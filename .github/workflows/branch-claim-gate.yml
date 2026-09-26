@@ -12,11 +12,10 @@
 # unresolvable commit range or a commit with no lane trailer would report green
 # over the entire corpus while proving nothing.
 #
-# The tests import the claim index module from the PRIVATE workspace repository
-# and FAIL rather than skip when it cannot be found. That is the point: a skipped
-# test is a green run, and a green run for a gate that could not execute is the
-# exact failure mode this phase exists to remove. The repository is not named
-# here -- it resolves from an organization variable, as in the reusable check.
+# The tests exercise omniclaude's own vendored claim index module and FAIL
+# rather than skip when it cannot be found. That is the point: a skipped test is
+# a green run, and a green run for a gate that could not execute is the exact
+# failure mode this phase exists to remove.
 #
 # THIS IS THE ONLY CI HOME FOR THESE TESTS, verified rather than assumed. The
 # consolidated test job does not collect `tests/scripts/` at all: a search of both
@@ -33,6 +32,7 @@ on:
     branches: [main, dev, 'hotfix/**']
     paths:
       - 'scripts/branch_claim.py'
+      - 'scripts/claim_index.py'
       - 'scripts/lane_identity.py'
       - 'scripts/hooks/pre-push-branch-claim'
       - 'tests/scripts/test_branch_claim.py'
@@ -46,6 +46,7 @@ on:
     branches: [main, dev]
     paths:
       - 'scripts/branch_claim.py'
+      - 'scripts/claim_index.py'
       - 'scripts/lane_identity.py'
       - 'scripts/hooks/pre-push-branch-claim'
       - 'tests/scripts/test_branch_claim.py'
@@ -98,44 +99,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
-      - name: Resolve the private claim store repo
-        id: store-repo
-        env:
-          FROM_VARS: ${{ vars.OMNI_LEDGER_REPO }}
-        run: |
-          set -euo pipefail
-          if [ -z "${FROM_VARS:-}" ]; then
-            echo "::error::the organization variable OMNI_LEDGER_REPO is unset, so the" \
-                 "claim index module these tests exercise cannot be located." \
-                 "THE GATE DID NOT RUN."
-            exit 1
-          fi
-          echo "name=${FROM_VARS}" >> "$GITHUB_OUTPUT"
-
-      - name: Mint token for the private claim store repo
-        id: store-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.ONEXBOT_APP_ID }}
-          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ steps.store-repo.outputs.name }}
-          permission-contents: read
-
-      # reusable-checkout-ref-ok: branch-claim-gate OMN-18263 the tests exercise the claim index
-      # module as it is on the store's default branch; pinning it would let this
-      # gate report green against a module the live check no longer runs.
-      - name: Fetch the claim index module
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ${{ github.repository_owner }}/${{ steps.store-repo.outputs.name }}
-          token: ${{ steps.store-token.outputs.token }}
-          path: .branch-claim-store
-          persist-credentials: false
-          sparse-checkout: |
-            docs/workflows/_shared/claim_index.py
-          sparse-checkout-cone-mode: false
-
       # uv sync, not a bare pytest install: this repo's tests/conftest.py imports
       # project dependencies, so `pip install pytest` alone fails at collection
       # with a ModuleNotFoundError -- a gate that cannot run, not one that passed.
@@ -144,23 +107,8 @@ jobs:
         run: uv sync --frozen --group dev --python 3.13
 
       - name: Branch-claim resolution and the pre-push hook
-        env:
-          # ABSOLUTE, and that is load-bearing. The hook tests spawn `git push`
-          # with the working directory set to a scratch clone under the temp
-          # directory, and the hook passes this value straight through to the
-          # resolution. A relative path resolves against the runner workspace for
-          # the resolution tests and against the scratch clone for the hook tests,
-          # so ten of the sixteen failed with "the claim index module is not at
-          # ..." on the first run that included them.
-          ONEX_CLAIM_INDEX_MODULE: ${{ github.workspace }}/.branch-claim-store/docs/workflows/_shared/claim_index.py
         run: |
           set -euo pipefail
-          if [ ! -f "${ONEX_CLAIM_INDEX_MODULE}" ]; then
-            echo "::error::the claim index module was not fetched to" \
-                 "${ONEX_CLAIM_INDEX_MODULE}. These tests FAIL rather than skip" \
-                 "without it. THE GATE DID NOT RUN."
-            exit 1
-          fi
           # The hook tests drive a real `git push` through the installed hook, so
           # they need an identity git will accept and a default branch name.
           git config --global init.defaultBranch main

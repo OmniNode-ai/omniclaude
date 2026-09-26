@@ -58,25 +58,6 @@ BRANCH = "lane/omn-9903-scratch"
 LEDGER_NAME = "SCRATCH_LEDGER.md"
 
 
-def _claim_index_module() -> Path:
-    explicit = os.environ.get("ONEX_CLAIM_INDEX_MODULE")
-    if explicit:
-        # Resolved, never passed through as given. The hook tests hand this path
-        # to a `git push` running in a scratch clone elsewhere on disk, so a
-        # relative value would resolve against a different directory there than
-        # here -- which is exactly how ten of them failed the first time they ran
-        # in continuous integration.
-        return Path(explicit).resolve()
-    workspace = os.environ.get("OMNI_HOME")
-    if workspace:
-        return Path(workspace) / "docs" / "workflows" / "_shared" / "claim_index.py"
-    raise AssertionError(
-        "neither ONEX_CLAIM_INDEX_MODULE nor OMNI_HOME is set, so the claim index "
-        "module cannot be located and these tests cannot run. They FAIL rather than "
-        "skip: a gate that cannot run has not passed."
-    )
-
-
 def _stamp(offset_hours: float = 0.0) -> str:
     return (datetime.now(UTC) - timedelta(hours=offset_hours)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
@@ -150,7 +131,6 @@ def _hook_env(scratch: dict) -> dict:
         "ONEX_LANE_REGISTRY_ROOT": str(scratch["registry"]),
         "ONEX_BRANCH_CLAIM_LEDGER": str(scratch["ledger"]),
         "ONEX_BRANCH_CLAIM_LEDGER_NAME": LEDGER_NAME,
-        "ONEX_BRANCH_CLAIM_INDEX_MODULE": str(_claim_index_module()),
         "ONEX_LANE_PYTHON": sys.executable,
     }
 
@@ -295,7 +275,11 @@ def test_a_push_to_a_branch_held_by_another_lane_is_refused(scratch: dict) -> No
     combined = result.stdout + result.stderr
     assert "holding-lane" in combined
     assert f"{LEDGER_NAME}:2" in combined
-    assert "RELEASE" in combined and "HANDOVER" in combined and "RECLAIM" in combined
+    assert "RELEASE" in combined
+    assert "| CLAIM |" in combined
+    assert "supersedes-claim=" in combined
+    assert "| HANDOVER |" not in combined
+    assert "| RECLAIM |" not in combined
     # And nothing reached the remote.
     refs = subprocess.run(
         ["git", "ls-remote", "--heads", str(scratch["remote"]), BRANCH],

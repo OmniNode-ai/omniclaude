@@ -33,12 +33,11 @@ path is shown easy in practice, measured rather than asserted. The two modes are
 one flag apart on purpose, so arming the refusal later is a change of caller and
 not a change of logic.
 
-WHY THE CLAIM INDEX IS LOADED FROM A PATH rather than imported. It lives beside
-the ledger, in the private workspace repository; this repository is public and
-may not name it (CLAUDE.md rule 23). The caller supplies the path -- the
-workflow from an organization variable, the hook from the workspace root. A path
-that does not resolve raises `ResolutionUnavailable` and the run FAILS: a gate
-that cannot see its own state has not passed, it has not run.
+WHY THE CLAIM INDEX IS LOADED FROM A PATH rather than imported. It is vendored
+beside this file so every caller runs the same reviewed resolution. Loading by
+path keeps direct hook and workflow execution independent of package import
+state. If that sibling path does not resolve, `ResolutionUnavailable` makes the
+run FAIL: a gate that cannot see its own state has not passed, it has not run.
 
 THE HONEST GAP, named rather than papered over. OMN-18260's stamping hook writes
 `Onex-Lane` and `Onex-Session` and NOT the fencing token the design's section 5
@@ -128,6 +127,7 @@ _REQUIRED_ENTRY_POINTS = (
     # every rolled claim, which is indistinguishable from a passing check.
     "window_sources",
     "build_index_from_sources",
+    "resolve_index",
     "ClaimStoreIncomplete",
 )
 
@@ -155,14 +155,14 @@ class Verdict:
         return not self.findings
 
 
-def load_claim_index(path: Path) -> ModuleType:
-    """Import the claim index module from `path`, fail-closed."""
-    resolved = Path(path)
+def load_claim_index() -> ModuleType:
+    """Import the vendored sibling claim index module, fail-closed."""
+    resolved = Path(__file__).resolve().with_name("claim_index.py")
     if not resolved.is_file():
         raise ResolutionUnavailable(
-            f"the claim index module is not at {resolved}. This check reads the claim "
-            "store through that module and refuses to guess without it; point "
-            "--claim-index-module (or ONEX_CLAIM_INDEX_MODULE) at it. THE CHECK DID NOT RUN."
+            f"the vendored claim index module is not at {resolved}. This check reads "
+            "the claim store through that module and refuses to guess without it. "
+            "THE CHECK DID NOT RUN."
         )
     spec = importlib.util.spec_from_file_location("onex_claim_index", resolved)
     if spec is None or spec.loader is None:
@@ -435,7 +435,6 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="how the ledger is cited in a refusal, e.g. docs/tracking/<file>.md",
     )
-    check.add_argument("--claim-index-module", required=True)
     check.add_argument("--index", help="optional cache path for the resolved index")
     check.add_argument("--mode", choices=("record", "refuse"), default="record")
     check.add_argument(
@@ -471,7 +470,7 @@ def main(argv: list[str] | None = None) -> int:
         return _install_hook(Path(args.repo))
 
     try:
-        claim_index = load_claim_index(Path(args.claim_index_module))
+        claim_index = load_claim_index()
     except ResolutionUnavailable as exc:
         # Loaded before the resolution below, and separately, because that
         # block catches an exception type the module itself declares -- naming

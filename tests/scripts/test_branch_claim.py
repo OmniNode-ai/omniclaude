@@ -42,7 +42,6 @@ through 7.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
@@ -73,35 +72,9 @@ def _real_stamp(offset_hours: float = 0.0) -> str:
     )
 
 
-def _claim_index_module() -> Path:
-    """Where the claim index module is, resolved fail-fast.
-
-    There is deliberately no fallback and no skip. The module lives in the
-    private workspace repository; a test that SKIPPED when it could not be found
-    would turn "the gate could not run" into a green run, which is the precise
-    failure this whole phase exists to remove.
-    """
-    explicit = os.environ.get("ONEX_CLAIM_INDEX_MODULE")
-    if explicit:
-        # Resolved, never passed through as given. The hook tests hand this path
-        # to a `git push` running in a scratch clone elsewhere on disk, so a
-        # relative value would resolve against a different directory there than
-        # here -- which is exactly how ten of them failed the first time they ran
-        # in continuous integration.
-        return Path(explicit).resolve()
-    workspace = os.environ.get("OMNI_HOME")
-    if workspace:
-        return Path(workspace) / "docs" / "workflows" / "_shared" / "claim_index.py"
-    raise AssertionError(
-        "neither ONEX_CLAIM_INDEX_MODULE nor OMNI_HOME is set, so the claim index "
-        "module cannot be located and these tests cannot run. They FAIL rather "
-        "than skip: a gate that cannot run has not passed."
-    )
-
-
 @pytest.fixture(scope="module")
 def claim_index():
-    return bc.load_claim_index(_claim_index_module())
+    return bc.load_claim_index()
 
 
 def _commit(message: str, sha: str = "a" * 40) -> tuple[str, str]:
@@ -201,7 +174,11 @@ def test_held_by_another_lane_without_a_release_row_is_a_finding(claim_index) ->
     # not decoration: a refusal a lane cannot act on is a stall.
     assert "beta" in body
     assert f"{LEDGER_NAME}:1" in body
-    assert "RELEASE" in body and "HANDOVER" in body and "RECLAIM" in body
+    assert "RELEASE" in body
+    assert "| CLAIM |" in body
+    assert "supersedes-claim=" in body
+    assert "| HANDOVER |" not in body
+    assert "| RECLAIM |" not in body
 
 
 def test_unclaimed_is_clean(claim_index) -> None:
@@ -338,19 +315,50 @@ def test_an_absent_fence_trailer_does_not_invent_one(claim_index) -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_the_vendored_claim_index_is_the_only_module_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The resolver loads the claim index vendored beside it (OMN-19722), with no
+    workspace root set: it no longer depends on a module fetched from another
+    repository, whose unpinned wording change turned this gate red."""
+    monkeypatch.delenv("OMNI_HOME", raising=False)
+
+    expected = Path(bc.__file__).resolve().with_name("claim_index.py")
+    assert expected.is_file()
+
+    module = bc.load_claim_index()
+    required = (
+        "refusal_for_push",
+        "build_index",
+        "build_index_from_sources",
+        "window_sources",
+        "resolve_index",
+        "holder",
+        "ticket_from_branch",
+        "ClaimStoreIncomplete",
+    )
+    assert all(hasattr(module, name) for name in required)
+
+
 def test_a_missing_claim_index_module_raises_rather_than_returning_empty(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(bc, "__file__", str(tmp_path / "branch_claim.py"))
     with pytest.raises(bc.ResolutionUnavailable) as caught:
-        bc.load_claim_index(tmp_path / "nope.py")
-    assert "nope.py" in str(caught.value)
+        bc.load_claim_index()
+    assert "claim_index.py" in str(caught.value)
 
 
-def test_a_claim_index_module_missing_its_entry_point_raises(tmp_path: Path) -> None:
+def test_a_claim_index_module_missing_its_entry_point_raises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     impostor = tmp_path / "claim_index.py"
     impostor.write_text("VERSION = 1\n", encoding="utf-8")
+    monkeypatch.setattr(bc, "__file__", str(tmp_path / "branch_claim.py"))
     with pytest.raises(bc.ResolutionUnavailable):
-        bc.load_claim_index(impostor)
+        bc.load_claim_index()
 
 
 # ---------------------------------------------------------------------------
@@ -358,9 +366,7 @@ def test_a_claim_index_module_missing_its_entry_point_raises(tmp_path: Path) -> 
 # ---------------------------------------------------------------------------
 
 
-def _run_cli(
-    args: list[str], ledger: Path, index_module: Path
-) -> subprocess.CompletedProcess:
+def _run_cli(args: list[str], ledger: Path) -> subprocess.CompletedProcess:
     repo_root = Path(__file__).resolve().parents[2]
     return subprocess.run(
         [
@@ -371,8 +377,6 @@ def _run_cli(
             str(ledger),
             "--ledger-name",
             LEDGER_NAME,
-            "--claim-index-module",
-            str(index_module),
         ],
         cwd=repo_root,
         capture_output=True,
@@ -425,7 +429,6 @@ def test_record_mode_reports_the_finding_and_still_exits_zero(
             str(stamped_message_file),
         ],
         collision_ledger,
-        _claim_index_module(),
     )
     assert result.returncode == 0, result.stderr
     assert "beta" in result.stdout + result.stderr
@@ -446,7 +449,6 @@ def test_refuse_mode_exits_non_zero_on_the_same_input(
             str(stamped_message_file),
         ],
         collision_ledger,
-        _claim_index_module(),
     )
     assert result.returncode == 1
     assert "beta" in result.stdout + result.stderr
@@ -470,7 +472,6 @@ def test_an_unreadable_ledger_fails_closed_in_both_modes(
                 str(stamped_message_file),
             ],
             tmp_path / "absent-ledger.md",
-            _claim_index_module(),
         )
         assert result.returncode == 2, f"mode={mode}: {result.stdout}{result.stderr}"
         assert "absent-ledger.md" in result.stdout + result.stderr
@@ -506,7 +507,6 @@ def test_refuse_mode_reports_but_does_not_refuse_an_unidentified_push(
             str(unstamped_message_file),
         ],
         collision_ledger,
-        _claim_index_module(),
     )
     assert result.returncode == 0, result.stdout + result.stderr
     combined = result.stdout + result.stderr
@@ -530,7 +530,6 @@ def test_refuse_mode_refuses_an_unidentified_push_when_asked(
             str(unstamped_message_file),
         ],
         collision_ledger,
-        _claim_index_module(),
     )
     assert result.returncode == 1
 
@@ -554,7 +553,6 @@ def test_record_mode_never_refuses_even_on_the_wrong_lane(
             str(stamped_message_file),
         ],
         collision_ledger,
-        _claim_index_module(),
     )
     assert result.returncode == 0
 
@@ -568,8 +566,7 @@ def test_record_mode_never_refuses_even_on_the_wrong_lane(
 # unclaimed branch is clean, so both callers of this resolution passed exactly
 # the case they exist to catch.
 #
-# The fix is in the claim index module, which lives in the private workspace
-# repository this one may not name (rule 23). What is pinned HERE is that
+# The fix is in the vendored claim index module. What is pinned HERE is that
 # this repository's two consumers go through the window-aware entry points
 # rather than reading the live file alone.
 # ---------------------------------------------------------------------------
@@ -637,10 +634,11 @@ def test_reading_the_live_file_alone_is_the_defect_this_replaces(
 
 def test_a_claim_index_without_the_window_entry_points_is_refused(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Fail closed on an OLD module. The entry points this resolution needs are
-    required at load time, so a store repository pinned before the fix produces
-    a named refusal rather than a silently live-file-only resolution -- which
+    required at load time, so an old or incomplete vendored copy produces a
+    named refusal rather than a silently live-file-only resolution -- which
     would look identical to a passing check."""
     stub = tmp_path / "claim_index.py"
     stub.write_text(
@@ -650,8 +648,9 @@ def test_a_claim_index_without_the_window_entry_points_is_refused(
         "def refusal_for_push(index, ticket, lane, *, fence, now): return None\n",
         encoding="utf-8",
     )
+    monkeypatch.setattr(bc, "__file__", str(tmp_path / "branch_claim.py"))
     with pytest.raises(bc.ResolutionUnavailable) as caught:
-        bc.load_claim_index(stub)
+        bc.load_claim_index()
     assert "window_sources" in str(caught.value)
 
 
@@ -684,7 +683,6 @@ def test_the_command_line_reports_an_incomplete_store_as_a_check_that_did_not_ru
             str(stamped_message_file),
         ],
         ledger,
-        _claim_index_module(),
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert "THE CLAIM STORE IS INCOMPLETE" in result.stderr
@@ -696,7 +694,5 @@ def test_the_backfill_resolves_a_holder_from_a_rolled_claim(tmp_path: Path) -> N
     worktree is silent to the pre-push hook -- so the false negative propagates
     from the resolution into the arming."""
     ledger = _rolled_store(tmp_path, lane="delta")
-    holders = li.claim_holders(
-        ledger, LEDGER_NAME, bc.load_claim_index(_claim_index_module())
-    )
+    holders = li.claim_holders(ledger, LEDGER_NAME, bc.load_claim_index())
     assert holders.get("OMN-9999") == "delta"

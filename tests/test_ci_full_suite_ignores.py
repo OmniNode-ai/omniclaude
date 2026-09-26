@@ -33,7 +33,8 @@ CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 
 # Ignored because a dedicated gate workflow runs them with the environment the
-# consolidated job does not provide. The value is that workflow.
+# consolidated job does not provide (a git identity and default branch for the
+# real `git push` and `git commit` they drive). The value is that workflow.
 IGNORED_WITH_A_GATE: dict[str, str] = {
     "tests/scripts/test_branch_claim.py": "branch-claim-gate.yml",
     "tests/scripts/test_branch_claim_hook.py": "branch-claim-gate.yml",
@@ -91,55 +92,48 @@ def test_the_no_ci_home_set_stays_small() -> None:
     )
 
 
-# A test module that resolves the claim index cannot run in the consolidated
-# job: that module lives in a different repository, the job does not check it
-# out, and every such file FAILS rather than skips when it cannot find it --
-# deliberately, because a gate that cannot run has not passed.
-_CLAIM_INDEX_VARIABLE = "ONEX_CLAIM_INDEX_MODULE"
+# The claim index module was once fetched from a different repository, so every
+# test module that resolved it had to be ignored here and run only by the gate
+# that checked that repository out (OMN-18273). It is vendored now, as
+# scripts/claim_index.py (OMN-19722): an unpinned cross-repository fetch let a
+# wording change there turn this repository's gate red with no change here. The
+# three files above stay ignored for the git identity their gate sets up, not
+# for the module. What this pins is that the cross-repository path does not
+# grow back, in a test module, a script or a workflow.
+_CROSS_REPO_CLAIM_INDEX_MARKERS = (
+    "ONEX_CLAIM_INDEX_MODULE",
+    "ONEX_BRANCH_CLAIM_INDEX_MODULE",
+    "docs/workflows/_shared/claim_index.py",
+)
 
 
-def _modules_needing_the_claim_index() -> set[str]:
-    """Every test module that resolves the claim index, by its repo-relative path."""
-    found: set[str] = set()
-    for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
-        if path.resolve() == Path(__file__).resolve():
-            continue
-        if _CLAIM_INDEX_VARIABLE in path.read_text(encoding="utf-8", errors="replace"):
-            found.add(path.relative_to(REPO_ROOT).as_posix())
-    return found
-
-
-def test_every_module_needing_the_claim_index_is_ignored_by_the_full_suite() -> None:
-    """The regression this file did not previously catch (OMN-18273).
-
-    `test_lane_identity_canary.py` landed wired into its gate workflow and NOT
-    into the consolidated job's ignore list. Half a two-half change. The
-    consolidated job then collected it, it could not find the claim index, and
-    it errored at fixture setup -- eleven errors in under a second, red Tests
-    Gate on every pull request merging dev afterwards, on diffs touching none of
-    it.
-
-    The two tests above could not see that: one pins the ignore list against a
-    constant in this file, and the other checks a gate names an ignored file.
-    Neither asks the inverse question, which is the one that matters -- is there
-    a file that NEEDS the gate's environment and is not ignored? A list that can
-    only be checked against itself cannot catch an omission from it.
-
-    Discovered from the filesystem rather than listed here, so a new file of the
-    same shape is covered on the day it lands rather than on the day someone
-    remembers to add it.
-    """
-    needs = _modules_needing_the_claim_index()
-    assert needs, (
-        "positive control: no test module references the claim index variable, so "
-        "this test proves nothing -- the discovery is broken, not the repository"
+def test_the_claim_index_is_vendored_and_never_resolved_from_another_repository() -> (
+    None
+):
+    vendored = REPO_ROOT / "scripts" / "claim_index.py"
+    assert vendored.is_file(), (
+        "positive control: scripts/claim_index.py is missing, so the resolver, the "
+        "pre-push hook and lane_identity have no claim index to load"
     )
-    ignored = set(_full_suite_ignores())
-    missing = sorted(needs - ignored)
-    assert not missing, (
-        "these test modules resolve the claim index, which the consolidated job "
-        "cannot provide, and are NOT in its ignore list. They will error at "
-        f"fixture setup on every full-suite run: {missing}. Add each to the "
-        "ignore list in ci.yml AND to IGNORED_WITH_A_GATE above, naming the gate "
-        "workflow that actually runs it."
+    gate = (WORKFLOW_DIR / "branch-claim-gate.yml").read_text(encoding="utf-8")
+    assert "scripts/claim_index.py" in gate, (
+        "branch-claim-gate.yml does not trigger on the vendored module, so a change "
+        "to the resolution would land without its gate running"
+    )
+    candidates = [
+        *sorted((REPO_ROOT / "tests").rglob("test_*.py")),
+        *sorted(WORKFLOW_DIR.glob("*.yml")),
+        *sorted((REPO_ROOT / "scripts").rglob("*.py")),
+        REPO_ROOT / "scripts" / "hooks" / "pre-push-branch-claim",
+    ]
+    offenders = sorted(
+        f"{path.relative_to(REPO_ROOT).as_posix()}: {marker}"
+        for path in candidates
+        if path.resolve() != Path(__file__).resolve()
+        for marker in _CROSS_REPO_CLAIM_INDEX_MARKERS
+        if marker in path.read_text(encoding="utf-8", errors="replace")
+    )
+    assert not offenders, (
+        "the claim index is resolved from outside this repository again; load the "
+        f"vendored scripts/claim_index.py instead: {offenders}"
     )
