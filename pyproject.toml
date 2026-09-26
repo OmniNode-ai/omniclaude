@@ -273,6 +273,9 @@ override-dependencies = [
 # Release v0.25.1: pin to paired release PR heads until tags are published.
 # OMN-13873: omnibase-core resolves from PyPI (not a git tag) so the dep-provenance
 # gate passes; the version constraint above governs core resolution.
+# OMN-18156: temporary trusted immutable source pin for the typed package-only
+# contract. Remove it when a released Core version exports the binding model.
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", rev = "27b7f7e1aa884af0fa32c9f82d11c8bdc35d770c" }  # raw-override-ok: OMN-18156
 # OMN-17176 / OMN-17177: omnibase-infra resolves from PyPI. The [tool.uv.sources]
 # git override that used to live here (last at rev v0.38.14) is REMOVED. A git
 # override is unreachable by `uv lock --upgrade-package`, which re-resolves against

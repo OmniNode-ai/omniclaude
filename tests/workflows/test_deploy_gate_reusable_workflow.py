@@ -79,6 +79,7 @@ def test_reusable_deploy_gate_delegates_occ_checkout_to_bounded_script() -> None
     assert resolve_step["if"] == "github.event_name != 'merge_group'"
     assert resolve_step["id"] == "resolve_occ_evidence"
     assert "--resolve-occ-ref" in resolve_step["run"]
+    assert '--repository "${GITHUB_REPOSITORY}"' in resolve_step["run"]
     assert '--github-output "$GITHUB_OUTPUT"' in resolve_step["run"]
 
     step = _step(
@@ -133,3 +134,22 @@ def test_checkout_script_is_bounded_and_self_diagnosing() -> None:
     assert "Elapsed:" in text
     assert "Last git subprocess:" in text
     assert "emit_process_tree" in text
+
+
+def test_reusable_gate_passes_immutable_pr_head_to_the_package_only_adapter() -> None:
+    """Code-only admission must bind the action to the triggering PR head."""
+
+    workflow = _load_workflow()
+    job = _deploy_gate_job(workflow)
+    step = _step(job, "Run deploy gate (canonical composite action)")
+    with_values = step["with"]
+    assert with_values["pr-head-sha"] == "${{ github.event.pull_request.head.sha }}"
+
+    action = (
+        REPO_ROOT / ".github" / "actions" / "deploy-gate" / "action.yml"
+    ).read_text(encoding="utf-8")
+    assert "uses: astral-sh/setup-uv@v7" in action
+    assert "uv run --no-project" in action
+    assert "omnibase_core.git@27b7f7e1aa884af0fa32c9f82d11c8bdc35d770c" in action
+    assert '--event-head-sha "$PR_HEAD_SHA"' in action
+    assert '--repository "$REPOSITORY"' in action
