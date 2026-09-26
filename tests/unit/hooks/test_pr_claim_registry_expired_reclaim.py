@@ -131,9 +131,24 @@ def test_same_run_live_reclaim_is_idempotent(tmp_path: Path) -> None:
     before = claim_file.read_text()
     registry = pr_claim_registry.ClaimRegistry(claims_dir=claims_dir)
 
-    assert registry.acquire(PR_KEY, RUN_A, "merge", lane_id=LANE_B) is True
+    assert registry.acquire(PR_KEY, RUN_A, "merge", lane_id=LANE_A) is True
     assert claim_file.read_text() == before
     assert json.loads(claim_file.read_text())["claimed_by_run"] == RUN_A
+
+
+def test_different_lane_sharing_run_id_is_refused_on_live_claim(
+    tmp_path: Path,
+) -> None:
+    # Subagent lanes in one session share the session id as their run id
+    # (pr_ownership_guard resolves run_id from the session), so run id alone
+    # cannot prove ownership: a live claim by another lane must still refuse.
+    claims_dir = tmp_path / "claims"
+    claim_file = _write_claim(claims_dir, run_id=RUN_A, lane_id=LANE_A, expired=False)
+    before = claim_file.read_text()
+    registry = pr_claim_registry.ClaimRegistry(claims_dir=claims_dir)
+
+    assert registry.acquire(PR_KEY, RUN_A, "merge", lane_id=LANE_B) is False
+    assert claim_file.read_text() == before
 
 
 def test_same_run_expired_claim_is_reaped_and_refreshed(tmp_path: Path) -> None:
