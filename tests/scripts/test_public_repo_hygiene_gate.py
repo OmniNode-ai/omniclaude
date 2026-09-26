@@ -28,6 +28,9 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATE_PATH = REPO_ROOT / "scripts" / "public_repo_hygiene_gate.py"
@@ -117,13 +120,20 @@ def vocab(tmp_path: Path) -> Path:
 
 def _make_repo(root: Path, files: dict[str, str], config: str = MINIMAL_CONFIG) -> Path:
     root.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "init", "-q"], cwd=root, check=True, env=scrub_git_location_env()
+    )
     (root / ".public-repo-hygiene.yaml").write_text(config, encoding="utf-8")
     for rel, content in files.items():
         target = root / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
-    subprocess.run(["git", "add", "-A", "-f"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "add", "-A", "-f"],
+        cwd=root,
+        check=True,
+        env=scrub_git_location_env(),
+    )
     return root
 
 
@@ -160,7 +170,9 @@ def test_missing_repo_config_is_a_refusal_not_a_pass(
     """An absent config is not an empty allowlist. Fail closed."""
     root = tmp_path / "r"
     root.mkdir()
-    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "init", "-q"], cwd=root, check=True, env=scrub_git_location_env()
+    )
     with pytest.raises(gate.ConfigError, match="THE GATE DID NOT RUN"):
         _run(root, vocab)
 

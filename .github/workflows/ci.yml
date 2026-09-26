@@ -9,7 +9,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'hotfix/**']
+    branches: [main, dev, 'hotfix/**']
   pull_request:
     branches: [main, dev]
   merge_group:
@@ -185,6 +185,14 @@ jobs:
             sleep "$sleep_seconds"
             attempt=$((attempt + 1))
           done
+
+      - name: Whole-tree local validator backstop (OMN-19612)
+        run: |
+          bash plugins/onex/hooks/scripts/pre-commit-no-inprocess-fallback.sh
+          uv run python scripts/validation/validate_no_internal_ips.py
+          uv run python scripts/validation/validate_kafka_env_fallbacks.py
+          bash scripts/check_no_cloud_bus_wrapper.sh
+          uv run python scripts/validation/validate_no_hardcoded_kafka_broker.py
 
       # OMN-17176: invoke the console script the repo's own pre-commit hooks
       # depend on. When #2076 bumped omnibase-core to 0.47.1 against a stale
@@ -3919,6 +3927,63 @@ jobs:
             --check-stale \
             --allowlist .onex_ratchets/noncanonical_class_allowlist.yaml \
             src/omniclaude
+
+  precommit-suite:
+    name: Pre-commit Suite (OMN-19612)
+    # Required through the CI Summary completeness roster. Keep this job
+    # unconditional so every staged-scoped local hook retains a whole-tree CI
+    # counterpart.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          save-cache: false
+      - name: Install dependencies
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
+      - name: Provide the sibling clones the cross-repo hooks resolve through OMNI_HOME
+        run: |
+          set -euo pipefail
+          OMNI_HOME="${RUNNER_TEMP}/sibling-clones"
+          echo "OMNI_HOME=${OMNI_HOME}" >> "$GITHUB_ENV"
+          mkdir -p "$OMNI_HOME"
+          # OCC tracks main, as in Skill Contracts CI. omnibase_core tracks the
+          # uv.lock-pinned version tag so hook-bits-drift checks hook_bits.sh
+          # against the EnumHookBit version omniclaude actually runs.
+          git clone --quiet --depth 1 --filter=blob:none --sparse --branch main https://github.com/OmniNode-ai/onex_change_control.git "$OMNI_HOME/onex_change_control"
+          git -C "$OMNI_HOME/onex_change_control" sparse-checkout set scripts/validation
+          core_version="$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("omnibase-core"))')"
+          git clone --quiet --depth 1 --branch "v${core_version}" https://github.com/OmniNode-ai/omnibase_core.git "$OMNI_HOME/omnibase_core"
+      - name: Pin the whole-tree backstop's own shape (OMN-19612)
+        run: uv run pytest -o addopts="" tests/ci/test_precommit_suite_job_omn19612.py -v -p no:cacheprovider
+      # The advisory-job-gate hook reads branch protection's
+      # required_status_checks, which needs administration:read. The workflow
+      # GITHUB_TOKEN lacks it, so the hook would refuse (it cannot resolve the
+      # enforcement surface). This is the same App the advisory-job-gate job
+      # mints for the same read.
+      - name: Mint a token that can read branch protection
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
+      # pre-commit and detect-secrets are not project dependencies, so they are
+      # installed as pinned tools layered over the synced project venv (the venv
+      # stays on PATH for the language: system hooks). Without the pre-commit pin
+      # this step died with "Failed to spawn: pre-commit".
+      - name: Run the whole-tree pre-commit suite
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: uv run --frozen --with 'pre-commit==4.6.2' --with 'detect-secrets==1.5.0' pre-commit run --all-files --show-diff-on-failure
 
   occ-companion-merged:
     name: OCC Companion Merged Gate (OMN-15214)

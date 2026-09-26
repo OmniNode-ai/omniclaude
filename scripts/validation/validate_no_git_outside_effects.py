@@ -16,6 +16,8 @@ import re
 import sys
 from pathlib import Path
 
+from _path_scope import selected_python_files
+
 # Matches "git" or "gh" as a standalone word (not "github", "lightweight", etc.)
 # at the start of a string (after optional whitespace), using a word boundary.
 _GIT_COMMAND_RE = re.compile(r"^\s*(git|gh)\b", re.IGNORECASE)
@@ -105,8 +107,12 @@ class GitCallVisitor(ast.NodeVisitor):
             # Also detect list literals like ["git", "commit", ...]
             if isinstance(arg, ast.List):
                 elements = arg.elts
-                if elements and isinstance(elements[0], ast.Constant):
-                    first = str(elements[0].value).strip().lower()
+                if (
+                    elements
+                    and isinstance(elements[0], ast.Constant)
+                    and isinstance(elements[0].value, str)
+                ):
+                    first = elements[0].value.strip().lower()
                     if first in ("git", "gh"):
                         self.violations.append(
                             f"{self.filepath}:{lineno}: git/gh call via subprocess list "
@@ -151,7 +157,7 @@ def check_file(filepath: Path) -> list[str]:
     return visitor.violations
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     root = Path(__file__).resolve()
     for _ in range(10):
         if (root / "pyproject.toml").exists() or (root / "src").exists():
@@ -165,7 +171,11 @@ def main() -> int:
 
     all_violations: list[str] = []
 
-    for py_file in sorted(src_root.rglob("*.py")):
+    for py_file in selected_python_files(
+        argv if argv is not None else sys.argv[1:],
+        roots=[src_root],
+        rule_file=Path(__file__),
+    ):
         # Only enforce inside ONEX node modules; infrastructure modules may call git legitimately
         if not is_node_module(py_file):
             continue

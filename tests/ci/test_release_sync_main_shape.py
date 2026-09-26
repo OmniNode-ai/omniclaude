@@ -26,6 +26,9 @@ from pathlib import Path
 
 import pytest
 import yaml
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -147,15 +150,31 @@ def _run_sync_script(tmp_path: Path, *, http_code: str) -> subprocess.CompletedP
 
     repo = tmp_path / "repo"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "init", "-q", "-b", "main"],
+        cwd=repo,
+        check=True,
+        env=scrub_git_location_env(),
+    )
     (repo / "f.txt").write_text("x\n")
-    subprocess.run(["git", "add", "f.txt"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "add", "f.txt"],
+        cwd=repo,
+        check=True,
+        env=scrub_git_location_env(),
+    )
     subprocess.run(
         ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "c"],
         cwd=repo,
         check=True,
+        env=scrub_git_location_env(),
     )
-    subprocess.run(["git", "tag", "v9.9.9"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "tag", "v9.9.9"],
+        cwd=repo,
+        check=True,
+        env=scrub_git_location_env(),
+    )
 
     env = dict(os.environ)
     env.update(

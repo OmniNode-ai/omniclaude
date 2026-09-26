@@ -28,6 +28,9 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATE = REPO_ROOT / "scripts" / "check_public_skill_hygiene.py"
@@ -64,7 +67,12 @@ entries: []
 
 
 def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        env=scrub_git_location_env(),
+    )
 
 
 def _make_repo(
@@ -345,6 +353,7 @@ def test_live_tree_scans_far_more_than_the_skills_subtree() -> None:
         capture_output=True,
         text=True,
         check=True,
+        env=scrub_git_location_env(),
     ).stdout.split()
     _blocked, _allowlisted, files_scanned = gate.scan_tree(REPO_ROOT)
     assert files_scanned > len(skills) * 2, (

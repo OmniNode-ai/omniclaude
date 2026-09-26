@@ -5,9 +5,13 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 from plugins.onex.hooks.lib.preflight_reality_check import (
     EnumClaimKind,
@@ -66,16 +70,24 @@ class TestRunRealityCheck:
     @pytest.fixture
     def fake_repo(self, tmp_path: Path) -> Path:
         """Create a minimal git repo with a real file and symbol."""
-        import subprocess
-
         repo = tmp_path / "fake_repo"
         repo.mkdir()
         (repo / "src").mkdir()
         (repo / "src" / "real.py").write_text(
             "class RealClass:\n    pass\n\ndef real_function():\n    return 1\n",
         )
-        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-        subprocess.run(["git", "add", "."], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "init", "-q"],
+            cwd=repo,
+            check=True,
+            env=scrub_git_location_env(),
+        )
+        subprocess.run(
+            ["git", "add", "."],
+            cwd=repo,
+            check=True,
+            env=scrub_git_location_env(),
+        )
         subprocess.run(
             [
                 "git",
@@ -90,6 +102,7 @@ class TestRunRealityCheck:
             ],
             cwd=repo,
             check=True,
+            env=scrub_git_location_env(),
         )
         return repo
 
