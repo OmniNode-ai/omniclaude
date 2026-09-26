@@ -221,6 +221,24 @@ def is_active(claim_data: dict) -> bool:  # type: ignore[type-arg]
     return not (heartbeat_stale and claimed_old)
 
 
+def _is_own_claim(
+    claim_data: dict,  # type: ignore[type-arg]
+    run_id: str,
+    lane_id: str | None,
+) -> bool:
+    """Return True when a live claim belongs to this caller (idempotent re-claim).
+
+    The run id alone is not proof of ownership: subagent lanes in one session
+    share the session id as their run id (``pr_ownership_guard`` resolves it
+    that way), so when both the claim and the caller name a lane, the lanes
+    must match too (OMN-19695).
+    """
+    if claim_data.get("claimed_by_run") != run_id:
+        return False
+    held_lane = claim_data.get("lane_id")
+    return not held_lane or not lane_id or held_lane == lane_id
+
+
 # ---------------------------------------------------------------------------
 # ClaimRegistry
 # ---------------------------------------------------------------------------
@@ -417,13 +435,14 @@ class ClaimRegistry:
             if existing is not None:
                 if is_active(existing):
                     existing_run = existing.get("claimed_by_run", "unknown")
-                    if existing_run == run_id:
+                    if _is_own_claim(existing, run_id, lane_id):
                         # We already own this claim — re-acquire (idempotent).
                         return True
                     collision = " concurrently" if saw_create_collision else ""
                     print(
                         f"[claim-registry] PR {pr_key} is actively claimed"
                         f"{collision} by run {existing_run} "
+                        f"(lane: {existing.get('lane_id') or 'unknown'}) "
                         f"(action: {existing.get('action', 'unknown')}). Skipping.",
                         flush=True,
                     )
@@ -441,11 +460,12 @@ class ClaimRegistry:
                 reaped, raced_live_claim = self._reap_inactive_claim(claim_file, pr_key)
                 if raced_live_claim is not None:
                     raced_run = raced_live_claim.get("claimed_by_run", "unknown")
-                    if raced_run == run_id:
+                    if _is_own_claim(raced_live_claim, run_id, lane_id):
                         return True
                     print(
                         f"[claim-registry] PR {pr_key} is actively claimed "
                         f"by run {raced_run} "
+                        f"(lane: {raced_live_claim.get('lane_id') or 'unknown'}) "
                         f"(action: {raced_live_claim.get('action', 'unknown')}). "
                         f"Skipping.",
                         flush=True,
