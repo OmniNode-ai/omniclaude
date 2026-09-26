@@ -508,7 +508,8 @@ class ClaimRegistry:
         pr_key: str,
         run_id: str,
         dry_run: bool = False,
-    ) -> None:
+        lane_id: str | None = None,
+    ) -> bool:
         """Release a claim held by this run.
 
         Safe to call even if the claim doesn't exist or was already released.
@@ -518,26 +519,53 @@ class ClaimRegistry:
             pr_key: Canonical PR key
             run_id: The run ID that holds the claim
             dry_run: If True, no filesystem writes.
+            lane_id: Releasing lane handle. A live claim naming a different
+                lane is not released when both lanes are known.
+
+        Returns:
+            True if this call deleted the claim file, otherwise False.
         """
         if dry_run:
-            return
+            return False
 
         claim_file = self._claim_path(pr_key)
         if not claim_file.exists():
-            return
+            return False
 
         try:
             existing = json.loads(claim_file.read_text())
             if existing.get("claimed_by_run") != run_id:
                 # Someone else's claim — do NOT delete
-                return
-            claim_file.unlink(missing_ok=True)
-        except (json.JSONDecodeError, OSError) as e:
+                return False
+            # Lanes in one session share the run id, so a matching run id alone
+            # does not prove the caller holds a live claim (OMN-19696): when the
+            # claim and the caller both name a lane, the lanes must match too.
+            # A claim with no lane_id, or a caller that passes none, keeps the
+            # run-id-only behaviour: legacy claims written before OMN-16485
+            # carry no lane and a laneless caller cannot prove one, so run id is
+            # the only key available. This mirrors _is_own_claim in acquire().
+            # An expired claim is released on run id alone; acquire() would
+            # reap it anyway.
+            if is_active(existing) and not _is_own_claim(existing, run_id, lane_id):
+                held_lane = existing.get("lane_id")
+                print(
+                    f"[claim-registry] Refusing to release live claim for {pr_key}: "
+                    f"held by lane {held_lane}, caller lane {lane_id}.",
+                    flush=True,
+                )
+                return False
+            claim_file.unlink()
+            return True
+        except FileNotFoundError:
+            # Released or reaped by another caller since the exists() check.
+            return False
+        except (AttributeError, OSError, TypeError, ValueError) as e:
             print(
                 f"[claim-registry] Warning: could not release claim for {pr_key}: {e}. "
                 f"Heartbeat expiry will clean it up.",
                 flush=True,
             )
+            return False
 
     def heartbeat(
         self,
