@@ -18,6 +18,9 @@ Cache hits and local subcommands (``auth``, ``config``) cost nothing.
 
 Attribution:
   * ``lane_source=env``: ``ONEX_LANE`` was set; the lane is named.
+  * ``lane_source=agent-env``: a workflow/sub-agent lane environment variable
+    named the lane directly.
+  * ``lane_source=registry``: the worktree's lane identity registry named it.
   * ``lane_source=session``: a Claude Code session id; attributed to the
     session. With ``--transcripts <project dir>`` the report narrows each such
     call to the one sub-agent whose Bash tool call was running when the call
@@ -69,7 +72,11 @@ def parse_when(text: str, now: datetime) -> datetime:
 
 def core_cost(rec: dict[str, object]) -> int:
     """Estimated core REST requests one logged call spent."""
-    if rec.get("cache") == "hit" or rec.get("method") in FREE_METHODS:
+    if (
+        rec.get("identity") == "app"
+        or rec.get("cache") == "hit"
+        or rec.get("method") in FREE_METHODS
+    ):
         return 0
     cls = str(rec.get("cls", ""))
     if cls == "api graphql":
@@ -260,7 +267,8 @@ def build_report(
         row["core_requests_est"] += cost
         row["graphql_calls"] += 1 if is_graphql(rec) else 0
         row["cache_hits"] += 1 if rec.get("cache") == "hit" else 0
-        if source not in ("env", "session"):
+        row["app_calls"] += 1 if rec.get("identity") == "app" else 0
+        if source not in ("env", "agent-env", "registry", "session"):
             unattributed_calls += 1
             unattributed_cost += cost
     total_calls = len(records)
@@ -276,6 +284,7 @@ def build_report(
                 ),
                 "graphql_calls": int(row["graphql_calls"]),
                 "cache_hits": int(row["cache_hits"]),
+                "app_calls": int(row["app_calls"]),
             }
         )
     rows.sort(
@@ -314,13 +323,15 @@ def render_text(rep: dict[str, object]) -> str:
         f"({float(share) * 100:.1f}%), "
         f"{rep['unattributed_core_requests_est']} core requests (estimate)",
         "",
-        f"{'lane':<48} {'calls':>6} {'core_est':>9} {'core/h':>8} {'gql':>5} {'hits':>5}",
+        f"{'lane':<48} {'calls':>6} {'app_calls':>9} {'core_est':>9} "
+        f"{'core/h':>8} {'gql':>5} {'hits':>5}",
     ]
     lanes = rep["lanes"]
     assert isinstance(lanes, list)
     for r in lanes:
         lines.append(
-            f"{str(r['lane'])[:48]:<48} {r['calls']:>6} {r['core_requests_est']:>9} "
+            f"{str(r['lane'])[:48]:<48} {r['calls']:>6} {r['app_calls']:>9} "
+            f"{r['core_requests_est']:>9} "
             f"{r['core_requests_per_hour_est']:>8} {r['graphql_calls']:>5} {r['cache_hits']:>5}"
         )
     lines.append("")

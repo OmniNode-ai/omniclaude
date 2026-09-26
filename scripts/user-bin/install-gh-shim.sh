@@ -16,7 +16,9 @@
 
 set -euo pipefail
 
-SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gh"
+SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC="$SRC_DIR/gh"
+ROUTER_SRC="$SRC_DIR/gh_route.py"
 BIN_DIR="$HOME/.local/bin"
 CHECK_ONLY=0
 while [ $# -gt 0 ]; do
@@ -28,6 +30,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -f "$SRC" ] || { echo "install-gh-shim: shim source missing: $SRC" >&2; exit 1; }
+[ -f "$ROUTER_SRC" ] || { echo "install-gh-shim: router source missing: $ROUTER_SRC" >&2; exit 1; }
 
 # Not `head | grep -q` under pipefail: grep -q can exit before head finishes,
 # and head's SIGPIPE status would then read as "not a shim".
@@ -77,12 +80,20 @@ if [ "$bin_pos" -gt "$real_pos" ]; then
 fi
 
 DEST="$BIN_DIR/gh"
+ROUTER_DEST="$BIN_DIR/gh_route.py"
 if [ -e "$DEST" ] && ! is_shim "$DEST"; then
   echo "install-gh-shim: REFUSED: $DEST exists and is not the gh shim; not overwriting it" >&2
   exit 3
 fi
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
+  if [ ! -f "$ROUTER_DEST" ]; then
+    echo "install-gh-shim: CHECK: $ROUTER_DEST is missing"
+  elif cmp -s "$ROUTER_SRC" "$ROUTER_DEST"; then
+    echo "install-gh-shim: CHECK: $ROUTER_DEST is present and identical to source"
+  else
+    echo "install-gh-shim: CHECK: $ROUTER_DEST differs from source"
+  fi
   echo "install-gh-shim: OK (check only): $BIN_DIR at PATH position $bin_pos is ahead of $real_path at $real_pos"
   exit 0
 fi
@@ -92,4 +103,8 @@ tmp="$DEST.tmp.$$"
 cp "$SRC" "$tmp"
 chmod 0755 "$tmp"
 mv -f "$tmp" "$DEST"
-echo "install-gh-shim: installed $DEST (ahead of $real_path); real gh resolves by walking PATH past the shim"
+router_tmp="$ROUTER_DEST.tmp.$$"
+cp "$ROUTER_SRC" "$router_tmp"
+chmod 0755 "$router_tmp"
+mv -f "$router_tmp" "$ROUTER_DEST"
+echo "install-gh-shim: installed $DEST and $ROUTER_DEST (ahead of $real_path); real gh resolves by walking PATH past the shim"

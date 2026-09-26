@@ -20,11 +20,24 @@
 # A cached "no pull requests found" answer is kept like a positive one; any
 # other failure (network, quota, auth) is never cached.
 #
+# Read routing (OMN-19587): with ONEX_GH_READ_ROUTING=1, the read shapes
+# `gh api` GET/HEAD, `pr view|list|checks` and `run view|list` are handed to
+# gh_route.py (installed next to this file by install-gh-shim.sh; override
+# with ONEX_GH_ROUTER), which runs them on the read-only App token from
+# GH_READ_TOKEN_CMD and falls back to the operator credential when there is
+# none. Every other call, and every write, runs on the operator unchanged and
+# never reaches the router. With the flag unset or anything but 1 the shim
+# runs the real gh exactly as it did before routing existed.
+#
 # Usage log (OMN-19585): every invocation appends one JSON line to
 # ${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage/<UTC date>.jsonl with the
-# timestamp, lane (ONEX_LANE, else the Claude Code session id, else the parent
-# command), command class, HTTP method, repository, endpoint path (gh api only,
-# query string dropped), exit code and whether the cache answered. Argv, stdin,
+# timestamp, lane (ONEX_LANE; else ONEX_LANE_ID, ONEX_AGENT_NAME,
+# CLAUDE_AGENT_NAME or CLAUDE_SUBAGENT_NAME; else the lane registered for the
+# omni_worktrees/<ticket>/<dir> worktree the call is made from; else the Claude
+# Code session id; else the parent command, with lane_source saying which),
+# command class, HTTP method, repository, endpoint path (gh api only,
+# query string dropped), exit code and whether the cache answered. With routing
+# on it adds identity (app, operator, operator-fallback) and route_reason. Argv, stdin,
 # output and environment values are never written, so no token can reach it.
 # scripts/user-bin/gh_usage_report.py turns the log into requests per lane.
 # ONEX_GH_USAGE_LOG=0 turns the log off for one call.
@@ -74,6 +87,61 @@ _clean() {
     *ghp_*|*gho_*|*ghu_*|*ghs_*|*ghr_*|*github_pat_*) v="REDACTED" ;;
   esac
   printf '%s' "${v:0:200}"
+}
+
+# Resolve attribution once for both the usage line and the read router.
+_lane_done=0
+_resolve_lane() {
+  [ "$_lane_done" -eq 1 ] && return 0
+  _lane_done=1
+  _lane=""; _lane_src=""
+  local agent="" cwd="" suffix="" ticket="" repo_dir="" worktree=""
+  local registry_dir="" record="" hash="" registered="" parent=""
+  if [ -n "${ONEX_LANE:-}" ]; then
+    _lane="$(_clean "$ONEX_LANE")"; _lane_src="env"
+    return
+  fi
+  if [ -n "${ONEX_LANE_ID:-}" ]; then agent="$ONEX_LANE_ID"
+  elif [ -n "${ONEX_AGENT_NAME:-}" ]; then agent="$ONEX_AGENT_NAME"
+  elif [ -n "${CLAUDE_AGENT_NAME:-}" ]; then agent="$CLAUDE_AGENT_NAME"
+  elif [ -n "${CLAUDE_SUBAGENT_NAME:-}" ]; then agent="$CLAUDE_SUBAGENT_NAME"
+  fi
+  if [ -n "$agent" ]; then
+    _lane="$(_clean "$agent")"; _lane_src="agent-env"
+    return
+  fi
+  cwd="$(pwd -P 2>/dev/null)"
+  case "$cwd" in
+    */omni_worktrees/*/*)
+      suffix="${cwd#*/omni_worktrees/}"
+      ticket="${suffix%%/*}"
+      suffix="${suffix#*/}"
+      repo_dir="${suffix%%/*}"
+      worktree="${cwd%%/omni_worktrees/*}/omni_worktrees/$ticket/$repo_dir"
+      if [ -n "${ONEX_LANE_REGISTRY_ROOT:-}" ]; then
+        registry_dir="$ONEX_LANE_REGISTRY_ROOT/lane_identity"
+      elif [ -n "${OMNI_HOME:-}" ]; then
+        registry_dir="$OMNI_HOME/.onex_state/lane_identity"
+      fi
+      if [ -n "$registry_dir" ]; then
+        hash="$(_sha "$worktree" | cut -c1-32)"
+        record="$registry_dir/$hash.json"
+        if [ -n "$hash" ] && [ -r "$record" ]; then
+          registered="$(sed -n 's/.*"lane"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$record" 2>/dev/null | head -n 1)"
+          if [ -n "$registered" ]; then
+            _lane="$(_clean "$registered")"; _lane_src="registry"
+            return
+          fi
+        fi
+      fi
+      ;;
+  esac
+  if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    _lane="session:$(_clean "$CLAUDE_CODE_SESSION_ID")"; _lane_src="session"
+    return
+  fi
+  parent="$(basename "$(ps -o comm= -p "$PPID" 2>/dev/null)" 2>/dev/null)"
+  _lane="parent:$(_clean "$parent")"; _lane_src="parent"
 }
 
 # Sets _cls, _method and _repo, _endpoint for the argv in "$@".
@@ -152,24 +220,27 @@ _classify() {
 _log() {
   [ "${ONEX_GH_USAGE_LOG:-1}" = "0" ] && return 0
   local dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage"
-  local ts lane lane_src session ticket=""
+  local ts session ticket="" identity="" route_reason=""
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   session="$(_clean "${CLAUDE_CODE_SESSION_ID:-}")"
-  if [ -n "${ONEX_LANE:-}" ]; then
-    lane="$(_clean "$ONEX_LANE")"; lane_src="env"
-  elif [ -n "$session" ]; then
-    lane="session:$session"; lane_src="session"
-  else
-    lane="parent:$(_clean "$(basename "$(ps -o comm= -p "$PPID" 2>/dev/null)" 2>/dev/null)")"; lane_src="parent"
-  fi
   case "$PWD" in
     */omni_worktrees/OMN-*) ticket="${PWD#*/omni_worktrees/}"; ticket="${ticket%%/*}" ;;
   esac
   mkdir -p "$dir" 2>/dev/null || return 0
-  printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","pid":%s}\n' \
-    "$ts" "$lane" "$lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
-    "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$$" \
-    >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
+  _resolve_lane
+  if [ -n "$_route" ]; then
+    identity="${_route%% *}"
+    case "$_route" in *\ *) route_reason="${_route#* }" ;; esac
+    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","identity":"%s","route_reason":"%s","pid":%s}\n' \
+      "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
+      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$(_clean "$identity")" "$(_clean "$route_reason")" "$$" \
+      >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
+  else
+    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","pid":%s}\n' \
+      "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
+      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$$" \
+      >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
+  fi
 }
 
 # --- is this one of the two cacheable read shapes? ---------------------------
@@ -199,6 +270,71 @@ _sha() {
 }
 
 _classify "$@"
+_route=""
+
+# Run one gh call and leave its routing identity/reason in _route. With routing
+# disabled this is deliberately the same single command as the old shim path.
+_run_gh() {
+  _route=""
+  if [ "${ONEX_GH_READ_ROUTING:-}" != "1" ]; then
+    "$real" "$@"
+    return $?
+  fi
+
+  local candidate=0 router="" py="" rf="" rc=0
+  if [ "$_cls" = "api" ] && { [ "$_method" = "GET" ] || [ "$_method" = "HEAD" ]; }; then
+    candidate=1
+  else
+    case "$_cls" in
+      "pr view"|"pr list"|"pr checks"|"run view"|"run list") candidate=1 ;;
+    esac
+  fi
+  if [ "$candidate" -ne 1 ]; then
+    "$real" "$@"
+    rc=$?
+    _route="operator shim-not-a-read"
+    return "$rc"
+  fi
+
+  if [ -n "${ONEX_GH_ROUTER:-}" ]; then
+    router="$ONEX_GH_ROUTER"
+  else
+    router="$(cd "$(dirname "$self")" 2>/dev/null && pwd)/gh_route.py"
+  fi
+  # The router is stdlib-only and makes no network connection itself (the
+  # real gh and the mint command do), so any python3 on PATH can run it;
+  # python3.13 first because that is the project interpreter.
+  if [ -n "${ONEX_GH_ROUTE_PYTHON:-}" ]; then
+    py="$ONEX_GH_ROUTE_PYTHON"
+  else
+    py="$(command -v python3.13 2>/dev/null)"
+    [ -n "$py" ] || py="$(command -v python3 2>/dev/null)"
+  fi
+  if [ ! -f "$router" ] || [ ! -r "$router" ] || [ -z "$py" ] || [ ! -x "$py" ]; then
+    "$real" "$@"
+    rc=$?
+    _route="operator-fallback router-unavailable"
+    return "$rc"
+  fi
+  rf="$(mktemp "${TMPDIR:-/tmp}/onex-gh-route.XXXXXX" 2>/dev/null)"
+  if [ -z "$rf" ]; then
+    "$real" "$@"
+    rc=$?
+    _route="operator-fallback router-unavailable"
+    return "$rc"
+  fi
+  _resolve_lane
+  ONEX_LANE="$_lane" "$py" "$router" exec --result-file "$rf" -- "$@"
+  rc=$?
+  IFS= read -r _route < "$rf" || true
+  rm -f "$rf" 2>/dev/null
+  if [ -z "$_route" ] && [ "$rc" -ne 0 ]; then
+    "$real" "$@"
+    rc=$?
+    _route="operator-fallback router-failed"
+  fi
+  return "$rc"
+}
 
 # owner/repo of the working directory's origin remote, or "" outside a clone.
 _origin_repo() {
@@ -262,7 +398,7 @@ if _cacheable "$@"; then
     fi
     mkdir -p "$_cache_root" 2>/dev/null
     _tmp="$_entry.tmp.$$"
-    "$real" "$@" > "$_tmp.out" 2> "$_tmp.err"
+    _run_gh "$@" > "$_tmp.out" 2> "$_tmp.err"
     _rc=$?
     cat "$_tmp.out"
     cat "$_tmp.err" >&2
@@ -288,7 +424,7 @@ fi
 
 # Pass-through. Run rather than exec, so the exit code can be logged; stdin,
 # stdout, stderr and the terminal are inherited unchanged.
-"$real" "$@"
+_run_gh "$@"
 _rc=$?
 _log "$_rc" none
 exit "$_rc"
