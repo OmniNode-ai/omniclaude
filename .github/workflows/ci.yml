@@ -2243,7 +2243,7 @@ jobs:
           path: junit-test-${{ matrix.split }}.xml
 
   hooks-tests:
-    name: Hooks System Tests
+    name: Hooks System Tests (${{ matrix.split }}/2)
     needs: [occ-preflight, zone-filter]
     if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
@@ -2257,6 +2257,10 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        split: [1, 2]
     services:
       postgres:
         image: postgres:16-alpine
@@ -2370,6 +2374,8 @@ jobs:
         run: |
           if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
             uv run pytest tests/hooks/ -v \
+              --splits 2 \
+              --group ${{ matrix.split }} \
               --cov=src/omniclaude \
               --cov-report=term-missing \
               --junitxml=junit-hooks.xml
@@ -2382,7 +2388,7 @@ jobs:
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: hooks-test-results
+          name: hooks-test-results-${{ matrix.split }}
           path: junit-hooks.xml
 
   agent-framework-tests:
@@ -3137,7 +3143,7 @@ jobs:
             if gh run download "${{ github.run_id }}" \
                  --repo "${{ github.repository }}" \
                  --pattern 'test-results-*' \
-                 --pattern 'hooks-test-results' \
+                 --pattern 'hooks-test-results-*' \
                  --pattern 'agent-framework-test-results' \
                  --dir junit-reports; then
               echo "JUnit reports downloaded on attempt ${attempt}."

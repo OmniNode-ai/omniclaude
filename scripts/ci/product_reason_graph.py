@@ -166,7 +166,15 @@ CHECK_NAME_TO_SUBCHECK: dict[str, str] = {
     "Secret Detection": "security",
 }
 # Prefix-matched leaves (matrix-split check names, e.g. "Tests (Split 1/4)").
-CHECK_PREFIX_TO_SUBCHECK: tuple[tuple[str, str], ...] = (("Tests (Split", "tests"),)
+# "Hooks System Tests (" catches the OMN-19681 2-way shard rename ("Hooks
+# System Tests (1/2)" / "Hooks System Tests (2/2)"), which the exact-match
+# "Hooks System Tests" entry above no longer matches now that the job reports
+# its shard in its name; without this prefix both shards silently drop out of
+# the `tests` subcheck fold.
+CHECK_PREFIX_TO_SUBCHECK: tuple[tuple[str, str], ...] = (
+    ("Tests (Split", "tests"),
+    ("Hooks System Tests (", "tests"),
+)
 
 
 def _subcheck_for_check_name(name: str) -> str | None:
