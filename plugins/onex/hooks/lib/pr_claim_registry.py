@@ -32,6 +32,9 @@ Expiry policy (BOTH conditions must hold):
     - last_heartbeat_at > 30 minutes stale
     - claimed_at > 2 hours ago
 
+Expired and malformed claims are reaped through a unique tomb path before a
+new claim is written. The tomb is revalidated so a racing live claim is preserved.
+
 Usage:
     registry = ClaimRegistry()
 
@@ -218,6 +221,24 @@ def is_active(claim_data: dict) -> bool:  # type: ignore[type-arg]
     return not (heartbeat_stale and claimed_old)
 
 
+def _is_own_claim(
+    claim_data: dict,  # type: ignore[type-arg]
+    run_id: str,
+    lane_id: str | None,
+) -> bool:
+    """Return True when a live claim belongs to this caller (idempotent re-claim).
+
+    The run id alone is not proof of ownership: subagent lanes in one session
+    share the session id as their run id (``pr_ownership_guard`` resolves it
+    that way), so when both the claim and the caller name a lane, the lanes
+    must match too (OMN-19695).
+    """
+    if claim_data.get("claimed_by_run") != run_id:
+        return False
+    held_lane = claim_data.get("lane_id")
+    return not held_lane or not lane_id or held_lane == lane_id
+
+
 # ---------------------------------------------------------------------------
 # ClaimRegistry
 # ---------------------------------------------------------------------------
@@ -251,6 +272,84 @@ class ClaimRegistry:
 
     def _claim_path(self, pr_key: str) -> Path:
         return self._claims_dir / f"{filesystem_key(pr_key)}.json"
+
+    def _reap_inactive_claim(
+        self, claim_file: Path, pr_key: str
+    ) -> tuple[bool, dict | None]:
+        """Move a presumed-inactive claim aside and revalidate it safely.
+
+        Returns ``(True, None)`` when the path is clear for a new claim,
+        ``(False, claim)`` when the tomb contains a live claim, and
+        ``(False, None)`` when the reap could not be completed.
+        """
+        tomb_path = self._claims_dir / f".{claim_file.name}.{uuid.uuid4().hex}.tomb"
+        try:
+            claim_file.rename(tomb_path)
+        except FileNotFoundError:
+            # Another acquirer reaped it first. The create-if-absent link below
+            # will decide which contender wins.
+            return True, None
+        except OSError as e:
+            print(
+                f"[claim-registry] Warning: could not reap claim for {pr_key}: {e}",
+                flush=True,
+            )
+            return False, None
+
+        try:
+            try:
+                tomb_claim = json.loads(tomb_path.read_text())
+            except json.JSONDecodeError:
+                # Malformed claim files follow the same expiry policy.
+                tomb_claim = None
+            except OSError as e:
+                # We moved the file but cannot verify it. Restore it rather than
+                # risk deleting a live claim that won the race.
+                try:
+                    os.link(tomb_path, claim_file)
+                except FileExistsError:
+                    pass
+                except OSError as restore_error:
+                    print(
+                        f"[claim-registry] Warning: could not restore unreadable "
+                        f"claim for {pr_key}: {restore_error}",
+                        flush=True,
+                    )
+                    return False, None
+                tomb_path.unlink(missing_ok=True)
+                print(
+                    f"[claim-registry] Warning: could not verify claim for "
+                    f"{pr_key} while reaping: {e}",
+                    flush=True,
+                )
+                return False, None
+
+            if tomb_claim is not None and is_active(tomb_claim):
+                # The pathname changed after our earlier read. Put the live
+                # record back unless another contender already installed one.
+                try:
+                    os.link(tomb_path, claim_file)
+                except FileExistsError:
+                    pass
+                except OSError as e:
+                    print(
+                        f"[claim-registry] Warning: could not restore live claim "
+                        f"for {pr_key}: {e}",
+                        flush=True,
+                    )
+                    return False, None
+                tomb_path.unlink(missing_ok=True)
+                return False, tomb_claim
+
+            tomb_path.unlink()
+            return True, None
+        except OSError as e:
+            print(
+                f"[claim-registry] Warning: could not finish reaping claim for "
+                f"{pr_key}: {e}",
+                flush=True,
+            )
+            return False, None
 
     # ------------------------------------------------------------------
     # Public API
@@ -302,40 +401,8 @@ class ClaimRegistry:
         self._ensure_dir()
         claim_file = self._claim_path(pr_key)
 
-        # Check for existing claim
-        if claim_file.exists():
-            try:
-                existing = json.loads(claim_file.read_text())
-                if is_active(existing):
-                    existing_run = existing.get("claimed_by_run", "unknown")
-                    if existing_run == run_id:
-                        # We already own this claim — re-acquire (idempotent)
-                        return True
-                    print(
-                        f"[claim-registry] PR {pr_key} is actively claimed by run "
-                        f"{existing_run} (action: {existing.get('action', 'unknown')}). "
-                        f"Skipping.",
-                        flush=True,
-                    )
-                    return False
-                else:
-                    # Expired claim — log and proceed to overwrite
-                    print(
-                        f"[claim-registry] Expired claim for {pr_key} "
-                        f"(run: {existing.get('claimed_by_run', 'unknown')}, "
-                        f"heartbeat: {existing.get('last_heartbeat_at', 'unknown')}). "
-                        f"Proceeding to claim.",
-                        flush=True,
-                    )
-            except (json.JSONDecodeError, OSError) as e:
-                # Malformed or unreadable claim — treat as expired
-                print(
-                    f"[claim-registry] Warning: could not read existing claim for "
-                    f"{pr_key}: {e}. Proceeding to overwrite.",
-                    flush=True,
-                )
-
-        # Write claim atomically
+        # Prepare the new claim once. Each create attempt still uses a unique
+        # temp path and an atomic link below.
         now = _now_utc()
         claim_data = {
             "pr_key": pr_key,
@@ -348,48 +415,93 @@ class ClaimRegistry:
             "lane_id": lane_id,
         }
 
-        # Write claim using atomic create-if-absent (os.link prevents races).
-        # Generate a unique temp path to avoid collisions between concurrent runs.
-        import uuid as _uuid
-
-        tmp_path = self._claims_dir / f".tmp-{_uuid.uuid4().hex}.json"
-        try:
-            tmp_path.write_text(json.dumps(claim_data, indent=2))
+        saw_create_collision = False
+        for _attempt in range(4):
+            existing: dict | None = None
+            needs_reap = False
             try:
-                os.link(tmp_path, claim_file)
-            except FileExistsError:
-                # Another run created the claim between our check and write.
-                # Re-read to see if it's still active and not ours.
-                tmp_path.unlink(missing_ok=True)
-                try:
-                    concurrent = json.loads(claim_file.read_text())
-                    if is_active(concurrent):
-                        concurrent_run = concurrent.get("claimed_by_run", "unknown")
-                        if concurrent_run == run_id:
-                            # We already own it (concurrent acquire from same run) — idempotent.
-                            return True
-                        print(
-                            f"[claim-registry] PR {pr_key} claimed concurrently by run "
-                            f"{concurrent_run} (action: {concurrent.get('action', 'unknown')}). "
-                            f"Skipping.",
-                            flush=True,
-                        )
-                    # Active claim from another run or malformed — do not proceed.
-                    return False
-                except (json.JSONDecodeError, OSError):
-                    return False
-            else:
-                # Link succeeded — we own the claim. Remove temp.
-                tmp_path.unlink(missing_ok=True)
-        except OSError as e:
-            tmp_path.unlink(missing_ok=True)
-            print(
-                f"[claim-registry] Warning: could not write claim for {pr_key}: {e}",
-                flush=True,
-            )
-            return False
+                existing = json.loads(claim_file.read_text())
+                needs_reap = True
+            except FileNotFoundError:
+                pass
+            except (json.JSONDecodeError, OSError) as e:
+                needs_reap = True
+                print(
+                    f"[claim-registry] Warning: could not read existing claim for "
+                    f"{pr_key}: {e}. Proceeding to reap.",
+                    flush=True,
+                )
 
-        return True
+            if existing is not None:
+                if is_active(existing):
+                    existing_run = existing.get("claimed_by_run", "unknown")
+                    if _is_own_claim(existing, run_id, lane_id):
+                        # We already own this claim — re-acquire (idempotent).
+                        return True
+                    collision = " concurrently" if saw_create_collision else ""
+                    print(
+                        f"[claim-registry] PR {pr_key} is actively claimed"
+                        f"{collision} by run {existing_run} "
+                        f"(lane: {existing.get('lane_id') or 'unknown'}) "
+                        f"(action: {existing.get('action', 'unknown')}). Skipping.",
+                        flush=True,
+                    )
+                    return False
+
+                print(
+                    f"[claim-registry] Expired claim for {pr_key} "
+                    f"(run: {existing.get('claimed_by_run', 'unknown')}, "
+                    f"heartbeat: {existing.get('last_heartbeat_at', 'unknown')}). "
+                    f"Proceeding to reap.",
+                    flush=True,
+                )
+
+            if needs_reap:
+                reaped, raced_live_claim = self._reap_inactive_claim(claim_file, pr_key)
+                if raced_live_claim is not None:
+                    raced_run = raced_live_claim.get("claimed_by_run", "unknown")
+                    if _is_own_claim(raced_live_claim, run_id, lane_id):
+                        return True
+                    print(
+                        f"[claim-registry] PR {pr_key} is actively claimed "
+                        f"by run {raced_run} "
+                        f"(lane: {raced_live_claim.get('lane_id') or 'unknown'}) "
+                        f"(action: {raced_live_claim.get('action', 'unknown')}). "
+                        f"Skipping.",
+                        flush=True,
+                    )
+                    return False
+                if not reaped:
+                    return False
+
+            tmp_path = self._claims_dir / f".tmp-{uuid.uuid4().hex}.json"
+            try:
+                tmp_path.write_text(json.dumps(claim_data, indent=2))
+                try:
+                    os.link(tmp_path, claim_file)
+                except FileExistsError:
+                    # A contender won between inspection/reap and create. Loop
+                    # through the same active/expired checks, including same-run
+                    # idempotency and malformed-claim reaping.
+                    saw_create_collision = True
+                    continue
+                return True
+            except OSError as e:
+                print(
+                    f"[claim-registry] Warning: could not write claim for "
+                    f"{pr_key}: {e}",
+                    flush=True,
+                )
+                return False
+            finally:
+                tmp_path.unlink(missing_ok=True)
+
+        print(
+            f"[claim-registry] Warning: could not write or reap claim for "
+            f"{pr_key} after repeated concurrent changes",
+            flush=True,
+        )
+        return False
 
     def release(
         self,
