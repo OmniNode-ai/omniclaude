@@ -1703,15 +1703,12 @@ def _reconcile(args: argparse.Namespace) -> int:
         )
         return 2
 
-    # The claim index module lives in the private workspace repository. Loaded
-    # by path, with importlib, exactly as the pre-push hook's resolution loads
-    # it -- not through `scripts.branch_claim`, which is only importable when
-    # this file is imported as part of a package and is not when it is run as a
-    # script, which is how every hook and every lane invokes it.
-    index_path = Path(
-        os.environ.get("ONEX_BRANCH_CLAIM_INDEX_MODULE")
-        or root / "docs/workflows/_shared/claim_index.py"
-    )
+    # The vendored claim index is loaded from its sibling path, with importlib,
+    # exactly as the pre-push hook's resolution loads it -- not through
+    # `scripts.branch_claim`, which is only importable when this file is imported
+    # as part of a package and is not when it is run as a script, which is how
+    # every hook and every lane invokes it.
+    index_path = Path(__file__).resolve().with_name("claim_index.py")
     try:
         spec = importlib.util.spec_from_file_location("onex_claim_index", index_path)
         if spec is None or spec.loader is None:

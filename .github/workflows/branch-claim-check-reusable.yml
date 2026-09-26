@@ -30,9 +30,12 @@
 # place for it to drift, and a local refusal that disagrees with a remote check
 # is invisible until they disagree about a real push.
 #
-# `secrets: inherit` IS REQUIRED. The claim store and its index module live in a
-# PRIVATE workspace repository, and this job mints an installation token to read
-# them. Without the secrets the token step fails and the job fails CLOSED -- see
+# `secrets: inherit` IS REQUIRED. The claim store lives in a PRIVATE workspace
+# repository, and this job mints an installation token to read it. The claim
+# index module that resolves it does NOT: it is vendored in this repository as
+# `scripts/claim_index.py` beside the resolver (OMN-19722), and is fetched at the
+# same pin. Fetching it unpinned from the store's default branch let a wording
+# change there turn this repository's own gate red with no change here. Without the secrets the token step fails and the job fails CLOSED -- see
 # the store steps below. The repository is NOT named here: this repository is
 # public, and naming a private repository in public source is a never-exemptable
 # hygiene class. The name lives in an organization variable; only the shape of
@@ -81,7 +84,7 @@ on:
       store_repo_name:
         description: >-
           Name (NOT owner/name) of the PRIVATE repository holding the claim
-          store and its index module; the owner is always
+          store; the owner is always
           github.repository_owner. Leave unset in normal use -- it resolves from
           the organization variable OMNI_LEDGER_REPO.
 
@@ -95,11 +98,6 @@ on:
         type: string
         required: false
         default: docs/tracking/ROLLING_WORK_LEDGER.md
-      claim_index_path:
-        description: Path to the claim index module inside that repository.
-        type: string
-        required: false
-        default: docs/workflows/_shared/claim_index.py
       ledger_archive_glob:
         description: >-
           Where the ledger's ROLLS live inside that repository.
@@ -198,6 +196,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             scripts/branch_claim.py
+            scripts/claim_index.py
             scripts/lane_identity.py
           sparse-checkout-cone-mode: false
 
@@ -256,10 +255,10 @@ jobs:
       # store is LIVE STATE: a pinned SHA would answer about who held a ticket at
       # some past moment rather than who holds it now, which is the one question
       # this check exists to ask. The security trade is explicit: this reads a
-      # markdown store and one first-party module from a PRIVATE first-party
-      # repository, and the resolution validates what it reads -- a module
-      # missing its entry points is a refusal, an unreadable store is a refusal.
-      - name: Fetch the claim store, its rolls, and its index module
+      # markdown store, and only data, from a PRIVATE first-party repository;
+      # no code is fetched from it (the index module is vendored here, at the
+      # pin, since OMN-19722). An unreadable store is a refusal.
+      - name: Fetch the claim store and its rolls
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.repository_owner }}/${{ steps.store-repo.outputs.name }}
@@ -268,7 +267,6 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             ${{ inputs.ledger_path }}
-            ${{ inputs.claim_index_path }}
             ${{ inputs.ledger_archive_glob }}
           sparse-checkout-cone-mode: false
 
@@ -290,7 +288,13 @@ jobs:
                 || 'scripts/lane_identity.py' }}
           LEDGER: .branch-claim-store/${{ inputs.ledger_path }}
           LEDGER_NAME: ${{ inputs.ledger_path }}
-          CLAIM_INDEX: .branch-claim-store/${{ inputs.claim_index_path }}
+          # Vendored beside the resolver (OMN-19722), loaded by it from that
+          # sibling path. Asserted here so a sparse checkout that missed it names
+          # the cause instead of surfacing as the resolver's own refusal.
+          CLAIM_INDEX: >-
+            ${{ github.repository != 'OmniNode-ai/omniclaude'
+                && '.omniclaude-branch-claim/scripts/claim_index.py'
+                || 'scripts/claim_index.py' }}
           # Asserted below alongside the other three, for the same reason and a
           # sharper one: a sparse pattern that silently missed this leaves the
           # store as the live file alone, which is the pre-OMN-18791 behaviour
@@ -333,5 +337,4 @@ jobs:
             --range "${BASE_SHA}..HEAD" \
             --ledger "${LEDGER}" \
             --ledger-name "${LEDGER_NAME}" \
-            --claim-index-module "${CLAIM_INDEX}" \
             --annotate
