@@ -2182,22 +2182,14 @@ jobs:
           #
           # test_branch_claim.py, test_branch_claim_hook.py and
           # test_lane_identity_canary.py drive a real `git push` and a real
-          # `git commit` through installed hooks. They need a git identity, a
-          # default branch name, and an ABSOLUTE path to the claim index module,
-          # which lives in a different repository. branch-claim-gate.yml checks
-          # that repository out and passes the path as ONEX_CLAIM_INDEX_MODULE;
-          # it is their CI home and they lose nothing here.
-          #
-          # The previous revision of this comment said the gate supplies
-          # OMNI_HOME. It does not, and never did -- these files resolve the
-          # module from the explicit variable and fall back to OMNI_HOME only
-          # when it is absent. That distinction is why the canary was red here:
-          # the consolidated job supplies NEITHER, and the canary FAILS rather
-          # than skipping when it cannot locate the module, so it errored at
-          # fixture setup on every pull request merging dev after
-          # 2026-09-16T14:35Z -- omniclaude#2194 among them, otherwise green.
-          # It was added to branch-claim-gate.yml when it landed and to this
-          # list only now; one half of a two-half change (OMN-18273).
+          # `git commit` through installed hooks, so they need a git identity
+          # and a default branch name, which branch-claim-gate.yml sets up; it
+          # is their CI home and they lose nothing here. The claim index module
+          # they exercise is vendored as scripts/claim_index.py (OMN-19722);
+          # until then it was fetched from a different repository, and the
+          # canary errored at fixture setup here on every pull request merging
+          # dev after 2026-09-16T14:35Z because this job could not locate it
+          # (omniclaude#2194 among them, OMN-18273).
           #
           # test_install_hook_emit_drainer.py drives the real launchd installer
           # and needs brew python3.13 at the rule-11 path plus launchctl. No

@@ -82,27 +82,6 @@ def _stamp(offset_hours: float = 0.0) -> str:
     )
 
 
-def _claim_index_module() -> Path:
-    """Where the claim index module is, resolved fail-fast.
-
-    No fallback and no skip. A test that SKIPPED when it could not find the
-    module would turn "the canary could not run" into a green run, which is the
-    precise failure this file exists to remove.
-    """
-    explicit = os.environ.get("ONEX_CLAIM_INDEX_MODULE")
-    if explicit:
-        return Path(explicit).resolve()
-    workspace = os.environ.get(li.WORKSPACE_ENV)
-    if workspace:
-        return Path(workspace) / "docs" / "workflows" / "_shared" / "claim_index.py"
-    raise AssertionError(
-        f"neither ONEX_CLAIM_INDEX_MODULE nor {li.WORKSPACE_ENV} is set, so the claim "
-        "index "
-        "module cannot be located and this canary cannot run. It FAILS rather than "
-        "skips: a gate that cannot run has not passed."
-    )
-
-
 @pytest.fixture
 def workspace(tmp_path: Path) -> dict:
     """A miniature of the real workspace.
@@ -149,7 +128,6 @@ def workspace(tmp_path: Path) -> dict:
         "ONEX_LANE_PYTHON": sys.executable,
         "ONEX_BRANCH_CLAIM_LEDGER": str(home / LEDGER_NAME),
         "ONEX_BRANCH_CLAIM_LEDGER_NAME": LEDGER_NAME,
-        "ONEX_BRANCH_CLAIM_INDEX_MODULE": str(_claim_index_module()),
     }
     for leaked in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
         env.pop(leaked, None)
@@ -381,16 +359,16 @@ def test_reconcile_backfills_only_a_worktree_with_a_live_holder(
     assert li.resolve(base, never) is None
 
 
-def test_reconcile_backfills_nothing_when_the_claim_index_is_unreachable(
+def test_reconcile_backfills_nothing_when_the_claim_store_is_unreachable(
     workspace: dict,
 ) -> None:
     """Fail closed on the backfill, and say so. The hooks still install -- they
     are safe without any registration -- but a holder is never guessed by a
-    local parser standing in for the module that decides who a holder is."""
+    local parser standing in for an unreadable claim store."""
     worktree = _add_worktree(workspace, "OMN-9909", "lane/omn-9909-a")
     _claim(workspace, "alpha", "OMN-9909")
     env = dict(workspace["env"])
-    env["ONEX_BRANCH_CLAIM_INDEX_MODULE"] = str(workspace["home"] / "absent.py")
+    env["ONEX_BRANCH_CLAIM_LEDGER"] = str(workspace["home"] / "absent.md")
     result = subprocess.run(  # noqa: PLW1510 - the return code IS the assertion
         [
             sys.executable,
@@ -402,8 +380,8 @@ def test_reconcile_backfills_nothing_when_the_claim_index_is_unreachable(
         text=True,
         env=env,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "did not load" in result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "cannot read the claim store" in result.stderr
     assert li.resolve(workspace["home"] / ".onex_state", worktree) is None
     # The install half still happened.
     assert (workspace["repo"] / ".git" / "hooks" / "prepare-commit-msg").is_file()

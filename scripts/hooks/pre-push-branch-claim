@@ -32,9 +32,10 @@
 # `core.hooksPath` and a `SKIP=` style switch each convert a governed result into
 # degraded evidence that later reads as proof. The escape from a refusal is the
 # RELEASE PATH, which the refusal prints in full with the holder, the citable row
-# and the ticket already filled in. The two `ONEX_BRANCH_CLAIM_*` variables below
-# relocate the claim store for tests; they are not a bypass, because a path that
-# does not resolve REFUSES rather than skipping — see the fail-closed note.
+# and the ticket already filled in. The `ONEX_BRANCH_CLAIM_LEDGER*` variables
+# below relocate the claim store for tests; they are not a bypass, because a
+# path that does not resolve REFUSES rather than skipping — see the fail-closed
+# note.
 #
 # WHAT IT REFUSES, and what it only reports: the wrong-lane case and a commit
 # whose fence is behind the live claim. A commit carrying NO lane trailer is
@@ -118,8 +119,7 @@ fi
 # for the wrong reason. Name the cause here instead.
 LEDGER="${ONEX_BRANCH_CLAIM_LEDGER:-}"
 LEDGER_NAME="${ONEX_BRANCH_CLAIM_LEDGER_NAME:-docs/tracking/ROLLING_WORK_LEDGER.md}"
-CLAIM_INDEX="${ONEX_BRANCH_CLAIM_INDEX_MODULE:-}"
-if [ -z "$LEDGER" ] || [ -z "$CLAIM_INDEX" ]; then
+if [ -z "$LEDGER" ]; then
   if [ -z "${OMNI_HOME:-}" ]; then
     echo "pre-push: this worktree is registered as a lane but the workspace root is" >&2
     echo "  not set, so the claim store cannot be located and the push is refused." >&2
@@ -127,7 +127,6 @@ if [ -z "$LEDGER" ] || [ -z "$CLAIM_INDEX" ]; then
     exit 1
   fi
   LEDGER="${LEDGER:-$OMNI_HOME/$LEDGER_NAME}"
-  CLAIM_INDEX="${CLAIM_INDEX:-$OMNI_HOME/docs/workflows/_shared/claim_index.py}"
 fi
 
 # git feeds one line per ref on stdin: <local ref> <local sha> <remote ref> <remote sha>
@@ -167,8 +166,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       --repo . \
       "${args[@]}" \
       --ledger "$LEDGER" \
-      --ledger-name "$LEDGER_NAME" \
-      --claim-index-module "$CLAIM_INDEX"; then
+      --ledger-name "$LEDGER_NAME"; then
     status=1
   fi
 done <<< "$REF_LINES"
