@@ -3949,7 +3949,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
           save-cache: false
       - name: Install dependencies
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
       - name: Provide the sibling clones the cross-repo hooks resolve through OMNI_HOME
         run: |
           set -euo pipefail
@@ -3964,7 +3964,8 @@ jobs:
           core_version="$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("omnibase-core"))')"
           git clone --quiet --depth 1 --branch "v${core_version}" https://github.com/OmniNode-ai/omnibase_core.git "$OMNI_HOME/omnibase_core"
       - name: Cache pre-commit hook environments
-        uses: actions/cache@v6
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/pre-commit
           key: precommit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}

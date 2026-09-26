@@ -16,6 +16,7 @@ hardcoded inline strings, so new cases can be added in one place.
 from __future__ import annotations
 
 import importlib.util
+import sys
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
@@ -29,10 +30,22 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts" / "validation"
 
 
 def load_validator(name: str):  # type: ignore[return]
-    """Load a validation script module by filename stem."""
+    """Load a validation script module by filename stem.
+
+    OMN-19612 scoped several scripts/validation/*.py modules to import a
+    sibling helper, ``from _path_scope import selected_python_files``. That
+    only resolves when the scripts directory is on ``sys.path`` (true when a
+    script runs standalone, since Python puts its own directory at
+    ``sys.path[0]``) — this loader executes the module via
+    ``importlib.util`` instead, which does not add that directory on its
+    own, so the sibling import raised ``ModuleNotFoundError`` here.
+    """
     script_path = SCRIPTS_DIR / f"{name}.py"
     if not script_path.exists():
         pytest.fail(f"Validation script not found: {script_path}")
+    scripts_dir_str = str(SCRIPTS_DIR)
+    if scripts_dir_str not in sys.path:
+        sys.path.insert(0, scripts_dir_str)
     spec = importlib.util.spec_from_file_location(name, script_path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
