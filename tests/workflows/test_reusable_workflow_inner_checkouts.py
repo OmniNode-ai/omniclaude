@@ -17,10 +17,11 @@ workflow source and the script source drift apart silently.
 context is the CALLER's, so ``github.sha`` is a commit in the caller repo
 (omnibase_core, omnimarket, ...) that does not exist in the callee repo at all.
 
-``github.job_workflow_sha`` is the only expression that means "the commit this
-workflow file was loaded from". It keeps the workflow and the code it invokes on
-one immutable commit behind a SINGLE caller-side pin, so the two can never
-diverge.
+``github.job_workflow_sha`` was measured empty at runtime: omnimarket job
+108305539687 silently fell back to omniclaude's ``dev`` branch. The documented
+property is ``job.workflow_sha``, which keeps the workflow and the code it
+invokes on one immutable commit behind a SINGLE caller-side pin. A workflow may
+validate that value and expose it as a prior step's output.
 
 DEFECT 2 -- the silent sparse-checkout miss.
 ``actions/checkout`` with ``sparse-checkout:`` naming a path that does not exist
@@ -35,23 +36,24 @@ the KB doc gate had never once executed successfully from any caller repo (5
 runs, 5 failures on omnimarket; exit 2 on omnibase_core#1599 job 98344865386)
 while both pilots looked correctly wired to everyone reading the YAML.
 
-Reference implementation for both fixes:
-``.github/workflows/kb-doc-gate-reusable.yml`` -- an input defaulting to
-``github.job_workflow_sha``, plus a step that tests the fetched path exists and
-fails with a message naming the cause and stating THE GATE DID NOT RUN.
+Reference implementations: ``anti-growth-baseline-reusable.yml`` validates
+``job.workflow_sha`` and passes it through a step output;
+``kb-doc-gate-reusable.yml`` tests that its sparse-fetched path exists and fails
+with a message naming the cause and stating THE GATE DID NOT RUN.
 
 SCOPE, stated as what is actually checked rather than as an aspiration:
 
 - Every ``*.yml`` AND ``*.yaml`` in ``.github/workflows/`` whose ``on:`` block
   declares ``workflow_call``. A workflow that is not reusable has no
-  ``job_workflow_sha`` to pin to and is out of scope by construction.
+  defining-workflow SHA to pin to and is out of scope by construction.
 - Within those, only ``actions/checkout`` steps that set ``repository:``. A bare
   checkout of the caller's own tree is the normal case and is not touched.
 - SELF-checkout (``repository:`` naming the repo that hosts this workflow) must
-  pin to ``github.job_workflow_sha``, an input expression that falls back to it,
-  or a 40-character SHA.
+  pin to ``job.workflow_sha``, a validated prior-step output, or a 40-character
+  SHA. The legacy GitHub-context spelling and inputs that fall back to it remain
+  accepted while eight sibling workflows migrate under a separate ticket.
 - THIRD-REPO checkout (``repository:`` naming some other repo) cannot use
-  ``job_workflow_sha`` -- that SHA does not exist over there. It must instead be
+  ``job.workflow_sha`` -- that SHA does not exist over there. It must instead be
   caller-controlled: an input expression or a 40-character SHA. A bare branch
   name is still refused, because it is an unpinned dependency on another repo's
   moving branch.
@@ -97,10 +99,20 @@ WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 #: is not a SHA.
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
-#: The only expression that means "the commit this reusable workflow was loaded
-#: from". Matched as a substring so ``${{ inputs.x || github.job_workflow_sha }}``
-#: counts -- an explicit override that DEFAULTS to the pin is still pinned.
+#: Legacy expression retained while eight sibling workflows migrate separately.
+#: Matched as a substring so ``${{ inputs.x || github.job_workflow_sha }}``
+#: continues to count as pinned.
 JOB_WORKFLOW_SHA = "github.job_workflow_sha"
+
+#: The documented job-context property for the defining workflow's commit.
+#: Reject a nonexistent ``github.``-prefixed spelling of this property.
+DOCUMENTED_JOB_WORKFLOW_SHA_RE = re.compile(r"(?<!github\.)\bjob\.workflow_sha\b")
+
+#: An exact prior-step output expression, used after a workflow validates the
+#: documented job-context pin and writes it to ``GITHUB_OUTPUT``.
+STEP_OUTPUT_EXPR_RE = re.compile(
+    r"^\$\{\{\s*steps\.[A-Za-z_][\w-]*\.outputs\.[A-Za-z_][\w-]*\s*\}\}$"
+)
 
 #: A ``${{ inputs.* }}`` reference. For a third-repo checkout this is the best
 #: available pin, because the caller chooses the value.
@@ -264,13 +276,17 @@ def _ref_verdict(checkout: InnerCheckout, self_repository: str) -> str | None:
             "which does not exist in the checked-out repo at all"
         )
     if is_self:
-        if JOB_WORKFLOW_SHA in ref:
+        if (
+            JOB_WORKFLOW_SHA in ref
+            or DOCUMENTED_JOB_WORKFLOW_SHA_RE.search(ref)
+            or STEP_OUTPUT_EXPR_RE.fullmatch(ref)
+        ):
             return None
         return (
             f"self-checkout pinned to {ref!r}. A caller-side 'uses:' pin governs "
             "only which workflow FILE loads; it cannot reach this second "
             "checkout, so the workflow and the code it runs drift apart. Use "
-            "'${{ inputs.<name> || github.job_workflow_sha }}'"
+            "'${{ job.workflow_sha }}' or a validated prior-step output"
         )
     if INPUT_EXPR_RE.search(ref):
         return None
@@ -448,6 +464,8 @@ def _checkout_step(ref_line: str, sparse: bool = False, assertion: bool = False)
     ("ref_line", "expect_failure"),
     [
         ("          ref: ${{ github.job_workflow_sha }}\n", False),
+        ("          ref: ${{ job.workflow_sha }}\n", False),
+        ("          ref: ${{ steps.pin.outputs.sha }}\n", False),
         (
             "          ref: ${{ inputs.validator_ref || github.job_workflow_sha }}\n",
             False,
