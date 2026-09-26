@@ -73,6 +73,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import shutil
@@ -138,6 +139,19 @@ LOAD_RETRY_MAX_WAIT_SECONDS = 120
 LOAD_RETRY_POLL_SECONDS = 10
 """Interval between load readings while waiting."""
 
+# --- per-worktree classification budget [OMN-19399] -------------------------
+# Each git probe is capped at GIT_TIMEOUT_SECONDS, but one worktree runs about a
+# dozen of them in sequence, so at host load ~80 a single tree could hold the
+# whole scan for many minutes with nothing in the log to say why. Measured
+# 2026-09-26: the unattended run sat at "classified 400/686" for over 30 minutes
+# and a lane read it as hung. The budget bounds the wall clock ONE worktree may
+# spend: once it is spent, every remaining probe for that tree is recorded as
+# timed out without being run, so the row lands as ``timed_out`` (never
+# removed) and the scan moves on to the next tree.
+WORKTREE_CLASSIFY_BUDGET_SECONDS = 180
+"""Default wall-clock budget for classifying one worktree; 0 disables it."""
+BUDGET_EXHAUSTED_STDERR = "per-worktree classification budget exhausted"
+
 GH_TIMEOUT_SECONDS = 300
 GH_MERGED_PR_LIMIT = 5000
 GH_OPEN_PR_LIMIT = 500
@@ -189,9 +203,28 @@ class ModelGitResult(BaseModel):
 
 
 def _git_run(
-    cwd: Path, *args: str, timeout: int = GIT_TIMEOUT_SECONDS
+    cwd: Path,
+    *args: str,
+    timeout: int = GIT_TIMEOUT_SECONDS,
+    deadline: float | None = None,
 ) -> ModelGitResult:
-    """Run one git command and report exactly what happened."""
+    """Run one git command and report exactly what happened.
+
+    ``deadline`` is a :func:`time.monotonic` instant from the per-worktree
+    budget [OMN-19399]. Past it, the command is not run at all and the result is
+    a timeout; before it, the command's own timeout is capped at the time left.
+    """
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return ModelGitResult(
+                exit_code=-1,
+                stdout="",
+                stderr=BUDGET_EXHAUSTED_STDERR,
+                timed_out=True,
+                load_average=host_load_average(),
+            )
+        timeout = max(1, min(timeout, math.ceil(remaining)))
     try:
         proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
             ["git", "-C", str(cwd), *args],
@@ -927,11 +960,20 @@ def collect_facts(
     pr_state_cache: dict[Path, dict[str, tuple[EnumBranchPrState, str | None]]]
     | None = None,
     open_pr_cache: dict[Path, frozenset[str] | None] | None = None,
+    *,
+    deadline: float | None = None,
 ) -> ModelWorktreePruneFacts:
     """Observe one worktree. Pure observation — no judgement, no mutation.
 
     ``open_pr_cache`` is passed only when the open-PR fence is on
     [OMN-19399]; without it ``open_pr`` stays ``None``.
+
+    ``deadline`` is the per-worktree budget [OMN-19399]: every probe scoped to
+    THIS worktree runs against it, and a probe the budget did not reach is
+    recorded as timed out, so the row is ``timed_out`` and never removed. The
+    per-clone lookups (base ref, stash list, pull-request maps) are cached and
+    shared by every later worktree, so they are deliberately NOT charged to one
+    tree's budget: a truncated shared answer would be wrong for all of them.
     """
     rel = worktree.relative_to(root)
     ticket_dir = rel.parts[0]
@@ -948,10 +990,16 @@ def collect_facts(
     timed_out_probes: list[str] = []
     load_at_timeout: float | None = None
 
+    def _note_timeout(name: str, result: ModelGitResult) -> None:
+        nonlocal load_at_timeout
+        timed_out_probes.append(name)
+        if load_at_timeout is None:
+            load_at_timeout = result.load_average
+
     def _probe(name: str, *args: str) -> str:
         """Run one read-only probe, routing its failure to the right bucket."""
         nonlocal load_at_timeout
-        result = _git_run(worktree, *args)
+        result = _git_run(worktree, *args, deadline=deadline)
         if result.timed_out:
             timed_out_probes.append(name)
             if load_at_timeout is None:
@@ -960,7 +1008,7 @@ def collect_facts(
             unreadable_probes.append(name)
         return result.stdout
 
-    branch_result = _git_run(worktree, "branch", "--show-current")
+    branch_result = _git_run(worktree, "branch", "--show-current", deadline=deadline)
     # A non-zero rc here is a real failure; a zero rc with empty output is a
     # detached HEAD, which the policy already refuses on its own terms.
     if branch_result.timed_out:
@@ -994,7 +1042,9 @@ def collect_facts(
     unmerged: tuple[str, ...] = ()
     tree_diff_empty = False
     if base_ref is not None:
-        count_result = _git_run(worktree, "rev-list", "--count", f"{base_ref}..HEAD")
+        count_result = _git_run(
+            worktree, "rev-list", "--count", f"{base_ref}..HEAD", deadline=deadline
+        )
         if count_result.ok and count_result.stdout.isdigit():
             commits_ahead = int(count_result.stdout)
         elif count_result.timed_out:
@@ -1004,13 +1054,16 @@ def collect_facts(
         else:
             unreadable_probes.append(f"git rev-list --count {base_ref}..HEAD")
         if commits_ahead > 0:
-            code, cherry_out = _git(worktree, "cherry", base_ref, "HEAD")
-            if code == 0:
+            cherry = _git_run(worktree, "cherry", base_ref, "HEAD", deadline=deadline)
+            if cherry.ok:
                 unmerged = tuple(
                     line.split(" ", 1)[1].strip()
-                    for line in cherry_out.splitlines()
+                    for line in cherry.stdout.splitlines()
                     if line.startswith("+ ")
                 )
+            elif cherry.timed_out:
+                _note_timeout(f"git cherry {base_ref} HEAD", cherry)
+                unmerged = tuple(f"<unreadable:{i}>" for i in range(commits_ahead))
             else:
                 # Unreadable cherry output must not read as "nothing unmerged".
                 unreadable_probes.append(f"git cherry {base_ref} HEAD")
@@ -1018,10 +1071,14 @@ def collect_facts(
             # `git diff --quiet` signals its answer through the exit code: 0 =
             # no difference, 1 = differences. Anything else is a failure, and
             # must not be read as "no difference".
-            code, _ = _git(worktree, "diff", "--quiet", f"{base_ref}...HEAD")
-            if code not in (0, 1):
+            diff = _git_run(
+                worktree, "diff", "--quiet", f"{base_ref}...HEAD", deadline=deadline
+            )
+            if diff.timed_out:
+                _note_timeout(f"git diff --quiet {base_ref}...HEAD", diff)
+            elif diff.exit_code not in (0, 1):
                 unreadable_probes.append(f"git diff --quiet {base_ref}...HEAD")
-            tree_diff_empty = code == 0
+            tree_diff_empty = diff.exit_code == 0 and not diff.timed_out
 
     has_terminal, ticket_open_claims = ledger.get(ticket or "", (False, ()))
     open_claim = select_blocking_claim(ticket_open_claims, str(worktree), branch)
@@ -1038,9 +1095,16 @@ def collect_facts(
             "--verify",
             "--quiet",
             f"refs/remotes/origin/{branch}",
+            deadline=deadline,
         )
-        if tracking.ok and tracking.stdout == head_oid:
-            remote = _git_run(worktree, "ls-remote", "--heads", "origin", branch)
+        if tracking.timed_out:
+            _note_timeout(
+                f"git rev-parse --verify refs/remotes/origin/{branch}", tracking
+            )
+        elif tracking.ok and tracking.stdout == head_oid:
+            remote = _git_run(
+                worktree, "ls-remote", "--heads", "origin", branch, deadline=deadline
+            )
             if remote.ok and remote.stdout:
                 first = remote.stdout.split("\n", 1)[0].split("\t", 1)[0].strip()
                 if first == head_oid:
@@ -1199,15 +1263,19 @@ def load_hand_held_entries(path: Path) -> tuple[ModelHandHeldEntry, ...] | None:
     return tuple(entries)
 
 
-def commit_age_days(worktree: Path, now: float) -> float | None:
+def commit_age_days(
+    worktree: Path, now: float, *, deadline: float | None = None
+) -> float | None:
     """Age of the branch tip's COMMITTER date, in days, or None if unreadable."""
-    result = _git_run(worktree, "log", "-1", "--format=%ct", "HEAD")
+    result = _git_run(worktree, "log", "-1", "--format=%ct", "HEAD", deadline=deadline)
     if not result.ok or not result.stdout.strip().isdigit():
         return None
     return max(0.0, (now - float(result.stdout.strip())) / 86400.0)
 
 
-def newest_git_visible_mtime_age_days(worktree: Path, now: float) -> float | None:
+def newest_git_visible_mtime_age_days(
+    worktree: Path, now: float, *, deadline: float | None = None
+) -> float | None:
     """Age of the newest GIT-VISIBLE file, in days, or None if unreadable.
 
     Git-visible means ``git ls-files`` plus ``git ls-files --others
@@ -1222,18 +1290,28 @@ def newest_git_visible_mtime_age_days(worktree: Path, now: float) -> float | Non
     A tree with no visible files at all reports the age of its own HEAD commit's
     absence rather than a fabricated zero: it returns ``None``, which the
     predicate refuses.
+
+    Past ``deadline`` (the per-worktree budget, OMN-19399) the walk stops and
+    returns None, which the predicate refuses, rather than reporting the age of
+    a partial walk.
     """
     newest: float | None = None
     for args in (
         ("ls-files", "-z"),
         ("ls-files", "--others", "--exclude-standard", "-z"),
     ):
-        result = _git_run(worktree, *args)
+        result = _git_run(worktree, *args, deadline=deadline)
         if not result.ok:
             return None
-        for name in result.stdout.split("\0"):
+        for count, name in enumerate(result.stdout.split("\0")):
             if not name:
                 continue
+            if (
+                deadline is not None
+                and count % 1000 == 0
+                and time.monotonic() >= deadline
+            ):
+                return None
             try:
                 stamp = (worktree / name).lstat().st_mtime
             except OSError:
@@ -1312,6 +1390,7 @@ def collect_rescue_only_facts(
     newest_claim: dict[str, float],
     hand_held: tuple[ModelHandHeldEntry, ...] | None,
     now: float,
+    deadline: float | None = None,
 ) -> ModelRescueOnlyFacts:
     """Observe the rescue-only facts for one worktree. No judgement, no mutation.
 
@@ -1335,9 +1414,13 @@ def collect_rescue_only_facts(
         or prune_facts.branch is None
     )
 
-    commit_age = None if disqualified else commit_age_days(worktree, now)
+    commit_age = (
+        None if disqualified else commit_age_days(worktree, now, deadline=deadline)
+    )
     mtime_age = (
-        None if disqualified else newest_git_visible_mtime_age_days(worktree, now)
+        None
+        if disqualified
+        else newest_git_visible_mtime_age_days(worktree, now, deadline=deadline)
     )
 
     return ModelRescueOnlyFacts(
@@ -2802,6 +2885,18 @@ def build_parser() -> argparse.ArgumentParser:
             "Only ever removes fewer worktrees."
         ),
     )
+    parser.add_argument(
+        "--worktree-budget-seconds",
+        type=int,
+        default=WORKTREE_CLASSIFY_BUDGET_SECONDS,
+        help=(
+            "Wall-clock budget for classifying ONE worktree (default "
+            f"{WORKTREE_CLASSIFY_BUDGET_SECONDS}; 0 disables). Probes the budget "
+            "does not reach are recorded as timed out, so that worktree is "
+            "reported timed_out and never removed, and the scan moves on "
+            "[OMN-19399]."
+        ),
+    )
     parser.add_argument("--report-md", help="Write the markdown report to this path")
     parser.add_argument("--report-json", help="Write the JSON report to this path")
     parser.add_argument(
@@ -3002,7 +3097,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     decisions: list[ModelWorktreePruneDecision] = []
     rescue_decisions: list[ModelRescueOnlyDecision] = []
+    budget_seconds = args.worktree_budget_seconds
     for index, worktree in enumerate(worktrees, start=1):
+        deadline = time.monotonic() + budget_seconds if budget_seconds > 0 else None
         worktree_facts = collect_facts(
             worktree,
             root,
@@ -3012,6 +3109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             stash_cache,
             pr_state_cache,
             open_pr_cache,
+            deadline=deadline,
         )
         decisions.append(
             classify_worktree_prune(worktree_facts, hold_open_pr=args.hold_open_pr)
@@ -3026,10 +3124,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                         newest_claim=newest_claim_by_ticket,
                         hand_held=rescue_hand_held,
                         now=rescue_now,
+                        deadline=deadline,
                     ),
                     max_age_days=args.rescue_only_age_days,
                     claim_fence_days=args.rescue_only_claim_fence_days,
                 )
+            )
+        if decisions[-1].disposition is EnumPruneDisposition.TIMED_OUT and (
+            deadline is not None and time.monotonic() >= deadline
+        ):
+            # Say which tree spent the budget: a silent stretch between two
+            # progress lines is what read as a hang on 2026-09-26 [OMN-19399].
+            print(
+                f"  budget {budget_seconds}s spent on {worktree}; recorded "
+                "timed_out, moving on",
+                flush=True,
             )
         if checkpoint_enabled and checkpoint_path is not None:
             _write_checkpoint(checkpoint_path, root, str(worktree))
