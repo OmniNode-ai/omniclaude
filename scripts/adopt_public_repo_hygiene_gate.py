@@ -186,8 +186,8 @@ def render_workflow(repo: str, ref: str, pin: str) -> str:
 # a loud one.
 #
 # The pin is a SINGLE source of truth: the reusable workflow checks its own
-# validator out at github.job_workflow_sha, i.e. this very SHA, so the workflow
-# and the script can never drift apart. Pin to an omniclaude commit on `dev`;
+# validator out at validated job.workflow_sha, i.e. this very SHA, so the
+# workflow and the script can never drift apart. Pin to an omniclaude commit on `dev`;
 # `main` is release-synced and does not carry the gate.
 
 name: Public Repo Hygiene

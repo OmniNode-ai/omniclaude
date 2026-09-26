@@ -35,8 +35,8 @@
 # Surfaced check context in the caller:
 #   `private-repo-runner-placement / private-repo-runner-placement`
 #
-# ONE pin, not two: the script is checked out at `github.job_workflow_sha` --
-# the SHA this reusable was resolved at -- so the caller`s `uses:` SHA is the
+# ONE pin, not two: the script is checked out at validated `job.workflow_sha`
+# -- the SHA this reusable was resolved at -- so the caller`s `uses:` SHA is the
 # single source of truth for both the workflow and the validator. Pin to an
 # omniclaude commit on `dev`; `main` is release-synced and does not carry it.
 
@@ -89,13 +89,46 @@ jobs:
       - name: Fetch every branch tip
         run: git fetch --no-tags --depth=1 origin '+refs/heads/*:refs/remotes/origin/*'
 
+      - name: Resolve the gate pin
+        id: pin
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::workflow SHA is empty or is not a lowercase 40-hex commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$WORKFLOW_REPOSITORY" != "OmniNode-ai/omniclaude" ]; then
+            echo "::error::workflow repository is '$WORKFLOW_REPOSITORY', not OmniNode-ai/omniclaude. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"
+          echo "private-repo-runner-placement pin: $WORKFLOW_SHA"
+
       - name: Checkout the validator at this workflow`s own SHA
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omniclaude
-          ref: ${{ github.job_workflow_sha }}
+          ref: ${{ steps.pin.outputs.sha }}
           path: .private-repo-runner-placement-gate
           persist-credentials: false
+
+      - name: Assert the private-repo-runner-placement checkout is at the pin
+        env:
+          GATE_PIN: ${{ steps.pin.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! checked_out_sha="$(git -C .private-repo-runner-placement-gate rev-parse HEAD)"; then
+            echo "::error::could not resolve the fetched private-repo-runner-placement commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$checked_out_sha" != "$GATE_PIN" ]; then
+            echo "::error::private-repo-runner-placement checkout is at $checked_out_sha, expected $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "private-repo-runner-placement checked out at $checked_out_sha"
 
       - name: Set up Python
         uses: actions/setup-python@v7
