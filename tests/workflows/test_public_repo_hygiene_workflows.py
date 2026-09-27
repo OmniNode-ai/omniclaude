@@ -111,3 +111,51 @@ def test_public_repo_hygiene_reusable_fetches_and_passes_the_lab_vocabulary() ->
     assert '--lab-vocabulary "${LAB_VOCAB_PATH}"' in run
     assert 'if [ ! -f "${LAB_VOCAB_PATH}" ]' in run
     assert "OMNI_HYGIENE_LAB_VOCAB_REPO" in text
+
+
+def test_public_repo_hygiene_reusable_hands_the_gate_a_pull_request_diff_base() -> None:
+    """OMN-19835: the added-lines scope needs the merge ref's first parent.
+
+    Depth 2 fetches exactly that parent. The resolve step refuses a checkout
+    that is not a two-parent merge ref whose second parent is the pull
+    request head, and the gate is handed the first parent as --diff-base.
+    """
+    checkout = _step(REUSABLE, "public-repo-hygiene", "Checkout caller repo")
+    checkout_with = checkout["with"]
+    assert isinstance(checkout_with, dict)
+    assert checkout_with["fetch-depth"] == 2
+
+    resolve = _step(REUSABLE, "public-repo-hygiene", "Resolve the diff base")
+    assert resolve["if"] == "github.event_name == 'pull_request'"
+    env = resolve["env"]
+    assert isinstance(env, dict)
+    assert env["PR_HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"
+    body = str(resolve["run"])
+    assert "git rev-list --parents -n 1 HEAD" in body
+    assert body.count("exit 1") == 2
+
+    gate_step = _step(
+        REUSABLE, "public-repo-hygiene", "Run the public-repo hygiene gate"
+    )
+    gate_env = gate_step["env"]
+    assert isinstance(gate_env, dict)
+    assert gate_env["DIFF_BASE"] == "${{ steps.diff-base.outputs.sha }}"
+    run = str(gate_step["run"])
+    assert 'diff_args=(--diff-base "${DIFF_BASE}")' in run
+    assert "${diff_args[@]+" in run
+
+
+def test_public_repo_hygiene_hook_runs_on_every_commit_with_the_staged_diff() -> None:
+    """OMN-19835: the exported hook hands the gate the staged diff, and runs on
+    every commit. OMN-18777 had narrowed it to workflow files by mistake, so a
+    commit adding a private name to any other file never ran it.
+    """
+    hooks = yaml.safe_load(
+        (REPO_ROOT / ".pre-commit-hooks.yaml").read_text(encoding="utf-8")
+    )
+    hook = next(h for h in hooks if h["id"] == "public-repo-hygiene")
+    assert "scripts/public_repo_hygiene_gate.py" in hook["entry"]
+    assert "--diff-staged" in hook["entry"]
+    assert hook["always_run"] is True
+    assert "files" not in hook
+    assert hook["pass_filenames"] is False

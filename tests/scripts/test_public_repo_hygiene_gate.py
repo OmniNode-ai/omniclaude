@@ -163,6 +163,7 @@ def _run(
     *,
     lab_vocab_path: Path | None = None,
     only_classes: frozenset[str] | None = None,
+    added=None,
 ):
     return gate.run(
         root,
@@ -171,6 +172,7 @@ def _run(
         None,
         lab_vocab_path=lab_vocab_path or _lab_vocab_for(vocab_path),
         only_classes=only_classes,
+        added_lines=added,
     )
 
 
@@ -995,3 +997,323 @@ def test_an_explicit_lab_vocabulary_that_is_absent_is_still_refused(
         str(tmp_path / "nope.yaml"),
     ]
     assert gate.main(argv) == 2
+
+
+# ---------------------------------------------------------------------------
+# Added-lines scope (OMN-19835)
+# ---------------------------------------------------------------------------
+
+SCOPE_CONFIG = MINIMAL_CONFIG.replace("mode: enforce", "mode: report") + (
+    "enforce_scope: added-lines\n"
+    "enforce_classes:\n"
+    '  - "lab-config"\n'
+    '  - "person-name"\n'
+)
+CLEAN_LINE = "nothing to see here\n"
+
+
+def _git_in(root: Path, *args: str) -> str:
+    """git in a fixture repository, with the hook-exported location scrubbed."""
+    return subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=scrub_git_location_env(),
+    ).stdout.strip()
+
+
+def _commit(root: Path, message: str) -> str:
+    _git_in(root, "add", "-A", "-f")
+    _git_in(root, "commit", "-q", "--allow-empty", "-m", message)
+    return _git_in(root, "rev-parse", "HEAD")
+
+
+def _scoped_repo(tmp_path: Path, files: dict[str, str]) -> tuple[Path, str]:
+    """A fixture repository whose base commit holds ``files``."""
+    root = _make_repo(tmp_path / "r", files, SCOPE_CONFIG)
+    return root, _commit(root, "base")
+
+
+def _run_from_base(root: Path, vocab: Path, base: str):
+    return _run(
+        root, vocab, mode="report", added=gate.added_lines_from_base(root, base)
+    )
+
+
+def _failing(root: Path, vocab: Path, added) -> list:
+    code, blocking, _ = _run(root, vocab, mode="report", added=added)
+    config = gate.load_repo_config(root / gate.CONFIG_BASENAME)
+    failing = gate.failing_findings(blocking, config, "report", added)
+    assert (code == 1) is bool(failing)
+    return failing
+
+
+def test_added_lines_an_added_finding_blocks(tmp_path: Path, vocab: Path) -> None:
+    root, base = _scoped_repo(tmp_path, {"src/a.txt": CLEAN_LINE})
+    (root / "src" / "a.txt").write_text(
+        CLEAN_LINE + f"lane {LAB_LANE}\n", encoding="utf-8"
+    )
+    _commit(root, "adds a lab lane id")
+    code, _, _ = _run_from_base(root, vocab, base)
+    assert code == 1
+    failing = _failing(root, vocab, gate.added_lines_from_base(root, base))
+    assert [(f.path, f.line_no, f.class_name) for f in failing] == [
+        ("src/a.txt", 2, "lab-config")
+    ]
+
+
+def test_added_lines_an_untouched_existing_finding_does_not_block(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root, base = _scoped_repo(
+        tmp_path, {"src/a.txt": f"lane {LAB_LANE}\n", "src/b.txt": CLEAN_LINE}
+    )
+    (root / "src" / "b.txt").write_text(CLEAN_LINE * 2, encoding="utf-8")
+    _commit(root, "an unrelated change")
+    code, blocking, _ = _run_from_base(root, vocab, base)
+    assert code == 0
+    # Still reported: the scope narrows the verdict, never the report.
+    assert ("src/a.txt", "lab-config") in {(f.path, f.class_name) for f in blocking}
+
+
+def test_added_lines_an_edit_elsewhere_in_the_same_file_does_not_charge_it(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root, base = _scoped_repo(tmp_path, {"src/a.txt": f"lane {LAB_LANE}\n"})
+    (root / "src" / "a.txt").write_text(
+        f"lane {LAB_LANE}\n" + CLEAN_LINE, encoding="utf-8"
+    )
+    _commit(root, "appends a clean line")
+    code, _, _ = _run_from_base(root, vocab, base)
+    assert code == 0
+
+
+def test_added_lines_a_moved_line_counts_as_added(tmp_path: Path, vocab: Path) -> None:
+    root, base = _scoped_repo(
+        tmp_path, {"src/a.txt": f"lane {LAB_LANE}\n" + CLEAN_LINE * 3}
+    )
+    (root / "src" / "a.txt").write_text(
+        CLEAN_LINE * 3 + f"lane {LAB_LANE}\n", encoding="utf-8"
+    )
+    _commit(root, "moves the line")
+    failing = _failing(root, vocab, gate.added_lines_from_base(root, base))
+    assert [(f.path, f.line_no) for f in failing] == [("src/a.txt", 4)]
+
+
+def test_added_lines_a_line_moved_to_another_file_counts_as_added(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root, base = _scoped_repo(
+        tmp_path, {"src/a.txt": f"lane {LAB_LANE}\n" + CLEAN_LINE}
+    )
+    (root / "src" / "a.txt").write_text(CLEAN_LINE, encoding="utf-8")
+    (root / "src" / "b.txt").write_text(f"lane {LAB_LANE}\n", encoding="utf-8")
+    _commit(root, "moves the line to another file")
+    failing = _failing(root, vocab, gate.added_lines_from_base(root, base))
+    assert [f.path for f in failing] == ["src/b.txt"]
+
+
+def test_added_lines_a_renamed_file_counts_in_full(tmp_path: Path, vocab: Path) -> None:
+    root, base = _scoped_repo(
+        tmp_path, {"src/old.txt": f"lane {LAB_LANE}\n" + CLEAN_LINE * 5}
+    )
+    _git_in(root, "mv", "src/old.txt", "src/new.txt")
+    _commit(root, "renames the file, content unchanged")
+    added = gate.added_lines_from_base(root, base)
+    assert "src/new.txt" in added.added_files
+    failing = _failing(root, vocab, added)
+    assert [(f.path, f.class_name) for f in failing] == [("src/new.txt", "lab-config")]
+
+
+def test_added_lines_a_deleted_file_adds_nothing(tmp_path: Path, vocab: Path) -> None:
+    root, base = _scoped_repo(
+        tmp_path, {"src/a.txt": f"lane {LAB_LANE}\n", "src/b.txt": CLEAN_LINE}
+    )
+    (root / "src" / "a.txt").unlink()
+    _commit(root, "deletes the file")
+    code, _, _ = _run_from_base(root, vocab, base)
+    assert code == 0
+
+
+def test_added_lines_a_changed_binary_file_is_charged_whole(
+    tmp_path: Path, vocab: Path
+) -> None:
+    """git gives a binary file no hunks, so it cannot say which line is new.
+
+    The file is charged whole rather than not at all.
+    """
+    root, base = _scoped_repo(tmp_path, {"src/a.txt": CLEAN_LINE})
+    blob = root / "src" / "blob.dat"
+    blob.write_bytes(b"\x00header\n" + CLEAN_LINE.encode())
+    _commit(root, "adds a clean binary")
+    base = _git_in(root, "rev-parse", "HEAD")
+    blob.write_bytes(b"\x00header\n" + f"lane {LAB_LANE}\n".encode())
+    _commit(root, "rewrites the binary with a lab lane id")
+    added = gate.added_lines_from_base(root, base)
+    assert "src/blob.dat" in added.whole_files
+    failing = _failing(root, vocab, added)
+    assert [(f.path, f.class_name) for f in failing] == [("src/blob.dat", "lab-config")]
+
+
+def test_added_lines_an_unchanged_binary_is_not_charged(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root = _make_repo(tmp_path / "r", {"src/a.txt": CLEAN_LINE}, SCOPE_CONFIG)
+    (root / "src" / "blob.dat").write_bytes(b"\x00" + f"lane {LAB_LANE}\n".encode())
+    base = _commit(root, "base carries the binary")
+    (root / "src" / "a.txt").write_text(CLEAN_LINE * 2, encoding="utf-8")
+    _commit(root, "unrelated")
+    code, _, _ = _run_from_base(root, vocab, base)
+    assert code == 0
+
+
+def test_added_lines_a_path_with_spaces_and_unicode_is_attributed(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root, base = _scoped_repo(tmp_path, {"src/a.txt": CLEAN_LINE})
+    odd = root / "src" / "dir with space" / 'café "q".txt'
+    odd.parent.mkdir(parents=True)
+    odd.write_text(CLEAN_LINE + f"lane {LAB_LANE}\n", encoding="utf-8")
+    _commit(root, "an oddly named file")
+    failing = _failing(root, vocab, gate.added_lines_from_base(root, base))
+    assert [(f.path, f.line_no) for f in failing] == [
+        ('src/dir with space/café "q".txt', 2)
+    ]
+
+
+def test_added_lines_diff_base_is_the_merge_base(tmp_path: Path, vocab: Path) -> None:
+    """A finding the base branch gained after the fork point is not the PR's."""
+    root, _ = _scoped_repo(tmp_path, {"src/a.txt": CLEAN_LINE})
+    _git_in(root, "branch", "-M", "main")
+    _git_in(root, "checkout", "-q", "-b", "pr")
+    (root / "src" / "pr.txt").write_text(CLEAN_LINE, encoding="utf-8")
+    _commit(root, "the pull request")
+    _git_in(root, "checkout", "-q", "main")
+    (root / "src" / "later.txt").write_text(f"lane {LAB_LANE}\n", encoding="utf-8")
+    _commit(root, "the base moves on")
+    _git_in(root, "checkout", "-q", "pr")
+    code, _, _ = _run_from_base(root, vocab, "main")
+    assert code == 0
+
+
+def test_added_lines_staged_blocks_a_staged_finding(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root, _ = _scoped_repo(tmp_path, {"src/a.txt": f"contact {PERSON}\n"})
+    assert _failing(root, vocab, gate.added_lines_staged(root)) == []
+    (root / "src" / "b.txt").write_text(f"contact {PERSON}\n", encoding="utf-8")
+    _git_in(root, "add", "src/b.txt")
+    failing = _failing(root, vocab, gate.added_lines_staged(root))
+    assert [(f.path, f.class_name) for f in failing] == [("src/b.txt", "person-name")]
+
+
+def test_added_lines_staged_first_commit_charges_everything(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root = _make_repo(tmp_path / "r", {"src/a.txt": f"lane {LAB_LANE}\n"}, SCOPE_CONFIG)
+    failing = _failing(root, vocab, gate.added_lines_staged(root))
+    assert [f.path for f in failing] == ["src/a.txt"]
+
+
+def test_added_lines_staged_merge_charges_only_what_the_merge_adds(
+    tmp_path: Path, vocab: Path
+) -> None:
+    """A clean merge brings the other branch's lines in; they are not the
+    merge author's. A line added relative to EVERY parent still is.
+    """
+    root, _ = _scoped_repo(tmp_path, {"src/a.txt": CLEAN_LINE})
+    _git_in(root, "branch", "-M", "main")
+    _git_in(root, "checkout", "-q", "-b", "side")
+    (root / "src" / "side.txt").write_text(f"lane {LAB_LANE}\n", encoding="utf-8")
+    _commit(root, "the other branch carries a finding")
+    _git_in(root, "checkout", "-q", "main")
+    (root / "src" / "main.txt").write_text(CLEAN_LINE, encoding="utf-8")
+    _commit(root, "main moves")
+    _git_in(root, "merge", "--no-commit", "--no-ff", "-q", "side")
+    assert _failing(root, vocab, gate.added_lines_staged(root)) == []
+    (root / "src" / "resolution.txt").write_text(
+        f"contact {PERSON}\n", encoding="utf-8"
+    )
+    _git_in(root, "add", "src/resolution.txt")
+    failing = _failing(root, vocab, gate.added_lines_staged(root))
+    assert [f.path for f in failing] == ["src/resolution.txt"]
+
+
+def test_scope_without_a_diff_source_is_refused(tmp_path: Path, vocab: Path) -> None:
+    root, _ = _scoped_repo(tmp_path, {"src/a.txt": CLEAN_LINE})
+    with pytest.raises(gate.ConfigError, match="no diff source"):
+        _run(root, vocab, mode="report")
+    assert _cli(root, vocab) == 2
+
+
+def test_scope_a_targeted_only_classes_run_keeps_its_whole_file_verdict(
+    tmp_path: Path, vocab: Path
+) -> None:
+    """The lab-class gate command works unchanged in an added-lines repository."""
+    root, _ = _scoped_repo(tmp_path, {"src/a.txt": f"lane {LAB_LANE}\n"})
+    args = ("--mode", "enforce", "--only-classes", "private-network,lab-config")
+    assert _cli(root, vocab, *args) == 1
+    (root / "src" / "a.txt").write_text(CLEAN_LINE, encoding="utf-8")
+    assert _cli(root, vocab, *args) == 0
+
+
+def test_scope_whole_tree_ignores_a_diff_source(tmp_path: Path, vocab: Path) -> None:
+    """Never weaker: a repository that does not declare the scope keeps its
+    whole-tree verdict even when CI hands the gate a diff base.
+    """
+    config = LAB_CONFIG
+    root = _make_repo(tmp_path / "r", {"src/a.txt": f"lane {LAB_LANE}\n"}, config)
+    base = _commit(root, "base")
+    (root / "src" / "b.txt").write_text(CLEAN_LINE, encoding="utf-8")
+    _commit(root, "unrelated")
+    assert gate.load_repo_config(root / gate.CONFIG_BASENAME).enforce_scope == (
+        gate.WHOLE_TREE_SCOPE
+    )
+    code, _, _ = _run_from_base(root, vocab, base)
+    assert code == 1
+    assert _cli(root, vocab, "--diff-base", base) == 1
+
+
+def test_scope_an_unknown_value_is_a_config_error(tmp_path: Path, vocab: Path) -> None:
+    config = MINIMAL_CONFIG + "enforce_scope: added_lines\n"
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"}, config)
+    with pytest.raises(gate.ConfigError, match="enforce_scope"):
+        _run(root, vocab)
+
+
+def test_scope_cli_diff_base_and_diff_staged(
+    tmp_path: Path, vocab: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, base = _scoped_repo(tmp_path, {"src/a.txt": f"lane {LAB_LANE}\n"})
+    assert _cli(root, vocab, "--diff-base", base) == 0
+    assert _cli(root, vocab, "--diff-staged") == 0
+    (root / "src" / "b.txt").write_text(f"lane {LAB_LANE}\n", encoding="utf-8")
+    _git_in(root, "add", "src/b.txt")
+    capsys.readouterr()
+    assert _cli(root, vocab, "--diff-staged") == 1
+    out = capsys.readouterr().out
+    assert "ADDED src/b.txt:1: lab-config" in out
+    assert "ADDED src/a.txt" not in out
+    _commit(root, "commits it")
+    assert _cli(root, vocab, "--diff-base", base) == 1
+
+
+def test_scope_an_unresolvable_diff_base_is_a_refusal(
+    tmp_path: Path, vocab: Path
+) -> None:
+    root, _ = _scoped_repo(tmp_path, {"src/a.txt": CLEAN_LINE})
+    assert _cli(root, vocab, "--diff-base", "no-such-ref") == 2
+
+
+def test_the_repo_enforces_the_four_classes_on_added_lines() -> None:
+    """omniclaude's own config: the four classes fail a run, on added lines."""
+    config = gate.load_repo_config(REPO_ROOT / gate.CONFIG_BASENAME)
+    assert config.enforce_scope == gate.ADDED_LINES_SCOPE
+    assert {
+        "private-repo-name",
+        "internal-kb-prose",
+        "lab-config",
+        "person-name",
+    } <= config.enforce_classes

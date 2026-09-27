@@ -17,6 +17,24 @@
 mode: report
 suppression_registry: ".public-repo-hygiene-suppressions.yaml"
 
+# OMN-19835: these four classes FAIL the run, on the lines a change ADDS.
+# The tree already carries a residue in each of them (counted in OMN-19836 at
+# 1531 findings in 377 files on dev 6ccd525e2), so a whole-tree enforce would
+# fail every unrelated pull request, and report mode is how internal content
+# reached public dev and main unnoticed. With enforce_scope: added-lines a
+# pull request that adds a private repository name, internal knowledge-base
+# prose, a lab lane id or a person's name goes red; one that touches none of
+# them stays green. The scan and the report stay whole-tree, so the residue is
+# still counted on every run. When OMN-19836 brings a class to zero, it stays
+# in this list and the scope question for it is moot; drop enforce_scope only
+# when all four are at zero.
+enforce_scope: added-lines
+enforce_classes:
+  - "private-repo-name"
+  - "internal-kb-prose"
+  - "lab-config"
+  - "person-name"
+
 allowed_top_level:
   - ".bandit"
   - ".claude"
