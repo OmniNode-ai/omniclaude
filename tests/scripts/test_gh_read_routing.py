@@ -450,7 +450,7 @@ def test_cache_file_is_mode_0600_and_reused(
     assert [c["gh_token"] for c in _calls(env)] == [APP_TOKEN, APP_TOKEN]
 
 
-def test_cache_expires_after_fifty_minutes(
+def test_cache_expires_after_its_own_max_age(
     fake_gh: Path,
     env: dict[str, str],
     records: list[object],
@@ -459,12 +459,30 @@ def test_cache_expires_after_fifty_minutes(
     clock = [1_000_000.0]
     monkeypatch.setattr(gr, "_now", lambda: clock[0])
     _run(READ_ARGV, fake_gh, env, records)
-    clock[0] += 49 * 60
+    clock[0] += gr.TOKEN_MAX_AGE_S - 1
     _run(READ_ARGV, fake_gh, env, records)
     assert _mint_count(env) == 1
-    clock[0] += 60 + 1  # 50 min + 1 s after the mint
+    clock[0] += 2  # TOKEN_MAX_AGE_S + 1s after the mint
     _run(READ_ARGV, fake_gh, env, records)
     assert _mint_count(env) == 2
+
+
+def test_cache_max_age_stays_under_the_mint_commands_guaranteed_floor() -> None:
+    """OMN-19852 P2 (measured 2026-09-27 ~20:00Z-23:00Z, periodic 401 "Bad credentials"
+    bursts roughly every 30 minutes). GH_READ_TOKEN_CMD (onex-gh-reader-token) only
+    guarantees more than its own --min-ttl (default 900s) of real GitHub life left on the
+    token it hands back -- it can already be up to (3600 - 900)s old when this router
+    receives it. Caching it here (TOKEN_MAX_AGE_S, counted from receipt, not from GitHub's
+    actual mint) for anywhere near that floor, let alone past it, reuses an
+    already-expired token for the tail of the window. The 50-minute value in place before
+    this fix put the compounded worst case at ~95 minutes against GitHub's flat 60-minute
+    token lifetime.
+    """
+    mint_guaranteed_min_remaining_s = (
+        900  # onex-gh-reader-token's own --min-ttl default
+    )
+    safety_margin_s = 300
+    assert mint_guaranteed_min_remaining_s - safety_margin_s >= gr.TOKEN_MAX_AGE_S
 
 
 def test_cache_with_loose_mode_is_discarded_and_reminted(

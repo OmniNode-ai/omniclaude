@@ -604,3 +604,23 @@ def test_env_flag_wins_over_the_routing_conf_file(routed_env: dict[str, str]) ->
     assert result.returncode == 0
     assert _gh_calls(env)[0]["gh_token"] == OPERATOR_TOKEN
     assert all("identity" not in row for row in _usage(env))
+
+
+def test_routing_conf_file_trailing_comment_on_the_value_line_is_stripped(
+    routed_env: dict[str, str],
+) -> None:
+    """OMN-19852 P2: an operator's own annotation on the value line (the observed shape,
+    e.g. "ONEX_GH_READ_ROUTING=1  # re-enabled by ...") must not be read as part of the
+    value. Before this fix ``${_line#*=}`` kept the comment text, so the flag compared
+    unequal to "1" and every read silently ran on the operator while the file read enabled.
+    """
+    env = _routing_conf(
+        routed_env,
+        "ONEX_GH_READ_ROUTING=1  # re-enabled by orchestrator-83 2026-09-27, OMN-19852\n"
+        f"GH_READ_TOKEN_CMD={routed_env['GH_READ_TOKEN_CMD']}  # trailing note too\n",
+    )
+    env.pop("GH_READ_TOKEN_CMD")
+    result = _run(env, "pr", "list")
+    assert result.returncode == 0, result.stderr
+    assert _gh_calls(env) == [{"argv": ["pr", "list"], "gh_token": APP_TOKEN}]
+    assert _usage(env)[0]["identity"] == "app"
