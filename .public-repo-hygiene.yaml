@@ -19,10 +19,11 @@ suppression_registry: ".public-repo-hygiene-suppressions.yaml"
 
 # OMN-19835: these five classes FAIL the run, on the lines a change ADDS.
 # The tree already carries a residue in each of them (counted in OMN-19836 at
-# 1531 findings in 377 files across the first four classes, plus 184
-# private-network findings added by OMN-19837, on dev 6ccd525e2), so a
-# whole-tree enforce would fail every unrelated pull request, and report mode
-# is how internal content reached public dev and main unnoticed. With
+# 1531 findings in 377 files across the first four classes on dev 6ccd525e2,
+# plus 193 private-network findings added by OMN-19837, measured on the real
+# CI-fetched private vocabulary against dev 9a58ef705), so a whole-tree
+# enforce would fail every unrelated pull request, and report mode is how
+# internal content reached public dev and main unnoticed. With
 # enforce_scope: added-lines a pull request that adds a private repository
 # name, internal knowledge-base prose, a lab lane id, a person's name or a lab
 # address/host nickname goes red; one that touches none of them stays green.
