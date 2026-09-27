@@ -27,7 +27,8 @@
 # GH_READ_TOKEN_CMD and falls back to the operator credential when there is
 # none. Every other call, and every write, runs on the operator unchanged and
 # never reaches the router. With the flag unset or anything but 1 the shim
-# runs the real gh exactly as it did before routing existed.
+# runs the real gh exactly as it did before routing existed. Both variables
+# default from ~/.config/omni/gh-read-routing.env when unset (OMN-19852).
 #
 # Usage log (OMN-19585): every invocation appends one JSON line to
 # ${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage/<UTC date>.jsonl with the
@@ -72,6 +73,25 @@ done
 if [ -z "$real" ]; then
   echo "gh shim (OMN-19479): no real gh found on PATH after $self" >&2
   exit 127
+fi
+
+# --- read-routing defaults (OMN-19852) -----------------------------------------
+# A session, a launchd job and a Codex lane each start with their own environment,
+# so an exported flag reaches only the shells that happened to inherit it. When
+# ONEX_GH_READ_ROUTING or GH_READ_TOKEN_CMD is unset, take it from the one host
+# file ${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-read-routing.env (KEY=VALUE
+# lines; only these two keys are read, nothing is evaluated). The environment
+# wins, so ONEX_GH_READ_ROUTING=0 still turns routing off for one call.
+_routing_conf="${ONEX_GH_READ_ROUTING_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-read-routing.env}"
+if [ -f "$_routing_conf" ] && { [ -z "${ONEX_GH_READ_ROUTING+x}" ] || [ -z "${GH_READ_TOKEN_CMD+x}" ]; }; then
+  while IFS= read -r _line || [ -n "$_line" ]; do
+    case "$_line" in
+      ONEX_GH_READ_ROUTING=*)
+        [ -n "${ONEX_GH_READ_ROUTING+x}" ] || export ONEX_GH_READ_ROUTING="${_line#*=}" ;;
+      GH_READ_TOKEN_CMD=*)
+        [ -n "${GH_READ_TOKEN_CMD+x}" ] || export GH_READ_TOKEN_CMD="${_line#*=}" ;;
+    esac
+  done < "$_routing_conf"
 fi
 
 _cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/prview"
