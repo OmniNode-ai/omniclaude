@@ -250,6 +250,15 @@ jobs:
         # infers the protocol from their presence — it reads it from the overlay.
         # On a fork/cloud runner they are absent and the publisher skips before
         # building a producer.
+        #
+        # OMN-16336 CHANGE-CONTROL BATCHING: the caller repo's Actions variable
+        # OMNI_OCC_COMPANION_BATCH_MODE is handed to the publisher ONLY when it
+        # is set. Batching (one change-control companion per repository batch
+        # window) is the default in omnimarket's publisher and runtime, and the
+        # variable can only turn it off (`off`); queue health reports a repo
+        # that did. It is exported only when non-empty so an older publisher at
+        # the pinned omnimarket ref, which rejects an empty value, is never
+        # handed one.
         env:
           KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}
           KAFKA_SASL_USERNAME: ${{ secrets.KAFKA_SASL_USERNAME }}
@@ -261,6 +270,10 @@ jobs:
           # Best-effort ticket extraction; the script also parses the branch ref.
           PR_TICKET: ""
           LANE: ${{ inputs.lane }}
+          OMNI_OCC_COMPANION_BATCH_MODE_VAR: ${{ vars.OMNI_OCC_COMPANION_BATCH_MODE }}
         working-directory: .occ-autobind-src
         run: |
+          if [ -n "${OMNI_OCC_COMPANION_BATCH_MODE_VAR}" ]; then
+            export OCC_COMPANION_BATCH_MODE="${OMNI_OCC_COMPANION_BATCH_MODE_VAR}"
+          fi
           python scripts/publish_occ_autobind_command.py --lane "${LANE}"
