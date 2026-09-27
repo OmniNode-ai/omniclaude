@@ -304,6 +304,20 @@ jobs:
         # unavailable or rate-limited read is INDETERMINATE, and indeterminate
         # publishes. `permissions: contents: read` is unchanged — a public-repo
         # pulls read needs no additional scope.
+        #
+        # OMN-16336 CHANGE-CONTROL BATCHING: the caller repo's Actions variable
+        # OMNI_OCC_COMPANION_BATCH_MODE is handed to the publisher ONLY when it
+        # is set. Batching (one change-control companion per repository batch
+        # window) is the default in omnimarket's publisher and runtime, and the
+        # variable can only turn it off (`off`); queue health reports a repo
+        # that did. It is exported only when non-empty so an older publisher at
+        # the pinned omnimarket ref, which rejects an empty value, is never
+        # handed one.
+        #
+        # While batching is on, the companion-effect publisher declines with
+        # `publish_declined: occ_companion_batch_window_owns_this_pr`: the
+        # autobind leg folds the PR into its repository's window, and a per-PR
+        # companion from this leg would race it and leave two companions.
         env:
           PR_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -311,6 +325,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           LANE: ${{ inputs.lane }}
           GH_TOKEN: ${{ github.token }}
+          OMNI_OCC_COMPANION_BATCH_MODE_VAR: ${{ vars.OMNI_OCC_COMPANION_BATCH_MODE }}
           # OMN-18012: the dev lane declares SASL_PLAINTEXT/SCRAM-SHA-256 in
           # omnimarket config/ci_bus_lanes.yaml. Only the CREDENTIALS come
           # from the caller's inherited secrets; the broker still comes from
@@ -339,6 +354,9 @@ jobs:
         # streaming to the job output as it happens).
         run: |
           set -euo pipefail
+          if [ -n "${OMNI_OCC_COMPANION_BATCH_MODE_VAR}" ]; then
+            export OCC_COMPANION_BATCH_MODE="${OMNI_OCC_COMPANION_BATCH_MODE_VAR}"
+          fi
           python scripts/publish_occ_companion_effect_command.py --lane "${LANE}" \
             2>&1 | tee /tmp/occ-companion-effect-publisher.log
           verdict_count="$(
