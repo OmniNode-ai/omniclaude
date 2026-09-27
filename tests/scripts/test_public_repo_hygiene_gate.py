@@ -1307,8 +1307,13 @@ def test_scope_an_unresolvable_diff_base_is_a_refusal(
     assert _cli(root, vocab, "--diff-base", "no-such-ref") == 2
 
 
-def test_the_repo_enforces_the_four_classes_on_added_lines() -> None:
-    """omniclaude's own config: the four classes fail a run, on added lines."""
+def test_the_repo_enforces_the_five_classes_on_added_lines() -> None:
+    """omniclaude's own config: the five classes fail a run, on added lines.
+
+    OMN-19835 enforced the first four; OMN-19837 added private-network (lab
+    addresses and host nicknames), which was already a fully implemented
+    content class but was left unenforced on purpose in OMN-19835's own PR.
+    """
     config = gate.load_repo_config(REPO_ROOT / gate.CONFIG_BASENAME)
     assert config.enforce_scope == gate.ADDED_LINES_SCOPE
     assert {
@@ -1316,4 +1321,5 @@ def test_the_repo_enforces_the_four_classes_on_added_lines() -> None:
         "internal-kb-prose",
         "lab-config",
         "person-name",
+        "private-network",
     } <= config.enforce_classes
