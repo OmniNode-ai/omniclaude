@@ -152,6 +152,16 @@ EVIDENCE_SOURCE_RE: Final[re.Pattern[str]] = re.compile(
 )
 OCC_PR_REF_RE: Final[re.Pattern[str]] = re.compile(r"^OCC#(\d+)$", re.IGNORECASE)
 
+#: The autobind producer's terminal-outcome check-run (OMN-18069). Mirrors
+#: ``check_occ_companion_merged.AUTOBIND_OUTCOME_CHECK_NAME`` /
+#: ``AUTOBIND_OUTCOME_MARKER_PREFIX`` / ``AUTOBIND_OUTCOME_DECLINED`` in this
+#: same repo -- name and marker prefix are a cross-repo contract owned by
+#: ``omnimarket`` ``occ_autobind_outcome.py``, not something this module may
+#: redefine independently.
+AUTOBIND_OUTCOME_CHECK_NAME: Final[str] = "occ-autobind / outcome"
+AUTOBIND_OUTCOME_MARKER_PREFIX: Final[str] = "occ-autobind-outcome:"
+AUTOBIND_OUTCOME_DECLINED: Final[str] = "DECLINED"
+
 _PAGE_SIZE: Final[int] = 100
 
 #: Ceiling on the open-PR listing. ``gh pr list`` truncates at ``--limit``
@@ -164,6 +174,8 @@ class EnumCompanionHealOutcome(StrEnum):
 
     RERUN_REQUIRED = "rerun_required"
     NO_FAILED_PREFLIGHT = "no_failed_preflight"
+    DRAFT_NOT_MINTED = "draft_not_minted"
+    AUTOBIND_DECLINED = "autobind_declined"
     NO_EVIDENCE_STAMP = "no_evidence_stamp"
     NOT_COMPANION_FORM = "not_companion_form"
     COMPANION_UNMERGED = "companion_unmerged"
@@ -207,6 +219,19 @@ class PrHealInput:
     companion_state: EnumCompanionState
     companion_number: int | None
     failed_runs: tuple[RunSnapshot, ...] = ()
+    #: Whether GitHub reports this PR as a draft. occ-autobind deliberately
+    #: does not mint a companion for a draft (OMN-14741 F-17 suppression), so
+    #: a draft with no ``Evidence-Source:`` line is expected, not missing.
+    is_draft: bool = False
+    #: The producer's own ``reason=`` when the ``occ-autobind / outcome``
+    #: check-run for this head reports a terminal DECLINED verdict, or
+    #: ``None`` when no such terminal decline was found (no check-run yet, an
+    #: ERROR outcome, or a MINTED one -- all of which leave this PR on the
+    #: ordinary NO_EVIDENCE_STAMP path). A DECLINED outcome (OMN-18069/
+    #: OMN-18647) is a deliberate policy refusal -- the companion is not
+    #: coming for this head -- and is not the same fact as "no one has
+    #: written the stamp yet".
+    autobind_declined_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -250,6 +275,62 @@ def parse_companion_number(evidence_source: str | None) -> int | None:
     return int(match.group(1))
 
 
+def read_autobind_declined_reason(check_runs: list[dict[str, object]]) -> str | None:
+    """The ``reason=`` of the newest terminal DECLINED autobind outcome.
+
+    Mirrors ``check_occ_companion_merged.read_autobind_outcome`` (OMN-18069),
+    narrowed to the one outcome this heal must not conflate with a missing
+    stamp: DECLINED is a policy decision the producer already made and wrote
+    down, and a re-run cannot change it (OMN-18647). Returns ``None`` for
+    ERROR (a fault, not a decline), MINTED, or no such check-run at all --
+    every one of those leaves the caller on its ordinary NO_EVIDENCE_STAMP
+    path, exactly as before this function existed.
+    """
+    latest: dict[str, object] | None = None
+    for run in check_runs:
+        if not isinstance(run, dict):
+            continue
+        if str(run.get("name") or "") != AUTOBIND_OUTCOME_CHECK_NAME:
+            continue
+        if str(run.get("status") or "") != "completed":
+            continue
+        if latest is None or str(run.get("completed_at") or "") >= str(
+            latest.get("completed_at") or ""
+        ):
+            latest = run
+    if latest is None:
+        return None
+
+    output = latest.get("output")
+    summary = str(output.get("summary") or "") if isinstance(output, dict) else ""
+    for line in summary.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(AUTOBIND_OUTCOME_MARKER_PREFIX):
+            continue
+        payload = stripped[len(AUTOBIND_OUTCOME_MARKER_PREFIX) :].strip()
+        if not payload:
+            return None
+        outcome = payload.split(None, 1)[0]
+        if outcome.upper() != AUTOBIND_OUTCOME_DECLINED:
+            return None
+        reason = ""
+        marker = "reason="
+        if marker in payload:
+            reason = payload.split(marker, 1)[1].strip()
+        return reason or "(no reason recorded)"
+    return None
+
+
+def _check_runs_in_payload(payload: object) -> list[dict[str, object]]:
+    """The ``check_runs`` list of one check-runs API page, or ``[]``."""
+    if not isinstance(payload, dict):
+        return []
+    runs = payload.get("check_runs")
+    if not isinstance(runs, list):
+        return []
+    return [entry for entry in runs if isinstance(entry, dict)]
+
+
 def decide_companion_heal(pr: PrHealInput) -> HealDecision:
     """Decide whether one PR's failed runs must be re-run.
 
@@ -268,6 +349,31 @@ def decide_companion_heal(pr: PrHealInput) -> HealDecision:
 
     evidence_source = parse_evidence_source(pr.body)
     if evidence_source is None:
+        if pr.is_draft:
+            return HealDecision(
+                outcome=EnumCompanionHealOutcome.DRAFT_NOT_MINTED,
+                pr_number=pr.pr_number,
+                detail=(
+                    f"{where}: preflight failed but this PR is a draft -- "
+                    "occ-autobind deliberately does not mint a companion for "
+                    "a draft (OMN-14741 F-17 suppression); this is not a "
+                    "missing stamp and resolves itself once the PR is marked "
+                    "ready for review"
+                ),
+            )
+        if pr.autobind_declined_reason is not None:
+            return HealDecision(
+                outcome=EnumCompanionHealOutcome.AUTOBIND_DECLINED,
+                pr_number=pr.pr_number,
+                detail=(
+                    f"{where}: preflight failed and occ-autobind reported a "
+                    f"terminal DECLINED outcome for this head: "
+                    f"{pr.autobind_declined_reason}. This is a deliberate "
+                    "policy refusal, not a missing stamp -- the companion is "
+                    "not coming for this head and hand-authored evidence "
+                    "(OMN-15247) is the remedy, not a re-run"
+                ),
+            )
         return HealDecision(
             outcome=EnumCompanionHealOutcome.NO_EVIDENCE_STAMP,
             pr_number=pr.pr_number,
@@ -470,13 +576,22 @@ def run_failed_on_preflight(payload: object, *, markers: tuple[str, ...]) -> boo
 class GhPort(Protocol):
     """The GitHub reads and the one write this guard needs."""
 
-    def open_pull_requests(self, *, repo: str) -> tuple[tuple[int, str, str], ...]:
-        """``(number, head_sha, body)`` for every open PR in ``repo``."""
+    def open_pull_requests(
+        self, *, repo: str
+    ) -> tuple[tuple[int, str, str, bool], ...]:
+        """``(number, head_sha, body, is_draft)`` for every open PR in ``repo``."""
         ...
 
     def failed_preflight_check_count(self, *, repo: str, head_sha: str) -> int: ...
 
     def companion_state(self, *, occ_repo: str, number: int) -> EnumCompanionState: ...
+
+    def autobind_declined_reason(self, *, repo: str, head_sha: str) -> str | None:
+        """The ``reason=`` of a terminal DECLINED ``occ-autobind / outcome``
+        check-run for ``head_sha``, or ``None`` when none is present (no such
+        check-run yet, or its outcome is ERROR/MINTED rather than DECLINED).
+        """
+        ...
 
     def failed_runs(self, *, repo: str, head_sha: str) -> tuple[RunSnapshot, ...]: ...
 
@@ -505,7 +620,9 @@ class GhCli:
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"gh {' '.join(args)} returned non-JSON: {exc}") from exc
 
-    def open_pull_requests(self, *, repo: str) -> tuple[tuple[int, str, str], ...]:
+    def open_pull_requests(
+        self, *, repo: str
+    ) -> tuple[tuple[int, str, str, bool], ...]:
         payload = self._json(
             [
                 "pr",
@@ -517,7 +634,7 @@ class GhCli:
                 "--limit",
                 str(_OPEN_PR_LIMIT),
                 "--json",
-                "number,headRefOid,body",
+                "number,headRefOid,body,isDraft",
             ]
         )
         if not isinstance(payload, list):
@@ -528,15 +645,18 @@ class GhCli:
                 f"gh pr list returned {type(payload).__name__}, not a list of "
                 "pull requests"
             )
-        out: list[tuple[int, str, str]] = []
+        out: list[tuple[int, str, str, bool]] = []
         for entry in payload:
             if not isinstance(entry, dict):
                 continue
             number = entry.get("number")
             head = entry.get("headRefOid")
             body = entry.get("body") or ""
+            is_draft = bool(entry.get("isDraft") or False)
             if isinstance(number, int) and isinstance(head, str):
-                out.append((number, head, body if isinstance(body, str) else ""))
+                out.append(
+                    (number, head, body if isinstance(body, str) else "", is_draft)
+                )
         if len(out) >= _OPEN_PR_LIMIT:
             # gh caps silently. A partial pass that reads as a complete one is
             # the same failure mode as the error object above: some PR stays
@@ -572,6 +692,25 @@ class GhCli:
         except RuntimeError:
             return EnumCompanionState.UNRESOLVED
         return companion_state_from_payload(payload)
+
+    def autobind_declined_reason(self, *, repo: str, head_sha: str) -> str | None:
+        try:
+            payload = self._json(
+                [
+                    "api",
+                    f"repos/{repo}/commits/{head_sha}/check-runs?per_page={_PAGE_SIZE}",
+                    "--paginate",
+                    "--slurp",
+                ]
+            )
+        except RuntimeError:
+            # Fail-open on this one read only: it can only ever turn an
+            # unqualified NO_EVIDENCE_STAMP into a more precise category. An
+            # outage here must never block the ordinary heal path.
+            return None
+        pages = payload if isinstance(payload, list) else [payload]
+        check_runs = [run for page in pages for run in _check_runs_in_payload(page)]
+        return read_autobind_declined_reason(check_runs)
 
     def failed_runs(self, *, repo: str, head_sha: str) -> tuple[RunSnapshot, ...]:
         payload = self._json(
@@ -629,12 +768,24 @@ def collect_decisions(
     failed preflight at all — costs one check-runs read and stops.
     """
     decisions: list[HealDecision] = []
-    for number, head_sha, body in gh.open_pull_requests(repo=repo):
+    for number, head_sha, body, is_draft in gh.open_pull_requests(repo=repo):
         if only_pr is not None and number != only_pr:
             continue
 
         failed_checks = gh.failed_preflight_check_count(repo=repo, head_sha=head_sha)
-        companion_number = parse_companion_number(parse_evidence_source(body))
+        evidence_source = parse_evidence_source(body)
+        companion_number = parse_companion_number(evidence_source)
+
+        # Only reached for the boundary case this heal must not miscount: a
+        # failed preflight with no stamp yet, on a non-draft PR. A draft is
+        # resolved for free from the listing already in hand; reading the
+        # autobind check-run for every other PR (which never reaches this
+        # branch) would be pure waste.
+        autobind_declined_reason: str | None = None
+        if failed_checks and evidence_source is None and not is_draft:
+            autobind_declined_reason = gh.autobind_declined_reason(
+                repo=repo, head_sha=head_sha
+            )
 
         state = EnumCompanionState.UNRESOLVED
         runs: tuple[RunSnapshot, ...] = ()
@@ -657,6 +808,8 @@ def collect_decisions(
                     companion_state=state,
                     companion_number=companion_number,
                     failed_runs=runs,
+                    is_draft=is_draft,
+                    autobind_declined_reason=autobind_declined_reason,
                 )
             )
         )

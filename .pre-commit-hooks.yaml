@@ -52,7 +52,11 @@
     the name public_repo_hygiene_lab_vocabulary.yaml; absent is exit 2.
     See scripts/public_repo_hygiene_gate.py for the full rules.
   language: script
-  entry: scripts/public_repo_hygiene_gate.py --repo-root .
+  # --diff-staged (OMN-19835) hands the gate the lines this commit adds. It
+  # narrows the verdict only in a repository whose .public-repo-hygiene.yaml
+  # declares `enforce_scope: added-lines`; elsewhere it is ignored and the
+  # verdict is the whole-tree one below.
+  entry: scripts/public_repo_hygiene_gate.py --repo-root . --diff-staged
   # WHOLE-TREE, not staged-files. This is the whole lesson of OMN-17993: the
   # omnibase_core local-path check was staged-files-only, so it reported green
   # on every commit for months while .mcp.json at the tracked ROOT carried an
@@ -65,10 +69,12 @@
   # repository. That is the price of the invariant, and it is the right trade
   # against a gate that cannot see what it is supposed to govern.
   pass_filenames: false
-  # `files:` is the trigger, `pass_filenames: false` is the scope. A commit
-  # touching no workflow cannot introduce either refusal, and `always_run`
-  # would suppress `files:` and make every commit pay a live surface read.
-  files: ^\.github/workflows/.*\.ya?ml$
+  # always_run, restored by OMN-19835. OMN-18777 (#2255) replaced it here with
+  # a workflow-files-only `files:` trigger written for its own advisory-job
+  # hook, so this hook stopped running on every commit that touched no
+  # workflow -- including one adding a private name to a .py file. The
+  # content classes apply to every file type, so every commit is in scope.
+  always_run: true
   stages: [pre-commit, pre-merge-commit]
 
 - id: private-repo-runner-placement
