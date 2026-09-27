@@ -95,7 +95,9 @@ IDENTITY_APP = "app"
 IDENTITY_OPERATOR = "operator"
 IDENTITY_FALLBACK = "operator-fallback"
 
-_INSTALLATION_SHAPE = re.compile(r"ghs_[A-Za-z0-9_]{20,255}")
+# Installation tokens minted since 2026 are ~380 characters and carry "-" and "." (measured
+# 2026-09-27 on onexbot-pr-reader, OMN-19852); the older shape was 36 word characters.
+_INSTALLATION_SHAPE = re.compile(r"ghs_[A-Za-z0-9_.\-]{20,1024}")
 _GITHUB_URL = re.compile(r"^https?://(?:www\.)?github\.com/([^/\s]+)/([^/\s#?]+)")
 _OWNER_REPO = re.compile(r"^([A-Za-z0-9][A-Za-z0-9-]*)/([A-Za-z0-9._-]+)$")
 _SEARCH_SCOPE = re.compile(r"\b(?:org|user|repo):([A-Za-z0-9-]+)", re.IGNORECASE)

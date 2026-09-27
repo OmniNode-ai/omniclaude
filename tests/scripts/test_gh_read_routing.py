@@ -550,3 +550,18 @@ def test_mutation_real_gh_resolution_skips_an_installed_shim_copy(
     _write_exe(installed / "gh", "# ONEX_GH_USER_SHIM\nraise SystemExit(9)\n")
     path_env = f"{installed}{os.pathsep}{fake_gh.parent}"
     assert gr.resolve_real_gh(path_env, _MODULE_PATH.parent) == str(fake_gh)
+
+
+READ_ARGV_LONG = ["api", "repos/OmniNode-ai/omniclaude/pulls"]
+
+
+def test_read_accepts_the_long_installation_token_shape(
+    fake_gh: Path, env: dict[str, str], records: list[object]
+) -> None:
+    """OMN-19852: installation tokens minted since 2026 are ~380 characters with '-' and '.'."""
+    long_token = "ghs_" + "Ab3_-." * 63
+    env["FAKE_MINT_OUTPUT"] = long_token
+    assert _run(READ_ARGV_LONG, fake_gh, env, records) == 0
+    assert _calls(env) == [{"argv": READ_ARGV_LONG, "gh_token": long_token}]
+    (rec,) = records
+    assert rec.identity == gr.IDENTITY_APP  # type: ignore[attr-defined]

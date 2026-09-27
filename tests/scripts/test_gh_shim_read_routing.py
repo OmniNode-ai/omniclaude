@@ -565,3 +565,42 @@ def test_report_agent_registry_attribution_and_app_calls(tmp_path: Path) -> None
     assert rep["unattributed_calls"] == 0
     text = report.render_text(rep)
     assert "app_calls" in text and "agent-a" in text
+
+
+def _routing_conf(env: dict[str, str], body: str) -> dict[str, str]:
+    conf = Path(env["HOME"]) / ".config" / "omni" / "gh-read-routing.env"
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    conf.write_text(body)
+    out = dict(env)
+    out.pop("ONEX_GH_READ_ROUTING", None)
+    return out
+
+
+def test_routing_conf_file_turns_routing_on_when_env_is_unset(
+    routed_env: dict[str, str],
+) -> None:
+    """OMN-19852: a launchd job or Codex lane without the exported flag still routes."""
+    env = _routing_conf(
+        routed_env,
+        f"# host defaults\nONEX_GH_READ_ROUTING=1\nGH_READ_TOKEN_CMD={routed_env['GH_READ_TOKEN_CMD']}\n",
+    )
+    env.pop("GH_READ_TOKEN_CMD")
+    result = _run(env, "pr", "list")
+    assert result.returncode == 0, result.stderr
+    assert _gh_calls(env) == [{"argv": ["pr", "list"], "gh_token": APP_TOKEN}]
+    assert _usage(env)[0]["identity"] == "app"
+
+
+def test_routing_conf_file_never_routes_a_write(routed_env: dict[str, str]) -> None:
+    env = _routing_conf(routed_env, "ONEX_GH_READ_ROUTING=1\n")
+    result = _run(env, "pr", "merge", "1", "--squash")
+    assert result.returncode == 0
+    assert _gh_calls(env)[0]["gh_token"] == OPERATOR_TOKEN
+
+
+def test_env_flag_wins_over_the_routing_conf_file(routed_env: dict[str, str]) -> None:
+    env = _routing_conf(routed_env, "ONEX_GH_READ_ROUTING=1\n")
+    result = _run(env, "pr", "list", extra={"ONEX_GH_READ_ROUTING": "0"})
+    assert result.returncode == 0
+    assert _gh_calls(env)[0]["gh_token"] == OPERATOR_TOKEN
+    assert all("identity" not in row for row in _usage(env))
