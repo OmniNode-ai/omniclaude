@@ -342,6 +342,100 @@ class TestBoundaryParityRegressionPin:
 
 
 @pytest.mark.unit
+class TestPushExternalContexts:
+    """OMN-17427: push heads only receive the push-reporting L4 contexts."""
+
+    def _push_success(self) -> list[dict]:
+        return [
+            _job(name, "success")
+            for name in (
+                "Hook Edge Lane Gate",
+                "Hook Inventory Gate",
+                "occ-preflight / eligibility",
+            )
+        ]
+
+    @pytest.mark.parametrize("event_name", ["push", "workflow_dispatch"])
+    def test_non_pr_only_requires_push_reporting_contexts(
+        self, event_name: str
+    ) -> None:
+        assert evaluate_external(self._push_success(), event_name=event_name) == (
+            "SUCCESS",
+            [],
+            [],
+        )
+
+    def test_push_inventory_failure_fails(self) -> None:
+        rows = self._push_success()
+        rows[1]["conclusion"] = "failure"
+        assert evaluate_external(rows, event_name="push") == (
+            "FAILURE",
+            ["Hook Inventory Gate"],
+            [],
+        )
+
+    def test_push_missing_edge_lane_is_pending(self) -> None:
+        assert evaluate_external(self._push_success()[1:], event_name="push") == (
+            "PENDING",
+            [],
+            ["Hook Edge Lane Gate"],
+        )
+
+    @pytest.mark.parametrize("explicit_event", [False, True])
+    def test_pr_default_still_requires_full_set(self, explicit_event: bool) -> None:
+        kwargs = {"event_name": "pull_request"} if explicit_event else {}
+        verdict, failures, pending = evaluate_external(self._push_success(), **kwargs)
+        assert verdict == "PENDING"
+        assert failures == []
+        assert set(pending) == set(EXPECTED_EXTERNAL_CONTEXTS) - {
+            "Hook Edge Lane Gate",
+            "Hook Inventory Gate",
+        }
+        assert len(pending) == 13
+
+    def test_push_reporting_contexts_are_expected(self) -> None:
+        assert (
+            frozenset({"Hook Edge Lane Gate", "Hook Inventory Gate"})
+            == ci_summary_gate.PUSH_REPORTING_EXTERNAL_CONTEXTS
+        )
+        assert ci_summary_gate.PUSH_REPORTING_EXTERNAL_CONTEXTS.issubset(
+            EXPECTED_EXTERNAL_CONTEXTS
+        )
+
+    def test_push_occ_preflight_still_required(self) -> None:
+        rows = self._push_success()
+        assert evaluate_external(rows[:-1], event_name="push") == (
+            "PENDING",
+            [],
+            ["occ-preflight / eligibility"],
+        )
+        rows[-1]["conclusion"] = "failure"
+        verdict, failures, pending = evaluate_external(rows, event_name="push")
+        assert verdict == "FAILURE"
+        assert failures == ["occ-preflight / eligibility (1/1 producer(s) not success)"]
+        assert pending == []
+
+    def test_main_push_success(self, tmp_path: Path) -> None:
+        jobs_path = tmp_path / "jobs.json"
+        check_runs_path = tmp_path / "check_runs.json"
+        jobs_path.write_text(json.dumps(_all_gates()), encoding="utf-8")
+        check_runs_path.write_text(json.dumps(self._push_success()), encoding="utf-8")
+        assert (
+            ci_summary_gate.main(
+                [
+                    "--jobs-file",
+                    str(jobs_path),
+                    "--check-runs-file",
+                    str(check_runs_path),
+                    "--event-name",
+                    "push",
+                ]
+            )
+            == EXIT_SUCCESS
+        )
+
+
+@pytest.mark.unit
 class TestExternalContextLayer:
     """OMN-16000 L4: contexts living in workflow files OTHER than ci.yml,
     asserted against commits/{sha}/check-runs (never actions/runs/{id}/jobs,
