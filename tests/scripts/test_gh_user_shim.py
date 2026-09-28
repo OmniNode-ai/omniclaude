@@ -215,7 +215,12 @@ def test_cache_is_purged_by_a_pr_mutation(env: dict[str, str], verb: str) -> Non
         "url",
         extra={"FAKE_GH_RC": "1", "FAKE_GH_STDERR": "no pull requests found"},
     )
-    _run(env, "pr", verb)
+    mutation = ["pr", verb]
+    if verb == "merge":
+        # A merge queue-safe enqueue form reaches the existing purge path without
+        # requiring the guard's live verification probes.
+        mutation.extend(["1", "--match-head-commit", "deadbeef"])
+    _run(env, *mutation)
     after = _run(
         env, "pr", "view", "--json", "url", extra={"FAKE_GH_STDOUT": '{"url":"new"}'}
     )
@@ -262,7 +267,14 @@ def test_cache_purge_is_scoped_to_the_mutated_repository(
     gh(a, "pr", "view", "--json", "url")
     assert len(_calls(env)) == 2
     gh(
-        b, "pr", "merge", "1", "-R", "OmniNode-ai/repo_a"
+        b,
+        "pr",
+        "merge",
+        "1",
+        "-R",
+        "OmniNode-ai/repo_a",
+        "--match-head-commit",
+        "deadbeef",
     )  # names repo_a: its entries are purged
     gh(a, "pr", "view", "--json", "url")
     assert len(_calls(env)) == 4
