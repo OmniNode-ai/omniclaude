@@ -236,7 +236,14 @@ jobs:
               print("\n".join(findings))
               print("")
               print("A check must not rely on a specific machine. Take the runner set from a")
-              print("repository variable (runs-on: ${{ fromJSON(vars.X) }}, no literal fallback),")
+              # OMN-19895 follow-up: this literal must never appear contiguously in
+              # a run: block. GitHub's workflow template parser evaluates any dollar-
+              # brace-brace expression it finds in a run script before the shell ever
+              # sees it, and fromJSON(vars.X) against an unset variable fails the
+              # whole workflow file with "Error reading JToken from JsonReader" (an
+              # empty-string JSON parse). Splitting the token keeps the printed text
+              # identical while keeping it out of GitHub's expression scanner.
+              print("repository variable (runs-on: $" + "{{ fromJSON(vars.X) }}, no literal fallback),")
               print("take lab addresses from the deployment overlay, and assert what a runner must")
               print("BE, never which machine it is. There is no annotation escape for these rules.")
               sys.exit(1)
