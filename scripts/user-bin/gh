@@ -82,14 +82,37 @@ fi
 # file ${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-read-routing.env (KEY=VALUE
 # lines; only these two keys are read, nothing is evaluated). The environment
 # wins, so ONEX_GH_READ_ROUTING=0 still turns routing off for one call.
+#
+# A trailing " # note" on the same line as the value (an operator's own
+# disable annotation is the observed case, OMN-19852) is stripped, comment and
+# the whitespace before it: without this, "ONEX_GH_READ_ROUTING=1  # re-enabled"
+# would compare unequal to "1" and silently run every read on the operator
+# while the file reads enabled.
+_conf_strip_comment() {
+  local v="$1"
+  case "$v" in *[[:space:]]'#'*) v="${v%%[[:space:]]\#*}" ;; esac
+  while :; do
+    case "$v" in
+      *[[:space:]]) v="${v%[[:space:]]}" ;;
+      *) break ;;
+    esac
+  done
+  printf '%s' "$v"
+}
 _routing_conf="${ONEX_GH_READ_ROUTING_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-read-routing.env}"
 if [ -f "$_routing_conf" ] && { [ -z "${ONEX_GH_READ_ROUTING+x}" ] || [ -z "${GH_READ_TOKEN_CMD+x}" ]; }; then
   while IFS= read -r _line || [ -n "$_line" ]; do
     case "$_line" in
       ONEX_GH_READ_ROUTING=*)
-        [ -n "${ONEX_GH_READ_ROUTING+x}" ] || export ONEX_GH_READ_ROUTING="${_line#*=}" ;;
+        if [ -z "${ONEX_GH_READ_ROUTING+x}" ]; then
+          _conf_v="$(_conf_strip_comment "${_line#*=}")"
+          export ONEX_GH_READ_ROUTING="$_conf_v"
+        fi ;;
       GH_READ_TOKEN_CMD=*)
-        [ -n "${GH_READ_TOKEN_CMD+x}" ] || export GH_READ_TOKEN_CMD="${_line#*=}" ;;
+        if [ -z "${GH_READ_TOKEN_CMD+x}" ]; then
+          _conf_v="$(_conf_strip_comment "${_line#*=}")"
+          export GH_READ_TOKEN_CMD="$_conf_v"
+        fi ;;
     esac
   done < "$_routing_conf"
 fi

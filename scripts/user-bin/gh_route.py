@@ -87,7 +87,17 @@ CACHE_SUBDIR = "omni"
 CACHE_FILE_NAME = "gh-read-token.json"
 USAGE_LOG_NAME = "gh-route.jsonl"
 SHIM_MARKER = b"ONEX_GH_USER_SHIM"
-TOKEN_MAX_AGE_S = 50 * 60
+# GH_READ_TOKEN_CMD (onex-gh-reader-token, in omnibase_internal) only guarantees that a token
+# it hands back has more than its own --min-ttl (default 900s) of real GitHub life left -- it
+# reuses ITS cache whenever more than that remains, so a token this router receives can already
+# be up to (3600 - 900)s = 2700s old. This cache used to assume the token was freshly minted at
+# receipt and held it for 50 more minutes, so the compounded age could reach ~95 minutes against
+# GitHub's flat 60-minute lifetime: periodic 401 "Bad credentials" bursts measured 2026-09-27
+# ~20:00Z-23:00Z (OMN-19852 P2), roughly every 30 minutes, each followed by a clean fallback once
+# route_and_run's own retry-on-refusal path did NOT catch it (that path only catches "Resource
+# not accessible by integration", not an expired-token 401). This value must stay safely under
+# the upstream's 900s floor, with margin for latency and clock skew.
+TOKEN_MAX_AGE_S = 5 * 60
 TOKEN_CMD_TIMEOUT_S: float = 30.0
 INTEGRATION_REFUSAL = "Resource not accessible by integration"
 
