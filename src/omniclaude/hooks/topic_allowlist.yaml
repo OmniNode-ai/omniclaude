@@ -716,6 +716,16 @@ allowed_extras:
       No dedicated node contract; contract governance to follow.
     ticket: OMN-7026
 
+  - topic: "onex.evt.omniclaude.hook-event.v1"
+    lifecycle: observability
+    reason: >
+      Lineage-carrying Claude Code hook event, all hook types (OMN-19513).
+      Declared in EVENT_REGISTRY to keep the daemon-registry projection
+      consistent (OMN-18357); the producer/consumer wiring is separate
+      OMN-19513 scope (omniclaude#2371/#2372), not landed yet.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-19513
+
   # ---------------------------------------------------------------------------
   # Hook health observability topics (OMN-7156)
   # Structured hook error events emitted by hook_error_emitter for health
