@@ -44,8 +44,8 @@
 # and the canonical clones instead.
 #
 # Shared call log (OMN-19852): every allowed or refused call appends one
-# tab-separated line to
-# ${ONEX_GH_CALLS_LOG:-${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/gh-calls.log}.
+# tab-separated line to ONEX_GH_CALLS_LOG, else ONEX_STATE_DIR/gh-calls.log
+# (no log is written when neither is set).
 # It contains only timestamp, resolved lane/source, class, method, endpoint,
 # exit code and action -- never argv, environment values or tokens.
 # ONEX_GH_USAGE_LOG=0 turns both usage logs off for one call.
@@ -287,8 +287,6 @@ _call_log() {
     file="$ONEX_GH_CALLS_LOG"
   elif [ -n "${ONEX_STATE_DIR:-}" ]; then
     file="$ONEX_STATE_DIR/gh-calls.log"
-  elif [ -n "${OMNI_HOME:-}" ]; then
-    file="$OMNI_HOME/.onex_state/gh-calls.log"
   else
     return 0
   fi
@@ -378,7 +376,7 @@ fi
 if [ "$_search_call" -eq 1 ] && [ "${ONEX_PR_WATCHER:-}" != "1" ]; then
   printf '%s\n' \
     'REFUSED (OMN-19852): GitHub search is the secondary-rate-limited bucket that took queue-status down at 21:5xZ on 2026-09-28.' \
-    'Read PR state from $OMNI_HOME/.claude_scratch/pr-watcher/state.json via merge-drain'"'"'s pr_state_local.py: python3 pr_state_local.py --pr OmniNode-ai/<repo>#<n>, or python3 pr_state_local.py --status.' \
+    'Read PR state from state.json under the .claude_scratch/pr-watcher directory of the workspace root; use merge-drain pr_state_local.py: python3 pr_state_local.py --pr OmniNode-ai/<repo>#<n>, or python3 pr_state_local.py --status.' \
     'For merge counts, use git -C <canonical clone> log origin/dev on the clone that canonical-clone-sync keeps fetched.' >&2
   _call_log 1 refused
   exit 1
