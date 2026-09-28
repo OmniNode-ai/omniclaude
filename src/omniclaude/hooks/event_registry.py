@@ -542,6 +542,22 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # =========================================================================
     # Tool Events
     # =========================================================================
+    # OMN-19551 (topic and contract owned by omnimarket, OMN-19550): full
+    # session content -- the complete prompt, tool input, tool result and
+    # assistant reply -- one item or one chunk per record, scrubbed by the
+    # capture-redaction contract's capture_scrubbed class before publish.
+    "content.captured": EventRegistration(
+        event_type="content.captured",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.CONTENT_CAPTURED,
+                transform=redact_capture,
+                description="Contract-scrubbed full session content (OMN-19550)",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "content_kind"],
+    ),
     "tool.executed": EventRegistration(
         event_type="tool.executed",
         fan_out=[
@@ -1412,6 +1428,26 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         ],
         partition_key_field="session_id",
         required_fields=["session_id", "model_id", "total_tokens"],
+    ),
+    # =========================================================================
+    # Lineage-Carrying Hook Event (OMN-19513)
+    # =========================================================================
+    # Declared by omnimarket's daemon registry (topics.yaml) so this repo's
+    # committed EVENT_REGISTRY stays in sync (Registry Consistency, OMN-18357
+    # generate_event_registry.py --check). The producer that actually emits
+    # this event for every hook type is OMN-19513 scope (omniclaude#2371);
+    # this entry only keeps the projection consistent ahead of that landing.
+    "hook.event": EventRegistration(
+        event_type="hook.event",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.HOOK_EVENT,
+                transform=redact_capture,
+                description="Lineage-carrying Claude Code hook event, all hook types (OMN-19513)",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "event_id", "hook_event_name", "lineage"],
     ),
 }
 

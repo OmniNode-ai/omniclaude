@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 HOOK_SCRIPT = (
@@ -104,6 +105,33 @@ def test_stop_blocks_skip_token_in_session_evidence(tmp_path: Path) -> None:
 def test_hooks_json_registers_guard_for_stop_and_subagent_stop() -> None:
     hooks_json = REPO_ROOT / "plugins" / "onex" / "hooks" / "hooks.json"
     data = json.loads(hooks_json.read_text())
+
+    # The guard is on the OMN-18531 triage list: dark by decision, not by
+    # accident. Stop now carries an unrelated observer (OMN-19551), so the
+    # "no hooks registered" skip below no longer covers that case.
+    inventory = yaml.safe_load(
+        (
+            REPO_ROOT
+            / "plugins"
+            / "onex"
+            / "hooks"
+            / "contracts"
+            / "hook_inventory.yaml"
+        ).read_text()
+    )
+    triaged = {
+        row.get("script")
+        for rows in inventory.values()
+        if isinstance(rows, list)
+        for row in rows
+        if isinstance(row, dict)
+        and (row.get("restoration") or {}).get("kind") == "triage"
+    }
+    if "skip_token_surface_guard.sh" in triaged:
+        pytest.skip(
+            "skip_token_surface_guard.sh is triaged dark under OMN-18531. "
+            "Re-enable this assertion when that triage registers it."
+        )
 
     for event_name in ("Stop", "SubagentStop"):
         if not data["hooks"].get(event_name):

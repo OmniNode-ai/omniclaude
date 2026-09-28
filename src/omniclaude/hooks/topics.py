@@ -63,6 +63,12 @@ class TopicBase(StrEnum):
     CLAUDE_HOOK_EVENT = "onex.cmd.omniintelligence.claude-hook-event.v1"
     # Tool content topic for pattern learning (OMN-1702)
     TOOL_CONTENT = "onex.cmd.omniintelligence.tool-content.v1"
+    # OMN-19551: full session content (prompt, tool input, tool result,
+    # assistant reply), scrubbed by the capture-redaction contract. A cmd
+    # topic because full prompts and file contents go only on the restricted
+    # onex.cmd.omniintelligence.* family; local, not on the cloud relay
+    # allowlist.
+    CONTENT_CAPTURED = "onex.cmd.omniintelligence.content-captured.v1"
     # Session outcome: CMD target for intelligence feedback loop (OMN-1735)
     SESSION_OUTCOME_CMD = "onex.cmd.omniintelligence.session-outcome.v1"
     # Session outcome: EVT target for dashboards / monitoring
@@ -71,6 +77,12 @@ class TopicBase(StrEnum):
     UTILIZATION_SCORING_CMD = "onex.cmd.omniintelligence.utilization-scoring.v1"
     # LLM call completed: cost telemetry for omnidash llm_cost_aggregates (OMN-7570)
     LLM_CALL_COMPLETED = "onex.evt.omniintelligence.llm-call-completed.v1"
+    # Lineage-carrying Claude Code hook event, all hook types (OMN-19513).
+    # Registered here so the daemon-registry projection (omnimarket
+    # topics.yaml) and this repo's committed EVENT_REGISTRY stay in sync
+    # (Registry Consistency, OMN-18357 script). The producer/consumer wiring
+    # for this event type is OMN-19513 scope (omniclaude#2371/#2372).
+    HOOK_EVENT = "onex.evt.omniclaude.hook-event.v1"
 
     # ==========================================================================
     # Hook adapter observability topics (migrated to ONEX format, OMN-1552)

@@ -55,7 +55,10 @@ TURN_DIRNAME = "hook_turns"
 STALE_AFTER_SECONDS = 30 * 24 * 3600
 
 _OPENS_A_TURN = frozenset({"prompt.submitted"})
-_INSIDE_A_TURN = frozenset({"tool.executed"})
+# OMN-19551: a content record inside a turn (the Stop hook's assistant reply)
+# belongs to the turn its prompt opened. The prompt and tool content records
+# pass the metadata record's turn in explicitly, so they never reach this.
+_INSIDE_A_TURN = frozenset({"tool.executed", "content.captured"})
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 
 
