@@ -249,6 +249,23 @@ class TestBodyAndScopeVerdicts:
 
 
 class TestMainEntrypoint:
+    @pytest.fixture(autouse=True)
+    def _hermetic_ci_environment(self, monkeypatch) -> None:
+        # main() defaults --event-name (and the other flags) from the ambient
+        # environment. On a push-to-dev CI run GITHUB_EVENT_NAME is "push", the gate
+        # reports "not applicable" and returns 0, so the pending and deadline tests
+        # failed on every dev push while passing on pull_request runs.
+        for name in (
+            "GITHUB_EVENT_NAME",
+            "GH_REPO",
+            "PR_NUMBER",
+            "MERGE_GROUP_HEAD_REF",
+            "OCC_REPO",
+            "DEADLINE_SECONDS",
+            "POLL_INTERVAL_SECONDS",
+        ):
+            monkeypatch.delenv(name, raising=False)
+
     def test_once_mode_returns_pending_exit_code(self, monkeypatch) -> None:
         # --once with an OPEN companion must surface PENDING (2), not PASS.
         import scripts.ci.check_occ_companion_merged as mod

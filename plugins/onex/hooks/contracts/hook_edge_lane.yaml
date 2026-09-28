@@ -439,6 +439,28 @@ governed_event_classes:
   - "team.task.completed"
   - "team.task.progress"
   - "tool.output.captured"
+  # OMN-19551 / OMN-19913: full-content capture, emitted from
+  # plugins/onex/hooks/lib/hook_content_capture.py. It fans out to
+  # onex.cmd.omniintelligence.content-captured.v1, the access-restricted
+  # class this repository reserves for full prompts and file contents, and it
+  # carries them only after the capture-redaction contract has scrubbed them.
+  #
+  # UNDECLARED UNTIL NOW FOR THE SAME REASON AS team.task.*: the call site
+  # passed the class through a module constant, which the literal-only scan
+  # cannot resolve, so the scan reported the edge clean. Measured cost,
+  # 2026-09-28 about 13:05Z: the dev-lane broker refused the topic for the
+  # hook principal, every refused record cost the drainer five 30s backoffs,
+  # the journal grew from 245 to 564 records in about three minutes, and
+  # capture was paused by hand. The call site now passes a literal so the scan
+  # sees it.
+  #
+  # GRANT STATE: a produce grant (LITERAL WRITE + DESCRIBE, no READ) exists on
+  # the lab dev-lane broker only, applied 2026-09-28T13:37:56Z under the
+  # operator's full-content-capture ruling (RULING 2026-09-25T11:23:30Z
+  # lane=merge-drain-83, which puts prod and cloud clusters out of scope) and
+  # recorded by HOLD 2026-09-28T13:37:44Z lane=content-capture-acl-83. Like
+  # every other grant on that broker it lives in broker state only.
+  - "content.captured"
   - "validator.catch"
   # OMN-19513: the all-hooks capture metadata class, one lineage-carrying
   # event per Claude Code hook call, emitted by hooks/lib/hook_claude_capture.py

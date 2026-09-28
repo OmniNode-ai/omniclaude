@@ -518,3 +518,18 @@ def test_drainer_reads_the_installed_registry_event_types() -> None:
     assert types is not None
     assert "tool.executed" in types
     assert list(types) == sorted(types)
+
+
+@pytest.mark.unit
+def test_the_emit_call_site_names_the_class_as_the_lane_scan_literal() -> None:
+    """OMN-19913: the call site passes a literal so the lane contract sees it.
+
+    validate_hook_edge_lane.py resolves only literal classes at an emit call.
+    Passing CONTENT_EVENT_TYPE hid content.captured from the hook-edge lane
+    contract, so nothing derived from it knew the class needed a broker grant.
+    The literal must stay equal to the constant the rest of the module reads.
+    """
+    source = Path(capture_mod.__file__).read_text(encoding="utf-8")
+    literal = f'event_type="{capture_mod.CONTENT_EVENT_TYPE}"'
+    assert literal in source
+    assert "event_type=CONTENT_EVENT_TYPE" not in source

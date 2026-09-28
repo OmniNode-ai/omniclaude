@@ -192,7 +192,7 @@ def test_route_off_is_byte_identical_for_all_commands(
     cases = [
         ["pr", "view", "--json", "url"],
         ["api", "repos/OmniNode-ai/omniclaude/pulls"],
-        ["pr", "merge", "1", "--squash"],
+        ["pr", "merge", "1", "--squash", "--match-head-commit", "deadbeef"],
         ["api", "-X", "POST", "repos/OmniNode-ai/omniclaude/issues"],
     ]
     for index, argv in enumerate(cases):

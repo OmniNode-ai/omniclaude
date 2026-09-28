@@ -406,6 +406,110 @@ _origin_repo() {
   printf '%s' "$url"
 }
 
+# --- merge-queue bypass guard (OMN-17427) -------------------------------------
+# omnibase_infra#4197 was pulled from the dev merge queue for failed checks at
+# 14:15:03Z on 2026-09-28 and then landed anyway by a raw REST PUT merge at
+# 14:27:17Z: the merge-drain workflow's own general rule told the land lane to
+# do exactly that ("Merges by REST squash on the exact head: gh api -X PUT
+# .../pulls/<n>/merge"), with no carve-out for a queue-protected branch, while
+# a second, repo-specific instruction a few lines later in the same prompt said
+# "never a REST merge". A prompt-text fix (repo_drains.js, this same ticket)
+# removes that contradiction, but a land lane is an LLM reading a prompt, and a
+# text rule is advice, not a control. This is the mechanical stop that holds
+# regardless of what any prompt says: it resolves the merge-queue rule LIVE for
+# the EXACT repo+branch a merge call targets -- never a hardcoded repo list, so
+# a queue ruleset added to a second repo tomorrow is covered with no code
+# change here -- and refuses the two shapes that bypass a queue: a raw
+# `gh api ... -X PUT pulls/<n>/merge`, and `gh pr merge ... --admin`. A bare
+# `gh pr merge` naming neither `--match-head-commit` nor `--auto` is also
+# refused on a queue branch: those two flags are the only forms every sanctioned
+# caller in this codebase uses (merge-drain SKILL.md, repo_drains.js,
+# arm_green_prs.py), so an invocation carrying neither is unverified, not
+# merely unusual, and this guard's own fail-closed rule (below) treats it the
+# same as a call it could not resolve at all.
+#
+# Fail-closed, narrowly: only these two risky shapes are ever evaluated (a
+# read, a safe enqueue-form merge, and everything that is not `pr merge` or a
+# `pulls/.../merge` PUT never reaches this block at all, so an API hiccup here
+# can never brick unrelated gh traffic). Once a call IS one of the two risky
+# shapes, an unresolvable repo, PR number, base branch or rules read is BLOCKED
+# rather than assumed safe -- CLAUDE.md rule 16: an unverified merge-queue
+# status is never treated as "no queue". The one-line remedy on a false-positive
+# block is always available and always safe: retry with the sanctioned enqueue
+# form, `gh pr merge <n> --repo <owner>/<repo> --squash --match-head-commit
+# <head>`.
+_mq_is_rest_put=0
+_mq_is_merge_call=0
+_mq_admin=0
+_mq_safe_flag=0
+_mq_repo=""
+_mq_pr_num=""
+if [ "${1:-}" = "pr" ] && [ "${2:-}" = "merge" ]; then
+  _mq_is_merge_call=1
+  case "${3:-}" in ''|-*) ;; *) _mq_pr_num="$3" ;; esac
+  _mq_prev=""
+  for _mq_a in "$@"; do
+    case "$_mq_prev" in -R|--repo) _mq_repo="$_mq_a" ;; esac
+    case "$_mq_a" in
+      --repo=*) _mq_repo="${_mq_a#--repo=}" ;;
+      --admin) _mq_admin=1 ;;
+      --match-head-commit|--auto) _mq_safe_flag=1 ;;
+    esac
+    _mq_prev="$_mq_a"
+  done
+  [ -n "$_mq_repo" ] || _mq_repo="$(_origin_repo)"
+elif [ "$_cls" = "api" ] && [ "$_method" = "PUT" ]; then
+  case "$_endpoint" in
+    repos/*/pulls/*/merge)
+      _mq_is_rest_put=1
+      _mq_repo="${_endpoint#repos/}"; _mq_repo="${_mq_repo%%/pulls/*}"
+      _mq_pr_num="${_endpoint#repos/*/pulls/}"; _mq_pr_num="${_mq_pr_num%%/merge}"
+      ;;
+  esac
+fi
+
+if [ "$_mq_is_rest_put" -eq 1 ] || { [ "$_mq_is_merge_call" -eq 1 ] && { [ "$_mq_admin" -eq 1 ] || [ "$_mq_safe_flag" -eq 0 ]; }; }; then
+  _mq_shape="gh api -X PUT .../pulls/<n>/merge"
+  if [ "$_mq_is_merge_call" -eq 1 ]; then
+    _mq_shape="gh pr merge"
+    [ "$_mq_admin" -eq 1 ] && _mq_shape="$_mq_shape --admin"
+    if [ "$_mq_safe_flag" -eq 0 ] && [ "$_mq_admin" -eq 0 ]; then
+      _mq_shape="$_mq_shape (neither --match-head-commit nor --auto)"
+    fi
+  fi
+  _mq_branch=""
+  if [ -n "$_mq_repo" ] && [ -n "$_mq_pr_num" ]; then
+    _mq_branch="$("$real" pr view "$_mq_pr_num" --repo "$_mq_repo" --json baseRefName --jq .baseRefName 2>/dev/null)"
+  fi
+  _mq_gated=-1  # -1 unresolved (fail closed), 0 no queue rule, 1 queue rule present
+  if [ -n "$_mq_repo" ] && [ -n "$_mq_branch" ]; then
+    _mq_rules="$("$real" api "repos/$_mq_repo/rules/branches/$_mq_branch" 2>/dev/null)"
+    if [ -n "$_mq_rules" ]; then
+      case "$_mq_rules" in
+        *'"type":"merge_queue"'*|*'"type": "merge_queue"'*) _mq_gated=1 ;;
+        *) _mq_gated=0 ;;
+      esac
+    fi
+  fi
+  if [ "$_mq_gated" -ne 0 ]; then
+    _mq_reason="repo=${_mq_repo:-<unresolved>} pr=${_mq_pr_num:-<unresolved>} base=${_mq_branch:-<unresolved>}"
+    if [ "$_mq_gated" -eq 1 ]; then
+      _mq_why="BLOCKED (OMN-17427): $_mq_shape bypasses the merge_queue rule on $_mq_reason. This is the queue's own rulesets API answer (repos/$_mq_repo/rules/branches/$_mq_branch), read live just now -- not a guess. The only sanctioned landing verb on a queue-protected branch is: gh pr merge $_mq_pr_num --repo $_mq_repo --squash --match-head-commit <head>  (this enqueues rather than merging, and still exits 0 -- read back mergedAt/mergeQueueEntry before calling it merged). A PR the queue dequeued for failed checks is RED, not merged: fix the cause and re-push, or leave it blocked. Never retry this exact call."
+    else
+      _mq_why="BLOCKED (OMN-17427): $_mq_shape could not be confirmed safe -- $_mq_reason, and the merge-queue rules read (repos/${_mq_repo:-<unresolved>}/rules/branches/${_mq_branch:-<unresolved>}) did not return a usable answer (network, auth, an unresolved PR/base, or a real API error). An unverified merge-queue status is never treated as 'no queue' (CLAUDE.md rule 16). Retry with the sanctioned enqueue form instead, which is safe on every branch whether or not it is queue-protected: gh pr merge <n> --repo <owner>/<repo> --squash --match-head-commit <head>  -- or resolve the read failure and retry this exact call."
+    fi
+    printf '%s\n' "$_mq_why" >&2
+    _mq_log_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage"
+    mkdir -p "$_mq_log_dir" 2>/dev/null || true
+    printf '{"ts":"%s","guard":"merge_queue_bypass","gated":%s,"shape":"%s","repo":"%s","pr":"%s","base":"%s","pid":%s}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$_mq_gated" "$(_clean "$_mq_shape")" "$(_clean "${_mq_repo:-}")" "$(_clean "${_mq_pr_num:-}")" "$(_clean "${_mq_branch:-}")" "$$" \
+      >> "$_mq_log_dir/merge-queue-guard.jsonl" 2>/dev/null || true
+    exit 1
+  fi
+fi
+unset _mq_a _mq_prev _mq_shape _mq_reason _mq_why _mq_rules _mq_log_dir
+
+
 # A PR mutation can change the cached answers for its repository: drop that
 # repository's entries before it runs (every entry when the repository is
 # unknown). Entries are named <repo hash>.<key>, so lookups in other
