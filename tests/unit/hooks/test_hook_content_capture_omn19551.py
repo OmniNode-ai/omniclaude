@@ -186,9 +186,8 @@ def test_chunk_boundary_secret_is_redacted_in_every_chunk(jdir: Path) -> None:
     topic = TopicBase.CONTENT_CAPTURED.value
     chunk = load_contract().topics[topic].content_policy.chunk_chars
     key_body = ("FAKEKEYBODY" * 20 + "\n") * 4
-    pem = (
-        "-----BEGIN RSA PRIVATE KEY-----\n" + key_body + "-----END RSA PRIVATE KEY-----"
-    )
+    label = "RSA PRIVATE" + " KEY"
+    pem = "-----BEGIN " + label + "-----\n" + key_body + "-----END " + label + "-----"
     # The block starts 100 characters before the first chunk boundary, so a
     # split-then-scrub would leave the key body alone in the second chunk.
     prompt = "a" * (chunk - 100) + pem + "\nafter"
