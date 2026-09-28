@@ -40,6 +40,7 @@ if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
 import hook_emit_drainer as drainer  # noqa: E402
+import hook_emit_health as health  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
 
 
@@ -77,8 +78,8 @@ def _seed(jdir: Path, n: int) -> None:
 def test_drain_publishes_and_acks_everything(jdir: Path) -> None:
     _seed(jdir, 5)
     emitter = FakeEmitter()
-    published, failed = drainer.drain_once(jdir, emitter)  # type: ignore[arg-type]
-    assert (published, failed) == (5, 0)
+    published, failed, dead_lettered = drainer.drain_once(jdir, emitter)  # type: ignore[arg-type]
+    assert (published, failed, dead_lettered) == (5, 0, 0)
     assert journal.list_pending(jdir) == [], "acked records must be removed"
 
 
@@ -91,7 +92,7 @@ def test_drain_preserves_fifo_order(jdir: Path) -> None:
 
 
 def test_drain_on_empty_journal_is_a_noop(jdir: Path) -> None:
-    assert drainer.drain_once(jdir, FakeEmitter()) == (0, 0)  # type: ignore[arg-type]
+    assert drainer.drain_once(jdir, FakeEmitter()) == (0, 0, 0)  # type: ignore[arg-type]
 
 
 def test_semantic_journal_record_uses_no_topic_override() -> None:
@@ -170,7 +171,7 @@ def test_unknown_legacy_topic_is_quarantined_byte_for_byte(
 
 def test_drain_respects_batch_limit(jdir: Path) -> None:
     _seed(jdir, 20)
-    published, _ = drainer.drain_once(jdir, FakeEmitter(), batch_limit=6)  # type: ignore[arg-type]
+    published, _, _ = drainer.drain_once(jdir, FakeEmitter(), batch_limit=6)  # type: ignore[arg-type]
     assert published == 6
     assert len(journal.list_pending(jdir)) == 14
 
@@ -184,15 +185,15 @@ def test_failed_publish_leaves_record_queued(jdir: Path) -> None:
     """A dead broker must queue, never drop."""
     _seed(jdir, 5)
     emitter = FakeEmitter(fail_after=0)
-    published, failed = drainer.drain_once(jdir, emitter)  # type: ignore[arg-type]
-    assert published == 0 and failed == 5
+    published, failed, dead_lettered = drainer.drain_once(jdir, emitter)  # type: ignore[arg-type]
+    assert (published, failed, dead_lettered) == (0, 5, 0)
     assert len(journal.list_pending(jdir)) == 5, "nothing may be lost on failure"
 
 
 def test_partial_failure_acks_only_confirmed_publishes(jdir: Path) -> None:
     _seed(jdir, 10)
     emitter = FakeEmitter(fail_after=4)
-    published, _ = drainer.drain_once(jdir, emitter)  # type: ignore[arg-type]
+    published, _, _ = drainer.drain_once(jdir, emitter)  # type: ignore[arg-type]
     assert published == 4
     assert len(journal.list_pending(jdir)) == 6, "unconfirmed records must survive"
 
@@ -519,6 +520,218 @@ class DeadBrokerEmitter:
         return False
 
 
+def test_proven_refused_class_is_dead_lettered_in_one_cycle(jdir: Path) -> None:
+    # The final X needs a following record to prove the broker still answers.
+    for event_type in ("X", "ok", "X", "ok", "X", "ok"):
+        journal.append(jdir, event_type=event_type, payload={}, correlation_id=None)
+    pending = journal.list_pending(jdir)
+    refused_records = [entry for entry in pending if entry.record.event_type == "X"]
+    expected = [
+        entry.record.event_id for entry in pending if entry.record.event_type == "ok"
+    ]
+    emitter = RefusingEmitter("X")
+    counts: dict[str, int] = {}
+    refused = {"X": "proving-record.json"}
+    cycles = 0
+    while journal.list_pending(jdir):
+        cycles += 1
+        assert cycles <= len(refused_records)
+        published, failed, dead_lettered = drainer.drain_once(
+            jdir, emitter, failure_counts=counts, refused_event_types=refused
+        )
+        assert published == 1
+        assert dead_lettered == 1
+        assert not (failed and not dead_lettered)
+    assert emitter.published == expected
+    assert all(
+        (jdir / "quarantine" / entry.path.name).exists() for entry in refused_records
+    )
+    assert counts == {}
+    assert refused == {"X": "proving-record.json"}
+
+
+def test_proven_refused_unreachable_broker_moves_nothing(jdir: Path) -> None:
+    for event_type in ("X", "ok", "X"):
+        journal.append(jdir, event_type=event_type, payload={}, correlation_id=None)
+    before = {
+        entry.path.name: entry.path.read_bytes() for entry in journal.list_pending(jdir)
+    }
+    counts: dict[str, int] = {}
+    refused = {"X": "proving-record.json"}
+    for _ in range(drainer.DEFAULT_QUARANTINE_AFTER_FAILURES + 2):
+        result = drainer.drain_once(
+            jdir,
+            DeadBrokerEmitter(),
+            failure_counts=counts,
+            refused_event_types=refused,
+        )
+        assert result == (0, 3, 0)
+    assert {
+        entry.path.name: entry.path.read_bytes() for entry in journal.list_pending(jdir)
+    } == before
+    assert not list((jdir / "quarantine").glob("*.json"))
+    assert counts[next(iter(before))] == drainer.DEFAULT_QUARANTINE_AFTER_FAILURES + 2
+    assert refused == {"X": "proving-record.json"}
+
+
+def test_first_record_of_class_needs_the_full_threshold(
+    jdir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    for event_type in ("X", "ok"):
+        journal.append(jdir, event_type=event_type, payload={}, correlation_id=None)
+    head = journal.list_pending(jdir)[0]
+    emitter = RefusingEmitter("X")
+    counts: dict[str, int] = {}
+    refused: dict[str, str] = {}
+    for _ in range(drainer.DEFAULT_QUARANTINE_AFTER_FAILURES - 1):
+        assert drainer.drain_once(
+            jdir, emitter, failure_counts=counts, refused_event_types=refused
+        ) == (0, 2, 0)
+        assert head.path.exists()
+        assert not list((jdir / "quarantine").glob("*.json"))
+        assert refused == {}
+    assert drainer.drain_once(
+        jdir, emitter, failure_counts=counts, refused_event_types=refused
+    ) == (1, 0, 1)
+    assert refused == {"X": head.path.name}
+    assert (jdir / "quarantine" / head.path.name).exists()
+    assert counts == {}
+    warnings = [
+        record
+        for record in caplog.records
+        if "event class X is refused" in record.message
+    ]
+    assert len(warnings) == 1
+    assert warnings[0].levelname == "WARNING"
+    assert head.path.name in warnings[0].message
+    reason = json.loads(
+        (jdir / "quarantine" / f"{head.path.stem}.reason.json").read_text()
+    )
+    assert reason["reason_kind"] == "consecutive_failures"
+    assert "proven_by" not in reason
+
+
+def test_refused_event_types_reach_status_and_reason(jdir: Path) -> None:
+    for event_type in ("X", "ok"):
+        journal.append(jdir, event_type=event_type, payload={}, correlation_id=None)
+    head, probe = journal.list_pending(jdir)
+    assert drainer.drain_once(
+        jdir, RefusingEmitter("X"), refused_event_types={"X": "proving-record.json"}
+    ) == (1, 0, 1)
+    reason = json.loads(
+        (jdir / "quarantine" / f"{head.path.stem}.reason.json").read_text()
+    )
+    assert reason["reason_kind"] == "event_class_proven_refused"
+    assert reason["proven_by"] == "proving-record.json"
+    assert reason["consecutive_failures"] == 1
+    assert reason["overtaken_by_event_id"] == probe.record.event_id
+
+
+def test_refused_event_types_reach_status_and_reason_round_trip(tmp_path: Path) -> None:
+    status = health.ModelDrainerStatus(
+        last_cycle_at=100.0,
+        last_publish_at=None,
+        published_total=0,
+        pid=123,
+        refused_event_types=("X", "Y"),
+    )
+    assert json.loads(status.to_json())["refused_event_types"] == ["X", "Y"]
+    path = tmp_path / "status.json"
+    path.write_text(status.to_json())
+    assert health.read_status(path) == status
+
+
+@pytest.mark.parametrize("invalid", [None, "X", 1, {}, ["X", 1]])
+def test_health_refused_event_types_invalid_or_absent_defaults_to_empty(
+    tmp_path: Path, invalid: object
+) -> None:
+    status = health.ModelDrainerStatus(
+        last_cycle_at=100.0, last_publish_at=None, published_total=0, pid=123
+    )
+    raw = json.loads(status.to_json())
+    assert raw.pop("refused_event_types") == []
+    path = tmp_path / "status.json"
+    path.write_text(json.dumps(raw))
+    assert health.read_status(path) == status
+    raw["refused_event_types"] = invalid
+    path.write_text(json.dumps(raw))
+    assert health.read_status(path) == status
+
+
+def test_proven_refused_non_head_record_is_not_dead_lettered(jdir: Path) -> None:
+    for event_type in ("ok", "X", "ok"):
+        journal.append(jdir, event_type=event_type, payload={}, correlation_id=None)
+    emitter = RefusingEmitter("X")
+    counts = {
+        journal.list_pending(jdir)[
+            1
+        ].path.name: drainer.DEFAULT_QUARANTINE_AFTER_FAILURES
+    }
+    result = drainer.drain_once(
+        jdir,
+        emitter,
+        failure_counts=counts,
+        refused_event_types={"X": "proving-record.json"},
+    )
+    assert result == (1, 2, 0)
+    assert len(journal.list_pending(jdir)) == 2
+    assert not list((jdir / "quarantine").glob("*.json"))
+
+
+def test_proven_refused_lone_head_still_needs_a_probe(jdir: Path) -> None:
+    journal.append(jdir, event_type="X", payload={}, correlation_id=None)
+    head = journal.list_pending(jdir)[0]
+    assert drainer.drain_once(
+        jdir, RefusingEmitter("X"), refused_event_types={"X": "proving-record.json"}
+    ) == (0, 1, 0)
+    assert head.path.exists()
+    assert not list((jdir / "quarantine").glob("*.json"))
+
+
+def test_drainer_run_skips_backoff_after_dead_letter_and_reports_refused_classes(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for event_type in ("X", "ok", "X", "ok", "X", "ok"):
+        journal.append(jdir, event_type=event_type, payload={}, correlation_id=None)
+    emitter = RefusingEmitter("X")
+    monkeypatch.setattr(emitter, "close", lambda: None, raising=False)
+    monkeypatch.setattr(drainer, "_Emitter", lambda: emitter)
+    monkeypatch.setattr(drainer, "apply_declared_lane", lambda: None)
+    monkeypatch.setattr(drainer, "migrate_legacy_journal", lambda _: (0, 0))
+    monkeypatch.setattr(drainer, "publishable_event_types", lambda: ("X", "ok"))
+    monkeypatch.setattr(drainer, "_shutdown", False)
+    sleeps: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        # Bound a regressed loop without waiting through real 30s backoffs.
+        if not journal.list_pending(jdir) or len(sleeps) >= 20:
+            monkeypatch.setattr(drainer, "_shutdown", True)
+
+    monkeypatch.setattr(drainer.time, "sleep", sleep)
+    assert (
+        drainer.run(
+            jdir,
+            jdir.parent / "drainer.lock",
+            poll_seconds=0.25,
+            idle_poll_seconds=10.0,
+            once=False,
+        )
+        == 0
+    )
+    assert journal.list_pending(jdir) == []
+    assert (
+        sleeps
+        == [drainer.DEFAULT_ERROR_BACKOFF_SECONDS]
+        * (drainer.DEFAULT_QUARANTINE_AFTER_FAILURES - 1)
+        + [0.25] * 3
+    )
+    status = health.read_status(jdir.parent / health.STATUS_FILENAME)
+    assert status is not None
+    assert status.refused_event_types == ("X",)
+    assert status.published_total == 3
+
+
 def _drain_n_cycles(
     jdir: Path,
     emitter: object,
@@ -539,27 +752,8 @@ def _drain_n_cycles(
     """
     counts = {} if counts is None else counts
     for _ in range(cycles):
-        _drain_once_compat(jdir, emitter, counts)
+        drainer.drain_once(jdir, emitter, failure_counts=counts)  # type: ignore[arg-type]
     return counts
-
-
-def _drain_once_compat(
-    jdir: Path, emitter: object, counts: dict[str, int]
-) -> tuple[int, int]:
-    """Call `drain_once`, tolerating a build that has no `failure_counts` yet.
-
-    This exists so the RED run of these tests fails on BEHAVIOUR rather than
-    on a TypeError. Against the pre-OMN-19074 drainer the parameter does not
-    exist, and a test that simply exploded on the signature would prove only
-    that a keyword argument is new -- not that one refused record holds the
-    whole queue, which is the defect. With this shim the pre-change build runs
-    its real drain loop for every cycle the test asks for, and the assertion
-    that the authorized records eventually publish is what fails.
-    """
-    try:
-        return drainer.drain_once(jdir, emitter, failure_counts=counts)
-    except TypeError:
-        return drainer.drain_once(jdir, emitter)
 
 
 def test_a_refused_record_does_not_hold_the_queue_forever(jdir: Path) -> None:
@@ -688,10 +882,13 @@ def test_a_transient_failure_still_halts_the_drain(jdir: Path) -> None:
         )
 
     emitter = FakeEmitter(fail_after=1)
-    published, failed = _drain_once_compat(jdir, emitter, {})
+    published, failed, dead_lettered = drainer.drain_once(
+        jdir, emitter, failure_counts={}
+    )  # type: ignore[arg-type]
 
     assert published == 1
     assert failed == 3
+    assert dead_lettered == 0
     assert len(journal.list_pending(jdir)) == 3, (
         "a single transient failure skipped a record instead of halting the "
         "drain, which reorders the stream"
@@ -723,7 +920,7 @@ def test_a_dead_lettered_record_replays_when_moved_back(jdir: Path) -> None:
     dead.replace(jdir / dead.name)
 
     emitter = FakeEmitter()
-    _drain_once_compat(jdir, emitter, {})
+    drainer.drain_once(jdir, emitter, failure_counts={})  # type: ignore[arg-type]
 
     assert len(emitter.published) == 1, "the replayed record did not publish"
     assert journal.list_pending(jdir) == []

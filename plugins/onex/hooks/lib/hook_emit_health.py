@@ -101,6 +101,7 @@ class ModelDrainerStatus:
     #: producer must read as "not publishable": a record the drainer cannot
     #: resolve blocks the journal head until it is dead-lettered (OMN-19074).
     publishable_event_types: tuple[str, ...] | None = None
+    refused_event_types: tuple[str, ...] = ()
 
     def to_json(self) -> str:
         body: dict[str, object] = {
@@ -108,6 +109,7 @@ class ModelDrainerStatus:
             "last_publish_at": self.last_publish_at,
             "published_total": self.published_total,
             "pid": self.pid,
+            "refused_event_types": list(self.refused_event_types),
         }
         if self.publishable_event_types is not None:
             body["publishable_event_types"] = list(self.publishable_event_types)
@@ -210,12 +212,20 @@ def read_status(path: Path) -> ModelDrainerStatus | None:
         if isinstance(types_raw, list)
         else None
     )
+    refused_raw = raw.get("refused_event_types")
+    refused = (
+        tuple(refused_raw)
+        if isinstance(refused_raw, list)
+        and all(isinstance(event_type, str) for event_type in refused_raw)
+        else ()
+    )
     return ModelDrainerStatus(
         last_cycle_at=last_cycle_at,
         last_publish_at=last_publish_at,
         published_total=published_total,
         pid=pid,
         publishable_event_types=publishable,
+        refused_event_types=refused,
     )
 
 
