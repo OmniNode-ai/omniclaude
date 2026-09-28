@@ -261,6 +261,8 @@ OPERATOR_CALLS: list[list[str]] = [
     ["api", "rate_limit"],
     ["api", "orgs/OmniNode-ai/installations"],
     ["api", "repos/SomeoneElse/tool/pulls"],
+    ["api", "repos/OmniNode-ai/omnibase_core", "--jq", ".allow_auto_merge"],
+    ["api", "/repos/OmniNode-ai/omniclaude/"],
     ["api", "--hostname", "ghe.example.com", "repos/OmniNode-ai/x/pulls"],
     ["api", "search/issues?q=is:pr+author:someone"],
     ["search", "prs", "--author", "@me"],
@@ -450,7 +452,7 @@ def test_cache_file_is_mode_0600_and_reused(
     assert [c["gh_token"] for c in _calls(env)] == [APP_TOKEN, APP_TOKEN]
 
 
-def test_cache_expires_after_fifty_minutes(
+def test_cache_expires_after_its_own_max_age(
     fake_gh: Path,
     env: dict[str, str],
     records: list[object],
@@ -459,12 +461,30 @@ def test_cache_expires_after_fifty_minutes(
     clock = [1_000_000.0]
     monkeypatch.setattr(gr, "_now", lambda: clock[0])
     _run(READ_ARGV, fake_gh, env, records)
-    clock[0] += 49 * 60
+    clock[0] += gr.TOKEN_MAX_AGE_S - 1
     _run(READ_ARGV, fake_gh, env, records)
     assert _mint_count(env) == 1
-    clock[0] += 60 + 1  # 50 min + 1 s after the mint
+    clock[0] += 2  # TOKEN_MAX_AGE_S + 1s after the mint
     _run(READ_ARGV, fake_gh, env, records)
     assert _mint_count(env) == 2
+
+
+def test_cache_max_age_stays_under_the_mint_commands_guaranteed_floor() -> None:
+    """OMN-19852 P2 (measured 2026-09-27 ~20:00Z-23:00Z, periodic 401 "Bad credentials"
+    bursts roughly every 30 minutes). GH_READ_TOKEN_CMD (onex-gh-reader-token) only
+    guarantees more than its own --min-ttl (default 900s) of real GitHub life left on the
+    token it hands back -- it can already be up to (3600 - 900)s old when this router
+    receives it. Caching it here (TOKEN_MAX_AGE_S, counted from receipt, not from GitHub's
+    actual mint) for anywhere near that floor, let alone past it, reuses an
+    already-expired token for the tail of the window. The 50-minute value in place before
+    this fix put the compounded worst case at ~95 minutes against GitHub's flat 60-minute
+    token lifetime.
+    """
+    mint_guaranteed_min_remaining_s = (
+        900  # onex-gh-reader-token's own --min-ttl default
+    )
+    safety_margin_s = 300
+    assert mint_guaranteed_min_remaining_s - safety_margin_s >= gr.TOKEN_MAX_AGE_S
 
 
 def test_cache_with_loose_mode_is_discarded_and_reminted(
@@ -550,3 +570,29 @@ def test_mutation_real_gh_resolution_skips_an_installed_shim_copy(
     _write_exe(installed / "gh", "# ONEX_GH_USER_SHIM\nraise SystemExit(9)\n")
     path_env = f"{installed}{os.pathsep}{fake_gh.parent}"
     assert gr.resolve_real_gh(path_env, _MODULE_PATH.parent) == str(fake_gh)
+
+
+READ_ARGV_LONG = ["api", "repos/OmniNode-ai/omniclaude/pulls"]
+
+
+def test_read_accepts_the_long_installation_token_shape(
+    fake_gh: Path, env: dict[str, str], records: list[object]
+) -> None:
+    """OMN-19852: installation tokens minted since 2026 are ~380 characters with '-' and '.'."""
+    long_token = "ghs_" + "Ab3_-." * 63
+    env["FAKE_MINT_OUTPUT"] = long_token
+    assert _run(READ_ARGV_LONG, fake_gh, env, records) == 0
+    assert _calls(env) == [{"argv": READ_ARGV_LONG, "gh_token": long_token}]
+    (rec,) = records
+    assert rec.identity == gr.IDENTITY_APP  # type: ignore[attr-defined]
+
+
+def test_bare_repository_object_stays_on_operator_but_its_subpaths_route() -> None:
+    """OMN-19852: the App nulls allow_auto_merge on the repository object, silently; the arm step's
+    probe then refused every arm. The object stays on the operator; anything under it still routes."""
+    cls = gr.classify(
+        ["api", "repos/OmniNode-ai/omnimarket", "--jq", ".allow_auto_merge"], {}
+    )
+    assert not cls.read and cls.reason == "repo-settings-fields"
+    sub = gr.classify(["api", "repos/OmniNode-ai/omnimarket/pulls/1"], {})
+    assert sub.read and sub.reason == "read-rest"

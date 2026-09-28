@@ -14,6 +14,13 @@
 # never by moving the residue into an allowlist, which is the recurrence
 # mechanism this programme exists to remove.
 #
+# Four classes already fail the run, on ADDED lines only (OMN-19835):
+# private-repo-name, internal-kb-prose, lab-config and person-name, set by
+# `enforce_classes` and `enforce_scope: added-lines` in .public-repo-hygiene.yaml.
+# The reusable hands the gate the merge ref's first parent as its diff base, so
+# a pull request that adds one of those goes red and one that does not stays
+# green over the residue OMN-19836 is counting down.
+#
 # The reusable workflow and the validator live in this repo and are pinned by
 # the caller's `uses:` SHA (see the reusable workflow's header). Within
 # omniclaude itself the reusable resolves to the PR's own commit, which is

@@ -91,6 +91,16 @@ on:
         type: string
         required: false
         default: ""
+      lab_vocabulary_repo_name:
+        description: >-
+          Name (NOT owner/name) of the PRIVATE repository holding the LAB
+          vocabulary (lab_lane_ids) that the lab-config class reads (OMN-19766).
+          Leave unset in normal use -- it resolves from the org Actions variable
+          OMNI_HYGIENE_LAB_VOCAB_REPO. Not written here for the same reason as
+          vocabulary_repo_name. Unset everywhere is a refusal, never a pass.
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -122,13 +132,49 @@ jobs:
       - name: Checkout caller repo
         uses: actions/checkout@v7
         with:
-          # The scanned surface is the TRACKED set (`git ls-files`), which a
-          # depth-1 checkout still gives in full -- unlike kb-doc-gate this
-          # validator does not diff against a base ref, so fetch-depth: 0 is
-          # not needed. It is a whole-tree invariant by design: a gate that
+          # The scanned surface is the TRACKED set (`git ls-files`), and the
+          # scan and its report are whole-tree for every caller: a gate that
           # only inspects the diff reports green over everything that landed
           # before it existed, which is the OMN-17992 residue exactly.
+          #
+          # Depth 2, not 1, for the added-lines scope (OMN-19835). On a pull
+          # request the checkout is the merge ref, and its first parent is the
+          # base the pull request merges into; depth 2 fetches exactly that
+          # parent, so the diff below needs no history walk. A caller whose
+          # .public-repo-hygiene.yaml does not declare
+          # `enforce_scope: added-lines` ignores the diff, so its verdict is
+          # the whole-tree one it always was.
+          fetch-depth: 2
           persist-credentials: false
+
+      # OMN-19835. Only a pull request has a base to diff against. The merge
+      # ref's first parent IS that base; its second parent must be the pull
+      # request's head, and anything else means the checkout is not the merge
+      # ref this step reasons about, so it refuses rather than diffing the
+      # wrong pair. Other events pass no diff source, and the gate refuses a
+      # repository that declares the added-lines scope without one.
+      - name: Resolve the diff base
+        id: diff-base
+        if: github.event_name == 'pull_request'
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          read -r -a commit_and_parents <<< "$(git rev-list --parents -n 1 HEAD)"
+          if [ "${#commit_and_parents[@]}" -ne 3 ]; then
+            echo "::error::the pull_request checkout is not a two-parent merge" \
+                 "ref (got ${#commit_and_parents[@]} ids from rev-list --parents)," \
+                 "so the added-lines diff base cannot be resolved. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "${commit_and_parents[2]}" != "${PR_HEAD_SHA}" ]; then
+            echo "::error::the merge ref's second parent is" \
+                 "${commit_and_parents[2]}, not the pull request head" \
+                 "${PR_HEAD_SHA}. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=${commit_and_parents[1]}" >> "$GITHUB_OUTPUT"
+          echo "public-repo-hygiene diff base: ${commit_and_parents[1]} (merge-ref first parent)"
 
       # The validator lives in omniclaude. When called from another repo,
       # GITHUB_WORKSPACE holds the CALLER's tree, so pull just the script into
@@ -207,6 +253,28 @@ jobs:
           fi
           echo "name=${resolved}" >> "$GITHUB_OUTPUT"
 
+      # OMN-19766: the lab-config class reads the LAB vocabulary, a second
+      # private file. It lives apart from the main vocabulary because every
+      # caller pins an older gate, and an older gate refuses an unknown key in
+      # the main vocabulary. Same refusal as above when the name is unset.
+      - name: Resolve the private lab vocabulary repo
+        id: lab-vocab-repo
+        env:
+          EXPLICIT: ${{ inputs.lab_vocabulary_repo_name }}
+          FROM_VARS: ${{ vars.OMNI_HYGIENE_LAB_VOCAB_REPO }}
+        run: |
+          set -euo pipefail
+          resolved="${EXPLICIT:-${FROM_VARS:-}}"
+          if [ -z "${resolved}" ]; then
+            echo "::error::neither the 'lab_vocabulary_repo_name' input nor the" \
+                 "org variable OMNI_HYGIENE_LAB_VOCAB_REPO is set, so the PRIVATE" \
+                 "lab vocabulary cannot be located. The lab-config class cannot" \
+                 "scan without it, and the gate refuses rather than reporting" \
+                 "green. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "name=${resolved}" >> "$GITHUB_OUTPUT"
+
       - name: Mint token for the private vocabulary repo
         id: vocab-token
         uses: actions/create-github-app-token@v3
@@ -214,7 +282,7 @@ jobs:
           app-id: ${{ secrets.ONEXBOT_APP_ID }}
           private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ steps.vocab-repo.outputs.name }}
+          repositories: ${{ steps.vocab-repo.outputs.name }},${{ steps.lab-vocab-repo.outputs.name }}
           permission-contents: read
 
       # DELIBERATELY UNPINNED, and pinning it would be the defect.
@@ -241,6 +309,24 @@ jobs:
             docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
           sparse-checkout-cone-mode: false
 
+      # Unpinned for the same reason as the vocabulary above: it is DATA read
+      # from a private first-party repository, and the gate re-validates it
+      # (missing, unknown key, or empty lab_lane_ids is exit 2).
+      #
+      # reusable-checkout-ref-ok: public-repo-hygiene OMN-19766 the lab
+      # vocabulary is data, re-validated by the gate, fetched unpinned exactly
+      # like the main vocabulary.
+      - name: Fetch the private lab vocabulary
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.lab-vocab-repo.outputs.name }}
+          token: ${{ steps.vocab-token.outputs.token }}
+          path: .public-repo-hygiene-lab-vocabulary
+          persist-credentials: false
+          sparse-checkout: |
+            vocabularies/public_repo_hygiene_lab_vocabulary.yaml
+          sparse-checkout-cone-mode: false
+
       - name: Run the public-repo hygiene gate
         env:
           MODE: ${{ inputs.mode }}
@@ -248,7 +334,9 @@ jobs:
             ${{ github.repository != 'OmniNode-ai/omniclaude'
                 && '.omniclaude-public-repo-hygiene/scripts/public_repo_hygiene_gate.py'
                 || 'scripts/public_repo_hygiene_gate.py' }}
+          DIFF_BASE: ${{ steps.diff-base.outputs.sha }}
           VOCAB_PATH: .public-repo-hygiene-vocabulary/docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
+          LAB_VOCAB_PATH: .public-repo-hygiene-lab-vocabulary/vocabularies/public_repo_hygiene_lab_vocabulary.yaml
         run: |
           set -euo pipefail
           # Fail LOUD, not with a bare "python3: can't open file ... Errno 2".
@@ -276,9 +364,30 @@ jobs:
                  "'secrets: inherit'. THE GATE DID NOT RUN."
             exit 1
           fi
+          if [ ! -f "${LAB_VOCAB_PATH}" ]; then
+            echo "::error::the private lab vocabulary was not fetched to" \
+                 "${LAB_VOCAB_PATH}. The lab-config class cannot scan without" \
+                 "it and the gate refuses rather than reporting green. Check" \
+                 "OMNI_HYGIENE_LAB_VOCAB_REPO and that the app installation" \
+                 "covers that repository. THE GATE DID NOT RUN."
+            exit 1
+          fi
           # Never suppress stderr on a verification sweep, and never `|| true`
           # a gate: both convert a failure into a confident zero.
+          # Per-class enforcement (enforce_classes) is read by the gate from
+          # the caller's own checked-in .public-repo-hygiene.yaml, so no input
+          # carries it: one surface, the repository's reviewed config.
+          # OMN-19835: on a pull request the diff base is always passed. It
+          # narrows the verdict only for a repository whose own config
+          # declares `enforce_scope: added-lines`; every other caller's
+          # verdict is unchanged by it.
+          diff_args=()
+          if [ -n "${DIFF_BASE}" ]; then
+            diff_args=(--diff-base "${DIFF_BASE}")
+          fi
           python3 "${SCRIPT_PATH}" \
             --repo-root . \
             --vocabulary "${VOCAB_PATH}" \
-            --mode "${MODE}"
+            --lab-vocabulary "${LAB_VOCAB_PATH}" \
+            --mode "${MODE}" \
+            ${diff_args[@]+"${diff_args[@]}"}

@@ -25,6 +25,9 @@ a read of an ``OmniNode-ai`` repository runs on the operator unchanged:
   * ``gh api graphql`` whose document has no ``mutation``, no ``viewer``, and
     names no owner other than ``OmniNode-ai``.
 
+  The bare repository object (``gh api repos/OmniNode-ai/<repo>``) stays on the
+  operator: the App's answer nulls the merge-settings fields without an error.
+
   Anything that resolves the viewer (``@me``, ``viewer``, ``pr status``) stays
   on the operator, because on an installation token it would answer as the bot
   or not at all. Unscoped search stays on the operator because the App sees
@@ -87,7 +90,17 @@ CACHE_SUBDIR = "omni"
 CACHE_FILE_NAME = "gh-read-token.json"
 USAGE_LOG_NAME = "gh-route.jsonl"
 SHIM_MARKER = b"ONEX_GH_USER_SHIM"
-TOKEN_MAX_AGE_S = 50 * 60
+# GH_READ_TOKEN_CMD (onex-gh-reader-token, in omnibase_internal) only guarantees that a token
+# it hands back has more than its own --min-ttl (default 900s) of real GitHub life left -- it
+# reuses ITS cache whenever more than that remains, so a token this router receives can already
+# be up to (3600 - 900)s = 2700s old. This cache used to assume the token was freshly minted at
+# receipt and held it for 50 more minutes, so the compounded age could reach ~95 minutes against
+# GitHub's flat 60-minute lifetime: periodic 401 "Bad credentials" bursts measured 2026-09-27
+# ~20:00Z-23:00Z (OMN-19852 P2), roughly every 30 minutes, each followed by a clean fallback once
+# route_and_run's own retry-on-refusal path did NOT catch it (that path only catches "Resource
+# not accessible by integration", not an expired-token 401). This value must stay safely under
+# the upstream's 900s floor, with margin for latency and clock skew.
+TOKEN_MAX_AGE_S = 5 * 60
 TOKEN_CMD_TIMEOUT_S: float = 30.0
 INTEGRATION_REFUSAL = "Resource not accessible by integration"
 
@@ -95,7 +108,9 @@ IDENTITY_APP = "app"
 IDENTITY_OPERATOR = "operator"
 IDENTITY_FALLBACK = "operator-fallback"
 
-_INSTALLATION_SHAPE = re.compile(r"ghs_[A-Za-z0-9_]{20,255}")
+# Installation tokens minted since 2026 are ~380 characters and carry "-" and "." (measured
+# 2026-09-27 on onexbot-pr-reader, OMN-19852); the older shape was 36 word characters.
+_INSTALLATION_SHAPE = re.compile(r"ghs_[A-Za-z0-9_.\-]{20,1024}")
 _GITHUB_URL = re.compile(r"^https?://(?:www\.)?github\.com/([^/\s]+)/([^/\s#?]+)")
 _OWNER_REPO = re.compile(r"^([A-Za-z0-9][A-Za-z0-9-]*)/([A-Za-z0-9._-]+)$")
 _SEARCH_SCOPE = re.compile(r"\b(?:org|user|repo):([A-Za-z0-9-]+)", re.IGNORECASE)
@@ -379,6 +394,13 @@ def _classify_api(args: Sequence[str], env: Mapping[str, str]) -> Classification
     segments = route.split("/")
     if segments[0] == "repos" and len(segments) >= 3:
         repo = f"{segments[1]}/{segments[2]}"
+        if _is_org(segments[1]) and not any(segments[3:]):
+            # The bare repository object carries the merge settings (allow_auto_merge,
+            # allow_squash_merge, delete_branch_on_merge), which an installation token without
+            # administration access gets as null WITHOUT an error. The arm step's live
+            # allow_auto_merge probe read '' and refused every arm (OMN-19852), so this read
+            # stays on the operator, like an unscoped search.
+            return _operator("api", "repo-settings-fields", effective, repo)
         if _is_org(segments[1]):
             return Classification(True, "api", effective, repo, "read-rest")
         return _operator("api", "repo-outside-org", effective, repo)

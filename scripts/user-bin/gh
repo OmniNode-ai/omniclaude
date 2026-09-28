@@ -21,13 +21,22 @@
 # other failure (network, quota, auth) is never cached.
 #
 # Read routing (OMN-19587): with ONEX_GH_READ_ROUTING=1, the read shapes
-# `gh api` GET/HEAD, `pr view|list|checks` and `run view|list` are handed to
-# gh_route.py (installed next to this file by install-gh-shim.sh; override
-# with ONEX_GH_ROUTER), which runs them on the read-only App token from
+# `gh api` GET/HEAD, `pr view|list|checks|diff`, `run view|list`, `repo view`,
+# `issue view|list` and `search` are candidates handed to gh_route.py
+# (installed next to this file by install-gh-shim.sh; override with
+# ONEX_GH_ROUTER); gh_route.py's own classify() is the authority on whether a
+# given call actually reads (a viewer-resolving query or a non-OmniNode-ai
+# owner still runs on the operator there). `api graphql` is never a
+# candidate here: this shim cannot tell a mutation from a read without
+# parsing the query the way gh_route.py does, so no graphql call reaches the
+# router process at all -- every graphql call, mutation or read, runs on the
+# operator unchanged, cleanly. It runs an actual read on the read-only App
+# token from
 # GH_READ_TOKEN_CMD and falls back to the operator credential when there is
 # none. Every other call, and every write, runs on the operator unchanged and
 # never reaches the router. With the flag unset or anything but 1 the shim
-# runs the real gh exactly as it did before routing existed.
+# runs the real gh exactly as it did before routing existed. Both variables
+# default from ~/.config/omni/gh-read-routing.env when unset (OMN-19852).
 #
 # Usage log (OMN-19585): every invocation appends one JSON line to
 # ${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage/<UTC date>.jsonl with the
@@ -72,6 +81,48 @@ done
 if [ -z "$real" ]; then
   echo "gh shim (OMN-19479): no real gh found on PATH after $self" >&2
   exit 127
+fi
+
+# --- read-routing defaults (OMN-19852) -----------------------------------------
+# A session, a launchd job and a Codex lane each start with their own environment,
+# so an exported flag reaches only the shells that happened to inherit it. When
+# ONEX_GH_READ_ROUTING or GH_READ_TOKEN_CMD is unset, take it from the one host
+# file ${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-read-routing.env (KEY=VALUE
+# lines; only these two keys are read, nothing is evaluated). The environment
+# wins, so ONEX_GH_READ_ROUTING=0 still turns routing off for one call.
+#
+# A trailing " # note" on the same line as the value (an operator's own
+# disable annotation is the observed case, OMN-19852) is stripped, comment and
+# the whitespace before it: without this, "ONEX_GH_READ_ROUTING=1  # re-enabled"
+# would compare unequal to "1" and silently run every read on the operator
+# while the file reads enabled.
+_conf_strip_comment() {
+  local v="$1"
+  case "$v" in *[[:space:]]'#'*) v="${v%%[[:space:]]\#*}" ;; esac
+  while :; do
+    case "$v" in
+      *[[:space:]]) v="${v%[[:space:]]}" ;;
+      *) break ;;
+    esac
+  done
+  printf '%s' "$v"
+}
+_routing_conf="${ONEX_GH_READ_ROUTING_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-read-routing.env}"
+if [ -f "$_routing_conf" ] && { [ -z "${ONEX_GH_READ_ROUTING+x}" ] || [ -z "${GH_READ_TOKEN_CMD+x}" ]; }; then
+  while IFS= read -r _line || [ -n "$_line" ]; do
+    case "$_line" in
+      ONEX_GH_READ_ROUTING=*)
+        if [ -z "${ONEX_GH_READ_ROUTING+x}" ]; then
+          _conf_v="$(_conf_strip_comment "${_line#*=}")"
+          export ONEX_GH_READ_ROUTING="$_conf_v"
+        fi ;;
+      GH_READ_TOKEN_CMD=*)
+        if [ -z "${GH_READ_TOKEN_CMD+x}" ]; then
+          _conf_v="$(_conf_strip_comment "${_line#*=}")"
+          export GH_READ_TOKEN_CMD="$_conf_v"
+        fi ;;
+    esac
+  done < "$_routing_conf"
 fi
 
 _cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/prview"
@@ -281,12 +332,21 @@ _run_gh() {
     return $?
   fi
 
+  # A candidate is only ever "worth asking the router about" -- gh_route.py's own
+  # classify() is the one place that decides read vs not (mutation, viewer-resolving,
+  # non-OmniNode-ai owner, unscoped search all still land on the operator there), so
+  # widening this set is safe: it was narrower than what the router actually
+  # classifies as a read (OMN-19852 P2 -- `gh search`, `repo view`, `issue view|list`,
+  # `pr diff` and `api graphql` reads were silently running on the operator, on this
+  # host and everywhere else the shim is installed, because they never reached the
+  # router at all).
   local candidate=0 router="" py="" rf="" rc=0
   if [ "$_cls" = "api" ] && { [ "$_method" = "GET" ] || [ "$_method" = "HEAD" ]; }; then
     candidate=1
   else
     case "$_cls" in
-      "pr view"|"pr list"|"pr checks"|"run view"|"run list") candidate=1 ;;
+      "pr view"|"pr list"|"pr checks"|"pr diff"|"run view"|"run list"|"repo view"|"issue view"|"issue list") candidate=1 ;;
+      "search "*) candidate=1 ;;
     esac
   fi
   if [ "$candidate" -ne 1 ]; then

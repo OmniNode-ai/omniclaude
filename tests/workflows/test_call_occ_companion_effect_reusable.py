@@ -159,7 +159,13 @@ def test_workflow_takes_no_broker_secret() -> None:
         "GH_TOKEN",
         "KAFKA_SASL_USERNAME",
         "KAFKA_SASL_PASSWORD",
+        # OMN-16336: the caller's change-control batching flag, a variable
+        # (never a secret) that can only turn batching off.
+        "OMNI_OCC_COMPANION_BATCH_MODE_VAR",
     }
+    assert env["OMNI_OCC_COMPANION_BATCH_MODE_VAR"] == (
+        "${{ vars.OMNI_OCC_COMPANION_BATCH_MODE }}"
+    )
     assert "secrets." not in str(env["GH_TOKEN"])
     assert "KAFKA_BOOTSTRAP_SERVERS" not in env, (
         "the broker never comes from the caller (OMN-14813)"

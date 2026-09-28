@@ -237,8 +237,13 @@ def test_route_off_is_byte_identical_for_all_commands(
         ["pr", "view", "1", "-R", "OmniNode-ai/omniclaude"],
         ["pr", "list"],
         ["pr", "checks", "1"],
+        ["pr", "diff", "1", "-R", "OmniNode-ai/omniclaude"],
         ["run", "view", "12"],
         ["run", "list"],
+        ["repo", "view", "OmniNode-ai/omniclaude"],
+        ["issue", "view", "1", "-R", "OmniNode-ai/omniclaude"],
+        ["issue", "list", "-R", "OmniNode-ai/omniclaude"],
+        ["search", "prs", "--owner", "OmniNode-ai"],
     ],
 )
 def test_route_read_uses_app_token_for_candidates(
@@ -248,6 +253,65 @@ def test_route_read_uses_app_token_for_candidates(
     assert result.returncode == 0, result.stderr
     assert _gh_calls(routed_env) == [{"argv": argv, "gh_token": APP_TOKEN}]
     assert _usage(routed_env)[0]["identity"] == "app"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["search", "prs", "--author", "@me"],
+        ["search", "prs", "is:open", "label:bug"],
+    ],
+)
+def test_route_widened_search_candidate_still_refuses_an_unscoped_search(
+    routed_env: dict[str, str], argv: list[str]
+) -> None:
+    """OMN-19852 P2: widening the bash pre-filter to forward `search` to the router
+    must not widen what actually gets the App token. gh_route.py's own classify()
+    still refuses an unscoped search, so it runs on the operator exactly as before
+    -- now via one round trip through the router rather than never reaching it."""
+    result = _run(routed_env, *argv, extra={"ONEX_GH_READ_ROUTING": "1"})
+    assert result.returncode == 0, result.stderr
+    assert _gh_calls(routed_env) == [{"argv": argv, "gh_token": OPERATOR_TOKEN}]
+    assert _usage(routed_env)[0]["identity"] == "operator"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [
+            "api",
+            "graphql",
+            "-f",
+            "query=mutation { enablePullRequestAutoMerge(input: {}) { clientMutationId } }",
+        ],
+        ["api", "graphql", "-f", "query={ viewer { login } }"],
+    ],
+)
+def test_route_graphql_never_reaches_the_router(
+    routed_env: dict[str, str], tmp_path: Path, argv: list[str]
+) -> None:
+    """OMN-19852 P2: unlike search, `api graphql` is deliberately excluded from the
+    bash candidate set (this shim cannot tell a mutation from a read without parsing
+    the query the way gh_route.py does), so a graphql call, mutation or read, never
+    even reaches the router process -- proven here with a router stand-in that would
+    fail the test if it were ever invoked."""
+    spy_log = tmp_path / "graphql-spy"
+    spy = _spy_router(tmp_path / "graphql-router", spy_log)
+    result = _run(
+        routed_env,
+        *argv,
+        extra={"ONEX_GH_READ_ROUTING": "1", "ONEX_GH_ROUTER": str(spy)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert _gh_calls(routed_env) == [{"argv": argv, "gh_token": OPERATOR_TOKEN}]
+    assert not spy_log.exists()
+    assert (
+        _usage(routed_env)[0]["identity"],
+        _usage(routed_env)[0]["route_reason"],
+    ) == (
+        "operator",
+        "shim-not-a-read",
+    )
 
 
 def test_route_fallback_when_token_command_is_unset(routed_env: dict[str, str]) -> None:
@@ -565,3 +629,62 @@ def test_report_agent_registry_attribution_and_app_calls(tmp_path: Path) -> None
     assert rep["unattributed_calls"] == 0
     text = report.render_text(rep)
     assert "app_calls" in text and "agent-a" in text
+
+
+def _routing_conf(env: dict[str, str], body: str) -> dict[str, str]:
+    conf = Path(env["HOME"]) / ".config" / "omni" / "gh-read-routing.env"
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    conf.write_text(body)
+    out = dict(env)
+    out.pop("ONEX_GH_READ_ROUTING", None)
+    return out
+
+
+def test_routing_conf_file_turns_routing_on_when_env_is_unset(
+    routed_env: dict[str, str],
+) -> None:
+    """OMN-19852: a launchd job or Codex lane without the exported flag still routes."""
+    env = _routing_conf(
+        routed_env,
+        f"# host defaults\nONEX_GH_READ_ROUTING=1\nGH_READ_TOKEN_CMD={routed_env['GH_READ_TOKEN_CMD']}\n",
+    )
+    env.pop("GH_READ_TOKEN_CMD")
+    result = _run(env, "pr", "list")
+    assert result.returncode == 0, result.stderr
+    assert _gh_calls(env) == [{"argv": ["pr", "list"], "gh_token": APP_TOKEN}]
+    assert _usage(env)[0]["identity"] == "app"
+
+
+def test_routing_conf_file_never_routes_a_write(routed_env: dict[str, str]) -> None:
+    env = _routing_conf(routed_env, "ONEX_GH_READ_ROUTING=1\n")
+    result = _run(env, "pr", "merge", "1", "--squash")
+    assert result.returncode == 0
+    assert _gh_calls(env)[0]["gh_token"] == OPERATOR_TOKEN
+
+
+def test_env_flag_wins_over_the_routing_conf_file(routed_env: dict[str, str]) -> None:
+    env = _routing_conf(routed_env, "ONEX_GH_READ_ROUTING=1\n")
+    result = _run(env, "pr", "list", extra={"ONEX_GH_READ_ROUTING": "0"})
+    assert result.returncode == 0
+    assert _gh_calls(env)[0]["gh_token"] == OPERATOR_TOKEN
+    assert all("identity" not in row for row in _usage(env))
+
+
+def test_routing_conf_file_trailing_comment_on_the_value_line_is_stripped(
+    routed_env: dict[str, str],
+) -> None:
+    """OMN-19852 P2: an operator's own annotation on the value line (the observed shape,
+    e.g. "ONEX_GH_READ_ROUTING=1  # re-enabled by ...") must not be read as part of the
+    value. Before this fix ``${_line#*=}`` kept the comment text, so the flag compared
+    unequal to "1" and every read silently ran on the operator while the file read enabled.
+    """
+    env = _routing_conf(
+        routed_env,
+        "ONEX_GH_READ_ROUTING=1  # re-enabled by orchestrator-83 2026-09-27, OMN-19852\n"
+        f"GH_READ_TOKEN_CMD={routed_env['GH_READ_TOKEN_CMD']}  # trailing note too\n",
+    )
+    env.pop("GH_READ_TOKEN_CMD")
+    result = _run(env, "pr", "list")
+    assert result.returncode == 0, result.stderr
+    assert _gh_calls(env) == [{"argv": ["pr", "list"], "gh_token": APP_TOKEN}]
+    assert _usage(env)[0]["identity"] == "app"
