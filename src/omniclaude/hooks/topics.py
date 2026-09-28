@@ -77,6 +77,12 @@ class TopicBase(StrEnum):
     UTILIZATION_SCORING_CMD = "onex.cmd.omniintelligence.utilization-scoring.v1"
     # LLM call completed: cost telemetry for omnidash llm_cost_aggregates (OMN-7570)
     LLM_CALL_COMPLETED = "onex.evt.omniintelligence.llm-call-completed.v1"
+    # Lineage-carrying Claude Code hook event, all hook types (OMN-19513).
+    # Registered here so the daemon-registry projection (omnimarket
+    # topics.yaml) and this repo's committed EVENT_REGISTRY stay in sync
+    # (Registry Consistency, OMN-18357 script). The producer/consumer wiring
+    # for this event type is OMN-19513 scope (omniclaude#2371/#2372).
+    HOOK_EVENT = "onex.evt.omniclaude.hook-event.v1"
 
     # ==========================================================================
     # Hook adapter observability topics (migrated to ONEX format, OMN-1552)

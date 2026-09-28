@@ -1429,6 +1429,26 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id", "model_id", "total_tokens"],
     ),
+    # =========================================================================
+    # Lineage-Carrying Hook Event (OMN-19513)
+    # =========================================================================
+    # Declared by omnimarket's daemon registry (topics.yaml) so this repo's
+    # committed EVENT_REGISTRY stays in sync (Registry Consistency, OMN-18357
+    # generate_event_registry.py --check). The producer that actually emits
+    # this event for every hook type is OMN-19513 scope (omniclaude#2371);
+    # this entry only keeps the projection consistent ahead of that landing.
+    "hook.event": EventRegistration(
+        event_type="hook.event",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.HOOK_EVENT,
+                transform=redact_capture,
+                description="Lineage-carrying Claude Code hook event, all hook types (OMN-19513)",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "event_id", "hook_event_name", "lineage"],
+    ),
 }
 
 
