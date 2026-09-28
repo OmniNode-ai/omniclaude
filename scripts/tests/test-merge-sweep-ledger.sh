@@ -75,7 +75,7 @@ DRY_RUN=false
 RESUME_REQUESTED=false
 MERGE_ONLY=false
 REPOS_FILTER="omniclaude"
-SWEEP_ARGS="--enable-admin-merge-fallback --admin-fallback-threshold-minutes=15"
+SWEEP_ARGS="--repos omniclaude"
 POLISH_DISPATCHES_BEFORE=0
 POLISH_DISPATCHES_AFTER=1
 POLISH_RESULTS_BEFORE=0
