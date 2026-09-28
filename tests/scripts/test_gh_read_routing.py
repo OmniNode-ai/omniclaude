@@ -261,6 +261,8 @@ OPERATOR_CALLS: list[list[str]] = [
     ["api", "rate_limit"],
     ["api", "orgs/OmniNode-ai/installations"],
     ["api", "repos/SomeoneElse/tool/pulls"],
+    ["api", "repos/OmniNode-ai/omnibase_core", "--jq", ".allow_auto_merge"],
+    ["api", "/repos/OmniNode-ai/omniclaude/"],
     ["api", "--hostname", "ghe.example.com", "repos/OmniNode-ai/x/pulls"],
     ["api", "search/issues?q=is:pr+author:someone"],
     ["search", "prs", "--author", "@me"],
@@ -583,3 +585,14 @@ def test_read_accepts_the_long_installation_token_shape(
     assert _calls(env) == [{"argv": READ_ARGV_LONG, "gh_token": long_token}]
     (rec,) = records
     assert rec.identity == gr.IDENTITY_APP  # type: ignore[attr-defined]
+
+
+def test_bare_repository_object_stays_on_operator_but_its_subpaths_route() -> None:
+    """OMN-19852: the App nulls allow_auto_merge on the repository object, silently; the arm step's
+    probe then refused every arm. The object stays on the operator; anything under it still routes."""
+    cls = gr.classify(
+        ["api", "repos/OmniNode-ai/omnimarket", "--jq", ".allow_auto_merge"], {}
+    )
+    assert not cls.read and cls.reason == "repo-settings-fields"
+    sub = gr.classify(["api", "repos/OmniNode-ai/omnimarket/pulls/1"], {})
+    assert sub.read and sub.reason == "read-rest"

@@ -25,6 +25,9 @@ a read of an ``OmniNode-ai`` repository runs on the operator unchanged:
   * ``gh api graphql`` whose document has no ``mutation``, no ``viewer``, and
     names no owner other than ``OmniNode-ai``.
 
+  The bare repository object (``gh api repos/OmniNode-ai/<repo>``) stays on the
+  operator: the App's answer nulls the merge-settings fields without an error.
+
   Anything that resolves the viewer (``@me``, ``viewer``, ``pr status``) stays
   on the operator, because on an installation token it would answer as the bot
   or not at all. Unscoped search stays on the operator because the App sees
@@ -391,6 +394,13 @@ def _classify_api(args: Sequence[str], env: Mapping[str, str]) -> Classification
     segments = route.split("/")
     if segments[0] == "repos" and len(segments) >= 3:
         repo = f"{segments[1]}/{segments[2]}"
+        if _is_org(segments[1]) and not any(segments[3:]):
+            # The bare repository object carries the merge settings (allow_auto_merge,
+            # allow_squash_merge, delete_branch_on_merge), which an installation token without
+            # administration access gets as null WITHOUT an error. The arm step's live
+            # allow_auto_merge probe read '' and refused every arm (OMN-19852), so this read
+            # stays on the operator, like an unscoped search.
+            return _operator("api", "repo-settings-fields", effective, repo)
         if _is_org(segments[1]):
             return Classification(True, "api", effective, repo, "read-rest")
         return _operator("api", "repo-outside-org", effective, repo)
