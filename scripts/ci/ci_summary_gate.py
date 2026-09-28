@@ -275,6 +275,14 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
 
 EXTERNAL_GOOD_CONCLUSIONS: frozenset[str] = frozenset({"success"})
 
+# OMN-17427: only these EXPECTED_EXTERNAL_CONTEXTS report on push heads.
+# The other workflows are pull_request-only; requiring them on a dev merge
+# commit leaves L4 pending until the poller's deadline. OCC remains required
+# independently through ALL_MUST_SUCCEED_EXTERNAL_NAMES on every event.
+PUSH_REPORTING_EXTERNAL_CONTEXTS: frozenset[str] = frozenset(
+    {"Hook Edge Lane Gate", "Hook Inventory Gate"}
+)
+
 # occ-preflight / eligibility is minted by the reusable
 # `occ-preflight.yml@{main,dev}` workflow, called from ~52 separate caller
 # workflow files against the same PR head SHA (generalizes OMN-15112's open
@@ -1528,6 +1536,7 @@ def evaluate_external_sweep(
 def evaluate_external(
     check_runs: list[dict[str, object]] | None,
     *,
+    event_name: str = "pull_request",
     expected: tuple[str, ...] = EXPECTED_EXTERNAL_CONTEXTS,
     all_must_succeed: frozenset[str] = ALL_MUST_SUCCEED_EXTERNAL_NAMES,
     now: datetime | None = None,
@@ -1535,6 +1544,10 @@ def evaluate_external(
     """Return ``(verdict, failures, pending)`` for the L4 external-context layer.
 
     ``verdict`` is one of ``"SUCCESS"``, ``"FAILURE"``, ``"PENDING"``.
+
+    Non-pull-request events require only push-reporting names from ``expected``.
+    The default enforces the full set (fail closed); ``all_must_succeed`` is
+    enforced unchanged for every event.
 
     ``check_runs is None`` means the fetch itself failed (or was never
     attempted) -- every expected/tracked context is treated as unobserved
@@ -1565,6 +1578,11 @@ def evaluate_external(
     Omitting it is the strict, pre-OMN-17864 reading: every non-good row fails
     on the poll that observes it.
     """
+
+    if event_name != "pull_request":
+        expected = tuple(
+            name for name in expected if name in PUSH_REPORTING_EXTERNAL_CONTEXTS
+        )
 
     if check_runs is None:
         return "PENDING", [], list(expected) + sorted(all_must_succeed)
@@ -1985,7 +2003,9 @@ def main(argv: list[str] | None = None) -> int:
         # and not its poller, and the gate shipped completely inert with every
         # unit test green.
         now = datetime.now(UTC)
-        ext_verdict, ext_failures, ext_pending = evaluate_external(check_runs, now=now)
+        ext_verdict, ext_failures, ext_pending = evaluate_external(
+            check_runs, event_name=args.event_name, now=now
+        )
         # OMN-18970 L5. Subtracting this run's own job names is what keeps the
         # sweep from re-judging a job the in-run soft-allowlist already
         # admitted, from the other side of the same head.
