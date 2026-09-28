@@ -21,9 +21,17 @@
 # other failure (network, quota, auth) is never cached.
 #
 # Read routing (OMN-19587): with ONEX_GH_READ_ROUTING=1, the read shapes
-# `gh api` GET/HEAD, `pr view|list|checks` and `run view|list` are handed to
-# gh_route.py (installed next to this file by install-gh-shim.sh; override
-# with ONEX_GH_ROUTER), which runs them on the read-only App token from
+# `gh api` GET/HEAD, `pr view|list|checks|diff`, `run view|list`, `repo view`,
+# `issue view|list` and `search` are candidates handed to gh_route.py
+# (installed next to this file by install-gh-shim.sh; override with
+# ONEX_GH_ROUTER); gh_route.py's own classify() is the authority on whether a
+# given call actually reads (a viewer-resolving query or a non-OmniNode-ai
+# owner still runs on the operator there). `api graphql` is never a
+# candidate here: this shim cannot tell a mutation from a read without
+# parsing the query the way gh_route.py does, so no graphql call reaches the
+# router process at all -- every graphql call, mutation or read, runs on the
+# operator unchanged, cleanly. It runs an actual read on the read-only App
+# token from
 # GH_READ_TOKEN_CMD and falls back to the operator credential when there is
 # none. Every other call, and every write, runs on the operator unchanged and
 # never reaches the router. With the flag unset or anything but 1 the shim
@@ -324,12 +332,21 @@ _run_gh() {
     return $?
   fi
 
+  # A candidate is only ever "worth asking the router about" -- gh_route.py's own
+  # classify() is the one place that decides read vs not (mutation, viewer-resolving,
+  # non-OmniNode-ai owner, unscoped search all still land on the operator there), so
+  # widening this set is safe: it was narrower than what the router actually
+  # classifies as a read (OMN-19852 P2 -- `gh search`, `repo view`, `issue view|list`,
+  # `pr diff` and `api graphql` reads were silently running on the operator, on this
+  # host and everywhere else the shim is installed, because they never reached the
+  # router at all).
   local candidate=0 router="" py="" rf="" rc=0
   if [ "$_cls" = "api" ] && { [ "$_method" = "GET" ] || [ "$_method" = "HEAD" ]; }; then
     candidate=1
   else
     case "$_cls" in
-      "pr view"|"pr list"|"pr checks"|"run view"|"run list") candidate=1 ;;
+      "pr view"|"pr list"|"pr checks"|"pr diff"|"run view"|"run list"|"repo view"|"issue view"|"issue list") candidate=1 ;;
+      "search "*) candidate=1 ;;
     esac
   fi
   if [ "$candidate" -ne 1 ]; then
