@@ -439,6 +439,31 @@ class _Emitter:
         return bool(result.published)
 
 
+def publishable_event_types() -> tuple[str, ...] | None:
+    """The event types the installed emit registry declares (OMN-19551).
+
+    Written into the drainer's status so a producer can tell, before it
+    journals a new event type, whether this drainer can publish it. A record
+    this drainer cannot resolve would fail at the journal head every cycle and
+    hold every record behind it until it is dead-lettered, which is the
+    OMN-19074 outage shape. ``None`` when the registry cannot be read.
+    """
+    try:
+        import yaml
+        from omnimarket.nodes.node_event_emit_effect.spool.topic_resolver import (
+            default_registry_path,
+        )
+
+        raw = yaml.safe_load(default_registry_path().read_text(encoding="utf-8"))
+        events = raw["events"]
+    except Exception as exc:  # noqa: BLE001 -- report nothing rather than guess
+        logger.error("cannot read the emit registry's event types: %s", exc)
+        return None
+    if not isinstance(events, dict):
+        return None
+    return tuple(sorted(str(event_type) for event_type in events))
+
+
 def _legacy_topic_to_semantic_event() -> dict[str, str] | None:
     """Read the installed contract and invert unambiguous legacy topic rules.
 
@@ -809,6 +834,9 @@ def run(
     # anything across cycles, and a per-call map would reset every 30 seconds
     # and never reach the threshold (OMN-19074).
     failure_counts: dict[str, int] = {}
+    # Read once per process: the installed registry cannot change under a
+    # running drainer, and a restart is what picks up a new one.
+    publishable = publishable_event_types()
 
     def _record_cycle() -> None:
         try:
@@ -819,6 +847,7 @@ def run(
                     last_publish_at=last_publish_at,
                     published_total=published_total,
                     pid=os.getpid(),
+                    publishable_event_types=publishable,
                 ),
             )
         except OSError as exc:  # pragma: no cover - reported, never fatal

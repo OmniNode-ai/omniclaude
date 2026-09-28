@@ -247,6 +247,22 @@ def _resolved_posture(contract_path: Path) -> dict[str, Any]:
             for topic, policy in contract.topics.items()
         },
         "redaction_state_field": contract.redaction_state_field,
+        # OMN-19551: the scrub marker and each topic's size bound are posture
+        # too. Left out, a drifted marker or bound would compare equal.
+        "scrub_marker": contract.scrub_marker,
+        "content_policies": {
+            topic: (
+                None
+                if policy.content_policy is None
+                else (
+                    policy.content_policy.chunk_chars,
+                    policy.content_policy.max_content_chars,
+                    policy.content_policy.truncated_field,
+                    policy.content_policy.original_field,
+                )
+            )
+            for topic, policy in contract.topics.items()
+        },
     }
 
 
