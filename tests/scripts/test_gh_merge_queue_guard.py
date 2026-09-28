@@ -121,10 +121,23 @@ def test_queue_put_blocked(env: dict[str, str]) -> None:
     assert "OMN-17427" in r.stderr
     assert "merge_queue" in r.stderr
     calls = _calls(env)
-    # only the two live-check reads ever reached the real gh -- never the merge itself
-    assert all(c[0] != "api" or "pulls/4197/merge" not in " ".join(c) for c in calls), (
-        calls
-    )
+    # The real shim flow reaches precisely the two live-check reads -- never the
+    # raw REST merge itself. This guards against detection that only works in a
+    # helper/unit scope rather than from the shim's actual argv classification.
+    assert calls == [
+        [
+            "pr",
+            "view",
+            "4197",
+            "--repo",
+            "o/r",
+            "--json",
+            "baseRefName",
+            "--jq",
+            ".baseRefName",
+        ],
+        ["api", "repos/o/r/rules/branches/dev"],
+    ]
 
 
 @pytest.mark.unit

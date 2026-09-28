@@ -256,7 +256,7 @@ def test_record_off_switch(env: dict[str, str]) -> None:
 @pytest.mark.parametrize(
     "argv",
     [
-        ["pr", "merge", "1", "--squash"],
+        ["pr", "merge", "1", "--squash", "--match-head-commit", "deadbeef"],
         ["api", "-X", "POST", "repos/o/r/issues/1/comments", "-f", "body=two words"],
         ["pr", "checks", "7"],
         ["api", "graphql", "-f", "query=q"],
