@@ -397,7 +397,12 @@ def capture(
             digest_field="content_sha256",
         ):
             appender.append_event(
-                event_type=CONTENT_EVENT_TYPE,
+                # A literal, not CONTENT_EVENT_TYPE, on purpose (OMN-19913):
+                # validate_hook_edge_lane.py resolves only literal classes at
+                # an emit call, so the constant hid this class from the lane
+                # contract and nothing derived from the contract knew it needed
+                # a broker grant. tests pin the literal to the constant.
+                event_type="content.captured",
                 payload=chunk,
                 correlation_id=correlation_id or session,
                 cwd=cwd,

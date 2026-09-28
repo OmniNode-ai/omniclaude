@@ -136,12 +136,20 @@ DEFAULT_BATCH_LIMIT = 200
 #
 # THE ARITHMETIC, not a round number. A failing cycle costs one publish attempt
 # plus DEFAULT_ERROR_BACKOFF_SECONDS, so with the transport failing fast on a
-# permanent refusal a cycle is ~30s and five of them are ~2.5 minutes. A broker
-# blip that resolves inside two and a half minutes therefore never reaches the
-# threshold, and a record is never set aside for a fault that had already
-# healed. Raising it trades a longer total stall for a margin the stand-down
-# probe below already provides more cheaply; lowering it buys minutes at the
-# cost of that margin.
+# permanent refusal five attempts are separated by four 30s backoffs: about two
+# minutes before the first dead-letter. A broker blip that resolves inside that
+# window never reaches the threshold, so a record is never set aside for a
+# fault that had already healed. Raising it trades a longer total stall for a
+# margin the stand-down probe below already provides more cheaply; lowering it
+# buys minutes at the cost of that margin.
+#
+# The threshold is paid ONCE PER EVENT CLASS, not once per record (OMN-19913).
+# After the first record of a class is dead-lettered, later records of the
+# same class go on their first failure, still behind the stand-down probe, and
+# a cycle that dead-letters owes no backoff. Before that change a continuously
+# emitted refused class (content.captured, 2026-09-28) cost every one of its
+# records the full two minutes, and the journal grew from 245 to 564 records
+# in about three minutes.
 #
 # The threshold is the CHEAP half of the guard and deliberately not the whole
 # one. What actually distinguishes "this record is poison" from "the broker is
@@ -207,7 +215,7 @@ def apply_declared_lane(
         import hook_edge_lane
 
         contract = hook_edge_lane.load_contract(path)
-        brokers = hook_edge_lane.resolve_bootstrap_servers(contract)
+        brokers: str = hook_edge_lane.resolve_bootstrap_servers(contract)
     except Exception as exc:  # noqa: BLE001 -- degrade, do not kill the daemon
         logger.error(
             "could not resolve the declared hook-edge lane from %s: %s; "
@@ -573,6 +581,8 @@ def quarantine_record(
     *,
     failures: int,
     overtaken_by: journal.JournalEntry | None = None,
+    reason_kind: str = "consecutive_failures",
+    proven_by: str | None = None,
 ) -> Path | None:
     """Move one unpublishable record into the journal's dead-letter.
 
@@ -617,8 +627,15 @@ def quarantine_record(
         "schema_version": _QUARANTINE_REASON_SCHEMA_VERSION,
         "quarantined_at": datetime.now(UTC).isoformat(),
         "reason_code": "publish_failed_repeatedly",
+        "reason_kind": reason_kind,
         "detail": (
-            f"{failures} consecutive publish failures at the journal head, and "
+            f"{failures} consecutive publish failures at the journal head"
+            + (
+                f" of an event class already proven refused by {proven_by}"
+                if proven_by is not None
+                else ""
+            )
+            + f", and "
             f"the record behind it published on the same cycle, so the broker "
             f"is reachable and this record is not. To replay: provision the "
             f"grant, then move this file back into the journal directory. "
@@ -637,13 +654,15 @@ def quarantine_record(
         "queued_at": entry.record.queued_at.isoformat(),
         "consecutive_failures": failures,
     }
+    if proven_by is not None:
+        reason["proven_by"] = proven_by
     try:
         quarantine.mkdir(parents=True, exist_ok=True)
         reason_path = quarantine / f"{entry.path.stem}.reason.json"
         tmp = reason_path.with_suffix(f".tmp.{os.getpid()}")
         tmp.write_text(json.dumps(reason, indent=2, sort_keys=True), encoding="utf-8")
         tmp.replace(reason_path)
-        target = quarantine / entry.path.name
+        target: Path = quarantine / entry.path.name
         entry.path.replace(target)
     except OSError as exc:
         # Never fatal. Failing to dead-letter leaves the record queued, which
@@ -699,9 +718,10 @@ def drain_once(
     *,
     batch_limit: int = DEFAULT_BATCH_LIMIT,
     failure_counts: dict[str, int] | None = None,
+    refused_event_types: dict[str, str] | None = None,
     quarantine_after: int = DEFAULT_QUARANTINE_AFTER_FAILURES,
-) -> tuple[int, int]:
-    """Drain up to ``batch_limit`` records. Returns (published, failed).
+) -> tuple[int, int, int]:
+    """Drain up to ``batch_limit`` records. Return (published, failed, dead_lettered).
 
     Stops at the first failure so ordering is preserved and a dead broker does
     not burn the whole backlog against a wall.
@@ -736,8 +756,14 @@ def drain_once(
     different defect that this file must not paper over. Worth knowing when
     reproducing: ``--once`` runs one cycle per PROCESS, so it can never reach
     the threshold, and the behaviour must be reproduced against the loop.
+
+    ``refused_event_types`` also belongs to the caller and resets on restart.
+    A class already proven refused needs a fresh successful stand-down probe,
+    but not another five failures per record. Otherwise a continuously emitted
+    refused class pays the same threshold for every record (OMN-19913).
     """
     counts = failure_counts if failure_counts is not None else {}
+    refused = refused_event_types if refused_event_types is not None else {}
     pending = journal.list_pending(journal_dir)[:batch_limit]
     published = 0
     for index, entry in enumerate(pending):
@@ -756,7 +782,8 @@ def drain_once(
         # Only the HEAD of this cycle's batch is ever a dead-letter candidate.
         # A record further back has not been given the chance to fail on its
         # own merits -- it has only been waiting -- so its count means nothing.
-        if index == 0 and failures >= quarantine_after:
+        proven_by = refused.get(entry.record.event_type)
+        if index == 0 and (proven_by is not None or failures >= quarantine_after):
             probe = _broker_answers_behind_the_head(pending, emitter)
             if probe is not None:
                 journal.ack(probe)
@@ -764,15 +791,33 @@ def drain_once(
                 published += 1
                 if (
                     quarantine_record(
-                        journal_dir, entry, failures=failures, overtaken_by=probe
+                        journal_dir,
+                        entry,
+                        failures=failures,
+                        overtaken_by=probe,
+                        reason_kind=(
+                            "event_class_proven_refused"
+                            if proven_by is not None
+                            else "consecutive_failures"
+                        ),
+                        proven_by=proven_by,
                     )
                     is not None
                 ):
                     counts.pop(key, None)
+                    if proven_by is None:
+                        refused[entry.record.event_type] = key
+                        logger.warning(
+                            "event class %s is refused by the broker (proven by %s); "
+                            "later records of it are dead-lettered on their first "
+                            "failure until this drainer restarts",
+                            entry.record.event_type,
+                            key,
+                        )
                     # Re-list rather than continuing over a stale `pending`:
-                    # two entries left it just now, and the next cycle is
-                    # milliseconds away.
-                    return published, max(0, len(pending) - published - 1)
+                    # two entries left it just now. Removing the head is
+                    # progress, so run() owes no error backoff for this cycle.
+                    return published, max(0, len(pending) - published - 1), 1
             else:
                 logger.warning(
                     "head record %s has failed %d times, but the record behind "
@@ -781,8 +826,8 @@ def drain_once(
                     entry.record.event_id,
                     failures,
                 )
-        return published, len(pending) - published
-    return published, 0
+        return published, len(pending) - published, 0
+    return published, 0, 0
 
 
 def run(
@@ -834,6 +879,7 @@ def run(
     # anything across cycles, and a per-call map would reset every 30 seconds
     # and never reach the threshold (OMN-19074).
     failure_counts: dict[str, int] = {}
+    refused_event_types: dict[str, str] = {}
     # Read once per process: the installed registry cannot change under a
     # running drainer, and a restart is what picks up a new one.
     publishable = publishable_event_types()
@@ -848,6 +894,7 @@ def run(
                     published_total=published_total,
                     pid=os.getpid(),
                     publishable_event_types=publishable,
+                    refused_event_types=tuple(sorted(refused_event_types)),
                 ),
             )
         except OSError as exc:  # pragma: no cover - reported, never fatal
@@ -859,8 +906,11 @@ def run(
     try:
         while True:
             cycle_started = time.perf_counter()
-            published, failed = drain_once(
-                journal_dir, emitter, failure_counts=failure_counts
+            published, failed, dead_lettered = drain_once(
+                journal_dir,
+                emitter,
+                failure_counts=failure_counts,
+                refused_event_types=refused_event_types,
             )
             if published:
                 # The cycle time makes the publish rate readable from this log
@@ -877,7 +927,7 @@ def run(
                 return 0
             if _shutdown:
                 return 0
-            if failed:
+            if failed and not dead_lettered:
                 logger.warning(
                     "%d event(s) still queued; backing off %.0fs",
                     failed,
@@ -885,7 +935,9 @@ def run(
                 )
                 time.sleep(DEFAULT_ERROR_BACKOFF_SECONDS)
             else:
-                time.sleep(poll_seconds if published else idle_poll_seconds)
+                time.sleep(
+                    poll_seconds if published or dead_lettered else idle_poll_seconds
+                )
     finally:
         emitter.close()
         lock.release()
