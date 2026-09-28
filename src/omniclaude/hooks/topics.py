@@ -41,6 +41,11 @@ class TopicBase(StrEnum):
     SESSION_ENDED = "onex.evt.omniclaude.session-ended.v1"
     PROMPT_SUBMITTED = "onex.evt.omniclaude.prompt-submitted.v1"
     TOOL_EXECUTED = "onex.evt.omniclaude.tool-executed.v1"
+    # OMN-19513: all-hooks capture. One lineage-carrying metadata event per
+    # Claude Code hook call, every hook type on one topic (contract
+    # claude_hook_capture). Content only by reference; the topic and its
+    # redaction policy are owned by omnimarket's emit registry.
+    HOOK_EVENT = "onex.evt.omniclaude.hook-event.v1"
     AGENT_ACTION = "onex.evt.omniclaude.agent-action.v1"
     LEARNING_PATTERN = "onex.evt.omniclaude.learning-pattern.v1"
     WORK_OBLIGATION_ABANDONED = "onex.evt.omniclaude.work-obligation-abandoned.v1"
@@ -77,12 +82,6 @@ class TopicBase(StrEnum):
     UTILIZATION_SCORING_CMD = "onex.cmd.omniintelligence.utilization-scoring.v1"
     # LLM call completed: cost telemetry for omnidash llm_cost_aggregates (OMN-7570)
     LLM_CALL_COMPLETED = "onex.evt.omniintelligence.llm-call-completed.v1"
-    # Lineage-carrying Claude Code hook event, all hook types (OMN-19513).
-    # Registered here so the daemon-registry projection (omnimarket
-    # topics.yaml) and this repo's committed EVENT_REGISTRY stay in sync
-    # (Registry Consistency, OMN-18357 script). The producer/consumer wiring
-    # for this event type is OMN-19513 scope (omniclaude#2371/#2372).
-    HOOK_EVENT = "onex.evt.omniclaude.hook-event.v1"
 
     # ==========================================================================
     # Hook adapter observability topics (migrated to ONEX format, OMN-1552)

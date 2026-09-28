@@ -214,6 +214,18 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
                 --turn-id "$TURN_ID" \
                 >>"$LOG_FILE" 2>&1
         fi
+        # OMN-19513: the lineage-carrying hook.event for this prompt, also
+        # after the metadata append, so its turn id is the turn that append
+        # just opened. UserPromptSubmit is the one hook the all-hooks capture
+        # runs from here rather than from claude_hook_capture.sh: every other
+        # hook reads the current turn, and only this one would race the
+        # allocation.
+        _HOOK_CAPTURE_PY="${HOOKS_LIB}/hook_claude_capture.py"
+        if [[ -f "$_HOOK_CAPTURE_PY" ]]; then
+            printf '%s' "$INPUT" | "$PYTHON_CMD" "$_HOOK_CAPTURE_PY" \
+                --actor "$HOOK_ACTOR_ARG" \
+                >>"$LOG_FILE" 2>&1
+        fi
     # The whole subshell's descriptors go to the log. With two commands in it,
     # bash keeps the subshell alive, and an inherited stdout or stderr pipe
     # would hold the hook's caller until both finished (OMN-19551).

@@ -178,16 +178,28 @@ else
     [[ "$INTERRUPTED" == "true" ]] || INTERRUPTED="false"
 fi
 
+# OMN-19513: the harness's tool-call id and the id of the agent that made the
+# call. A subagent shares its parent's session_id, so without agent_id a
+# subagent's tool rows were indistinguishable from the main thread's, and
+# without tool_use_id a row could not be joined to the hook-event lineage
+# (parent tool_use_id, spawn depth) that claude_hook_capture.sh publishes.
+# Both are opaque harness ids; an absent one is an explicit null.
+TOOL_USE_ID=$(echo "$INPUT" | jq -r '.tool_use_id // ""' 2>/dev/null) || TOOL_USE_ID=""
+
 PAYLOAD=$(jq -nc \
     --arg session_id "$SESSION_ID" \
     --arg working_directory "$WORKING_DIRECTORY" \
     --arg tool_name "$TOOL_NAME" \
+    --arg tool_use_id "$TOOL_USE_ID" \
+    --arg agent_id "$AGENT_ID" \
     --argjson duration_ms "$DURATION_MS" \
     --argjson interrupted "$INTERRUPTED" \
     '{
         session_id: $session_id,
         working_directory: $working_directory,
         tool_name: $tool_name,
+        tool_use_id: (if $tool_use_id == "" then null else $tool_use_id end),
+        agent_id: (if $agent_id == "" then null else $agent_id end),
         duration_ms: $duration_ms,
         interrupted: $interrupted,
         hook_source: "post_tool_use"

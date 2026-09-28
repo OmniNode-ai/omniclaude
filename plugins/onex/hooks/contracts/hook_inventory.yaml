@@ -1434,6 +1434,182 @@ expected_hooks:
       This observer writes capture telemetry; its secret-control test proves
       the payload reduction and relay proof belongs to activation.
 
+  # --- OMN-19513 all-hooks capture ------------------------------------------
+  # One observer script, declared once per hook event it is registered under
+  # (hook_inventory.py matches a script declared under several events per
+  # event). Operator ruling "we need all hooks captured" (ledger RULING row by
+  # lane all-hooks-capture-83-ruling). UserPromptSubmit is captured inside
+  # user_prompt_submit_bus_mirror.sh; WorktreeCreate, WorktreeRemove and
+  # MessageDisplay are deliberately never registered, for the reasons
+  # hook_claude_capture.NEVER_REGISTERED records.
+
+  - &claude_hook_capture
+    script: "claude_hook_capture.sh"
+    event: "PreToolUse"
+    matcher: ".*"
+    order: 15
+    ticket: "OMN-19513"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Journals one lineage-carrying hook.event per hook call (session_id,
+      agent_id, parent tool_use_id, spawn depth, workflow run id, tool_use_id,
+      prompt and turn ids, correlation and causation ids), mapped through the
+      claude_hook_capture contract with every content field scrubbed before it
+      is hashed; the drainer publishes it to the hook-event metadata topic.
+      Backgrounded, silent and fail-open; journals nothing unless the
+      drainer lists hook.event.
+    enforcement: false
+    lite_mode_exit: true
+    mask:
+      gate_call: "CLAUDE_HOOK_CAPTURE"
+      bit_defined: false
+    canary: null
+    no_canary_reason: >
+      An observer, not an enforcement mechanism: it refuses nothing. Running
+      it journals a record the drainer publishes to the declared lane, so a
+      canary would write synthetic events onto the surface it would check.
+      Covered by tests/unit/hooks/test_hook_claude_capture_omn19513.py.
+
+  - <<: *claude_hook_capture
+    event: "PostToolUse"
+    matcher: ".*"
+    order: 8
+
+  - <<: *claude_hook_capture
+    event: "PostToolUseFailure"
+    matcher: ".*"
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "PostToolBatch"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "Notification"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "UserPromptExpansion"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "SessionStart"
+    matcher: null
+    order: 4
+
+  - <<: *claude_hook_capture
+    event: "SessionEnd"
+    matcher: null
+    order: 1
+
+  - <<: *claude_hook_capture
+    event: "Stop"
+    matcher: null
+    order: 1
+
+  - <<: *claude_hook_capture
+    event: "StopFailure"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "SubagentStart"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "SubagentStop"
+    matcher: null
+    order: 3
+
+  - <<: *claude_hook_capture
+    event: "PreCompact"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "PostCompact"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "PreModelSwitch"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "PostModelSwitch"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "PermissionRequest"
+    matcher: ".*"
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "PermissionDenied"
+    matcher: ".*"
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "Setup"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "TeammateIdle"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "TaskCreated"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "TaskCompleted"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "Elicitation"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "ElicitationResult"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "ConfigChange"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "InstructionsLoaded"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "CwdChanged"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "FileChanged"
+    matcher: null
+    order: 0
+
+  - <<: *claude_hook_capture
+    event: "DirectoryAdded"
+    matcher: null
+    order: 0
+
 disabled_hooks:
   - script: "hook_dispatch_claim_pretool.sh"
     owner: "omniclaude hooks lane"

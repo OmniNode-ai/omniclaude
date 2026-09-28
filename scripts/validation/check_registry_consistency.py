@@ -165,10 +165,17 @@ def check_registry_consistency(daemon_registry_path: Path) -> list[str]:
     for event_type in sorted(supported):
         source_topics = event_registry.get(event_type, set())
         event_def = daemon_events.get(event_type)
+        # An event type the daemon does not register is already reported as
+        # missing above; it must not crash this pass. The old comprehension
+        # called event_def.get before its isinstance filter ran, so a
+        # hook-side type landing ahead of its omnimarket registration
+        # (OMN-19513, OMN-19551) raised AttributeError instead of printing
+        # the ordering violation.
+        fan_out = event_def.get("fan_out", []) if isinstance(event_def, dict) else []
         daemon_topics = {
             str(rule["topic"])
-            for rule in event_def.get("fan_out", [])
-            if isinstance(event_def, dict) and isinstance(rule, dict)
+            for rule in fan_out
+            if isinstance(rule, dict) and "topic" in rule
         }
         missing = source_topics - daemon_topics
         if missing:

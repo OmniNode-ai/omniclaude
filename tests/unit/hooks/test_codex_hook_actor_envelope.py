@@ -114,6 +114,9 @@ _CLAUDE_POST_TOOL_USE = {
     "tool_input": {"command": "git status"},
     "tool_response": {"stdout": "on branch dev\n", "stderr": "", "interrupted": False},
     "duration_ms": 42,
+    # Claude Code 2.1.283 sends the tool call's id on every PostToolUse; the
+    # tool-executed payload carries it since OMN-19513.
+    "tool_use_id": "toolu_01FAKEclaudeEnvelope",
 }
 
 _EVENT_SCRIPTS = {

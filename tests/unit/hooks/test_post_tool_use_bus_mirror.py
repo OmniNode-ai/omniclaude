@@ -53,6 +53,7 @@ _STDIN_PAYLOAD = json.dumps(
             "interrupted": False,
         },
         "duration_ms": 42,
+        "tool_use_id": "toolu_01FAKEmirror",
     }
 )
 
@@ -199,6 +200,9 @@ def test_post_tool_use_bus_mirror_invokes_direct_dispatch_with_correct_args(
     assert payload["tool_name"] == "Bash"
     assert payload["duration_ms"] == 42
     assert payload["interrupted"] is False
+    # OMN-19513: the tool call's id and the (main-thread, so null) agent id.
+    assert payload["tool_use_id"] == "toolu_01FAKEmirror"
+    assert payload["agent_id"] is None
     # The critical privacy assertion: no tool_input/tool_response content leaks.
     assert "tool_input" not in payload
     assert "tool_response" not in payload

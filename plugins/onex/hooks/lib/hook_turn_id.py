@@ -136,6 +136,19 @@ def prune_stale(turn_dir: Path, *, now: float | None = None) -> int:
     return removed
 
 
+def peek_turn_id(turn_dir: Path, session_id: str | None) -> str | None:
+    """The session's current turn id, read without opening a new turn.
+
+    OMN-19513: the all-hooks capture stamps every in-turn hook event with the
+    turn the prompt mirror opened. It must never allocate one itself, or two
+    writers would race the counter. ``None`` when there is no session.
+    """
+    session = (session_id or "").strip()
+    if not session:
+        return None
+    return _format(session, _current_turn(turn_dir, session))
+
+
 def resolve_turn_id(
     turn_dir: Path,
     *,

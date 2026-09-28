@@ -50,11 +50,13 @@ _STDIN_PAYLOAD = json.dumps(
 )
 
 _SLOW_STUB = """#!/bin/bash
-# OMN-19551: the mirror now makes two calls in one background subshell --
-# the metadata append, then content capture with the hook input on stdin.
+# OMN-19551: the mirror now makes several calls in one background subshell --
+# the metadata append, then content capture with the hook input on stdin, then
+# (OMN-19513) the all-hooks hook.event capture, also on stdin.
 # Each is recorded separately so the metadata contract stays checkable.
 case "$1" in
   *hook_content_capture.py) out="{marker}.content"; cat > "{marker}.stdin" ;;
+  *hook_claude_capture.py) out="{marker}.hook_event"; cat > "{marker}.hook_event.stdin" ;;
   *) out="{marker}" ;;
 esac
 printf '%s\\n' "$@" > "$out"
@@ -63,11 +65,13 @@ exit 0
 """
 
 _FAST_STUB = """#!/bin/bash
-# OMN-19551: the mirror now makes two calls in one background subshell --
-# the metadata append, then content capture with the hook input on stdin.
+# OMN-19551: the mirror now makes several calls in one background subshell --
+# the metadata append, then content capture with the hook input on stdin, then
+# (OMN-19513) the all-hooks hook.event capture, also on stdin.
 # Each is recorded separately so the metadata contract stays checkable.
 case "$1" in
   *hook_content_capture.py) out="{marker}.content"; cat > "{marker}.stdin" ;;
+  *hook_claude_capture.py) out="{marker}.hook_event"; cat > "{marker}.hook_event.stdin" ;;
   *) out="{marker}" ;;
 esac
 printf '%s\\n' "$@" > "$out"
