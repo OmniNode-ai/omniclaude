@@ -371,7 +371,7 @@ _route=""
 # --- secondary-rate-limited search guard (OMN-19852) -------------------------
 _search_call=0
 if [ "$_cls" = "api" ]; then
-  case "$_endpoint" in search/*) _search_call=1 ;; esac
+  case "$_endpoint" in search/*|http://*/search/*|https://*/search/*) _search_call=1 ;; esac
 else
   case "$_cls" in search|search\ *) _search_call=1 ;; esac
 fi

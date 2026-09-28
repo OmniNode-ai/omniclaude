@@ -78,6 +78,7 @@ def _calls(env: dict[str, str]) -> list[list[str]]:
         ["api", "search/issues?q=is:open"],
         ["api", "/search/code"],
         ["api", "-X", "GET", "/search/code"],
+        ["api", "https://api.github.com/search/issues?q=is:open"],
     ],
 )
 def test_api_search_is_refused_without_calling_real_gh(
