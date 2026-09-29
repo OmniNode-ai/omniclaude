@@ -1215,6 +1215,21 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-20109: a change to the hook tree runs the real-hook system suite before
+      # it is committed. On 2026-09-29 a hook regression exhausted the per-user
+      # process limit on the operator Mac and no test had run the hooks the way
+      # Claude Code does. The same suite is the required `Hook System Tests
+      # (OMN-20109)` job in CI; this hook is the local half, and stands down in CI
+      # (with a line saying so) so the suite is not run twice.
+      - id: hook-system-tests
+        name: Hook system tests (real hook entrypoints)
+        entry: bash scripts/run_hook_system_tests_precommit.sh
+        language: system
+        pass_filenames: false
+        require_serial: true
+        files: ^(plugins/onex/hooks/|tests/hooks_system/|scripts/hook_process_canary\.py$|scripts/hook_canary_)
+        stages: [pre-commit]
+
       # OMN-3777: Block cloud bus references in source code
       - id: no-cloud-bus
         name: Block cloud bus references

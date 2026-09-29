@@ -99,6 +99,15 @@ GATE_JOBS: tuple[str, ...] = (
     # a legitimate opt-out, which is why it is ALSO a STRICT_SUCCESS_JOBS member
     # below. Pinned by tests/ci/test_skip_count_ratchet_omn18790.py.
     "Skip Count Ratchet (OMN-18776)",  # skip-count-ratchet
+    # OMN-20109: the real-hook system suite (tests/hooks_system). THIS LINE IS HALF
+    # THE MECHANISM, on the identical reasoning as the entries above: the
+    # default-deny sweep already fails this gate when the job FAILS, but an
+    # unregistered job that is `skipped` or ABSENT yields SUCCESS, so deleting the
+    # job from ci.yml would silently retire the only test that runs the hooks the
+    # way Claude Code does. The job is unconditional (no needs, `if: always()`), so
+    # a skip is anomalous, which is why it is ALSO a STRICT_SUCCESS_JOBS member
+    # below. Pinned by tests/ci/test_hook_system_tests_gate_omn20109.py.
+    "Hook System Tests (OMN-20109)",  # hook-system-tests
     "Cross-Repo Boundary Parity",  # boundary-parity (OMN-16000) — DIRECTLY REQUIRED live; was previously mis-marked SOFT_ALLOWLIST "warn-only" while a `contains()` substring bug in its `if:` silently skipped it on any PR whose changed-file count contained the digit '0' (10/20/100/...). Fixed 2026-08-13: `if:` no longer branches on changed_files, and the job is now a completeness-anchor member so CI Summary WAITS for it and only accepts success/skipped (occ-preflight's own legitimate skip carve-out), never a false green from the old bug.
 )
 
@@ -128,6 +137,9 @@ STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
         # the present + completed + EXACTLY-success posture omnibase_infra's
         # STRICT_GATE_JOBS gives the same job in the OMN-18776 pilot.
         "Skip Count Ratchet (OMN-18776)",
+        # OMN-20109: see the GATE_JOBS entry above. A skip means the hooks were
+        # not exercised, and must fail closed rather than read as an opt-out.
+        "Hook System Tests (OMN-20109)",
     }
 )
 
