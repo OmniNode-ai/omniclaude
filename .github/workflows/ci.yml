@@ -2392,6 +2392,90 @@ jobs:
           name: hooks-test-results-${{ matrix.split }}
           path: junit-hooks.xml
 
+  # ============================================================================
+  # Hook System Tests (OMN-20109). The REAL hook entrypoints, run the way Claude
+  # Code runs them: under concurrency, over a broken emit path, and against a
+  # per-tool-call cost budget (tests/hooks_system).
+  #
+  # Why it exists: on 2026-09-29 about 10,000 hung hook processes exhausted the
+  # operator Mac's per-user process limit and stopped every lane. `hooks-tests`
+  # above runs tests/hooks, which drives handlers with the process boundary mocked,
+  # so it could not see a fork storm, an orphan, or a hook that exits 0 with its
+  # emit lost. This job can.
+  #
+  # Registered in GATE_JOBS *and* STRICT_SUCCESS_JOBS (scripts/ci/ci_summary_gate.py),
+  # the same two-line mechanism as `skip-count-ratchet`: `CI Summary` is already a
+  # required context, so the umbrella registration is what makes this required
+  # without a new branch-protection row, and the default-deny sweep fails the
+  # umbrella when the job FAILS. The registration is what closes the other half:
+  # a job that is `skipped` or ABSENT would otherwise read as success. So this job
+  # has no `needs` and is `if: always()`; a skip is anomalous and never a legitimate
+  # opt-out. Pinned by tests/ci/test_hook_system_tests_gate_omn20109.py.
+  #
+  # Adding a raw `Hook System Tests (OMN-20109)` row to branch protection is a
+  # separate, operator-run step and is deliberately not done here.
+  # ============================================================================
+  hook-system-tests:
+    name: "Hook System Tests (OMN-20109)"
+    if: always()
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Require the tools the suite measures with
+        run: |
+          # The suite counts real processes with ps and the hooks under test call
+          # jq. A runner without either would make the tests meaningless, so it
+          # fails here, by name, instead of skipping.
+          missing=0
+          for tool in ps jq; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              echo "::error::hook system tests need '$tool' on the runner and it is not installed"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: uv sync --frozen --group dev --python "${PYTHON_VERSION}"
+
+      - name: Run the hook system suite
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run pytest tests/hooks_system -v -p no:cacheprovider \
+            --junitxml=junit-hook-system.xml
+
+      - name: Upload hook system test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: hook-system-test-results
+          path: junit-hook-system.xml
+
   agent-framework-tests:
     name: Agent Framework Tests
     needs: [occ-preflight, zone-filter]
