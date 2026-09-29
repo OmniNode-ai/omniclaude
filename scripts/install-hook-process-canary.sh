@@ -10,13 +10,13 @@
 # switch in a working tree never changes what a running canary executes.
 #
 # Usage:
-#   bash scripts/install-hook-process-canary.sh --state-dir DIR [--ledger FILE] [--omni-home DIR]
+#   bash scripts/install-hook-process-canary.sh --state-dir DIR [--ledger FILE] [--ledger-lock SCRIPT]
 #   bash scripts/install-hook-process-canary.sh --state-dir DIR --status
 #   bash scripts/install-hook-process-canary.sh --state-dir DIR --uninstall
 #
 # --state-dir is required, no default: it holds the heartbeat, ALERT.json, the log
-# and the copied scripts (under DIR/repo-copy). --ledger and --omni-home name the
-# rolling ledger the ALERT row is appended to (a host without one, such as a lab
+# and the copied scripts (under DIR/repo-copy). --ledger and --ledger-lock name the
+# rolling ledger the ALERT row is appended to and the locked-append script that writes it (a host without one, such as a lab
 # host, omits both and relies on the operator notifier alone; the canary then
 # reports that channel as not delivered on every alarm rather than pretending).
 set -euo pipefail
@@ -27,13 +27,13 @@ LABEL="ai.omninode.hook-process-canary"
 ACTION=install
 STATE_DIR=""
 LEDGER=""
-OMNI_HOME_ARG=""
+LEDGER_LOCK=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --state-dir) STATE_DIR="${2:?--state-dir needs a value}"; shift 2 ;;
     --ledger) LEDGER="${2:?--ledger needs a value}"; shift 2 ;;
-    --omni-home) OMNI_HOME_ARG="${2:?--omni-home needs a value}"; shift 2 ;;
+    --ledger-lock) LEDGER_LOCK="${2:?--ledger-lock needs a value}"; shift 2 ;;
     --status) ACTION=status; shift ;;
     --uninstall) ACTION=uninstall; shift ;;
     --dry-run) ACTION=dry-run; shift ;;
@@ -72,18 +72,18 @@ copy_scripts() {
 }
 
 render_plist() {
-  local python="$1" workspace="${OMNI_HOME_ARG:-${OMNI_HOME:-}}" ledger="${LEDGER:-${ONEX_LEDGER_PATH:-}}"
-  [[ -n "${workspace}" ]] || { echo "install-hook-process-canary: set OMNI_HOME or --omni-home" >&2; exit 2; }
+  local python="$1" lock="${LEDGER_LOCK:-${ONEX_LEDGER_LOCK_SCRIPT:-}}" ledger="${LEDGER:-${ONEX_LEDGER_PATH:-}}"
+  [[ -n "${lock}" ]] || { echo "install-hook-process-canary: set ONEX_LEDGER_LOCK_SCRIPT or --ledger-lock" >&2; exit 2; }
   [[ -n "${ledger}" ]] || { echo "install-hook-process-canary: set ONEX_LEDGER_PATH or --ledger" >&2; exit 2; }
   sed -e "s|__PYTHON__|${python}|g" -e "s|__ROOT__|${COPY_ROOT}|g" -e "s|__STATE_DIR__|${STATE_DIR}|g" \
-      -e "s|__OMNI_HOME__|${workspace}|g" -e "s|__LEDGER__|${ledger}|g" -e "s|__HOME__|${HOME}|g" \
+      -e "s|__LEDGER_LOCK__|${lock}|g" -e "s|__LEDGER__|${ledger}|g" -e "s|__HOME__|${HOME}|g" \
       "${REPO_ROOT}/scripts/launchd/${LABEL}.plist"
 }
 
 cron_line() {
   local python="$1"
   local env_prefix="ONEX_STATE_DIR=${STATE_DIR}"
-  [[ -n "${LEDGER}" ]] && env_prefix="${env_prefix} ONEX_LEDGER_PATH=${LEDGER} OMNI_HOME=${OMNI_HOME_ARG:?--omni-home is required with --ledger}"
+  [[ -n "${LEDGER}" ]] && env_prefix="${env_prefix} ONEX_LEDGER_PATH=${LEDGER} ONEX_LEDGER_LOCK_SCRIPT=${LEDGER_LOCK:?--ledger-lock is required with --ledger}"
   echo "* * * * * ${env_prefix} timeout 50 ${python} ${COPY_ROOT}/scripts/hook_process_canary.py --once --state-dir ${STATE_DIR} >> ${STATE_DIR}/canary.log 2>&1 ${CRON_TAG}"
 }
 
