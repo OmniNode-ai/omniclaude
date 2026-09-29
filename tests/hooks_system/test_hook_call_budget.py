@@ -96,7 +96,7 @@ def test_one_tool_call_stays_inside_the_process_and_time_budget(
     ceiling = budget.CEILING_EXECS_PER_CALL[tool]
     assert ledger.spawned <= ceiling, (
         f"a {tool} tool call started {ledger.spawned} hook processes; the ceiling is "
-        f"{ceiling} (measured 2026-09-29: {budget.MEASURED_EXECS_PER_CALL[tool]}, "
+        f"{ceiling} (measured: {budget.MEASURED_EXECS_PER_CALL[tool]}, "
         f"target: {budget.TARGET_EXECS_PER_CALL}; the incident snapshot counted "
         f"{budget.INCIDENT_CONCURRENT_HOOK_PROCESSES_PER_CALL} alive at once).\n"
         f"{ledger.processes()}"
@@ -113,7 +113,8 @@ def test_budget_record_only_ratchets_down() -> None:
     assert set(budget.CEILING_EXECS_PER_CALL) == set(budget.MEASURED_EXECS_PER_CALL)
     for tool, ceiling in budget.CEILING_EXECS_PER_CALL.items():
         measured = budget.MEASURED_EXECS_PER_CALL[tool]
-        assert ceiling > budget.TARGET_EXECS_PER_CALL, tool
+        # A tool call already under the target (Read, after OMN-20114) keeps
+        # the same headroom rule; the target is a floor for nothing.
         # Headroom over the measurement is at most 15 percent.
         assert measured <= ceiling <= measured * 1.15, (tool, measured, ceiling)
     assert budget.BUDGET_SECONDS_PER_TOOL_CALL < 60, "the harness cancels a hook at 60s"
