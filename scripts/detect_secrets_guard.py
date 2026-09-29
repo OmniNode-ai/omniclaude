@@ -115,6 +115,7 @@ EXCLUDE_PATTERNS: list[str] = [
     r"bandit-report\.json$",
     r"^tests/",
     r"security-report\.json$",
+    r"^config/hardcoded_model_config_baseline\.yaml$",
 ]
 
 # Substrings in `git show`'s stderr that mean "there is no prior committed

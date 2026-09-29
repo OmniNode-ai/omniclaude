@@ -75,6 +75,13 @@ repos:
       - id: check-toml
         stages: [pre-commit]
 
+  # OMN-19183 plan task A3.x: shrink-only baseline config/hardcoded_model_config_baseline.yaml;
+  # no inline suppression marker; pin must equal core_ref in .github/workflows/hardcoded-model-config.yml.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: f873d2c30201c05d4be020fa0b281b5edbfb8307  # v0.47.24  # pragma: allowlist secret
+    hooks:
+      - id: check-hardcoded-model-config-compute
+
   # Fast Python formatting and linting (staged files only)
   # Order: format -> fix -> check (matches CI behavior)
   # Note: To run on entire codebase, use: uv run ruff check src/ tests/

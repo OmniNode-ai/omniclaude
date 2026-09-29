@@ -1922,7 +1922,8 @@ jobs:
             --exclude-files '\.env\.example$' \
             --exclude-files 'bandit-report\.json$' \
             --exclude-files '^tests/' \
-            --exclude-files 'security-report\.json$'
+            --exclude-files 'security-report\.json$' \
+            --exclude-files '^config/hardcoded_model_config_baseline\.yaml$'
 
           # OMN-15072: diff against the target-branch baseline (a ref this
           # PR/push cannot rewrite within its own commit) instead of a
