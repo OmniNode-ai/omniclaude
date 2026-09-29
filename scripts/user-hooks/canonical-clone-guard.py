@@ -1120,8 +1120,8 @@ def _kill_bypass_reason(tokens: list[str], depth: int = 0) -> str | None:
         if depth == max_depth:
             return None
         for segment in re.split(r"&&|\|\||;|\n|\|", nested):
-            child_tokens = _segment_tokens(segment)
-            denied = _kill_bypass_reason(child_tokens, depth + 1)
+            nested_words = _segment_tokens(segment)
+            denied = _kill_bypass_reason(nested_words, depth + 1)
             if denied:
                 return denied
         return None
