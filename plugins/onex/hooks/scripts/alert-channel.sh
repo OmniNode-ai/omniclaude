@@ -224,3 +224,81 @@ alert_channel_send() {
     alert_channel_record_failure "$category" "${detail}message=${text:0:160}"
     return 1
 }
+
+# -----------------------------------------------------------------------------
+# Alarm-class delivery: credentials resolved, "not configured" is a FAILURE
+# -----------------------------------------------------------------------------
+# alert_channel_send treats "no Slack credential in the environment" as state 2,
+# a silent no-op. That is right for a status notice on a host with no Slack and
+# wrong for an ALARM: the operator ruled on 2026-09-29 that an alarm which can
+# only print a line nobody reads is worse than the system failing, and OMN-20109
+# measured the consequence. The launchd hook-emit drainer, the foreground hook
+# runner and the cron canary do not inherit SLACK_BOT_TOKEN / SLACK_CHANNEL_ID
+# (launchd hands the drainer {OMNI_HOME, ONEX_STATE_DIR, HOME} and nothing
+# else), so every drop or timeout alarm reached a macOS banner and never Slack.
+#
+# alert_channel_alarm is the sender for those paths. It resolves the two named
+# keys the way hook_edge_lane.read_operator_env_file does for the lane
+# credential: from the environment first, then by READING (never sourcing) the
+# one operator env file, OMNIBASE_OPERATOR_ENV_FILE or ~/.omnibase/.env. Reading
+# named keys keeps the rest of that file's secrets out of this process. A
+# credential that cannot be resolved is a recorded delivery failure (durable
+# log plus local notification) and returns 1, never 2.
+#
+# Returns 0 delivered / 1 not delivered (dead channel OR unresolvable credential).
+alert_channel_operator_env_file() {
+    printf '%s' "${OMNIBASE_OPERATOR_ENV_FILE:-${HOME}/.omnibase/.env}"
+}
+
+# _alert_channel_read_key <file> <KEY>: value of the LAST assignment of KEY in a
+# KEY=VALUE file, with an optional `export ` prefix and one layer of matching
+# quotes removed; empty when the file or the key is absent. Same rules as
+# hook_edge_lane.read_operator_env_file (a parity test pins them together).
+_alert_channel_read_key() {
+    local file="$1" key="$2" line k v last=""
+    [[ -r "$file" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line#"${line%%[![:space:]]*}"}"
+        [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
+        if [[ "$line" == export[[:space:]]* ]]; then
+            line="${line#export}"
+            line="${line#"${line%%[![:space:]]*}"}"
+        fi
+        k="${line%%=*}"
+        k="${k%"${k##*[![:space:]]}"}"
+        [[ "$k" == "$key" ]] || continue
+        v="${line#*=}"
+        v="${v#"${v%%[![:space:]]*}"}"
+        v="${v%"${v##*[![:space:]]}"}"
+        if [[ ${#v} -ge 2 ]]; then
+            case "${v:0:1}" in
+                \"|\') [[ "${v: -1}" == "${v:0:1}" ]] && v="${v:1:${#v}-2}" ;;
+            esac
+        fi
+        last="$v"
+    done < "$file"
+    printf '%s' "$last"
+}
+
+alert_channel_alarm() {
+    local category="$1"
+    local text="$2"
+    local token="${SLACK_BOT_TOKEN:-}"
+    local channel="${SLACK_CHANNEL_ID:-}"
+    local env_file
+    env_file="$(alert_channel_operator_env_file)"
+
+    [[ -n "$token" ]] || token="$(_alert_channel_read_key "$env_file" SLACK_BOT_TOKEN)"
+    [[ -n "$channel" ]] || channel="$(_alert_channel_read_key "$env_file" SLACK_CHANNEL_ID)"
+
+    if [[ -z "$token" || -z "$channel" ]]; then
+        alert_channel_record_failure "$category" \
+            "ALARM NOT DELIVERED: SLACK_BOT_TOKEN/SLACK_CHANNEL_ID unresolved (not in the environment, not in ${env_file}); message=${text:0:160}"
+        return 1
+    fi
+
+    local rc=0
+    SLACK_BOT_TOKEN="$token" SLACK_CHANNEL_ID="$channel" alert_channel_send "$category" "$text" || rc=$?
+    [[ "$rc" -eq 0 ]] && return 0
+    return 1
+}
