@@ -11,9 +11,8 @@ keeps internal tooling out of customer installs. This test proves:
      matching (reconciled) versions -- closing the OMN-15496-class drift
      (root 1.0.0 vs plugins/ 1.1.0) that existed before this ticket.
   2. `plugins/onex-delegate/` ships exactly the customer delegation siblings:
-     `delegate` (customer-local) and `cloud_delegate` (dashboard-key gateway),
-     plus zero hooks and zero agents. OMN-17354 adds the cloud sibling required
-     for beta U4 without exposing the internal/dev skill tree.
+     `delegate` (customer-local) only, plus zero hooks and zero agents
+     (OMN-19965: `cloud_delegate` lives in the internal dev tree, not here).
   3. The internal/dev skill tree (`plugins/onex/`, 100+ skills) is preserved
      on disk and reachable via a SEPARATE, non-consumer marketplace file
      (`plugins/onex-dev-marketplace/`) so local dev sessions do not lose
@@ -108,59 +107,44 @@ class TestConsumerMarketplaceIsSlim:
         assert root_cli["package"] == scoped_cli["package"] == compat["package"]
 
 
-class TestSlimPluginShipsCustomerDelegationSkills:
+class TestSlimPluginShipsDelegateOnly:
     def test_plugin_json_exists(self) -> None:
         assert (DELEGATE_PLUGIN_DIR / ".claude-plugin" / "plugin.json").exists()
 
-    def test_exactly_the_customer_delegation_skill_directories(self) -> None:
+    def test_exactly_one_skill_directory(self) -> None:
         skills_dir = DELEGATE_PLUGIN_DIR / "skills"
         assert skills_dir.exists(), f"missing {skills_dir}"
         skill_dirs = sorted(p.name for p in skills_dir.iterdir() if p.is_dir())
-        assert skill_dirs == ["cloud_delegate", "delegate"], (
-            "onex-delegate must ship only the customer delegation siblings "
-            f"(delegate, cloud_delegate), found: {skill_dirs}"
+        assert skill_dirs == ["delegate"], (
+            "the published plugin ships exactly one skill, `delegate` "
+            f"(OMN-19965); found: {skill_dirs}"
         )
+
+    def test_a_planted_second_skill_folder_is_detected(self, tmp_path: Path) -> None:
+        """Positive control: the listing used above sees a planted folder."""
+        (tmp_path / "delegate").mkdir()
+        (tmp_path / "planted").mkdir()
+        assert sorted(p.name for p in tmp_path.iterdir() if p.is_dir()) != ["delegate"]
 
     def test_delegate_skill_md_exists(self) -> None:
         assert (DELEGATE_PLUGIN_DIR / "skills" / "delegate" / "SKILL.md").exists()
 
-    def test_cloud_delegate_skill_files_exist(self) -> None:
-        cloud_skill_dir = DELEGATE_PLUGIN_DIR / "skills" / "cloud_delegate"
-        assert (cloud_skill_dir / "SKILL.md").exists()
-        assert (cloud_skill_dir / "prompt.md").exists()
+    def test_skill_md_documents_the_one_time_permission_rule(self) -> None:
+        text = (DELEGATE_PLUGIN_DIR / "skills" / "delegate" / "SKILL.md").read_text()
+        assert "Bash(onex delegate:*)" in text, (
+            "SKILL.md must tell the developer which permission rule stops the "
+            "prompt on every call"
+        )
 
-    def test_cloud_delegate_is_the_canonical_thin_shim(self) -> None:
-        """The published copy must not drift into its own transport implementation."""
-        source = DEV_PLUGIN_DIR / "skills" / "cloud_delegate"
-        shipped = DELEGATE_PLUGIN_DIR / "skills" / "cloud_delegate"
-        for name in ("SKILL.md", "prompt.md"):
-            assert (shipped / name).read_text() == (source / name).read_text(), (
-                f"{name} must stay byte-identical to the canonical cloud_delegate "
-                "skill; update both through the shared thin-shim contract"
-            )
-
-    def test_cloud_delegate_keeps_dashboard_key_and_gateway_boundaries(self) -> None:
-        skill_text = (
-            DELEGATE_PLUGIN_DIR / "skills" / "cloud_delegate" / "SKILL.md"
-        ).read_text()
-        prompt_text = (
-            DELEGATE_PLUGIN_DIR / "skills" / "cloud_delegate" / "prompt.md"
-        ).read_text()
-        published_text = f"{skill_text}\n{prompt_text}"
-
-        for required in (
-            "onex cloud delegate",
-            "onxk_",
-            "--api-key-stdin",
-            "result.txt",
-            "receipt.json",
-            "run.json",
+    def test_manifests_do_not_advertise_a_second_skill(self) -> None:
+        for path in (
+            ROOT_MARKETPLACE,
+            SCOPED_MARKETPLACE,
+            DELEGATE_PLUGIN_DIR / ".claude-plugin" / "plugin.json",
         ):
-            assert required in published_text
-        for forbidden in ("ANTHROPIC_API_KEY", "api.anthropic.com", "curl "):
-            assert forbidden not in published_text, (
-                f"published cloud_delegate must not introduce {forbidden!r}"
-            )
+            text = path.read_text()
+            assert "cloud_delegate" not in text, f"{path} names cloud_delegate"
+            assert "exactly two" not in text, f"{path} says two skills"
 
     def test_zero_hooks(self) -> None:
         assert not (DELEGATE_PLUGIN_DIR / "hooks").exists(), (
