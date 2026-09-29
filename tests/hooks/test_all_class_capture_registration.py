@@ -62,7 +62,10 @@ def test_skill_started_and_completed_use_the_real_hook_boundaries() -> None:
     assert '"skill.started"' not in completed
     assert "tool_use_id" in started
     assert "tool_use_id" in completed
-    assert 'SKILL_SESSION_ID=$(echo "$TOOL_INFO"' in completed
+    # OMN-20114: the session id is read from the hook's own payload, by the one
+    # jq that reads every field, not derived from anything the hook computes.
+    assert 'SKILL_SESSION_ID="$_Q_SKILL_SESSION_ID"' in completed
+    assert '"_Q_SKILL_SESSION_ID=\\(try (.session_id // .sessionId' in completed
     assert '_SKILL_CORR_ID="${ONEX_CORRELATION_ID:-$SKILL_SESSION_ID}"' in completed
 
 
