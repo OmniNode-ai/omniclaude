@@ -1215,14 +1215,15 @@ repos:
         always_run: true
         stages: [pre-commit]
 
-      # OMN-20109: a change to the hook tree runs the real-hook system suite before
-      # it is committed. On 2026-09-29 a hook regression exhausted the per-user
-      # process limit on the operator Mac and no test had run the hooks the way
-      # Claude Code does. The same suite is the required `Hook System Tests
-      # (OMN-20109)` job in CI; this hook is the local half, and stands down in CI
-      # (with a line saying so) so the suite is not run twice.
+      # OMN-20109: a change to the hook tree runs the deterministic half of the
+      # real-hook system suite before it is committed (the canary contract, hook
+      # registration and the cost ratchet). On 2026-09-29 a hook regression exhausted
+      # the per-user process limit on the operator Mac and no test had run the hooks
+      # the way Claude Code does. The real-process half (concurrency, broken emit
+      # paths, per-call wall time) is the required `Hook System Tests (OMN-20109)`
+      # CI job, run off-box; this hook stands down in CI so nothing runs twice.
       - id: hook-system-tests
-        name: Hook system tests (real hook entrypoints)
+        name: Hook system tests (deterministic half; real-process half is the CI job)
         entry: bash scripts/run_hook_system_tests_precommit.sh
         language: system
         pass_filenames: false

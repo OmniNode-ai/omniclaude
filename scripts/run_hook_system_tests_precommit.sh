@@ -4,20 +4,26 @@
 #
 # run_hook_system_tests_precommit.sh (OMN-20109)
 #
-# Pre-commit entry for the real-hook system suite. Local commits touching the hook
-# tree run tests/hooks_system. In CI the same suite is its own required job
-# ("Hook System Tests (OMN-20109)"), so the pre-commit suite job stands down here
-# and says so, rather than running 60 seconds of process-counting twice.
+# Pre-commit entry for the real-hook system suite (OMN-20109).
+#
+# A commit that touches the hook tree runs the DETERMINISTIC half of the suite:
+# the canary contract, the hook registration and cost-ratchet checks. The
+# real-process half (40 hooks in parallel, broken emit paths, the per-call
+# wall-time budget) spawns thousands of processes and its wall-time assertions
+# depend on host load, so a hand-run on a loaded workstation would fail for the
+# load and teach people to bypass the hook (rule 21: directory-wide runs go
+# off-box). That half is the required CI job "Hook System Tests (OMN-20109)".
+# In CI this pre-commit hook stands down and says so, rather than running twice.
 set -euo pipefail
 
 if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
-  echo "hook-system-tests: in CI this suite runs as the required job 'Hook System Tests (OMN-20109)'; not run twice."
+  echo "hook-system-tests: in CI the full suite runs as the required job 'Hook System Tests (OMN-20109)'; not run twice."
   exit 0
 fi
 
-for tool in ps jq; do
-  command -v "${tool}" >/dev/null 2>&1 || { echo "hook-system-tests: '${tool}' is required and is not installed" >&2; exit 1; }
-done
-
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bash "${here}/uv-run-worktree-safe.sh" python -m pytest tests/hooks_system -q -x -p no:cacheprovider
+exec bash "${here}/uv-run-worktree-safe.sh" python -m pytest -q -x -p no:cacheprovider \
+  tests/hooks_system/test_hook_canary.py \
+  tests/ci/test_hook_system_tests_gate_omn20109.py \
+  "tests/hooks_system/test_hook_call_budget.py::test_budget_record_only_ratchets_down" \
+  "tests/hooks_system/test_hook_call_budget.py::test_every_registered_hook_exists_and_is_executable"

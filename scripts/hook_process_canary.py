@@ -52,6 +52,9 @@ from pathlib import Path
 
 LANE = "hook-process-canary"
 _HOOK_PATH = re.compile(r"/hooks/(scripts|lib)/")
+# Resident daemons that live under the hook tree by design, parented to pid 1
+# (launchd or init) on purpose. They are not hook invocations and never leaks.
+_RESIDENT_DAEMONS = ("hook_emit_drainer.py",)
 _GAP_INTERVALS = 3
 _SUBPROCESS_TIMEOUT_S = 30
 
@@ -114,7 +117,12 @@ def parse_ps(text: str) -> list[ProcRow]:
 
 def measure(rows: list[ProcRow], uid: int, limit: int | None, self_pid: int) -> Reading:
     mine = [r for r in rows if r.uid == uid and r.pid != self_pid]
-    hooks = [r for r in mine if _HOOK_PATH.search(r.command)]
+    hooks = [
+        r
+        for r in mine
+        if _HOOK_PATH.search(r.command)
+        and not any(daemon in r.command for daemon in _RESIDENT_DAEMONS)
+    ]
     return Reading(
         hook_processes=len(hooks),
         hook_pythons=sum(1 for r in hooks if "python" in r.command),

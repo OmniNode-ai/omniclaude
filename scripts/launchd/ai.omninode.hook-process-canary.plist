@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.hook-process-canary.plist: launchd KeepAlive job for the live
+  hook-process canary (OMN-20109).
+
+  On 2026-09-29 about 10,000 hung hook processes exhausted the per-user process
+  limit of the operator Mac and stopped every lane; nothing counted them. Every
+  60 seconds this job counts hook processes, hook processes orphaned to pid 1
+  and the user's processes against kern.maxprocperuid, and alarms the operator
+  once per episode (operator notifier plus a ledger STATUS row with state=ALERT).
+
+  Resident KeepAlive, not a periodic job: a resident process already exists when
+  the host runs out of processes, whereas a periodic job needs a fork to start.
+  If the canary dies, launchd restarts it and its first cycle raises the
+  canary-gap alarm from the stale heartbeat, so a stopped canary is an alarm.
+
+  Template: the double-underscore placeholders below (interpreter, script root,
+  state directory, workspace, ledger, home) are expanded by
+  install-hook-process-canary.sh, which copies the scripts into a directory the
+  job owns so a branch switch in a working tree never changes what the canary
+  runs.
+
+  Install:   bash scripts/install-hook-process-canary.sh
+  Uninstall: the same script with its uninstall flag (not spelled out here: a
+  double hyphen is illegal inside an XML comment).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.hook-process-canary</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>__ROOT__/scripts/hook_process_canary.py</string>
+    <string>--loop</string>
+    <string>--interval</string>
+    <string>60</string>
+    <string>--state-dir</string>
+    <string>__STATE_DIR__</string>
+  </array>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+    <key>ONEX_STATE_DIR</key>
+    <string>__OMNI_HOME__/.onex_state</string>
+    <key>ONEX_LEDGER_PATH</key>
+    <string>__LEDGER__</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>__STATE_DIR__/canary.log</string>
+  <key>StandardErrorPath</key>
+  <string>__STATE_DIR__/canary.log</string>
+</dict>
+</plist>

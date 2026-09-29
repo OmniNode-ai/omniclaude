@@ -34,6 +34,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from tests.hooks_system._harness import REPO_ROOT
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -121,6 +123,19 @@ def test_measure_counts_hook_processes_orphans_and_user_processes() -> None:
     assert reading.hook_orphans == 2
     assert reading.user_processes == 5
     assert reading.limit == 1000
+
+
+def test_measure_does_not_count_the_resident_drainer_as_a_leaked_hook() -> None:
+    drainer = _row(
+        20,
+        1,
+        501,
+        "/x/.venv/bin/python /x/plugins/onex/hooks/lib/hook_emit_drainer.py --log-level INFO",
+    )
+    reading = canary.measure([drainer, _hook(21)], uid=501, limit=None, self_pid=9999)
+    assert reading.hook_processes == 1
+    assert reading.hook_orphans == 0
+    assert reading.user_processes == 2, "it is still one of the user's processes"
 
 
 def test_measure_never_counts_the_canary_itself() -> None:
@@ -416,3 +431,69 @@ def test_cli_an_internal_error_is_an_alarm_and_a_nonzero_exit(tmp_path: Path) ->
     run, notify_log, _ = _cli(tmp_path, env_extra={"HOOK_CANARY_FORCE_ERROR": "1"})
     assert run.returncode == 5, run.stdout + run.stderr
     assert "canary-error" in notify_log.read_text()
+
+
+# ---------------------------------------------------------------------------
+# The installer
+# ---------------------------------------------------------------------------
+
+_INSTALLER = REPO_ROOT / "scripts" / "install-hook-process-canary.sh"
+
+
+def test_installer_refuses_without_a_state_dir(tmp_path: Path) -> None:
+    run = subprocess.run(
+        ["bash", str(_INSTALLER), "--dry-run"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "--state-dir is required" in run.stderr
+
+
+@pytest.mark.skipif(
+    sys.platform != "darwin", reason="renders the launchd plist on macOS"
+)
+def test_installer_renders_a_complete_plist(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.md"
+    run = subprocess.run(
+        [
+            "bash",
+            str(_INSTALLER),
+            "--dry-run",
+            "--state-dir",
+            str(tmp_path / "state"),
+            "--ledger",
+            str(ledger),
+            "--omni-home",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    assert "__" not in run.stdout, "an unexpanded template placeholder"
+    plist = tmp_path / "canary.plist"
+    plist.write_text(run.stdout)
+    lint = subprocess.run(
+        ["plutil", "-lint", str(plist)], capture_output=True, text=True, check=False
+    )
+    assert lint.returncode == 0, lint.stdout + lint.stderr
+    assert "--loop" in run.stdout and "<key>KeepAlive</key>" in run.stdout
+
+
+@pytest.mark.skipif(sys.platform == "darwin", reason="renders the cron line on Linux")
+def test_installer_renders_a_cron_line_that_cannot_stack_up(tmp_path: Path) -> None:
+    run = subprocess.run(
+        ["bash", str(_INSTALLER), "--dry-run", "--state-dir", str(tmp_path / "state")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    assert (
+        run.stdout.startswith("* * * * * ")
+        and " timeout 50 " in run.stdout
+        and "--once" in run.stdout
+    )
