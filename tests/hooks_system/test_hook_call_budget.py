@@ -78,6 +78,9 @@ def test_one_tool_call_stays_inside_the_process_and_time_budget(
         leftovers = wait_for_settle(rig.token, budget.SETTLE_SECONDS)
     wall = time.monotonic() - t0
 
+    print(  # noqa: T201 - the measurement, read from `pytest -s` when a ceiling moves
+        f"HOOK-BUDGET tool={tool} execs={ledger.spawned} wall={wall:.2f}s hooks={len(runs)}"
+    )
     record_property("processes_spawned", ledger.spawned)
     record_property("wall_seconds", round(wall, 3))
     record_property("hooks_run", len(runs))
