@@ -11,19 +11,25 @@ started another.
 
 The operator ruling that governs this suite (2026-09-29): a failed emit fails the
 tool call loudly with an alarm, there is no silent failure and no alternate path.
-So for each broken-emit condition the hook must, inside ``BUDGET_SECONDS_BROKEN_EMIT``:
+The suite states that as outcomes, not as a mechanism, so a fix may take any shape
+that keeps them. For every broken-emit condition, inside
+``BUDGET_SECONDS_BROKEN_EMIT``, the hook must:
 
-* exit non-zero, with the cause on stderr (Claude Code shows a non-zero hook's
-  stderr, which is what makes it loud);
-* leave no process behind, and never be killed by the harness for hanging.
+* finish, and never be killed by the harness for hanging;
+* leave no process behind, so nothing is left waiting on the broken path;
+* never fail silently: exit 0 only when the record really landed in the journal;
+  otherwise exit non-zero with the cause on stderr (Claude Code shows a non-zero
+  hook's stderr, which is what makes it loud).
 
-Those are two tests per condition, so a hang and a silent exit are reported
-separately. Three conditions are the opposite case and pin the boundary of the
-rule: a healthy journal must actually receive the record (the positive control
-that keeps every other test here from passing because a hook exited at its first
-guard), an unreachable bus is not an emit failure (the edge is journal-only, so
-the hook must not notice), and a journal at its bound is backpressure, evicted
-quickly, not a failure.
+The conditions: the journal cannot be written (must fail loudly); the journal is
+at its bound with its bound lock held by another process, the exact incident
+state (the append must not queue behind that lock); the journal writer wedges
+(the bounded runner must kill it and fail loudly); and three that pin the
+boundary of the rule: a healthy journal must actually receive the record (the
+positive control that keeps every other test here from passing because a hook
+exited at its first guard), an unreachable bus is not an emit failure (the edge
+is journal-only, so the hook must not notice), and a journal at its bound with a
+free lock is backpressure, not a failure.
 """
 
 from __future__ import annotations
@@ -40,6 +46,7 @@ import pytest
 
 from tests.hooks_system import budget
 from tests.hooks_system._harness import (
+    HANG_EMIT_ENV,
     HookRun,
     ProcInfo,
     Rig,
@@ -54,8 +61,12 @@ from tests.hooks_system._harness import (
 
 # The journal bound in hook_emit_journal.DEFAULT_MAX_RECORDS. One record over it
 # is the state the edge reaches when the drainer has stopped and the backlog is
-# full: every append then takes the eviction branch and its lock.
+# full, which is where the incident began.
 JOURNAL_BOUND = 50_000
+
+# The emit budget the wedged-writer scenario gives the hook (seconds), so the test
+# does not wait out the production default.
+WEDGE_EMIT_BUDGET_S = 3
 
 # The three entrypoints that append to the journal on the incident path.
 _EMITTING_HOOKS = [
@@ -114,6 +125,8 @@ def _apply(rig: Rig, scenario: str) -> None:
         rig.journal_dir.write_text("not a directory")
     elif scenario in ("journal-full", "journal-full-lock-held"):
         _fill_journal(rig.journal_dir, JOURNAL_BOUND + 1)
+    elif scenario == "emitter-wedged":
+        return
     else:  # pragma: no cover - a typo in a parametrization must be loud
         raise AssertionError(scenario)
 
@@ -126,7 +139,14 @@ def _observe(
     payload = hook_payload(
         event, tool_name=tool, skill="onex:delegate" if tool == "Skill" else None
     )
-    extra = _BLACKHOLE if scenario == "bus-unreachable" else None
+    extra: dict[str, str] | None = None
+    if scenario == "bus-unreachable":
+        extra = _BLACKHOLE
+    elif scenario == "emitter-wedged":
+        extra = {
+            HANG_EMIT_ENV: "1",
+            "ONEX_HOOK_EMIT_BUDGET_S": str(WEDGE_EMIT_BUDGET_S),
+        }
 
     def go() -> Observation:
         run = run_hook(
@@ -170,10 +190,25 @@ def observe(
             kill_tagged(obs.rig.token)
 
 
-_LOUD_SCENARIOS = ["journal-path-is-a-file", "journal-full-lock-held"]
+_BROKEN_SCENARIOS = [
+    "journal-path-is-a-file",
+    "journal-full",
+    "journal-full-lock-held",
+    "emitter-wedged",
+]
+# These can only end one way: the record cannot land, so the hook must fail.
+_MUST_FAIL_SCENARIOS = ["journal-path-is-a-file", "emitter-wedged"]
 
 
-@pytest.mark.parametrize("scenario", _LOUD_SCENARIOS)
+def _landed(rig: Rig) -> bool:
+    """Did a real record (not one of the prefill files) reach the journal?"""
+    return any(
+        "_prefill" not in path.name and path.name != ".bound.lock"
+        for path in rig.journal_files()
+    )
+
+
+@pytest.mark.parametrize("scenario", _BROKEN_SCENARIOS)
 @pytest.mark.parametrize(("hook_name", "event", "tool"), _EMITTING_HOOKS)
 def test_broken_emit_never_hangs_or_leaves_a_process(
     observe: Callable[..., Observation],
@@ -194,24 +229,31 @@ def test_broken_emit_never_hangs_or_leaves_a_process(
     )
 
 
-@pytest.mark.parametrize("scenario", _LOUD_SCENARIOS)
+@pytest.mark.parametrize("scenario", _BROKEN_SCENARIOS)
 @pytest.mark.parametrize(("hook_name", "event", "tool"), _EMITTING_HOOKS)
-def test_broken_emit_fails_loudly(
+def test_a_broken_emit_is_never_silent(
     observe: Callable[..., Observation],
     hook_name: str,
     event: str,
     tool: str,
     scenario: str,
 ) -> None:
+    """Exit 0 means the record landed. Anything else exits non-zero and says why."""
     obs = observe(hook_name, event, tool, scenario)
     run = obs.run
     assert not run.timed_out, (
         f"hung, so it could not have failed loudly: {run.summary()}"
     )
-    assert run.returncode not in (0, None), (
-        f"{scenario}: the emit path was broken and the hook exited 0, a silent failure. "
-        f"{run.summary()}\nhook logs:\n{obs.rig.log_tail()}"
-    )
+    if run.returncode == 0:
+        assert scenario not in _MUST_FAIL_SCENARIOS, (
+            f"{scenario}: the emit path was broken and the hook exited 0, a silent failure. "
+            f"{run.summary()}\nhook logs:\n{obs.rig.log_tail()}"
+        )
+        assert _landed(obs.rig), (
+            f"{scenario}: the hook exited 0 and nothing reached the journal, so the "
+            f"event was lost without a word. {run.summary()}\nhook logs:\n{obs.rig.log_tail()}"
+        )
+        return
     assert run.stderr.strip(), "the hook failed without saying why on stderr"
     assert any(word in run.stderr.lower() for word in ("journal", "lock", "emit")), (
         f"stderr does not name the failing emit path: {run.stderr[-600:]!r}"
@@ -237,11 +279,11 @@ def test_healthy_journal_receives_the_record(
 
 
 @pytest.mark.parametrize(("hook_name", "event", "tool"), _EMITTING_HOOKS)
-def test_full_journal_is_evicted_inside_the_budget(
+def test_full_journal_with_a_free_lock_is_backpressure_not_a_failure(
     observe: Callable[..., Observation], hook_name: str, event: str, tool: str
 ) -> None:
-    """Backpressure is not a failure: a full journal with a free lock drops the
-    oldest record and the hook succeeds, quickly, leaving nothing running."""
+    """A journal at its bound with nothing else wrong: the hook succeeds, quickly,
+    leaving nothing running, and its record lands."""
     obs = observe(hook_name, event, tool, "journal-full")
     assert not obs.run.timed_out, f"hung on a full journal: {obs.run.summary()}"
     assert obs.run.returncode == 0, (
@@ -249,8 +291,12 @@ def test_full_journal_is_evicted_inside_the_budget(
     )
     assert obs.run.wall_seconds <= budget.BUDGET_SECONDS_BROKEN_EMIT
     assert not obs.leftovers, describe(obs.leftovers.values())
-    assert len(obs.rig.journal_files()) <= JOURNAL_BOUND, (
-        "the journal grew past its bound"
+    assert _landed(obs.rig), "a full journal swallowed the record"
+    # The bound is the drainer's job now, so the hook may overshoot it, but only by
+    # the record it appended: a hook that scans or grows the journal unboundedly is
+    # the incident again.
+    assert len(obs.rig.journal_files()) <= JOURNAL_BOUND + 8, (
+        "a single hook grew the journal far past its bound"
     )
 
 

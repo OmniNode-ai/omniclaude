@@ -190,6 +190,7 @@ class Rig:
 
 
 SPAWN_LOG_ENV = "ONEX_HOOK_SYSTEST_SPAWNLOG"
+HANG_EMIT_ENV = "ONEX_HOOK_SYSTEST_HANG_EMIT"
 
 # Commands a hook script reaches through PATH. Each gets a two-line wrapper that
 # appends its pid to the spawn log and execs the real binary, so the process
@@ -229,6 +230,15 @@ def _python_shim(shim_dir: Path, spawn_log: Path) -> Path:
     wrapper.write_text(
         "#!/bin/sh\n"
         f"printf '%s %s\\n' \"$$\" python >> {shlex.quote(str(spawn_log))}\n"
+        # HANG_EMIT_ENV makes the journal writers wedge the way the incident's did
+        # (alive, waiting on something that never comes), so a test can require the
+        # hook to notice, fail loudly and take the wedged process down with it.
+        f'if [ -n "${{{HANG_EMIT_ENV}:-}}" ]; then\n'
+        '  case "$*" in\n'
+        "    *hook_emit_append.py*|*hook_claude_capture.py*|*hook_content_capture.py*)\n"
+        "      exec /bin/sleep 300 ;;\n"
+        "  esac\n"
+        "fi\n"
         f'exec {shlex.quote(sys.executable)} "$@"\n',
         encoding="utf-8",
     )
