@@ -68,6 +68,26 @@ def _guard_step(job: dict[str, Any]) -> dict[str, Any]:
     raise AssertionError("no step invokes runtime_hardcoded_model_config")
 
 
+def test_checkout_fetches_full_history_so_the_pr_base_sha_resolves() -> None:
+    workflow = _load_workflow()
+    steps = _job(workflow)["steps"]
+    checkout_step = next(
+        (
+            step
+            for step in steps
+            if isinstance(step, dict)
+            and isinstance(step.get("uses"), str)
+            and step["uses"].startswith("actions/checkout")
+        ),
+        None,
+    )
+    assert isinstance(checkout_step, dict), "no actions/checkout step found"
+    checkout_with = checkout_step.get("with")
+    assert isinstance(checkout_with, dict), "checkout step must define with"
+    assert checkout_with["fetch-depth"] == 0
+    assert checkout_with["persist-credentials"] is False
+
+
 # ---------------------------------------------------------------------------
 # core_ref input: required, 40-hex, no default that would let a caller omit it
 # ---------------------------------------------------------------------------

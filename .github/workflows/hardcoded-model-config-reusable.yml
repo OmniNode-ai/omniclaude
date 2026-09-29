@@ -89,6 +89,9 @@ jobs:
           # public-repo-hygiene-reusable.yml uses and for the same reason: a
           # gate that only inspects the diff reports green over everything
           # that landed before it existed.
+          # The --base ratchet reads the baseline at the PR base sha, which a
+          # depth-1 clone lacks.
+          fetch-depth: 0
           persist-credentials: false
 
       # `uvx` is not preinstalled on the self-hosted omnibase-ci runner (the
