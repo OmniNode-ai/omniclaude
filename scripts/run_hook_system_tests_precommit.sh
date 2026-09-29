@@ -21,6 +21,10 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   exit 0
 fi
 
+# pytest imports the root conftest, and a bytecode cache written into the project
+# root fails the pre-push clean-root validator on the next push.
+export PYTHONDONTWRITEBYTECODE=1
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 exec bash "${here}/uv-run-worktree-safe.sh" python -m pytest -q -x -p no:cacheprovider \
   tests/hooks_system/test_hook_canary.py \
