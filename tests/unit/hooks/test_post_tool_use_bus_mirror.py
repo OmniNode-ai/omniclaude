@@ -101,6 +101,12 @@ def _base_env(tmp_path: Path, *, plugin_python_bin: str | None) -> dict[str, str
     env["CLAUDE_PROJECT_DIR"] = str(_REPO_ROOT)
     env["OMNICLAUDE_MODE"] = "full"
     env["ONEX_STATE_DIR"] = str(tmp_path / "onex_state")
+    # common.sh loads ~/.omnibase/.env, which can re-point ONEX_STATE_DIR at a
+    # host journal; the explicit journal override keeps the emit in tmp_path
+    # (OMN-20110: an unwritable journal now fails the hook, as it should).
+    env["ONEX_HOOK_EMIT_JOURNAL_DIR"] = str(
+        tmp_path / "onex_state" / "hook_emit_journal"
+    )
     if plugin_python_bin is not None:
         env["PLUGIN_PYTHON_BIN"] = plugin_python_bin
     else:
