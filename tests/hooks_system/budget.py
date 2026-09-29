@@ -68,3 +68,9 @@ BUDGET_SECONDS_BROKEN_EMIT = 10.0
 
 # Concurrency width for the parallel test.
 CONCURRENT_INVOCATIONS = 40
+
+# The longest a hook may wait on an emit before it must fail loudly. Operator
+# ruling 2026-09-29: about 30 seconds ("we can titrate it because we can see
+# errors"). Claude Code cancels a hook at 60 s, so a default above this ceiling
+# can be cancelled by the harness before the hook reports anything.
+EMIT_BUDGET_CEILING_SECONDS = 30.0

@@ -35,6 +35,7 @@ free lock is backpressure, not a failure.
 from __future__ import annotations
 
 import fcntl
+import importlib.util
 import os
 import time
 from collections.abc import Callable, Iterator
@@ -47,6 +48,7 @@ import pytest
 from tests.hooks_system import budget
 from tests.hooks_system._harness import (
     HANG_EMIT_ENV,
+    REPO_ROOT,
     HookRun,
     ProcInfo,
     Rig,
@@ -316,3 +318,14 @@ def test_unreachable_bus_is_invisible_to_the_hook(
     assert not obs.leftovers, (
         f"a process is still waiting on the unreachable bus:\n{describe(obs.leftovers.values())}"
     )
+
+
+def test_the_default_emit_budget_ends_before_the_harness_cancels_the_hook() -> None:
+    """A budget the harness outlives is a hang with extra steps: Claude Code
+    cancels a hook at 60 s and would report nothing."""
+    path = REPO_ROOT / "plugins/onex/hooks/lib/hook_emit_bounded.py"
+    spec = importlib.util.spec_from_file_location("hook_emit_bounded_under_test", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert 0 < module.DEFAULT_BUDGET_S <= budget.EMIT_BUDGET_CEILING_SECONDS

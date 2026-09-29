@@ -231,11 +231,13 @@ def _python_shim(shim_dir: Path, spawn_log: Path) -> Path:
         "#!/bin/sh\n"
         f"printf '%s %s\\n' \"$$\" python >> {shlex.quote(str(spawn_log))}\n"
         # HANG_EMIT_ENV makes the journal writers wedge the way the incident's did
-        # (alive, waiting on something that never comes), so a test can require the
+        # (alive, waiting on something that never comes). Only the interpreter's FIRST
+        # argument is matched: the bounded runner is itself run through this shim with
+        # the writer's path further along its argv, and it must not be wedged. So a test can require the
         # hook to notice, fail loudly and take the wedged process down with it.
         f'if [ -n "${{{HANG_EMIT_ENV}:-}}" ]; then\n'
-        '  case "$*" in\n'
-        "    *hook_emit_append.py*|*hook_claude_capture.py*|*hook_content_capture.py*)\n"
+        '  case "$1" in\n'
+        "    *hook_emit_append.py|*hook_claude_capture.py|*hook_content_capture.py)\n"
         "      exec /bin/sleep 300 ;;\n"
         "  esac\n"
         "fi\n"
