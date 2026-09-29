@@ -292,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         f"BLOCKED: hook emit '{args.label}' {cause}"
         f"{' -- ' + detail if detail else ''}. "
         f"The event was NOT recorded. Fix the emit path (journal "
-        f"{_state_dir() / 'hook_emit_journal'}, drainer ai.omninode.hook-emit-drainer)"
+        f"{journal.default_journal_dir()}, drainer ai.omninode.hook-emit-drainer)"
         f"{', log ' + str(log) if log else ''}. Ticket OMN-20110."
     )
     print(message, file=sys.stderr)
