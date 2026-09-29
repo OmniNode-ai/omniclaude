@@ -432,6 +432,8 @@ def start_hook(
         proc.stdin.close()
     except BrokenPipeError:
         pass
+    # communicate() would flush a closed stdin and raise; the payload is sent.
+    proc.stdin = None
     return proc, started
 
 
