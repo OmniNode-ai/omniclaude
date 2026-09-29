@@ -949,10 +949,20 @@ def check_parity(
         registered_by_script.setdefault(reg.script, []).append(reg)
 
     declared_scripts = {hook.script for hook in inventory.expected}
+    # OMN-19513: one observer script may be declared once per hook EVENT (the
+    # all-hooks capture registers one script under every event it covers).
+    # Such a script is matched per (script, event); a script declared under
+    # one event keeps the per-script matching, so EVENT_MISMATCH still fires
+    # for it.
+    declared_events: dict[str, set[str]] = {}
+    for hook in inventory.expected:
+        declared_events.setdefault(hook.script, set()).add(hook.event)
 
     # 1. Every expected hook is registered, at the declared event/matcher/order.
     for hook in inventory.expected:
         matches = registered_by_script.get(hook.script, [])
+        if len(declared_events[hook.script]) > 1:
+            matches = [m for m in matches if m.event == hook.event]
         if not matches:
             findings.append(
                 Finding(
@@ -1017,6 +1027,19 @@ def check_parity(
 
     # 2. Nothing is registered that the inventory does not declare.
     for reg in registrations:
+        multi_event = len(declared_events.get(reg.script, ())) > 1
+        if multi_event and reg.event not in declared_events[reg.script]:
+            findings.append(
+                Finding(
+                    "UNDECLARED_REGISTRATION",
+                    reg.script,
+                    f"registered under {reg.event} (matcher {reg.matcher!r}), an "
+                    f"event its expected_hooks entries in {inventory.path.name} do "
+                    "not declare. A script declared per event is declared for each "
+                    "event it runs under.",
+                )
+            )
+            continue
         if reg.script not in declared_scripts:
             findings.append(
                 Finding(

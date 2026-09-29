@@ -780,6 +780,61 @@ def _matched_output_class(
     return None
 
 
+def _has_nested_policy(fields: dict[str, EnumCaptureClass], prefix: str) -> bool:
+    """True when the policy governs subfields of ``prefix`` by dotted name."""
+    dotted = f"{prefix}."
+    return any(name.startswith(dotted) for name in fields)
+
+
+def _redact_nested(
+    value: JsonDict,
+    *,
+    prefix: str,
+    fields: dict[str, EnumCaptureClass],
+    contract: RedactionContract,
+) -> tuple[JsonDict, bool]:
+    """Apply per-subfield classes to one nested object (OMN-19513).
+
+    Mirrors omnimarket's owning ``redaction._redact_nested``. A policy may
+    govern an object field's members by dotted name (``lineage.session_id``);
+    each member resolves exactly as a top-level field does: its declared
+    class, else the fail-closed default, and the secret scrub over whatever
+    survives verbatim. Returns the redacted object and whether any secret
+    was detected.
+    """
+    result: JsonDict = {}
+    detected = False
+    for key, member in value.items():
+        name = f"{prefix}.{key}"
+        if isinstance(member, dict) and _has_nested_policy(fields, name):
+            nested, hit = _redact_nested(
+                member, prefix=name, fields=fields, contract=contract
+            )
+            result[key] = nested
+            detected = detected or hit
+            continue
+        capture_class = fields.get(name, contract.default_field_class)
+        if capture_class is EnumCaptureClass.NEVER_CAPTURE:
+            continue
+        if capture_class is EnumCaptureClass.CAPTURE_HASHED:
+            result[key] = hash_value(member)
+            continue
+        if capture_class is EnumCaptureClass.CAPTURE_SHAPE_ONLY:
+            result[key] = shape_of(member)
+            continue
+        if capture_class is EnumCaptureClass.CAPTURE_SCRUBBED:
+            hits: dict[str, int] = {}
+            result[key] = _scrub_value(member, contract, hits)
+            detected = detected or bool(hits)
+            continue
+        if _matches_secret(member, contract) is not None:
+            result[key] = hash_value(member)
+            detected = True
+        else:
+            result[key] = member
+    return result, detected
+
+
 def redact_capture(
     payload: JsonDict, *, topic: str, contract_path: Path | None = None
 ) -> JsonDict:
@@ -860,6 +915,17 @@ def redact_capture(
     for field, value in list(payload.items()) + list(derived_values.items()):
         if field == contract.redaction_state_field:
             # A producer does not get to declare its own posture.
+            continue
+
+        # OMN-19513: an object whose members the policy declares by dotted
+        # name is redacted member by member, never passed or hashed whole.
+        if isinstance(value, dict) and _has_nested_policy(policy.fields, field):
+            nested, detected = _redact_nested(
+                value, prefix=field, fields=policy.fields, contract=contract
+            )
+            result[field] = nested
+            if detected:
+                state = EnumRedactionState.SECRET_DETECTED
             continue
 
         capture_class = policy.fields.get(field, contract.default_field_class)
