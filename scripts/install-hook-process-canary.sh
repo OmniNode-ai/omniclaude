@@ -118,8 +118,16 @@ case "${ACTION}" in
       render_plist "${python}" > "${DST_PLIST}"
       plutil -lint "${DST_PLIST}" >/dev/null
       launchctl bootout "gui/${UID_GUI}/${LABEL}" 2>/dev/null || true
+      # bootout is asynchronous: bootstrapping before the old job is gone fails with
+      # "Input/output error" and leaves NOTHING loaded, so wait for it to go.
+      for _ in $(seq 1 20); do
+        launchctl print "gui/${UID_GUI}/${LABEL}" >/dev/null 2>&1 || break
+        sleep 0.5
+      done
       launchctl bootstrap "gui/${UID_GUI}" "${DST_PLIST}"
       launchctl kickstart -k "gui/${UID_GUI}/${LABEL}"
+      launchctl print "gui/${UID_GUI}/${LABEL}" >/dev/null 2>&1 \
+        || { echo "install-hook-process-canary: ${LABEL} is NOT loaded after bootstrap" >&2; exit 1; }
     else
       new_line="$(cron_line "${python}")"
       { crontab -l 2>/dev/null | grep -vF "${CRON_TAG}" || true; echo "${new_line}"; } | crontab -
