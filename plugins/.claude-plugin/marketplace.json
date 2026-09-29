@@ -1,8 +1,8 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "omninode-tools",
-  "version": "2.1.0",
-  "description": "OmniNode ONEX customer delegation plugin — local and dashboard-key cloud paths",
+  "version": "2.2.0",
+  "description": "OmniNode ONEX customer delegation plugin — one local delegation skill",
   "owner": {
     "name": "OmniNode",
     "email": "dev@omninode.ai"
@@ -10,8 +10,8 @@
   "plugins": [
     {
       "name": "onex",
-      "description": "ONEX customer delegation: local delegate and dashboard-key cloud_delegate. Ships exactly two delegation skills — no hooks, no agents (OMN-17354).",
-      "version": "0.2.1",
+      "description": "ONEX customer delegation: ships exactly one local delegation skill, delegate — no hooks, no agents.",
+      "version": "0.3.0",
       "source": "./onex-delegate",
       "category": "development",
       "homepage": "https://github.com/OmniNode-ai/omniclaude",
