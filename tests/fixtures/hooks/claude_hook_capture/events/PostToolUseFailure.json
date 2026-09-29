@@ -13,7 +13,9 @@
   "event_id": "64881551-6c84-58dc-878c-1fdf5bba10be",
   "hook_event_name": "PostToolUseFailure",
   "lineage": {
+    "agent_description": null,
     "agent_id": null,
+    "agent_model": null,
     "agent_type": null,
     "causation_id": "4c7209ac-ddba-5675-b306-f13230d27287",
     "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
@@ -24,6 +26,7 @@
     "spawn_depth": null,
     "tool_use_id": "toolu-fixture-failure",
     "turn_id": "turn-fixed-1",
+    "workflow_phase": null,
     "workflow_run_id": null
   },
   "payload": {

@@ -337,6 +337,76 @@ def test_lineage_rejects_is_subagent_agent_id_inconsistency() -> None:
         )
 
 
+def _map_subagent_start(sidecar: object | None) -> ModelClaudeHookEvent:
+    stdin = _load_json(FIXTURE_ROOT / "stdin" / "SubagentStart.json")
+    assert isinstance(stdin, dict)
+    return map_hook_stdin(
+        stdin,
+        emitted_at=datetime.fromisoformat("2026-09-26T12:00:00+00:00"),
+        sidecar=sidecar,  # type: ignore[arg-type]
+        claude_code_version="2.1.283",
+        turn_id=None,
+        content_scrubber=SCRUB,
+    ).event
+
+
+def test_subagent_sidecar_model_description_and_phase_reach_the_lineage() -> None:
+    """OMN-20010: the sidecar's model and description are lineage metadata."""
+    sidecar = GENERATOR._sidecar(agent_type="Explore", spawn_depth=1, tool_use_id="t1")
+    lineage = _map_subagent_start(sidecar).lineage
+    assert lineage.agent_model == "claude-opus-4-1"
+    assert lineage.agent_description == "deterministic fixture agent"
+    assert lineage.workflow_phase is None
+
+    workflow = GENERATOR._sidecar(
+        agent_type="Explore",
+        spawn_depth=1,
+        workflow_phase="review",
+        workflow_run_id="run-1",
+    )
+    assert _map_subagent_start(workflow).lineage.workflow_phase == "review"
+
+
+def test_subagent_sidecar_model_absent_without_a_sidecar_and_on_the_main_thread() -> (
+    None
+):
+    assert _map_subagent_start(None).lineage.agent_model is None
+    assert _map_subagent_start(None).lineage.agent_description is None
+    main = _load_json(FIXTURE_ROOT / "events" / "PreToolUse.json")
+    assert isinstance(main, dict)
+    lineage = main["lineage"]
+    assert isinstance(lineage, dict)
+    assert lineage["agent_model"] is None
+    assert lineage["agent_description"] is None
+
+
+def test_subagent_sidecar_model_description_is_scrubbed_and_length_capped() -> None:
+    """A description is a short label: a secret in it is scrubbed, a long one cut."""
+    sidecar = GENERATOR._sidecar(agent_type="Explore", spawn_depth=1, tool_use_id="t1")
+    leaky = sidecar.model_copy(update={"description": f"use {FAKE_SECRET} now"})
+    described = _map_subagent_start(leaky).lineage.agent_description
+    assert described is not None
+    assert FAKE_SECRET not in described
+    assert "[REDACTED" in described
+
+    long = sidecar.model_copy(update={"description": "x" * 5000})
+    capped = _map_subagent_start(long).lineage.agent_description
+    assert capped is not None
+    assert len(capped) <= 200
+
+
+def test_the_redaction_table_declares_the_new_lineage_fields() -> None:
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    fields = contract["redaction"]["fields"]
+    for name in ("agent_model", "agent_description", "workflow_phase"):
+        assert fields[f"lineage.{name}"] == "capture_verbatim"
+        assert name in contract["lineage"]["fields"]
+    span_columns = {
+        column["name"] for column in contract["projection"]["lineage_table"]["columns"]
+    }
+    assert {"model", "description", "workflow_phase"} <= span_columns
+
+
 def test_generator_check_passes() -> None:
     result = subprocess.run(
         [

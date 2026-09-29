@@ -68,6 +68,9 @@ lineage:
     turn_id: {type: string, nullable: true}
     correlation_id: {type: uuid, required: true}
     causation_id: {type: uuid, nullable: true}
+    agent_model: {type: string, nullable: true, source: "sidecar.model", added_by: OMN-20010}
+    agent_description: {type: string, nullable: true, max_length: 200, source: "sidecar.description", added_by: OMN-20010, rule: "the spawning call's short task label; scrubbed with the content scrub and cut to 200 characters, never a prompt"}
+    workflow_phase: {type: string, nullable: true, source: "sidecar.workflowPhase", added_by: OMN-20010}
   parent_agent_id: >
     Deliberately absent from the event. The ordered projection fold derives it
     from the PreToolUse carrying parent_tool_use_id.
@@ -335,6 +338,9 @@ redaction:
     lineage.turn_id: capture_verbatim
     lineage.correlation_id: capture_verbatim
     lineage.causation_id: capture_verbatim
+    lineage.agent_model: capture_verbatim
+    lineage.agent_description: capture_verbatim
+    lineage.workflow_phase: capture_verbatim
     payload.hook_event_name: capture_verbatim
     payload.tool_name: capture_verbatim
     payload.mcp_server: capture_verbatim
@@ -451,6 +457,9 @@ projection:
       - {name: started_at, type: timestamptz, nullable: false}
       - {name: stopped_at, type: timestamptz, nullable: true}
       - {name: tool_call_count, type: integer, nullable: false}
+      - {name: model, type: text, nullable: true, source: lineage.agent_model}
+      - {name: description, type: text, nullable: true, source: lineage.agent_description}
+      - {name: workflow_phase, type: text, nullable: true, source: lineage.workflow_phase}
       - {name: parent_resolution, type: text, nullable: false, values: [main_thread, resolved, workflow, unknown]}
   fold_rules:
     parent_agent_id: >

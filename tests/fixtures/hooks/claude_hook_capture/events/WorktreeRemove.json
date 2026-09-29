@@ -13,7 +13,9 @@
   "event_id": "e7e31045-1bab-5efe-8295-d73231eecce3",
   "hook_event_name": "WorktreeRemove",
   "lineage": {
+    "agent_description": null,
     "agent_id": null,
+    "agent_model": null,
     "agent_type": null,
     "causation_id": null,
     "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
@@ -24,6 +26,7 @@
     "spawn_depth": null,
     "tool_use_id": null,
     "turn_id": "turn-fixed-1",
+    "workflow_phase": null,
     "workflow_run_id": null
   },
   "payload": {

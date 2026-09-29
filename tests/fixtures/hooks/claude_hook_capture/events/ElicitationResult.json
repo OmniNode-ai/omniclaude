@@ -13,7 +13,9 @@
   "event_id": "d291a58b-61c9-535c-a4e7-fc6948178395",
   "hook_event_name": "ElicitationResult",
   "lineage": {
+    "agent_description": null,
     "agent_id": null,
+    "agent_model": null,
     "agent_type": null,
     "causation_id": null,
     "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
@@ -24,6 +26,7 @@
     "spawn_depth": null,
     "tool_use_id": null,
     "turn_id": "turn-fixed-1",
+    "workflow_phase": null,
     "workflow_run_id": null
   },
   "payload": {

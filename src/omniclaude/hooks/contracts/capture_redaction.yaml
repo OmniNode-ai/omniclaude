@@ -392,6 +392,11 @@ topics:
       lineage.turn_id: capture_verbatim
       lineage.correlation_id: capture_verbatim
       lineage.causation_id: capture_verbatim
+      # OMN-20010: sidecar model/description/phase; description is a scrubbed
+      # 200-char task label, never a prompt.
+      lineage.agent_model: capture_verbatim
+      lineage.agent_description: capture_verbatim
+      lineage.workflow_phase: capture_verbatim
       payload.hook_event_name: capture_verbatim
       payload.tool_name: capture_verbatim
       payload.mcp_server: capture_verbatim
