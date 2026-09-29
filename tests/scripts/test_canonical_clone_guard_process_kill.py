@@ -16,53 +16,18 @@ deny reason must carry the sanctioned alternative.
 
 from __future__ import annotations
 
-import json
-import os
-import subprocess
-import sys
-from pathlib import Path
-
 import pytest
 
-GUARD = (
-    Path(__file__).resolve().parents[2]
-    / "scripts"
-    / "user-hooks"
-    / "canonical-clone-guard.py"
+from tests.scripts.test_canonical_clone_guard_bypass import (
+    Registry,
+    bash,
+    registry,  # noqa: F401  (pytest fixture, reused so the registry env is built in one place)
 )
 
 
-def _run(tmp_path: Path, command: str) -> tuple[bool, str]:
-    home = tmp_path / "home"
-    registry_root = home / "registry"
-    (registry_root / "omni_worktrees" / "OMN-1" / "x").mkdir(
-        parents=True, exist_ok=True
-    )
-    env = {
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": str(home),
-        "OMNI_HOME": str(registry_root),
-    }
-    payload = json.dumps(
-        {
-            "tool_name": "Bash",
-            "tool_input": {"command": command},
-            "cwd": str(registry_root / "omni_worktrees" / "OMN-1" / "x"),
-        }
-    )
-    proc = subprocess.run(
-        [sys.executable, str(GUARD)],
-        input=payload,
-        capture_output=True,
-        text=True,
-        env=env,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr
-    if not proc.stdout.strip():
-        return False, ""
-    hso = json.loads(proc.stdout)["hookSpecificOutput"]
-    return hso["permissionDecision"] == "deny", hso["permissionDecisionReason"]
+def _run(registry: Registry, command: str) -> tuple[bool, str]:  # noqa: F811
+    verdict = bash(registry, command)
+    return verdict.denied, verdict.reason
 
 
 DENIED = [
@@ -74,7 +39,7 @@ DENIED = [
     ("pkill under sudo", "sudo pkill -f x"),
     ("pkill under env", "env FOO=1 pkill x"),
     ("pkill in bash -c", "bash -c 'pkill -f x'"),
-    ("pkill over ssh", 'ssh ops@host.example "pkill -f x"'),
+    ("pkill over ssh", 'ssh -o BatchMode=yes remote "pkill -f x"'),
     ("pkill after pipe", "echo hi | pkill -f x"),
     ("killall", "killall Python"),
     ("killall -9", "killall -9 node"),
@@ -118,8 +83,8 @@ ALLOWED = [
 
 @pytest.mark.unit
 @pytest.mark.parametrize(("label", "command"), DENIED, ids=[d[0] for d in DENIED])
-def test_denied(tmp_path: Path, label: str, command: str) -> None:
-    denied, reason = _run(tmp_path, command)
+def test_denied(registry: Registry, label: str, command: str) -> None:  # noqa: F811
+    denied, reason = _run(registry, command)
     assert denied, f"{label}: expected deny for {command!r}"
     assert "kill <your own pid>" in reason
     assert "rule 21" in reason.lower()
@@ -127,6 +92,6 @@ def test_denied(tmp_path: Path, label: str, command: str) -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize(("label", "command"), ALLOWED, ids=[a[0] for a in ALLOWED])
-def test_allowed(tmp_path: Path, label: str, command: str) -> None:
-    denied, reason = _run(tmp_path, command)
+def test_allowed(registry: Registry, label: str, command: str) -> None:  # noqa: F811
+    denied, reason = _run(registry, command)
     assert not denied, f"{label}: unexpected deny for {command!r}: {reason}"
