@@ -316,7 +316,12 @@ def make_rig(root: Path) -> Rig:
     for key in [k for k in env if k.startswith("SLACK_")]:
         env.pop(key)
     return Rig(
-        root=root, token=token, state_dir=state_dir, journal_dir=journal_dir, env=env
+        root=root,
+        token=token,
+        state_dir=state_dir,
+        journal_dir=journal_dir,
+        spawn_log=spawn_log,
+        env=env,
     )
 
 
