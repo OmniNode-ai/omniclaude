@@ -53,7 +53,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import hook_emit_journal as journal  # noqa: E402
 
 BLOCKING_EXIT = 2
-DEFAULT_BUDGET_S = 5.0
+# Operator 2026-09-29 ~20:08Z: 30s, to be titrated from the visible timeout errors.
+DEFAULT_BUDGET_S = 30.0
 ALARM_BUDGET_S = 8.0
 _TAIL_BYTES = 600
 _EPISODE_MARKER = "hook_emit_failure_episode"
@@ -123,8 +124,11 @@ def _on_signal(signum: int, _frame: object) -> None:
     os._exit(128 + signum)
 
 
-for _sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
-    signal.signal(_sig, _on_signal)
+def _install_signal_handlers() -> None:
+    """Installed by :func:`main` only, so the drainer can import this module
+    for :func:`raise_alarm_once` without having its own handlers replaced."""
+    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(sig, _on_signal)
 
 
 _last_pgid = 0
@@ -166,13 +170,14 @@ def _kill_group(pgid: int) -> None:
         os.killpg(pgid, signal.SIGKILL)
 
 
-def raise_alarm_once(category: str, text: str) -> bool:
+def raise_alarm_once(category: str, text: str, marker: Path | None = None) -> bool:
     """Raise the operator alarm if this failure opens an episode.
 
     The episode marker is created with O_EXCL, so of any number of concurrent
     failing hooks exactly one raises the alarm. Returns True when it did.
     """
-    marker = episode_marker_path()
+    if marker is None:
+        marker = episode_marker_path()
     try:
         marker.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(marker), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
@@ -201,9 +206,9 @@ def raise_alarm_once(category: str, text: str) -> bool:
     return True
 
 
-def close_episode() -> None:
+def close_episode(marker: Path | None = None) -> None:
     with contextlib.suppress(FileNotFoundError, OSError):
-        episode_marker_path().unlink()
+        (marker if marker is not None else episode_marker_path()).unlink()
 
 
 def _tail(log: Path | None, start: int) -> str:
@@ -220,6 +225,7 @@ def _tail(log: Path | None, start: int) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _install_signal_handlers()
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--" not in argv:
         print("hook_emit_bounded: usage: ... -- CMD [ARG...]", file=sys.stderr)
@@ -260,7 +266,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         os.dup2(log_fd, 1)
         os.dup2(log_fd, 2)
+        started = time.monotonic()
         timed_out, rc = _run_bounded(cmd, args.budget)
+        elapsed = time.monotonic() - started
     finally:
         os.dup2(saved_out, 1)
         os.dup2(saved_err, 2)
@@ -274,11 +282,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if timed_out:
         cause = (
-            f"did not complete within its {args.budget:g}s budget; its process "
-            f"group {_last_pgid} was killed"
+            f"did not complete within its {args.budget:g}s budget (killed after "
+            f"{elapsed:.1f}s); its process group {_last_pgid} was killed"
         )
     else:
-        cause = f"exited {rc}"
+        cause = f"exited {rc} after {elapsed:.1f}s"
     detail = _tail(log, start)
     message = (
         f"BLOCKED: hook emit '{args.label}' {cause}"

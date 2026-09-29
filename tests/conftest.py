@@ -1108,3 +1108,20 @@ def _strip_test_local_git_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     monkeypatch.setenv("GIT_EDITOR", "true")
+
+
+@pytest.fixture(autouse=True)
+def _no_real_operator_alarm(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """No test may page the operator (OMN-20110).
+
+    Any test that runs a hook emit through hook_emit_bounded would otherwise
+    post a real Slack alarm through alert-channel.sh and raise a desktop
+    notification: on 2026-09-29 one pytest run posted four. A test that
+    asserts on the alarm sets its own recording command on top of this.
+    """
+    scratch = tmp_path_factory.mktemp("emit-alarm")
+    monkeypatch.setenv("ONEX_EMIT_ALARM_CMD", "/usr/bin/true")
+    monkeypatch.setenv("ONEX_EMIT_EPISODE_MARKER", str(scratch / "episode"))
+    monkeypatch.setenv("ONEX_EMIT_DROP_EPISODE_MARKER", str(scratch / "drop-episode"))

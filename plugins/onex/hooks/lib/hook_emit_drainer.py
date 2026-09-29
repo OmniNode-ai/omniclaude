@@ -113,6 +113,7 @@ import signal
 import stat
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -120,11 +121,48 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import hook_emit_bounded as bounded  # noqa: E402
 import hook_emit_bus  # noqa: E402
 import hook_emit_health as health  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
 
 logger = logging.getLogger("hook_emit_drainer")
+
+_DROP_EPISODE_MARKER = "hook_emit_drop_episode"
+
+
+def drop_episode_marker(journal_dir: Path) -> Path:
+    override = os.environ.get("ONEX_EMIT_DROP_EPISODE_MARKER")
+    if override:
+        return Path(override)
+    return Path(journal_dir).parent / "hooks" / _DROP_EPISODE_MARKER
+
+
+def alarm_on_drop(
+    dropped: int,
+    max_records: int,
+    journal_dir: Path,
+    marker: Path,
+    raise_alarm: Callable[[str, str, Path], bool],
+    close: Callable[[Path], None],
+) -> None:
+    """Alarm the operator when the bound evicted records (OMN-20110).
+
+    A drop is lost telemetry, and the operator ruling of 2026-09-29 is that
+    loss may not live only in a log line. One alarm per drop episode; the
+    episode closes on the first cycle with no drop.
+    """
+    if dropped > 0:
+        text = (
+            f"[{os.uname().nodename}] The hook emit drainer dropped {dropped} oldest "
+            f"journal record(s) because the journal in {journal_dir} exceeded its "
+            f"bound of {max_records} records. Those events are lost. Check the "
+            f"drainer ai.omninode.hook-emit-drainer and the bus (ticket OMN-20110)."
+        )
+        raise_alarm("hook_emit_journal_dropped", text, marker)
+    else:
+        close(marker)
+
 
 DEFAULT_POLL_SECONDS = 2.0
 DEFAULT_IDLE_POLL_SECONDS = 10.0
@@ -766,7 +804,8 @@ def drain_once(
     refused = refused_event_types if refused_event_types is not None else {}
     # The bound is enforced here, once per cycle by the one drainer, and never
     # on the hook path, where it cost a whole-directory scan per tool call
-    # (OMN-20110). Drops are logged: they mean the drainer is not keeping up.
+    # (OMN-20110). A drop means the drainer is not keeping up: it is logged
+    # and alarms the operator once per drop episode.
     try:
         dropped = journal.enforce_bound(journal_dir)
     except (OSError, TimeoutError) as exc:
@@ -778,6 +817,14 @@ def drain_once(
                 journal.DEFAULT_MAX_RECORDS,
                 dropped,
             )
+        alarm_on_drop(
+            dropped,
+            journal.DEFAULT_MAX_RECORDS,
+            Path(journal_dir),
+            drop_episode_marker(Path(journal_dir)),
+            bounded.raise_alarm_once,
+            bounded.close_episode,
+        )
     pending = journal.list_pending(journal_dir, limit=batch_limit)
     published = 0
     for index, entry in enumerate(pending):

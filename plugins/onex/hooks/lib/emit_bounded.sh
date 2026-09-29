@@ -13,7 +13,7 @@
 #
 # onex_emit_bounded runs one emit in the FOREGROUND through
 # hook_emit_bounded.py, which gives it its own process group and a time
-# budget (ONEX_HOOK_EMIT_BUDGET_S, default 5s), SIGKILLs the whole group on a
+# budget (ONEX_HOOK_EMIT_BUDGET_S, default 30s), SIGKILLs the whole group on a
 # miss, prints a blocking error naming the cause on stderr, raises one
 # operator alarm per failure episode through alert-channel.sh, and exits 2.
 #

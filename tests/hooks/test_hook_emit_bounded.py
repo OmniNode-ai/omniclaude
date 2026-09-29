@@ -271,3 +271,52 @@ def test_runner_has_no_spool_fail_open_or_kill_switch() -> None:
     src = _RUNNER.read_text().lower()
     for word in ("spool_dir", "fail_open", "hooks_disable", "kill_switch"):
         assert word not in src, word
+
+
+def test_blocked_text_names_the_elapsed_time(env: dict[str, str]) -> None:
+    """Titration needs the time an emit took, not only the budget it missed."""
+    proc = _run(env, "/bin/sleep", "5", budget=0.5)
+    assert proc.returncode == 2
+    assert re.search(r"killed after \d+\.\ds", proc.stderr), proc.stderr
+    proc = _run(env, "/usr/bin/false")
+    assert re.search(r"exited 1 after \d+\.\ds", proc.stderr), proc.stderr
+
+
+def test_import_installs_no_signal_handlers() -> None:
+    """The drainer imports the runner for its alarm; its handlers must survive."""
+    code = (
+        "import signal, sys\n"
+        f"sys.path.insert(0, {str(_LIB)!r})\n"
+        "before = signal.getsignal(signal.SIGHUP)\n"
+        "import hook_emit_bounded\n"
+        "assert signal.getsignal(signal.SIGHUP) is before\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
+
+
+def test_drainer_drop_alarms_once_per_episode(
+    env: dict[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bound eviction is lost telemetry: it alarms, once per drop episode."""
+    for key in ("ONEX_EMIT_ALARM_CMD", "ONEX_EMIT_EPISODE_MARKER"):
+        monkeypatch.setenv(key, env[key])
+    sys.path.insert(0, str(_LIB))
+    import hook_emit_bounded as bounded
+    import hook_emit_drainer as drainer
+
+    journal_dir = tmp_path / "state" / "hook_emit_journal"
+    marker = tmp_path / "drop-episode"
+    for dropped in (3, 5, 0, 2):
+        drainer.alarm_on_drop(
+            dropped,
+            10,
+            journal_dir,
+            marker,
+            bounded.raise_alarm_once,
+            bounded.close_episode,
+        )
+    alarms = _alarms(env)
+    assert len(alarms) == 2, alarms
+    assert all(a.startswith("hook_emit_journal_dropped|") for a in alarms)
+    assert "dropped 3 oldest" in alarms[0] and "dropped 2 oldest" in alarms[1]
+    assert marker.exists(), "the second episode is still open"

@@ -210,7 +210,7 @@ No `@dataclass`; no `str` literals for finite sets.
 **Hook emits fail loud (OMN-20110, operator ruling 2026-09-29).** Every journal emit runs in the
 foreground through `plugins/onex/hooks/lib/hook_emit_bounded.py` (sourced as
 `hooks/lib/emit_bounded.sh`): its own process group, a time budget (`ONEX_HOOK_EMIT_BUDGET_S`,
-default 5s), the whole group SIGKILLed on a miss, exit 2 with the cause on stderr so the tool
+default 30s), the whole group SIGKILLed on a miss, exit 2 with the cause on stderr so the tool
 call is blocked, and one operator alarm per failure episode through `alert-channel.sh` plus a
 local notification. No spool, no fail-open branch, no kill switch, never a disowned emit (the
 2026-09-29 incident: ~10k disowned emitters stuck in a journal scan exhausted the per-user process
