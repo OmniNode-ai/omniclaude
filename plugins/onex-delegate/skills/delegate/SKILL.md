@@ -1,5 +1,5 @@
 ---
-version: 3.0.0
+version: 3.1.0
 description: "Single-command local LLM delegation. Runs `onex delegate \"<prompt>\"` which builds the payload, dispatches node_delegate_skill_orchestrator, and prints one typed ModelSkillResult[ModelDelegateSkillResponse]. Handled inline — no subagent, no payload file, no cat of workflow_result.json."
 skill_kind: dispatch
 mode: full
@@ -110,6 +110,20 @@ Installing `omnibase-core` alone is not enough — `onex` will load, but
 `onex delegate` exits 2 with `Error: No such command 'delegate'. Did you mean
 'gate'?`.
 
+## One-time permission rule
+
+Add `Bash(onex delegate:*)` to `permissions.allow` in `~/.claude/settings.json`
+(or via `/permissions`) once so `/onex:delegate` does not ask on every call:
+
+```json
+{
+  "permissions": { "allow": ["Bash(onex delegate:*)"] }
+}
+```
+
+This rule covers only `onex delegate` invocations. The one-time setup commands above
+(`onex local init`, `onex secret set`) are separate commands and ask once each.
+
 ## Task Types
 
 | Task Type | When to use |
@@ -124,6 +138,29 @@ Installing `omnibase-core` alone is not enough — `onex` will load, but
 
 Omit `--task-type` to auto-classify from the prompt (`onex delegate` applies the
 keyword table above; routing is owned by the node contract's `allowed_task_types`).
+
+## Prompt Size Limits (measured 2026-09-28, OMN-17427)
+
+A delegation is not refused for being long; routing climbs. The ceilings are declared in
+`omnimarket` `routing_tiers.yaml` and `bifrost_delegation.yaml` (`max_grounded_input_tokens`),
+not in this skill.
+
+| Task class | Stays on the lab up to | Above it |
+|------------|------------------------|----------|
+| prose (`document`, `research`, `review`, `reasoning`, `summarization`, `planning`) | about 8,192 input tokens (roughly 24k to 30k chars) | climbs to a cloud rung; the free rung took 45k chars in about 2 minutes |
+| code (`code_generation`, `refactor`, `test`) | 65,536 input tokens | climbs |
+
+Measured through `onex delegate --task-type document`, 2 to 160k chars of ledger text: every
+size completed. 30k chars ran on the lab in 22 s, 60k chars climbed to the free cloud rung in
+35 s, 160k chars in 68 s. A 3,000-word draft (5,229 output tokens) took 56 s on the lab, and six
+concurrent 40k to 90k char drafts with `--max-tokens 6000` all completed in 84 to 137 s. The
+handler budget is 240 s, so a run that outlasts it is a queue or a host problem, not a size limit.
+
+Lane rule: keep a prose prompt under about 24k chars and split longer material into chunks (one
+delegation per section, then one delegation to combine the summaries). The free cloud rung can
+return an empty response, which the gate scores as a climb and retries; the GLM rung refuses with
+`credential_absent` when its key is unregistered. Read `attempts` in the result before
+concluding a size limit.
 
 ## Usage
 

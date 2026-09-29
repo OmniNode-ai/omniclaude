@@ -194,6 +194,19 @@ def test_guard_step_runs_shrink_only_check_against_pr_base_when_available() -> N
     assert step["env"]["PR_BASE_SHA"] == "${{ github.event.pull_request.base.sha }}"
 
 
+def test_checkout_fetches_full_history_so_the_pr_base_sha_resolves() -> None:
+    workflow = _load_workflow()
+    steps = _job(workflow)["steps"]
+    checkout_step = next(
+        step
+        for step in steps
+        if isinstance(step, dict) and step.get("name") == "Checkout caller repo"
+    )
+    with_block = checkout_step["with"]
+    assert with_block["fetch-depth"] in (0, "0")
+    assert with_block["persist-credentials"] is False
+
+
 def test_permissions_are_read_only() -> None:
     workflow = _load_workflow()
     assert workflow["permissions"] == {"contents": "read"}

@@ -464,8 +464,9 @@ governed_event_classes:
   - "validator.catch"
   # OMN-19513: the all-hooks capture metadata class, one lineage-carrying
   # event per Claude Code hook call, emitted by hooks/lib/hook_claude_capture.py
-  # to onex.evt.omniclaude.hook-event.v1. Declared AND held back: see
-  # produce_grant_pending below.
+  # to onex.evt.omniclaude.hook-event.v1. The dev-lane produce grant (literal
+  # WRITE + DESCRIBE, existing principal) landed 2026-09-26 and was read back
+  # live (positive control at offset 41), so the class is no longer held back.
   - "hook.event"
 
 # ---------------------------------------------------------------------------
@@ -483,8 +484,12 @@ governed_event_classes:
 # grant: the grant lands under its own operator consent row (the 3770 shape:
 # literal WRITE plus DESCRIBE on the one topic, for the existing principal),
 # then a one-line PR deletes the entry.
-produce_grant_pending:
-  - "hook.event"
+#
+# EMPTY since OMN-19513 activation: hook.event was the only entry, and its
+# grant was applied 2026-09-26T15:41Z on the dev-lane broker. While the entry
+# stayed, hook_claude_capture.py refused every hook call ("skipped ... (no
+# produce grant yet)") and the topic held 42 records, none from a live session.
+produce_grant_pending: []
 
 # ---------------------------------------------------------------------------
 # Surfaces explicitly demoted from authority (AC3).
