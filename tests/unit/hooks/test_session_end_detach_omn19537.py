@@ -22,6 +22,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -59,7 +60,12 @@ def _run(
     root = _slow_plugin_copy(tmp_path)
     marker = tmp_path / "argv.txt"
     stub = tmp_path / "fake_python.sh"
-    stub.write_text(f'#!/bin/bash\nprintf "%s\\n" "$@" > "{marker}"\ncat >/dev/null\n')
+    # OMN-20110: the bounded emit runner runs on the real interpreter; the
+    # emitter it runs is the stand-in that records its argv.
+    stub.write_text(
+        f'#!/bin/bash\ncase "$1" in *hook_emit_bounded.py) exec "{sys.executable}" "$@" ;; esac\n'
+        f'printf "%s\\n" "$@" > "{marker}"\ncat >/dev/null\n'
+    )
     stub.chmod(0o755)
     env = os.environ.copy()
     env.update(

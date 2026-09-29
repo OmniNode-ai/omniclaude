@@ -392,11 +392,16 @@ def test_every_contract_hook_is_either_captured_or_named_never() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _run_script(tmp_path: Path, payload: dict[str, Any]) -> tuple[float, Path]:
+def _run_script(
+    tmp_path: Path, payload: dict[str, Any], *, expect_rc: int = 0
+) -> tuple[float, Path]:
     marker = tmp_path / "argv.txt"
     stub = tmp_path / "fake_python.sh"
+    # OMN-20110: the bounded emit runner runs on the real interpreter; the
+    # capture it runs is the slow stand-in.
     stub.write_text(
-        f'#!/bin/bash\nsleep 1\nprintf "%s\\n" "$@" > "{marker}"\n'
+        f'#!/bin/bash\ncase "$1" in *hook_emit_bounded.py) exec "{sys.executable}" "$@" ;; esac\n'
+        f'sleep 1\nprintf "%s\\n" "$@" > "{marker}"\n'
         "cat >/dev/null\nsleep 4\n"
     )
     stub.chmod(0o755)
@@ -407,6 +412,9 @@ def _run_script(tmp_path: Path, payload: dict[str, Any]) -> tuple[float, Path]:
             "OMNICLAUDE_MODE": "full",
             "ONEX_STATE_DIR": str(tmp_path / "onex_state"),
             "PLUGIN_PYTHON_BIN": str(stub),
+            "ONEX_HOOK_EMIT_BUDGET_S": "2",
+            "ONEX_EMIT_ALARM_CMD": "/usr/bin/true",
+            "ONEX_EMIT_EPISODE_MARKER": str(tmp_path / "episode"),
         }
     )
     started = time.monotonic()
@@ -421,22 +429,21 @@ def _run_script(tmp_path: Path, payload: dict[str, Any]) -> tuple[float, Path]:
         env=env,
     )
     elapsed = time.monotonic() - started
-    assert result.returncode == 0
+    assert result.returncode == expect_rc, result.stderr
     assert result.stdout == ""
     return elapsed, marker
 
 
-def test_the_capture_script_is_silent_and_returns_before_the_capture(
+def test_the_capture_script_is_silent_and_fails_loud_on_a_missed_budget(
     tmp_path: Path,
 ) -> None:
+    # OMN-20110: the capture runs in the foreground inside its budget. The
+    # stand-in takes 5 s against a 2 s budget, so the hook blocks (exit 2),
+    # still prints nothing on stdout, and returns promptly.
     elapsed, marker = _run_script(
-        tmp_path, {"hook_event_name": "SubagentStop", "session_id": "s"}
+        tmp_path, {"hook_event_name": "SubagentStop", "session_id": "s"}, expect_rc=2
     )
-    assert elapsed < 3.0
-    assert not marker.exists()
-    deadline = time.monotonic() + 5.0
-    while not marker.exists() and time.monotonic() < deadline:
-        time.sleep(0.05)
+    assert elapsed < 5.0
     assert marker.read_text().splitlines()[0].endswith("hook_claude_capture.py")
 
 

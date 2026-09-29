@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -58,6 +59,8 @@ _STDIN_PAYLOAD = json.dumps(
 )
 
 _SLOW_STUB = """#!/bin/bash
+# OMN-20110: the bounded emit runner runs on the real interpreter.
+case "$1" in *hook_emit_bounded.py) exec "{py}" "$@" ;; esac
 # OMN-19551: the mirror now makes two calls in one background subshell --
 # the metadata append, then content capture with the hook input on stdin.
 # Each is recorded separately so the metadata contract stays checkable.
@@ -71,6 +74,8 @@ exit 0
 """
 
 _FAST_STUB = """#!/bin/bash
+# OMN-20110: the bounded emit runner runs on the real interpreter.
+case "$1" in *hook_emit_bounded.py) exec "{py}" "$@" ;; esac
 # OMN-19551: the mirror now makes two calls in one background subshell --
 # the metadata append, then content capture with the hook input on stdin.
 # Each is recorded separately so the metadata contract stays checkable.
@@ -85,7 +90,9 @@ exit 0
 
 def _write_stub(path: Path, marker: Path, *, sleep_seconds: float = 0) -> None:
     template = _SLOW_STUB if sleep_seconds else _FAST_STUB
-    path.write_text(template.format(marker=marker, sleep_seconds=sleep_seconds))
+    path.write_text(
+        template.format(marker=marker, sleep_seconds=sleep_seconds, py=sys.executable)
+    )
     path.chmod(0o755)
 
 
@@ -102,8 +109,10 @@ def _base_env(tmp_path: Path, *, plugin_python_bin: str | None) -> dict[str, str
 
 
 @pytest.mark.unit
-def test_post_tool_use_bus_mirror_backgrounds_the_dispatch_call(tmp_path: Path) -> None:
-    """The hook must return well before a slow dispatch call finishes (non-blocking)."""
+def test_post_tool_use_bus_mirror_fails_loud_when_the_dispatch_misses_its_budget(
+    tmp_path: Path,
+) -> None:
+    """A dispatch that misses its budget blocks the hook loudly (OMN-20110)."""
     assert _SCRIPT.exists(), f"Script not found at {_SCRIPT}"
 
     marker = tmp_path / "invocation-argv.txt"
@@ -111,6 +120,12 @@ def test_post_tool_use_bus_mirror_backgrounds_the_dispatch_call(tmp_path: Path) 
     _write_stub(stub, marker, sleep_seconds=6)
 
     env = _base_env(tmp_path, plugin_python_bin=str(stub))
+    # OMN-20110: the emit runs in the foreground inside a budget. A dispatch
+    # that misses it is killed with its process group, the hook exits 2 with
+    # the cause, and the operator alarm fires (stubbed here).
+    env["ONEX_HOOK_EMIT_BUDGET_S"] = "1"
+    env["ONEX_EMIT_ALARM_CMD"] = "/usr/bin/true"
+    env["ONEX_EMIT_EPISODE_MARKER"] = str(tmp_path / "episode")
 
     start = time.monotonic()
     result = subprocess.run(
@@ -125,14 +140,13 @@ def test_post_tool_use_bus_mirror_backgrounds_the_dispatch_call(tmp_path: Path) 
     )
     elapsed = time.monotonic() - start
 
-    assert result.returncode == 0, (
-        f"Hook must exit 0 (exit {result.returncode}).\nstderr: {result.stderr}"
+    assert result.returncode == 2, (
+        f"A missed emit budget must block (exit 2), got {result.returncode}. "
+        f"stderr: {result.stderr}"
     )
-    assert elapsed < 3.0, (
-        f"Hook took {elapsed:.2f}s to return but the stand-in dispatcher sleeps "
-        "6s -- the hook is blocking on the emit dispatch instead of "
-        "backgrounding it (violates the non-blocking requirement)."
-    )
+    assert elapsed < 6.0, f"Hook took {elapsed:.2f}s against a 1s emit budget"
+    assert "BLOCKED: hook emit" in result.stderr
+    assert "budget" in result.stderr
     assert result.stdout == "", (
         "PostToolUse bus-mirror hook must emit nothing on stdout (silence-on-"
         f"pass discipline). Got: {result.stdout!r}"

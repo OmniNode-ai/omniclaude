@@ -403,17 +403,27 @@ def test_stop_content_capture_records_one_reply_once(jdir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("stdin", ["not json", "[1, 2]", "", '{"session_id": 5}'])
-def test_content_capture_fail_open_on_malformed_input(
+@pytest.mark.parametrize(
+    ("stdin", "expected"),
+    [("not json", 1), ("[1, 2]", 0), ("", 0), ('{"session_id": 5}', 0)],
+)
+def test_content_capture_on_malformed_input(
     jdir: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     stdin: str,
+    expected: int,
 ) -> None:
+    # OMN-20110: input that cannot be parsed is a failure the hook reports
+    # (exit 1, so the bounded runner blocks and alarms), never a silent skip.
+    # Input that parses to nothing capturable is not a failure.
     monkeypatch.setattr(sys, "stdin", io.StringIO(stdin))
     code = capture_mod.main(["--kind", "tool", "--journal-dir", str(jdir)])
-    assert code == 0
-    assert capsys.readouterr().out == ""
+    assert code == expected
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    if expected:
+        assert "NOT journalled" in captured.err
     assert _records(jdir) == []
 
 
@@ -433,14 +443,19 @@ _STOP_SCRIPT = (
 )
 
 
-def test_stop_content_capture_script_is_silent_and_never_blocks(tmp_path: Path) -> None:
+def test_stop_content_capture_script_is_silent_and_fails_loud_on_a_missed_budget(
+    tmp_path: Path,
+) -> None:
     import os
     import time
 
     marker = tmp_path / "argv.txt"
     stub = tmp_path / "fake_python.sh"
+    # OMN-20110: the bounded emit runner runs on the real interpreter; the
+    # capture it runs is the slow stand-in, which misses a 2 s budget.
     stub.write_text(
-        f'#!/bin/bash\nprintf "%s\\n" "$@" > "{marker}"\ncat >/dev/null\nsleep 6\n'
+        f'#!/bin/bash\ncase "$1" in *hook_emit_bounded.py) exec "{sys.executable}" "$@" ;; esac\n'
+        f'printf "%s\\n" "$@" > "{marker}"\ncat >/dev/null\nsleep 6\n'
     )
     stub.chmod(0o755)
     env = os.environ.copy()
@@ -450,6 +465,9 @@ def test_stop_content_capture_script_is_silent_and_never_blocks(tmp_path: Path) 
             "OMNICLAUDE_MODE": "full",
             "ONEX_STATE_DIR": str(tmp_path / "onex_state"),
             "PLUGIN_PYTHON_BIN": str(stub),
+            "ONEX_HOOK_EMIT_BUDGET_S": "2",
+            "ONEX_EMIT_ALARM_CMD": "/usr/bin/true",
+            "ONEX_EMIT_EPISODE_MARKER": str(tmp_path / "episode"),
         }
     )
     payload = json.dumps(
@@ -466,9 +484,10 @@ def test_stop_content_capture_script_is_silent_and_never_blocks(tmp_path: Path) 
         timeout=20,
         env=env,
     )
-    assert result.returncode == 0
+    assert result.returncode == 2, result.stderr
+    assert "BLOCKED: hook emit" in result.stderr
     assert result.stdout == ""
-    assert time.monotonic() - started < 3.0
+    assert time.monotonic() - started < 5.0
     deadline = time.monotonic() + 3.0
     while not marker.exists() and time.monotonic() < deadline:
         time.sleep(0.05)
