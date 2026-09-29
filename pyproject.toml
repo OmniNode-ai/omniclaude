@@ -265,7 +265,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@fbc9b1ad39f66341edbcb07452f03bdb70b3dfb9",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@e01380bfde111c1ac15e8eae745482cff05f79df",
 ]
 
 [tool.uv.sources]
@@ -311,7 +311,7 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 #
 # So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
 # on workflow_dispatch and review the bot PR.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "fbc9b1ad39f66341edbcb07452f03bdb70b3dfb9" }  # pragma: allowlist secret
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "e01380bfde111c1ac15e8eae745482cff05f79df" }  # pragma: allowlist secret
 
 # OMN-18752: which surface decides the commit a git-sourced sibling must carry.
 # `clone` is claimed only where something enforces it. omnimarket's in-process
