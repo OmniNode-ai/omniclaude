@@ -92,7 +92,7 @@ is_omninode_repo() {
 
     # Marker 2: package.json referencing an OmniNode package.
     if [[ -f "$root/package.json" ]]; then
-        if _repo_guard_file_matches_ere "$root/package.json" '(omnidash|@omni|omniweb)'; then
+        if grep -qE '(omnidash|@omni|omniweb)' "$root/package.json" 2>/dev/null; then
             return 0
         fi
     fi
