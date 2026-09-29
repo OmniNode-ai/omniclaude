@@ -249,7 +249,10 @@ def test_route_off_is_byte_identical_for_all_commands(
 def test_route_read_uses_app_token_for_candidates(
     routed_env: dict[str, str], argv: list[str]
 ) -> None:
-    result = _run(routed_env, *argv, extra={"ONEX_GH_READ_ROUTING": "1"})
+    extra = {"ONEX_GH_READ_ROUTING": "1"}
+    if argv[0] == "search":
+        extra["ONEX_PR_WATCHER"] = "1"
+    result = _run(routed_env, *argv, extra=extra)
     assert result.returncode == 0, result.stderr
     assert _gh_calls(routed_env) == [{"argv": argv, "gh_token": APP_TOKEN}]
     assert _usage(routed_env)[0]["identity"] == "app"
@@ -265,11 +268,17 @@ def test_route_read_uses_app_token_for_candidates(
 def test_route_widened_search_candidate_still_refuses_an_unscoped_search(
     routed_env: dict[str, str], argv: list[str]
 ) -> None:
-    """OMN-19852 P2: widening the bash pre-filter to forward `search` to the router
-    must not widen what actually gets the App token. gh_route.py's own classify()
-    still refuses an unscoped search, so it runs on the operator exactly as before
-    -- now via one round trip through the router rather than never reaching it."""
-    result = _run(routed_env, *argv, extra={"ONEX_GH_READ_ROUTING": "1"})
+    """A watcher search still uses the router's scoped-token classification.
+
+    The shim-level search guard allows only the watcher marker. Once allowed,
+    gh_route.py still refuses the App token for an unscoped search and runs it
+    on the operator.
+    """
+    result = _run(
+        routed_env,
+        *argv,
+        extra={"ONEX_GH_READ_ROUTING": "1", "ONEX_PR_WATCHER": "1"},
+    )
     assert result.returncode == 0, result.stderr
     assert _gh_calls(routed_env) == [{"argv": argv, "gh_token": OPERATOR_TOKEN}]
     assert _usage(routed_env)[0]["identity"] == "operator"

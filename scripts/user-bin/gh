@@ -38,6 +38,18 @@
 # runs the real gh exactly as it did before routing existed. Both variables
 # default from ~/.config/omni/gh-read-routing.env when unset (OMN-19852).
 #
+# Search guard (OMN-19852): GitHub's secondary-rate-limited search bucket is
+# reserved for the launchd PR watcher. `gh api search/...` and `gh search ...`
+# are refused unless ONEX_PR_WATCHER=1; readers use the watcher's local state
+# and the canonical clones instead.
+#
+# Shared call log (OMN-19852): every allowed or refused call appends one
+# tab-separated line to ONEX_GH_CALLS_LOG, else ONEX_STATE_DIR/gh-calls.log
+# (no log is written when neither is set).
+# It contains only timestamp, resolved lane/source, class, method, endpoint,
+# exit code and action -- never argv, environment values or tokens.
+# ONEX_GH_USAGE_LOG=0 turns both usage logs off for one call.
+#
 # Usage log (OMN-19585): every invocation appends one JSON line to
 # ${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage/<UTC date>.jsonl with the
 # timestamp, lane (ONEX_LANE; else ONEX_LANE_ID, ONEX_AGENT_NAME,
@@ -129,7 +141,7 @@ _cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/prview"
 
 # --- usage log (OMN-19585) -----------------------------------------------------
 
-# Keep only characters that are safe inside a JSON string and meaningful in a
+# Keep only characters that are safe inside a log value and meaningful in a
 # repo, endpoint or lane name, and blank anything shaped like a GitHub token.
 _clean() {
   local v="$1"
@@ -267,9 +279,40 @@ _classify() {
   fi
 }
 
+# _call_log <exit code> <action: allowed|refused>
+_call_log() {
+  [ "${ONEX_GH_USAGE_LOG:-1}" = "0" ] && return 0
+  local file="" dir="" ts="" oversized=""
+  if [ -n "${ONEX_GH_CALLS_LOG:-}" ]; then
+    file="$ONEX_GH_CALLS_LOG"
+  elif [ -n "${ONEX_STATE_DIR:-}" ]; then
+    file="$ONEX_STATE_DIR/gh-calls.log"
+  else
+    return 0
+  fi
+  case "$file" in
+    */*) dir="${file%/*}" ;;
+    *) dir="." ;;
+  esac
+  mkdir -p "$dir" 2>/dev/null || return 0
+  if [ $(( $$ % 50 )) -eq 0 ] && [ -f "$file" ]; then
+    oversized="$(find "$file" -prune -type f -size +20480k -print 2>/dev/null)"
+    if [ -n "$oversized" ]; then
+      mv -f "$file" "$file.1" 2>/dev/null || true
+    fi
+  fi
+  _resolve_lane
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$(_clean "$ts")" "$(_clean "$_lane")" "$(_clean "$_lane_src")" \
+    "$(_clean "$_cls")" "$(_clean "$_method")" "$(_clean "$_endpoint")" \
+    "$(_clean "$1")" "$(_clean "$2")" >> "$file" 2>/dev/null || true
+}
+
 # _log <exit code> <cache: hit|miss|none>
 _log() {
   [ "${ONEX_GH_USAGE_LOG:-1}" = "0" ] && return 0
+  _call_log "$1" allowed
   local dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage"
   local ts session ticket="" identity="" route_reason=""
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -322,6 +365,23 @@ _sha() {
 
 _classify "$@"
 _route=""
+
+# --- secondary-rate-limited search guard (OMN-19852) -------------------------
+_search_call=0
+if [ "$_cls" = "api" ]; then
+  case "$_endpoint" in search/*|http://*/search/*|https://*/search/*) _search_call=1 ;; esac
+else
+  case "$_cls" in search|search\ *) _search_call=1 ;; esac
+fi
+if [ "$_search_call" -eq 1 ] && [ "${ONEX_PR_WATCHER:-}" != "1" ]; then
+  printf '%s\n' \
+    'REFUSED (OMN-19852): GitHub search is the secondary-rate-limited bucket that took queue-status down at 21:5xZ on 2026-09-28.' \
+    'Read PR state from state.json under the .claude_scratch/pr-watcher directory of the workspace root; use merge-drain pr_state_local.py: python3 pr_state_local.py --pr OmniNode-ai/<repo>#<n>, or python3 pr_state_local.py --status.' \
+    'For merge counts, use git -C <canonical clone> log origin/dev on the clone that canonical-clone-sync keeps fetched.' >&2
+  _call_log 1 refused
+  exit 1
+fi
+unset _search_call
 
 # Run one gh call and leave its routing identity/reason in _route. With routing
 # disabled this is deliberately the same single command as the old shim path.
@@ -504,6 +564,7 @@ if [ "$_mq_is_rest_put" -eq 1 ] || { [ "$_mq_is_merge_call" -eq 1 ] && { [ "$_mq
     printf '{"ts":"%s","guard":"merge_queue_bypass","gated":%s,"shape":"%s","repo":"%s","pr":"%s","base":"%s","pid":%s}\n' \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$_mq_gated" "$(_clean "$_mq_shape")" "$(_clean "${_mq_repo:-}")" "$(_clean "${_mq_pr_num:-}")" "$(_clean "${_mq_branch:-}")" "$$" \
       >> "$_mq_log_dir/merge-queue-guard.jsonl" 2>/dev/null || true
+    _call_log 1 refused
     exit 1
   fi
 fi

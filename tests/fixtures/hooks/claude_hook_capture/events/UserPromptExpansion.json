@@ -19,7 +19,9 @@
   "event_id": "6acf8f96-e4e4-5ac6-8a9a-c97fa6ccbaeb",
   "hook_event_name": "UserPromptExpansion",
   "lineage": {
+    "agent_description": null,
     "agent_id": null,
+    "agent_model": null,
     "agent_type": null,
     "causation_id": null,
     "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
@@ -30,6 +32,7 @@
     "spawn_depth": null,
     "tool_use_id": null,
     "turn_id": "turn-fixed-1",
+    "workflow_phase": null,
     "workflow_run_id": null
   },
   "payload": {

@@ -6,7 +6,9 @@
   "event_id": "ea14c7df-2f64-5dd0-9a82-a7fc90dbda19",
   "hook_event_name": "TeammateIdle",
   "lineage": {
+    "agent_description": null,
     "agent_id": null,
+    "agent_model": null,
     "agent_type": null,
     "causation_id": null,
     "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
@@ -17,6 +19,7 @@
     "spawn_depth": null,
     "tool_use_id": null,
     "turn_id": "turn-fixed-1",
+    "workflow_phase": null,
     "workflow_run_id": null
   },
   "payload": {

@@ -670,3 +670,11 @@ gates:
     job_path: ["skip-count-ratchet"]
     skip_semantics: never
     rationale: "OMN-18790/OMN-18776: skip-count baseline ratchet, direct job in ci.yml (`if: always()`, unconditional). Live-required on dev; row added under OMN-18790 to clear the manifest reconcile."
+
+  - name: "pypi-pin-resolvability"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: pin-resolvability-gate.yml
+    job_path: ["pin-resolvability"]
+    skip_semantics: never
+    rationale: "OMN-19655: judges PyPI dependency-pin resolvability before merge with the release step's own script; no paths filter and no job-level if, so the context reports on every pull request. Live-required on dev since 2026-09-26 (first red reconcile run 36213669738); row added under OMN-17427 to clear the manifest reconcile."

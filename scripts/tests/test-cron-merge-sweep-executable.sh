@@ -88,10 +88,22 @@ MOCK_EOF
   _assert_not_contains "executable path is not quarantined" "\"status\":\"quarantined\"" "${output}"
 }
 
+# OMN-19929: the orchestrator start command no longer carries the admin-merge
+# fallback (an admin merge of a PR the merge queue refused is a merge outside
+# the queue), and it forbids unknown fields, so the tick must not send it.
+test_start_command_carries_no_admin_merge_fallback() {
+  local body
+  body="$(cat "${SWEEP_SCRIPT}")"
+  _assert_not_contains "tick sends no admin-merge fallback field" "admin_merge_fallback" "${body}"
+  _assert_not_contains "tick sends no admin fallback threshold" "admin_fallback_threshold" "${body}"
+  _assert_not_contains "tick passes no admin-merge fallback flag" "admin-merge-fallback" "${body}"
+}
+
 echo "=== cron merge-sweep executable-path tests ==="
 echo ""
 
 test_executable_path_reaches_preflight
+test_start_command_carries_no_admin_merge_fallback
 
 echo ""
 echo "--- results ---"

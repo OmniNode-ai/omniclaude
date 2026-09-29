@@ -24,6 +24,9 @@ from pydantic import (
 
 HOOK_CAPTURE_NAMESPACE = UUID("9449178f-fb63-5b0d-b17d-379aafbcfe67")
 HOOK_EVENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
+#: The sidecar description is the spawning call's short task label. It is
+#: scrubbed and cut here so a long value can never carry a prompt.
+MAX_AGENT_DESCRIPTION = 200
 
 
 class UnknownHookEventError(ValueError):
@@ -197,6 +200,13 @@ class ModelHookLineage(BaseModel):
     turn_id: str | None
     correlation_id: UUID
     causation_id: UUID | None
+    # OMN-20010: from the harness sidecar, which no hook stdin carries. Null on
+    # the main thread and when the sidecar was unreadable at emit time.
+    agent_model: str | None = None
+    agent_description: str | None = Field(
+        default=None, max_length=MAX_AGENT_DESCRIPTION
+    )
+    workflow_phase: str | None = None
 
     @model_validator(mode="after")
     def validate_subagent_flag(self) -> ModelHookLineage:
@@ -1209,6 +1219,14 @@ def map_hook_stdin(
     ):
         causation_id = make_tool_call_key(session_id, tool_use_id)
 
+    agent_description: str | None = None
+    if sidecar is not None and sidecar.description:
+        # A description is free text the operator or a model typed, so it takes
+        # the same scrub as content before it is journaled as metadata.
+        agent_description = content_scrubber(sidecar.description).value[
+            :MAX_AGENT_DESCRIPTION
+        ]
+
     lineage = ModelHookLineage(
         session_id=session_id,
         agent_id=agent_id,
@@ -1222,6 +1240,9 @@ def map_hook_stdin(
         turn_id=effective_turn_id,
         correlation_id=make_correlation_id(session_id),
         causation_id=causation_id,
+        agent_model=sidecar.model if sidecar is not None else None,
+        agent_description=agent_description,
+        workflow_phase=sidecar.workflow_phase if sidecar is not None else None,
     )
     event = ModelClaudeHookEvent(
         event_id=event_id,
@@ -1241,6 +1262,7 @@ def map_hook_stdin(
 
 
 __all__ = [
+    "MAX_AGENT_DESCRIPTION",
     "HOOK_CAPTURE_NAMESPACE",
     "HOOK_EVENT_SCHEMA_VERSION",
     "HOOK_PAYLOAD_ADAPTER",

@@ -13,7 +13,9 @@
   "event_id": "2cb370b7-9641-5c76-92e5-ae4125f52f12",
   "hook_event_name": "PostToolUse",
   "lineage": {
+    "agent_description": null,
     "agent_id": null,
+    "agent_model": null,
     "agent_type": null,
     "causation_id": "870a7922-d77c-5b69-90f4-2f200c62295b",
     "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
@@ -24,6 +26,7 @@
     "spawn_depth": null,
     "tool_use_id": "toolu-fixture-1",
     "turn_id": "turn-fixed-1",
+    "workflow_phase": null,
     "workflow_run_id": null
   },
   "payload": {

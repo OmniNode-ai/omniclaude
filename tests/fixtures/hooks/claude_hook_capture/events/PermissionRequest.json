@@ -6,7 +6,9 @@
   "event_id": "3b3fcfb3-0b65-5306-bba4-d5ccb86da013",
   "hook_event_name": "PermissionRequest",
   "lineage": {
+    "agent_description": null,
     "agent_id": null,
+    "agent_model": null,
     "agent_type": null,
     "causation_id": null,
     "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
@@ -17,6 +19,7 @@
     "spawn_depth": null,
     "tool_use_id": null,
     "turn_id": "turn-fixed-1",
+    "workflow_phase": null,
     "workflow_run_id": null
   },
   "payload": {

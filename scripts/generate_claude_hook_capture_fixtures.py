@@ -721,8 +721,18 @@ def _reference_projection(
                 "started_at": event.emitted_at.isoformat().replace("+00:00", "Z"),
                 "stopped_at": None,
                 "tool_call_count": 0,
+                "model": lineage.agent_model,
+                "description": lineage.agent_description,
+                "workflow_phase": lineage.workflow_phase,
             }
             spans[key] = span
+        for column, value in (
+            ("model", lineage.agent_model),
+            ("description", lineage.agent_description),
+            ("workflow_phase", lineage.workflow_phase),
+        ):
+            if span[column] is None:
+                span[column] = value
         if event.hook_event_name is EnumClaudeHookEventName.SUBAGENT_STOP:
             span["stopped_at"] = event.emitted_at.isoformat().replace("+00:00", "Z")
         if event.hook_event_name in {

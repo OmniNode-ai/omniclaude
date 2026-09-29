@@ -63,17 +63,11 @@ POLISH_DISPATCHES_AFTER=""
 POLISH_RESULTS_BEFORE=""
 POLISH_RESULTS_AFTER=""
 
-# Pass-through args for merge-sweep skill
+# Pass-through args for merge-sweep skill.
 #
-# OMN-9065: enable admin-merge-fallback by default so the tick auto-unsticks
-# queue stalls (PRs stuck AWAITING_CHECKS > threshold). Without this, a
-# hanging third-party check-run can wedge the queue head
-# indefinitely — observed 2026-04-17 with omnibase_infra#1330 stalled 70+ min
-# across multiple tick cycles because the feature was off.
-#
-# Threshold 15 min = unstick within ~2 tick cycles at the 5-min tick interval.
-# CLI invocations can override via later flags (last-wins in argument parsing).
-SWEEP_ARGS="--enable-admin-merge-fallback=true --admin-fallback-threshold-minutes=15"
+# OMN-19929: no admin-merge fallback. An admin merge of a PR the merge queue
+# refused is a merge outside the queue; the orchestrator no longer has it.
+SWEEP_ARGS=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -347,8 +341,6 @@ build_runtime_payload() {
     --argjson enable_auto_rebase true \
     --argjson use_dag_ordering true \
     --argjson enable_trivial_comment_resolution true \
-    --argjson enable_admin_merge_fallback true \
-    --argjson admin_fallback_threshold_minutes 15 \
     --argjson verify false \
     --argjson verify_timeout_seconds 30 \
     --argjson loop_until_done true \
@@ -367,8 +359,6 @@ build_runtime_payload() {
       enable_auto_rebase: $enable_auto_rebase,
       use_dag_ordering: $use_dag_ordering,
       enable_trivial_comment_resolution: $enable_trivial_comment_resolution,
-      enable_admin_merge_fallback: $enable_admin_merge_fallback,
-      admin_fallback_threshold_minutes: $admin_fallback_threshold_minutes,
       verify: $verify,
       verify_timeout_seconds: $verify_timeout_seconds,
       loop_until_done: $loop_until_done,
