@@ -190,8 +190,11 @@ PAYLOAD=$(jq -nc \
 # import once and publishes the backlog.
 _EMIT_DISPATCH_PY="${HOOKS_LIB}/hook_emit_append.py"
 if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
-    (
-        "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
+    # OMN-20110: foreground through the bounded runner, never disowned. A
+    # miss or failure fails the hook (blocking exit naming the cause) and
+    # alarms the operator once per episode. See hooks/lib/emit_bounded.sh.
+    source "${HOOKS_LIB}/emit_bounded.sh"
+    onex_emit_bounded session.started "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
             --event-type "session.started" \
             --payload "$PAYLOAD" \
             --correlation-id "${SESSION_ID:-unknown}" \
@@ -201,9 +204,7 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --cwd "$CWD" \
             --actor "$HOOK_ACTOR_ARG" \
             --turn-id "$TURN_ID" \
-            >>"$LOG_FILE" 2>&1
-    ) &
-    disown 2>/dev/null || true
+        </dev/null || onex_emit_fail_exit "${INPUT:-}"
 fi
 
 # --- hook-emit delivery liveness (OMN-18471 AC4) ---------------------------

@@ -186,7 +186,7 @@ interfaces change without deprecation periods.
 | All event schemas are **frozen** (`frozen=True`, `extra="ignore"`, `from_attributes=True`) | Events are immutable after emission |
 | `emitted_at` timestamps **explicitly injected** — no `datetime.now()` defaults | Deterministic testing |
 | SessionStart must be **idempotent** | May be called multiple times on reconnect |
-| Hooks exit 0 unless blocking is intentional | Non-zero exit blocks the tool/prompt |
+| Hooks exit 0 unless blocking is intentional | Non-zero exit blocks the tool/prompt; a failed journal emit blocks on purpose (OMN-20110) |
 | Migration freeze is marker-driven (`.migration_freeze`, checked by `scripts/check_migration_freeze.sh --ci`) | No new schema migrations while the marker exists |
 
 `prompt_preview` auto-redacts secrets (OpenAI/AWS/GitHub/Slack keys, PEM, Bearer tokens,
@@ -207,10 +207,19 @@ No `@dataclass`; no `str` literals for finite sets.
 
 ## Failure Modes
 
-**Design principle: hooks never block Claude Code.** On infrastructure failure (emit daemon
-down, Kafka unavailable, Postgres down, routing/injection timeout, malformed stdin) hooks exit
-0 and degrade — data loss is acceptable, UI freeze is not. Failures log to `~/.claude/hooks.log`
-when `LOG_FILE` is set.
+**Hook emits fail loud (OMN-20110, operator ruling 2026-09-29).** Every journal emit runs in the
+foreground through `plugins/onex/hooks/lib/hook_emit_bounded.py` (sourced as
+`hooks/lib/emit_bounded.sh`): its own process group, a time budget (`ONEX_HOOK_EMIT_BUDGET_S`,
+default 30s), the whole group SIGKILLed on a miss, exit 2 with the cause on stderr so the tool
+call is blocked, and one operator alarm per failure episode through `alert-channel.sh` plus a
+local notification. No spool, no fail-open branch, no kill switch, never a disowned emit (the
+2026-09-29 incident: ~10k disowned emitters stuck in a journal scan exhausted the per-user process
+limit). SessionEnd is the one detached emit, because the harness ignores its exit code; it is
+still bounded and still alarms. A Stop hook already re-running on a block exits 1 rather than 2.
+
+For everything other than journal emits, the older principle holds: on infrastructure failure
+(Kafka unavailable, Postgres down, routing/injection timeout, malformed stdin) hooks exit 0 and
+degrade. Failures log to `~/.claude/hooks.log` when `LOG_FILE` is set.
 
 **Exception — Python resolution** (`find_python()` in `plugins/onex/hooks/scripts/common.sh`):
 strict priority chain (`PLUGIN_PYTHON_BIN` → `CLAUDE_PLUGIN_DATA/.venv` → repo `.venv` →

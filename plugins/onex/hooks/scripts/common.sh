@@ -673,9 +673,11 @@ emit_hook_error_event() {
 # a delivery path must not depend on each caller remembering to export a
 # variable.
 #
-# Backgrounded and fail-open by construction: a hook that cannot record
-# telemetry must never slow or break the operator's session. The per-call
-# cost is one stdlib-only Python process; publishing is the drainer's job.
+# Foreground, bounded and fail-loud (OMN-20110, operator ruling 2026-09-29):
+# an event that cannot be journalled inside its budget fails the hook with a
+# blocking error and alarms the operator once per episode. The per-call cost
+# is one stdlib-only Python process and one O(1) journal write; publishing is
+# the drainer's job.
 #
 # Usage: emit_to_journal <event_type> <payload_json> [correlation_id] [cwd] \
 #                        [agent_id] [transcript_path]
@@ -684,6 +686,9 @@ emit_hook_error_event() {
 # $TRANSCRIPT_PATH when it parsed them out of the hook payload. They locate the
 # harness spawn sidecar that names the lane (OMN-18609); without them the event
 # is journalled with an explicit "unresolved" lane rather than a guessed one.
+
+# shellcheck source=../lib/emit_bounded.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/emit_bounded.sh"
 
 emit_to_journal() {
     local event_type="$1"
@@ -713,10 +718,11 @@ emit_to_journal() {
     [[ -n "$transcript_path" ]] && args+=(--transcript-path "$transcript_path")
     [[ -n "$session_id" ]] && args+=(--session-id "$session_id")
 
-    (
-        "$PYTHON_CMD" "$append_py" "${args[@]}" >>"${LOG_FILE:-/dev/null}" 2>&1
-    ) &
-    disown 2>/dev/null || true
+    # OMN-20110: foreground and bounded, never disowned. A miss or a failure
+    # fails the hook (exit 2, cause on stderr) and alarms the operator once
+    # per episode. See hooks/lib/emit_bounded.sh.
+    onex_emit_bounded "$event_type" "$PYTHON_CMD" "$append_py" "${args[@]}" \
+        </dev/null || onex_emit_fail_exit "${INPUT:-}"
     return 0
 }
 

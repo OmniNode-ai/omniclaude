@@ -217,8 +217,13 @@ PAYLOAD=$(jq -nc \
 # import once and publishes the backlog.
 _EMIT_DISPATCH_PY="${HOOKS_LIB}/hook_emit_append.py"
 if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
-    (
-        "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
+    # OMN-20110: both emits run in the foreground through the bounded runner:
+    # own process group, a time budget, the group killed on a miss, a
+    # blocking exit naming the cause and one operator alarm per episode.
+    # Never backgrounded or disowned again -- that is how ten thousand stuck
+    # emitters were orphaned to ppid 1 on 2026-09-29 with nothing reporting it.
+    source "${HOOKS_LIB}/emit_bounded.sh"
+    onex_emit_bounded tool.executed "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
             --event-type "tool.executed" \
             --payload "$PAYLOAD" \
             --correlation-id "${SESSION_ID:-unknown}" \
@@ -228,7 +233,7 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --cwd "$CWD" \
             --actor "$HOOK_ACTOR_ARG" \
             --turn-id "$TURN_ID" \
-            >>"$LOG_FILE" 2>&1
+        </dev/null || onex_emit_fail_exit "$INPUT"
         # OMN-19551: full-content capture, AFTER the metadata append above and
         # in the same backgrounded subshell, so the content record reads the
         # turn that append just stamped. The hook input goes on stdin, never on
@@ -238,7 +243,8 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
         # type or OMNICLAUDE_CONTENT_CAPTURE is off.
         _CONTENT_CAPTURE_PY="${HOOKS_LIB}/hook_content_capture.py"
         if [[ -f "$_CONTENT_CAPTURE_PY" ]]; then
-            printf '%s' "$INPUT" | "$PYTHON_CMD" "$_CONTENT_CAPTURE_PY" \
+            printf '%s' "$INPUT" | onex_emit_bounded content.captured \
+                "$PYTHON_CMD" "$_CONTENT_CAPTURE_PY" \
                 --kind tool \
                 --correlation-id "${SESSION_ID:-unknown}" \
                 --agent-id "$AGENT_ID" \
@@ -247,13 +253,8 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
                 --cwd "$CWD" \
                 --actor "$HOOK_ACTOR_ARG" \
                 --turn-id "$TURN_ID" \
-                >>"$LOG_FILE" 2>&1
+                || onex_emit_fail_exit "$INPUT"
         fi
-    # The whole subshell's descriptors go to the log. With two commands in it,
-    # bash keeps the subshell alive, and an inherited stdout or stderr pipe
-    # would hold the hook's caller until both finished (OMN-19551).
-    ) >>"$LOG_FILE" 2>&1 </dev/null &
-    disown 2>/dev/null || true
 fi
 
 exit 0

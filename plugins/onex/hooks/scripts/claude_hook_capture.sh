@@ -173,20 +173,20 @@ INPUT="$(cat)"
 _HOOK_CAPTURE_PY="${HOOKS_LIB}/hook_claude_capture.py"
 [[ -n "${PYTHON_CMD:-}" && -f "$_HOOK_CAPTURE_PY" ]] || exit 0
 
-# Every hook, SessionEnd included, returns at once and journals in the
-# background. Measured on Claude Code 2.1.283 (OMN-19537 probe, 2026-09-26): a
-# headless session gives its SessionEnd hooks about 1.5 s, cancels a hook still
-# running at that point and kills its process group, but a disowned child of a
-# hook that has already returned survives the session's exit. Returning fast
-# is therefore what keeps the record; running the capture in the foreground
-# would only spend that window.
-(
-    printf '%s' "$INPUT" | "$PYTHON_CMD" "$_HOOK_CAPTURE_PY" \
-        --actor "$HOOK_ACTOR_ARG" \
-        >>"$LOG_FILE" 2>&1
-# The subshell's own descriptors go to the log: an inherited stdout or stderr
-# pipe would hold the hook's caller until the capture finished (OMN-19551).
-) >>"$LOG_FILE" 2>&1 </dev/null &
-disown 2>/dev/null || true
+# OMN-20110: every hook but SessionEnd (detached above, because the harness
+# ignores its exit code and kills it at ~1.5 s) captures in the FOREGROUND
+# through the bounded runner: own process group, a time budget, the group
+# killed on a miss, a blocking exit naming the cause and one operator alarm
+# per episode. The disowned capture this replaces is how thousands of stuck
+# captures were orphaned to ppid 1 on 2026-09-29 with nothing reporting it.
+source "${HOOKS_LIB}/emit_bounded.sh"
+if [[ -n "${_ONEX_CAPTURE_DETACHED:-}" ]]; then
+    printf '%s' "$INPUT" | onex_emit_bounded hook.event \
+        "$PYTHON_CMD" "$_HOOK_CAPTURE_PY" --actor "$HOOK_ACTOR_ARG"
+    exit 0
+fi
+printf '%s' "$INPUT" | onex_emit_bounded hook.event \
+    "$PYTHON_CMD" "$_HOOK_CAPTURE_PY" --actor "$HOOK_ACTOR_ARG" \
+    || onex_emit_fail_exit "$INPUT"
 
 exit 0

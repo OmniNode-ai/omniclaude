@@ -138,8 +138,12 @@ TURN_ID=$(echo "$INPUT" | jq -r '.turn_id // ""' 2>/dev/null) || TURN_ID=""
 
 _CONTENT_CAPTURE_PY="${HOOKS_LIB}/hook_content_capture.py"
 if [[ -n "${PYTHON_CMD:-}" && -f "$_CONTENT_CAPTURE_PY" ]]; then
-    (
-        printf '%s' "$INPUT" | "$PYTHON_CMD" "$_CONTENT_CAPTURE_PY" \
+    # OMN-20110: foreground through the bounded runner, never disowned. A
+    # miss or failure fails the hook (blocking exit naming the cause) and
+    # alarms the operator once per episode. See hooks/lib/emit_bounded.sh.
+    source "${HOOKS_LIB}/emit_bounded.sh"
+    printf '%s' "$INPUT" | onex_emit_bounded content.captured \
+            "$PYTHON_CMD" "$_CONTENT_CAPTURE_PY" \
             --kind stop \
             --correlation-id "${SESSION_ID:-unknown}" \
             --agent-id "$AGENT_ID" \
@@ -148,12 +152,7 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_CONTENT_CAPTURE_PY" ]]; then
             --cwd "$CWD" \
             --actor "$HOOK_ACTOR_ARG" \
             --turn-id "$TURN_ID" \
-            >>"$LOG_FILE" 2>&1
-    # The whole subshell's descriptors go to the log. With two commands in it,
-    # bash keeps the subshell alive, and an inherited stdout or stderr pipe
-    # would hold the hook's caller until both finished (OMN-19551).
-    ) >>"$LOG_FILE" 2>&1 </dev/null &
-    disown 2>/dev/null || true
+            || onex_emit_fail_exit "$INPUT"
 fi
 
 exit 0
