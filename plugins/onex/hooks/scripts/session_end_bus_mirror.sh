@@ -189,8 +189,14 @@ PAYLOAD=$(jq -nc \
 # import once and publishes the backlog.
 _EMIT_DISPATCH_PY="${HOOKS_LIB}/hook_emit_append.py"
 if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
+    # OMN-20110: SessionEnd is the one detached emit. The harness ignores a
+    # SessionEnd exit code and kills a hook still running after ~1.5 s, so
+    # blocking is impossible here; the emit still runs through the bounded
+    # runner, so it cannot outlive its budget and a failure alarms the
+    # operator once per episode.
+    source "${HOOKS_LIB}/emit_bounded.sh"
     (
-        "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
+        onex_emit_bounded session.ended "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
             --event-type "session.ended" \
             --payload "$PAYLOAD" \
             --correlation-id "${SESSION_ID:-unknown}" \
@@ -200,8 +206,8 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --cwd "${CWD:-$(pwd)}" \
             --actor "$HOOK_ACTOR_ARG" \
             --turn-id "$TURN_ID" \
-            >>"$LOG_FILE" 2>&1
-    ) &
+            </dev/null
+    ) >>"$LOG_FILE" 2>&1 </dev/null &
     disown 2>/dev/null || true
 fi
 

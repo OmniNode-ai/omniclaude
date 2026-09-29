@@ -60,8 +60,7 @@ def test_append_writes_one_readable_record(jdir: Path) -> None:
         payload={"tool_name": "Bash"},
         correlation_id="corr-1",
     )
-    assert outcome.dropped_count == 0
-    assert outcome.path is not None and outcome.path.exists()
+    assert outcome.path.exists()
 
     pending = journal.list_pending(jdir)
     assert len(pending) == 1
@@ -95,15 +94,15 @@ def test_append_is_fast(jdir: Path) -> None:
     assert worst < 0.100, f"append worst-case {worst * 1000:.1f}ms exceeds 100ms budget"
 
 
-def test_append_never_raises_on_unserializable_payload(jdir: Path) -> None:
-    """Fail-open: a hook must never break because a payload was odd."""
-    outcome = journal.append(
-        jdir,
-        event_type="e",
-        payload={"bad": object()},  # type: ignore[dict-item]
-        correlation_id=None,
-    )
-    assert outcome.path is None
+def test_append_raises_on_unserializable_payload(jdir: Path) -> None:
+    """Fail-loud (OMN-20110): an event that cannot be written is an error, not "no event"."""
+    with pytest.raises(TypeError):
+        journal.append(
+            jdir,
+            event_type="e",
+            payload={"bad": object()},  # type: ignore[dict-item]
+            correlation_id=None,
+        )
     assert journal.list_pending(jdir) == []
 
 
@@ -186,11 +185,9 @@ def test_append_subprocess_is_fast_end_to_end(jdir: Path) -> None:
 
 
 def test_journal_is_bounded_and_drops_oldest(jdir: Path) -> None:
-    dropped_total = 0
     for i in range(30):
-        dropped_total += journal.append(
-            jdir, event_type="e", payload={"i": i}, correlation_id=None, max_records=10
-        ).dropped_count
+        journal.append(jdir, event_type="e", payload={"i": i}, correlation_id=None)
+    dropped_total = journal.enforce_bound(jdir, 10)
 
     pending = journal.list_pending(jdir)
     assert len(pending) <= 10, "journal must stay bounded"
@@ -202,9 +199,8 @@ def test_journal_is_bounded_and_drops_oldest(jdir: Path) -> None:
 
 def test_bounded_append_never_grows_unbounded(jdir: Path) -> None:
     for i in range(200):
-        journal.append(
-            jdir, event_type="e", payload={"i": i}, correlation_id=None, max_records=5
-        )
+        journal.append(jdir, event_type="e", payload={"i": i}, correlation_id=None)
+        journal.enforce_bound(jdir, 5)
     assert len(journal.list_pending(jdir)) <= 5
 
 

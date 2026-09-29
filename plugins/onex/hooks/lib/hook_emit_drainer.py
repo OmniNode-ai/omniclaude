@@ -764,7 +764,21 @@ def drain_once(
     """
     counts = failure_counts if failure_counts is not None else {}
     refused = refused_event_types if refused_event_types is not None else {}
-    pending = journal.list_pending(journal_dir)[:batch_limit]
+    # The bound is enforced here, once per cycle by the one drainer, and never
+    # on the hook path, where it cost a whole-directory scan per tool call
+    # (OMN-20110). Drops are logged: they mean the drainer is not keeping up.
+    try:
+        dropped = journal.enforce_bound(journal_dir)
+    except (OSError, TimeoutError) as exc:
+        logger.error("journal bound not enforced this cycle: %s", exc)
+    else:
+        if dropped:
+            logger.error(
+                "journal over bound (%d): dropped %d oldest record(s)",
+                journal.DEFAULT_MAX_RECORDS,
+                dropped,
+            )
+    pending = journal.list_pending(journal_dir, limit=batch_limit)
     published = 0
     for index, entry in enumerate(pending):
         if _shutdown:

@@ -18,8 +18,11 @@ Deliberately stdlib-only and free of any ``omnibase_infra`` / ``omnimarket``
 import -- see ``hook_emit_journal`` for why that constraint is load-bearing
 and mechanically tested.
 
-Fail-open, like every hook on this path: always exits 0. A hook that cannot
-record telemetry must still never break or slow the operator's session.
+Fail-loud (OMN-20110): an event that cannot be journalled exits 1 with the
+cause on stderr. The hook runs this under ``hook_emit_bounded.py``, which
+turns that exit, or a missed time budget, into a blocking error and one
+operator alarm per failure episode. The operator ruling of 2026-09-29: a hook
+may not fail silently.
 """
 
 from __future__ import annotations
@@ -63,7 +66,6 @@ def append_event(
     transcript_path: str | None,
     session_id: str | None,
     journal_dir: str | None,
-    max_records: int = journal.DEFAULT_MAX_RECORDS,
 ) -> str | None:
     """Stamp lane, actor and turn onto ``payload`` and journal it.
 
@@ -71,7 +73,7 @@ def append_event(
     second record for the same hook call (OMN-19551's content record) can
     carry the SAME turn instead of racing a second allocation.
 
-    Raises whatever the journal raises; :func:`main` is the fail-open boundary.
+    Raises whatever the journal raises; :func:`main` turns it into exit 1.
     """
     target = Path(journal_dir) if journal_dir else journal.default_journal_dir()
     # Lane attribution is merged here rather than in the shell hook so the
@@ -105,21 +107,12 @@ def append_event(
         host_turn_id=host_turn_id,
     )
     payload["turn_id"] = turn_id
-    outcome = journal.append(
+    journal.append(
         target,
         event_type=event_type,
         payload=payload,
         correlation_id=correlation_id,
-        max_records=max_records,
     )
-    if outcome.dropped_count:
-        # Backpressure is worth a line in the hook log: it means the
-        # drainer is not keeping up (or is not running at all).
-        print(
-            f"hook_emit_append: journal over bound; dropped "
-            f"{outcome.dropped_count} oldest record(s)",
-            file=sys.stderr,
-        )
     return turn_id
 
 
@@ -183,17 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Override the journal directory (defaults to ONEX_STATE_DIR).",
     )
-    parser.add_argument(
-        "--max-records",
-        type=int,
-        default=journal.DEFAULT_MAX_RECORDS,
-        help="Backpressure bound; oldest records are dropped and counted.",
-    )
-    try:
-        args = parser.parse_args(argv)
-    except SystemExit:
-        # argparse exits non-zero on bad args; fail-open still applies.
-        return 0
+    args = parser.parse_args(argv)
 
     try:
         append_event(
@@ -207,10 +190,14 @@ def main(argv: list[str] | None = None) -> int:
             transcript_path=args.transcript_path,
             session_id=args.session_id,
             journal_dir=args.journal_dir,
-            max_records=args.max_records,
         )
-    except Exception as exc:  # noqa: BLE001 -- outermost fail-open boundary
-        print(f"hook_emit_append: unexpected error: {exc}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 -- outermost boundary: report, exit 1
+        print(
+            f"hook_emit_append: {args.event_type} NOT journalled: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

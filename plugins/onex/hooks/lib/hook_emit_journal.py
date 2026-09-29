@@ -71,14 +71,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 __all__ = [
+    "DEFAULT_LOCK_WAIT_S",
     "AppendOutcome",
     "JournalEntry",
+    "JournalLockTimeout",
     "JournalRecord",
+    "JournalWriteError",
     "SingletonLock",
     "ack",
     "append",
     "default_journal_dir",
     "default_lock_path",
+    "enforce_bound",
     "list_pending",
 ]
 
@@ -158,18 +162,30 @@ class JournalEntry:
     path: Path
 
 
-@dataclass(frozen=True)
-class AppendOutcome:
-    """Result of one append.
+class JournalWriteError(OSError):
+    """An append could not be written. Raised, never swallowed (OMN-20110).
 
-    ``path`` is ``None`` when the event could not be written at all (an
-    unserializable payload, or a filesystem that refused). ``dropped_count``
-    reports how many older records this append evicted to stay under the
-    bound -- surfaced rather than silent, so backpressure is observable.
+    The hook path runs every append under ``hook_emit_bounded``, which turns
+    this into a blocking error that names the cause and an operator alarm.
+    Returning "no event" here is how emits failed silently before.
     """
 
-    path: Path | None
-    dropped_count: int
+
+class JournalLockTimeout(TimeoutError):
+    """The bound lock was not acquired inside its wait budget (OMN-20110)."""
+
+
+@dataclass(frozen=True)
+class AppendOutcome:
+    """Result of one append: the path of the record written."""
+
+    path: Path
+
+
+# Seconds a bound enforcer waits for the eviction lock before giving up with
+# JournalLockTimeout. A blocking flock with no deadline is one of the two ways
+# an emit could wait forever.
+DEFAULT_LOCK_WAIT_S = 2.0
 
 
 def _next_seq() -> int:
@@ -193,88 +209,102 @@ def append(
     event_type: str,
     payload: dict[str, object],
     correlation_id: str | None,
-    max_records: int = DEFAULT_MAX_RECORDS,
 ) -> AppendOutcome:
-    """Append one event to the journal. Fast, bounded, and never raises.
+    """Append one event to the journal: one temp write and one rename.
 
-    Fail-open is a hard requirement: this runs on the hook path of every
-    tool call, so a bad payload or a full disk must degrade to "no event",
-    never to a broken or slowed session.
+    O(1) in the size of the backlog, by construction (OMN-20110). Before this
+    ticket every append scanned the whole journal directory to enforce the
+    bound; with a 29,839-record backlog on 2026-09-29 that scan took minutes
+    under the directory lock, thousands of hook processes queued behind it in
+    uninterruptible wait, and the operator Mac ran out of processes. The bound
+    is now the drainer's job (:func:`enforce_bound`), done once per cycle by
+    one process.
+
+    Raises :class:`JournalWriteError` when the record cannot be written.
     """
     journal_dir = Path(journal_dir)
-    try:
-        record = JournalRecord(
-            event_id=str(uuid.uuid4()),
-            event_type=event_type,
-            payload=payload,
-            correlation_id=correlation_id,
-            queued_at=datetime.now(UTC),
-        )
-        blob = record.to_json()
-    except (TypeError, ValueError):
-        # Unserializable payload. Nothing to write; the session continues.
-        return AppendOutcome(path=None, dropped_count=0)
+    record = JournalRecord(
+        event_id=str(uuid.uuid4()),
+        event_type=event_type,
+        payload=payload,
+        correlation_id=correlation_id,
+        queued_at=datetime.now(UTC),
+    )
+    blob = record.to_json()
 
+    name = f"{_next_seq():0{_SEQ_WIDTH}d}_{record.event_id}.json"
+    target = journal_dir / name
+    # Write to a temp file then rename: a reader never observes a
+    # partially-written record.
+    tmp = journal_dir / f".{name}.tmp"
     try:
         journal_dir.mkdir(parents=True, exist_ok=True)
-        name = f"{_next_seq():0{_SEQ_WIDTH}d}_{record.event_id}.json"
-        target = journal_dir / name
-        # Write to a temp file then rename: a reader never observes a
-        # partially-written record.
-        tmp = journal_dir / f".{name}.tmp"
         tmp.write_text(blob)
         tmp.replace(target)
-    except OSError:
-        return AppendOutcome(path=None, dropped_count=0)
+    except OSError as exc:
+        raise JournalWriteError(
+            exc.errno, f"cannot write journal record in {journal_dir}: {exc.strerror}"
+        ) from exc
+    return AppendOutcome(path=target)
 
-    dropped = _enforce_bound(journal_dir, max_records)
-    return AppendOutcome(path=target, dropped_count=dropped)
+
+def _sorted_record_names(journal_dir: Path) -> list[str]:
+    return sorted(
+        e.name
+        for e in os.scandir(journal_dir)
+        if e.is_file() and e.name.endswith(".json")
+    )
 
 
-def _enforce_bound(journal_dir: Path, max_records: int) -> int:
-    """Drop oldest records beyond ``max_records``. Returns the drop count.
+def _acquire_bounded(fd: int, wait_s: float) -> None:
+    deadline = time.monotonic() + wait_s
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except OSError as exc:
+            if exc.errno not in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
+                raise
+        if time.monotonic() >= deadline:
+            raise JournalLockTimeout(f"journal bound lock busy for {wait_s:g}s")
+        time.sleep(0.02)
 
-    Serialized under an exclusive lock so concurrent hook processes cannot
-    race into a double-eviction. The lock is held only for the eviction
-    branch -- the common case (under the bound) takes it briefly and does
-    nothing, which is why the fast path stays fast.
+
+def enforce_bound(
+    journal_dir: Path | str,
+    max_records: int = DEFAULT_MAX_RECORDS,
+    *,
+    lock_wait_s: float = DEFAULT_LOCK_WAIT_S,
+) -> int:
+    """Drop the oldest records beyond ``max_records``. Returns the drop count.
+
+    Called by the drainer once per cycle, never on the hook path. Serialized
+    under an exclusive lock whose wait is bounded by ``lock_wait_s``; a lock
+    that stays busy raises :class:`JournalLockTimeout` rather than waiting.
     """
+    journal_dir = Path(journal_dir)
     if max_records < 1:
         return 0
     try:
-        names = sorted(
-            e.name
-            for e in os.scandir(journal_dir)
-            if e.is_file() and e.name.endswith(".json")
-        )
-    except OSError:
+        names = _sorted_record_names(journal_dir)
+    except FileNotFoundError:
         return 0
     if len(names) <= max_records:
         return 0
 
     dropped = 0
-    lock_path = journal_dir / ".bound.lock"
+    fd = os.open(str(journal_dir / ".bound.lock"), os.O_CREAT | os.O_RDWR, 0o644)
     try:
-        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
-    except OSError:
-        return 0
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        # Re-list under the lock: another process may have already evicted.
-        names = sorted(
-            e.name
-            for e in os.scandir(journal_dir)
-            if e.is_file() and e.name.endswith(".json")
-        )
+        _acquire_bounded(fd, lock_wait_s)
+        # Re-list under the lock: another enforcer may have already evicted.
+        names = _sorted_record_names(journal_dir)
         excess = len(names) - max_records
-        for name in names[:excess]:
+        for name in names[: max(excess, 0)]:
             try:
                 (journal_dir / name).unlink()
                 dropped += 1
-            except OSError:
+            except FileNotFoundError:
                 pass
-    except OSError:
-        pass
     finally:
         try:
             fcntl.flock(fd, fcntl.LOCK_UN)
@@ -284,24 +314,26 @@ def _enforce_bound(journal_dir: Path, max_records: int) -> int:
     return dropped
 
 
-def list_pending(journal_dir: Path | str) -> list[JournalEntry]:
-    """Return pending records in FIFO order. Corrupt files are skipped.
+def list_pending(
+    journal_dir: Path | str, *, limit: int | None = None
+) -> list[JournalEntry]:
+    """Return up to ``limit`` pending records in FIFO order.
 
-    A single unreadable record must never stall the whole drain, so parse
-    failures are dropped from the result rather than raised.
+    Only the records returned are read and parsed. Before OMN-20110 the
+    drainer parsed the whole journal to publish a 200-record batch, so a
+    backlog made every cycle slower, which grew the backlog. Corrupt files
+    are skipped: a single unreadable record must never stall the drain.
     """
     journal_dir = Path(journal_dir)
     try:
-        names = sorted(
-            e.name
-            for e in os.scandir(journal_dir)
-            if e.is_file() and e.name.endswith(".json")
-        )
-    except OSError:
+        names = _sorted_record_names(journal_dir)
+    except FileNotFoundError:
         return []
 
     entries: list[JournalEntry] = []
     for name in names:
+        if limit is not None and len(entries) >= limit:
+            break
         path = journal_dir / name
         try:
             entries.append(

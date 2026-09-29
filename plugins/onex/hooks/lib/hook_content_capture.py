@@ -457,8 +457,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         if count:
             _log(f"journalled {count} {CONTENT_EVENT_TYPE} record(s) ({args.kind})")
-    except Exception as exc:  # noqa: BLE001 -- outermost fail-open boundary
-        _log(f"unexpected error: {type(exc).__name__}: {exc}")
+    except Exception as exc:  # noqa: BLE001 -- outermost boundary: report, exit 1
+        # Exit 1 so hook_emit_bounded fails loud (OMN-20110).
+        print(
+            f"hook_content_capture: content NOT journalled: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

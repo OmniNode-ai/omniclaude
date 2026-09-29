@@ -182,8 +182,11 @@ PAYLOAD=$(jq -nc \
 # import once and publishes the backlog.
 _EMIT_DISPATCH_PY="${HOOKS_LIB}/hook_emit_append.py"
 if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
-    (
-        "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
+    # OMN-20110: foreground through the bounded runner, never disowned. A
+    # miss or failure fails the hook (blocking exit naming the cause) and
+    # alarms the operator once per episode. See hooks/lib/emit_bounded.sh.
+    source "${HOOKS_LIB}/emit_bounded.sh"
+    onex_emit_bounded prompt.submitted "$PYTHON_CMD" "$_EMIT_DISPATCH_PY" \
             --event-type "prompt.submitted" \
             --payload "$PAYLOAD" \
             --correlation-id "${SESSION_ID:-unknown}" \
@@ -193,7 +196,7 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
             --cwd "$CWD" \
             --actor "$HOOK_ACTOR_ARG" \
             --turn-id "$TURN_ID" \
-            >>"$LOG_FILE" 2>&1
+        </dev/null || onex_emit_fail_exit "$INPUT"
         # OMN-19551: full-content capture, AFTER the metadata append above and
         # in the same backgrounded subshell, so the content record reads the
         # turn that append just stamped. The hook input goes on stdin, never on
@@ -203,7 +206,8 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
         # type or OMNICLAUDE_CONTENT_CAPTURE is off.
         _CONTENT_CAPTURE_PY="${HOOKS_LIB}/hook_content_capture.py"
         if [[ -f "$_CONTENT_CAPTURE_PY" ]]; then
-            printf '%s' "$INPUT" | "$PYTHON_CMD" "$_CONTENT_CAPTURE_PY" \
+            printf '%s' "$INPUT" | onex_emit_bounded content.captured \
+                "$PYTHON_CMD" "$_CONTENT_CAPTURE_PY" \
                 --kind prompt \
                 --correlation-id "${SESSION_ID:-unknown}" \
                 --agent-id "$AGENT_ID" \
@@ -212,7 +216,7 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
                 --cwd "$CWD" \
                 --actor "$HOOK_ACTOR_ARG" \
                 --turn-id "$TURN_ID" \
-                >>"$LOG_FILE" 2>&1
+                || onex_emit_fail_exit "$INPUT"
         fi
         # OMN-19513: the lineage-carrying hook.event for this prompt, also
         # after the metadata append, so its turn id is the turn that append
@@ -222,15 +226,11 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
         # allocation.
         _HOOK_CAPTURE_PY="${HOOKS_LIB}/hook_claude_capture.py"
         if [[ -f "$_HOOK_CAPTURE_PY" ]]; then
-            printf '%s' "$INPUT" | "$PYTHON_CMD" "$_HOOK_CAPTURE_PY" \
+            printf '%s' "$INPUT" | onex_emit_bounded hook.event \
+                "$PYTHON_CMD" "$_HOOK_CAPTURE_PY" \
                 --actor "$HOOK_ACTOR_ARG" \
-                >>"$LOG_FILE" 2>&1
+                || onex_emit_fail_exit "$INPUT"
         fi
-    # The whole subshell's descriptors go to the log. With two commands in it,
-    # bash keeps the subshell alive, and an inherited stdout or stderr pipe
-    # would hold the hook's caller until both finished (OMN-19551).
-    ) >>"$LOG_FILE" 2>&1 </dev/null &
-    disown 2>/dev/null || true
 fi
 
 exit 0

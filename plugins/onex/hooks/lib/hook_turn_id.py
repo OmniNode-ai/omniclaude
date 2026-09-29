@@ -88,11 +88,38 @@ def _read_seq(handle: IO[str]) -> int:
     return seq if seq >= 0 else 0
 
 
+def _lock_wait_s() -> float:
+    try:
+        return float(os.environ.get("ONEX_HOOK_LOCK_WAIT_S", "2"))
+    except ValueError:
+        return 2.0
+
+
+def _flock_bounded(fd: int, op: int, path: Path) -> None:
+    """Take ``op`` on ``fd`` within the lock-wait budget, or raise TimeoutError.
+
+    A blocking flock with no deadline let one stuck holder queue every hook
+    behind it (OMN-20110). The caller's emit fails loud instead, naming this
+    lock.
+    """
+    wait_s = _lock_wait_s()
+    deadline = time.monotonic() + wait_s
+    while True:
+        try:
+            fcntl.flock(fd, op | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            pass
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"turn counter lock {path} busy for {wait_s:g}s")
+        time.sleep(0.02)
+
+
 def _open_turn(turn_dir: Path, session_id: str) -> int:
     turn_dir.mkdir(parents=True, exist_ok=True)
     path = _counter_path(turn_dir, session_id)
     with open(path, "a+", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        _flock_bounded(handle.fileno(), fcntl.LOCK_EX, path)
         try:
             seq = _read_seq(handle) + 1
             handle.seek(0)
@@ -109,7 +136,7 @@ def _current_turn(turn_dir: Path, session_id: str) -> int:
     path = _counter_path(turn_dir, session_id)
     try:
         with open(path, encoding="utf-8") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+            _flock_bounded(handle.fileno(), fcntl.LOCK_SH, path)
             try:
                 return _read_seq(handle)
             finally:

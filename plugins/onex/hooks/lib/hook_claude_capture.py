@@ -480,10 +480,14 @@ def main(argv: list[str] | None = None) -> int:
                 f"journalled {HOOK_EVENT_TYPE} "
                 f"{hook_input.get('hook_event_name')} ({lineage_note})"
             )
-    except Exception as exc:  # noqa: BLE001 -- outermost fail-open boundary
+    except Exception as exc:  # noqa: BLE001 -- outermost boundary: report, exit 1
         # The type only: a pydantic error message quotes the input, and hook
-        # stdin is content.
-        _log(f"unexpected error: {type(exc).__name__}")
+        # stdin is content. Exit 1 so hook_emit_bounded fails loud (OMN-20110).
+        print(
+            f"hook_claude_capture: hook.event NOT journalled: {type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
