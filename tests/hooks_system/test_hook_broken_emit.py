@@ -17,28 +17,37 @@ So for each broken-emit condition the hook must, inside ``BUDGET_SECONDS_BROKEN_
   stderr, which is what makes it loud);
 * leave no process behind, and never be killed by the harness for hanging.
 
-Two conditions are the opposite case and pin the boundary of that rule: an
-unreachable bus is not an emit failure (the edge is journal-only, so the hook
-must not notice), and a journal at its bound is backpressure, evicted quickly.
+Those are two tests per condition, so a hang and a silent exit are reported
+separately. Three conditions are the opposite case and pin the boundary of the
+rule: a healthy journal must actually receive the record (the positive control
+that keeps every other test here from passing because a hook exited at its first
+guard), an unreachable bus is not an emit failure (the edge is journal-only, so
+the hook must not notice), and a journal at its bound is backpressure, evicted
+quickly, not a failure.
 """
 
 from __future__ import annotations
 
 import fcntl
 import os
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from tests.hooks_system import budget
 from tests.hooks_system._harness import (
-    ProcessLedger,
+    HookRun,
+    ProcInfo,
     Rig,
     describe,
     entrypoint,
     hook_payload,
+    kill_tagged,
+    make_rig,
     run_hook,
     wait_for_settle,
 )
@@ -56,6 +65,18 @@ _EMITTING_HOOKS = [
     pytest.param("post_tool_use_bus_mirror.sh", "PostToolUse", "Bash", id="bus-mirror"),
     pytest.param("claude_hook_capture.sh", "PreToolUse", "Bash", id="hook-capture"),
 ]
+
+_BLACKHOLE = {
+    "KAFKA_BOOTSTRAP_SERVERS": "192.0.2.1:9092",
+    "KAFKA_BROKERS": "192.0.2.1:9092",
+}
+
+
+@dataclass
+class Observation:
+    run: HookRun
+    leftovers: dict[tuple[int, float], ProcInfo]
+    rig: Rig
 
 
 def _fill_journal(journal_dir: Path, count: int) -> None:
@@ -84,113 +105,168 @@ def _hold_bound_lock(journal_dir: Path) -> Iterator[None]:
             os.close(fd)
 
 
-def _breaks(rig: Rig, how: str) -> None:
-    if how == "journal-path-is-a-file":
-        # mkdir/open on the journal directory fails for every user, root included.
-        (rig.journal_dir).rmdir()
+def _apply(rig: Rig, scenario: str) -> None:
+    if scenario in ("healthy", "bus-unreachable"):
+        return
+    if scenario == "journal-path-is-a-file":
+        # mkdir and open on the journal directory fail for every user, root included.
+        rig.journal_dir.rmdir()
         rig.journal_dir.write_text("not a directory")
-    elif how == "journal-full":
+    elif scenario in ("journal-full", "journal-full-lock-held"):
         _fill_journal(rig.journal_dir, JOURNAL_BOUND + 1)
     else:  # pragma: no cover - a typo in a parametrization must be loud
-        raise AssertionError(how)
+        raise AssertionError(scenario)
 
 
-def _run_and_observe(rig: Rig, hook_name: str, event: str, tool: str, **kwargs):
+def _observe(
+    rig: Rig, hook_name: str, event: str, tool: str, scenario: str
+) -> Observation:
+    _apply(rig, scenario)
     hook = entrypoint(hook_name)
     payload = hook_payload(
-        event,
-        tool_name=tool,
-        skill="onex:delegate" if tool == "Skill" else None,
+        event, tool_name=tool, skill="onex:delegate" if tool == "Skill" else None
     )
-    with ProcessLedger(rig.token) as ledger:
+    extra = _BLACKHOLE if scenario == "bus-unreachable" else None
+
+    def go() -> Observation:
         run = run_hook(
             hook,
             payload,
             rig,
             budget_seconds=budget.BUDGET_SECONDS_BROKEN_EMIT,
-            **kwargs,
+            extra_env=extra,
         )
-        leftovers = wait_for_settle(rig.token, budget.SETTLE_SECONDS)
-    return run, leftovers, ledger
+        return Observation(run, wait_for_settle(rig.token, budget.SETTLE_SECONDS), rig)
+
+    if scenario == "journal-full-lock-held":
+        with _hold_bound_lock(rig.journal_dir):
+            return go()
+    return go()
 
 
-def _assert_loud_failure(run, leftovers, rig: Rig) -> None:
-    assert not run.timed_out, (
-        f"the hook hung on a broken emit path and had to be killed after "
-        f"{run.wall_seconds:.1f}s: {run.summary()}\nhook logs:\n{rig.log_tail()}"
+@pytest.fixture(scope="module")
+def observe(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[Callable[..., Observation]]:
+    """Run one (hook, scenario) once and share the observation between the tests
+    that assert on it: building a full journal is the slow part."""
+    cache: dict[tuple[str, str], Observation] = {}
+
+    def get(hook_name: str, event: str, tool: str, scenario: str) -> Observation:
+        key = (hook_name, scenario)
+        if key not in cache:
+            rig = make_rig(
+                tmp_path_factory.mktemp(
+                    f"{scenario}-{hook_name.split('.', maxsplit=1)[0]}"
+                )
+            )
+            cache[key] = _observe(rig, hook_name, event, tool, scenario)
+        return cache[key]
+
+    try:
+        yield get
+    finally:
+        for obs in cache.values():
+            kill_tagged(obs.rig.token)
+
+
+_LOUD_SCENARIOS = ["journal-path-is-a-file", "journal-full-lock-held"]
+
+
+@pytest.mark.parametrize("scenario", _LOUD_SCENARIOS)
+@pytest.mark.parametrize(("hook_name", "event", "tool"), _EMITTING_HOOKS)
+def test_broken_emit_never_hangs_or_leaves_a_process(
+    observe: Callable[..., Observation],
+    hook_name: str,
+    event: str,
+    tool: str,
+    scenario: str,
+) -> None:
+    obs = observe(hook_name, event, tool, scenario)
+    assert not obs.run.timed_out, (
+        f"the hook hung and was killed after {obs.run.wall_seconds:.1f}s: {obs.run.summary()}"
     )
-    assert run.wall_seconds <= budget.BUDGET_SECONDS_BROKEN_EMIT
+    assert obs.run.wall_seconds <= budget.BUDGET_SECONDS_BROKEN_EMIT
+    assert not obs.leftovers, (
+        f"{scenario}: {len(obs.leftovers)} process(es) the hook started are still alive "
+        f"{budget.SETTLE_SECONDS}s later, waiting on the broken emit path:\n"
+        f"{describe(obs.leftovers.values())}\nhook logs:\n{obs.rig.log_tail()}"
+    )
+
+
+@pytest.mark.parametrize("scenario", _LOUD_SCENARIOS)
+@pytest.mark.parametrize(("hook_name", "event", "tool"), _EMITTING_HOOKS)
+def test_broken_emit_fails_loudly(
+    observe: Callable[..., Observation],
+    hook_name: str,
+    event: str,
+    tool: str,
+    scenario: str,
+) -> None:
+    obs = observe(hook_name, event, tool, scenario)
+    run = obs.run
+    assert not run.timed_out, (
+        f"hung, so it could not have failed loudly: {run.summary()}"
+    )
     assert run.returncode not in (0, None), (
-        "the emit path was broken and the hook exited 0: a silent failure. "
-        f"{run.summary()}\nhook logs:\n{rig.log_tail()}"
+        f"{scenario}: the emit path was broken and the hook exited 0, a silent failure. "
+        f"{run.summary()}\nhook logs:\n{obs.rig.log_tail()}"
     )
     assert run.stderr.strip(), "the hook failed without saying why on stderr"
     assert any(word in run.stderr.lower() for word in ("journal", "lock", "emit")), (
         f"stderr does not name the failing emit path: {run.stderr[-600:]!r}"
     )
-    assert not leftovers, (
-        f"the hook left {len(leftovers)} process(es) behind:\n{describe(leftovers.values())}"
+
+
+@pytest.mark.parametrize(("hook_name", "event", "tool"), _EMITTING_HOOKS)
+def test_healthy_journal_receives_the_record(
+    observe: Callable[..., Observation], hook_name: str, event: str, tool: str
+) -> None:
+    """The positive control. A hook that exits at its first guard is green in
+    every other test in this file, so this one requires the record to land."""
+    obs = observe(hook_name, event, tool, "healthy")
+    assert obs.run.returncode == 0, obs.run.summary()
+    deadline = time.monotonic() + budget.SETTLE_SECONDS
+    while not obs.rig.journal_files() and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert obs.rig.journal_files(), (
+        f"{hook_name} ran clean and journalled nothing, so the tests that rely on it "
+        f"prove nothing.\nhook logs:\n{obs.rig.log_tail()}"
     )
-
-
-@pytest.mark.parametrize(("hook_name", "event", "tool"), _EMITTING_HOOKS)
-def test_journal_that_cannot_be_written_fails_loudly(
-    rig: Rig, hook_name: str, event: str, tool: str
-) -> None:
-    _breaks(rig, "journal-path-is-a-file")
-    run, leftovers, _ledger = _run_and_observe(rig, hook_name, event, tool)
-    _assert_loud_failure(run, leftovers, rig)
-
-
-@pytest.mark.parametrize(("hook_name", "event", "tool"), _EMITTING_HOOKS)
-def test_journal_lock_held_by_another_process_fails_loudly(
-    rig: Rig, hook_name: str, event: str, tool: str
-) -> None:
-    """The incident. The journal is at its bound, so the append takes the eviction
-    lock, and a peer holds it. The hook must give up and say so, not wait."""
-    _breaks(rig, "journal-full")
-    with _hold_bound_lock(rig.journal_dir):
-        run, leftovers, _ledger = _run_and_observe(rig, hook_name, event, tool)
-    _assert_loud_failure(run, leftovers, rig)
+    assert not obs.leftovers, describe(obs.leftovers.values())
 
 
 @pytest.mark.parametrize(("hook_name", "event", "tool"), _EMITTING_HOOKS)
 def test_full_journal_is_evicted_inside_the_budget(
-    rig: Rig, hook_name: str, event: str, tool: str
+    observe: Callable[..., Observation], hook_name: str, event: str, tool: str
 ) -> None:
     """Backpressure is not a failure: a full journal with a free lock drops the
     oldest record and the hook succeeds, quickly, leaving nothing running."""
-    _breaks(rig, "journal-full")
-    run, leftovers, _ledger = _run_and_observe(rig, hook_name, event, tool)
-    assert not run.timed_out, f"hung on a full journal: {run.summary()}"
-    assert run.returncode == 0, (
-        f"a full journal must not fail the hook: {run.summary()}"
+    obs = observe(hook_name, event, tool, "journal-full")
+    assert not obs.run.timed_out, f"hung on a full journal: {obs.run.summary()}"
+    assert obs.run.returncode == 0, (
+        f"a full journal must not fail the hook: {obs.run.summary()}"
     )
-    assert run.wall_seconds <= budget.BUDGET_SECONDS_BROKEN_EMIT
-    assert not leftovers, describe(leftovers.values())
-    assert len(rig.journal_files()) <= JOURNAL_BOUND, "the journal grew past its bound"
+    assert obs.run.wall_seconds <= budget.BUDGET_SECONDS_BROKEN_EMIT
+    assert not obs.leftovers, describe(obs.leftovers.values())
+    assert len(obs.rig.journal_files()) <= JOURNAL_BOUND, (
+        "the journal grew past its bound"
+    )
 
 
 @pytest.mark.parametrize(("hook_name", "event", "tool"), _EMITTING_HOOKS)
 def test_unreachable_bus_is_invisible_to_the_hook(
-    rig: Rig, hook_name: str, event: str, tool: str
+    observe: Callable[..., Observation], hook_name: str, event: str, tool: str
 ) -> None:
     """The hook edge journals; the drainer publishes. A bus that swallows
     connections (192.0.2.1 is TEST-NET-1, never routed) must not slow the hook,
     fail it, or leave a process waiting on a socket."""
-    run, leftovers, _ledger = _run_and_observe(
-        rig,
-        hook_name,
-        event,
-        tool,
-        extra_env={
-            "KAFKA_BOOTSTRAP_SERVERS": "192.0.2.1:9092",
-            "KAFKA_BROKERS": "192.0.2.1:9092",
-        },
+    obs = observe(hook_name, event, tool, "bus-unreachable")
+    assert not obs.run.timed_out, f"hung with the bus unreachable: {obs.run.summary()}"
+    assert obs.run.returncode == 0, (
+        f"an unreachable bus failed the hook: {obs.run.summary()}"
     )
-    assert not run.timed_out, f"hung with the bus unreachable: {run.summary()}"
-    assert run.returncode == 0, f"an unreachable bus failed the hook: {run.summary()}"
-    assert run.wall_seconds <= budget.BUDGET_SECONDS_BROKEN_EMIT
-    assert not leftovers, (
-        f"a process is still waiting on the unreachable bus:\n{describe(leftovers.values())}"
+    assert obs.run.wall_seconds <= budget.BUDGET_SECONDS_BROKEN_EMIT
+    assert not obs.leftovers, (
+        f"a process is still waiting on the unreachable bus:\n{describe(obs.leftovers.values())}"
     )

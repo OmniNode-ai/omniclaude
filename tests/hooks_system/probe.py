@@ -16,6 +16,7 @@ other test in this directory, so the ``records`` column is the positive control.
 
 from __future__ import annotations
 
+import sys
 import tempfile
 from pathlib import Path
 
@@ -39,7 +40,8 @@ _SHAPES = [
 ]
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    verbose = "-v" in (argv if argv is not None else sys.argv[1:])
     total = 0
     for event, tool in _SHAPES:
         print(f"== {event} {tool}")
@@ -52,7 +54,7 @@ def main() -> int:
                     tool_name=tool,
                     skill="onex:delegate" if tool == "Skill" else None,
                 )
-                with ProcessLedger(rig.token) as ledger:
+                with ProcessLedger(rig) as ledger:
                     run = run_hook(
                         hook,
                         payload,
@@ -64,11 +66,13 @@ def main() -> int:
                 shape_total += ledger.spawned
                 print(
                     f"  {hook.name:<52} rc={run.returncode} wall={run.wall_seconds:5.2f}s "
-                    f"procs>={ledger.spawned:<3} records={len(rig.journal_files())} "
+                    f"procs={ledger.spawned:<3} records={len(rig.journal_files())} "
                     f"left={len(left)}"
                 )
                 if left:
                     print(describe(left.values()))
+                if verbose:
+                    print(ledger.processes())
             finally:
                 kill_tagged(rig.token)
         print(f"  -- shape total procs>={shape_total}")

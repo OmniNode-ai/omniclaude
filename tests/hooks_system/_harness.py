@@ -23,8 +23,10 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -150,7 +152,21 @@ class Rig:
     token: str
     state_dir: Path
     journal_dir: Path
+    spawn_log: Path
     env: dict[str, str] = field(default_factory=dict)
+
+    def shim_pids(self) -> dict[int, str]:
+        """Every PATH-resolved command the hooks ran, by pid: exact, not sampled."""
+        found: dict[int, str] = {}
+        try:
+            lines = self.spawn_log.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return found
+        for line in lines:
+            pid, _, name = line.partition(" ")
+            if pid.isdigit():
+                found[int(pid)] = name
+        return found
 
     def journal_files(self) -> list[Path]:
         if not self.journal_dir.is_dir():
@@ -173,6 +189,81 @@ class Rig:
         return "\n".join(chunks) or "<hook logs empty>"
 
 
+SPAWN_LOG_ENV = "ONEX_HOOK_SYSTEST_SPAWNLOG"
+
+# Commands a hook script reaches through PATH. Each gets a two-line wrapper that
+# appends its pid to the spawn log and execs the real binary, so the process
+# count is exact for everything a hook starts by name rather than a sample.
+_SHIMMED_COMMANDS = (
+    "awk", "basename", "cat", "chmod", "cp", "curl", "cut", "date", "dirname",
+    "env", "find", "git", "grep", "head", "hostname", "id", "jq", "kill",
+    "ln", "mkdir", "mktemp", "mv", "pgrep", "ps", "readlink", "realpath", "rm",
+    "sed", "shasum", "sleep", "sort", "ssh", "stat", "tail", "tee", "touch",
+    "tr", "uname", "uniq", "wc", "xargs",
+)  # fmt: skip
+
+
+def _install_shims(shim_dir: Path, spawn_log: Path, path: str) -> Path:
+    shim_dir.mkdir(parents=True, exist_ok=True)
+    for name in _SHIMMED_COMMANDS:
+        real = shutil.which(name, path=path)
+        if real is None:
+            continue
+        wrapper = shim_dir / name
+        wrapper.write_text(
+            "#!/bin/sh\n"
+            f"printf '%s %s\\n' \"$$\" {shlex.quote(name)} >> {shlex.quote(str(spawn_log))}\n"
+            f'exec {shlex.quote(real)} "$@"\n',
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+    return shim_dir
+
+
+def _python_shim(shim_dir: Path, spawn_log: Path) -> Path:
+    """The hook interpreter, counted. ``PLUGIN_PYTHON_BIN`` is the first thing
+    ``find_python`` in common.sh consults, so the hooks run this wrapper, which
+    execs the interpreter that is running the tests (the repo venv)."""
+    shim_dir.mkdir(parents=True, exist_ok=True)
+    wrapper = shim_dir / "hook-python"
+    wrapper.write_text(
+        "#!/bin/sh\n"
+        f"printf '%s %s\\n' \"$$\" python >> {shlex.quote(str(spawn_log))}\n"
+        f'exec {shlex.quote(sys.executable)} "$@"\n',
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    return wrapper
+
+
+def _write_drainer_status(root: Path) -> None:
+    """A drainer status that lists the event classes as publishable.
+
+    ``hook_claude_capture`` journals nothing unless the drainer beside the
+    journal says ``hook.event`` is publishable, so without this file the
+    capture hook exits early and every test that touches it is vacuous.
+    """
+    now = time.time()
+    status = {
+        "last_cycle_at": now,
+        "last_publish_at": now,
+        "published_total": 1,
+        "pid": os.getpid(),
+        "refused_event_types": [],
+        "publishable_event_types": [
+            "hook.event",
+            "tool.executed",
+            "skill.started",
+            "skill.completed",
+            "session.started",
+            "session.ended",
+        ],
+    }
+    (root / "hook_emit_drainer_status.json").write_text(
+        json.dumps(status), encoding="utf-8"
+    )
+
+
 def make_rig(root: Path) -> Rig:
     """Build a rig under ``root``. Nothing here can touch the live spool."""
     state_dir = root / "state"
@@ -189,8 +280,18 @@ def make_rig(root: Path) -> Rig:
     # must never touch the operator home or the shared clones, so both are
     # replaced: HOME by an empty directory, OMNI_HOME removed, which those hooks
     # read as "not a workspace" and exit.
-    env.pop("OMNI_HOME", None)
+    workspace = root / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    env["OMNI_HOME"] = str(workspace)
     env["HOME"] = str(home)
+    env.pop("CLAUDE_PLUGIN_DATA", None)
+    spawn_log = root / "spawn.log"
+    spawn_log.write_text("", encoding="utf-8")
+    shim_dir = _install_shims(root / "shims", spawn_log, env["PATH"])
+    env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    env["PLUGIN_PYTHON_BIN"] = str(_python_shim(root / "shims", spawn_log))
+    env[SPAWN_LOG_ENV] = str(spawn_log)
+    _write_drainer_status(root)
     env.update(
         {
             TOKEN_ENV: token,
@@ -283,8 +384,9 @@ class ProcessLedger:
     sample of the full scan.
     """
 
-    def __init__(self, token: str, root_pids: Iterable[int] = ()) -> None:
-        self.token = token
+    def __init__(self, rig: Rig, root_pids: Iterable[int] = ()) -> None:
+        self.rig = rig
+        self.token = rig.token
         self._roots: set[int] = set(root_pids)
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -336,7 +438,35 @@ class ProcessLedger:
 
     @property
     def spawned(self) -> int:
-        return len(self.seen)
+        """Distinct processes the hooks started.
+
+        The union, by pid, of three sources: every hook root the caller
+        registered, every command the PATH shims saw (exact), and every process
+        the sampler saw. Bash subshells that live under one sampling interval
+        are the one thing none of them sees, so this is a lower bound, and the
+        budget ceiling is set with this same instrument.
+        """
+        pids = {pid for pid, _created in self.seen}
+        pids |= self._roots
+        pids |= set(self.rig.shim_pids())
+        return len(pids)
+
+    def processes(self) -> str:
+        names = self.rig.shim_pids()
+        rows = [
+            f"  pid={pid} {names.get(pid, self._name_of(pid))}"
+            for pid in sorted(self._all_pids())
+        ]
+        return "\n".join(rows)
+
+    def _all_pids(self) -> set[int]:
+        return {pid for pid, _c in self.seen} | self._roots | set(self.rig.shim_pids())
+
+    def _name_of(self, pid: int) -> str:
+        for (seen_pid, _c), info in self.seen.items():
+            if seen_pid == pid:
+                return info.cmdline
+        return "hook root" if pid in self._roots else "?"
 
 
 def wait_for_settle(token: str, seconds: float) -> dict[tuple[int, float], ProcInfo]:

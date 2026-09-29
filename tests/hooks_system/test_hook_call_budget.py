@@ -70,7 +70,7 @@ def test_one_tool_call_stays_inside_the_process_and_time_budget(
 ) -> None:
     tool_use_id = f"toolu_budget_{tool.lower()}"
     t0 = time.monotonic()
-    with ProcessLedger(rig.token) as ledger:
+    with ProcessLedger(rig) as ledger:
         runs = _run_phase(rig, ledger, "PreToolUse", tool, skill, tool_use_id)
         runs += _run_phase(rig, ledger, "PostToolUse", tool, skill, tool_use_id)
         # The detached emit children are part of the call's cost: let them finish
@@ -94,7 +94,7 @@ def test_one_tool_call_stays_inside_the_process_and_time_budget(
         f"a {tool} tool call started {ledger.spawned} hook processes; the ceiling is "
         f"{budget.CEILING_PROCESSES_PER_TOOL_CALL} (measured at the incident: "
         f"{budget.MEASURED_PROCESSES_PER_TOOL_CALL}, target: "
-        f"{budget.TARGET_PROCESSES_PER_TOOL_CALL}).\n{describe(ledger.seen.values())}"
+        f"{budget.TARGET_PROCESSES_PER_TOOL_CALL}).\n{ledger.processes()}"
     )
     assert wall <= budget.BUDGET_SECONDS_PER_TOOL_CALL, (
         f"a {tool} tool call spent {wall:.1f}s in hooks; the budget is "

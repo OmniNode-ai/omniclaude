@@ -51,7 +51,7 @@ def test_parallel_hooks_finish_in_budget_and_leave_no_process(rig: Rig) -> None:
     invocations = _invocations(budget.CONCURRENT_INVOCATIONS)
     assert len(invocations) == budget.CONCURRENT_INVOCATIONS
 
-    with ProcessLedger(rig.token) as ledger:
+    with ProcessLedger(rig) as ledger:
         started = []
         for n, (event, tool, hook) in enumerate(invocations):
             payload = hook_payload(
@@ -101,7 +101,7 @@ def test_a_second_wave_after_the_first_finds_the_host_clean(rig: Rig) -> None:
     makes the second wave start with the first wave's leftovers; the count of
     tagged processes must return to zero between them."""
     for wave in range(2):
-        with ProcessLedger(rig.token) as ledger:
+        with ProcessLedger(rig) as ledger:
             started = []
             for n, (event, tool, hook) in enumerate(_invocations(10)):
                 payload = hook_payload(
