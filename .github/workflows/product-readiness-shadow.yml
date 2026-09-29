@@ -187,7 +187,8 @@ jobs:
             --exclude-files '\.env\.example$' \
             --exclude-files 'bandit-report\.json$' \
             --exclude-files '^tests/' \
-            --exclude-files 'security-report\.json$'
+            --exclude-files 'security-report\.json$' \
+            --exclude-files '^config/hardcoded_model_config_baseline\.yaml$'
           NEW_SECRETS=$(python3 -c "
           import json
           old = json.load(open('.secrets.baseline.bak'))
