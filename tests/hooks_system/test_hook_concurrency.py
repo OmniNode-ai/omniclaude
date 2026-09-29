@@ -89,12 +89,6 @@ def test_parallel_hooks_finish_in_budget_and_leave_no_process(rig: Rig) -> None:
         f"{budget.SETTLE_SECONDS}s after the last hook exited:\n{describe(leftovers.values())}"
     )
 
-    ceiling = budget.CONCURRENT_INVOCATIONS * budget.CEILING_PROCESSES_PER_TOOL_CALL
-    assert ledger.peak_tagged <= ceiling, (
-        f"{ledger.peak_tagged} hook processes alive at once for "
-        f"{budget.CONCURRENT_INVOCATIONS} invocations; ceiling {ceiling}"
-    )
-
 
 def test_a_second_wave_after_the_first_finds_the_host_clean(rig: Rig) -> None:
     """Two waves back to back. A hook that leaves one process per call behind

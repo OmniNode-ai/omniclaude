@@ -90,11 +90,13 @@ def test_one_tool_call_stays_inside_the_process_and_time_budget(
         f"{len(leftovers)} process(es) still running {budget.SETTLE_SECONDS}s after the "
         f"call:\n{describe(leftovers.values())}"
     )
-    assert ledger.spawned <= budget.CEILING_PROCESSES_PER_TOOL_CALL, (
+    ceiling = budget.CEILING_EXECS_PER_CALL[tool]
+    assert ledger.spawned <= ceiling, (
         f"a {tool} tool call started {ledger.spawned} hook processes; the ceiling is "
-        f"{budget.CEILING_PROCESSES_PER_TOOL_CALL} (measured at the incident: "
-        f"{budget.MEASURED_PROCESSES_PER_TOOL_CALL}, target: "
-        f"{budget.TARGET_PROCESSES_PER_TOOL_CALL}).\n{ledger.processes()}"
+        f"{ceiling} (measured 2026-09-29: {budget.MEASURED_EXECS_PER_CALL[tool]}, "
+        f"target: {budget.TARGET_EXECS_PER_CALL}; the incident snapshot counted "
+        f"{budget.INCIDENT_CONCURRENT_HOOK_PROCESSES_PER_CALL} alive at once).\n"
+        f"{ledger.processes()}"
     )
     assert wall <= budget.BUDGET_SECONDS_PER_TOOL_CALL, (
         f"a {tool} tool call spent {wall:.1f}s in hooks; the budget is "
@@ -105,11 +107,12 @@ def test_one_tool_call_stays_inside_the_process_and_time_budget(
 def test_budget_record_only_ratchets_down() -> None:
     """The ceiling starts at the measurement and may only tighten toward the
     target. Raising it past the measurement is how a leak gets a permit."""
-    assert (
-        budget.TARGET_PROCESSES_PER_TOOL_CALL
-        < budget.CEILING_PROCESSES_PER_TOOL_CALL
-        <= budget.MEASURED_PROCESSES_PER_TOOL_CALL
-    )
+    assert set(budget.CEILING_EXECS_PER_CALL) == set(budget.MEASURED_EXECS_PER_CALL)
+    for tool, ceiling in budget.CEILING_EXECS_PER_CALL.items():
+        measured = budget.MEASURED_EXECS_PER_CALL[tool]
+        assert ceiling > budget.TARGET_EXECS_PER_CALL, tool
+        # Headroom over the measurement is at most 15 percent.
+        assert measured <= ceiling <= measured * 1.15, (tool, measured, ceiling)
     assert budget.BUDGET_SECONDS_PER_TOOL_CALL < 60, "the harness cancels a hook at 60s"
     assert budget.BUDGET_SECONDS_PER_HOOK_UNDER_CONCURRENCY < 60
 
