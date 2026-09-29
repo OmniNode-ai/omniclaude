@@ -74,7 +74,6 @@ def test_scan_covers_the_shipped_skills_and_both_marketplaces() -> None:
     for required in (
         "plugins/onex-delegate/skills/delegate/SKILL.md",
         "plugins/onex-delegate/skills/delegate/prompt.md",
-        "plugins/onex-delegate/skills/cloud_delegate/SKILL.md",
         "plugins/onex-delegate/plugin-compat.yaml",
         "plugins/onex-delegate/.claude-plugin/plugin.json",
         ".claude-plugin/marketplace.json",

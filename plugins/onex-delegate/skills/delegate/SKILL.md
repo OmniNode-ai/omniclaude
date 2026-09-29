@@ -1,5 +1,5 @@
 ---
-version: 3.0.0
+version: 3.1.0
 description: "Single-command local LLM delegation. Runs `onex delegate \"<prompt>\"` which builds the payload, dispatches node_delegate_skill_orchestrator, and prints one typed ModelSkillResult[ModelDelegateSkillResponse]. Handled inline — no subagent, no payload file, no cat of workflow_result.json."
 skill_kind: dispatch
 mode: full
@@ -109,6 +109,20 @@ the bare `onex` on PATH.
 Installing `omnibase-core` alone is not enough — `onex` will load, but
 `onex delegate` exits 2 with `Error: No such command 'delegate'. Did you mean
 'gate'?`.
+
+## One-time permission rule
+
+Add `Bash(onex delegate:*)` to `permissions.allow` in `~/.claude/settings.json`
+(or via `/permissions`) once so `/onex:delegate` does not ask on every call:
+
+```json
+{
+  "permissions": { "allow": ["Bash(onex delegate:*)"] }
+}
+```
+
+This rule covers only `onex delegate` invocations. The one-time setup commands above
+(`onex local init`, `onex secret set`) are separate commands and ask once each.
 
 ## Task Types
 
