@@ -176,6 +176,7 @@ _HOOKS_LIB = Path(__file__).parent
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
+from collections import ChainMap  # noqa: E402
 from collections.abc import Mapping  # noqa: E402
 
 from shell_words import (  # noqa: E402
@@ -454,6 +455,13 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
         break
     if idx >= len(args):
         return None
+    if target_arg is None:
+        # OMN-19852. `--work-tree=<dir>` names the tree git operates on, so
+        # it is the effective directory when no `-C` is given.
+        for flag in global_flags:
+            if flag.startswith("--work-tree=") and flag != "--work-tree=":
+                target_arg = flag[len("--work-tree=") :]
+                break
     return _GitInvocation(
         target_arg=target_arg,
         subcommand=args[idx],
@@ -1688,6 +1696,68 @@ def _plainly_names_refused_verb(command: str, policy: Policy) -> bool:
     )
 
 
+def _peel_grouping(segment: list[str]) -> tuple[list[str], int, int]:
+    """Strip subshell and brace grouping from one segment (OMN-19852).
+
+    Returns ``(tokens, opened, closed)``: the segment without its leading
+    ``(`` / ``{`` and its unmatched trailing ``)`` / ``}``, how many subshells
+    it opens (each ``(`` keeps a directory change from leaking out) and how
+    many it closes. A ``$(`` substitution balances itself and is left alone.
+    """
+    tokens = list(segment)
+    opened = 0
+    while tokens:
+        head = tokens[0]
+        if head == "{":
+            tokens = tokens[1:]
+        elif head.startswith("(") and not head.startswith("$("):
+            opened += 1
+            tokens[0] = head[1:]
+            if not tokens[0]:
+                tokens = tokens[1:]
+        else:
+            break
+    closed = 0
+    balance = sum(t.count("(") - t.count(")") for t in tokens)
+    while tokens and balance < 0 and tokens[-1].endswith(")"):
+        tokens[-1] = tokens[-1][:-1]
+        closed += 1
+        balance += 1
+        if not tokens[-1]:
+            tokens.pop()
+    while tokens and tokens[-1] == "}":
+        tokens.pop()
+    return tokens, opened, closed
+
+
+def _track_assignments(segment: list[str], scope: Scope) -> None:
+    """Record ``NAME=value`` in ``scope`` when the value is fully resolvable.
+
+    OMN-19852. The names a command assigns start unresolvable (the hook's own
+    environment holds the value from BEFORE the command). A pure assignment
+    segment -- ``WT=<path>`` or ``export WT=<path>`` -- whose value expands
+    from what is already known gives the name its real value from that point
+    on, so an assignment of a worktree path followed by ``git -C "$WT"`` is
+    judged where git will run. A value with a substitution, an unset or
+    unresolved variable or a glob stays unresolvable. A segment with a
+    command word (``WT=x <command>``) assigns only for that one command and
+    is not tracked.
+    """
+    if not isinstance(scope, ChainMap):
+        return
+    tokens = segment[1:] if segment[:1] == ["export"] else segment
+    if not tokens or not all(_ASSIGNMENT.match(t) for t in tokens):
+        return
+    for token in tokens:
+        name, _, value = token.partition("=")
+        if name not in scope.maps[0]:
+            continue
+        try:
+            scope.maps[0][name] = expand_word(unquoted(value), scope)
+        except UnresolvableWord:
+            scope.maps[0][name] = None
+
+
 def evaluate_bash_command(
     command: str,
     policy: Policy,
@@ -1729,7 +1799,20 @@ def evaluate_bash_command(
     # A location variable the hook itself inherits, or one exported earlier
     # in this command, relocates every later git call.
     exported_relocation = any(os.environ.get(name) for name in _GIT_LOCATION_ENV)
-    for segment in segments:
+    # OMN-19852. Each `(` saves the directory in force so a `cd` inside the
+    # subshell cannot leak out of its `)`.
+    subshell_stack: list[tuple[Path, bool]] = []
+    pending_close = 0
+    for raw_segment in segments:
+        # A `)` takes effect after the segment that carries it.
+        for _ in range(pending_close):
+            if subshell_stack:
+                effective_cwd, cwd_known = subshell_stack.pop()
+        segment, opened, pending_close = _peel_grouping(raw_segment)
+        subshell_stack.extend([(effective_cwd, cwd_known)] * opened)
+        if not segment:
+            continue
+        _track_assignments(segment, scope)
         if _assigns_git_location(segment):
             stripped_program = _strip_wrappers(segment)
             if (

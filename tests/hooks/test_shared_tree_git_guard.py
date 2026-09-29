@@ -1463,3 +1463,78 @@ def test_shell_wrapper_disabled_via_mask(tmp_path: Path, registry: Path) -> None
         mask="0x0",
     )
     assert result.returncode == 0, (result.stdout, result.stderr)
+
+
+# ---------------------------------------------------------------------------
+# OMN-19852: the effective directory of the command, not the session cwd
+# ---------------------------------------------------------------------------
+#
+# A lane's Bash call starts in the session cwd (the registry clone), so the
+# only place a merge, rebase or reset can be aimed at the lane's own worktree
+# is inside the command itself. Three spellings of that were read as the
+# session cwd and refused: a variable the command assigns, a subshell or brace
+# group around the `cd`, and `--work-tree`. Each is paired with the same
+# command aimed at the registry, which must stay refused.
+
+_WT_VERBS = ("merge origin/dev", "rebase origin/dev", "reset --hard origin/dev")
+
+
+@pytest.mark.parametrize("verb", _WT_VERBS)
+@pytest.mark.parametrize(
+    "template",
+    [
+        'WT="{t}"; git -C "$WT" {v}',
+        'WT={t}; cd "$WT" && git {v}',
+        'export WT="{t}"; git -C "$WT" {v}',
+        'A={t}; B="$A"; git -C "$B" {v}',
+        "(cd {t} && git {v})",
+        "{{ cd {t} && git {v}; }}",
+        "( cd {t}; git {v} )",
+        "git --work-tree={t} {v}",
+    ],
+)
+def test_effective_directory_in_a_worktree_is_admitted(
+    template: str,
+    verb: str,
+    registry: Path,
+    registry_worktree: Path,
+    policy: Policy,
+) -> None:
+    command = template.format(t=registry_worktree, v=verb)
+    decision = evaluate_bash_command(
+        command, policy, cwd=registry, registry_root=registry
+    )
+    assert not decision.blocked, (command, decision.reason)
+
+
+@pytest.mark.parametrize("verb", _WT_VERBS)
+@pytest.mark.parametrize(
+    "template",
+    [
+        'WT="{t}"; git -C "$WT" {v}',
+        'WT={t}; cd "$WT" && git {v}',
+        'A={t}; B="$A"; git -C "$B" {v}',
+        "(cd {t} && git {v})",
+        "{{ cd {t} && git {v}; }}",
+        "git --work-tree={t} {v}",
+        # a later assignment replaces an earlier one
+        'WT={w}; WT={t}; git -C "$WT" {v}',
+        # a subshell `cd` does not leak out of the subshell
+        "(cd {w}); git {v}",
+        "(cd {w} && true) && git {v}",
+        # an unresolvable assignment stays unresolvable
+        'WT=$(pwd); git -C "$WT" {v}',
+    ],
+)
+def test_same_spellings_aimed_at_the_registry_stay_refused(
+    template: str,
+    verb: str,
+    registry: Path,
+    registry_worktree: Path,
+    policy: Policy,
+) -> None:
+    command = template.format(t=registry, v=verb, w=registry_worktree)
+    decision = evaluate_bash_command(
+        command, policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked, command
