@@ -89,6 +89,7 @@ import json
 import os
 import re
 import shlex
+import signal
 import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -1026,6 +1027,155 @@ def _git_bypass_reason(tokens: list[str]) -> str | None:
     return None
 
 
+# --- process-kill class (OMN-16742, rule 21) ----------------------------------
+
+
+def _kill_bypass_reason(tokens: list[str], depth: int = 0) -> str | None:
+    """Judge one tokenized segment; inspect nested shell commands through depth 3.
+
+    Only command positions are judged, so text-emitting commands (including
+    those in the guard's _TEXT_EMITTING set) never expose their arguments.
+    """
+    max_depth = 3
+    if depth > max_depth:
+        return None
+    reason = (
+        "BLOCKED: rule 21 forbids process-name, process-group, and computed "
+        "PID-list kills, which can terminate other workers. "
+        "Use kill <your own pid> instead."
+    )
+    shells = {"bash", "sh", "zsh"}
+    wrappers = shells | {"env", "nohup", "time", "command", "exec", "sudo"}
+    value_options = {
+        "env": {"-u", "--unset", "-C", "--chdir"},
+        "time": {"-o", "--output", "-f", "--format"},
+        "exec": {"-a"},
+        "sudo": {
+            "-u",
+            "--user",
+            "-g",
+            "--group",
+            "-h",
+            "--host",
+            "-p",
+            "--prompt",
+            "-C",
+            "--close-from",
+            "-D",
+            "--chdir",
+            "-R",
+            "--chroot",
+            "-r",
+            "--role",
+            "-t",
+            "--type",
+            "-T",
+            "--command-timeout",
+        },
+        "bash": {"-o", "-O", "--rcfile", "--init-file"},
+        "sh": {"-o"},
+        "zsh": {"-o"},
+    }
+    nested: str | None = None
+    i = 0
+    while i < len(tokens):
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[i]):
+            i += 1
+            continue
+        command = tokens[i].rsplit("/", 1)[-1]
+        i += 1
+        if command not in wrappers:
+            break
+        while i < len(tokens) and tokens[i].startswith("-"):
+            option = tokens[i]
+            i += 1
+            if option == "--":
+                break
+            if command == "command" and option in {"-v", "-V"}:
+                return None  # These report command information without executing.
+            if command in shells and not option.startswith("--") and "c" in option:
+                if i < len(tokens):
+                    nested = tokens[i]
+                break
+            if option in value_options.get(command, set()):
+                i += 1
+        if nested is not None:
+            break
+    else:
+        return None
+
+    if nested is None and command == "ssh":
+        # SSH consumes its options and destination; remaining words form the
+        # remote shell command, including a single quoted command-string arg.
+        ssh_value_options = set("BbcDEeFIiJLlmOoPpQRSWw")
+        while i < len(tokens) and tokens[i].startswith("-"):
+            option = tokens[i]
+            i += 1
+            if option == "--":
+                break
+            if len(option) == len("-p") and option[1] in ssh_value_options:
+                i += 1
+        nested = " ".join(tokens[i + 1 :])
+    if nested is not None:
+        if depth == max_depth:
+            return None
+        for segment in re.split(r"&&|\|\||;|\n|\|", nested):
+            nested_words = _segment_tokens(segment)
+            denied = _kill_bypass_reason(nested_words, depth + 1)
+            if denied:
+                return denied
+        return None
+
+    if command in {"pkill", "killall", "killall5"}:
+        return reason
+    args = tokens[i:]
+    if command == "xargs":
+        return (
+            reason
+            if any(
+                arg.rsplit("/", 1)[-1] in {"kill", "pkill", "killall", "killall5"}
+                for arg in args
+            )
+            else None
+        )
+    if command != "kill":
+        return None
+
+    # Consume only the leading signal selector. Once it is consumed, negative
+    # numbers are operands, including -1 after an explicit signal or '--'.
+    start = 0
+    if args:
+        first = args[0]
+        if first in {"-0", "-l", "-L", "--list", "--table"}:
+            return None
+        if first == "--":
+            start = 1
+        elif first in {"-s", "-n", "--signal"}:
+            if len(args) > 1 and args[1] == "0":
+                return None
+            start = 2
+        elif first.startswith("--signal="):
+            if first.split("=", 1)[1] == "0":
+                return None
+            start = 1
+        elif re.fullmatch(r"-(?:s|n).+", first):
+            if first[2:] == "0":
+                return None
+            start = 1
+        elif re.fullmatch(r"-[A-Za-z][A-Za-z0-9]*", first) or (
+            re.fullmatch(r"-\d+", first)
+            and len(args) > 1
+            and int(first[1:]) in signal.valid_signals()
+        ):
+            start = 1
+    for operand in args[start:]:
+        if re.fullmatch(r"-\d+|[+]?0+", operand):
+            return reason
+        if re.search(r"(?:\$\(\s*|`\s*)(?:pgrep|pidof)\b", operand):
+            return reason
+    return None
+
+
 def _iter_bypass_checks(command: str) -> Iterator[tuple[str, str]]:
     """Yield (label, deny reason) for every gate-escape in *command*."""
     for raw_segment in _SEGMENT_SPLIT_RE.split(_strip_heredocs(command)):
@@ -1034,6 +1184,10 @@ def _iter_bypass_checks(command: str) -> Iterator[tuple[str, str]]:
             continue
         tokens = _segment_tokens(segment)
         if not tokens:
+            continue
+        kill_reason = _kill_bypass_reason(tokens)
+        if kill_reason:
+            yield "process kill", kill_reason
             continue
         if tokens[0] == "export":
             for tok in tokens[1:]:
