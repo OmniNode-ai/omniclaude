@@ -487,14 +487,17 @@ def test_the_redaction_mirror_passes_the_lineage_and_hashes_the_undeclared(
 # ---------------------------------------------------------------------------
 
 
-def test_the_shipped_lane_contract_holds_hook_event_back(
-    jdir: Path, monkeypatch: pytest.MonkeyPatch
+def test_the_shipped_lane_contract_no_longer_holds_hook_event_back(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """The dev-lane produce grant landed 2026-09-26 (offset 41 positive control).
+
+    With hook.event still listed under produce_grant_pending every hook on the
+    operator Mac logged "skipped ... (no produce grant yet)" and journalled
+    nothing, so the topic stayed at 42 records (OMN-19513).
+    """
     monkeypatch.undo()
-    monkeypatch.delenv(capture_mod.OPT_OUT_ENV, raising=False)
-    assert capture_mod.lane_grant_pending() is True
-    assert capture_mod.capture(_stdin("Stop"), journal_dir=jdir) == 0
-    assert _events(jdir) == []
+    assert capture_mod.lane_grant_pending() is False
 
 
 def test_deleting_the_pending_entry_is_what_activates_the_capture(
