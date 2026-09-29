@@ -32,15 +32,17 @@ _OMNICLAUDE_HOOK_NAME="${_OMNICLAUDE_HOOK_NAME:-unknown-hook}"
 # Standalone hooks source error-guard before common.sh, and some never source
 # common.sh at all. Load the bitmask gate here so ONEX_HOOKS_MASK checks are
 # available before hook-specific behavior starts.
-source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
+# OMN-20109: this file's directory, resolved once without a dirname exec.
+_ONEX_ERROR_GUARD_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_ERROR_GUARD_DIR=.; [[ -n "$_ONEX_ERROR_GUARD_DIR" ]] || _ONEX_ERROR_GUARD_DIR=/
+source "${_ONEX_ERROR_GUARD_DIR}/hook-gate.sh" 2>/dev/null || true
 
 # Outcome-checked alert delivery (OMN-15600). Curl-only, no common.sh dependency.
 # shellcheck source=./alert-channel.sh
-source "$(dirname "${BASH_SOURCE[0]}")/alert-channel.sh" 2>/dev/null || true
+source "${_ONEX_ERROR_GUARD_DIR}/alert-channel.sh" 2>/dev/null || true
 
 # Log directory for error-guard failures (created lazily on first error)
 _ERROR_GUARD_LOG_DIR="${_ERROR_GUARD_LOG_DIR:-${TMPDIR:-/tmp}/omniclaude-error-guard}"
-mkdir -p "$_ERROR_GUARD_LOG_DIR" 2>/dev/null || true
+[[ -d "$_ERROR_GUARD_LOG_DIR" ]] || mkdir -p "$_ERROR_GUARD_LOG_DIR" 2>/dev/null || true
 
 # Structured log file — one file per hook, appended to
 _ERROR_GUARD_LOG_FILE="${_ERROR_GUARD_LOG_DIR}/${_OMNICLAUDE_HOOK_NAME}.log"

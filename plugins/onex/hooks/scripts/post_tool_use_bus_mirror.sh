@@ -34,11 +34,13 @@
 
 set -uo pipefail
 
-_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
 
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+. "${_ONEX_HOOK_SELF_DIR}/../lib/repo_guard.sh" 2>/dev/null || true
 if declare -F is_omninode_repo >/dev/null 2>&1; then
     CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
         is_omninode_repo || {
@@ -48,7 +50,7 @@ if declare -F is_omninode_repo >/dev/null 2>&1; then
 fi
 
 # Lite mode: no bus mirroring in lite mode (generic dev tooling only).
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then
     # shellcheck disable=SC1090
@@ -79,14 +81,14 @@ else
 fi
 
 # shellcheck source=onex-paths.sh
-source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
+source "${_ONEX_HOOK_SELF_DIR}/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/hook-post-tool-use-bus-mirror.log"
 # OMN-19519: this log is appended on every event it mirrors and had no
 # rotation; the helper from onex-paths.sh bounds it (sampled, never fails).
 if declare -F onex_maybe_rotate_log >/dev/null 2>&1; then
     onex_maybe_rotate_log "$LOG_FILE"
 fi
-mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
 
 # Detect project root (same convention as session_start_bus_mirror.sh).
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
@@ -127,7 +129,7 @@ source "${HOOKS_DIR}/scripts/common.sh" 2>/dev/null || {
 # line is where it wins. Order is enforced by
 # scripts/validation/validate_hook_edge_lane.py, not left to convention.
 # shellcheck source=hook_edge_lane.sh
-source "$(dirname "${BASH_SOURCE[0]}")/hook_edge_lane.sh" 2>/dev/null || true
+source "${_ONEX_HOOK_SELF_DIR}/hook_edge_lane.sh" 2>/dev/null || true
 onex_hook_gate POST_TOOL_USE_BUS_MIRROR || {
     cat >/dev/null 2>/dev/null || true
     exit 0
@@ -139,25 +141,64 @@ if ! command -v jq >/dev/null 2>&1; then
     # No jq: cannot safely build a JSON payload. Fail-open, no emission.
     exit 0
 fi
-if ! echo "$INPUT" | jq -e . >/dev/null 2>&1; then
+# OMN-20109: every field below is read by ONE jq, not one jq per field. This
+# hook runs on every tool call, and the per-field reads were 11 of its execs.
+# Each expression is the one the per-field read used. `raw` prints what
+# `jq -r` printed into `$(...)`: a string minus trailing newlines, any other
+# value as jq's indented JSON. A read that errors (a non-object input) yields
+# the fallback its `|| VAR=...` gave. `_BM_VALID` is the old `jq -e .` test:
+# absent when the input does not parse, is empty, or is null or false, which
+# resets INPUT to '{}' exactly as before.
+_BM_FIELDS=$(echo "$INPUT" | jq -r '
+    def ind($n): [range($n) | "  "] | join("");
+    def pp($n): if type == "object" then
+            (if length == 0 then "{}" else "{\n" + ([to_entries[]
+                | ind($n + 1) + (.key | tojson) + ": " + (.value | pp($n + 1))]
+                | join(",\n")) + "\n" + ind($n) + "}" end)
+        elif type == "array" then
+            (if length == 0 then "[]" else "[\n" + ([.[] | ind($n + 1) + pp($n + 1)]
+                | join(",\n")) + "\n" + ind($n) + "]" end)
+        else tojson end;
+    def raw: if type == "string"
+        then (if endswith("\n") then (.[:-1] | raw) else . end)
+        else pp(0) end;
+    (if . == null or . == false then "" else "_BM_VALID=1\n" end)
+    + @sh "SESSION_ID=\(try (.session_id // .sessionId // "" | raw) catch "")\n"
+    + @sh "AGENT_ID=\(try (.agent_id // .agentId // "" | raw) catch "")\n"
+    + @sh "TRANSCRIPT_PATH=\(try (.transcript_path // .transcriptPath // "" | raw) catch "")\n"
+    + @sh "CWD=\(try (.cwd // "" | raw) catch "")\n"
+    + @sh "TURN_ID=\(try (.turn_id // "" | raw) catch "")\n"
+    + @sh "TOOL_NAME=\(try (.tool_name // "unknown" | raw) catch "unknown")\n"
+    + @sh "_BM_DURATION_MS=\(try (.duration_ms // 0 | raw) catch "0")\n"
+    + @sh "_BM_INTERRUPTED=\(try (.tool_response.interrupted // false | raw) catch "false")\n"
+    + @sh "TOOL_USE_ID=\(try (.tool_use_id // "" | raw) catch "")"
+' 2>/dev/null) || _BM_FIELDS=""
+_BM_VALID=""
+SESSION_ID="" AGENT_ID="" TRANSCRIPT_PATH="" CWD="" TURN_ID="" TOOL_NAME="unknown"
+_BM_DURATION_MS=0 _BM_INTERRUPTED="false" TOOL_USE_ID=""
+[[ -n "$_BM_FIELDS" ]] && eval "$_BM_FIELDS"
+if [[ "$_BM_VALID" != "1" ]]; then
     INPUT='{}'
+    SESSION_ID="" AGENT_ID="" TRANSCRIPT_PATH="" CWD="" TURN_ID="" TOOL_NAME="unknown"
+    _BM_DURATION_MS=0 _BM_INTERRUPTED="false" TOOL_USE_ID=""
 fi
+unset _BM_FIELDS _BM_VALID
 
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SESSION_ID=""
 # OMN-18609: the lane a hook event belongs to is resolved from the harness's
 # own spawn sidecar, keyed by agent id and located from the session transcript.
 # A dispatched lane's cwd is the SESSION's directory, not its worktree, so the
-# worktree registry alone resolved every record on this fleet to "unresolved".
-AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // .agentId // ""' 2>/dev/null) || AGENT_ID=""
-TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // .transcriptPath // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
-CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
+# worktree registry alone resolved every record to "unresolved". AGENT_ID and
+# TRANSCRIPT_PATH above are those two keys.
 [[ -z "$CWD" ]] && CWD="$(pwd)"
-WORKING_DIRECTORY="$(basename "$CWD")"
-# OMN-18704: Codex supplies a per-turn identifier; Claude Code does not.
-# Read it host-agnostically -- absent yields the empty string, which the
-# appender records as an explicit null rather than omitting the field.
-TURN_ID=$(echo "$INPUT" | jq -r '.turn_id // ""' 2>/dev/null) || TURN_ID=""
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // "unknown"' 2>/dev/null) || TOOL_NAME="unknown"
+# basename(1) without the exec: trailing slashes dropped, "/" stays "/".
+_BM_WD="$CWD"
+while [[ "$_BM_WD" == */ && "$_BM_WD" != "/" ]]; do _BM_WD="${_BM_WD%/}"; done
+[[ "$_BM_WD" == "/" ]] && WORKING_DIRECTORY="/" || WORKING_DIRECTORY="${_BM_WD##*/}"
+unset _BM_WD
+# OMN-18704: Codex supplies a per-turn identifier (TURN_ID above); Claude Code
+# does not. Absent yields the empty string, which the appender records as an
+# explicit null rather than omitting the field.
+#
 # OMN-18704: Codex's PostToolUse input carries neither a duration nor an
 # interrupt flag -- verified against the live 0.154.0 wire format, whose
 # required fields are cwd, hook_event_name, model, permission_mode,
@@ -168,23 +209,28 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // "unknown"' 2>/dev/null) || TOOL
 # explicitly null for that actor, and hooks/contracts/hook_actor_envelope.yaml
 # carries the reason. The Claude branch is byte-identical to the pre-ticket
 # code: this adds an actor, it does not change what the Claude host records.
-if [[ "$(printf '%s' "${HOOK_ACTOR_ARG:-}" | tr '[:upper:]' '[:lower:]')" == "codex" ]]; then
+# The actor compare is case-insensitive, as the `tr` lowercase it replaces was.
+case "${HOOK_ACTOR_ARG:-}" in
+    [Cc][Oo][Dd][Ee][Xx]) _BM_IS_CODEX=1 ;;
+    *) _BM_IS_CODEX=0 ;;
+esac
+if [[ "$_BM_IS_CODEX" == "1" ]]; then
     DURATION_MS="null"
     INTERRUPTED="null"
 else
-    DURATION_MS=$(echo "$INPUT" | jq -r '.duration_ms // 0' 2>/dev/null) || DURATION_MS=0
+    DURATION_MS="$_BM_DURATION_MS"
     [[ "$DURATION_MS" =~ ^[0-9]+$ ]] || DURATION_MS=0
-    INTERRUPTED=$(echo "$INPUT" | jq -r '.tool_response.interrupted // false' 2>/dev/null) || INTERRUPTED="false"
+    INTERRUPTED="$_BM_INTERRUPTED"
     [[ "$INTERRUPTED" == "true" ]] || INTERRUPTED="false"
 fi
+unset _BM_IS_CODEX _BM_DURATION_MS _BM_INTERRUPTED
 
-# OMN-19513: the harness's tool-call id and the id of the agent that made the
-# call. A subagent shares its parent's session_id, so without agent_id a
-# subagent's tool rows were indistinguishable from the main thread's, and
-# without tool_use_id a row could not be joined to the hook-event lineage
-# (parent tool_use_id, spawn depth) that claude_hook_capture.sh publishes.
-# Both are opaque harness ids; an absent one is an explicit null.
-TOOL_USE_ID=$(echo "$INPUT" | jq -r '.tool_use_id // ""' 2>/dev/null) || TOOL_USE_ID=""
+# OMN-19513: the harness's tool-call id (TOOL_USE_ID above) and the id of the
+# agent that made the call. A subagent shares its parent's session_id, so
+# without agent_id a subagent's tool rows were indistinguishable from the main
+# thread's, and without tool_use_id a row could not be joined to the hook-event
+# lineage (parent tool_use_id, spawn depth) that claude_hook_capture.sh
+# publishes. Both are opaque harness ids; an absent one is an explicit null.
 
 PAYLOAD=$(jq -nc \
     --arg session_id "$SESSION_ID" \

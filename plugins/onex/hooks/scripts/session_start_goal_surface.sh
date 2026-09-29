@@ -125,7 +125,9 @@ say() { printf '%s %s\n' "$_PREFIX" "$*"; }
 
 # Lite mode: an external contributor using this plugin in an unrelated repo has
 # no knowledge-base-internal clone and must never see ONEX-specific output.
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || _SCRIPT_DIR="."
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+_SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" 2>/dev/null && pwd)" || _SCRIPT_DIR="."
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then
     # shellcheck disable=SC1090

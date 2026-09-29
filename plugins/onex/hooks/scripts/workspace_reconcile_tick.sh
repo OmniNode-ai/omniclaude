@@ -84,7 +84,9 @@
 
 set -u
 
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || _SCRIPT_DIR="."
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+_SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" 2>/dev/null && pwd)" || _SCRIPT_DIR="."
 
 # SessionStart/PostToolUse deliver a JSON payload on stdin. Nothing here needs
 # it, but an unread stdin can hand the caller an EPIPE, so drain it.
@@ -120,7 +122,8 @@ _STATUS="${_STATE_DIR}/workspace-reconcile.status"
 _RECEIPTS="${ONEX_LOG_DIR:-${HOME}/.onex_state/logs}/workspace-reconcile.log"
 _INTERVAL="${ONEX_RECONCILE_TICK_SECONDS:-600}"
 
-mkdir -p "$_STATE_DIR" "$(dirname "$_RECEIPTS")" 2>/dev/null || true
+[[ -d "$_STATE_DIR" && -d "${_RECEIPTS%/*}" ]] \
+    || mkdir -p "$_STATE_DIR" "$(dirname "$_RECEIPTS")" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Throttle

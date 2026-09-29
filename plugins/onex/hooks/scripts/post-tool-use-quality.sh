@@ -6,11 +6,13 @@
 # Auto-fixes naming convention violations after files are written
 
 set -euo pipefail
-_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
-source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
+source "${_ONEX_HOOK_SELF_DIR}/error-guard.sh" 2>/dev/null || true
 
 # --- Lite mode guard [OMN-5398] ---
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && exit 0; fi
 unset _SCRIPT_DIR _MODE_SH
@@ -19,9 +21,15 @@ unset _SCRIPT_DIR _MODE_SH
 # Resolve absolute path of this script, handling relative invocation (e.g. ./post-tool-use-quality.sh).
 # Falls back to python3 if realpath is unavailable (non-GNU macOS without coreutils).
 # Resolved BEFORE any `cd`: BASH_SOURCE[0] may be relative [OMN-19047].
-_SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
-SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
+if [[ -L "${BASH_SOURCE[0]}" ]]; then
+    _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
+        || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
+    SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
+else
+    # OMN-20109: not a symlink, so realpath() of this script is its physical
+    # directory plus its name; cd -P resolves that without a realpath exec.
+    SCRIPT_DIR="$(CDPATH='' cd -P -- "${_ONEX_HOOK_SELF_DIR}" && pwd -P)"
+fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
@@ -34,7 +42,7 @@ HOOKS_LIB="${HOOKS_DIR}/lib"
 # Absolute script directory, resolved while the caller's CWD is still in
 # effect. BASH_SOURCE[0] may be relative, so a sibling sourced after the
 # cd below cannot be found through it [OMN-19047].
-HOOK_SCRIPT_DIR="${HOOK_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+HOOK_SCRIPT_DIR="${HOOK_SCRIPT_DIR:-$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)}"
 
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
@@ -60,7 +68,7 @@ else
 fi
 
 # Ensure log directory exists
-mkdir -p "$(dirname "$LOG_FILE")"
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")"
 
 # --- Log rotation guard [OMN-8429] ---
 # Trim-in-place when log exceeds ONEX_HOOK_LOG_MAX_MB (default 50MB).
@@ -151,20 +159,59 @@ fi
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] PostToolUse JSON:" >> "$LOG_FILE"
 echo "$TOOL_INFO" | jq '.' >> "$LOG_FILE" 2>&1 || echo "$TOOL_INFO" >> "$LOG_FILE"
 
+# OMN-20109: every field this hook reads from the payload is read by ONE jq
+# here, not by one jq per field (eleven on a Skill call). Each expression is
+# the one its own jq used. `raw` prints what `jq -r` printed into `$(...)`: a
+# string minus trailing newlines, any other value as jq's indented JSON. A read
+# that errors yields the fallback its `|| VAR=...` gave. The values are
+# assigned below at the lines that used to read them, so which variables exist
+# on which branch is unchanged. TOOL_INFO already passed `jq -e .` above.
+_Q_FIELDS=$(echo "$TOOL_INFO" | jq -r '
+    def ind($n): [range($n) | "  "] | join("");
+    def pp($n): if type == "object" then
+            (if length == 0 then "{}" else "{\n" + ([to_entries[]
+                | ind($n + 1) + (.key | tojson) + ": " + (.value | pp($n + 1))]
+                | join(",\n")) + "\n" + ind($n) + "}" end)
+        elif type == "array" then
+            (if length == 0 then "[]" else "[\n" + ([.[] | ind($n + 1) + pp($n + 1)]
+                | join(",\n")) + "\n" + ind($n) + "]" end)
+        else tojson end;
+    def raw: if type == "string"
+        then (if endswith("\n") then (.[:-1] | raw) else . end)
+        else pp(0) end;
+    @sh "_Q_TOOL_NAME=\(try (.tool_name // "unknown" | raw) catch "unknown")\n"
+    + @sh "_Q_SESSION_ID=\(try (.sessionId // .session_id // "" | raw) catch "")\n"
+    + @sh "_Q_AGENT_ID=\(try (.agent_id // .agentId // "" | raw) catch "")\n"
+    + @sh "_Q_TRANSCRIPT_PATH=\(try (.transcript_path // .transcriptPath // "" | raw) catch "")\n"
+    + @sh "_Q_SKILL_NAME=\(try (.tool_input.skill // .tool_input.name // "unknown" | raw) catch "unknown")\n"
+    + @sh "_Q_SKILL_ERROR=\(try (.tool_response.error // "" | raw) catch "")\n"
+    + @sh "_Q_SKILL_RUN_ID=\(try (.tool_use_id // "" | raw) catch "")\n"
+    + @sh "_Q_SKILL_SESSION_ID=\(try (.session_id // .sessionId // "" | raw) catch "")\n"
+    + @sh "_Q_TOOL_ERROR=\(try (.tool_response.error // .error // "" | raw) catch "")\n"
+    + @sh "_Q_DURATION_MS=\(try (.duration_ms // .durationMs // "" | raw) catch "")\n"
+    + @sh "_Q_INPUT_TOKENS=\(try (.usage.input_tokens // 0 | raw) catch "0")\n"
+    + @sh "_Q_OUTPUT_TOKENS=\(try (.usage.output_tokens // 0 | raw) catch "0")"
+' 2>/dev/null) || _Q_FIELDS=""
+_Q_TOOL_NAME="unknown" _Q_SESSION_ID="" _Q_AGENT_ID="" _Q_TRANSCRIPT_PATH=""
+_Q_SKILL_NAME="unknown" _Q_SKILL_ERROR="" _Q_SKILL_RUN_ID="" _Q_SKILL_SESSION_ID=""
+_Q_TOOL_ERROR="" _Q_DURATION_MS="" _Q_INPUT_TOKENS=0 _Q_OUTPUT_TOKENS=0
+if [[ -n "$_Q_FIELDS" ]]; then eval "$_Q_FIELDS"; fi
+unset _Q_FIELDS
+
 # Extract tool name (non-critical: fall back to "unknown" on jq failure)
-TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // "unknown"' 2>/dev/null) || TOOL_NAME="unknown"
+TOOL_NAME="$_Q_TOOL_NAME"
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] PostToolUse hook triggered for $TOOL_NAME (plugin mode)" >> "$LOG_FILE"
 
 # Extract session ID early — needed by pattern enforcement and Kafka emission.
 # Wrapped in set +e to ensure the fallback chain never kills the hook.
 set +e
-SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.sessionId // .session_id // ""' 2>/dev/null)
+SESSION_ID="$_Q_SESSION_ID"
 # OMN-18609: locate the harness spawn sidecar that names the lane. Read here
 # rather than in emit_to_journal so the lookup uses the SAME payload the hook
 # was handed; a dispatched lane's cwd is the session's directory, not its
 # worktree, so the worktree registry alone cannot attribute these events.
-AGENT_ID=$(echo "$TOOL_INFO" | jq -r '.agent_id // .agentId // ""' 2>/dev/null) || AGENT_ID=""
-TRANSCRIPT_PATH=$(echo "$TOOL_INFO" | jq -r '.transcript_path // .transcriptPath // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
+AGENT_ID="$_Q_AGENT_ID"
+TRANSCRIPT_PATH="$_Q_TRANSCRIPT_PATH"
 if [[ -z "$SESSION_ID" ]]; then
     SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]')
 fi
@@ -182,14 +229,14 @@ set -e
 # -----------------------------------------------------------------------
 source "${HOOK_SCRIPT_DIR}/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
 TRACE_LOG="${ONEX_LOG_DIR}/pipeline-trace.log"
-mkdir -p "$(dirname "$TRACE_LOG")" 2>/dev/null
+[[ -d "${TRACE_LOG%/*}" ]] || mkdir -p "$(dirname "${TRACE_LOG}")" 2>/dev/null
 TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 if [[ "$TOOL_NAME" == "Skill" ]]; then
-    SKILL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_input.skill // .tool_input.name // "unknown"' 2>/dev/null) || SKILL_NAME="unknown"
-    SKILL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // ""' 2>/dev/null) || SKILL_ERROR=""
-    SKILL_RUN_ID=$(echo "$TOOL_INFO" | jq -r '.tool_use_id // ""' 2>/dev/null) || SKILL_RUN_ID=""
-    SKILL_SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SKILL_SESSION_ID=""
+    SKILL_NAME="$_Q_SKILL_NAME"
+    SKILL_ERROR="$_Q_SKILL_ERROR"
+    SKILL_RUN_ID="$_Q_SKILL_RUN_ID"
+    SKILL_SESSION_ID="$_Q_SKILL_SESSION_ID"
     if [[ -n "$SKILL_ERROR" ]]; then
         echo "[$TS] [PostToolUse] SKILL_LOAD_FAILED skill=$SKILL_NAME error=$SKILL_ERROR" >> "$TRACE_LOG"
     else
@@ -356,7 +403,7 @@ else
 fi
 
 # Error detection and logging
-TOOL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // .error // empty' 2>/dev/null) || TOOL_ERROR=""
+TOOL_ERROR="$_Q_TOOL_ERROR"
 if [[ -n "$TOOL_ERROR" ]]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool error detected: $TOOL_ERROR" >> "$LOG_FILE"
 fi
@@ -369,7 +416,7 @@ if [[ -n "$TOOL_ERROR" ]]; then
 fi
 
 # Extract duration if available
-DURATION_MS=$(echo "$TOOL_INFO" | jq -r '.duration_ms // .durationMs // ""' 2>/dev/null || echo "")
+DURATION_MS="$_Q_DURATION_MS"
 
 # -----------------------------------------------------------------------
 # Session Accumulator: Increment token + tool counters (OMN-7602)
@@ -391,8 +438,8 @@ if [[ -n "$SESSION_ID" && "$SESSION_ID" != "unknown-session" ]]; then
     _ACCUM_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
 
     # Extract token usage from PostToolUse payload (.usage.input_tokens, .usage.output_tokens)
-    _ptu_input_tokens=$(echo "$TOOL_INFO" | jq -r '.usage.input_tokens // 0' 2>/dev/null) || _ptu_input_tokens=0
-    _ptu_output_tokens=$(echo "$TOOL_INFO" | jq -r '.usage.output_tokens // 0' 2>/dev/null) || _ptu_output_tokens=0
+    _ptu_input_tokens="$_Q_INPUT_TOKENS"
+    _ptu_output_tokens="$_Q_OUTPUT_TOKENS"
     # Sanitize: ensure numeric
     [[ "$_ptu_input_tokens" =~ ^[0-9]+$ ]] || _ptu_input_tokens=0
     [[ "$_ptu_output_tokens" =~ ^[0-9]+$ ]] || _ptu_output_tokens=0

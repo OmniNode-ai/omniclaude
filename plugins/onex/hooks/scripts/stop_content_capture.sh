@@ -20,11 +20,13 @@
 
 set -uo pipefail
 
-_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
 
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+. "${_ONEX_HOOK_SELF_DIR}/../lib/repo_guard.sh" 2>/dev/null || true
 if declare -F is_omninode_repo >/dev/null 2>&1; then
     CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
         is_omninode_repo || {
@@ -34,7 +36,7 @@ if declare -F is_omninode_repo >/dev/null 2>&1; then
 fi
 
 # Lite mode: no bus mirroring in lite mode (generic dev tooling only).
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then
     # shellcheck disable=SC1090
@@ -65,14 +67,14 @@ else
 fi
 
 # shellcheck source=onex-paths.sh
-source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" 2>/dev/null || true
+source "${_ONEX_HOOK_SELF_DIR}/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/hook-stop-content-capture.log"
 # OMN-19519: this log is appended on every event it mirrors and had no
 # rotation; the helper from onex-paths.sh bounds it (sampled, never fails).
 if declare -F onex_maybe_rotate_log >/dev/null 2>&1; then
     onex_maybe_rotate_log "$LOG_FILE"
 fi
-mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
 
 # Detect project root (same convention as session-end.sh).
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
@@ -113,7 +115,7 @@ source "${HOOKS_DIR}/scripts/common.sh" 2>/dev/null || {
 # line is where it wins. Order is enforced by
 # scripts/validation/validate_hook_edge_lane.py, not left to convention.
 # shellcheck source=hook_edge_lane.sh
-source "$(dirname "${BASH_SOURCE[0]}")/hook_edge_lane.sh" 2>/dev/null || true
+source "${_ONEX_HOOK_SELF_DIR}/hook_edge_lane.sh" 2>/dev/null || true
 onex_hook_gate STOP_CONTENT_CAPTURE || {
     cat >/dev/null 2>/dev/null || true
     exit 0

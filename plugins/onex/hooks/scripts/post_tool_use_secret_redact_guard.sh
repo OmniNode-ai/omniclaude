@@ -35,14 +35,22 @@
 set -eo pipefail
 
 # --- Lite mode guard [OMN-5398], mirrors post_tool_use_output_suppressor.sh ---
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+_SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && exit 0; fi
 unset _MODE_SH
 
-_SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
-SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
+if [[ -L "${BASH_SOURCE[0]}" ]]; then
+    _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
+        || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
+    SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
+else
+    # OMN-20109: not a symlink, so realpath() of this script is its physical
+    # directory plus its name; cd -P resolves that without a realpath exec.
+    SCRIPT_DIR="$(CDPATH='' cd -P -- "${_ONEX_HOOK_SELF_DIR}" && pwd -P)"
+fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF _SCRIPT_DIR SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"

@@ -51,11 +51,13 @@
 # first write a phantom OPEN lane record.
 
 set -euo pipefail
-_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
 
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+. "${_ONEX_HOOK_SELF_DIR}/../lib/repo_guard.sh" 2>/dev/null || true
 if declare -F is_omninode_repo >/dev/null 2>&1; then
     CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
         is_omninode_repo || {
@@ -73,13 +75,19 @@ fi
 # core is standard-library-only precisely so this guard can resolve an
 # interpreter itself and refuse when it cannot.
 # shellcheck source=./error-guard.sh
-source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
+source "${_ONEX_HOOK_SELF_DIR}/error-guard.sh" 2>/dev/null || true
 
 # Resolve this script's own location BEFORE any `cd`. BASH_SOURCE[0] may be
 # relative, and resolving it afterwards lands in the wrong tree.
-_SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
-SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
+if [[ -L "${BASH_SOURCE[0]}" ]]; then
+    _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
+        || python3 -c "import os,sys; p=os.path.realpath(sys.argv[1]); print(p) if os.path.exists(p) else sys.exit(1)" "${BASH_SOURCE[0]}")"
+    SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
+else
+    # OMN-20109: not a symlink, so realpath() of this script is its physical
+    # directory plus its name; cd -P resolves that without a realpath exec.
+    SCRIPT_DIR="$(CDPATH='' cd -P -- "${_ONEX_HOOK_SELF_DIR}" && pwd -P)"
+fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 GUARD_PY="${SCRIPT_DIR}/../lib/workflow_model_guard.py"
 unset _SELF
@@ -92,7 +100,7 @@ cd "$HOME" 2>/dev/null || cd /tmp || true
 # shellcheck source=./onex-paths.sh
 source "${SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_HOOK_LOG:-${HOME}/.claude/onex-hooks.log}"
-mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
 
 onex_hook_gate PRE_TOOL_AGENT_DISPATCH_GATE || exit 0
 

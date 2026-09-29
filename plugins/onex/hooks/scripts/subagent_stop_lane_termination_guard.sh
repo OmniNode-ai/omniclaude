@@ -41,7 +41,9 @@ set -eo pipefail
 
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+. "${_ONEX_HOOK_SELF_DIR}/../lib/repo_guard.sh" 2>/dev/null || true
 if declare -F is_omninode_repo >/dev/null 2>&1; then
     CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
         is_omninode_repo || {
@@ -51,7 +53,7 @@ if declare -F is_omninode_repo >/dev/null 2>&1; then
     }
 fi
 
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)"
 PLUGIN_ROOT="$(cd "${_SCRIPT_DIR}/../.." && pwd)"
 PROJECT_ROOT="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd || echo "")"
 export PLUGIN_ROOT PROJECT_ROOT
@@ -59,7 +61,7 @@ export PLUGIN_ROOT PROJECT_ROOT
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/hooks/scripts/onex-paths.sh"
 LOG_FILE="${ONEX_HOOK_LOG}"
-mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
 export LOG_FILE
 
 # shellcheck source=/dev/null

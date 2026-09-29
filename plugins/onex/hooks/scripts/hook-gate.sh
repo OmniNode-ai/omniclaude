@@ -8,7 +8,11 @@
 # the bitmask gate function before their first behavioral branch.
 
 if ! declare -F onex_hook_gate >/dev/null 2>&1; then
-    _ONEX_HOOK_GATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+    # OMN-20109: no dirname exec; "." when sourced by a bare name, as dirname says.
+    _ONEX_HOOK_GATE_DIR="${BASH_SOURCE[0]%/*}"
+    [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_GATE_DIR=.
+    [[ -n "$_ONEX_HOOK_GATE_DIR" ]] || _ONEX_HOOK_GATE_DIR=/
+    _ONEX_HOOK_GATE_DIR="$(cd "$_ONEX_HOOK_GATE_DIR" 2>/dev/null && pwd)"
     _ONEX_HOOK_BITS_PATH="${_ONEX_HOOK_GATE_DIR}/../lib/hook_bits.sh"
 
     if [[ -f "$_ONEX_HOOK_BITS_PATH" ]]; then
