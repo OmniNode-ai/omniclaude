@@ -12,6 +12,16 @@ A Bash command that REPLACES a pull request's description -- ``gh pr edit
 evidence-source line that the live description currently carries. The refusal
 prints the exact line that would have been lost, so the remedy is one paste.
 
+The one edit that may drop a stamp line (OMN-17427)
+---------------------------------------------------
+A body can end up carrying two canonical evidence-source lines, which the
+receipt gate refuses, while this gate refuses the edit that removes either one:
+no compliant edit exists. The edit is admitted when the replacement body keeps
+EXACTLY ONE canonical line, that line is ``OCC#<n>``, and a live read
+(``gh pr view``) shows that onex_change_control pull request MERGED. An open,
+closed-unmerged or unreadable companion, a commit-sha value, no line at all and
+two lines all stay refused, and with no reader wired nothing is admitted.
+
 Why a hook and not a validator
 ------------------------------
 The plan's section 2 correction 1 measured it: a pull-request description is a
@@ -146,6 +156,7 @@ __all__ = [
     "PolicyError",
     "PrBodyEdit",
     "check_bash_command",
+    "gh_companion_merged_reader",
     "load_policy",
     "main",
     "parse_pr_body_edits",
@@ -1367,6 +1378,87 @@ def gh_live_body_reader(cwd: str | None = None, timeout: int = 45) -> LiveBodyRe
     return _read
 
 
+#: The repository every ``OCC#<n>`` evidence-source value names. Mirror of
+#: ``check_occ_companion_merged.OCC_REPO_DEFAULT`` (copied, not imported: this
+#: module runs under any resolved interpreter with no project path).
+_OCC_REPO = "OmniNode-ai/onex_change_control"
+
+#: ``OCC#<number>``, the only stamp value whose merge state can be read live.
+_OCC_PR_REF = re.compile(r"^OCC#(\d+)$", re.IGNORECASE)
+
+#: ``True`` when the change-control pull request is MERGED, ``False`` when it is
+#: read and is not, ``None`` when the read failed.
+CompanionMergedReader = Callable[[str], "bool | None"]
+
+
+def gh_companion_merged_reader(
+    cwd: str | None = None, timeout: int = 45
+) -> CompanionMergedReader:
+    """A reader that asks the platform whether one OCC pull request is MERGED.
+
+    Read-only ``gh pr view --json state``. A failed read is ``None``, never
+    ``False``, and the caller treats both the same way: the drop stays refused.
+    """
+
+    def _read(number: str) -> bool | None:
+        argv = [
+            "gh",
+            "pr",
+            "view",
+            number,
+            "--repo",
+            _OCC_REPO,
+            "--json",
+            "state",
+            "--jq",
+            ".state",
+        ]
+        try:
+            result = subprocess.run(  # fixed argv, no shell
+                argv,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+                cwd=cwd if cwd and Path(cwd).is_dir() else None,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() == "MERGED"
+
+    return _read
+
+
+def _kept_stamp_is_merged_companion(
+    new_body: str, policy: Policy, companion_merged: CompanionMergedReader | None
+) -> bool:
+    """True when the new body declares exactly one stamp and its companion is MERGED.
+
+    OMN-17427. Dropping a stamp line is the defect this gate refuses, except
+    where the line that stays is provably the right one: the body still
+    declares exactly one canonical evidence-source line (the receipt gate
+    refuses two), it is ``OCC#<n>``, and a live read shows that change-control
+    pull request MERGED. A body edit that leaves no stamp, two stamps, a
+    commit-sha stamp, or a companion that is open, closed unmerged or unreadable
+    stays refused. Without a reader nothing can be proven, so nothing is
+    admitted.
+    """
+    if companion_merged is None:
+        return False
+    kept = stamp_lines(new_body, policy)
+    if len(kept) != 1:
+        return False
+    value = policy.stamp_line.search(kept[0])
+    if value is None:
+        return False
+    match = _OCC_PR_REF.match(value.group(1).strip())
+    if match is None:
+        return False
+    return companion_merged(match.group(1)) is True
+
+
 # ---------------------------------------------------------------------------
 # The decision
 # ---------------------------------------------------------------------------
@@ -1377,8 +1469,13 @@ def check_bash_command(
     policy: Policy,
     live_body: LiveBodyReader,
     cwd: str | None = None,
+    companion_merged: CompanionMergedReader | None = None,
 ) -> list[Finding]:
-    """Findings for one Bash command. Empty means admit."""
+    """Findings for one Bash command. Empty means admit.
+
+    ``companion_merged`` answers whether an ``OCC#<n>`` companion is MERGED; it
+    is what lets an edit drop a stale stamp and keep the one merged stamp.
+    """
     if command is None or not isinstance(command, str):
         return [
             Finding(
@@ -1441,7 +1538,9 @@ def check_bash_command(
             continue
         kept = set(stamp_lines(edit.new_body, policy))
         dropped = tuple(line for line in present if line not in kept)
-        if dropped:
+        if dropped and not _kept_stamp_is_merged_companion(
+            edit.new_body, policy, companion_merged
+        ):
             findings.append(
                 Finding(
                     kind="dropped_stamp",
@@ -1484,7 +1583,9 @@ def render_block_reason(findings: list[Finding]) -> str:
                 "each on a line of its own:\n\n"
                 f"{lines}\n\n"
                 "Then re-run the edit. Nothing else about the command needs to "
-                "change."
+                "change. The one edit that may drop a stamp line keeps exactly "
+                "one canonical evidence-source line, written OCC#<number>, "
+                "whose onex_change_control pull request is MERGED (OMN-17427)."
             )
             continue
         parts.append(
@@ -1547,10 +1648,15 @@ def main(argv: list[str] | None = None) -> int:
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
 
     cwd = payload.get("cwd")
-    reader = gh_live_body_reader(cwd if isinstance(cwd, str) else None)
+    session_cwd = cwd if isinstance(cwd, str) else None
+    reader = gh_live_body_reader(session_cwd)
 
     findings = check_bash_command(
-        command, policy, reader, cwd if isinstance(cwd, str) else None
+        command,
+        policy,
+        reader,
+        session_cwd,
+        gh_companion_merged_reader(session_cwd),
     )
     if findings:
         return _block(render_block_reason(findings))
