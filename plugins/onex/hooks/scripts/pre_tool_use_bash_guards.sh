@@ -79,6 +79,13 @@ while [[ "$_OBG_INPUT" == *$'\n' ]]; do _OBG_INPUT="${_OBG_INPUT%$'\n'}"; done
 # shellcheck source=../lib/bash_guard_core.sh
 source "${_OBG_LIB}/bash_guard_core.sh"
 
+# The guards' shared log directory (onex-paths.sh's ONEX_LOG_DIR), made once
+# before they start concurrently. Otherwise every guard that looks before the
+# first one creates it races to mkdir it too, and how many do depends on how
+# slow the machine is: more execs per call on a loaded runner.
+_OBG_LOG_DIR="${ONEX_STATE_DIR:-${HOME}/.onex_state}/logs"
+[[ -d "$_OBG_LOG_DIR" ]] || mkdir -p "$_OBG_LOG_DIR" 2>/dev/null || true
+
 ONEX_BASH_GUARDS_REQ="${TMPDIR:-/tmp}"
 ONEX_BASH_GUARDS_REQ="${ONEX_BASH_GUARDS_REQ%/}/onex-bash-guards.$$.${RANDOM}${RANDOM}"
 

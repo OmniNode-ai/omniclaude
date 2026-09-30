@@ -174,7 +174,7 @@ _CALLER_HOOK_LOG="${ONEX_HOOK_LOG:-}"
 source "${SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${_CALLER_HOOK_LOG:-${ONEX_HOOK_LOG:-${HOME}/.claude/onex-hooks.log}}"
 unset _CALLER_HOOK_LOG
-[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "${LOG_FILE%/*}" 2>/dev/null || true
 
 _log() {
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] shared-tree-git-guard: $*" >> "$LOG_FILE" 2>/dev/null || true
