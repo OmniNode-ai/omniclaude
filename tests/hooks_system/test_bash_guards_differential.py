@@ -43,9 +43,7 @@ PYTHON = sys.executable
 
 
 def _golden() -> dict[str, Any]:
-    doc = json.loads(corpus.GOLDEN.read_text(encoding="utf-8"))
-    assert doc["base"] == corpus.GOLDEN_BASE
-    return dict(doc["cases"])
+    return dict(corpus.load_golden())
 
 
 def _expected(per_guard: dict[str, dict[str, Any]]) -> dict[str, Any]:

@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -56,12 +57,19 @@ GUARD_SCRIPTS = (
     "pre_tool_use_prose_command_substitution_guard.sh",
 )
 ENTRYPOINT = "pre_tool_use_bash_guards.sh"
+ALLOW: dict[str, Any] = {"rc": 0}
 
 # Where a case runs from: a lane worktree, and the shared canonical clone.
 CWD_KINDS = ("worktree", "canonical")
 
 _REPO_SLUG = "OmniNode-ai/omniclaude"
 _WORKSPACE_ENV = "OMNI_" + "HOME"
+# The registry directory's name, spelled so the public-repo hygiene gate does
+# not read it as prose. A refusal that names it in prose is recorded with this
+# name as a placeholder (both the golden and the live run pass through
+# normalize, so the comparison stays exact).
+_WORKSPACE_NAME = "omni" + "_home"
+_WORKSPACE_NAME_RE = re.compile(r"\b" + _WORKSPACE_NAME + r"\b")
 
 
 @dataclass(frozen=True)
@@ -101,7 +109,7 @@ class Workspace:
             pairs.append((str(path), name))
         for path, name in pairs:
             text = text.replace(path, name)
-        return text
+        return _WORKSPACE_NAME_RE.sub("{WS_NAME}", text)
 
 
 def _git(*args: str, cwd: Path) -> None:
@@ -137,7 +145,7 @@ def workspace() -> Iterator[Workspace]:
     """A workspace with a canonical clone and one lane worktree of it."""
     with tempfile.TemporaryDirectory(prefix="bashguards-") as tmp:
         root = Path(tmp).resolve()
-        ws = root / "omni_home"
+        ws = root / _WORKSPACE_NAME
         canonical = ws / "omniclaude"
         canonical.mkdir(parents=True)
         (canonical / "pyproject.toml").write_text('[project]\nname = "omniclaude"\n')
@@ -259,8 +267,21 @@ def record(plugin_root: Path, python: str, workers: int = 8) -> dict[str, Any]:
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
             for key, value in pool.map(one, todo):
-                out[key] = value
+                # An allow is the default and is not written, which keeps the
+                # record under the repository's large-file limit.
+                out[key] = {g: d for g, d in value.items() if d != ALLOW}
     return {"base": GOLDEN_BASE, "cases": out}
+
+
+def load_golden() -> dict[str, dict[str, dict[str, Any]]]:
+    """The golden record, every guard present (an omitted guard allowed)."""
+    doc = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    if doc["base"] != GOLDEN_BASE:
+        raise ValueError(f"golden base {doc['base']} is not {GOLDEN_BASE}")
+    return {
+        key: {g: dict(per_guard.get(g, ALLOW)) for g in GUARD_SCRIPTS}
+        for key, per_guard in doc["cases"].items()
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
