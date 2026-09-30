@@ -509,6 +509,150 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="obligation_id",
         required_fields=["obligation_id", "actor_id", "summary", "owed_by"],
     ),
+    "pr.state.observed": EventRegistration(
+        event_type="pr.state.observed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.PR_STATE_OBSERVED,
+                transform=None,
+                description="A watcher tick observes the complete PR state",
+            ),
+        ],
+        partition_key_field=None,
+        required_fields=["repo", "pr_number", "state", "observed_at", "digest"],
+    ),
+    "work.ledger.ack": EventRegistration(
+        event_type="work.ledger.ack",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_ACK,
+                transform=None,
+                description="A message, hold or ruling is acknowledged",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
+    "work.ledger.claim": EventRegistration(
+        event_type="work.ledger.claim",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_CLAIM,
+                transform=None,
+                description="A lane claims work",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
+    "work.ledger.correction": EventRegistration(
+        event_type="work.ledger.correction",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_CORRECTION,
+                transform=None,
+                description="A row already on the ledger was wrong; this is the fix",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
+    "work.ledger.friction": EventRegistration(
+        event_type="work.ledger.friction",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_FRICTION,
+                transform=None,
+                description="Process friction with its ticket and cost",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
+    "work.ledger.hold": EventRegistration(
+        event_type="work.ledger.hold",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_HOLD,
+                transform=None,
+                description="Nobody proceeds on a scope until a release names this hold",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
+    "work.ledger.msg": EventRegistration(
+        event_type="work.ledger.msg",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_MSG,
+                transform=None,
+                description="A lane-to-lane message",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
+    "work.ledger.operator_consent": EventRegistration(
+        event_type="work.ledger.operator_consent",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_OPERATOR_CONSENT,
+                transform=None,
+                description="Operator consent with approved and out-of-scope lists",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
+    "work.ledger.release": EventRegistration(
+        event_type="work.ledger.release",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_RELEASE,
+                transform=None,
+                description="A hold or claim is released",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
+    "work.ledger.ruling": EventRegistration(
+        event_type="work.ledger.ruling",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_RULING,
+                transform=None,
+                description="An operator ruling with the operator's words",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
+    "work.ledger.status": EventRegistration(
+        event_type="work.ledger.status",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_STATUS,
+                transform=None,
+                description="Where a lane is",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
+    "work.ledger.terminal": EventRegistration(
+        event_type="work.ledger.terminal",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_TERMINAL,
+                transform=None,
+                description="A lane closes its claim with an outcome",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=["ledger_id", "row_id", "row_timestamp", "raw_row"],
+    ),
     # =========================================================================
     # Prompt Events (Fan-out to TWO topics)
     # =========================================================================

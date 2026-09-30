@@ -328,6 +328,42 @@ class TopicBase(StrEnum):
     PUSH_VALIDATION_FAILED = "onex.evt.omnimarket.push-validation-failed.v1"
     """Push validation terminal failure event emitted by omnimarket."""
 
+    PR_STATE_OBSERVED = "onex.evt.omnimarket.pr-state-observed.v1"
+    """A watcher tick observes the complete PR state."""
+
+    WORK_LEDGER_ACK = "onex.evt.omnimarket.work-ledger-ack.v1"
+    """A message, hold or ruling is acknowledged."""
+
+    WORK_LEDGER_CLAIM = "onex.evt.omnimarket.work-ledger-claim.v1"
+    """A lane claims work."""
+
+    WORK_LEDGER_CORRECTION = "onex.evt.omnimarket.work-ledger-correction.v1"
+    """A row already on the ledger was wrong; this is the fix."""
+
+    WORK_LEDGER_FRICTION = "onex.evt.omnimarket.work-ledger-friction.v1"
+    """Process friction with its ticket and cost."""
+
+    WORK_LEDGER_HOLD = "onex.evt.omnimarket.work-ledger-hold.v1"
+    """Nobody proceeds on a scope until a release names this hold."""
+
+    WORK_LEDGER_MSG = "onex.evt.omnimarket.work-ledger-msg.v1"
+    """A lane-to-lane message."""
+
+    WORK_LEDGER_OPERATOR_CONSENT = "onex.evt.omnimarket.work-ledger-operator-consent.v1"
+    """Operator consent with approved and out-of-scope lists."""
+
+    WORK_LEDGER_RELEASE = "onex.evt.omnimarket.work-ledger-release.v1"
+    """A hold or claim is released."""
+
+    WORK_LEDGER_RULING = "onex.evt.omnimarket.work-ledger-ruling.v1"
+    """An operator ruling with the operator's words."""
+
+    WORK_LEDGER_STATUS = "onex.evt.omnimarket.work-ledger-status.v1"
+    """Where a lane is."""
+
+    WORK_LEDGER_TERMINAL = "onex.evt.omnimarket.work-ledger-terminal.v1"
+    """A lane closes its claim with an outcome."""
+
     # ==========================================================================
     # Friction observation topics (OMN-5747)
     # ==========================================================================
