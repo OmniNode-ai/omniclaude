@@ -12,10 +12,10 @@ decision: the exit status and, for a refusal, the refusal JSON with the fixture
 paths written as placeholders.
 
 ``fixtures/bash_guard_golden.json`` holds those decisions as the seven separate
-scripts at origin/dev ``29030cf92`` (the last tree before OMN-20118, with the OMN-17427 matcher narrowing of #2421) made them.
+scripts at origin/dev ``1618db6e2`` (the last tree before OMN-20118, with the OMN-17427 guard changes of #2421 and #2422) made them.
 It is recorded, never hand-edited::
 
-    git archive 29030cf92 plugins/onex | tar -x -C /tmp/base
+    git archive 1618db6e2 plugins/onex | tar -x -C /tmp/base
     uv run python -m tests.hooks_system.bash_guard_corpus \\
         --plugin-root /tmp/base/plugins/onex > tests/hooks_system/fixtures/bash_guard_golden.json
 
@@ -45,7 +45,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 CORPUS = FIXTURES / "bash_guard_corpus.json"
 GOLDEN = FIXTURES / "bash_guard_golden.json"
-GOLDEN_BASE = "29030cf928216379711cbdb184c8c08d11c13b0e"
+GOLDEN_BASE = "1618db6e272da6ca4288c784906ea62ed7491a55"
 
 GUARD_SCRIPTS = (
     "pre_tool_use_worktree_guard.sh",
