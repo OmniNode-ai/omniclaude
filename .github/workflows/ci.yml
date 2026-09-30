@@ -4255,6 +4255,38 @@ jobs:
       - name: Require cited OCC evidence to be merged/durable before product merge
         run: python3 scripts/ci/check_occ_companion_merged.py
 
+  runtime-profiles:
+    if: always()
+    name: Runtime Profiles
+    # OMNI_RUNNER_SELECTOR_V1 - trusted events default to self-hosted omnibase-ci; pull_request defaults to ubuntu-latest
+    runs-on: >-
+      ${{
+        github.event_name != 'pull_request'
+        && fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+      }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.3"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Validate runtime_profiles on omniclaude contracts
+        run: uv run python scripts/ci/run_runtime_profiles_validator.py
+
   ci-summary:
     name: CI Summary
     # OMN-14127: REQUIRED branch-protection context, implemented as a NO-`needs`,

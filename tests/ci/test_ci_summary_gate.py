@@ -1890,3 +1890,39 @@ class TestTheReviewFindingsThatWereReal:
 
         pattern = _re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
         assert bool(pattern.match(value)) is allowed
+
+
+@pytest.mark.unit
+class TestRuntimeProfilesRequired:
+    def test_wiring_and_registration(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+        job = workflow["jobs"]["runtime-profiles"]
+        assert job["name"] == "Runtime Profiles"
+        assert job["if"] == "always()"
+        assert "needs" not in job
+        assert "continue-on-error" not in job
+        assert "Runtime Profiles" in GATE_JOBS
+        assert "Runtime Profiles" in STRICT_SUCCESS_JOBS
+        assert "Runtime Profiles" not in SOFT_ALLOWLIST
+        commands = [step.get("run", "") for step in job["steps"]]
+        assert "uv run python scripts/ci/run_runtime_profiles_validator.py" in commands
+        assert not (root / ".github/workflows/validator-runtime-profiles.yml").exists()
+
+    @pytest.mark.parametrize(
+        ("conclusion", "expected"),
+        [
+            ("success", EXIT_SUCCESS),
+            ("skipped", EXIT_FAILURE),
+            ("failure", EXIT_FAILURE),
+            ("cancelled", EXIT_FAILURE),
+        ],
+    )
+    def test_verdict(self, conclusion: str, expected: int) -> None:
+        jobs = [job for job in _all_gates() if job["name"] != "Runtime Profiles"]
+        jobs.append(_job("Runtime Profiles", conclusion))
+        assert evaluate(jobs)[0] == expected
+
+    def test_missing_validator_cannot_pass(self) -> None:
+        jobs = [job for job in _all_gates() if job["name"] != "Runtime Profiles"]
+        assert evaluate(jobs)[0] == EXIT_PENDING

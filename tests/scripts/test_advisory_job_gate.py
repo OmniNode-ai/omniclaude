@@ -833,3 +833,14 @@ class TestWiring:
         )
         assert "advisory_job_gate.py" in (hook.get("entry") or "")
         assert "advisory_job_gate.py" in REUSABLE_WORKFLOW.read_text(encoding="utf-8")
+
+
+def test_runtime_profiles_is_required_not_grandfathered() -> None:
+    payload = yaml.safe_load(BASELINE.read_text())
+    entries = payload["repos"]["OmniNode-ai/omniclaude"]
+    for entry in entries["advisory"] + entries["verification_jobs"]:
+        assert "runtime-profiles" not in entry["key"]
+    from scripts.ci.ci_summary_gate import GATE_JOBS, STRICT_SUCCESS_JOBS
+
+    assert "Runtime Profiles" in GATE_JOBS
+    assert "Runtime Profiles" in STRICT_SUCCESS_JOBS
