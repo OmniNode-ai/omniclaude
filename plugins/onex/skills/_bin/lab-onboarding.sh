@@ -871,8 +871,9 @@ retire_lab_model_overrides() {
 # The provider's own words from the latest capture log (a delegation that fails on
 # the provider is retried and ends in a timeout that names none of them).
 provider_error() {
+  local c
   # shellcheck disable=SC2012  # onex names its capture files; newest-first is what matters
-  local c; c="$(ls -t "$HOME/.onex_state/captures/"*.log 2>/dev/null | head -n 1)"
+  c="$(ls -t "$HOME/.onex_state/captures/"*.log 2>/dev/null | head -n 1)"
   [ -n "$c" ] || return 0
   grep -A3 'provider response' "$c" | grep -E '"message"' | tail -n 1 |
     sed -e 's/^[^:]*"message": *"//' -e 's/",\{0,1\} *$//' | cut -c1-300
