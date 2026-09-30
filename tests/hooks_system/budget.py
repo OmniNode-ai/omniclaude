@@ -58,6 +58,20 @@ CEILING_EXECS_PER_CALL = {"Bash": 125, "Skill": 93, "Read": 50}
 # interpreter are what is left between here and the target.
 TARGET_EXECS_PER_CALL = 60
 
+# Python interpreter starts per tool call, by the shapes of
+# tests/hooks_system/wall.py. After OMN-20114 these, not execs, were the wall
+# time: 0.2 to 0.85 s each on the operator Mac idle, 5 to 8 s under contention.
+# OMN-20118 (2026-09-30, lab h202, deterministic across runs): one interpreter
+# for the seven Bash guards' decision cores, and every bounded emit forks its
+# writer instead of starting a second interpreter.
+PYTHON_STARTS_BEFORE_OMN_20118 = {
+    "bash": 10,
+    "bash-guarded": 17,
+    "skill": 17,
+    "read": 8,
+}
+CEILING_PYTHON_STARTS_PER_CALL = {"bash": 6, "bash-guarded": 7, "skill": 10, "read": 4}
+
 # Wall time budgets, seconds. Claude Code gives a hook 60 s before it cancels it,
 # and a tool call that spends 60 s in hooks is the incident. These are set an
 # order of magnitude under that on an idle host.

@@ -133,3 +133,23 @@ def test_every_registered_hook_exists_and_is_executable() -> None:
             elif not script.stat().st_mode & 0o111:
                 problems.append(f"{event}: {script} is not executable")
     assert not problems, "\n".join(problems)
+
+
+@pytest.mark.parametrize("shape", sorted(budget.CEILING_PYTHON_STARTS_PER_CALL))
+def test_interpreter_starts_per_call_stay_under_the_ceiling(shape: str) -> None:
+    """OMN-20118: interpreter starts are what a tool call's hook wall time is
+    made of, so they have a ceiling of their own, and it only moves down."""
+    from tests.hooks_system import wall
+
+    ceiling = budget.CEILING_PYTHON_STARTS_PER_CALL[shape]
+    assert ceiling <= budget.PYTHON_STARTS_BEFORE_OMN_20118[shape]
+    _name, tool, skill, command = next(s for s in wall.SHAPES if s[0] == shape)
+    _walls, pythons, _execs, _nonzero, _slowest = wall._measure_batch(
+        tool, skill, command, 1
+    )
+    print(f"HOOK-PYTHONS shape={shape} starts={pythons[0]}")  # noqa: T201
+    assert pythons[0] <= ceiling, (
+        f"a {shape} tool call started {pythons[0]} Python interpreters; the "
+        f"ceiling is {ceiling} (before OMN-20118: "
+        f"{budget.PYTHON_STARTS_BEFORE_OMN_20118[shape]})"
+    )
