@@ -87,7 +87,7 @@ repos:
   # pinned omnibase_core; keep this rev equal to the pin in
   # .github/workflows/url-authority-gate.yml. Suppress: # url-authority-ok: <reason>
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: d968103eb859eaadaf532ae260deaa2b17a55681 # pragma: allowlist secret
+    rev: d720f33cf02aca1886d43811337d80aa1a47720e # pragma: allowlist secret
     hooks:
       - id: check-url-authority
         args: [--repo, omniclaude, --repo-root, .]
