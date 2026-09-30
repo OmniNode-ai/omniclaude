@@ -415,11 +415,14 @@ def _long_option(name: str) -> str:
     )
 
 
-def _destination(add_args: list[Word], scope: Mapping[str, str | None]) -> Word | None:
-    """The ``<path>`` operand of ``git worktree add``, or None when git makes nothing."""
-    for word in add_args:
-        # An unquoted expansion is split into words by the shell, which moves
-        # every operand after it, so it must resolve to exactly one word.
+def _require_single_words(words: list[Word], scope: Mapping[str, str | None]) -> None:
+    """Refuse an unquoted expansion the guard cannot resolve to exactly one word.
+
+    The shell splits an unquoted expansion into words, which moves every
+    operand after it, so a word that comes before the destination must resolve
+    to one word before the destination can be located.
+    """
+    for word in words:
         if not word.splits:
             continue
         try:
@@ -433,7 +436,19 @@ def _destination(add_args: list[Word], scope: Mapping[str, str | None]) -> Word 
                 f"the unquoted argument `{word.text}` expands to `{value}`, which the "
                 "shell would split into a different number of words"
             )
+
+
+def _destination(add_args: list[Word], scope: Mapping[str, str | None]) -> Word | None:
+    """The ``<path>`` operand of ``git worktree add``, or None when git makes nothing.
+
+    OMN-17427. Only the words up to and including the path are required to
+    resolve to one word each. The word after it is the commit-ish
+    (`origin/$BASE`), which no expansion can turn into a different path, so a
+    variable the command sets from a substitution there is not a reason to
+    refuse a destination that resolves under the canonical root.
+    """
     positionals: list[Word] = []
+    destination_end: int | None = None  # count of words through the path
     idx = 0
     options_done = False
     while idx < len(add_args):
@@ -445,6 +460,8 @@ def _destination(add_args: list[Word], scope: Mapping[str, str | None]) -> Word 
         first = word.parts[0].text if word.parts else ""
         if options_done or not first.startswith("-") or text == "-":
             positionals.append(word)
+            if destination_end is None:
+                destination_end = idx
             continue
         if text == "--":
             options_done = True
@@ -459,6 +476,7 @@ def _destination(add_args: list[Word], scope: Mapping[str, str | None]) -> Word 
                 raise Refusal(f"`--{option}` takes no value, but `{text}` gives one")
             continue
         if text == "-h":
+            _require_single_words(add_args, scope)
             return None  # usage text; nothing is created
         for pos, letter in enumerate(text[1:], start=1):
             if letter in _ADD_SHORT_FLAGS:
@@ -471,6 +489,9 @@ def _destination(add_args: list[Word], scope: Mapping[str, str | None]) -> Word 
                 f"`-{letter}` (in `{text}`) is not a `git worktree add` option "
                 "this guard can read"
             )
+    _require_single_words(
+        add_args if destination_end is None else add_args[:destination_end], scope
+    )
     return positionals[0] if positionals else None
 
 

@@ -1259,6 +1259,95 @@ def test_untokenisable_command_naming_no_refused_verb_passes(
 
 
 # ---------------------------------------------------------------------------
+# OMN-17427: the command is read the way the shell reads it
+# ---------------------------------------------------------------------------
+#
+# The guard split a command with `shlex`, for which an apostrophe in a
+# here-document body or a comment is an unbalanced quote. The raw-text fallback
+# then refused any command whose PROSE said `git` beside `merge`, `push` or
+# `branch`: writing a note, a commit message or a ledger row. And a newline was
+# plain whitespace, so the second line of a script joined the first line's
+# segment and was never read as a git command.
+
+PROSE_NAMING_A_REFUSED_VERB = [
+    # A here-document body: data handed to a program, not shell.
+    "cat <<'EOF' > note.md\nit's a git merge note, push later\nEOF",
+    "cat > note.md <<'EOF'\nDon't git reset the branch; it's shared.\nEOF\necho done",
+    "git commit -m \"$(cat <<'EOF'\nfix: don't merge the branch; git push later\nEOF\n)\"",
+    # A comment on a line of its own.
+    "# don't run git merge or git push here\nls -la",
+    "ls -la # it's not a git branch\n",
+    # A quoted argument of a program that is not git.
+    'echo "it\'s a git merge"',
+    "grep -n 'git reset' notes.md",
+]
+
+
+@pytest.mark.parametrize("command", PROSE_NAMING_A_REFUSED_VERB)
+def test_prose_naming_a_refused_verb_is_not_a_git_command(
+    command: str, registry: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        command, policy, cwd=registry, registry_root=registry
+    )
+    assert not decision.blocked, (command, decision.reason)
+
+
+COMMANDS_AFTER_PROSE_OR_A_NEWLINE = [
+    # The here-document ends, and a real reset follows it.
+    "cat <<'EOF' > note.md\nit's a note\nEOF\ngit -C {reg} reset --hard",
+    # A comment ends at its newline; the next line is a command.
+    "# it's a comment\ngit -C {reg} reset --hard",
+    # Two lines: the first moves the directory, the second is the refused verb.
+    "cd /tmp\ngit -C {reg} reset --hard",
+    "cd {reg}\ngit reset --hard origin/main",
+    "cd {reg}\ngit checkout -b lane/x",
+    "cd {reg}\ngit clean -fd",
+    # A refused verb after a real separator, with a here-document before it.
+    "cat <<'EOF' | wc -l\ndon't\nEOF\ncd {reg} && git switch main",
+    # A subshell that spans lines.
+    "(\ncd {reg}\ngit reset --hard\n)",
+]
+
+
+@pytest.mark.parametrize("command", COMMANDS_AFTER_PROSE_OR_A_NEWLINE)
+def test_a_refused_verb_on_a_later_line_is_still_refused(
+    command: str, registry: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        command.format(reg=registry), policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked, command
+
+
+def test_a_refused_verb_on_a_later_line_passes_outside_the_registry(
+    registry: Path, code_clone: Path, policy: Policy
+) -> None:
+    """The positive control: the same two-line shape aimed at a code clone."""
+    decision = evaluate_bash_command(
+        f"cd {code_clone}\ngit reset --hard origin/main",
+        policy,
+        cwd=registry,
+        registry_root=registry,
+    )
+    assert not decision.blocked, decision.reason
+
+
+def test_a_genuinely_unbalanced_git_command_is_still_refused(
+    registry: Path, policy: Policy
+) -> None:
+    for command in (
+        "git reset --hard 'unbalanced",
+        'cat <<EOF\ngit reset --hard\nEOF\ngit push "unterminated',
+    ):
+        decision = evaluate_bash_command(
+            command, policy, cwd=registry, registry_root=registry
+        )
+        assert decision.blocked, command
+        assert "could not be tokenised" in decision.reason
+
+
+# ---------------------------------------------------------------------------
 # The RED control: a policy refusing nothing admits every shape
 # ---------------------------------------------------------------------------
 

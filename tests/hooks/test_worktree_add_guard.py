@@ -726,3 +726,63 @@ class TestStrayWorktreeRoot:
         )
         assert decision.blocked
         assert str(internal.resolve()) in decision.reason
+
+
+@pytest.mark.unit
+class TestOnlyTheWordsBeforeThePathMustResolve:
+    """OMN-17427. The commit-ish after the path cannot move the destination.
+
+    The guard required every unquoted expansion among the ``add`` arguments to
+    resolve to one word, including ``origin/$BASE`` after the path, so a lane
+    that set ``BASE`` from a substitution was refused although the path
+    resolved under the canonical root (ledger FRICTION, 2026-09-29T21:53Z).
+    """
+
+    @staticmethod
+    def _wt(workspace: Path) -> str:
+        return str(workspace / "omni_worktrees" / "OMN-1" / "omnibase_infra")
+
+    @pytest.mark.parametrize(
+        "template",
+        [
+            'B=$(git rev-parse --abbrev-ref HEAD); git -C {ws}/omnibase_infra worktree add "{wt}" -b lane/x origin/$B',
+            'B=$(cat base); git -C {ws}/omnibase_infra worktree add -b lane/x "{wt}" origin/$B',
+            'git -C {ws}/omnibase_infra worktree add "{wt}" origin/$UNSET_BASE',
+            "git -C {ws}/omnibase_infra worktree add {wt} origin/$UNSET_BASE -b lane/x",
+        ],
+    )
+    def test_an_unresolved_commitish_after_a_resolved_path_is_admitted(
+        self, workspace: Path, template: str
+    ) -> None:
+        command = template.format(ws=workspace, wt=self._wt(workspace))
+        assert _judge(command, workspace) is None
+
+    def test_an_unresolved_commitish_after_a_stray_path_is_still_refused(
+        self, workspace: Path
+    ) -> None:
+        reason = _judge(
+            f"B=$(cat base); git -C {workspace}/omnibase_infra worktree add "
+            "/tmp/elsewhere/x -b lane/x origin/$B",
+            workspace,
+        )
+        assert reason is not None
+        assert "Worktrees must be created under" in reason
+
+    @pytest.mark.parametrize(
+        "template",
+        [
+            # The path itself is computed.
+            "P=$(mktemp -d); git -C {ws}/omnibase_infra worktree add $P -b lane/x",
+            # An unquoted expansion BEFORE the path may split into several words
+            # and move it, so it must resolve first.
+            "B=$(cat base); git -C {ws}/omnibase_infra worktree add -b $B {wt}",
+            "O=$(cat opts); git -C {ws}/omnibase_infra worktree add $O {wt}",
+        ],
+    )
+    def test_an_unresolved_word_at_or_before_the_path_is_still_refused(
+        self, workspace: Path, template: str
+    ) -> None:
+        command = template.format(ws=workspace, wt=self._wt(workspace))
+        reason = _judge(command, workspace)
+        assert reason is not None
+        assert "cannot be resolved" in reason
