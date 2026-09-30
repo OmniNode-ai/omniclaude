@@ -57,9 +57,21 @@ _PAYLOADS = [
     "7",
 ]
 
+# One entry per distinct binary: on a runner /bin/bash and the PATH bash are
+# often the same file, and a duplicate case proves nothing twice.
 _BASHES = sorted(
-    {b for b in ("/bin/bash", shutil.which("bash")) if b and Path(b).exists()}
+    {
+        str(Path(b).resolve())
+        for b in ("/bin/bash", shutil.which("bash"))
+        if b and Path(b).exists()
+    }
 )
+
+# The payloads the quality hook's own `jq -e .` test refuses. It exits before
+# any field read on these, so they are not cases for its read comparison;
+# test_the_quality_exclusions_are_exactly_what_jq_e_refuses keeps this honest.
+_REFUSED_BY_JQ_E = frozenset({"null", "false", "", "not json"})
+_QUALITY_PAYLOADS = [p for p in _PAYLOADS if p not in _REFUSED_BY_JQ_E]
 
 
 def _block(script: str, start: str, end: str) -> str:
@@ -176,25 +188,34 @@ def test_skill_started_reads_match_the_per_field_reads(bash: str, payload: str) 
     shutil.which("jq") is None, reason="the hooks exit before any read without jq"
 )
 @pytest.mark.parametrize("bash", _BASHES)
-@pytest.mark.parametrize("payload", _PAYLOADS)
+@pytest.mark.parametrize("payload", _QUALITY_PAYLOADS)
 def test_quality_reads_match_the_per_field_reads(bash: str, payload: str) -> None:
-    # The quality hook reads only after its own `jq -e .` test passed, so a
-    # payload that test refuses never reaches either version.
-    probe = subprocess.run(  # noqa: S603
-        ["jq", "-e", "."],
-        input=payload + "\n",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if probe.returncode != 0:
-        pytest.skip("the quality hook exits before its reads on this payload")
     before = _per_field(_QUALITY_READS).replace('"$INPUT"', '"$TOOL_INFO"')
     after = _block("post-tool-use-quality.sh", "_Q_FIELDS=$(echo", "unset _Q_FIELDS")
     variables = [var for var, _, _ in _QUALITY_READS]
     assert _run(bash, after, variables, payload) == _run(
         bash, before, variables, payload
     )
+
+
+@pytest.mark.skipif(
+    shutil.which("jq") is None, reason="the hooks exit before any read without jq"
+)
+def test_the_quality_exclusions_are_exactly_what_jq_e_refuses() -> None:
+    """The quality hook reads only after `echo "$TOOL_INFO" | jq -e .` passed."""
+    refused = {
+        payload
+        for payload in _PAYLOADS
+        if subprocess.run(  # noqa: S603
+            ["jq", "-e", "."],
+            input=payload + "\n",
+            capture_output=True,
+            text=True,
+            check=False,
+        ).returncode
+        != 0
+    }
+    assert refused == _REFUSED_BY_JQ_E
 
 
 def test_the_consolidated_blocks_are_where_this_test_reads_them() -> None:
