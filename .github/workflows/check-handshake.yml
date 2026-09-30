@@ -47,8 +47,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
-          # Auto-bumped by omnibase_core publish-downstream-pin-bump.yml to ad62c0b92876.
-          ref: ad62c0b928760958fb073a9e32621de53c4a9a1a  # pragma: allowlist secret
+                    # Auto-bumped by omnibase_core publish-downstream-pin-bump.yml to 645ebea04116.
+          ref: 645ebea04116d45540ab3bff8ac0661ce08ad016  # pragma: allowlist secret
           path: omnibase_core
 
       - name: Verify omnibase_core checkout
