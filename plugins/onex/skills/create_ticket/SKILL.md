@@ -35,7 +35,7 @@ args:
     description: string list arg
     required: false
   - name: --project
-    description: string arg
+    description: "REFUSED when set: new tickets are created in the Backlog with no project"
     required: false
   - name: --team
     description: string arg

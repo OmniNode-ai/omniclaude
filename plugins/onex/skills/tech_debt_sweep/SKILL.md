@@ -18,7 +18,7 @@ args:
     description: "If true, report findings without creating tickets (default: false)"
     required: false
   - name: project
-    description: "Linear project assigned to newly created work items (default: Active Sprint)"
+    description: "REFUSED when set: new tickets are created in the Backlog with no project"
     required: false
 ---
 
@@ -341,7 +341,7 @@ For each group that has net-new findings:
 tracker.save_issue(
     title=f"[Tech Debt] {category_label}: {repo}/{directory} ({new_count} findings)",
     team="Omninode",
-    project=project or "Active Sprint",
+    state="Backlog",  # no project
     parentId=epic_id,
     labels=[repo_label],
     priority=max_severity_to_priority(findings),
@@ -408,7 +408,9 @@ before any dedup or ticket creation occurs.
 repo_filter = args.repo or None
 category_filter = args.categories.split(",") if args.categories else None
 dry_run = args.dry_run == "true"
-project = args.project or "Active Sprint"
+if args.project:
+    raise ValueError("project refused: new tickets are created in the Backlog with no project")
+project = None
 
 ALL_CATEGORIES = ["type-ignore", "noqa", "todo-fixme", "any-types", "skipped-tests", "stale-ignores"]
 

@@ -43,8 +43,10 @@ A create is admitted only when all seven hold:
 
 1. ``parentId`` is present, **or** the description declares the issue an epic
    on a line of its own.
-2. A project is named -- ``project`` on the MCP surface, ``projectId`` in the
-   REST spelling; either satisfies it.
+2. NO project is named -- neither ``project`` (MCP surface) nor ``projectId``
+   (REST spelling). Operator ruling 2026-09-30T14:30:05Z: every new ticket is
+   created in the Backlog with no project. This inverts the original OMN-17942
+   rule 2, which required one.
 3. The description carries a binding line, on a line of its own. The shape of
    that line, the rewrites applied to what it carries, and every form the
    binding may take are declared ONCE, in ``config/gate_binding_grammar.json``,
@@ -1823,23 +1825,27 @@ def check_save_issue(
             )
         )
 
-    # Rule 2 -- a project.
-    if not (
-        _is_present(tool_input.get("project"))
-        or _is_present(tool_input.get("projectId"))
+    # Rule 2 -- NO project (operator ruling 2026-09-30T14:30:05Z: "all new
+    # tickets need to go into the backlog not into a project"). Inverts the
+    # OMN-17942 original, which refused a create that named no project.
+    if _is_present(tool_input.get("project")) or _is_present(
+        tool_input.get("projectId")
     ):
         findings.append(
             Finding(
-                code="missing_project",
+                code="project_set",
                 field="project",
                 reason=(
-                    "the issue names no project, so it lands in the 269-ticket "
-                    "no-project pool that no sprint review ever reads"
+                    "the create sets a project, but the operator ruled "
+                    "(2026-09-30T14:30:05Z, ledger RULING lane=orchestrator-0c2f "
+                    "ticket=OMN-17427) that every new ticket is created in the "
+                    "Backlog with NO project"
                 ),
                 fix=(
-                    "pass project with the sprint or project this belongs to; "
-                    "if it belongs to no current commitment, it is not ready to "
-                    "be a ticket"
+                    "remove project and projectId from the create; leave the "
+                    "state at Backlog. A parent epic link is fine. Moving a "
+                    "ticket into a sprint project is the operator's call, made "
+                    "later with an update, never at creation"
                 ),
             )
         )

@@ -1,0 +1,30 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-17942
+title: "Ticket-creation gate (rule 2 inverted by OMN-17427)"
+summary: >
+  OMN-17942 introduced the ticket-creation create gate. It is referenced by
+  PR 2441, which inverts its project rule per the OMN-17427 operator ruling of
+  2026-09-30: a create that sets a project is refused (project_set) and a
+  no-project create is admitted. Every other rule is unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Ticket-creation guard tests pass, including the registered hook end to end"
+    command: "uv run pytest tests/hooks/test_ticket_creation_guard.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-guard-tests-pass
+    description: >
+      The full ticket-creation guard suite passes against the inverted
+      project rule, so every unchanged rule still holds.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard.py -q"

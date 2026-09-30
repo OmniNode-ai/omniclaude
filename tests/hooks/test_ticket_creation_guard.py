@@ -118,7 +118,6 @@ def _create(**overrides: Any) -> dict[str, Any]:
         "team": "Omninode",
         "title": "Refuse a Linear create with no binding",
         "parentId": "OMN-16729",
-        "project": "7ab68a44-653e-40e1-a770-b5e6a964b159",
         "description": _GOOD_DESCRIPTION,
     }
     payload.update(overrides)
@@ -570,25 +569,39 @@ def test_the_epic_marker_must_be_its_own_line() -> None:
     assert "missing_parent" in _codes(payload)
 
 
-def test_create_without_a_project_is_refused() -> None:
+def test_create_without_a_project_is_admitted() -> None:
+    """Operator ruling 2026-09-30T14:30:05Z: new tickets go to the Backlog with
+    no project. The well-formed create carries none and is admitted."""
     payload = _create()
-    del payload["project"]
-    assert "missing_project" in _codes(payload)
+    assert "project" not in payload
+    assert "project_set" not in _codes(payload)
+    assert _check(payload) == []
 
 
-def test_create_with_a_null_project_is_refused() -> None:
-    assert "missing_project" in _codes(_create(project=None))
+def test_create_with_a_project_is_refused() -> None:
+    assert "project_set" in _codes(
+        _create(project="7ab68a44-653e-40e1-a770-b5e6a964b159")
+    )
 
 
-def test_the_projectid_spelling_is_accepted_too() -> None:
-    """The MCP surface's field is `project`; `projectId` is what the REST API
-    and half the internal prose call it. Both name the same requirement, and a
-    guard that refuses one spelling teaches lanes to work around it rather than
-    to name a project."""
+def test_the_projectid_spelling_is_refused_too() -> None:
+    """Both spellings name the same thing; refusing one teaches lanes to use
+    the other."""
     payload = _create()
-    del payload["project"]
     payload["projectId"] = "7ab68a44-653e-40e1-a770-b5e6a964b159"
-    assert "missing_project" not in _codes(payload)
+    assert "project_set" in _codes(payload)
+
+
+def test_a_null_or_empty_project_is_not_a_project() -> None:
+    assert "project_set" not in _codes(_create(project=None))
+    assert "project_set" not in _codes(_create(project=""))
+
+
+def test_the_project_refusal_names_the_ruling() -> None:
+    reason = _GUARD.render_block_reason(_check(_create(project="p")), POLICY)
+    assert "2026-09-30T14:30:05Z" in reason
+    assert "OMN-17427" in reason
+    assert "Backlog" in reason
 
 
 def test_create_without_a_gate_line_is_refused() -> None:
@@ -741,10 +754,10 @@ def test_residual_terms_match_on_word_boundaries_not_inside_other_words() -> Non
         ({"title": "x"}, "a create with nothing but a title"),
         ({"id": "", "title": "x"}, "an id that is present but blank"),
         ({"id": 17942, "title": "x"}, "an id that is not a string"),
-        ({"title": None, "parentId": "OMN-1", "project": "p"}, "a null title"),
-        ({"title": 3, "parentId": "OMN-1", "project": "p"}, "a non-string title"),
+        ({"title": None, "parentId": "OMN-1"}, "a null title"),
+        ({"title": 3, "parentId": "OMN-1"}, "a non-string title"),
         (
-            {"title": "x", "parentId": "OMN-1", "project": "p", "description": 7},
+            {"title": "x", "parentId": "OMN-1", "description": 7},
             "a non-string description",
         ),
     ],
@@ -762,7 +775,6 @@ def test_a_template_create_with_no_description_is_refused() -> None:
             "team": "Omninode",
             "title": "From a template",
             "parentId": "OMN-16729",
-            "project": "7ab68a44",
             "template": "Bug report",
         }
     )
@@ -789,7 +801,7 @@ def test_the_block_reason_lists_every_failing_rule_at_once() -> None:
     reason = _GUARD.render_block_reason(
         _check({"title": "nit: a thing", "team": "Omninode"}), POLICY
     )
-    for expected in ("parentId", "project", "Gate:"):
+    for expected in ("parentId", "Gate:"):
         assert expected in reason
 
 
@@ -959,9 +971,30 @@ def test_registered_hook_blocks_a_create_with_no_binding(tmp_path: Path) -> None
     )
     assert '"decision": "block"' in combined
     assert "parentId" in combined
-    assert "project" in combined
     assert "Gate:" in combined
     assert _GATE_BIT_NAME in combined
+
+
+def test_registered_hook_blocks_a_create_that_sets_a_project(tmp_path: Path) -> None:
+    result = _run_hook(
+        {
+            "tool_name": "mcp__linear-server__save_issue",
+            "tool_input": _create(project="7ab68a44-653e-40e1-a770-b5e6a964b159"),
+        },
+        tmp_path,
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode == 2, combined
+    assert "project_set" in combined or "NO project" in combined
+    assert "OMN-17427" in combined
+
+
+def test_registered_hook_admits_a_create_with_no_project(tmp_path: Path) -> None:
+    result = _run_hook(
+        {"tool_name": "mcp__linear-server__save_issue", "tool_input": _create()},
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_registered_hook_blocks_a_residual_title(tmp_path: Path) -> None:
@@ -972,7 +1005,6 @@ def test_registered_hook_blocks_a_residual_title(tmp_path: Path) -> None:
                 "team": "Omninode",
                 "title": "Follow-up: tighten the selector",
                 "parentId": "OMN-16729",
-                "project": "7ab68a44",
                 "description": "Gate: OMN-16729 AC-5\n\nbody\n",
             },
         },
