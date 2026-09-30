@@ -431,6 +431,92 @@ def test_a_script_naming_a_private_repo_is_not_the_public_doc_class(
 
 
 # ---------------------------------------------------------------------------
+# OMN-20150 — the upper-case environment variable is not the private slug
+# ---------------------------------------------------------------------------
+
+# The variable name is the same word as the private repository's slug, but it
+# is an environment variable used across public repositories. The slug stays
+# private; the variable does not name it. Assembled so this file spells
+# neither form as a literal.
+_SLUG = "omni" + "_home"
+_ENV_VAR = _SLUG.upper()
+_ENV_VAR_VOCAB = VOCAB.replace(PRIVATE_REPO, _SLUG)
+
+
+@pytest.fixture
+def env_var_vocab(tmp_path: Path) -> Path:
+    path = tmp_path / "env_var_vocabulary.yaml"
+    path.write_text(_ENV_VAR_VOCAB, encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        f'cd "${_ENV_VAR}/scripts"',
+        f'cd "${{{_ENV_VAR}}}/scripts"',
+        f'ROOT="${{{_ENV_VAR}:?set {_ENV_VAR}}}"',
+        f"export {_ENV_VAR}=/somewhere",
+        f"{_ENV_VAR}=/somewhere ./run.sh",
+        f"Set `{_ENV_VAR}` before running.",
+        f'os.environ["{_ENV_VAR}"]',
+    ],
+)
+def test_the_upper_case_env_var_is_not_a_private_repo_reference(
+    tmp_path: Path, env_var_vocab: Path, payload: str
+) -> None:
+    root = _make_repo(tmp_path / "r", {"src/x.sh": payload + "\n"})
+    code, blocking, _ = _run(root, env_var_vocab)
+    assert "private-repo-name" not in _classes(blocking), payload
+    assert code == 0, [f"{f.path}:{f.class_name}" for f in blocking]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        f"clone {_SLUG} first",
+        f"git clone https://github.com/OmniNode-ai/{_SLUG}",
+        f"git clone https://github.com/OmniNode-ai/{_ENV_VAR}",
+        f"OmniNode-ai/{_SLUG}",
+        f"see [the repo](../{_SLUG}/README.md)",
+        f"cd ${_ENV_VAR}/{_SLUG}",
+        f"the {_SLUG.title()} repository",
+        f"{_ENV_VAR}_EXTRA is not the env var either",
+    ],
+)
+def test_the_slug_as_a_repo_name_still_fails(
+    tmp_path: Path, env_var_vocab: Path, payload: str
+) -> None:
+    root = _make_repo(tmp_path / "r", {"src/x.sh": payload + "\n"})
+    _, blocking, _ = _run(root, env_var_vocab)
+    if "_EXTRA" in payload:
+        # An identifier that merely starts with the variable is neither the
+        # variable nor the slug, and the boundary lookahead already ignores it.
+        assert "private-repo-name" not in _classes(blocking)
+    else:
+        assert "private-repo-name" in _classes(blocking), payload
+
+
+def test_the_env_var_does_not_launder_the_slug_on_the_same_line(
+    tmp_path: Path, env_var_vocab: Path
+) -> None:
+    root = _make_repo(
+        tmp_path / "r", {"src/x.sh": f"cd ${_ENV_VAR} && git clone {_SLUG}\n"}
+    )
+    _, blocking, _ = _run(root, env_var_vocab)
+    assert "private-repo-name" in _classes(blocking)
+
+
+def test_a_public_doc_naming_only_the_env_var_is_clean(
+    tmp_path: Path, env_var_vocab: Path
+) -> None:
+    root = _make_repo(tmp_path / "r", {"README.md": f"Export `${_ENV_VAR}` first.\n"})
+    code, blocking, _ = _run(root, env_var_vocab)
+    assert "public-doc-private-repo" not in _classes(blocking)
+    assert code == 0, [f"{f.path}:{f.class_name}" for f in blocking]
+
+
+# ---------------------------------------------------------------------------
 # Mechanism 3 — suppression is two-party, scoped and expiring
 # ---------------------------------------------------------------------------
 
