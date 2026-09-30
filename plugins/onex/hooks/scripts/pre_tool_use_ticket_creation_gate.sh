@@ -5,9 +5,10 @@
 # PreToolUse save_issue Admission Gate (OMN-17942, OMN-18404)
 # ===========================================================
 # Refuses a Linear issue CREATE (`mcp__linear-server__save_issue` with no `id`)
-# that is not bound to a commitment: no parent and no epic declaration, no
-# project, no `Gate:` binding line, or a residual-shaped title with no
-# live-gate-defect binding.
+# that is not bound to a commitment: no parent and no epic declaration, a
+# project set (operator ruling 2026-09-30: new tickets are created in the
+# Backlog with NO project), no `Gate:` binding line, or a residual-shaped title
+# with no live-gate-defect binding.
 #
 # An UPDATE (`save_issue` with an `id`) is gated on ONE thing (rule 9,
 # OMN-18404): it may not rewrite an acceptance criterion's own line, because

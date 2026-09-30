@@ -117,7 +117,7 @@ mismatches are tracked. Pass `--no-create-tickets` for explicit read-only runs.
 When ticket creation is enabled, one ticket is created per CRITICAL finding using:
 - Title: `[env-parity:<check_id>] <finding title verbatim>`
 - Priority: 1 (Urgent)
-- Project: Active Sprint
+- Project: none
 - Deduplication: exact prefix match on `[env-parity:<check_id>]` — skip if any existing ticket (any state) matches
 
 ## See Also

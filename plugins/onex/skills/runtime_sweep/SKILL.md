@@ -105,7 +105,7 @@ CRASH_LOOP_CRITICAL, or CONSUMER_GROUP_EMPTY, create a Linear ticket via
 
 ```
 Title: fix(wiring): <finding_type> — <subject>
-Project: Active Sprint
+Project: none
 Labels: wiring, runtime-sweep
 ```
 

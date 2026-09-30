@@ -344,7 +344,7 @@ For each finding with status `PLACEHOLDER`, `UNWIRED`, `PRODUCER_ONLY`, `CONSUME
 
 ```
 Title: fix(wiring): {finding_type} — {subject}
-Project: Active Sprint
+Project: none
 Labels: wiring, runtime-sweep
 Description: include evidence (file paths, topic names, handler names, log excerpts)
 ```

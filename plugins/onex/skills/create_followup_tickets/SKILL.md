@@ -54,9 +54,13 @@ The skill expects review data in this JSON structure (output by `/local-review` 
 }
 ```
 
-## Project Fuzzy Matching
+## Project Fuzzy Matching (RETIRED)
 
-The first argument is matched against Linear project names:
+**Every new ticket is created in the
+Backlog with NO project.** A project argument is refused, never matched. Ignore the
+table below; it documents the retired behaviour.
+
+The first argument was matched against Linear project names:
 
 | Input | Matches |
 |-------|---------|
@@ -227,7 +231,7 @@ Supported formats:
 # 2. Create follow-up tickets for remaining work
 /create-followup-tickets "beta hardening"
 
-# 3. Tickets created and linked to project
+# 3. Tickets created in Backlog with no project (parent link only)
 ```
 
 ### PR Review Workflow

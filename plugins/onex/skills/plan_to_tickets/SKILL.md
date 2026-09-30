@@ -19,7 +19,7 @@ args:
     description: Positional plan_path (required).
     required: true
   - name: --project
-    description: string arg
+    description: "REFUSED when set: new tickets are created in the Backlog with no project"
     required: false
   - name: --epic-title
     description: string arg

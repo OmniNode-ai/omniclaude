@@ -109,7 +109,7 @@ ticket_context = f"Related ticket: {agg.most_recent_ticket}" if agg.most_recent_
 tracker.save_issue(
     title=f"[Friction] {agg.surface_key} — {agg.count} occurrences / score {agg.severity_score} ({window_days}d)",
     team="Omninode",
-    project="Active Sprint",
+    state="Backlog",  # no project: new tickets are created in the Backlog
     priority=2,  # High — friction crosses threshold
     description=f"""## Friction Surface Escalation
 
