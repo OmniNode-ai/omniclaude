@@ -257,6 +257,11 @@ def _python_shim(shim_dir: Path, spawn_log: Path) -> Path:
         # interpreter, so the writer never passes through this shim: the runner
         # gets a sitecustomize whose at-fork hook wedges every forked child the
         # same way, before the child can take its own process group.
+        # This wrapper execs the test interpreter unchanged, so it declares
+        # itself to the bounded runner as that interpreter: a writer it names
+        # is forked exactly as the production interpreter's would be.
+        f"ONEX_HOOK_PYTHON_WRAPPER={shlex.quote(str(wrapper))}; "
+        "export ONEX_HOOK_PYTHON_WRAPPER\n"
         f'if [ -n "${{{HANG_EMIT_ENV}:-}}" ]; then\n'
         '  case "$1" in\n'
         "    *hook_emit_append.py|*hook_claude_capture.py|*hook_content_capture.py)\n"

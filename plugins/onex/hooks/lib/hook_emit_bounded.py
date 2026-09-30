@@ -53,6 +53,7 @@ import argparse
 import contextlib
 import os
 import runpy
+import shutil
 import signal
 import subprocess
 import sys
@@ -158,13 +159,36 @@ _last_pgid = 0
 _LIB_DIR = Path(__file__).resolve().parent
 
 
+# A wrapper that execs this interpreter unchanged may declare itself here (the
+# hook system tests' counting shim does); it is then this interpreter too. No
+# production path sets it.
+PYTHON_WRAPPER_ENV = "ONEX_HOOK_PYTHON_WRAPPER"
+
+
+def _is_this_interpreter(program: str) -> bool:
+    """Whether ``program`` names the interpreter running this module."""
+    wrapper = os.environ.get(PYTHON_WRAPPER_ENV, "")
+    if wrapper and program == wrapper:
+        return True
+    found = shutil.which(program) if os.sep not in program else program
+    if not found:
+        return False
+    try:
+        return os.path.realpath(found) == os.path.realpath(sys.executable)
+    except OSError:
+        return False
+
+
 def in_process_writer(cmd: list[str]) -> Path | None:
     """The writer script ``cmd`` runs, when it is ``<python> <lib>/<writer>.py ...``.
 
-    Only a ``.py`` file in this module's own directory qualifies: those are the
-    stdlib journal writers the hooks call. Anything else is exec'd as before.
+    Only a ``.py`` file in this module's own directory qualifies, and only when
+    ``<python>`` is the interpreter this runner is already running on (the hooks
+    start both with the same ``$PYTHON_CMD``): then a fork runs the writer on
+    exactly the interpreter an exec would have started. A different interpreter,
+    or any other program (a wrapper script, say), is exec'd as before.
     """
-    if len(cmd) < 2 or "python" not in Path(cmd[0]).name:
+    if len(cmd) < 2 or not _is_this_interpreter(cmd[0]):
         return None
     script = Path(cmd[1])
     if script.suffix != ".py":
