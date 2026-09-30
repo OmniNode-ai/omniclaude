@@ -56,6 +56,11 @@ BLOCKING_EXIT = 2
 # Operator 2026-09-29 ~20:08Z: 30s, to be titrated from the visible timeout errors.
 DEFAULT_BUDGET_S = 30.0
 ALARM_BUDGET_S = 8.0
+# An alarm that reached no Slack channel is retried after this long, so a
+# channel that is down for a minute does not swallow the whole episode.
+ALARM_RETRY_S = 300.0
+_UNDELIVERED = "UNDELIVERED"
+_LEDGER_APPEND_TIMEOUT_S = 10.0
 _TAIL_BYTES = 600
 _EPISODE_MARKER = "hook_emit_failure_episode"
 
@@ -75,23 +80,27 @@ def episode_marker_path() -> Path:
 def _default_alarm_cmd(category: str, text: str) -> list[str]:
     """The existing alerting path: alert-channel.sh, plus a local notification.
 
-    ``alert_channel_send`` posts through the Slack bot token when one is
-    configured and records a delivery failure (with its own local
-    notification) when the channel is configured but dead. The macOS
-    notification is sent regardless, so the operator at the console is told
-    even when Slack is not configured on this host.
+    ``alert_channel_alarm`` resolves the Slack bot token and channel from the
+    environment or, failing that, by reading the one operator env file (the
+    launchd drainer and cron canary inherit neither, OMN-20109), and posts
+    through the Slack Web API. An unresolvable credential or a dead channel
+    is a recorded delivery failure and a non-zero exit; "not configured" is
+    not a quiet outcome for an alarm. The macOS notification is sent
+    regardless, so the operator at the console is told even then.
     """
     alert_sh = Path(__file__).resolve().parent.parent / "scripts" / "alert-channel.sh"
     script = (
-        # Exit status is the Slack outcome: 0 delivered, 1 configured but
-        # dead, 2 not configured. The runner reports any non-zero on the
-        # blocking error, so an alarm that reached only the console says so.
+        # Exit status is the Slack outcome: 0 delivered, non-zero not
+        # delivered. The runner reports any non-zero on the blocking error,
+        # raises a ledger ALERT row, and retries the episode later.
         "rc=3\n"
         'source "$1" 2>/dev/null || true\n'
-        "if declare -F alert_channel_send >/dev/null 2>&1; then\n"
-        '  alert_channel_send "$2" "$3"; rc=$?\n'
+        "if declare -F alert_channel_alarm >/dev/null 2>&1; then\n"
+        '  alert_channel_alarm "$2" "$3"; rc=$?\n'
         "fi\n"
-        "if [[ -x /usr/bin/osascript ]]; then\n"
+        'if [[ -n "${ONEX_ALERT_LOCAL_NOTIFY_CMD:-}" ]]; then\n'
+        '  "${ONEX_ALERT_LOCAL_NOTIFY_CMD}" "$3" >/dev/null 2>&1 || true\n'
+        "elif [[ -x /usr/bin/osascript ]]; then\n"
         "  esc=$(printf '%s' \"$3\" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/\"/\\\\\"/g')\n"
         '  /usr/bin/osascript -e "display notification \\"${esc}\\" with title '
         '\\"Hook emit FAILED - work is blocked\\" sound name \\"Sosumi\\"" '
@@ -170,11 +179,114 @@ def _kill_group(pgid: int) -> None:
         os.killpg(pgid, signal.SIGKILL)
 
 
+def _cell(text: str) -> str:
+    """One ledger cell: no pipe, no newline."""
+    return " ".join(text.replace("|", "/").split())
+
+
+def _ledger_paths() -> tuple[Path, Path] | None:
+    """The rolling ledger and its locked-append script, or None when unknown.
+
+    ``ONEX_LEDGER_PATH`` and ``ONEX_LEDGER_LOCK_SCRIPT`` when set (the canary
+    plist sets them). The launchd drainer sets neither, so they fall back to
+    the fixed locations under the workspace root, which is the parent of the
+    required ``ONEX_STATE_DIR`` (the drainer's environment carries that
+    variable and no ledger variable). No state dir, no guess.
+    """
+    ledger = os.environ.get("ONEX_LEDGER_PATH")
+    lock = os.environ.get("ONEX_LEDGER_LOCK_SCRIPT")
+    state = os.environ.get("ONEX_STATE_DIR")
+    home = Path(state).parent if state else None
+    if not ledger and home:
+        ledger = str(home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md")
+    if not lock and home:
+        lock = str(home / "scripts" / "ledger_lock.py")
+    if not ledger or not lock:
+        return None
+    return Path(ledger), Path(lock)
+
+
+def record_undelivered_alarm(category: str, text: str, why: str) -> bool:
+    """Write a ledger STATUS state=ALERT row for an alarm Slack never received.
+
+    The operator ruling of 2026-09-29: an alarm path that cannot alarm must
+    fail loud, not print a line nobody reads. This is the durable half (the
+    macOS notification and the non-zero exit are the other two). Returns True
+    when the row was appended; on False the reason is on stderr.
+    """
+    paths = _ledger_paths()
+    if paths is None:
+        print(
+            "hook_emit_bounded: cannot record the undelivered alarm in the ledger: "
+            "set ONEX_LEDGER_PATH and ONEX_LEDGER_LOCK_SCRIPT (or ONEX_STATE_DIR)",
+            file=sys.stderr,
+        )
+        return False
+    ledger, lock = paths
+    row = (
+        f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} | STATUS | "
+        f"lane=hook-emit-alarm | state=ALERT | host={_cell(os.uname().nodename)} | "
+        f"category={_cell(category)} | slack-delivery={_cell(why)} | "
+        f"detail={_cell(text)[:400]}"
+    )
+    try:
+        done = subprocess.run(  # noqa: S603
+            [
+                sys.executable,
+                str(lock),
+                str(ledger),
+                "--timeout",
+                "5s",
+                "--append",
+                row,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=_LEDGER_APPEND_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"hook_emit_bounded: ledger ALERT append failed: {exc}", file=sys.stderr)
+        return False
+    if done.returncode != 0:
+        print(
+            f"hook_emit_bounded: ledger ALERT append exited {done.returncode}: "
+            f"{done.stderr.strip()[:300]}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _marker_retry_due(marker: Path) -> bool:
+    """True when the marker records an UNDELIVERED alarm old enough to retry."""
+    try:
+        age = time.time() - marker.stat().st_mtime
+        with marker.open("rb") as fh:
+            head = fh.read(4096)
+    except OSError:
+        return False
+    return _UNDELIVERED.encode() in head and age >= ALARM_RETRY_S
+
+
+def _write_marker(marker: Path, text: str, *, delivered: bool) -> None:
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    flag = "" if delivered else f"{_UNDELIVERED} "
+    with contextlib.suppress(OSError):
+        marker.write_text(f"{stamp} {flag}{text}\n")
+
+
 def raise_alarm_once(category: str, text: str, marker: Path | None = None) -> bool:
     """Raise the operator alarm if this failure opens an episode.
 
     The episode marker is created with O_EXCL, so of any number of concurrent
     failing hooks exactly one raises the alarm. Returns True when it did.
+
+    An alarm that Slack did not receive (an unresolvable credential, a dead
+    channel, a timeout) is never silent: it prints on stderr, appends a ledger
+    STATUS state=ALERT row, leaves the local notification the alarm command
+    always raises, and marks the episode UNDELIVERED so it is raised again
+    after :data:`ALARM_RETRY_S` instead of being swallowed for good.
     """
     if marker is None:
         marker = episode_marker_path()
@@ -182,7 +294,11 @@ def raise_alarm_once(category: str, text: str, marker: Path | None = None) -> bo
         marker.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(marker), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
     except FileExistsError:
-        return False
+        if not _marker_retry_due(marker):
+            return False
+        fd = -1
+        with contextlib.suppress(OSError):
+            os.utime(marker)  # claim this retry: concurrent failers see a fresh clock
     except OSError as exc:
         # Cannot record the episode: alarm anyway. Over-alarming is the safe
         # direction for a failure the operator ruled must never be silent.
@@ -197,12 +313,16 @@ def raise_alarm_once(category: str, text: str, marker: Path | None = None) -> bo
             os.close(fd)
     timed_out, rc = _run_bounded(_alarm_cmd(category, text), ALARM_BUDGET_S)
     if timed_out or rc:
+        why = "timeout" if timed_out else f"exit {rc}"
         print(
-            "hook_emit_bounded: operator alarm NOT delivered to Slack "
-            f"({'timeout' if timed_out else f'exit {rc}'}; 1=channel dead, "
-            "2=not configured); local notification attempted",
+            f"hook_emit_bounded: operator alarm NOT delivered to Slack ({why}); "
+            "local notification attempted, ledger ALERT row requested",
             file=sys.stderr,
         )
+        _write_marker(marker, text, delivered=False)
+        record_undelivered_alarm(category, text, why)
+    else:
+        _write_marker(marker, text, delivered=True)
     return True
 
 

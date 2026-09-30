@@ -217,6 +217,19 @@ local notification. No spool, no fail-open branch, no kill switch, never a disow
 limit). SessionEnd is the one detached emit, because the harness ignores its exit code; it is
 still bounded and still alarms. A Stop hook already re-running on a block exits 1 rather than 2.
 
+**The alarm itself cannot go quiet (OMN-20109, operator ruling 2026-09-29).** Every alarm path
+(the foreground emit runner, the launchd drainer's drop alarm, the canary on the Mac and on the cron host)
+sends through `alert_channel_alarm` in `alert-channel.sh`. launchd and cron do not inherit
+`SLACK_BOT_TOKEN` or `SLACK_CHANNEL_ID`, so the sender resolves the two named keys from the
+environment first and then by reading, never sourcing, the operator env file
+(`OMNIBASE_OPERATOR_ENV_FILE`, default `~/.omnibase/.env`), the same surface and parse rules as
+`hook_edge_lane.read_operator_env_file`. A credential it cannot resolve, or a dead channel, is a
+delivery failure, not a no-op: non-zero exit, a local notification, a line in
+`~/.omnibase/alert_delivery_failures.log`, and a ledger `STATUS state=ALERT` row. An undelivered
+emit or drop alarm is retried after 5 minutes rather than swallowed for the episode. Plain status
+notices keep `alert_channel_send`'s three states. Tests never reach Slack: the autouse fixture in
+`tests/conftest.py` points the operator env file, the ledger and the local notifier at nothing.
+
 For everything other than journal emits, the older principle holds: on infrastructure failure
 (Kafka unavailable, Postgres down, routing/injection timeout, malformed stdin) hooks exit 0 and
 degrade. Failures log to `~/.claude/hooks.log` when `LOG_FILE` is set.

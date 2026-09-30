@@ -1125,3 +1125,12 @@ def _no_real_operator_alarm(
     monkeypatch.setenv("ONEX_EMIT_ALARM_CMD", "/usr/bin/true")
     monkeypatch.setenv("ONEX_EMIT_EPISODE_MARKER", str(scratch / "episode"))
     monkeypatch.setenv("ONEX_EMIT_DROP_EPISODE_MARKER", str(scratch / "drop-episode"))
+    # The alarm sender falls back to READING the operator env file for the Slack
+    # credential (OMN-20109), and an undelivered alarm appends a ledger ALERT
+    # row. A developer host has both: point them at nothing.
+    monkeypatch.setenv("OMNIBASE_OPERATOR_ENV_FILE", str(scratch / "no-operator.env"))
+    monkeypatch.setenv("ONEX_ALERT_LOCAL_NOTIFY_CMD", "/usr/bin/true")
+    monkeypatch.setenv("ONEX_ALERT_DELIVERY_LOG", str(scratch / "alert-failures.log"))
+    monkeypatch.setenv("ONEX_ALERT_LOCAL_NOTIFY_RATE_DIR", str(scratch / "rate"))
+    monkeypatch.setenv("ONEX_LEDGER_PATH", str(scratch / "no-ledger.md"))
+    monkeypatch.setenv("ONEX_LEDGER_LOCK_SCRIPT", str(scratch / "no-ledger-lock.py"))
