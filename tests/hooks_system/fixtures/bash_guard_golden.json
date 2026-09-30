@@ -90,7 +90,7 @@
    "pre_tool_use_credential_rotation_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: this looks like a credential rotation, re-issue or revoke, and it is not authorised (OMN-17957).\n\nOperator ruling, 2026-09-05, firm. Credential rotations keep being performed because an agent decided that a value it saw in a local transcript, log, scratch file or ledger was a leak. A value that never left the computer is NOT exposure and is not a reason to rotate; the 2026-08-30 rotation taken on exactly that reasoning froze secret sync cluster-wide for five days. Rotate only for real exposure -- pushed to a remote, posted to Slack/Linear/GitHub, printed into CI logs, or handed outside -- with the exposure path recorded FIRST; every rotation is approved explicitly by operator or jake and by nobody else; and every rotation enumerates and restarts or re-reads EVERY consumer in the same action, with readback. No agent, lane or codex message is approval.\n\n  * [consent_ledger_unreadable] aws_secretsmanager_rotate [operator-k8s]: the cited ledger {WS}/docs/tracking/ROLLING_WORK_LEDGER.md could not be read ([Errno 2] No such file or directory: '{WS}/docs/tracking/ROLLING_WORK_LEDGER.md')\n      fix: set OMNI_HOME to the {WS_NAME} clone and cite a line that exists in its rolling ledger\n\nTo proceed on a real, approved exposure, carry the citation on the command line or in an inline assignment: 'ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md@<row timestamp> (or the older :<line> form)' pointing at an OPERATOR-CONSENT row ({WS_NAME} CLAUDE.md rules 18 and 22) that carries approved_by=<jake|operator>, an APPROVED SCOPE naming this credential, and an OUT OF SCOPE list.\nReads are never gated: get, describe, list, -o name, get-secret-value, gh secret list, and kubectl rollout restart all pass untouched.\nTo disable this guard deliberately: onex hooks disable PRE_TOOL_AUTHORIZATION_SHIM"
+     "reason": "BLOCKED: this looks like a credential rotation, re-issue or revoke, and it is not authorised (OMN-17957).\n\nOperator ruling, 2026-09-05, firm. Credential rotations keep being performed because an agent decided that a value it saw in a local transcript, log, scratch file or ledger was a leak. A value that never left the computer is NOT exposure and is not a reason to rotate; the 2026-08-30 rotation taken on exactly that reasoning froze secret sync cluster-wide for five days. Rotate only for real exposure -- pushed to a remote, posted to Slack/Linear/GitHub, printed into CI logs, or handed outside -- with the exposure path recorded FIRST; every rotation is approved explicitly by operator or jake and by nobody else; and every rotation enumerates and restarts or re-reads EVERY consumer in the same action, with readback. No agent, lane or codex message is approval.\n\n  * [consent_ledger_unreadable] aws_secretsmanager_rotate [operator-k8s]: the cited ledger {WS}/docs/tracking/ROLLING_WORK_LEDGER.md could not be read ([Errno 2] No such file or directory: '{WS}/docs/tracking/ROLLING_WORK_LEDGER.md')\n      fix: set {WSENV} to the {WS_NAME} clone and cite a line that exists in its rolling ledger\n\nTo proceed on a real, approved exposure, carry the citation on the command line or in an inline assignment: 'ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md@<row timestamp> (or the older :<line> form)' pointing at an OPERATOR-CONSENT row ({WS_NAME} CLAUDE.md rules 18 and 22) that carries approved_by=<jake|operator>, an APPROVED SCOPE naming this credential, and an OUT OF SCOPE list.\nReads are never gated: get, describe, list, -o name, get-secret-value, gh secret list, and kubectl rollout restart all pass untouched.\nTo disable this guard deliberately: onex hooks disable PRE_TOOL_AUTHORIZATION_SHIM"
     },
     "rc": 2
    }
@@ -313,7 +313,7 @@
    "pre_tool_use_git_stash_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git stash pop` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under $OMNI_HOME, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
+     "reason": "BLOCKED: `git stash pop` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under ${WSENV}, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
     },
     "rc": 2
    },
@@ -702,11 +702,11 @@
   "canonical\tgit -C \"$OMN19229_R\" reset --hard origin/main": {},
   "canonical\tgit -C \"$OMN19229_UNSET\" reset --hard origin/main": {},
   "canonical\tgit -C \"$OMN19229_WT\" reset --hard origin/dev": {},
-  "canonical\tgit -C $OMNI_HOME/second-clone worktree add omni_worktrees/OMN-19236/second-clone -b feat/omn-19236 origin/dev": {
+  "canonical\tgit -C ${WSENV}/second-clone worktree add omni_worktrees/OMN-19236/second-clone -b feat/omn-19236 origin/dev": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/second-clone/omni_worktrees/OMN-19236/second-clone (the relative path `omni_worktrees/OMN-19236/second-clone` resolves against `{WS}/second-clone`, where git runs). {WS}/second-clone/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from $OMNI_HOME, never from memory or from a redefined OMNI_HOME. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/second-clone/omni_worktrees/OMN-19236/second-clone (the relative path `omni_worktrees/OMN-19236/second-clone` resolves against `{WS}/second-clone`, where git runs). {WS}/second-clone/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -715,7 +715,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {REG}/omnibase_infra/omni_worktrees/OMN-19113/omnibase_infra (the relative path `omni_worktrees/OMN-19113/omnibase_infra` resolves against `{REG}/omnibase_infra`, where git runs). {REG}/omnibase_infra/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from $OMNI_HOME, never from memory or from a redefined OMNI_HOME. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {REG}/omnibase_infra/omni_worktrees/OMN-19113/omnibase_infra (the relative path `omni_worktrees/OMN-19113/omnibase_infra` resolves against `{REG}/omnibase_infra`, where git runs). {REG}/omnibase_infra/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -724,7 +724,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {REG}/omnibase_infra/omni_worktrees/X/omnibase_infra (the relative path `omni_worktrees/X/omnibase_infra` resolves against `{REG}/omnibase_infra`, where git runs). {REG}/omnibase_infra/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from $OMNI_HOME, never from memory or from a redefined OMNI_HOME. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {REG}/omnibase_infra/omni_worktrees/X/omnibase_infra (the relative path `omni_worktrees/X/omnibase_infra` resolves against `{REG}/omnibase_infra`, where git runs). {REG}/omnibase_infra/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -949,7 +949,7 @@
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through scripts/commit_lock.py; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under ${WSENV}/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C ${WSENV} merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through scripts/commit_lock.py; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
     },
     "rc": 2
    }
@@ -968,7 +968,7 @@
    "pre_tool_use_git_stash_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git stash push` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under $OMNI_HOME, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
+     "reason": "BLOCKED: `git stash push` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under ${WSENV}, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
     },
     "rc": 2
    }
@@ -978,7 +978,7 @@
    "pre_tool_use_git_stash_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git stash pop` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under $OMNI_HOME, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
+     "reason": "BLOCKED: `git stash pop` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under ${WSENV}, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
     },
     "rc": 2
    }
@@ -987,7 +987,7 @@
    "pre_tool_use_git_stash_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git stash push` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under $OMNI_HOME, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
+     "reason": "BLOCKED: `git stash push` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under ${WSENV}, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
     },
     "rc": 2
    }
@@ -996,7 +996,7 @@
    "pre_tool_use_git_stash_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git stash push` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under $OMNI_HOME, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
+     "reason": "BLOCKED: `git stash push` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under ${WSENV}, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
     },
     "rc": 2
    }
@@ -1046,7 +1046,6 @@
     "rc": 2
    }
   },
-  "canonical\tgit worktree add \"${OMNI_HOME}/omni_worktrees/OMN-1/repo\" -b x": {},
   "canonical\tgit worktree add \"${WT:-/tmp}\"": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
@@ -1056,6 +1055,7 @@
     "rc": 2
    }
   },
+  "canonical\tgit worktree add \"${{WSENV}}/omni_worktrees/OMN-1/repo\" -b x": {},
   "canonical\tgit worktree add '$WT'": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
@@ -1096,7 +1096,7 @@
     "rc": 2
    }
   },
-  "canonical\tgit worktree add --no-track -b ledger-publish-omn19212 \"$OMNI_HOME/omni_worktrees/OMN-19212/registry-ledger-publish\" origin/main": {},
+  "canonical\tgit worktree add --no-track -b ledger-publish-omn19212 \"${WSENV}/omni_worktrees/OMN-19212/registry-ledger-publish\" origin/main": {},
   "canonical\tgit worktree add --reason=why --lock {DEST}": {},
   "canonical\tgit worktree add -B feat/x --orphan {DEST}": {},
   "canonical\tgit worktree add -b feat/x": {},
@@ -1125,7 +1125,7 @@
    "pre_tool_use_git_stash_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git stash pop` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under $OMNI_HOME, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
+     "reason": "BLOCKED: `git stash pop` operates on a stash ref shared across every worktree of a clone (OMN-17334). {REG} is a canonical clone directly under ${WSENV}, shared by every concurrent lane. A push here can be popped by another lane, and a pop can take another lane's stash instead of your own -- this exact collision has recurred repeatedly, twice destroying a peer lane's uncommitted work outright. Use the path-scoped safe alternative instead: read the pre-image without touching the tree with git show origin/dev:<path> > <scratch file>; or commit your work first (confirm with git log -1), then git checkout origin/dev -- <path> and restore it with git checkout HEAD -- <path>, scoped to named paths. `git stash list` / `git stash show` are never gated. To disable this guard: onex hooks disable SWEEP_PREFLIGHT"
     },
     "rc": 2
    },
@@ -1204,7 +1204,7 @@
   },
   "canonical\tkcadm.sh get clients -r onex": {},
   "canonical\tkubectl -n infisical-operator-system rollout restart deployment/secrets-operato-controller-manager": {},
-  "canonical\tkubectl -n onex-dev create secret generic operator-k8s --from-literal=clientSecret=x --dry-run=client -o yaml": {
+  "canonical\tkubectl -n tenant-a create secret generic operator-k8s --from-literal=clientSecret=x --dry-run=client -o yaml": {
    "pre_tool_use_credential_rotation_guard.sh": {
     "out": {
      "decision": "block",
@@ -1213,7 +1213,7 @@
     "rc": 2
    }
   },
-  "canonical\tkubectl -n onex-dev delete secret operator-k8s": {
+  "canonical\tkubectl -n tenant-a delete secret operator-k8s": {
    "pre_tool_use_credential_rotation_guard.sh": {
     "out": {
      "decision": "block",
@@ -1222,10 +1222,10 @@
     "rc": 2
    }
   },
-  "canonical\tkubectl -n onex-dev describe secret operator-k8s": {},
-  "canonical\tkubectl -n onex-dev get secret operator-k8s -o name": {},
-  "canonical\tkubectl -n onex-dev get secrets": {},
-  "canonical\tkubectl -n onex-dev rollout restart deployment/omninode-runtime": {},
+  "canonical\tkubectl -n tenant-a describe secret operator-k8s": {},
+  "canonical\tkubectl -n tenant-a get secret operator-k8s -o name": {},
+  "canonical\tkubectl -n tenant-a get secrets": {},
+  "canonical\tkubectl -n tenant-a rollout restart deployment/omninode-runtime": {},
   "canonical\tls -la": {},
   "canonical\tmkdir -p": {},
   "canonical\tmkdir -p \"$UNSET_BASE/omni_worktrees/OMN-1\"": {
@@ -1238,8 +1238,8 @@
    }
   },
   "canonical\tmkdir -p \"$UNSET_SCRATCH/notes\"": {},
-  "canonical\tmkdir -p $OMNI_HOME/omni_worktrees/OMN-1": {},
-  "canonical\tmkdir -p /tmp/lane-scratch && ls $OMNI_HOME/omni_worktrees": {},
+  "canonical\tmkdir -p ${WSENV}/omni_worktrees/OMN-1": {},
+  "canonical\tmkdir -p /tmp/lane-scratch && ls ${WSENV}/omni_worktrees": {},
   "canonical\tmkdir -p {WS}/omni_worktrees/OMN-1/repo": {},
   "canonical\tmkdir {WS}/omni_worktrees": {},
   "canonical\tonex": {},
@@ -1385,7 +1385,7 @@
    "pre_tool_use_credential_rotation_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: this looks like a credential rotation, re-issue or revoke, and it is not authorised (OMN-17957).\n\nOperator ruling, 2026-09-05, firm. Credential rotations keep being performed because an agent decided that a value it saw in a local transcript, log, scratch file or ledger was a leak. A value that never left the computer is NOT exposure and is not a reason to rotate; the 2026-08-30 rotation taken on exactly that reasoning froze secret sync cluster-wide for five days. Rotate only for real exposure -- pushed to a remote, posted to Slack/Linear/GitHub, printed into CI logs, or handed outside -- with the exposure path recorded FIRST; every rotation is approved explicitly by operator or jake and by nobody else; and every rotation enumerates and restarts or re-reads EVERY consumer in the same action, with readback. No agent, lane or codex message is approval.\n\n  * [consent_ledger_unreadable] aws_secretsmanager_rotate [operator-k8s]: the cited ledger {WS}/docs/tracking/ROLLING_WORK_LEDGER.md could not be read ([Errno 2] No such file or directory: '{WS}/docs/tracking/ROLLING_WORK_LEDGER.md')\n      fix: set OMNI_HOME to the {WS_NAME} clone and cite a line that exists in its rolling ledger\n\nTo proceed on a real, approved exposure, carry the citation on the command line or in an inline assignment: 'ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md@<row timestamp> (or the older :<line> form)' pointing at an OPERATOR-CONSENT row ({WS_NAME} CLAUDE.md rules 18 and 22) that carries approved_by=<jake|operator>, an APPROVED SCOPE naming this credential, and an OUT OF SCOPE list.\nReads are never gated: get, describe, list, -o name, get-secret-value, gh secret list, and kubectl rollout restart all pass untouched.\nTo disable this guard deliberately: onex hooks disable PRE_TOOL_AUTHORIZATION_SHIM"
+     "reason": "BLOCKED: this looks like a credential rotation, re-issue or revoke, and it is not authorised (OMN-17957).\n\nOperator ruling, 2026-09-05, firm. Credential rotations keep being performed because an agent decided that a value it saw in a local transcript, log, scratch file or ledger was a leak. A value that never left the computer is NOT exposure and is not a reason to rotate; the 2026-08-30 rotation taken on exactly that reasoning froze secret sync cluster-wide for five days. Rotate only for real exposure -- pushed to a remote, posted to Slack/Linear/GitHub, printed into CI logs, or handed outside -- with the exposure path recorded FIRST; every rotation is approved explicitly by operator or jake and by nobody else; and every rotation enumerates and restarts or re-reads EVERY consumer in the same action, with readback. No agent, lane or codex message is approval.\n\n  * [consent_ledger_unreadable] aws_secretsmanager_rotate [operator-k8s]: the cited ledger {WS}/docs/tracking/ROLLING_WORK_LEDGER.md could not be read ([Errno 2] No such file or directory: '{WS}/docs/tracking/ROLLING_WORK_LEDGER.md')\n      fix: set {WSENV} to the {WS_NAME} clone and cite a line that exists in its rolling ledger\n\nTo proceed on a real, approved exposure, carry the citation on the command line or in an inline assignment: 'ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md@<row timestamp> (or the older :<line> form)' pointing at an OPERATOR-CONSENT row ({WS_NAME} CLAUDE.md rules 18 and 22) that carries approved_by=<jake|operator>, an APPROVED SCOPE naming this credential, and an OUT OF SCOPE list.\nReads are never gated: get, describe, list, -o name, get-secret-value, gh secret list, and kubectl rollout restart all pass untouched.\nTo disable this guard deliberately: onex hooks disable PRE_TOOL_AUTHORIZATION_SHIM"
     },
     "rc": 2
    }
@@ -1989,11 +1989,11 @@
   "worktree\tgit -C \"$OMN19229_R\" reset --hard origin/main": {},
   "worktree\tgit -C \"$OMN19229_UNSET\" reset --hard origin/main": {},
   "worktree\tgit -C \"$OMN19229_WT\" reset --hard origin/dev": {},
-  "worktree\tgit -C $OMNI_HOME/second-clone worktree add omni_worktrees/OMN-19236/second-clone -b feat/omn-19236 origin/dev": {
+  "worktree\tgit -C ${WSENV}/second-clone worktree add omni_worktrees/OMN-19236/second-clone -b feat/omn-19236 origin/dev": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/second-clone/omni_worktrees/OMN-19236/second-clone (the relative path `omni_worktrees/OMN-19236/second-clone` resolves against `{WS}/second-clone`, where git runs). {WS}/second-clone/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from $OMNI_HOME, never from memory or from a redefined OMNI_HOME. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/second-clone/omni_worktrees/OMN-19236/second-clone (the relative path `omni_worktrees/OMN-19236/second-clone` resolves against `{WS}/second-clone`, where git runs). {WS}/second-clone/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2212,7 +2212,7 @@
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through scripts/commit_lock.py; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under ${WSENV}/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C ${WSENV} merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through scripts/commit_lock.py; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
     },
     "rc": 2
    }
@@ -2309,7 +2309,6 @@
     "rc": 2
    }
   },
-  "worktree\tgit worktree add \"${OMNI_HOME}/omni_worktrees/OMN-1/repo\" -b x": {},
   "worktree\tgit worktree add \"${WT:-/tmp}\"": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
@@ -2319,6 +2318,7 @@
     "rc": 2
    }
   },
+  "worktree\tgit worktree add \"${{WSENV}}/omni_worktrees/OMN-1/repo\" -b x": {},
   "worktree\tgit worktree add '$WT'": {},
   "worktree\tgit worktree add '{DEST}": {
    "pre_tool_use_worktree_guard.sh": {
@@ -2351,7 +2351,7 @@
     "rc": 2
    }
   },
-  "worktree\tgit worktree add --no-track -b ledger-publish-omn19212 \"$OMNI_HOME/omni_worktrees/OMN-19212/registry-ledger-publish\" origin/main": {},
+  "worktree\tgit worktree add --no-track -b ledger-publish-omn19212 \"${WSENV}/omni_worktrees/OMN-19212/registry-ledger-publish\" origin/main": {},
   "worktree\tgit worktree add --reason=why --lock {DEST}": {},
   "worktree\tgit worktree add -B feat/x --orphan {DEST}": {},
   "worktree\tgit worktree add -b feat/x": {},
@@ -2459,7 +2459,7 @@
   },
   "worktree\tkcadm.sh get clients -r onex": {},
   "worktree\tkubectl -n infisical-operator-system rollout restart deployment/secrets-operato-controller-manager": {},
-  "worktree\tkubectl -n onex-dev create secret generic operator-k8s --from-literal=clientSecret=x --dry-run=client -o yaml": {
+  "worktree\tkubectl -n tenant-a create secret generic operator-k8s --from-literal=clientSecret=x --dry-run=client -o yaml": {
    "pre_tool_use_credential_rotation_guard.sh": {
     "out": {
      "decision": "block",
@@ -2468,7 +2468,7 @@
     "rc": 2
    }
   },
-  "worktree\tkubectl -n onex-dev delete secret operator-k8s": {
+  "worktree\tkubectl -n tenant-a delete secret operator-k8s": {
    "pre_tool_use_credential_rotation_guard.sh": {
     "out": {
      "decision": "block",
@@ -2477,10 +2477,10 @@
     "rc": 2
    }
   },
-  "worktree\tkubectl -n onex-dev describe secret operator-k8s": {},
-  "worktree\tkubectl -n onex-dev get secret operator-k8s -o name": {},
-  "worktree\tkubectl -n onex-dev get secrets": {},
-  "worktree\tkubectl -n onex-dev rollout restart deployment/omninode-runtime": {},
+  "worktree\tkubectl -n tenant-a describe secret operator-k8s": {},
+  "worktree\tkubectl -n tenant-a get secret operator-k8s -o name": {},
+  "worktree\tkubectl -n tenant-a get secrets": {},
+  "worktree\tkubectl -n tenant-a rollout restart deployment/omninode-runtime": {},
   "worktree\tls -la": {},
   "worktree\tmkdir -p": {},
   "worktree\tmkdir -p \"$UNSET_BASE/omni_worktrees/OMN-1\"": {
@@ -2493,8 +2493,8 @@
    }
   },
   "worktree\tmkdir -p \"$UNSET_SCRATCH/notes\"": {},
-  "worktree\tmkdir -p $OMNI_HOME/omni_worktrees/OMN-1": {},
-  "worktree\tmkdir -p /tmp/lane-scratch && ls $OMNI_HOME/omni_worktrees": {},
+  "worktree\tmkdir -p ${WSENV}/omni_worktrees/OMN-1": {},
+  "worktree\tmkdir -p /tmp/lane-scratch && ls ${WSENV}/omni_worktrees": {},
   "worktree\tmkdir -p {WS}/omni_worktrees/OMN-1/repo": {},
   "worktree\tmkdir {WS}/omni_worktrees": {},
   "worktree\tonex": {},

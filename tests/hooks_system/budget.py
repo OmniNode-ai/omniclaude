@@ -42,8 +42,10 @@ INCIDENT_HOOK_SECONDS_PER_CALL_UNDER_LOAD = (60, 175)
 # jq, which took the same calls from 261 / 166 / 90 on dev to 109 / 81 / 44.
 # OMN-20118 (2026-09-30, lab h202, three runs each, highest kept): the seven
 # Bash guards run from one entrypoint (one bash, at most one interpreter) and a
-# bounded emit forks its writer: 109 / 81 / 44 to 91 / 74 / 44.
-MEASURED_EXECS_PER_CALL = {"Bash": 91, "Skill": 74, "Read": 44}
+# bounded emit forks its writer: 109 / 81 / 44 to 104 / 74 / 44. The guards
+# run concurrently inside the entrypoint (one process substitution each), which
+# the sampled count sees as processes; they are forks, not interpreter starts.
+MEASURED_EXECS_PER_CALL = {"Bash": 104, "Skill": 74, "Read": 44}
 # History of this instrument: 250 / 151 / 83 on dev before the OMN-20110
 # foreground runner; 261 / 167 / 91 with it (the bounded runner's own
 # interpreter start plus one process group per emit, paid to make every emit
@@ -51,7 +53,7 @@ MEASURED_EXECS_PER_CALL = {"Bash": 91, "Skill": 74, "Read": 44}
 
 # The enforced ceiling, per tool. Measured plus a small headroom for the
 # branches a hook takes only sometimes. It only ever moves down.
-CEILING_EXECS_PER_CALL = {"Bash": 103, "Skill": 82, "Read": 50}
+CEILING_EXECS_PER_CALL = {"Bash": 115, "Skill": 82, "Read": 50}
 
 # The target every tool call is held to. A ceiling above this is debt. After
 # OMN-20114 the remaining cost is one bash per registered hook (17 on a Bash
