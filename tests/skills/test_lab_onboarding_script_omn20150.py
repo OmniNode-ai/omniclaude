@@ -117,7 +117,7 @@ def test_a_vm_is_never_given_containers(tmp_path: Path) -> None:
 
 
 @macos_only
-def test_a_large_physical_mac_gets_both_modes(tmp_path: Path) -> None:
+def test_containers_are_offered_not_imposed(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
         "--preflight-only",
@@ -127,7 +127,69 @@ def test_a_large_physical_mac_gets_both_modes(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     if "ports in use" not in result.stdout:
+        assert "containers available if you want them (--containers)" in result.stdout
+
+
+@macos_only
+def test_containers_when_asked_for(tmp_path: Path) -> None:
+    result = _run(
+        tmp_path,
+        "--preflight-only",
+        "--containers",
+        ONBOARD_TEST_VM="0",
+        ONBOARD_TEST_RAM_GB="32",
+        ONBOARD_TEST_CPUS="10",
+    )
+    assert result.returncode == 0
+    if "ports in use" not in result.stdout:
         assert "and Mode 2 (containers)" in result.stdout
+
+
+@macos_only
+def test_no_containers_is_honoured(tmp_path: Path) -> None:
+    result = _run(
+        tmp_path,
+        "--preflight-only",
+        "--no-containers",
+        ONBOARD_TEST_RAM_GB="32",
+        ONBOARD_TEST_CPUS="10",
+    )
+    assert "Containers skipped: you chose not to (--no-containers)" in result.stdout
+
+
+@macos_only
+def test_containers_asked_for_on_a_mac_that_cannot_run_them_continue_without(
+    tmp_path: Path,
+) -> None:
+    result = _run(
+        tmp_path,
+        "--preflight-only",
+        "--containers",
+        ONBOARD_TEST_RAM_GB="8",
+        ONBOARD_TEST_CPUS="4",
+    )
+    assert result.returncode == 0
+    assert "cannot run them" in result.stdout
+    assert "Continuing without them" in result.stdout
+
+
+@macos_only
+@pytest.mark.parametrize(
+    ("docker", "floor"),
+    [("not installed", "30 GB"), ("installed, not running", "20 GB")],
+)
+def test_disk_floor_depends_on_whether_docker_is_installed(
+    tmp_path: Path, docker: str, floor: str
+) -> None:
+    result = _run(
+        tmp_path,
+        "--preflight-only",
+        ONBOARD_TEST_DOCKER=docker,
+        ONBOARD_TEST_DISK_GB="25",
+    )
+    line = next(ln for ln in result.stdout.splitlines() if "Free disk" in ln)
+    assert line.rstrip().endswith(floor)
+    assert f"Docker Desktop         {docker}" in result.stdout
 
 
 @macos_only

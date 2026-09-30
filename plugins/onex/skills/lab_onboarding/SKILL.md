@@ -15,6 +15,9 @@ args:
   - name: --preflight-only
     description: "Check this Mac against the minimum requirements and stop; changes nothing"
     required: false
+  - name: --containers
+    description: "Set up Docker Desktop and the local container stack (if this Mac can run them)"
+    required: false
   - name: --no-containers
     description: "Never install Docker Desktop or boot the local stack"
     required: false
@@ -51,7 +54,7 @@ its prompts, then reports each phase to the developer the moment it finishes.
 | 3 | Tailnet: Tailscale installed and signed in | yes |
 | 4 | onex, the local identity, one model path, one delegation | yes |
 | 5 | This machine's lab bus identity, issued automatically; one delegation on the lab dev lane | yes |
-| 6 | Containers (only on a physical Mac at the Mode 2 floor, unless `--no-containers`) | yes |
+| 6 | Containers, if the developer wants them and the Mac can run them: Docker Desktop installed, or launched if installed but stopped; then the local stack | yes |
 | 7 | Claude Code plugin `onex@omninode-tools` | yes |
 | 8 | Verify | no |
 
@@ -72,7 +75,12 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/lab-onboarding.sh" --preflight-only <arg
   recommended VM verbatim. **Stop.** Do not offer to install anyway.
 - Exit 1: a fixable condition (not an admin account, a Rosetta shell, not macOS).
   Relay the `Next:` line and stop.
-- Exit 0: relay the "Will set up" line, then continue.
+- Exit 0: relay the "Will set up" line. If it says containers are available,
+  ask the developer whether they want the local container stack (Docker Desktop
+  plus about 10 GB of memory while it runs, and 10-20 minutes the first time),
+  and pass `--containers` or `--no-containers` to the run. Skip the question if
+  either flag was already given. If Docker Desktop is installed but not
+  running, say the run will start it.
 
 If `--preflight-only` was the argument, stop here.
 

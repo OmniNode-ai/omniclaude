@@ -15,7 +15,8 @@
 #   3 Tailnet            Tailscale installed and signed in to the OmniNode tailnet
 #   4 onex + model       dispatch venv, onex, local identity, one model path, one delegation
 #   5 Bus identity       this machine's lab principal, issued automatically; one lane delegation
-#   6 Containers         optional: Docker Desktop and the local stack (physical Mac, Mode 2 floor)
+#   6 Containers         optional, the developer's choice: Docker Desktop (installed, or
+#                        launched if it is installed but stopped) and the local stack
 #   7 Claude Code plugin onex@omninode-tools
 #   8 Verify             the checks for the selected modes, one line each
 #
@@ -27,7 +28,9 @@
 #
 # Options:
 #   --preflight-only     run phase 0, print the verdict, exit
+#   --containers         set up Docker and the local stack (if this Mac can run them)
 #   --no-containers      never set up Docker or the local stack
+#                        (neither: asked on a terminal; without one, containers are skipped)
 #   --provider NAME      openrouter | gemini | none   (default: ask on a terminal, else none)
 #   --workspace DIR      the workspace (default: $OMNI_HOME, else ~/code/omni)
 #   --restart            forget completed phases and run every phase again
@@ -48,12 +51,15 @@ M1_RAM_GB=8
 M1_DISK_GB=20
 M2_CPUS=8
 M2_RAM_GB=16
-M2_DISK_GB=60
+# Disk, measured 2026-09-30 on a Mac running the stack: images 4.7 GB (the runtime
+# image alone 3.6 GB), volumes about 6 GB, plus build cache during the first build.
+M2_DISK_GB=30                 # free disk when Docker Desktop still has to be installed
+M2_DISK_GB_DOCKER_PRESENT=20  # free disk when Docker Desktop is already installed
 DOCKER_MEM_GB=10          # the local-dev guide's floor for Docker Desktop
 DOCKER_CPUS=4
 HOST_RESERVE_GB=6         # Docker Desktop never leaves the host less than this
 BOOT_FREE_MEM_GB=4        # available memory required at the moment the stack boots
-BOOT_FREE_DISK_GB=30      # free disk required at the moment the stack boots
+BOOT_FREE_DISK_GB=15      # free disk required at the moment the stack boots
 MODE2_PORTS="5436 19092 16379 8085 8086"
 VM_SPEC="a macOS 14 (or newer) VM with 4 vCPU, 8 GB RAM and 40 GB disk, on a host with that much to spare (Tart or UTM on an Apple-silicon Mac, or a hosted Mac such as EC2 Mac)"
 
@@ -72,7 +78,7 @@ case "$RETRIES" in ''|*[!0-9]*) RETRIES=3 ;; esac
 # Arguments
 # ---------------------------------------------------------------------------
 PREFLIGHT_ONLY=0
-NO_CONTAINERS=0
+WANT_CONTAINERS=""        # 1 --containers, 0 --no-containers, empty: ask
 PROVIDER=""
 WORKSPACE="${OMNI_HOME:-$HOME/code/omni}"
 RESTART=0
@@ -83,7 +89,8 @@ usage() { sed -n '2,/^set -uo pipefail$/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//
 while [ $# -gt 0 ]; do
   case "$1" in
     --preflight-only) PREFLIGHT_ONLY=1 ;;
-    --no-containers) NO_CONTAINERS=1 ;;
+    --containers) WANT_CONTAINERS=1 ;;
+    --no-containers) WANT_CONTAINERS=0 ;;
     --provider) shift; PROVIDER="${1:-}" ;;
     --provider=*) PROVIDER="${1#*=}" ;;
     --workspace) shift; WORKSPACE="${1:-}" ;;
@@ -114,6 +121,15 @@ STATUS="$RUN_DIR/status"
 : >"$STATUS"
 STATE_DIR="$HOME/.omninode/onboarding"
 DONE_FILE="$STATE_DIR/phases.done"
+
+# The system directories first-class on PATH, whatever this was started from:
+# an app launched with `open` inherits this PATH, and Docker Desktop's own setup
+# runs /sbin/md5 (a stripped PATH fails its licence step with "md5: command not found").
+case ":$PATH:" in *":/usr/sbin:"*) ;; *) PATH="$PATH:/usr/sbin" ;; esac
+case ":$PATH:" in *":/sbin:"*) ;; *) PATH="$PATH:/sbin" ;; esac
+case ":$PATH:" in *":/usr/bin:"*) ;; *) PATH="/usr/bin:$PATH" ;; esac
+case ":$PATH:" in *":/bin:"*) ;; *) PATH="/bin:$PATH" ;; esac
+export PATH
 
 IS_TTY=0
 [ -t 0 ] && [ -t 1 ] && IS_TTY=1
@@ -300,6 +316,22 @@ avail_mem_gb() { # free + inactive + speculative pages
           if (ps == 0) ps = 4096; printf "%d\n", (f + i + s) * ps / 1073741824 }'
 }
 port_busy() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+
+# Docker Desktop's CLI lives inside the app; a fresh install has not put it on PATH yet.
+export PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin:$HOME/.docker/bin"
+LOCAL_STACK_PROJECT="omnibase-infra-local"
+docker_installed() { [ -d /Applications/Docker.app ]; }
+docker_ready() { docker info >/dev/null 2>&1; }
+docker_state() {
+  if [ -n "${ONBOARD_TEST_DOCKER:-}" ]; then echo "$ONBOARD_TEST_DOCKER"; return; fi
+  if ! docker_installed; then echo "not installed"
+  elif docker_ready; then echo "running"
+  else echo "installed, not running"
+  fi
+}
+local_stack_running() { # the local stack's own containers are up (they hold its ports)
+  docker_ready && [ -n "$(docker ps -q --filter "label=com.docker.compose.project=$LOCAL_STACK_PROJECT" 2>/dev/null)" ]
+}
 arch() { uname -m; }
 
 brew_bin() {
@@ -391,11 +423,14 @@ row() { printf '  %-22s %-16s %-14s %s\n' "$1" "$2" "$3" "$4" | tee -a "$LOG"; }
 
 phase0() {
   phase_start 0 "Preflight (reads this Mac; changes nothing)" "under a minute"
-  local mv major cpus ram disk vm="physical Mac" p busy="" ambient
+  local mv major cpus ram disk vm="physical Mac" p busy="" ambient dstate m2disk a
   mv="$(macos_version)"; major="${mv%%.*}"
   case "$major" in ''|*[!0-9]*) major=0 ;; esac
   cpus="$(cpu_count)"; ram="$(ram_gb)"; disk="$(disk_free_gb)"
   is_vm && vm="virtual machine"
+  dstate="$(docker_state)"
+  m2disk=$M2_DISK_GB
+  [ "$dstate" != "not installed" ] && m2disk=$M2_DISK_GB_DOCKER_PRESENT
 
   say "  Log file: $LOG"
   say ""
@@ -403,8 +438,9 @@ phase0() {
   row "macOS" "$mv" "$M1_MACOS_MAJOR+" "$M1_MACOS_MAJOR+"
   row "CPU cores" "$cpus ($(arch))" "$M1_CPUS" "$M2_CPUS"
   row "RAM" "${ram} GB" "${M1_RAM_GB} GB" "${M2_RAM_GB} GB"
-  row "Free disk" "${disk} GB" "${M1_DISK_GB} GB" "${M2_DISK_GB} GB"
+  row "Free disk" "${disk} GB" "${M1_DISK_GB} GB" "${m2disk} GB"
   row "Machine" "$vm" "either" "physical Mac"
+  row "Docker Desktop" "$dstate" "not used" "installed or launched for you"
   say ""
 
   [ "$major" -ge "$M1_MACOS_MAJOR" ] || { MODE1_OK=0; MODE1_WHY="$MODE1_WHY macOS $mv is older than $M1_MACOS_MAJOR;"; }
@@ -417,11 +453,14 @@ phase0() {
   else
     [ "$cpus" -ge "$M2_CPUS" ] || { MODE2_OK=0; MODE2_WHY="$MODE2_WHY $cpus CPU cores (needs $M2_CPUS);"; }
     [ "$ram" -ge "$M2_RAM_GB" ] || { MODE2_OK=0; MODE2_WHY="$MODE2_WHY ${ram} GB RAM (needs $M2_RAM_GB);"; }
-    [ "$disk" -ge "$M2_DISK_GB" ] || { MODE2_OK=0; MODE2_WHY="$MODE2_WHY ${disk} GB free disk (needs $M2_DISK_GB);"; }
+    [ "$disk" -ge "$m2disk" ] || { MODE2_OK=0; MODE2_WHY="$MODE2_WHY ${disk} GB free disk (needs $m2disk);"; }
     is_vm && { MODE2_OK=0; MODE2_WHY="$MODE2_WHY this is a VM, and Docker Desktop cannot run inside a macOS guest;"; }
-    for p in $MODE2_PORTS; do port_busy "$p" && busy="$busy $p"; done
-    [ -n "$busy" ] && { MODE2_OK=0; MODE2_WHY="$MODE2_WHY ports in use:$busy;"; }
-    [ "$NO_CONTAINERS" -eq 1 ] && { MODE2_OK=0; MODE2_WHY="$MODE2_WHY --no-containers was given;"; }
+    if local_stack_running; then
+      STACK_RUNNING=1   # its own containers hold the ports: not a conflict
+    else
+      for p in $MODE2_PORTS; do port_busy "$p" && busy="$busy $p"; done
+      [ -n "$busy" ] && { MODE2_OK=0; MODE2_WHY="$MODE2_WHY ports in use by something else:$busy;"; }
+    fi
   fi
 
   # Conditions that are fixable on this machine, not a hardware shortfall.
@@ -456,7 +495,32 @@ phase0() {
     exit 3
   fi
 
+  # Containers are the developer's choice, offered only when this Mac can run them.
   if [ "$MODE2_OK" -eq 1 ]; then
+    case "$WANT_CONTAINERS" in
+      1) ;;
+      0) MODE2_OK=0; MODE2_WHY=" you chose not to (--no-containers)" ;;
+      *)
+        if [ "$IS_TTY" -eq 1 ] && [ "$PREFLIGHT_ONLY" -eq 0 ]; then
+          say "  This Mac can also run the local container stack (Docker Desktop: $dstate)."
+          say "  It needs ${DOCKER_MEM_GB} GB of memory for Docker while it runs, and 10-20 minutes the first time."
+          printf '  Set up the containers too? [y/N] '
+          IFS= read -r a
+          case "$a" in y|Y|yes|YES) ;; *) MODE2_OK=0; MODE2_WHY=" you chose not to" ;; esac
+        elif [ "$PREFLIGHT_ONLY" -eq 1 ]; then
+          MODE2_OFFERED=1
+        else
+          MODE2_OK=0; MODE2_WHY=" not requested (run with --containers to set them up)"
+        fi
+        ;;
+    esac
+  elif [ "$WANT_CONTAINERS" = "1" ]; then
+    say "  ⚠ You asked for containers, but this Mac cannot run them:$MODE2_WHY. Continuing without them."
+  fi
+
+  if [ "$MODE2_OK" -eq 1 ] && [ "$MODE2_OFFERED" -eq 1 ]; then
+    SELECTED="Mode 1 (native onex) and the lab bus; containers available if you want them (--containers)"
+  elif [ "$MODE2_OK" -eq 1 ]; then
     SELECTED="Mode 1 (native onex), the lab bus, and Mode 2 (containers)"
   else
     SELECTED="Mode 1 (native onex) and the lab bus. Containers skipped:$MODE2_WHY"
@@ -466,6 +530,8 @@ phase0() {
 }
 AMBIENT_FOUND=""
 SELECTED=""
+STACK_RUNNING=0
+MODE2_OFFERED=0
 
 # ===========================================================================
 # Phase 1: base tools
@@ -913,7 +979,6 @@ phase5() {
 # ===========================================================================
 # Phase 6: containers (optional)
 # ===========================================================================
-docker_ready() { docker info >/dev/null 2>&1; }
 docker_settings_file() {
   local d="$HOME/Library/Group Containers/group.com.docker"
   if [ -f "$d/settings-store.json" ]; then echo "$d/settings-store.json"; else echo "$d/settings.json"; fi
@@ -937,6 +1002,44 @@ json.dump(data, open(path, "w"), indent=2)
 PY
 }
 
+docker_awaits_terms() { # Docker Desktop is showing its licence window and will not start until accepted
+  pgrep -f 'Docker Desktop.*--name=new-license' >/dev/null 2>&1
+}
+
+# Wait for the engine; if Docker Desktop is holding at its licence screen, say so
+# (accepting Docker's terms is the developer's decision, never this script's).
+wait_for_docker() {
+  local t0=$SECONDS told=0
+  while [ $((SECONDS - t0)) -lt 600 ]; do
+    docker_ready && return 0
+    if [ "$told" -eq 0 ] && docker_awaits_terms; then
+      say "  Docker Desktop is waiting for you to accept its terms in its own window."
+      say "  Accept them there (or quit Docker and run this with --no-containers); waiting up to 10 minutes…"
+      notify "Action needed" "Accept Docker Desktop's terms in its window"
+      told=1
+    fi
+    sleep 5
+  done
+  FAILED_STEP="Docker Desktop to start (waited 10m)"
+  if docker_awaits_terms; then LAST_ERR="Docker Desktop is still showing its licence terms"; else LAST_ERR="$(last_log_lines)"; fi
+  return 1
+}
+
+accept_docker_terms() { # fresh install only, and only with the developer's yes
+  local a="n"
+  say "  Docker Desktop requires accepting the Docker Subscription Service Agreement:"
+  say "    https://www.docker.com/legal/docker-subscription-service-agreement"
+  if [ "$IS_TTY" -eq 1 ]; then
+    printf '  Accept it now? [y/N] '; IFS= read -r a
+  fi
+  # shellcheck disable=SC2024  # the log is the user's own file; only install needs root
+  case "$a" in
+    y|Y|yes|YES) sudo -n /Applications/Docker.app/Contents/MacOS/install --accept-license --user "$(id -un)" >>"$LOG" 2>&1 ;;
+    *) say "  Not accepted here; Docker Desktop will show its terms when it starts." ;;
+  esac
+  return 0
+}
+
 restart_docker() {
   if docker desktop restart >/dev/null 2>&1; then return 0; fi
   /usr/bin/osascript -e 'quit app "Docker"' >/dev/null 2>&1 || true
@@ -945,8 +1048,9 @@ restart_docker() {
 }
 
 compose_ok() { # compose 2.20 or newer
-  local v; v="$(docker compose version --short 2>/dev/null | sed 's/^v//')"
-  [ -n "$v" ] || return 1
+  local v; v="$(docker compose version --short 2>&1 | sed 's/^v//')"
+  echo "docker compose version: ${v:-none}"
+  case "$v" in [0-9]*) ;; *) return 1 ;; esac
   local major="${v%%.*}" rest="${v#*.}"; local minor="${rest%%.*}"
   [ "$major" -gt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -ge 20 ]; }
 }
@@ -977,13 +1081,12 @@ phase6() {
   [ $((host_ram - mem_gb)) -lt "$HOST_RESERVE_GB" ] && mem_gb=$((host_ram - HOST_RESERVE_GB))
   mem=$((mem_gb * 1024))
 
-  if [ ! -d /Applications/Docker.app ]; then
+  if ! docker_installed; then
     say "  Installing Docker Desktop…"
     ensure_sudo || { FAILED_STEP="administrator password"; phase_fail "run again and enter your Mac password when asked"; }
     retry "install Docker Desktop" sh -c "'$(brew_bin)' install --cask docker-desktop || '$(brew_bin)' install --cask docker" ||
       phase_fail "install Docker Desktop from docker.com, then run this again"
-    step "accept the Docker Desktop licence" sudo -n /Applications/Docker.app/Contents/MacOS/install --accept-license --user "$(id -un)" ||
-      phase_fail "open Docker Desktop once and accept its licence, then run this again"
+    accept_docker_terms
   else
     say "  Docker Desktop: present"
   fi
@@ -996,8 +1099,14 @@ phase6() {
     *) FAILED_STEP="size Docker Desktop"; LAST_ERR="$(last_log_lines)"
        phase_fail "set Settings > Resources to ${mem_gb} GB and $DOCKER_CPUS CPUs by hand, then run this again" ;;
   esac
-  docker_ready || open -g -a Docker
-  wait_until "Docker Desktop to start" 300 5 docker_ready || phase_fail "open Docker Desktop and wait for it to say it is running, then run this again"
+  if ! docker_ready; then
+    say "  Starting Docker Desktop…"
+    notify "Starting Docker Desktop" "The local stack comes up once Docker is running"
+    open -g -a Docker
+  fi
+  wait_for_docker ||
+    phase_fail "open Docker Desktop; if it asks you to accept its terms or to update, do that, then run this again"
+  say "  Docker Desktop: running"
   step "docker compose 2.20 or newer" compose_ok || phase_fail "update Docker Desktop, then run this again"
 
   free="$(avail_mem_gb)"; disk="$(disk_free_gb)"
@@ -1007,18 +1116,24 @@ phase6() {
     phase_fail "close other apps or free disk space, then run this again"
   fi
 
-  step "make local-env" make -C "$WORKSPACE/omnibase_infra" local-env || phase_fail "see the log for make local-env's message"
-  step "point the stack at the lab model server" point_bundle_model "$(lab_fact lab_model_url)" ||
-    phase_fail "set model_endpoint in ~/.omnibase/local.bifrost.yaml by hand, then run this again"
-  say "  Building and starting the local stack (make up-local)…"
-  retry "make up-local" nice -n 10 make -C "$WORKSPACE/omnibase_infra" up-local ||
-    phase_fail "see the log; 'make status-local' from omnibase_infra shows what is not up"
+  # Launching Docker restarts a stack that was already there (restart policies).
+  local_stack_running && STACK_RUNNING=1
+  if [ "$STACK_RUNNING" -eq 1 ]; then
+    say "  The local stack is already there; checking it instead of rebuilding it."
+  else
+    step "make local-env" make -C "$WORKSPACE/omnibase_infra" local-env || phase_fail "see the log for make local-env's message"
+    step "point the stack at the lab model server" point_bundle_model "$(lab_fact lab_model_url)" ||
+      phase_fail "set model_endpoint in ~/.omnibase/local.bifrost.yaml by hand, then run this again"
+    say "  Building and starting the local stack (make up-local)…"
+    retry "make up-local" nice -n 10 make -C "$WORKSPACE/omnibase_infra" up-local ||
+      phase_fail "see the log; 'make status-local' from omnibase_infra shows what is not up"
+  fi
   say "  Waiting for the stack to report healthy (a cold boot takes several minutes)…"
   wait_until "the local stack to become healthy" 900 15 stack_healthy ||
     phase_fail "run 'make status-local' in omnibase_infra; if the main kernel is still provisioning topics, wait and run this again"
   retry "make delegate-local" make -C "$WORKSPACE/omnibase_infra" delegate-local PROMPT="Reply with exactly one word: hello" ||
     phase_fail "the stack is up but the delegation failed; see the log"
-  phase_pass "stack healthy, one delegation answered"
+  phase_pass "stack healthy, one delegation answered (stop it with 'make down-local' from the checkout that started it)"
 }
 
 # ===========================================================================
