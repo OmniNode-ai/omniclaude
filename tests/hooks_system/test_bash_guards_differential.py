@@ -223,7 +223,12 @@ def test_an_unwritable_request_dir_is_never_less_strict(
     # the entrypoint may refuse more than the seven separate hooks did (several
     # of them fail open on an unwritable TMPDIR through error-guard.sh), never
     # less. Before the fix, `git stash pop` was allowed here.
-    env = {"TMPDIR": str(tmp_path / "no-such-dir")}
+    # Under a regular file, so no `mkdir -p` along the way can create it (a
+    # missing directory under a writable parent gets created by error-guard.sh
+    # and would make this test pass without exercising anything).
+    blocker = tmp_path / "a-file"
+    blocker.write_text("")
+    env = {"TMPDIR": str(blocker / "tmp")}
     with corpus.workspace() as ws:
         separate = [
             corpus.run_script(
