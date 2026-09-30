@@ -440,7 +440,7 @@ def test_a_script_naming_a_private_repo_is_not_the_public_doc_class(
 # neither form as a literal.
 _SLUG = "omni" + "_home"
 _ENV_VAR = _SLUG.upper()
-_ENV_VAR_VOCAB = VOCAB.replace('- "omninode_infra"', f'- "{_SLUG}"')
+_ENV_VAR_VOCAB = VOCAB.replace(PRIVATE_REPO, _SLUG)
 
 
 @pytest.fixture
