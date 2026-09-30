@@ -31,7 +31,7 @@
 #   --containers         answer the Docker question yes in advance
 #   --no-containers      answer it no in advance
 #                        (neither: the one question is asked after preflight)
-#   --provider NAME      openrouter | gemini | glm   (your own model key; default: asked up front)
+#   --provider NAME      openrouter | gemini   (your own model key; default: asked up front)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else $OMNI_HOME, else ~/code/omni)
 #   --restart            forget completed phases and run every phase again
 #   --reissue-identity   request a fresh bus identity even if one is stored
@@ -104,8 +104,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-case "$PROVIDER" in ''|openrouter|gemini|glm) ;; *)
-  printf 'lab-onboarding: --provider must be openrouter, gemini or glm (developers bring their own key)\n' >&2; exit 2 ;;
+case "$PROVIDER" in ''|openrouter|gemini) ;; *)
+  printf 'lab-onboarding: --provider must be openrouter or gemini (developers bring their own key; the beta offers these two)\n' >&2; exit 2 ;;
 esac
 [ -n "$WORKSPACE" ] || { printf 'lab-onboarding: --workspace needs a directory\n' >&2; exit 2; }
 
@@ -442,7 +442,7 @@ OSA
 }
 
 # ---------------------------------------------------------------------------
-# The model key. Developers bring their own (OpenRouter, Gemini or GLM); there
+# The model key. Developers bring their own (OpenRouter or Gemini); there
 # is no lab-model fallback. Settled in preflight, before anything installs, so
 # the run never stops mid-way to ask. The key is held only in this process
 # (never exported, logged or written) until phase 4 stores it in onex.
@@ -454,7 +454,6 @@ provider_label() {
   case "$1" in
     openrouter) echo "OpenRouter" ;;
     gemini) echo "Gemini (a Google AI Studio API key)" ;;
-    glm) echo "GLM (a z.ai general API key; Coding Plan keys are not allowed)" ;;
     *) echo "$1" ;;
   esac
 }
@@ -463,7 +462,7 @@ stored_key_provider() { # an earlier run's key, if onex is already here
   [ -x "$HOME/.local/bin/onex" ] || return 1
   local p list
   list="$(env -u PYTHONPATH "$HOME/.local/bin/onex" secret list 2>/dev/null)" || return 1
-  for p in openrouter gemini glm; do
+  for p in openrouter gemini; do
     printf '%s\n' "$list" | grep -qE "^[[:space:]]+llm\.$p\.api_key[[:space:]]" && { echo "$p"; return 0; }
   done
   return 1
@@ -476,18 +475,17 @@ ask_provider() { # -> MODEL_CHOICE, or empty when nobody can be asked
     say "  Your delegations run on your own model key. Which provider is it from?"
     say "    1) OpenRouter"
     say "    2) Gemini (a Google AI Studio API key)"
-    say "    3) GLM (a z.ai general API key; Coding Plan keys are not allowed)"
-    printf '  Choose 1, 2 or 3: '
+    printf '  Choose 1 or 2: '
     IFS= read -r a
-    case "$a" in 1) MODEL_CHOICE=openrouter ;; 2) MODEL_CHOICE=gemini ;; 3) MODEL_CHOICE=glm ;; esac
+    case "$a" in 1) MODEL_CHOICE=openrouter ;; 2) MODEL_CHOICE=gemini ;; esac
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
-set r to choose from list {"OpenRouter", "Gemini (Google AI Studio)", "GLM (z.ai general API)"} with title "OmniNode onboarding" with prompt "Your delegations run on your own model key. Which provider is it from?"
+set r to choose from list {"OpenRouter", "Gemini (Google AI Studio)"} with title "OmniNode onboarding" with prompt "Your delegations run on your own model key. Which provider is it from?"
 if r is false then return ""
 return item 1 of r
 OSA
 )"
-    case "$a" in OpenRouter) MODEL_CHOICE=openrouter ;; Gemini*) MODEL_CHOICE=gemini ;; GLM*) MODEL_CHOICE=glm ;; esac
+    case "$a" in OpenRouter) MODEL_CHOICE=openrouter ;; Gemini*) MODEL_CHOICE=gemini ;; esac
   fi
 }
 
@@ -503,14 +501,14 @@ settle_model_key() {
   if [ -z "$MODEL_CHOICE" ]; then
     FAILED_STEP="choose your model key's provider"
     LAST_ERR="no provider was chosen, and there is no terminal or desktop to ask on"
-    phase_fail "run this in Terminal, or pass --provider openrouter|gemini|glm. Nothing was installed"
+    phase_fail "run this in Terminal, or pass --provider openrouter|gemini. Nothing was installed"
   fi
   read_secret "Paste your $(provider_label "$MODEL_CHOICE") key (input is hidden):"
   PENDING_KEY="$SECRET"; SECRET=""
   if [ -z "$PENDING_KEY" ]; then
     FAILED_STEP="your model key"
     LAST_ERR="no key was given; developers bring their own key and the lab's models are not used"
-    phase_fail "get a key (OpenRouter, Google AI Studio or z.ai general API) and run this again. Nothing was installed"
+    phase_fail "get an OpenRouter or Google AI Studio key and run this again. Nothing was installed"
   fi
   say "  Model key: received (held in memory; stored in onex in phase 4)."
 }
@@ -976,11 +974,11 @@ phase4() {
     PENDING_KEY=""
     FAILED_STEP="check that onex routes a $choice key"
     LAST_ERR="this onex's provider catalogue does not offer $choice yet; the key was not stored"
-    phase_fail "run this again with another provider's key (--provider openrouter|gemini|glm)"
+    phase_fail "run this again with another provider's key (--provider openrouter|gemini)"
   fi
   if [ -n "$PENDING_KEY" ]; then
-    # The CLI decides the key's plan before storing it, and refuses one the
-    # catalogue does not allow (a z.ai Coding Plan key); its words are shown.
+    # The CLI checks the key before storing it and refuses one the catalogue
+    # does not allow; its words are shown.
     local refusal
     if refusal="$(printf '%s' "$PENDING_KEY" | onex_run secret set --force "llm.$choice.api_key" 2>&1)"; then
       PENDING_KEY=""
@@ -1013,7 +1011,7 @@ phase4() {
     phase_fail "run 'onex delegate \"Reply with exactly one word: hello\"' to see the error"
   fi
   endpoint="$(receipt_field "$CAPTURED" endpoint)"
-  # Exact URL, not host: z.ai's Coding Plan and general API share a host. A
+  # Exact URL, not host: one provider can serve several routes from one host. A
   # receipt naming any other endpoint (a lab model included) fails the phase.
   local urls ok=0 p
   urls="$(provider_endpoints "$choice")"

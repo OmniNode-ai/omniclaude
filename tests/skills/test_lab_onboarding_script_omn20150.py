@@ -287,10 +287,12 @@ def _phase0_only(tmp_path: Path) -> Path:
     return p
 
 
-def test_the_lab_model_is_not_a_provider(tmp_path: Path) -> None:
-    result = _run(tmp_path, "--provider", "none")
+@pytest.mark.parametrize("provider", ["none", "glm"])
+def test_only_the_beta_providers_are_accepted(tmp_path: Path, provider: str) -> None:
+    """No lab-model fallback, and GLM is out of the beta: only openrouter and gemini."""
+    result = _run(tmp_path, "--provider", provider)
     assert result.returncode == 2
-    assert "developers bring their own key" in result.stderr
+    assert "must be openrouter or gemini" in result.stderr
 
 
 @macos_only
@@ -322,7 +324,7 @@ def test_the_key_is_settled_in_preflight(
     """Provider then key, both before anything installs; an empty key stops the run."""
     script = (
         f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
-        'expect "Choose 1, 2 or 3:"; send "2\\r"; '
+        'expect "Choose 1 or 2:"; send "2\\r"; '
         f'expect "key (input is hidden)"; send "{key}\\r"; expect eof'
     )
     result = subprocess.run(

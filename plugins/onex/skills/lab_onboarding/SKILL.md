@@ -23,7 +23,7 @@ args:
     description: "Answer the Docker question no in advance (lab only)"
     required: false
   - name: --provider
-    description: "Your own model key's provider: openrouter | gemini | glm (default: asked). The lab's models are never used"
+    description: "Your own model key's provider: openrouter | gemini (default: asked). The lab's models are never used"
     required: false
   - name: --workspace
     description: "Workspace directory (default: $OMNIBASE_PATH, else ~/code/omni)"
@@ -87,8 +87,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/lab-onboarding.sh" --preflight-only <arg
   offered, relay why: the lab alone covers delegations.
 - Then the model key. Developers bring their own key; the lab's models are
   never used. Unless `--provider` was given, ask which provider their key is
-  from: OpenRouter, Gemini (a Google AI Studio key) or GLM (a z.ai general API
-  key; Coding Plan keys are refused). Pass it as `--provider openrouter|gemini|glm`.
+  from: OpenRouter or Gemini (a Google AI Studio key); the beta offers only
+  these two. Pass it as `--provider openrouter|gemini`.
   The key itself is typed only in the Terminal window, at a hidden prompt that
   comes right after preflight, before anything installs. If they have no key
   yet, say where to get one and stop: the run refuses to start without one.
