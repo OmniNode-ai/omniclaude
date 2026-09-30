@@ -265,12 +265,14 @@ expected_hooks:
     owner: "omniclaude hooks lane"
     purpose: >
       The one registration for the seven Bash PreToolUse guards, run in their
-      former order: the worktree guard (OMN-14330, WORKTREE_GUARD), the
-      pr-ownership guard (OMN-16485, BASH_GUARD), the credential-rotation gate
-      (OMN-17957, PRE_TOOL_AUTHORIZATION_SHIM), the git-stash gate (OMN-17334,
-      SWEEP_PREFLIGHT), the shared-tree git gate (OMN-18798, SCOPE_GATE), the
-      pull-request body stamp gate (OMN-18335, BRANCH_PROTECTION_GUARD) and the
-      prose command-substitution gate (OMN-18750, BASH_GUARD). Each guard
+      former order: pre_tool_use_worktree_guard.sh (OMN-14330, WORKTREE_GUARD),
+      pre_tool_use_pr_ownership_guard.sh (OMN-16485, BASH_GUARD),
+      pre_tool_use_credential_rotation_guard.sh (OMN-17957,
+      PRE_TOOL_AUTHORIZATION_SHIM), pre_tool_use_git_stash_guard.sh (OMN-17334,
+      SWEEP_PREFLIGHT), pre_tool_use_shared_tree_git_guard.sh (OMN-18798,
+      SCOPE_GATE), pre_tool_use_pr_body_stamp_guard.sh (OMN-18335,
+      BRANCH_PROTECTION_GUARD) and
+      pre_tool_use_prose_command_substitution_guard.sh (OMN-18750, BASH_GUARD). Each guard
       script is sourced in its own subshell and keeps its own gate bit,
       pre-filter, fail-closed branches and refusal text; every decision core
       the call needs runs in ONE interpreter (lib/bash_guard_cores.py) instead of

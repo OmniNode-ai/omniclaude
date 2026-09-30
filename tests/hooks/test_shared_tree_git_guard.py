@@ -46,6 +46,8 @@ from omnibase_core.validators.no_unguarded_git_subprocess import (
     scrub_git_location_env,
 )
 
+from tests.hooks._bash_guard_registration import is_live_on_bash_matcher
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOKS_DIR = REPO_ROOT / "plugins" / "onex" / "hooks"
 LIB_DIR = HOOKS_DIR / "lib"
@@ -1402,12 +1404,11 @@ def test_borrowed_bit_namesake_is_unregistered() -> None:
 
 
 def test_the_guard_is_registered_on_the_bash_matcher() -> None:
-    hooks_json = json.loads((HOOKS_DIR / "hooks.json").read_text())
-    groups = hooks_json["hooks"]["PreToolUse"]
-    bash_groups = [g for g in groups if g.get("matcher") == "Bash"]
-    assert bash_groups, "no PreToolUse group matches Bash"
-    commands = [h["command"] for g in bash_groups for h in g["hooks"]]
-    assert any(HOOK_SCRIPT.name in c for c in commands), commands
+    # OMN-20118: registered through the one Bash guards entrypoint, which
+    # sources this guard in its former order.
+    assert is_live_on_bash_matcher("pre_tool_use_shared_tree_git_guard.sh"), (
+        "the guard must be live on the Bash matcher"
+    )
 
 
 # ---------------------------------------------------------------------------
