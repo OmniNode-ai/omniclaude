@@ -234,8 +234,8 @@ alert_channel_send() {
 # only print a line nobody reads is worse than the system failing, and OMN-20109
 # measured the consequence. The launchd hook-emit drainer, the foreground hook
 # runner and the cron canary do not inherit SLACK_BOT_TOKEN / SLACK_CHANNEL_ID
-# (launchd hands the drainer {OMNI_HOME, ONEX_STATE_DIR, HOME} and nothing
-# else), so every drop or timeout alarm reached a macOS banner and never Slack.
+# (launchd hands the drainer ONEX_STATE_DIR, HOME and the workspace-root
+# variable and nothing else), so every drop or timeout alarm reached a macOS banner and never Slack.
 #
 # alert_channel_alarm is the sender for those paths. It resolves the two named
 # keys the way hook_edge_lane.read_operator_env_file does for the lane

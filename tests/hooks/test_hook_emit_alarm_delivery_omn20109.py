@@ -8,7 +8,8 @@ doesn't mean anybody is going to fucking see it I would rather have the system
 fail then bypass any sort of alarm."
 
 Finding that prompted it: the launchd hook-emit drainer runs with an
-environment of exactly OMNI_HOME, ONEX_STATE_DIR and HOME. Its drop alarm went
+environment of exactly the workspace-root variable, ONEX_STATE_DIR and HOME. Its
+drop alarm went
 through ``alert_channel_send``, which treated the missing SLACK_BOT_TOKEN as
 "not configured" and returned quietly, so the operator got a macOS banner and
 Slack got nothing. These tests run ``raise_alarm_once`` (the function the
@@ -102,8 +103,7 @@ def _drainer_env(tmp_path: Path, slack: FakeSlack, **extra: str) -> dict[str, st
     env = {
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
         "HOME": str(home),
-        "OMNI_HOME": str(tmp_path / "workspace"),
-        "ONEX_STATE_DIR": str(tmp_path / "state"),
+        "ONEX_STATE_DIR": str(tmp_path / "workspace" / ".onex_state"),
         "SLACK_API_BASE_URL": f"{slack.url}/api",
         "ONEX_ALERT_LOCAL_NOTIFY_CMD": "/usr/bin/true",
         "ONEX_ALERT_DELIVERY_LOG": str(tmp_path / "failures.log"),
@@ -194,10 +194,10 @@ def test_unresolvable_credential_fails_loud_on_three_channels(
     assert "UNDELIVERED" in marker.read_text()
 
 
-def test_ledger_paths_fall_back_to_omni_home_for_the_drainer(
+def test_ledger_paths_fall_back_to_the_state_dir_parent_for_the_drainer(
     tmp_path: Path, slack: FakeSlack
 ) -> None:
-    """The drainer's env has OMNI_HOME and no ledger variables."""
+    """The drainer's env has a state dir and no ledger variables."""
     omni = tmp_path / "workspace"
     (omni / "docs" / "tracking").mkdir(parents=True)
     (omni / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md").write_text("")
@@ -218,7 +218,7 @@ def test_undelivered_alarm_without_a_ledger_still_says_so_on_stderr(
     tmp_path: Path, slack: FakeSlack
 ) -> None:
     env = _drainer_env(tmp_path, slack)
-    del env["OMNI_HOME"]
+    del env["ONEX_STATE_DIR"]
     result = _raise(env, tmp_path / "drop-episode")
     assert "cannot record the undelivered alarm in the ledger" in result.stderr
     assert "operator alarm NOT delivered to Slack" in result.stderr

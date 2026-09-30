@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MIT
 """The alarm sender resolves its Slack credential and never goes quiet (OMN-20109).
 
-The launchd hook-emit drainer runs with an environment of exactly
-``{OMNI_HOME, ONEX_STATE_DIR, HOME}``; the cron canary with ``HOME`` and its
-state dir. Neither carries SLACK_BOT_TOKEN or SLACK_CHANNEL_ID, and
+The launchd hook-emit drainer runs with an environment of exactly the
+workspace-root variable, ``ONEX_STATE_DIR`` and ``HOME``; the cron canary with
+``HOME`` and its state dir. Neither carries SLACK_BOT_TOKEN or SLACK_CHANNEL_ID, and
 ``alert_channel_send`` scored that as "not configured", a silent no-op, so a
 drop alarm reached a macOS banner and never Slack. ``alert_channel_alarm`` is
 the alarm-class sender: it reads the two named keys from the operator env file

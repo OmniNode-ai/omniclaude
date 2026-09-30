@@ -189,16 +189,18 @@ def _ledger_paths() -> tuple[Path, Path] | None:
 
     ``ONEX_LEDGER_PATH`` and ``ONEX_LEDGER_LOCK_SCRIPT`` when set (the canary
     plist sets them). The launchd drainer sets neither, so they fall back to
-    the fixed locations under the required ``OMNI_HOME``. No OMNI_HOME, no
-    guess.
+    the fixed locations under the workspace root, which is the parent of the
+    required ``ONEX_STATE_DIR`` (the drainer's environment carries that
+    variable and no ledger variable). No state dir, no guess.
     """
     ledger = os.environ.get("ONEX_LEDGER_PATH")
     lock = os.environ.get("ONEX_LEDGER_LOCK_SCRIPT")
-    home = os.environ.get("OMNI_HOME")
+    state = os.environ.get("ONEX_STATE_DIR")
+    home = Path(state).parent if state else None
     if not ledger and home:
-        ledger = str(Path(home) / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md")
+        ledger = str(home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md")
     if not lock and home:
-        lock = str(Path(home) / "scripts" / "ledger_lock.py")
+        lock = str(home / "scripts" / "ledger_lock.py")
     if not ledger or not lock:
         return None
     return Path(ledger), Path(lock)
@@ -216,7 +218,7 @@ def record_undelivered_alarm(category: str, text: str, why: str) -> bool:
     if paths is None:
         print(
             "hook_emit_bounded: cannot record the undelivered alarm in the ledger: "
-            "set ONEX_LEDGER_PATH and ONEX_LEDGER_LOCK_SCRIPT (or OMNI_HOME)",
+            "set ONEX_LEDGER_PATH and ONEX_LEDGER_LOCK_SCRIPT (or ONEX_STATE_DIR)",
             file=sys.stderr,
         )
         return False
