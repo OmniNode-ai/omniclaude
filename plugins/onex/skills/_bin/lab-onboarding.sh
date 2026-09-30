@@ -202,7 +202,10 @@ phase_fail() { # next-step
   local t; t="$(elapsed $((SECONDS - PHASE_T0)))"
   say ""
   say "✘ Phase $PHASE_NO/$TOTAL_PHASES FAILED: $PHASE_NAME ($t)"
-  [ -n "$FAILED_STEP" ] && say "  Step:      $FAILED_STEP${FAILED_ATTEMPTS:+ (after $FAILED_ATTEMPTS attempt(s))}"
+  if [ -n "$FAILED_STEP" ]; then
+    if [ "$FAILED_ATTEMPTS" -gt 0 ]; then say "  Step:      $FAILED_STEP (after $FAILED_ATTEMPTS attempt(s))"
+    else say "  Step:      $FAILED_STEP"; fi
+  fi
   [ -n "$LAST_ERR" ] && say "  Last error: $LAST_ERR"
   say "  Next:      $1"
   say "  Log:       $LOG"
@@ -1178,12 +1181,23 @@ sqlite_rows() {
 }
 no_shadow() { [ "$(readlink "$HOME/.local/bin/onex")" = "$WORKSPACE/omnibase_infra/scripts/onex" ]; }
 
+# The workspace floor the onex wrapper enforces before any --lane command. If dev
+# moved while this ran, the clones fast-forward here but the dispatch venv built
+# in phase 4 is behind; the floor's own remedy is to rebuild it and reconcile again.
+reconcile_host() { nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-host.sh" --omni-home "$WORKSPACE"; }
+workspace_floor() {
+  reconcile_host && return 0
+  nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" &&
+    reconcile_host
+}
+
 phase8() {
   phase_start 8 "Verify" "about a minute"
   [ -n "$ONEX" ] || ONEX="$HOME/.local/bin/onex"
   check "onex starts ($(onex_run --version 2>/dev/null | tail -n 1))" onex_run --version
   check "local identity minted" onex_run local identity
   check "onex is the workspace wrapper, not a PyPI copy" no_shadow
+  check "workspace floor proven (reconcile-host IN_SYNC)" retry "reconcile the workspace floor" workspace_floor
   check "a delegation row in the local store" sqlite_rows
   check "onex metering reads it" onex_run metering
   check "lab bus identity stored for lane $(lab_fact lane)" lane_identity_stored
