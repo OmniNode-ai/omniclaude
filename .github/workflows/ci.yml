@@ -2928,7 +2928,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
-          ref: ad62c0b928760958fb073a9e32621de53c4a9a1a  # pragma: allowlist secret
+          ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
           token: ${{ steps.app-token.outputs.token || github.token }}
           path: onex_change_control
           sparse-checkout: |
