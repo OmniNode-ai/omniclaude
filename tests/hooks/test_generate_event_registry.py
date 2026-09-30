@@ -244,3 +244,35 @@ class TestLiveProjectionMatchesCommitted:
             "into src/omniclaude/hooks/event_registry.py. Violations:\n"
             + "\n".join(violations)
         )
+
+
+_WORK_LEDGER_ROW_TYPES = (
+    "claim",
+    "status",
+    "terminal",
+    "hold",
+    "release",
+    "msg",
+    "ack",
+    "ruling",
+    "operator_consent",
+    "friction",
+    "correction",
+)
+
+
+def test_daemon_side_producers_are_excluded_from_the_projection(gen: Any) -> None:
+    """pr.state.observed (OMN-19999) and work.ledger.* (OMN-19513) have no hook client."""
+    excluded = gen.DAEMON_INTERNAL_EVENT_TYPES
+    assert "pr.state.observed" in excluded
+    for row_type in _WORK_LEDGER_ROW_TYPES:
+        assert f"work.ledger.{row_type}" in excluded
+
+    daemon_events = {
+        event_type: {
+            "fan_out": [{"topic": "onex.evt.omnimarket.x.v1"}],
+            "required_fields": [],
+        }
+        for event_type in ("pr.state.observed", "work.ledger.claim")
+    }
+    assert gen.build_projected_registry(daemon_events) == {}
