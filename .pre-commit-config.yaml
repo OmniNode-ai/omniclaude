@@ -1220,7 +1220,7 @@ repos:
       # installed cache. Same validator runs in CI (plugin-version-bump-gate.yml).
       - id: plugin-version-bump-gate
         name: Plugin version bump (OMN-16913)
-        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_plugin_version_bump.py --base origin/dev
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_plugin_version_bump.py --base origin/dev --defer-to-workflow-in-ci
         language: system
         pass_filenames: false
         always_run: true

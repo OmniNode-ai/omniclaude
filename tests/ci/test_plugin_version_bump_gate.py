@@ -154,3 +154,17 @@ def test_unresolvable_base_is_an_error_not_a_pass(repo: Path) -> None:
 def test_real_repo_manifests_agree() -> None:
     """The committed plugin.json and dev marketplace.json never disagree."""
     assert gate.marketplace_skew(REPO_ROOT) == []
+
+
+@pytest.mark.unit
+def test_defer_flag_only_defers_under_github_actions(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (repo / "plugins/onex/skills/a/SKILL.md").write_text("two\n")
+    _commit(repo)
+    argv = ["--repo-root", str(repo), "--base", "dev", "--defer-to-workflow-in-ci"]
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    assert gate.main(argv) == 1
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    assert gate.main(argv) == 0
+    assert gate.main(argv[:-1]) == 1

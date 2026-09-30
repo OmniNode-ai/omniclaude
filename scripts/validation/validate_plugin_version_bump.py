@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -143,7 +144,23 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--base", default="origin/dev")
+    parser.add_argument(
+        "--defer-to-workflow-in-ci",
+        action="store_true",
+        help=(
+            "Exit 0 when running under GitHub Actions. The whole-tree pre-commit "
+            "job checks out one commit with no base ref to compare against; the "
+            "dedicated Plugin Version Bump Gate workflow is the blocking verdict "
+            "there. Local runs are unaffected."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.defer_to_workflow_in_ci and os.environ.get("GITHUB_ACTIONS") == "true":
+        print(
+            "plugin-version-bump: deferred to the Plugin Version Bump Gate workflow",
+            file=sys.stderr,
+        )
+        return 0
     try:
         findings = check(args.repo_root, args.base)
     except GateError as exc:
