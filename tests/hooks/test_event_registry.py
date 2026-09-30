@@ -864,6 +864,18 @@ class TestEventRegistryIntegration:
             "work.obligation.satisfied",
             "work.obligation.superseded",
             "work.obligation.transferred",
+            "pr.state.observed",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.ack",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.claim",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.correction",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.friction",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.hold",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.msg",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.operator_consent",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.release",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.ruling",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.status",  # OMN-16913 - omnimarket ledger/PR-state registry sync
+            "work.ledger.terminal",  # OMN-16913 - omnimarket ledger/PR-state registry sync
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
