@@ -1215,6 +1215,17 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-16913: a change under plugins/onex needs a plugin version bump. The
+      # plugin cache is version-keyed, so an unbumped change never reaches an
+      # installed cache. Same validator runs in CI (plugin-version-bump-gate.yml).
+      - id: plugin-version-bump-gate
+        name: Plugin version bump (OMN-16913)
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_plugin_version_bump.py --base origin/dev --defer-to-workflow-in-ci
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       # OMN-20109: a change to the hook tree runs the deterministic half of the
       # real-hook system suite before it is committed (the canary contract, hook
       # registration and the cost ratchet). On 2026-09-29 a hook regression exhausted
