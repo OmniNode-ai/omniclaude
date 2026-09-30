@@ -698,8 +698,11 @@ def load_contract(path: Path) -> HookEdgeLaneContract:
     """Parse and structurally validate the hook-edge lane declaration."""
     import yaml
 
+    # libyaml when PyYAML carries it (OMN-20118): the same safe parse, on the
+    # path of every hook.event capture.
+    loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
     try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        raw = yaml.load(path.read_text(encoding="utf-8"), Loader=loader)  # noqa: S506 - CSafeLoader or SafeLoader, both safe
     except FileNotFoundError as exc:
         raise HookEdgeLaneError(f"no hook-edge lane contract at {path}") from exc
     if not isinstance(raw, dict):
