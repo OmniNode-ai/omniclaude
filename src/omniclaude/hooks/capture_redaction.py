@@ -550,7 +550,7 @@ def _load(path_str: str) -> RedactionContract:
     # every hook process that captures pays it.
     loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
     try:
-        parsed = yaml.load(path.read_text(encoding="utf-8"), Loader=loader)  # noqa: S506  # nosec B506 - CSafeLoader or SafeLoader, both safe
+        parsed = yaml.load(path.read_text(encoding="utf-8"), Loader=loader)  # noqa: S506  # nosec B506
     except yaml.YAMLError as exc:
         raise MalformedRedactionContractError(
             source=path_str, detail=f"contract YAML does not parse: {exc}"

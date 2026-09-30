@@ -702,7 +702,7 @@ def load_contract(path: Path) -> HookEdgeLaneContract:
     # path of every hook.event capture.
     loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
     try:
-        raw = yaml.load(path.read_text(encoding="utf-8"), Loader=loader)  # noqa: S506  # nosec B506 - CSafeLoader or SafeLoader, both safe
+        raw = yaml.load(path.read_text(encoding="utf-8"), Loader=loader)  # noqa: S506  # nosec B506
     except FileNotFoundError as exc:
         raise HookEdgeLaneError(f"no hook-edge lane contract at {path}") from exc
     if not isinstance(raw, dict):
