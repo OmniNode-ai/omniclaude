@@ -1,0 +1,29 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-20150
+title: "Lab onboarding script and /onex:lab_onboarding skill"
+summary: >
+  OMN-20150 adds the lab onboarding script (plugins/onex/skills/_bin/lab-onboarding.sh)
+  and the /onex:lab_onboarding skill, introduced by PR 2442. The in-repo contract exists
+  because validate-pr-contracts reads contracts/ in this repository.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Lab onboarding script tests pass"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-lab-onboarding-tests-pass
+    description: >
+      The lab onboarding script suite passes; the macOS-only cases are recorded in the
+      skip-count baseline.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q"

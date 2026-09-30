@@ -1,0 +1,1347 @@
+#!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# lab-onboarding.sh -- one command from a bare Mac to a lab-ready developer
+# machine.
+#
+# Runs in phases. Each phase reports PASS or FAIL the moment it ends, in the
+# terminal, as a macOS notification, and as a line in the status file, so a
+# failure is never discovered at the end of a long run.
+#
+#   0 Preflight          reads the machine; changes nothing
+#   1 Base tools         Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv
+#   2 Workspace          the canonical clones, OMNIBASE_PATH (and legacy OMNI_HOME), PATH
+#   3 Tailnet            Tailscale installed and signed in to the OmniNode tailnet
+#   4 onex + model       dispatch venv, onex, local identity, one model path, one delegation
+#   5 Bus identity       this machine's lab principal, issued automatically; one lane delegation
+#   6 Docker             optional, in addition to the lab: asked once after preflight;
+#                        Docker Desktop installed, or started if stopped, then the stack
+#   7 Claude Code plugin onex@omninode-tools
+#   8 Verify             the checks for the selected modes, one line each
+#
+# Compatible with macOS's stock /bin/bash 3.2: no associative arrays, no
+# ${var,,}, no mapfile, and no "${arr[@]}" of a possibly-empty array.
+#
+# Usage:
+#   bash lab-onboarding.sh [options]
+#
+# Options:
+#   --preflight-only     run phase 0, print the verdict, exit
+#   --containers         answer the Docker question yes in advance
+#   --no-containers      answer it no in advance
+#                        (neither: the one question is asked after preflight)
+#   --provider NAME      openrouter | gemini | glm | none   (default: ask on a terminal, else none)
+#   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else $OMNI_HOME, else ~/code/omni)
+#   --restart            forget completed phases and run every phase again
+#   --reissue-identity   request a fresh bus identity even if one is stored
+#   -h, --help           this text
+#
+# Exit codes: 0 all selected phases passed; 1 a phase failed; 2 bad usage;
+#             3 this machine is below the minimum requirements (nothing installed).
+
+set -uo pipefail
+
+# ---------------------------------------------------------------------------
+# Minimum requirements. The single source for what preflight enforces.
+# ---------------------------------------------------------------------------
+M1_MACOS_MAJOR=14
+M1_CPUS=4
+M1_RAM_GB=8
+M1_DISK_GB=20
+M2_CPUS=8
+M2_RAM_GB=16
+# Disk, measured 2026-09-30 on a Mac running the stack: images 4.7 GB (the runtime
+# image alone 3.6 GB), volumes about 6 GB, plus build cache during the first build.
+M2_DISK_GB=30                 # free disk when Docker Desktop still has to be installed
+M2_DISK_GB_DOCKER_PRESENT=20  # free disk when Docker Desktop is already installed
+DOCKER_MEM_GB=10          # the local-dev guide's floor for Docker Desktop
+DOCKER_CPUS=4
+HOST_RESERVE_GB=6         # Docker Desktop never leaves the host less than this
+BOOT_FREE_MEM_GB=4        # available memory required at the moment the stack boots
+BOOT_FREE_DISK_GB=15      # free disk required at the moment the stack boots
+MODE2_PORTS="5436 19092 16379 8085 8086"
+VM_SPEC="a macOS 14 (or newer) VM with 4 vCPU, 8 GB RAM and 40 GB disk, on a host with that much to spare (Tart or UTM on an Apple-silicon Mac, or a hosted Mac such as EC2 Mac)"
+
+REPOS="omnibase_compat omnibase_core omnibase_spi omnibase_infra omnimarket omniclaude omnidash"
+GITHUB_ORG_URL="https://github.com/OmniNode-ai"
+# The lab's addresses are declared in the workspace, never in this public script.
+LAB_FACTS_REL="omnibase_infra/deploy/lab/developer-onboarding.yaml"
+LANE_FILE_REL="omnimarket/config/ci_bus_lanes.yaml"
+
+# At least 3 attempts, 5-10 s apart, for everything that touches the network.
+RETRIES="${ONBOARD_RETRIES:-3}"
+case "$RETRIES" in ''|*[!0-9]*) RETRIES=3 ;; esac
+[ "$RETRIES" -lt 3 ] && RETRIES=3
+
+# ---------------------------------------------------------------------------
+# Arguments
+# ---------------------------------------------------------------------------
+PREFLIGHT_ONLY=0
+WANT_CONTAINERS=""        # 1 --containers, 0 --no-containers, empty: ask
+PROVIDER=""
+# OMNIBASE_PATH is the workspace variable; OMNI_HOME is its legacy name, still
+# read by the reconcile scripts this run drives, so both are honoured and set.
+WORKSPACE="${OMNIBASE_PATH:-${OMNI_HOME:-$HOME/code/omni}}"
+RESTART=0
+REISSUE=0
+
+usage() { sed -n '2,/^set -uo pipefail$/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; }
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --preflight-only) PREFLIGHT_ONLY=1 ;;
+    --containers) WANT_CONTAINERS=1 ;;
+    --no-containers) WANT_CONTAINERS=0 ;;
+    --provider) shift; PROVIDER="${1:-}" ;;
+    --provider=*) PROVIDER="${1#*=}" ;;
+    --workspace) shift; WORKSPACE="${1:-}" ;;
+    --workspace=*) WORKSPACE="${1#*=}" ;;
+    --restart) RESTART=1 ;;
+    --reissue-identity) REISSUE=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf 'lab-onboarding: unknown option: %s (see --help)\n' "$1" >&2; exit 2 ;;
+  esac
+  shift
+done
+case "$PROVIDER" in ''|openrouter|gemini|glm|none) ;; *)
+  printf 'lab-onboarding: --provider must be openrouter, gemini, glm or none\n' >&2; exit 2 ;;
+esac
+[ -n "$WORKSPACE" ] || { printf 'lab-onboarding: --workspace needs a directory\n' >&2; exit 2; }
+
+# ---------------------------------------------------------------------------
+# Run files. The log and status live under TMPDIR, never under $HOME, so a run
+# that stops at preflight leaves nothing in the home directory.
+# ---------------------------------------------------------------------------
+_tmp="${TMPDIR:-/tmp}"
+RUN_DIR="${ONBOARD_RUN_DIR:-${_tmp%/}/omninode-onboarding}"
+mkdir -p "$RUN_DIR" && chmod 700 "$RUN_DIR"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+LOG="$RUN_DIR/run-$STAMP.log"
+STATUS="$RUN_DIR/status"
+: >"$LOG"
+: >"$STATUS"
+STATE_DIR="$HOME/.omninode/onboarding"
+DONE_FILE="$STATE_DIR/phases.done"
+
+# The system directories first-class on PATH, whatever this was started from:
+# an app launched with `open` inherits this PATH, and Docker Desktop's own setup
+# runs /sbin/md5 (a stripped PATH fails its licence step with "md5: command not found").
+case ":$PATH:" in *":/usr/sbin:"*) ;; *) PATH="$PATH:/usr/sbin" ;; esac
+case ":$PATH:" in *":/sbin:"*) ;; *) PATH="$PATH:/sbin" ;; esac
+case ":$PATH:" in *":/usr/bin:"*) ;; *) PATH="/usr/bin:$PATH" ;; esac
+case ":$PATH:" in *":/bin:"*) ;; *) PATH="/bin:$PATH" ;; esac
+export PATH
+
+IS_TTY=0
+[ -t 0 ] && [ -t 1 ] && IS_TTY=1
+
+# Ambient configuration that silently redirects onex (local-dev guide, section 2).
+# This run and everything it starts never inherit it.
+unset BIFROST_CONTRACT_PATH BIFROST_OVERLAY_PATH DELEGATION_ROUTING_TIERS_PATH \
+  POSTGRES_PASSWORD VALKEY_PASSWORD PYTHONPATH 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+log() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >>"$LOG"; }
+say() { printf '%s\n' "$*"; log "$*"; }
+hr() { say "------------------------------------------------------------------------"; }
+
+GUI_SESSION=0
+if command -v launchctl >/dev/null 2>&1 && [ "$(launchctl managername 2>/dev/null)" = "Aqua" ]; then
+  GUI_SESSION=1
+fi
+
+notify() { # title message
+  [ "$GUI_SESSION" -eq 1 ] || return 0
+  [ "${ONBOARD_NOTIFY:-1}" = "0" ] && return 0
+  /usr/bin/osascript - "$1" "$2" >/dev/null 2>&1 <<'OSA' || true
+on run argv
+  display notification (item 2 of argv) with title "OmniNode onboarding" subtitle (item 1 of argv)
+end run
+OSA
+}
+
+PHASE_NO=""
+PHASE_NAME=""
+PHASE_T0=0
+FAILED_STEP=""
+FAILED_ATTEMPTS=0
+LAST_ERR=""
+TOTAL_PHASES=8
+
+elapsed() { # seconds -> "Xm Ys"
+  local s="$1"
+  if [ "$s" -ge 60 ]; then printf '%dm %02ds' $((s / 60)) $((s % 60)); else printf '%ds' "$s"; fi
+}
+
+phase_start() { # no name estimate
+  PHASE_NO="$1"; PHASE_NAME="$2"; PHASE_T0=$SECONDS
+  FAILED_STEP=""; FAILED_ATTEMPTS=0; LAST_ERR=""
+  hr
+  say "▶ Phase $1/$TOTAL_PHASES: $2${3:+  (usually $3)}"
+  printf 'phase=%s name="%s" result=RUNNING\n' "$1" "$2" >>"$STATUS"
+}
+
+phase_pass() { # [note]
+  local t; t="$(elapsed $((SECONDS - PHASE_T0)))"
+  say "✔ Phase $PHASE_NO/$TOTAL_PHASES PASSED: $PHASE_NAME ($t)${1:+ -- $1}"
+  printf 'phase=%s name="%s" result=PASS elapsed="%s" note="%s"\n' "$PHASE_NO" "$PHASE_NAME" "$t" "${1:-}" >>"$STATUS"
+  notify "Phase $PHASE_NO/$TOTAL_PHASES passed" "$PHASE_NAME ($t)"
+  [ "$PHASE_NO" = "0" ] || mark_done "$PHASE_NO"   # preflight always re-runs and writes nothing under $HOME
+}
+
+phase_skip() { # reason
+  say "⏭ Phase $PHASE_NO/$TOTAL_PHASES SKIPPED: $PHASE_NAME -- $1"
+  printf 'phase=%s name="%s" result=SKIPPED note="%s"\n' "$PHASE_NO" "$PHASE_NAME" "$1" >>"$STATUS"
+  notify "Phase $PHASE_NO/$TOTAL_PHASES skipped" "$PHASE_NAME: $1"
+}
+
+phase_fail() { # next-step
+  local t; t="$(elapsed $((SECONDS - PHASE_T0)))"
+  say ""
+  say "✘ Phase $PHASE_NO/$TOTAL_PHASES FAILED: $PHASE_NAME ($t)"
+  if [ -n "$FAILED_STEP" ]; then
+    if [ "$FAILED_ATTEMPTS" -gt 0 ]; then say "  Step:      $FAILED_STEP (after $FAILED_ATTEMPTS attempt(s))"
+    else say "  Step:      $FAILED_STEP"; fi
+  fi
+  [ -n "$LAST_ERR" ] && say "  Last error: $LAST_ERR"
+  say "  Next:      $1"
+  say "  Log:       $LOG"
+  say "  Re-run the same command to resume from this phase; completed phases are not redone."
+  printf 'phase=%s name="%s" result=FAIL elapsed="%s" step="%s" next="%s"\n' \
+    "$PHASE_NO" "$PHASE_NAME" "$t" "$FAILED_STEP" "$1" >>"$STATUS"
+  notify "Phase $PHASE_NO/$TOTAL_PHASES FAILED" "$PHASE_NAME: ${FAILED_STEP:-see the terminal}"
+  exit 1
+}
+
+mark_done() { mkdir -p "$STATE_DIR" && { grep -qx "$1" "$DONE_FILE" 2>/dev/null || echo "$1" >>"$DONE_FILE"; }; }
+is_done() { [ "$RESTART" -eq 0 ] && grep -qx "$1" "$DONE_FILE" 2>/dev/null; }
+
+last_log_lines() { tail -n 3 "$LOG" 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-300; }
+
+# retry DESC CMD... : run CMD with output to the log, up to RETRIES attempts,
+# 5-10 s apart. Returns CMD's status; on failure sets FAILED_STEP/LAST_ERR.
+retry() {
+  local desc="$1"; shift
+  local n=1 rc wait
+  while :; do
+    log "\$ $desc (attempt $n/$RETRIES)"
+    "$@" >>"$LOG" 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && return 0
+    LAST_ERR="$(last_log_lines)"
+    if [ "$n" -ge "$RETRIES" ]; then
+      FAILED_STEP="$desc"; FAILED_ATTEMPTS=$n
+      return "$rc"
+    fi
+    wait=$(( (RANDOM % 6) + 5 ))
+    say "  … $desc failed (attempt $n/$RETRIES); retrying in ${wait}s"
+    sleep "$wait"
+    n=$((n + 1))
+  done
+}
+
+# retry_capture DESC CMD... : like retry, but CMD's stdout is returned in
+# CAPTURED and never written to the log (it may carry a credential).
+CAPTURED=""
+retry_capture() {
+  local desc="$1"; shift
+  local n=1 rc wait
+  CAPTURED=""
+  while :; do
+    log "\$ $desc (attempt $n/$RETRIES; output not logged)"
+    CAPTURED="$("$@" 2>>"$LOG")"
+    rc=$?
+    [ "$rc" -eq 0 ] && return 0
+    CAPTURED=""
+    LAST_ERR="$(last_log_lines)"
+    if [ "$n" -ge "$RETRIES" ]; then
+      FAILED_STEP="$desc"; FAILED_ATTEMPTS=$n
+      return "$rc"
+    fi
+    wait=$(( (RANDOM % 6) + 5 ))
+    say "  … $desc failed (attempt $n/$RETRIES); retrying in ${wait}s"
+    sleep "$wait"
+    n=$((n + 1))
+  done
+}
+
+# step DESC CMD... : a local step, run once.
+step() {
+  local desc="$1"; shift
+  log "\$ $desc"
+  if "$@" >>"$LOG" 2>&1; then return 0; fi
+  FAILED_STEP="$desc"; FAILED_ATTEMPTS=1; LAST_ERR="$(last_log_lines)"
+  return 1
+}
+
+# wait_until DESC SECONDS INTERVAL CMD... : poll a condition (not a retry of a
+# failed action), used for things that come up on their own time.
+wait_until() {
+  local desc="$1" limit="$2" every="$3"; shift 3
+  local t0=$SECONDS
+  while [ $((SECONDS - t0)) -lt "$limit" ]; do
+    "$@" >>"$LOG" 2>&1 && return 0
+    sleep "$every"
+  done
+  FAILED_STEP="$desc (waited $(elapsed "$limit"))"; LAST_ERR="$(last_log_lines)"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Machine facts (with test seams: ONBOARD_TEST_* overrides a reading)
+# ---------------------------------------------------------------------------
+macos_version() { echo "${ONBOARD_TEST_MACOS:-$(sw_vers -productVersion 2>/dev/null || echo 0)}"; }
+cpu_count() { echo "${ONBOARD_TEST_CPUS:-$(sysctl -n hw.ncpu 2>/dev/null || echo 0)}"; }
+ram_gb() {
+  if [ -n "${ONBOARD_TEST_RAM_GB:-}" ]; then echo "$ONBOARD_TEST_RAM_GB"; return; fi
+  local b; b="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"
+  echo $(( (b + 536870912) / 1073741824 ))
+}
+disk_free_gb() {
+  if [ -n "${ONBOARD_TEST_DISK_GB:-}" ]; then echo "$ONBOARD_TEST_DISK_GB"; return; fi
+  df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {printf "%d\n", $4/1048576}'
+}
+is_vm() {
+  if [ -n "${ONBOARD_TEST_VM:-}" ]; then [ "$ONBOARD_TEST_VM" = "1" ]; return; fi
+  [ "$(sysctl -n kern.hv_vmm_present 2>/dev/null || echo 0)" = "1" ]
+}
+is_rosetta() { [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ]; }
+is_admin() {
+  if [ -n "${ONBOARD_TEST_ADMIN:-}" ]; then [ "$ONBOARD_TEST_ADMIN" = "1" ]; return; fi
+  id -Gn 2>/dev/null | tr ' ' '\n' | grep -qx admin
+}
+avail_mem_gb() { # free + inactive + speculative pages
+  vm_stat 2>/dev/null | awk '
+    /page size of/ { ps = $8 }
+    /Pages free/ { f = $3 } /Pages inactive/ { i = $3 } /Pages speculative/ { s = $3 }
+    END { gsub(/\./, "", f); gsub(/\./, "", i); gsub(/\./, "", s);
+          if (ps == 0) ps = 4096; printf "%d\n", (f + i + s) * ps / 1073741824 }'
+}
+port_busy() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+
+# Docker Desktop's CLI lives inside the app; a fresh install has not put it on PATH yet.
+export PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin:$HOME/.docker/bin"
+LOCAL_STACK_PROJECT="omnibase-infra-local"
+docker_installed() { [ -d /Applications/Docker.app ]; }
+docker_ready() { docker info >/dev/null 2>&1; }
+docker_state() {
+  if [ -n "${ONBOARD_TEST_DOCKER:-}" ]; then echo "$ONBOARD_TEST_DOCKER"; return; fi
+  if ! docker_installed; then echo "not installed"
+  elif docker_ready; then echo "running"
+  else echo "installed, not running"
+  fi
+}
+local_stack_running() { # the local stack's own containers are up (they hold its ports)
+  docker_ready && [ -n "$(docker ps -q --filter "label=com.docker.compose.project=$LOCAL_STACK_PROJECT" 2>/dev/null)" ]
+}
+arch() { uname -m; }
+
+brew_bin() {
+  if [ -x /opt/homebrew/bin/brew ]; then echo /opt/homebrew/bin/brew
+  elif [ -x /usr/local/bin/brew ]; then echo /usr/local/bin/brew
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Privilege and secrets. On a terminal these prompt there; without one (a
+# Claude Code tool call, an ssh session) they use a macOS dialog. A value is
+# held only in a shell variable and handed over on stdin.
+# ---------------------------------------------------------------------------
+ASKPASS="$RUN_DIR/askpass.sh"
+make_askpass() {
+  cat >"$ASKPASS" <<'SH'
+#!/bin/bash
+/usr/bin/osascript -e 'display dialog "OmniNode onboarding needs your Mac administrator password to install developer tools." with title "OmniNode onboarding" default answer "" with hidden answer buttons {"Cancel","OK"} default button "OK"' -e 'text returned of result' 2>/dev/null
+SH
+  chmod 700 "$ASKPASS"
+}
+
+SUDO_KEEPALIVE_PID=""
+ensure_sudo() {
+  sudo -n true 2>/dev/null && return 0
+  if [ "$IS_TTY" -eq 1 ]; then
+    say "  The next step needs your Mac administrator password (asked once, by sudo)."
+    sudo -v || return 1
+  elif [ "$GUI_SESSION" -eq 1 ]; then
+    make_askpass
+    export SUDO_ASKPASS="$ASKPASS"
+    say "  A dialog is asking for your Mac administrator password."
+    sudo -A -v || return 1
+  else
+    say "  Administrator access is needed and there is no terminal or desktop to ask on."
+    return 1
+  fi
+  if [ -z "$SUDO_KEEPALIVE_PID" ]; then
+    ( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null; sleep 50; done ) &
+    SUDO_KEEPALIVE_PID=$!
+  fi
+  return 0
+}
+
+read_secret() { # prompt -> SECRET
+  SECRET=""
+  if [ "$IS_TTY" -eq 1 ]; then
+    printf '%s ' "$1"
+    IFS= read -r -s SECRET
+    printf '\n'
+  elif [ "$GUI_SESSION" -eq 1 ]; then
+    SECRET="$(/usr/bin/osascript - "$1" 2>/dev/null <<'OSA'
+on run argv
+  set r to display dialog (item 1 of argv) with title "OmniNode onboarding" default answer "" with hidden answer buttons {"Skip","OK"} default button "OK"
+  if button returned of r is "Skip" then return ""
+  return text returned of r
+end run
+OSA
+)"
+  fi
+}
+
+cleanup() {
+  [ -n "$SUDO_KEEPALIVE_PID" ] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
+  rm -f "$ASKPASS" 2>/dev/null
+  SECRET=""; CAPTURED=""
+  return 0
+}
+trap cleanup EXIT
+
+# ---------------------------------------------------------------------------
+# Lab facts, read from the workspace.
+# ---------------------------------------------------------------------------
+lab_fact() { # key -> value from the flat developer-onboarding.yaml
+  local f="${ONBOARD_LAB_FACTS:-$WORKSPACE/$LAB_FACTS_REL}"
+  [ -f "$f" ] || return 1
+  sed -n "s/^$1:[[:space:]]*//p" "$f" | head -n 1 | sed -e 's/[[:space:]]*#.*$//' -e 's/^"//' -e 's/"$//'
+}
+
+ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag.
+  local a=""
+  say ""
+  say "  The lab is set up either way: delegations run on the lab dev lane with no local containers."
+  say "  $1. Running the stack locally takes ${DOCKER_MEM_GB} GB of memory while it runs, and 10-20 minutes the first time."
+  if [ "$IS_TTY" -eq 1 ]; then
+    printf '  Also run the stack locally in Docker? [y/N] '
+    IFS= read -r a
+  elif [ "$GUI_SESSION" -eq 1 ]; then
+    a="$(/usr/bin/osascript - "$1" 2>/dev/null <<'OSA'
+on run argv
+  set r to display dialog ("The lab is set up either way. " & (item 1 of argv) & ".") & return & return & "Also run the stack locally in Docker?" with title "OmniNode onboarding" buttons {"No", "Yes"} default button "No"
+  if button returned of r is "Yes" then return "y"
+  return "n"
+end run
+OSA
+)"
+    say "  Also run the stack locally in Docker? ${a:-n} (answered in a dialog)"
+  else
+    say "  No terminal or desktop to ask on, so the stack is not run locally (--containers adds it)."
+  fi
+  case "$a" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+}
+
+# ===========================================================================
+# Phase 0: preflight. Reads only.
+# ===========================================================================
+MODE1_OK=1
+MODE2_OK=1
+MODE2_WHY=""
+MODE1_WHY=""
+
+row() { printf '  %-22s %-16s %-14s %s\n' "$1" "$2" "$3" "$4" | tee -a "$LOG"; }
+
+phase0() {
+  phase_start 0 "Preflight (reads this Mac; changes nothing)" "under a minute"
+  local mv major cpus ram disk vm="physical Mac" p busy="" ambient dstate m2disk a
+  mv="$(macos_version)"; major="${mv%%.*}"
+  case "$major" in ''|*[!0-9]*) major=0 ;; esac
+  cpus="$(cpu_count)"; ram="$(ram_gb)"; disk="$(disk_free_gb)"
+  is_vm && vm="virtual machine"
+  dstate="$(docker_state)"
+  m2disk=$M2_DISK_GB
+  [ "$dstate" != "not installed" ] && m2disk=$M2_DISK_GB_DOCKER_PRESENT
+
+  say "  Log file: $LOG"
+  say ""
+  row "Requirement" "This Mac" "Mode 1 needs" "Mode 2 (containers) needs"
+  row "macOS" "$mv" "$M1_MACOS_MAJOR+" "$M1_MACOS_MAJOR+"
+  row "CPU cores" "$cpus ($(arch))" "$M1_CPUS" "$M2_CPUS"
+  row "RAM" "${ram} GB" "${M1_RAM_GB} GB" "${M2_RAM_GB} GB"
+  row "Free disk" "${disk} GB" "${M1_DISK_GB} GB" "${m2disk} GB"
+  row "Machine" "$vm" "either" "physical Mac"
+  row "Docker Desktop" "$dstate" "not used" "installed or launched for you"
+  say ""
+
+  [ "$major" -ge "$M1_MACOS_MAJOR" ] || { MODE1_OK=0; MODE1_WHY="$MODE1_WHY macOS $mv is older than $M1_MACOS_MAJOR;"; }
+  [ "$cpus" -ge "$M1_CPUS" ] || { MODE1_OK=0; MODE1_WHY="$MODE1_WHY $cpus CPU cores (needs $M1_CPUS);"; }
+  [ "$ram" -ge "$M1_RAM_GB" ] || { MODE1_OK=0; MODE1_WHY="$MODE1_WHY ${ram} GB RAM (needs $M1_RAM_GB);"; }
+  [ "$disk" -ge "$M1_DISK_GB" ] || { MODE1_OK=0; MODE1_WHY="$MODE1_WHY ${disk} GB free disk (needs $M1_DISK_GB);"; }
+
+  if [ "$MODE1_OK" -eq 0 ]; then
+    MODE2_OK=0
+  else
+    [ "$cpus" -ge "$M2_CPUS" ] || { MODE2_OK=0; MODE2_WHY="$MODE2_WHY $cpus CPU cores (needs $M2_CPUS);"; }
+    [ "$ram" -ge "$M2_RAM_GB" ] || { MODE2_OK=0; MODE2_WHY="$MODE2_WHY ${ram} GB RAM (needs $M2_RAM_GB);"; }
+    [ "$disk" -ge "$m2disk" ] || { MODE2_OK=0; MODE2_WHY="$MODE2_WHY ${disk} GB free disk (needs $m2disk);"; }
+    is_vm && { MODE2_OK=0; MODE2_WHY="$MODE2_WHY this is a VM, and Docker Desktop cannot run inside a macOS guest;"; }
+    if local_stack_running; then
+      STACK_RUNNING=1   # its own containers hold the ports: not a conflict
+    else
+      for p in $MODE2_PORTS; do port_busy "$p" && busy="$busy $p"; done
+      [ -n "$busy" ] && { MODE2_OK=0; MODE2_WHY="$MODE2_WHY ports in use by something else:$busy;"; }
+    fi
+  fi
+
+  # Conditions that are fixable on this machine, not a hardware shortfall.
+  if [ "$(uname -s)" != "Darwin" ]; then
+    FAILED_STEP="operating system check"; LAST_ERR="$(uname -s) is not macOS"
+    phase_fail "run this on macOS; Linux and Windows are not supported yet"
+  fi
+  if is_rosetta; then
+    FAILED_STEP="native terminal check"; LAST_ERR="this shell is running under Rosetta on Apple silicon"
+    phase_fail "open a native (arm64) terminal and run the command again, so Homebrew lands in /opt/homebrew"
+  fi
+  if ! is_admin; then
+    FAILED_STEP="administrator check"; LAST_ERR="$(id -un) is not in the admin group"
+    phase_fail "run this from an administrator account, or ask your Mac's administrator to add you to the admin group"
+  fi
+
+  ambient="$(grep -nE '^[[:space:]]*(export[[:space:]]+)?(BIFROST_[A-Z_]+|DELEGATION_ROUTING_TIERS_PATH|POSTGRES_PASSWORD|VALKEY_PASSWORD)=|^[[:space:]]*(source|\.)[[:space:]]+.*\.omnibase/\.env' \
+    "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.zshenv" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.profile" 2>/dev/null || true)"
+  if [ -n "$ambient" ]; then
+    AMBIENT_FOUND="$ambient"
+    say "  ⚠ Your shell profile exports configuration that silently redirects onex. This run"
+    say "    ignores it, but your own shells will not. Remove these lines:"
+    printf '%s\n' "$ambient" | sed 's/=.*$/=…/' | sed 's/^/      /' | tee -a "$LOG"
+  fi
+
+  MODE1_WHY="${MODE1_WHY%;}"; MODE2_WHY="${MODE2_WHY%;}"
+  if [ "$MODE1_OK" -eq 0 ]; then
+    say "✘ This Mac is below the minimum requirements:$MODE1_WHY"
+    say "  Nothing was installed. Use $VM_SPEC, and run this command inside it."
+    printf 'phase=0 name="Preflight" result=BELOW_MINIMUM why="%s"\n' "$MODE1_WHY" >>"$STATUS"
+    notify "Below minimum requirements" "Nothing was installed. See the terminal for the recommended VM."
+    exit 3
+  fi
+
+  # Every machine gets the lab. Docker is one question on top of it, asked after
+  # preflight and only when this Mac can run it; the flags answer it in advance.
+  local docker_note
+  case "$dstate" in
+    running) docker_note="Docker Desktop is running" ;;
+    "installed, not running") docker_note="Docker Desktop is installed; it will be started" ;;
+    *) docker_note="Docker Desktop is not installed; it will be installed" ;;
+  esac
+  if [ "$MODE2_OK" -eq 1 ]; then
+    case "$WANT_CONTAINERS" in
+      1) ;;
+      0) MODE2_OK=0; MODE2_WHY=" you said no" ;;
+      *)
+        if [ "$PREFLIGHT_ONLY" -eq 1 ]; then
+          MODE2_OFFERED=1
+        else
+          ask_docker "$docker_note" || { MODE2_OK=0; MODE2_WHY=" you said no"; }
+        fi
+        ;;
+    esac
+  else
+    say "  Docker is not offered on this Mac:$MODE2_WHY."
+    say "  That is fine: the lab dev lane runs your delegations."
+  fi
+
+  if [ "$MODE2_OK" -eq 1 ] && [ "$MODE2_OFFERED" -eq 1 ]; then
+    SELECTED="the lab (this machine's own bus identity) and native onex; Docker can be added (you will be asked)"
+  elif [ "$MODE2_OK" -eq 1 ]; then
+    SELECTED="the lab (this machine's own bus identity), native onex, and the stack locally in Docker"
+  else
+    SELECTED="the lab (this machine's own bus identity) and native onex. No local Docker:$MODE2_WHY"
+  fi
+  say "  Will set up: $SELECTED"
+  phase_pass "$SELECTED"
+}
+AMBIENT_FOUND=""
+SELECTED=""
+STACK_RUNNING=0
+MODE2_OFFERED=0
+
+# ===========================================================================
+# Phase 1: base tools
+# ===========================================================================
+install_clt() { # Xcode command-line tools, without the GUI prompt
+  local marker=/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress label
+  touch "$marker"
+  label="$(softwareupdate -l 2>/dev/null | sed -n 's/^[[:space:]]*\* Label: //p' | grep -E '^Command Line Tools' | sort -V | tail -n 1)"
+  if [ -z "$label" ]; then rm -f "$marker"; echo "no Command Line Tools update is offered" >&2; return 1; fi
+  sudo -n softwareupdate -i "$label" --verbose
+  local rc=$?
+  rm -f "$marker"
+  return $rc
+}
+
+download() { # url dest
+  curl -fsSL --connect-timeout 15 --max-time 300 -o "$2" "$1"
+}
+
+brew_install() { # formula-or-cask [--cask]
+  local b; b="$(brew_bin)"
+  if [ "${2:-}" = "--cask" ]; then
+    "$b" list --cask "$1" >/dev/null 2>&1 && return 0
+    HOMEBREW_NO_ENV_HINTS=1 "$b" install --cask "$1"
+  else
+    "$b" list --versions "$1" >/dev/null 2>&1 && return 0
+    HOMEBREW_NO_ENV_HINTS=1 "$b" install "$1"
+  fi
+}
+
+uv_bin() {
+  if command -v uv >/dev/null 2>&1; then command -v uv
+  elif [ -x "$HOME/.local/bin/uv" ]; then echo "$HOME/.local/bin/uv"
+  fi
+}
+
+phase1_verified() {
+  xcode-select -p >/dev/null 2>&1 && [ -n "$(brew_bin)" ] && [ -n "$(uv_bin)" ] &&
+    "$(brew_bin)" list --versions gh jq python@3.13 >/dev/null 2>&1
+}
+
+phase1() {
+  phase_start 1 "Base tools (Xcode tools, Homebrew, gh, jq, python@3.13, uv)" "5-20 minutes on a clean Mac"
+  if is_done 1 && phase1_verified; then phase_pass "already installed"; return; fi
+
+  if ! xcode-select -p >/dev/null 2>&1; then
+    say "  Installing the Xcode command-line tools…"
+    ensure_sudo || { FAILED_STEP="administrator password"; phase_fail "run again and enter your Mac password when asked"; }
+    retry "install Xcode command-line tools" install_clt ||
+      phase_fail "install them by hand with 'xcode-select --install', then run this again"
+  else
+    say "  Xcode command-line tools: present"
+  fi
+
+  if [ -z "$(brew_bin)" ]; then
+    say "  Installing Homebrew…"
+    ensure_sudo || { FAILED_STEP="administrator password"; phase_fail "run again and enter your Mac password when asked"; }
+    retry "download the Homebrew installer" download https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh "$RUN_DIR/brew-install.sh" ||
+      phase_fail "check your internet connection, then run this again"
+    retry "install Homebrew" env NONINTERACTIVE=1 /bin/bash "$RUN_DIR/brew-install.sh" ||
+      phase_fail "see the log; Homebrew's own message names the problem"
+  else
+    say "  Homebrew: present ($(brew_bin))"
+  fi
+  eval "$("$(brew_bin)" shellenv)"
+
+  local f
+  for f in gh jq python@3.13; do
+    if "$(brew_bin)" list --versions "$f" >/dev/null 2>&1; then
+      say "  $f: present"
+    else
+      say "  Installing $f…"
+      retry "brew install $f" brew_install "$f" || phase_fail "run 'brew install $f' to see the error, then run this again"
+    fi
+  done
+
+  if [ -z "$(uv_bin)" ]; then
+    # Never 'brew install uv': on Intel there is no bottle and it compiles LLVM.
+    say "  Installing uv (Astral installer)…"
+    retry "download the uv installer" download https://astral.sh/uv/install.sh "$RUN_DIR/uv-install.sh" ||
+      phase_fail "check your internet connection, then run this again"
+    retry "install uv" env UV_NO_MODIFY_PATH=1 /bin/sh "$RUN_DIR/uv-install.sh" ||
+      phase_fail "see the log for the installer's message"
+  else
+    say "  uv: present ($(uv_bin))"
+  fi
+  export PATH="$HOME/.local/bin:$PATH"
+  phase_pass
+}
+
+# ===========================================================================
+# Phase 2: workspace
+# ===========================================================================
+PROFILE_BEGIN="# >>> omninode onboarding >>>"
+PROFILE_END="# <<< omninode onboarding <<<"
+
+write_profile_block() { # file
+  local f="$1" tmp
+  touch "$f"
+  tmp="$(mktemp "$RUN_DIR/profile.XXXXXX")"
+  awk -v b="$PROFILE_BEGIN" -v e="$PROFILE_END" '$0==b{skip=1} !skip{print} $0==e{skip=0}' "$f" >"$tmp"
+  {
+    printf '%s\n' "$PROFILE_BEGIN"
+    printf 'export OMNIBASE_PATH="%s"\n' "$WORKSPACE"
+    printf 'export OMNI_HOME="%s"   # legacy name, still read by the reconcile scripts\n' "$WORKSPACE"
+    # shellcheck disable=SC2016  # written literally; expands in the user's shell
+    printf 'eval "$(%s shellenv)"\n' "$(brew_bin)"
+    # shellcheck disable=SC2016
+    printf 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac\n'
+    printf '%s\n' "$PROFILE_END"
+  } >>"$tmp"
+  cat "$tmp" >"$f" && rm -f "$tmp"
+}
+
+sync_clone() { # repo
+  local d="$WORKSPACE/$1" def
+  if [ -d "$d/.git" ]; then
+    git -C "$d" fetch --quiet origin || return 1
+    def="$(git -C "$d" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')"
+    [ -n "$def" ] || return 0
+    # A canonical clone is read-only: fast-forward it only when it sits clean
+    # on its default branch; anything else is the developer's and is left alone.
+    if [ "$(git -C "$d" rev-parse --abbrev-ref HEAD)" = "$def" ] && [ -z "$(git -C "$d" status --porcelain)" ]; then
+      git -C "$d" merge --ff-only --quiet "origin/$def" || true
+    fi
+    return 0
+  fi
+  rm -rf "$d"
+  git clone --quiet --filter=blob:none "$GITHUB_ORG_URL/$1.git" "$d"
+}
+
+phase2_verified() {
+  local r
+  for r in $REPOS; do [ -d "$WORKSPACE/$r/.git" ] || return 1; done
+  grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null
+}
+
+phase2() {
+  phase_start 2 "Workspace ($WORKSPACE)" "2-5 minutes"
+  if is_done 2 && phase2_verified; then phase_pass "already in place"; return; fi
+  mkdir -p "$WORKSPACE" || { FAILED_STEP="create $WORKSPACE"; phase_fail "choose another directory with --workspace"; }
+  local r
+  for r in $REPOS; do
+    if [ -d "$WORKSPACE/$r/.git" ]; then say "  $r: present, fetching"; else say "  $r: cloning"; fi
+    retry "clone or fetch $r" sync_clone "$r" || phase_fail "check that github.com is reachable, then run this again"
+  done
+  write_profile_block "$HOME/.zshrc"
+  case "${SHELL:-}" in */bash) write_profile_block "$HOME/.bash_profile" ;; esac
+  export OMNIBASE_PATH="$WORKSPACE" OMNI_HOME="$WORKSPACE"
+  say "  OMNIBASE_PATH (and legacy OMNI_HOME), Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
+  if [ ! -f "${ONBOARD_LAB_FACTS:-$WORKSPACE/$LAB_FACTS_REL}" ]; then
+    FAILED_STEP="read the lab's declared addresses"
+    LAST_ERR="$LAB_FACTS_REL is missing from the omnibase_infra clone"
+    phase_fail "update the omnibase_infra clone (its dev branch declares the file), then run this again"
+  fi
+  phase_pass
+}
+
+# ===========================================================================
+# Phase 3: tailnet
+# ===========================================================================
+TS=""
+find_tailscale() {
+  if [ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ]; then TS=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+  elif command -v tailscale >/dev/null 2>&1; then TS="$(command -v tailscale)"
+  else TS=""
+  fi
+}
+ts_state() { "$TS" status --json 2>/dev/null | jq -r '.BackendState // empty'; }
+ts_suffix() { "$TS" status --json 2>/dev/null | jq -r '.MagicDNSSuffix // empty'; }
+ts_running() { [ "$(ts_state)" = "Running" ]; }
+
+install_tailscale() {
+  brew_install tailscale-app --cask || brew_install tailscale --cask
+}
+
+phase3_verified() { find_tailscale; [ -n "$TS" ] && ts_running && [ "$(ts_suffix)" = "$(lab_fact tailnet_suffix)" ]; }
+
+phase3() {
+  phase_start 3 "Tailnet (Tailscale, signed in to the OmniNode tailnet)" "2-5 minutes, plus your sign-in"
+  if is_done 3 && phase3_verified; then phase_pass "already connected"; return; fi
+  local want; want="$(lab_fact tailnet_suffix)"
+  find_tailscale
+  if [ -z "$TS" ]; then
+    say "  Installing Tailscale…"
+    ensure_sudo || { FAILED_STEP="administrator password"; phase_fail "run again and enter your Mac password when asked"; }
+    retry "install Tailscale" install_tailscale || phase_fail "install Tailscale from tailscale.com/download, then run this again"
+    find_tailscale
+  else
+    say "  Tailscale: present"
+  fi
+  [ -n "$TS" ] || { FAILED_STEP="locate the Tailscale CLI"; phase_fail "open the Tailscale app once, then run this again"; }
+  open -g -a Tailscale 2>/dev/null || true
+
+  if ! ts_running; then
+    say "  Sign in to Tailscale with your OmniNode account (the Tailscale menu-bar icon, or the"
+    say "  browser window it opens). Waiting up to 15 minutes…"
+    notify "Action needed" "Sign in to Tailscale with your OmniNode account"
+    "$TS" up >>"$LOG" 2>&1 &
+    wait_until "Tailscale sign-in" 900 5 ts_running || {
+      if [ "$(ts_state)" = "NeedsMachineAuth" ]; then
+        LAST_ERR="this device is waiting for a tailnet admin to approve it"
+        phase_fail "ask a tailnet admin to approve this device in the Tailscale admin console, then run this again"
+      fi
+      phase_fail "finish signing in to Tailscale, then run this again"
+    }
+  fi
+  if [ -n "$want" ] && [ "$(ts_suffix)" != "$want" ]; then
+    FAILED_STEP="tailnet check"; LAST_ERR="signed in to $(ts_suffix), not the OmniNode tailnet"
+    phase_fail "switch Tailscale to your OmniNode account (menu-bar icon, Switch account), then run this again"
+  fi
+  phase_pass "on the OmniNode tailnet"
+}
+
+# ===========================================================================
+# Phase 4: onex, the local identity, one model path, one delegation
+# ===========================================================================
+ONEX=""
+onex_run() { env -u PYTHONPATH "$ONEX" "$@"; }
+
+link_onex() {
+  local wrapper="$WORKSPACE/omnibase_infra/scripts/onex" link="$HOME/.local/bin/onex" uvb
+  mkdir -p "$HOME/.local/bin"
+  if [ -L "$link" ] && [ "$(readlink "$link")" = "$wrapper" ]; then return 0; fi
+  if [ -e "$link" ] || [ -L "$link" ]; then
+    # A PyPI onex here outranks the workspace wrapper and fails the workspace
+    # floor (local-dev guide D5). The floor's own remedy is to uninstall it.
+    uvb="$(uv_bin)"
+    if [ -n "$uvb" ] && "$uvb" tool list 2>/dev/null | grep -q '^omnibase-core '; then
+      "$uvb" tool uninstall omnibase-core || return 1
+    fi
+    if [ -e "$link" ] || [ -L "$link" ]; then mv "$link" "$link.pre-onboarding.$STAMP" || return 1; fi
+  fi
+  ln -s "$wrapper" "$link"
+}
+
+provider_offered() { # slug -> 0 when onex routes a key for it
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$1" <<'PY' 2>>"$LOG"
+import sys
+from omnimarket.routing.byok_provider_backends import resolve_byok_provider_backend
+sys.exit(0 if resolve_byok_provider_backend(sys.argv[1]) is not None else 1)
+PY
+}
+
+provider_endpoints() { # slug -> the endpoint URLs the catalogue routes that provider's keys to (routable plans only)
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$1" <<'PY' 2>>"$LOG"
+import sys
+from importlib.resources import files
+import yaml
+doc = yaml.safe_load(files("omnimarket").joinpath("configs/byok_provider_backends.v1.yaml").read_text())
+urls = set()
+def walk(node):
+    if isinstance(node, dict):
+        if node.get("provider") == sys.argv[1] and node.get("endpoint_url") and node.get("customer_routable", True):
+            urls.add(node["endpoint_url"])
+        for v in node.values(): walk(v)
+    elif isinstance(node, list):
+        for v in node: walk(v)
+walk(doc)
+print(" ".join(sorted(urls)))
+PY
+}
+
+provider_label() {
+  case "$1" in
+    openrouter) echo "OpenRouter" ;;
+    gemini) echo "Gemini (a Google AI Studio API key)" ;;
+    glm) echo "GLM (a z.ai general API key; Coding Plan keys are not allowed)" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+key_stored() { onex_run secret list 2>/dev/null | grep -qE "^[[:space:]]+llm\.$1\.api_key[[:space:]]"; }
+
+write_lab_model_overrides() {
+  local url="$1" model="$2" f="$HOME/.omninode/delegation/bifrost_overrides.yaml"
+  mkdir -p "$(dirname "$f")"
+  [ -f "$f" ] && cp -p "$f" "$f.pre-onboarding.$STAMP"
+  cat >"$f" <<YAML
+# Written by lab-onboarding: the lab model server, over the tailnet.
+backends:
+  - backend_id: local-coder
+    endpoint_url: "$url"
+    model_name: "$model"
+  - backend_id: local-heavy-reasoning
+    endpoint_url: "$url"
+    model_name: "$model"
+YAML
+}
+
+# A lab-model overrides file this script wrote on an earlier run declares a local
+# model, and routing takes a declared local model before a registered key, so the
+# key would never be used. Moved aside (never deleted) once a key is chosen. A
+# file the developer wrote is left alone and named.
+retire_lab_model_overrides() {
+  local f="$HOME/.omninode/delegation/bifrost_overrides.yaml"
+  [ -f "$f" ] || return 0
+  if head -n 1 "$f" | grep -q '^# Written by lab-onboarding'; then
+    mv "$f" "$f.pre-key.$STAMP"
+    say "  Moved aside the lab-model overrides an earlier run wrote, so your key is used."
+  else
+    say "  ⚠ $f declares a local model; it is used before your key. Remove it if you want the key used."
+  fi
+}
+
+# The provider's own words from the latest capture log (a delegation that fails on
+# the provider is retried and ends in a timeout that names none of them).
+provider_error() {
+  local c
+  # shellcheck disable=SC2012  # onex names its capture files; newest-first is what matters
+  c="$(ls -t "$HOME/.onex_state/captures/"*.log 2>/dev/null | head -n 1)"
+  [ -n "$c" ] || return 0
+  grep -A3 'provider response' "$c" | grep -E '"message"' | tail -n 1 |
+    sed -e 's/^[^:]*"message": *"//' -e 's/",\{0,1\} *$//' | cut -c1-300
+}
+
+lab_model_reachable() { curl -fsS -m 8 "${1%/chat/completions}/models" | grep -q "$2"; }
+
+# receipt_field JSON KEY -> the first value of KEY anywhere in the receipt JSON
+receipt_field() { printf '%s' "$1" | jq -r --arg k "$2" '[.. | objects | .[$k]? // empty] | first // empty' 2>/dev/null; }
+
+delegate_hello() { # -> stdout: the run's receipt.json (it names the endpoint and model)
+  # Mode 1 is the in-process bus. Said explicitly: through the workspace wrapper a
+  # bare `onex delegate` treats the workspace as a registry workspace and refuses
+  # without a declared runtime config.
+  local out line receipt
+  # stderr too: the "delegate artifacts:" line naming receipt.json is printed there.
+  out="$(cd "$HOME" && onex_run delegate --json --bus inmemory "Reply with exactly one word: hello" 2>&1)" ||
+    { printf '%s\n' "$out" >>"$LOG"; return 1; }
+  line="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
+  [ "$(receipt_field "$line" status)" = "success" ] || { printf '%s\n' "$out" >>"$LOG"; return 1; }
+  receipt="$(printf '%s\n' "$out" | tr ' ' '\n' | grep -E '/receipt\.json$' | tail -n 1)"
+  [ -f "$receipt" ] || { echo "the delegation named no receipt.json" >&2; return 1; }
+  cat "$receipt"
+}
+
+MODEL_CHOICE=""
+phase4() {
+  phase_start 4 "onex, local identity and a model" "3-10 minutes"
+  local lab_url lab_model endpoint
+  lab_url="$(lab_fact lab_model_url)"; lab_model="$(lab_fact lab_model_name)"
+
+  say "  Building the workspace dispatch environment (onex)…"
+  retry "build the dispatch venv" nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" ||
+    phase_fail "see the log; the script names the exact command to run by hand"
+  step "point ~/.local/bin/onex at the workspace wrapper" link_onex ||
+    phase_fail "remove ~/.local/bin/onex by hand, then run this again"
+  ONEX="$HOME/.local/bin/onex"
+  step "onex --version" onex_run --version || phase_fail "run 'onex --version' to see why it does not start"
+  say "  $(onex_run --version 2>/dev/null | tail -n 1)"
+
+  if onex_run local identity >/dev/null 2>&1; then
+    say "  Local identity: present"
+  else
+    step "onex local init" onex_run local init || phase_fail "run 'onex local init' to see the error"
+    say "  Local identity: minted"
+  fi
+
+  # Pick the model path.
+  local choice="$PROVIDER"
+  if [ -z "$choice" ]; then
+    local p
+    for p in openrouter gemini glm; do key_stored "$p" && { choice=$p; break; }; done
+    if [ -n "$choice" ]; then :
+    elif [ "$IS_TTY" -eq 1 ]; then
+      say ""
+      say "  Which model should your delegations use?"
+      say "    1) my own OpenRouter key"
+      say "    2) my own Gemini key (Google AI Studio)"
+      say "    3) my own GLM key (z.ai general API; Coding Plan keys are not allowed)"
+      say "    4) the lab model server (no key)"
+      printf '  Choose 1, 2, 3 or 4 [4]: '
+      local a; IFS= read -r a
+      case "$a" in 1) choice=openrouter ;; 2) choice=gemini ;; 3) choice=glm ;; *) choice=none ;; esac
+    else
+      choice=none
+    fi
+  fi
+
+  if [ "$choice" != "none" ]; then
+    if ! provider_offered "$choice"; then
+      say "  ⚠ This onex does not route a $choice key yet (its provider catalogue does not offer it)."
+      say "    It was not stored; this run uses the lab model server. An OpenRouter key reaches most models."
+      choice=none
+    elif key_stored "$choice"; then
+      say "  Your $choice key is already stored; keeping it."
+    else
+      read_secret "Paste your $(provider_label "$choice") key (input is hidden; leave empty to skip):"
+      if [ -n "$SECRET" ]; then
+        # The CLI decides the key's plan before storing it, and refuses one the
+        # catalogue does not allow (a z.ai Coding Plan key); its words are shown.
+        local refusal
+        if refusal="$(printf '%s' "$SECRET" | onex_run secret set "llm.$choice.api_key" 2>&1)"; then
+          printf '%s\n' "$refusal" >>"$LOG"
+          say "  Stored your $choice key in the onex secret store."
+        else
+          SECRET=""
+          printf '%s\n' "$refusal" >>"$LOG"
+          FAILED_STEP="store the $choice key"
+          LAST_ERR="$(printf '%s\n' "$refusal" | grep -E 'Error|refus|not ' | tail -n 3 | tr '\n' ' ' | cut -c1-400)"
+          say "  $LAST_ERR"
+          phase_fail "use a key the message above allows, then run this again with --provider $choice"
+        fi
+        SECRET=""
+      else
+        say "  No key given; using the lab model server."
+        choice=none
+      fi
+    fi
+  fi
+  MODEL_CHOICE="$choice"
+  [ "$choice" != "none" ] && retire_lab_model_overrides
+
+  if [ "$choice" = "none" ]; then
+    retry "reach the lab model server" lab_model_reachable "$lab_url" "$lab_model" ||
+      phase_fail "check that Tailscale is connected, or run again with --provider openrouter"
+    step "write the lab model overrides" write_lab_model_overrides "$lab_url" "$lab_model" ||
+      phase_fail "check that ~/.omninode is writable"
+  fi
+
+  say "  Running one delegation…"
+  if ! retry_capture "one onex delegate" delegate_hello; then
+    local perr; perr="$(provider_error)"
+    if [ "$choice" != "none" ] && [ -n "$perr" ]; then
+      LAST_ERR="$choice said: $perr"
+      phase_fail "fix it on the provider's side (the message above names what), then run this again"
+    fi
+    phase_fail "run 'onex delegate \"Reply with exactly one word: hello\"' to see the error"
+  fi
+  endpoint="$(receipt_field "$CAPTURED" endpoint)"
+  if [ "$choice" = "none" ] && [ -n "$endpoint" ] && [ "$endpoint" != "$lab_url" ]; then
+    FAILED_STEP="check the delegation's endpoint"
+    LAST_ERR="the receipt names $endpoint, not the lab model server $lab_url"
+    phase_fail "something in your environment overrides the model; remove the profile lines shown in phase 0"
+  fi
+  if [ "$choice" != "none" ]; then
+    # Exact URL, not host: z.ai's Coding Plan and general API share a host.
+    local urls ok=0
+    urls="$(provider_endpoints "$choice")"
+    for p in $urls; do [ "$p" = "$endpoint" ] && ok=1; done
+    if [ "$ok" -ne 1 ]; then
+      FAILED_STEP="check the delegation went to your $choice key"
+      LAST_ERR="the receipt names ${endpoint:-no endpoint}, not a $choice route (${urls:-none declared})"
+      phase_fail "the key was stored but did not route; run 'onex secret list' and 'onex delegate --json \"hello\"' to see why"
+    fi
+  fi
+  say "  Delegation answered by $(receipt_field "$CAPTURED" model) at ${endpoint:-an endpoint the receipt does not name}"
+  CAPTURED=""
+  phase_pass "model: $([ "$choice" = none ] && echo "lab model server" || echo "your $choice key")"
+}
+
+# ===========================================================================
+# Phase 5: this machine's lab bus identity, issued automatically
+# ===========================================================================
+lane_bootstrap() {
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$WORKSPACE/$LANE_FILE_REL" "$(lab_fact lane)" <<'PY' 2>>"$LOG"
+import sys, yaml
+lanes = yaml.safe_load(open(sys.argv[1]))["lanes"]
+print(lanes[sys.argv[2]]["broker"])
+PY
+}
+
+broker_reachable() { local hp="$1"; nc -z -G 5 "${hp%:*}" "${hp##*:}"; }
+
+lane_identity_stored() { # a stored by-reference identity in ~/.onex (onex auth lane-login)
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$(lab_fact lane)" <<'PY' 2>>"$LOG"
+import sys
+from pathlib import Path
+from omnibase_infra.cli.store_lane_credential import StoreLaneCredential
+sys.exit(0 if sys.argv[1] in StoreLaneCredential(onex_home=Path.home() / ".onex").declared_lanes() else 1)
+PY
+}
+
+request_identity() { # -> stdout: the issuer's JSON (principal + password)
+  local device
+  device="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
+  curl -fsS -m 60 -X POST "$(lab_fact principal_issuer_url)/v1/principals" \
+    -H 'content-type: application/json' \
+    --data "{\"lane\":\"$(lab_fact lane)\",\"device\":\"$device\"}"
+}
+
+store_identity() { # uses CAPTURED
+  local principal password
+  principal="$(printf '%s' "$CAPTURED" | jq -r '.principal // empty')"
+  password="$(printf '%s' "$CAPTURED" | jq -r '.password // empty')"
+  CAPTURED=""
+  [ -n "$principal" ] && [ -n "$password" ] || { echo "the issuer's answer had no principal or password" >&2; return 1; }
+  ISSUED_PRINCIPAL="$principal"
+  printf '%s' "$password" | onex_run auth lane-login --lane "$(lab_fact lane)" \
+    --sasl-username "$principal" --sasl-password-stdin
+  local rc=$?
+  password=""
+  return $rc
+}
+ISSUED_PRINCIPAL=""
+
+lane_delegate() { # from the workspace, as the local-dev guide requires
+  local out
+  out="$(cd "$WORKSPACE" && env -u PYTHONPATH "$WORKSPACE/omnibase_infra/scripts/onex" delegate --json \
+    --bus kafka --lane "$(lab_fact lane)" "Reply with exactly one word: hello" 2>>"$LOG")" || return 1
+  out="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
+  [ "$(receipt_field "$out" status)" = "success" ] || { printf '%s\n' "$out" >>"$LOG"; return 1; }
+}
+
+phase5() {
+  phase_start 5 "Lab bus identity (issued automatically)" "1-3 minutes"
+  [ -n "$ONEX" ] || ONEX="$HOME/.local/bin/onex"
+  local hp
+  hp="$(lane_bootstrap)" || { FAILED_STEP="read the dev lane's broker"; phase_fail "update the omnimarket clone, then run this again"; }
+  retry "reach the lab broker ($hp)" broker_reachable "$hp" ||
+    phase_fail "check that Tailscale is connected; if it is, the lab broker is down, so say so on the team channel"
+
+  if [ "$REISSUE" -eq 0 ] && lane_identity_stored; then
+    say "  A bus identity for lane $(lab_fact lane) is already stored; keeping it (--reissue-identity to replace it)."
+  else
+    say "  Requesting this machine's bus identity from the lab…"
+    retry_capture "request a bus identity" request_identity ||
+      phase_fail "the lab's identity service did not answer. Tailscale is connected (phase 3), so the service is down or not deployed on the lab host; say so on the team channel, then run this again"
+    step "store the bus identity" store_identity ||
+      phase_fail "see the log; the identity was not stored"
+    say "  Stored bus identity '$ISSUED_PRINCIPAL' for lane $(lab_fact lane)."
+  fi
+
+  say "  Running one delegation on the lab dev lane…"
+  retry "one delegation over the lab bus" lane_delegate ||
+    phase_fail "run 'omnibase_infra/scripts/onex delegate --bus kafka --lane dev \"hello\"' from $WORKSPACE to see the error"
+  phase_pass "lane $(lab_fact lane) answered"
+}
+
+# ===========================================================================
+# Phase 6: containers (optional)
+# ===========================================================================
+docker_settings_file() {
+  local d="$HOME/Library/Group Containers/group.com.docker"
+  if [ -f "$d/settings-store.json" ]; then echo "$d/settings-store.json"; else echo "$d/settings.json"; fi
+}
+
+size_docker() { # memory MiB, cpus -> 0 changed, 1 error, 2 already enough
+  "$(brew_bin | sed 's#/brew$##')/python3.13" - "$(docker_settings_file)" "$1" "$2" <<'PY'
+import json, os, sys
+path, mem, cpus = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+data = json.load(open(path)) if os.path.exists(path) else {}
+mem_key = "MemoryMiB" if "MemoryMiB" in data or path.endswith("settings-store.json") else "memoryMiB"
+cpu_key = "Cpus" if "Cpus" in data or path.endswith("settings-store.json") else "cpus"
+if int(data.get(mem_key, 0)) >= mem and int(data.get(cpu_key, 0)) >= cpus:
+    sys.exit(2)
+data[mem_key] = max(mem, int(data.get(mem_key, 0)))
+data[cpu_key] = max(cpus, int(data.get(cpu_key, 0)))
+if os.path.exists(path):
+    os.replace(path, path + ".pre-onboarding")
+os.makedirs(os.path.dirname(path), exist_ok=True)
+json.dump(data, open(path, "w"), indent=2)
+PY
+}
+
+docker_awaits_terms() { # Docker Desktop is showing its licence window and will not start until accepted
+  pgrep -f 'Docker Desktop.*--name=new-license' >/dev/null 2>&1
+}
+
+# Wait for the engine; if Docker Desktop is holding at its licence screen, say so
+# (accepting Docker's terms is the developer's decision, never this script's).
+wait_for_docker() {
+  local t0=$SECONDS told=0
+  while [ $((SECONDS - t0)) -lt 600 ]; do
+    docker_ready && return 0
+    if [ "$told" -eq 0 ] && docker_awaits_terms; then
+      say "  Docker Desktop is waiting for you to accept its terms in its own window."
+      say "  Accept them there (or quit Docker and run this with --no-containers); waiting up to 10 minutes…"
+      notify "Action needed" "Accept Docker Desktop's terms in its window"
+      told=1
+    fi
+    sleep 5
+  done
+  FAILED_STEP="Docker Desktop to start (waited 10m)"
+  if docker_awaits_terms; then LAST_ERR="Docker Desktop is still showing its licence terms"; else LAST_ERR="$(last_log_lines)"; fi
+  return 1
+}
+
+accept_docker_terms() { # fresh install only, and only with the developer's yes
+  local a="n"
+  say "  Docker Desktop requires accepting the Docker Subscription Service Agreement:"
+  say "    https://www.docker.com/legal/docker-subscription-service-agreement"
+  if [ "$IS_TTY" -eq 1 ]; then
+    printf '  Accept it now? [y/N] '; IFS= read -r a
+  fi
+  # shellcheck disable=SC2024  # the log is the user's own file; only install needs root
+  case "$a" in
+    y|Y|yes|YES) sudo -n /Applications/Docker.app/Contents/MacOS/install --accept-license --user "$(id -un)" >>"$LOG" 2>&1 ;;
+    *) say "  Not accepted here; Docker Desktop will show its terms when it starts." ;;
+  esac
+  return 0
+}
+
+restart_docker() {
+  if docker desktop restart >/dev/null 2>&1; then return 0; fi
+  /usr/bin/osascript -e 'quit app "Docker"' >/dev/null 2>&1 || true
+  sleep 5
+  open -g -a Docker
+}
+
+compose_ok() { # compose 2.20 or newer
+  local v; v="$(docker compose version --short 2>&1 | sed 's/^v//')"
+  echo "docker compose version: ${v:-none}"
+  case "$v" in [0-9]*) ;; *) return 1 ;; esac
+  local major="${v%%.*}" rest="${v#*.}"; local minor="${rest%%.*}"
+  [ "$major" -gt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -ge 20 ]; }
+}
+
+stack_healthy() {
+  local s; s="$(cd "$WORKSPACE/omnibase_infra" && make -s status-local 2>&1)"
+  printf '%s\n' "$s" | grep -q 'migration-gate: healthy' &&
+    curl -fsS -m 5 http://localhost:8085/health | grep -q '"healthy"' &&
+    curl -fsS -m 5 http://localhost:8086/health | grep -q '"healthy"'
+}
+
+point_bundle_model() { # local.bifrost.yaml defaults to host.docker.internal (guide D14)
+  local f="$HOME/.omnibase/local.bifrost.yaml" url="$1"
+  [ -f "$f" ] || return 1
+  grep -q '&model_endpoint "http://host.docker.internal' "$f" || return 0
+  cp -p "$f" "$f.pre-onboarding.$STAMP"
+  sed -i '' "s#&model_endpoint \"http://host.docker.internal[^\"]*\"#\\&model_endpoint \"$url\"#" "$f"
+}
+
+phase6() {
+  phase_start 6 "Docker (optional, in addition to the lab)" "10-20 minutes the first time"
+  if [ "$MODE2_OK" -ne 1 ]; then phase_skip "${MODE2_WHY# }"; return; fi
+  if is_done 6 && docker_ready && stack_healthy; then phase_pass "already running"; return; fi
+
+  local host_ram mem_gb mem free disk
+  host_ram="$(ram_gb)"
+  mem_gb=$DOCKER_MEM_GB
+  [ $((host_ram - mem_gb)) -lt "$HOST_RESERVE_GB" ] && mem_gb=$((host_ram - HOST_RESERVE_GB))
+  mem=$((mem_gb * 1024))
+
+  if ! docker_installed; then
+    say "  Installing Docker Desktop…"
+    ensure_sudo || { FAILED_STEP="administrator password"; phase_fail "run again and enter your Mac password when asked"; }
+    retry "install Docker Desktop" sh -c "'$(brew_bin)' install --cask docker-desktop || '$(brew_bin)' install --cask docker" ||
+      phase_fail "install Docker Desktop from docker.com, then run this again"
+    accept_docker_terms
+  else
+    say "  Docker Desktop: present"
+  fi
+
+  size_docker "$mem" "$DOCKER_CPUS"
+  case $? in
+    0) say "  Docker Desktop set to ${mem_gb} GB and $DOCKER_CPUS CPUs; restarting it…"
+       docker_ready && restart_docker >>"$LOG" 2>&1 ;;
+    2) say "  Docker Desktop already has at least ${mem_gb} GB and $DOCKER_CPUS CPUs" ;;
+    *) FAILED_STEP="size Docker Desktop"; LAST_ERR="$(last_log_lines)"
+       phase_fail "set Settings > Resources to ${mem_gb} GB and $DOCKER_CPUS CPUs by hand, then run this again" ;;
+  esac
+  if ! docker_ready; then
+    say "  Starting Docker Desktop…"
+    notify "Starting Docker Desktop" "The local stack comes up once Docker is running"
+    open -g -a Docker
+  fi
+  wait_for_docker ||
+    phase_fail "open Docker Desktop; if it asks you to accept its terms or to update, do that, then run this again"
+  say "  Docker Desktop: running"
+  step "docker compose 2.20 or newer" compose_ok || phase_fail "update Docker Desktop, then run this again"
+
+  free="$(avail_mem_gb)"; disk="$(disk_free_gb)"
+  if [ "$free" -lt "$BOOT_FREE_MEM_GB" ] || [ "$disk" -lt "$BOOT_FREE_DISK_GB" ]; then
+    FAILED_STEP="resources at boot time"
+    LAST_ERR="${free} GB memory available (needs $BOOT_FREE_MEM_GB) and ${disk} GB disk free (needs $BOOT_FREE_DISK_GB)"
+    phase_fail "close other apps or free disk space, then run this again"
+  fi
+
+  # Launching Docker restarts a stack that was already there (restart policies).
+  local_stack_running && STACK_RUNNING=1
+  if [ "$STACK_RUNNING" -eq 1 ]; then
+    say "  The local stack is already there; checking it instead of rebuilding it."
+  else
+    step "make local-env" make -C "$WORKSPACE/omnibase_infra" local-env || phase_fail "see the log for make local-env's message"
+    step "point the stack at the lab model server" point_bundle_model "$(lab_fact lab_model_url)" ||
+      phase_fail "set model_endpoint in ~/.omnibase/local.bifrost.yaml by hand, then run this again"
+    say "  Building and starting the local stack (make up-local)…"
+    retry "make up-local" nice -n 10 make -C "$WORKSPACE/omnibase_infra" up-local ||
+      phase_fail "see the log; 'make status-local' from omnibase_infra shows what is not up"
+  fi
+  say "  Waiting for the stack to report healthy (a cold boot takes several minutes)…"
+  wait_until "the local stack to become healthy" 900 15 stack_healthy ||
+    phase_fail "run 'make status-local' in omnibase_infra; if the main kernel is still provisioning topics, wait and run this again"
+  retry "make delegate-local" make -C "$WORKSPACE/omnibase_infra" delegate-local PROMPT="Reply with exactly one word: hello" ||
+    phase_fail "the stack is up but the delegation failed; see the log"
+  phase_pass "stack healthy, one delegation answered (stop it with 'make down-local' from the checkout that started it)"
+}
+
+# ===========================================================================
+# Phase 7: Claude Code plugin
+# ===========================================================================
+install_claude_code() {
+  download https://claude.ai/install.sh "$RUN_DIR/claude-install.sh" && bash "$RUN_DIR/claude-install.sh"
+}
+
+phase7() {
+  phase_start 7 "Claude Code plugin (onex@omninode-tools)" "about a minute"
+  if ! command -v claude >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/claude" ]; then
+    say "  Installing Claude Code…"
+    retry "install Claude Code" install_claude_code || phase_fail "install Claude Code from claude.com/claude-code, then run this again"
+  fi
+  local claude; claude="$(command -v claude || echo "$HOME/.local/bin/claude")"
+  if "$claude" plugin list 2>/dev/null | grep -q 'onex@omninode-tools'; then
+    say "  onex@omninode-tools: installed"
+  else
+    "$claude" plugin marketplace list 2>/dev/null | grep -q 'omninode-tools' ||
+      retry "add the OmniNode plugin marketplace" "$claude" plugin marketplace add OmniNode-ai/omniclaude ||
+      phase_fail "run 'claude plugin marketplace add OmniNode-ai/omniclaude' to see the error"
+    retry "install onex@omninode-tools" "$claude" plugin install onex@omninode-tools ||
+      phase_fail "run 'claude plugin install onex@omninode-tools' to see the error"
+  fi
+  phase_pass "use /onex:delegate in a new Claude Code session"
+}
+
+# ===========================================================================
+# Phase 8: verify
+# ===========================================================================
+CHECKS_FAILED=0
+check() { # label cmd...
+  local label="$1"; shift
+  if "$@" >>"$LOG" 2>&1; then say "  ✔ $label"; else say "  ✘ $label"; CHECKS_FAILED=$((CHECKS_FAILED + 1)); fi
+}
+sqlite_rows() {
+  [ "$(sqlite3 -readonly "$HOME/.omninode/delegation/delegation.sqlite" 'select count(*) from delegation_events;' 2>/dev/null || echo 0)" -ge 1 ]
+}
+no_shadow() { [ "$(readlink "$HOME/.local/bin/onex")" = "$WORKSPACE/omnibase_infra/scripts/onex" ]; }
+
+# The workspace floor the onex wrapper enforces before any --lane command. If dev
+# moved while this ran, the clones fast-forward here but the dispatch venv built
+# in phase 4 is behind; the floor's own remedy is to rebuild it and reconcile again.
+reconcile_host() { nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-host.sh" --omni-home "$WORKSPACE"; }
+workspace_floor() {
+  reconcile_host && return 0
+  nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" &&
+    reconcile_host
+}
+
+phase8() {
+  phase_start 8 "Verify" "about a minute"
+  [ -n "$ONEX" ] || ONEX="$HOME/.local/bin/onex"
+  check "onex starts ($(onex_run --version 2>/dev/null | tail -n 1))" onex_run --version
+  check "local identity minted" onex_run local identity
+  check "onex is the workspace wrapper, not a PyPI copy" no_shadow
+  check "workspace floor proven (reconcile-host IN_SYNC)" retry "reconcile the workspace floor" workspace_floor
+  check "a delegation row in the local store" sqlite_rows
+  check "onex metering reads it" onex_run metering
+  check "lab bus identity stored for lane $(lab_fact lane)" lane_identity_stored
+  if [ "$MODE2_OK" -eq 1 ]; then check "local stack healthy" stack_healthy; fi
+  if [ -n "$AMBIENT_FOUND" ]; then
+    say "  ⚠ Your shell profile still exports settings that redirect onex (listed in phase 0)."
+  fi
+  if [ "$CHECKS_FAILED" -gt 0 ]; then
+    FAILED_STEP="$CHECKS_FAILED check(s) failed"
+    phase_fail "the ✘ lines above name what is wrong; fix them and run this again"
+  fi
+  phase_pass
+}
+
+# ===========================================================================
+main() {
+  say "OmniNode lab onboarding. Status file: $STATUS"
+  [ "$RESTART" -eq 1 ] && rm -f "$DONE_FILE"
+  phase0
+  [ "$PREFLIGHT_ONLY" -eq 1 ] && { say "Preflight only: nothing was changed."; exit 0; }
+  phase1
+  phase2
+  phase3
+  phase4
+  phase5
+  phase6
+  phase7
+  phase8
+  hr
+  say "Done. Set up: $SELECTED."
+  say "Model: $([ "$MODEL_CHOICE" = none ] && echo "the lab model server" || echo "your $MODEL_CHOICE key")."
+  say "Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect."
+  notify "Onboarding complete" "Every phase passed"
+  printf 'result=COMPLETE\n' >>"$STATUS"
+}
+
+main
