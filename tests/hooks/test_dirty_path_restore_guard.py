@@ -713,8 +713,6 @@ def test_non_restore_shapes_pass_over_dirty_work(
     [
         # An unresolvable cd: which tree the restore runs in is unknown.
         'cd "$WT" && git checkout HEAD -- src/guard.py',
-        # A path the guard cannot read without the shell.
-        'git checkout HEAD -- "$TARGET"',
         # Paths from a file the guard does not read.
         "git checkout HEAD --pathspec-from-file=paths.txt",
         "git restore --pathspec-from-file paths.txt",
@@ -726,9 +724,6 @@ def test_non_restore_shapes_pass_over_dirty_work(
         "GIT_DIR=/elsewhere/.git git checkout HEAD -- src/guard.py",
         "env GIT_WORK_TREE=/elsewhere git restore src/guard.py",
         "export GIT_WORK_TREE=/elsewhere; git checkout HEAD -- src/guard.py",
-        # Brace expansion: git would be asked about a literal `{a,b}` that
-        # matches nothing while the shell hands the command both files.
-        "git checkout HEAD -- src/{guard,other}.py",
     ],
 )
 def test_an_indeterminate_restore_is_refused(
@@ -972,3 +967,119 @@ def test_shell_wrapper_logs_a_deliberate_disable(
     log = (tmp_path / "hook.log").read_text()
     assert "DISABLED" in log
     assert "onex hooks enable SCOPE_GATE" in log
+
+
+# ---------------------------------------------------------------------------
+# OMN-17427: an operand the shell computes is judged by what it could name
+# ---------------------------------------------------------------------------
+#
+# The arm refused every restore whose operand the shell computes ("the operand
+# '$HEAD' is expanded by the shell"), so a lane whose worktree held nothing to
+# lose was refused all the same. What must still refuse is the loss itself: a
+# computed operand may name any path, so it is refused exactly when SOME path
+# of the tree holds work that exists nowhere else.
+
+COMPUTED_OPERAND_SHAPES = [
+    'git checkout HEAD -- "$TARGET"',
+    "git checkout HEAD -- $TARGET",
+    'git checkout "$SHA" -- src/guard.py',
+    "git checkout $HEAD -- src/guard.py",
+    'git checkout "$(git rev-parse HEAD)" -- src/guard.py',
+    'git restore "$F"',
+    "git restore $F",
+    'git restore --source "$SHA" src/guard.py',
+    "git restore --source=$SHA -- src/guard.py",
+    # Brace expansion: git would be asked about a literal `{a,b}` that matches
+    # nothing while the shell hands the command both files.
+    "git checkout HEAD -- src/{guard,other}.py",
+]
+
+
+@pytest.mark.parametrize("shape", COMPUTED_OPERAND_SHAPES)
+def test_a_computed_operand_over_a_clean_tree_passes(
+    shape: str, worktree: Path, fleet_root: Path, policy: Policy
+) -> None:
+    decision = _evaluate(shape, policy, worktree, fleet_root)
+    assert not decision.blocked, (shape, decision.reason)
+
+
+@pytest.mark.parametrize("shape", COMPUTED_OPERAND_SHAPES)
+def test_a_computed_operand_over_uncommitted_work_is_refused(
+    shape: str, worktree: Path, fleet_root: Path, policy: Policy
+) -> None:
+    (worktree / "src" / "guard.py").write_text(IMPL_TEXT)
+    decision = _evaluate(shape, policy, worktree, fleet_root)
+    assert decision.blocked, shape
+    assert RESTORE_TICKET in decision.reason
+    assert "src/guard.py" in decision.reason
+
+
+def test_a_computed_operand_over_an_untracked_file_is_not_a_loss(
+    worktree: Path, fleet_root: Path, policy: Policy
+) -> None:
+    """A restore never removes an untracked file, computed operand or not."""
+    (worktree / "notes.txt").write_text("only copy\n")
+    decision = _evaluate('git restore "$F"', policy, worktree, fleet_root)
+    assert not decision.blocked, decision.reason
+
+
+def test_a_computed_source_cannot_credit_a_dirty_path_as_saved(
+    worktree: Path, fleet_root: Path, policy: Policy
+) -> None:
+    """Replayed for real: the source is computed, the path is literal and dirty."""
+    target = worktree / "src" / "guard.py"
+    target.write_text(IMPL_TEXT)
+    decisions = _replay(
+        ['SHA=$(git rev-parse HEAD); git checkout "$SHA" -- src/guard.py'],
+        policy,
+        worktree,
+        fleet_root,
+    )
+    assert decisions[0].blocked
+    assert target.read_text() == IMPL_TEXT
+
+
+def test_a_computed_source_over_a_clean_path_runs_end_to_end(
+    worktree: Path, fleet_root: Path, policy: Policy
+) -> None:
+    """The admitted command is executed: it must be a working command."""
+    decisions = _replay(
+        ['SHA=$(git rev-parse HEAD); git checkout "$SHA" -- src/guard.py'],
+        policy,
+        worktree,
+        fleet_root,
+    )
+    assert not decisions[0].blocked, decisions[0].reason
+    assert (worktree / "src" / "guard.py").read_text() == BASE_TEXT
+
+
+def test_a_variable_the_command_sets_to_a_literal_is_read_not_widened(
+    worktree: Path, fleet_root: Path, policy: Policy
+) -> None:
+    """`TARGET=src/other.py` names one clean path, so dirt elsewhere is not lost."""
+    (worktree / "src" / "guard.py").write_text(IMPL_TEXT)
+    clean = _evaluate(
+        'TARGET=src/other.py; git checkout HEAD -- "$TARGET"',
+        policy,
+        worktree,
+        fleet_root,
+    )
+    assert not clean.blocked, clean.reason
+    dirty = _evaluate(
+        'TARGET=src/guard.py; git checkout HEAD -- "$TARGET"',
+        policy,
+        worktree,
+        fleet_root,
+    )
+    assert dirty.blocked
+    assert "src/guard.py" in dirty.reason
+
+
+def test_a_computed_operand_over_work_saved_on_a_reachable_ref_passes(
+    worktree: Path, fleet_root: Path, policy: Policy
+) -> None:
+    """The Rule 17 committed-first sequence keeps working with a computed path."""
+    (worktree / "src" / "guard.py").write_text(IMPL_TEXT)
+    _commit_all(worktree, "implementation")
+    decision = _evaluate('git checkout HEAD -- "$TARGET"', policy, worktree, fleet_root)
+    assert not decision.blocked, decision.reason

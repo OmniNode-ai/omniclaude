@@ -75,7 +75,7 @@ already have the OMN-7018/OMN-14330 worktree guard.
 
 Token matching, not substring matching
 ---------------------------------------
-Each shell segment is tokenised with ``shlex`` and matched by program plus
+Each shell segment is tokenised with the shared shell tokenizer and matched by program plus
 tokens, never by raw text -- the same reason the OMN-17334 git-stash guard
 this module is patterned on does it that way: a comment or a grep that
 merely *mentions* ``git reset`` is not a reset, and a raw-substring rule
@@ -92,7 +92,10 @@ Fail-closed boundary, stated deliberately
 * An UNTOKENISABLE command is refused only when its raw text plainly names
   ``git`` and one of the refused verbs as whole words. An unbalanced quote
   in a command that has nothing to do with git is not this guard's business,
-  and refusing it would be a bug wearing a fail-closed costume.
+  and refusing it would be a bug wearing a fail-closed costume. Untokenisable
+  means what the shell means (OMN-17427): an unterminated quote or
+  substitution. An apostrophe in a here-document body or a comment is text,
+  and a newline ends a command.
 
 The dirty-path restore arm (OMN-18874), and why its scope is wider
 --------------------------------------------------------------------
@@ -133,11 +136,19 @@ Unlike the rest of this module, this arm has to run git: dirtiness lives in
 the index and the object store. Every probe runs with the location variables
 scrubbed, optional locks off, and a declared timeout, and it fails CLOSED --
 a probe that errors or times out, an unresolvable ``cd`` ahead of the
-restore, a path operand the shell would expand (variables, ``~``, brace
-expansion), ``--pathspec-from-file``, and a ``--git-dir``/``--work-tree``
+restore, ``--pathspec-from-file``, and a ``--git-dir``/``--work-tree``
 override -- flag or ``GIT_DIR``/``GIT_WORK_TREE`` assignment -- are all
 refused, because in each case whether the command destroys work cannot be
-determined. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
+determined.
+
+An operand the shell computes (a variable, ``~``, a substitution, brace
+expansion) is not refused for being computed (OMN-17427). A variable the
+environment or an earlier assignment in the command resolves is read. One
+that cannot be resolved is judged by the worst thing it could name: a path
+operand becomes the whole tree, a source operand credits nothing as already
+saved. The restore is then refused exactly when some path of the tree holds
+work that exists nowhere else, so a clean tree passes and a tree holding
+uncommitted work does not. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
 refused on the same ground, since it may be a branch switch or a path
 restore; the refusal names ``git switch`` as the unambiguous verb. A
 conflicted path is judged too: ``--ours``/``--theirs``/``-m`` rewrite its
@@ -165,10 +176,9 @@ import argparse
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Final
 
@@ -180,10 +190,14 @@ from collections import ChainMap  # noqa: E402
 from collections.abc import Mapping  # noqa: E402
 
 from shell_words import (  # noqa: E402
+    Operator,
+    ShellSyntaxError,
     UnresolvableWord,
+    Word,
     expand_word,
     shadow,
     shadowed_names,
+    tokenize,
     unquoted,
 )
 
@@ -229,9 +243,13 @@ GATE_BIT_NAME: Final[str] = "SCOPE_GATE"
 
 TICKET: Final[str] = "OMN-18798"
 
-#: Shell separators that end one segment and begin another, matched on the
-#: TOKEN stream shlex produces rather than on raw text.
-_SEPARATORS: Final[frozenset[str]] = frozenset({";", "&&", "||", "|", "&"})
+#: Shell operators that end one segment and begin another, matched on the
+#: OPERATOR tokens the shared tokenizer produces (OMN-17427) and never on the
+#: text of a word, so a quoted semicolon (an argument of `find -exec`) ends
+#: nothing. A newline ends a command exactly as a semicolon does.
+_SEPARATORS: Final[frozenset[str]] = frozenset(
+    {";", ";;", "&", "&&", "|", "||", "|&", "\n"}
+)
 
 #: Wrapper programs stripped before a segment's program is read, so
 #: `sudo git reset --hard` is still a git reset.
@@ -375,29 +393,39 @@ def load_policy(path: Path | None = None) -> Policy:
     )
 
 
-def _tokenize(command: str) -> list[str] | None:
-    """Tokenise a command, or return None when it cannot be tokenised."""
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
-    lexer.whitespace_split = True
-    try:
-        return list(lexer)
-    except ValueError:
-        return None
-
-
 def _segments(command: str) -> list[list[str]] | None:
-    tokens = _tokenize(command)
-    if tokens is None:
+    """The simple commands of ``command``, each as its dequoted words.
+
+    OMN-17427. This read the command with ``shlex``, which is not a shell
+    reader. An apostrophe in a here-document body made the whole command
+    "untokenisable", and the raw-text fallback then refused any command whose
+    prose said ``git`` next to ``merge``, ``push`` or ``branch``. A newline
+    was plain whitespace, so the second line of ``cd x`` then
+    ``git -C <registry clone> reset --hard`` joined the first line's segment
+    and was never read as a git command at all. The shared tokenizer the
+    worktree and PR-body guards already use ends a command at a newline, keeps
+    a here-document body and a comment out of the command list, and fails
+    only on a genuine syntax error (an unterminated quote or substitution).
+    A subshell parenthesis stays a word of its own, which ``_peel_grouping``
+    reads.
+    """
+    try:
+        tokens = tokenize(command)
+    except ShellSyntaxError:
         return None
     segments: list[list[str]] = []
     current: list[str] = []
     for tok in tokens:
-        if tok in _SEPARATORS:
-            if current:
-                segments.append(current)
-            current = []
-        else:
-            current.append(tok)
+        if isinstance(tok, Operator):
+            if tok.text in _SEPARATORS:
+                if current:
+                    segments.append(current)
+                current = []
+            else:
+                current.append(tok.text)
+        elif isinstance(tok, Word):
+            current.append(tok.text)
+        # A HereDoc is data handed to a program, never a command line.
     if current:
         segments.append(current)
     return segments
@@ -1107,6 +1135,11 @@ class _RestoreShape:
     #: overlay mode leaves a path the source does not carry untouched;
     #: no-overlay removes it. `checkout` defaults to overlay, `restore` not.
     overlay: bool
+    #: OMN-17427. The source is a tree-ish the shell computes (`$SHA`,
+    #: `$(git rev-parse ...)`), so what it carries is unknown. Every named
+    #: path is then assumed overwritten with content the guard cannot credit
+    #: as a copy of what is being lost.
+    source_unknown: bool = False
 
 
 def resolve_worktree_roots(
@@ -1343,22 +1376,72 @@ def _parse_restore(
     return _restore_shape(args)
 
 
-def _require_literal(shape: _RestoreShape) -> None:
-    for operand in (*shape.paths, *([shape.source] if shape.source else [])):
-        # `{a,b}` is brace expansion: git would be asked about a literal
-        # pathspec that matches nothing, while the shell hands the real
-        # command both files. Globs are left alone -- git's own pathspec
-        # globbing matches a superset of what the shell expands.
-        if (
-            "$" in operand
-            or "`" in operand
-            or operand.startswith("~")
-            or ("{" in operand and "}" in operand)
-        ):
-            raise _Indeterminate(
-                f"the operand {operand!r} is expanded by the shell, so what "
-                "it names cannot be read from the command"
-            )
+#: The pathspec that names every path of the repository, whatever directory
+#: git runs in. It stands in for an operand the shell computes.
+_WHOLE_TREE: Final[str] = ":/"
+
+
+def _is_shell_computed(operand: str) -> bool:
+    """Does the shell compute this operand, so the command text cannot name it?
+
+    `{a,b}` is brace expansion: git would be asked about a literal pathspec
+    that matches nothing, while the shell hands the real command both files.
+    Globs are left alone -- git's own pathspec globbing matches a superset of
+    what the shell expands.
+    """
+    return (
+        "$" in operand
+        or "`" in operand
+        or operand.startswith("~")
+        or ("{" in operand and "}" in operand)
+    )
+
+
+def _read_operand(operand: str, scope: Scope) -> str:
+    """The operand as the shell will hand it to git, when it can be read.
+
+    OMN-17427. An operand naming a variable the environment or an earlier
+    assignment in this command resolves to one word is that word. Anything
+    else is returned unchanged and is left to ``_widen_computed_operands``.
+    """
+    if "$" not in operand and not operand.startswith("~"):
+        return operand
+    value = _expand_path(operand, scope)
+    if value is None or len(value.split()) != 1:
+        return operand
+    return value
+
+
+def _widen_computed_operands(shape: _RestoreShape) -> _RestoreShape:
+    """Judge an operand the shell computes by the worst thing it could name.
+
+    OMN-17427. This was ``_require_literal``, which refused every restore with
+    an operand the shell computes (``git checkout "$SHA" -- <path>``,
+    ``git restore "$F"``), so a lane whose worktree held nothing to lose was
+    refused all the same, on the grounds that "what it names cannot be read".
+    What matters is what could be lost, not what is named:
+
+    * a path the shell computes may name any path of the repository, so the
+      named paths become the whole tree, and the restore is refused exactly
+      when SOME path of the tree holds work that exists nowhere else;
+    * a source the shell computes carries unknown content, so it can credit
+      no path as already saved, and only the declared reachable refs can.
+
+    A clean tree therefore passes, and a tree holding uncommitted work is
+    refused, as before.
+    """
+    paths = shape.paths
+    if any(_is_shell_computed(path) for path in paths):
+        paths = (_WHOLE_TREE,)
+    source_unknown = shape.source is not None and _is_shell_computed(shape.source)
+    return _RestoreShape(
+        source=shape.source,
+        paths=paths,
+        writes_index=shape.writes_index,
+        writes_worktree=shape.writes_worktree,
+        overlay=shape.overlay,
+        source_unknown=source_unknown,
+    )
 
 
 def _parse_porcelain(raw: bytes) -> list[tuple[str, str]]:
@@ -1484,7 +1567,11 @@ def _paths_losing_work(
         raise _Indeterminate("a matched path contains a newline")
     index_blobs, conflicted = _index_blobs(git_root, paths, timeout)
     worktree_blobs = _worktree_blobs(git_root, paths, timeout)
-    if shape.source is None:
+    if shape.source_unknown:
+        # Every dirty path is assumed rewritten from a tree whose content
+        # matches nothing, so only a declared reachable ref can save it.
+        source_blobs = dict.fromkeys(paths, "")
+    elif shape.source is None:
         source_blobs = index_blobs
     else:
         read = _tree_blobs(git_root, shape.source, paths, timeout)
@@ -1600,11 +1687,15 @@ def _restore_refusal(
     target_known: bool,
     registry_root: Path | None,
     worktree_roots: tuple[Path, ...],
+    scope: Scope,
     env_relocated: bool = False,
 ) -> str | None:
     """Why this path restore is refused, or None when it discards nothing."""
     if invocation.subcommand not in policy.restore_subcommands:
         return None
+    invocation = replace(
+        invocation, args=tuple(_read_operand(arg, scope) for arg in invocation.args)
+    )
     relocated = env_relocated or any(
         flag.split("=", 1)[0] in _RELOCATING_GLOBAL_FLAGS
         for flag in invocation.global_flags
@@ -1643,7 +1734,7 @@ def _restore_refusal(
                 "an earlier cd, or its -C operand, could not be resolved, so "
                 "neither can the tree it writes"
             )
-        _require_literal(shape)
+        shape = _widen_computed_operands(shape)
         lost = _paths_losing_work(shape, target_dir, git_root, policy)
     except _Indeterminate as exc:
         return _render_restore_indeterminate(policy, invocation, str(exc))
@@ -1890,6 +1981,7 @@ def evaluate_bash_command(
             target_known,
             registry_root,
             worktree_roots,
+            scope,
             env_relocated=exported_relocation or _assigns_git_location(segment),
         )
         if restore is not None:

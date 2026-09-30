@@ -587,6 +587,147 @@ def _split_inline(word: Word) -> Word | None:
     return None
 
 
+#: Characters that make a ``sed`` pattern anything other than the literal text
+#: it spells, in basic or extended syntax alike. A pattern free of all of them
+#: matches exactly its own characters, so the substitution is the same
+#: ``str.replace`` in every ``sed`` dialect.
+_SED_PATTERN_SPECIAL = frozenset("\\.[]*^$+?(){}|")
+
+#: Characters that make a ``sed`` replacement anything other than literal text.
+_SED_REPLACEMENT_SPECIAL = frozenset("\\&\n")
+
+#: A ``sed`` script that only prints lines: an optional line range, then ``p``.
+_SED_PRINT_ONLY = re.compile(r"(?:(?:\d+|\$)(?:,(?:\d+|\$))?)?p")
+
+
+@dataclass(frozen=True)
+class _SedPlan:
+    """One ``sed`` command read as a filter over its files, or standard input."""
+
+    in_place: bool
+    suffix: str
+    #: ``-n``: nothing is printed except by a ``p`` command.
+    quiet: bool
+    #: ``(pattern, replacement, every)`` in the order ``sed`` applies them to
+    #: each line.
+    edits: tuple[tuple[str, str, bool], ...]
+    files: tuple[Word, ...]
+
+
+def _sed_substitution(script: str) -> tuple[str, str, bool] | None:
+    """``(pattern, replacement, every)`` for ``s<d>literal<d>literal<d>[g]``."""
+    if len(script) < 5 or script[0] != "s":
+        return None
+    delimiter = script[1]
+    if delimiter.isalnum() or delimiter.isspace() or delimiter == "\\":
+        return None
+    parts = script[2:].split(delimiter)
+    if len(parts) != 3 or parts[2] not in ("", "g"):
+        return None
+    pattern, replacement, flags = parts
+    if not pattern or _SED_PATTERN_SPECIAL & set(pattern):
+        return None
+    if _SED_REPLACEMENT_SPECIAL & set(replacement):
+        return None
+    return pattern, replacement, flags == "g"
+
+
+def _parse_sed(args: list[Word]) -> _SedPlan | None:
+    """Read a ``sed`` command, or None when what it does cannot be computed.
+
+    OMN-17427. ``sed`` was treated as a program that may rewrite any file it
+    names, so a body file it merely printed or filtered made every later edit
+    from that file "unknown", and a literal substitution the guard could just
+    apply was refused too. What is modelled is what any ``sed`` reads the same
+    way:
+
+    * a script that only prints (``-n`` with an optional line range and ``p``),
+      and a substitution whose pattern and replacement are literal text,
+      neither of which can write a file, run a command or read another one;
+    * ``-i`` in the two spellings that mean one thing to both the BSD and the
+      GNU ``sed``: an attached suffix (``-i.bak``), and the BSD idiom ``-i ''``
+      whose empty suffix is a separate word. A bare ``-i`` followed by a script
+      is a suffix to BSD ``sed`` and an in-place edit to GNU ``sed``, so it is
+      not read.
+
+    Anything else -- a regular expression, a ``w`` or ``e`` command, a script
+    file, several commands in one script, a long option -- is not modelled and
+    leaves the file unknown, as before.
+    """
+    in_place = False
+    suffix = ""
+    quiet = False
+    scripts: list[str] = []
+    files: list[Word] = []
+    index = 0
+    options_done = False
+    while index < len(args):
+        word = args[index]
+        text = word.text
+        index += 1
+        if options_done or not text.startswith("-") or text == "-":
+            if not word.is_plain and not files and not scripts:
+                return None  # a script the shell computes
+            if not scripts and not files:
+                scripts.append(text)
+            else:
+                files.append(word)
+            continue
+        if text == "--":
+            options_done = True
+            continue
+        if text.startswith("--"):
+            return None
+        cluster = text[1:]
+        for pos, letter in enumerate(cluster):
+            if letter in "nEr":
+                quiet = quiet or letter == "n"
+            elif letter == "e":
+                rest = cluster[pos + 1 :]
+                if rest:
+                    scripts.append(rest)
+                elif index < len(args) and args[index].is_plain:
+                    scripts.append(args[index].text)
+                    index += 1
+                else:
+                    return None
+                break
+            elif letter == "i":
+                in_place = True
+                rest = cluster[pos + 1 :]
+                if rest:
+                    suffix = rest
+                elif index < len(args) and args[index].text == "":
+                    index += 1
+                else:
+                    return None
+                break
+            else:
+                return None
+    if not scripts or (quiet and in_place):
+        return None
+    edits: list[tuple[str, str, bool]] = []
+    for script in scripts:
+        substitution = _sed_substitution(script)
+        if substitution is not None:
+            edits.append(substitution)
+        elif not (quiet and _SED_PRINT_ONLY.fullmatch(script)):
+            return None
+    return _SedPlan(in_place, suffix, quiet, tuple(edits), tuple(files))
+
+
+def _sed_transform(text: str, edits: tuple[tuple[str, str, bool], ...]) -> str:
+    """``text`` after ``sed`` applies each literal substitution to each line."""
+    lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        body = line.rstrip("\n")
+        ending = line[len(body) :]
+        for pattern, replacement, every in edits:
+            body = body.replace(pattern, replacement, -1 if every else 1)
+        lines.append(body + ending)
+    return "".join(lines)
+
+
 class _Model:
     """The files a command writes, followed in order, and how to read them."""
 
@@ -775,6 +916,15 @@ class _Model:
             )
         if program == "tee":
             return self.stdin(cmd)
+        if program == "sed":
+            plan = _parse_sed(args)
+            if plan is not None and not plan.in_place and not plan.quiet:
+                text = (
+                    "".join(self.read(f, "the file") for f in plan.files)
+                    if plan.files
+                    else self.stdin(cmd)
+                )
+                return _sed_transform(text, plan.edits)
         if program == "echo":
             newline = "\n"
             if args and args[0].text == "-n":
@@ -917,6 +1067,13 @@ class _Model:
 
         if not program:
             return
+        if program == "sed":
+            plan = _parse_sed(args)
+            if plan is not None:
+                if plan.in_place:
+                    self._apply_sed_in_place(cmd, plan, who)
+                # A filter writes only through a redirection, handled above.
+                return
         runs_a_script = "/" in next(
             (w.text for w in cmd.words if w.assignment() is None), ""
         )
@@ -925,6 +1082,28 @@ class _Model:
             return
         if program not in _NO_FILE_WRITES:
             self.taints.append(_Taint(self.at, who, self._mention_text(cmd)))
+
+    def _apply_sed_in_place(self, cmd: _Cmd, plan: _SedPlan, who: str) -> None:
+        """Record the text ``sed -i`` leaves in each file it names.
+
+        A file whose text or path the guard cannot read is left unknown, which
+        is what an unmodelled ``sed`` did to every file it mentioned.
+        """
+        if not plan.files:
+            return  # `sed -i` with no file reads no input and edits nothing
+        try:
+            results = []
+            for word in plan.files:
+                path = self.path(word)
+                before = self.read(word, "the file")
+                results.append((path, before, _sed_transform(before, plan.edits)))
+        except _Unknown:
+            self.taints.append(_Taint(self.at, who, self._mention_text(cmd)))
+            return
+        for path, before, after in results:
+            if plan.suffix:
+                self.write(path + plan.suffix, before, None)
+            self.write(path, after, None)
 
     def _mention_text(self, cmd: _Cmd) -> str:
         """Every word of ``cmd``, as written and as expanded, and its

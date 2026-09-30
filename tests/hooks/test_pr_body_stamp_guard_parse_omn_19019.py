@@ -537,3 +537,117 @@ def test_hook_refuses_a_lossy_input_payload(tmp_path: Path, fake_gh: Path) -> No
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert STAMP in result.stdout
+
+
+# --------------------------------------------------------------------------
+# OMN-17427 -- ``sed`` was "a program that may rewrite any file it names", so
+# a body file it only printed, or a literal substitution the guard could just
+# apply, made every later edit from that file unreadable (ledger FRICTION rows
+# of 2026-09-29T20:51Z and T22:43Z). What sed does is now read where every
+# sed reads it the same way, and nowhere else.
+# --------------------------------------------------------------------------
+
+
+def _fetch_edit_sed(sp: Path, sed: str, body: str = "b.md", src: str = "b.md") -> str:
+    return (
+        f"S={sp}; gh pr view 42 --repo {REPO} --json body -q .body > $S/{src}; "
+        f"{sed}; gh pr edit 42 --repo {REPO} --body-file $S/{body}"
+    )
+
+
+ADMITTED_SED_SHAPES = {
+    "bsd-in-place-literal-substitution": "sed -i '' 's/Fixture/Changed/' $S/b.md",
+    "in-place-attached-suffix": "sed -i.bak 's/Fixture/Changed/g' $S/b.md",
+    "in-place-two-scripts": "sed -i '' -e 's/Fixture/A/' -e 's|body|text|' $S/b.md",
+    "print-a-line-range": "sed -n '1,3p' $S/b.md",
+    "print-last-line": "sed -n '$p' $S/b.md",
+    "filter-to-stdout": "sed 's/Fixture/Changed/' $S/b.md > /dev/null",
+}
+
+
+@pytest.mark.parametrize("name", sorted(ADMITTED_SED_SHAPES))
+def test_a_sed_that_keeps_the_stamp_line_is_admitted(
+    name: str, policy: Policy, tmp_path: Path
+) -> None:
+    command = _fetch_edit_sed(tmp_path, ADMITTED_SED_SHAPES[name])
+    findings = check_bash_command(command, policy, reader(LIVE), cwd=str(tmp_path))
+    assert findings == [], (name, render_block_reason(findings))
+
+
+def test_a_filtering_sed_feeds_the_body_it_writes(
+    policy: Policy, tmp_path: Path
+) -> None:
+    keep = (
+        f"S={tmp_path}; gh pr view 42 --repo {REPO} --json body -q .body > $S/a.md; "
+        f"sed 's/Fixture/Changed/g' $S/a.md > $S/b.md; "
+        f"gh pr edit 42 --repo {REPO} --body-file $S/b.md"
+    )
+    assert check_bash_command(keep, policy, reader(LIVE), cwd=str(tmp_path)) == []
+    drop = keep.replace("s/Fixture/Changed/g", f"s/{STAMP}//")
+    assert _kinds(check_bash_command(drop, policy, reader(LIVE))) == ["dropped_stamp"]
+
+
+@pytest.mark.parametrize(
+    "sed",
+    [
+        # The substitution changes the stamp line itself.
+        f"sed -i '' 's/{STAMP}/{_PREFIX}OCC#1/' $S/b.md",
+        "sed -i.bak 's/OCC#9999/OCC#1/g' $S/b.md",
+        # A later script undoes an earlier one that kept it.
+        "sed -i '' -e 's/Fixture/X/' -e 's/OCC#9999/OCC#2/' $S/b.md",
+        # The stamp line is emptied.
+        f"sed -i '' 's/{STAMP}//' $S/b.md",
+    ],
+)
+def test_a_sed_that_drops_the_stamp_line_is_refused(
+    sed: str, policy: Policy, tmp_path: Path
+) -> None:
+    findings = check_bash_command(
+        _fetch_edit_sed(tmp_path, sed), policy, reader(LIVE), cwd=str(tmp_path)
+    )
+    assert _kinds(findings) == ["dropped_stamp"], render_block_reason(findings)
+
+
+@pytest.mark.parametrize(
+    "sed",
+    [
+        # A regular expression: the guard does not evaluate one.
+        "sed -i '' 's/^Fixture/X/' $S/b.md",
+        "sed -i '' 's/Fix.*/X/' $S/b.md",
+        # A command that writes another file, or runs one.
+        "sed -i '' 'w /tmp/elsewhere' $S/b.md",
+        "sed -i '' '1d' $S/b.md",
+        # Several commands in one script.
+        "sed -i '' 's/a/b/;s/c/d/' $S/b.md",
+        # A script file, and a computed script.
+        "sed -i '' -f $S/script.sed $S/b.md",
+        'sed -i "" "s/a/$X/" $S/b.md',
+        # Bare -i: a suffix to BSD sed, an in-place edit to GNU sed.
+        "sed -i 's/Fixture/X/' $S/b.md",
+        # -n with a substitution and no p prints nothing; -n -i empties the file.
+        "sed -n -i '' 's/Fixture/X/' $S/b.md",
+        # A long option.
+        "sed --in-place 's/Fixture/X/' $S/b.md",
+    ],
+)
+def test_a_sed_the_guard_cannot_read_is_still_refused_with_the_workaround(
+    sed: str, policy: Policy, tmp_path: Path
+) -> None:
+    findings = check_bash_command(
+        _fetch_edit_sed(tmp_path, sed), policy, reader(LIVE), cwd=str(tmp_path)
+    )
+    assert _kinds(findings) == ["unreadable_new_body"], render_block_reason(findings)
+    assert WORKAROUND in render_block_reason(findings)
+
+
+def test_a_sed_after_an_unreadable_writer_does_not_launder_the_file(
+    policy: Policy, tmp_path: Path
+) -> None:
+    """A literal substitution applied to a file a script may have rewritten."""
+    command = (
+        f"S={tmp_path}; gh pr view 42 --repo {REPO} --json body -q .body > $S/b.md; "
+        f"python3 $S/rewrite.py $S/b.md; sed -i '' 's/Fixture/X/' $S/b.md; "
+        f"gh pr edit 42 --repo {REPO} --body-file $S/b.md"
+    )
+    findings = check_bash_command(command, policy, reader(LIVE), cwd=str(tmp_path))
+    assert _kinds(findings) == ["unreadable_new_body"]

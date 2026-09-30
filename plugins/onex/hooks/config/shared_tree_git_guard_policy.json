@@ -184,9 +184,11 @@
         "",
         "It fails CLOSED. A git probe that errors or exceeds",
         "git_probe_timeout_seconds, more dirty matches than restore_max_dirty_paths,",
-        "an unresolvable cd or -C, a shell-expanded operand, --pathspec-from-file,",
-        "and a --git-dir/--work-tree override are each refused, because whether the",
-        "command destroys work cannot then be known."
+        "an unresolvable cd or -C, --pathspec-from-file, and a --git-dir/--work-tree",
+        "override are each refused, because whether the command destroys work cannot",
+        "then be known. An operand the shell computes is judged by the worst thing it",
+        "could name (OMN-17427): the whole tree, and a source that saves nothing, so a",
+        "clean tree passes and a tree holding uncommitted work is refused."
     ],
     "ticket": "OMN-18798",
     "rule": "Operating Rule 19",
