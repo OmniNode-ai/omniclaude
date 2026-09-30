@@ -112,6 +112,24 @@ def _canonical_lock_path() -> Path:
     return _repo_root() / "uv.lock"
 
 
+def _venv_builder_lock_path(checkout_lock: Path) -> Path:
+    """The lock this host's live venvs are built from (OMN-20131).
+
+    ``ensure-plugin-venv.sh`` builds the plugin venv from the canonical omniclaude clone
+    and the hook interpreter is that clone's own ``.venv``, so on a host with a
+    canonical clone the live venvs answer to the clone's lock, not to the lock
+    of whichever checkout runs this gate. A worktree that stages a new lock
+    cannot have its venvs rebuilt from it until it lands; judging them against
+    it refused every lock change with no remedy. With no canonical clone (CI,
+    a lab host) the checkout's own lock is the only lock there is.
+    """
+    clone = git_source_pins.canonical_clone("omniclaude")
+    if clone is None:
+        return checkout_lock
+    builder_lock = clone / "uv.lock"
+    return builder_lock if builder_lock.is_file() else checkout_lock
+
+
 def _canonical_lock_hash(lock_path: Path) -> str:
     """SHA-256 of ``uv.lock`` — must match ensure-plugin-venv.sh's formula."""
     return hashlib.sha256(lock_path.read_bytes()).hexdigest()
@@ -444,10 +462,27 @@ def main(argv: list[str] | None = None) -> int:
     # that looked at nothing (OMN-18663).
     print(hook_interpreter.describe_hook_interpreter())
 
+    # The live venvs answer to the lock their builder installs from, which on a
+    # host with a canonical clone is that clone's lock, not this checkout's
+    # (OMN-20131). This checkout's lock was proven parseable above.
+    builder_lock = _venv_builder_lock_path(lock_path)
+    live_hash, live_pins = canonical_hash, pins
+    if builder_lock.resolve() != lock_path.resolve():
+        try:
+            live_hash = _canonical_lock_hash(builder_lock)
+            live_pins = _canonical_pins(builder_lock)
+        except (ValueError, tomllib.TOMLDecodeError) as exc:
+            print(
+                f"ERROR: the venv builder's lock {builder_lock} is unparseable: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+    print(f"live venvs judged against {builder_lock}")
+
     # live-skew mode — only when a live daemon venv exists (local dev).
-    findings = _check_live_skew(pins, canonical_hash)
+    findings = _check_live_skew(live_pins, live_hash)
     # the interpreter the hooks actually run on (OMN-18746)
-    findings += _check_hook_interpreter_skew(pins)
+    findings += _check_hook_interpreter_skew(live_pins)
     # the orphan that left the chain in 035707dd2 must stay gone (OMN-18746)
     findings += hook_interpreter.check_orphan_absent()
 
