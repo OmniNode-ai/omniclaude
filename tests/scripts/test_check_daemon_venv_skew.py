@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import importlib.util
 import os
@@ -279,6 +280,7 @@ def test_resolver_honors_default_path_when_env_unset(
 # canonical clone carries: they cannot be rebuilt from the new lock until it
 # lands, so that refusal has no remedy.
 
+_REAL_CANONICAL_CLONE = skew.git_source_pins.canonical_clone
 _BUMPED_LOCK = _SAMPLE_LOCK.replace('version = "1.17.3"', 'version = "1.17.4"')
 
 
@@ -298,7 +300,13 @@ def _host(
         clone = registry / "omniclaude"
         (clone / ".git").mkdir(parents=True)
         (clone / "uv.lock").write_text(canonical_lock, encoding="utf-8")
-    monkeypatch.setenv("OMNI_HOME", str(registry))
+    # The real clone resolver, pointed at this temp registry instead of the
+    # host's own clones.
+    monkeypatch.setattr(
+        skew.git_source_pins,
+        "canonical_clone",
+        functools.partial(_REAL_CANONICAL_CLONE, registry_root=str(registry)),
+    )
     worktree = tmp_path / "worktree"
     (worktree / "scripts").mkdir(parents=True)
     (worktree / "uv.lock").write_text(worktree_lock, encoding="utf-8")
