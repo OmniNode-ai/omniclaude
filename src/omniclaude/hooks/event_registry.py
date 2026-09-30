@@ -69,7 +69,8 @@ Single-owner registry (OMN-15967 / OMN-13146):
 
     1. ``daemon.health.probe``, ``delegation.request`` and
        ``pr.state.observed`` (emitted by omnimarket's PR watcher node,
-       OMN-19999) are daemon-side event types — no hook client ever
+       OMN-19999) and the ``work.ledger.*`` row events (emitted by
+       omnimarket's work-ledger emit node, OMN-19513) are daemon-side event types — no hook client ever
        constructs them, so there is no client-side registration to
        project. See
        ``generate_event_registry.DAEMON_INTERNAL_EVENT_TYPES``.
