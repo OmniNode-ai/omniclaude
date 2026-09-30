@@ -64,6 +64,21 @@ DAEMON_INTERNAL_EVENT_TYPES: frozenset[str] = frozenset(
     {
         "daemon.health.probe",
         "delegation.request",
+        # omnimarket-owned work-ledger and PR-watcher events. They are written
+        # by lanes and watchers through the daemon, never by a Claude Code hook
+        # client, so there is nothing client-side to project.
+        "pr.state.observed",
+        "work.ledger.ack",
+        "work.ledger.claim",
+        "work.ledger.correction",
+        "work.ledger.friction",
+        "work.ledger.hold",
+        "work.ledger.msg",
+        "work.ledger.operator_consent",
+        "work.ledger.release",
+        "work.ledger.ruling",
+        "work.ledger.status",
+        "work.ledger.terminal",
     }
 )
 
