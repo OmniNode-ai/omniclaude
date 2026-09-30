@@ -31,7 +31,7 @@
 #   --containers         answer the Docker question yes in advance
 #   --no-containers      answer it no in advance
 #                        (neither: the one question is asked after preflight)
-#   --provider NAME      openrouter | gemini | none   (default: ask on a terminal, else none)
+#   --provider NAME      openrouter | gemini | glm | none   (default: ask on a terminal, else none)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else $OMNI_HOME, else ~/code/omni)
 #   --restart            forget completed phases and run every phase again
 #   --reissue-identity   request a fresh bus identity even if one is stored
@@ -104,8 +104,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-case "$PROVIDER" in ''|openrouter|gemini|none) ;; *)
-  printf 'lab-onboarding: --provider must be openrouter, gemini or none\n' >&2; exit 2 ;;
+case "$PROVIDER" in ''|openrouter|gemini|glm|none) ;; *)
+  printf 'lab-onboarding: --provider must be openrouter, gemini, glm or none\n' >&2; exit 2 ;;
 esac
 [ -n "$WORKSPACE" ] || { printf 'lab-onboarding: --workspace needs a directory\n' >&2; exit 2; }
 
@@ -807,6 +807,34 @@ sys.exit(0 if resolve_byok_provider_backend(sys.argv[1]) is not None else 1)
 PY
 }
 
+provider_endpoints() { # slug -> the endpoint URLs the catalogue routes that provider's keys to (routable plans only)
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$1" <<'PY' 2>>"$LOG"
+import sys
+from importlib.resources import files
+import yaml
+doc = yaml.safe_load(files("omnimarket").joinpath("configs/byok_provider_backends.v1.yaml").read_text())
+urls = set()
+def walk(node):
+    if isinstance(node, dict):
+        if node.get("provider") == sys.argv[1] and node.get("endpoint_url") and node.get("customer_routable", True):
+            urls.add(node["endpoint_url"])
+        for v in node.values(): walk(v)
+    elif isinstance(node, list):
+        for v in node: walk(v)
+walk(doc)
+print(" ".join(sorted(urls)))
+PY
+}
+
+provider_label() {
+  case "$1" in
+    openrouter) echo "OpenRouter" ;;
+    gemini) echo "Gemini (a Google AI Studio API key)" ;;
+    glm) echo "GLM (a z.ai general API key; Coding Plan keys are not allowed)" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 key_stored() { onex_run secret list 2>/dev/null | grep -qE "^[[:space:]]+llm\.$1\.api_key[[:space:]]"; }
 
 write_lab_model_overrides() {
@@ -823,6 +851,31 @@ backends:
     endpoint_url: "$url"
     model_name: "$model"
 YAML
+}
+
+# A lab-model overrides file this script wrote on an earlier run declares a local
+# model, and routing takes a declared local model before a registered key, so the
+# key would never be used. Moved aside (never deleted) once a key is chosen. A
+# file the developer wrote is left alone and named.
+retire_lab_model_overrides() {
+  local f="$HOME/.omninode/delegation/bifrost_overrides.yaml"
+  [ -f "$f" ] || return 0
+  if head -n 1 "$f" | grep -q '^# Written by lab-onboarding'; then
+    mv "$f" "$f.pre-key.$STAMP"
+    say "  Moved aside the lab-model overrides an earlier run wrote, so your key is used."
+  else
+    say "  ⚠ $f declares a local model; it is used before your key. Remove it if you want the key used."
+  fi
+}
+
+# The provider's own words from the latest capture log (a delegation that fails on
+# the provider is retried and ends in a timeout that names none of them).
+provider_error() {
+  # shellcheck disable=SC2012  # onex names its capture files; newest-first is what matters
+  local c; c="$(ls -t "$HOME/.onex_state/captures/"*.log 2>/dev/null | head -n 1)"
+  [ -n "$c" ] || return 0
+  grep -A3 'provider response' "$c" | grep -E '"message"' | tail -n 1 |
+    sed -e 's/^[^:]*"message": *"//' -e 's/",\{0,1\} *$//' | cut -c1-300
 }
 
 lab_model_reachable() { curl -fsS -m 8 "${1%/chat/completions}/models" | grep -q "$2"; }
@@ -870,35 +923,47 @@ phase4() {
   # Pick the model path.
   local choice="$PROVIDER"
   if [ -z "$choice" ]; then
-    if key_stored openrouter; then choice=openrouter
+    local p
+    for p in openrouter gemini glm; do key_stored "$p" && { choice=$p; break; }; done
+    if [ -n "$choice" ]; then :
     elif [ "$IS_TTY" -eq 1 ]; then
       say ""
       say "  Which model should your delegations use?"
-      say "    1) my own OpenRouter key     2) my own Gemini key     3) the lab model server (no key)"
-      printf '  Choose 1, 2 or 3 [3]: '
+      say "    1) my own OpenRouter key"
+      say "    2) my own Gemini key (Google AI Studio)"
+      say "    3) my own GLM key (z.ai general API; Coding Plan keys are not allowed)"
+      say "    4) the lab model server (no key)"
+      printf '  Choose 1, 2, 3 or 4 [4]: '
       local a; IFS= read -r a
-      case "$a" in 1) choice=openrouter ;; 2) choice=gemini ;; *) choice=none ;; esac
+      case "$a" in 1) choice=openrouter ;; 2) choice=gemini ;; 3) choice=glm ;; *) choice=none ;; esac
     else
       choice=none
     fi
   fi
 
-  if [ "$choice" = "gemini" ] || [ "$choice" = "openrouter" ]; then
+  if [ "$choice" != "none" ]; then
     if ! provider_offered "$choice"; then
-      say "  ⚠ onex does not route a $choice key yet (the provider catalogue declares it not offered)."
-      say "    It was not stored. An OpenRouter key reaches Gemini models; this run uses the lab model server."
+      say "  ⚠ This onex does not route a $choice key yet (its provider catalogue does not offer it)."
+      say "    It was not stored; this run uses the lab model server. An OpenRouter key reaches most models."
       choice=none
     elif key_stored "$choice"; then
       say "  Your $choice key is already stored; keeping it."
     else
-      read_secret "Paste your $choice API key (input is hidden; leave empty to skip):"
+      read_secret "Paste your $(provider_label "$choice") key (input is hidden; leave empty to skip):"
       if [ -n "$SECRET" ]; then
-        if printf '%s' "$SECRET" | onex_run secret set "llm.$choice.api_key" >>"$LOG" 2>&1; then
+        # The CLI decides the key's plan before storing it, and refuses one the
+        # catalogue does not allow (a z.ai Coding Plan key); its words are shown.
+        local refusal
+        if refusal="$(printf '%s' "$SECRET" | onex_run secret set "llm.$choice.api_key" 2>&1)"; then
+          printf '%s\n' "$refusal" >>"$LOG"
           say "  Stored your $choice key in the onex secret store."
         else
           SECRET=""
-          FAILED_STEP="store the $choice key"; LAST_ERR="$(last_log_lines)"
-          phase_fail "check the key, then run this again with --provider $choice"
+          printf '%s\n' "$refusal" >>"$LOG"
+          FAILED_STEP="store the $choice key"
+          LAST_ERR="$(printf '%s\n' "$refusal" | grep -E 'Error|refus|not ' | tail -n 3 | tr '\n' ' ' | cut -c1-400)"
+          say "  $LAST_ERR"
+          phase_fail "use a key the message above allows, then run this again with --provider $choice"
         fi
         SECRET=""
       else
@@ -908,6 +973,7 @@ phase4() {
     fi
   fi
   MODEL_CHOICE="$choice"
+  [ "$choice" != "none" ] && retire_lab_model_overrides
 
   if [ "$choice" = "none" ]; then
     retry "reach the lab model server" lab_model_reachable "$lab_url" "$lab_model" ||
@@ -917,13 +983,30 @@ phase4() {
   fi
 
   say "  Running one delegation…"
-  retry_capture "one onex delegate" delegate_hello ||
+  if ! retry_capture "one onex delegate" delegate_hello; then
+    local perr; perr="$(provider_error)"
+    if [ "$choice" != "none" ] && [ -n "$perr" ]; then
+      LAST_ERR="$choice said: $perr"
+      phase_fail "fix it on the provider's side (the message above names what), then run this again"
+    fi
     phase_fail "run 'onex delegate \"Reply with exactly one word: hello\"' to see the error"
+  fi
   endpoint="$(receipt_field "$CAPTURED" endpoint)"
   if [ "$choice" = "none" ] && [ -n "$endpoint" ] && [ "$endpoint" != "$lab_url" ]; then
     FAILED_STEP="check the delegation's endpoint"
     LAST_ERR="the receipt names $endpoint, not the lab model server $lab_url"
     phase_fail "something in your environment overrides the model; remove the profile lines shown in phase 0"
+  fi
+  if [ "$choice" != "none" ]; then
+    # Exact URL, not host: z.ai's Coding Plan and general API share a host.
+    local urls ok=0
+    urls="$(provider_endpoints "$choice")"
+    for p in $urls; do [ "$p" = "$endpoint" ] && ok=1; done
+    if [ "$ok" -ne 1 ]; then
+      FAILED_STEP="check the delegation went to your $choice key"
+      LAST_ERR="the receipt names ${endpoint:-no endpoint}, not a $choice route (${urls:-none declared})"
+      phase_fail "the key was stored but did not route; run 'onex secret list' and 'onex delegate --json \"hello\"' to see why"
+    fi
   fi
   say "  Delegation answered by $(receipt_field "$CAPTURED" model) at ${endpoint:-an endpoint the receipt does not name}"
   CAPTURED=""
