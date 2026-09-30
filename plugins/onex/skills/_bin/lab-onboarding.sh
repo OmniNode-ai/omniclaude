@@ -11,7 +11,7 @@
 #
 #   0 Preflight          reads the machine; changes nothing
 #   1 Base tools         Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv
-#   2 Workspace          the canonical clones, OMNI_HOME, PATH
+#   2 Workspace          the canonical clones, OMNIBASE_PATH (and legacy OMNI_HOME), PATH
 #   3 Tailnet            Tailscale installed and signed in to the OmniNode tailnet
 #   4 onex + model       dispatch venv, onex, local identity, one model path, one delegation
 #   5 Bus identity       this machine's lab principal, issued automatically; one lane delegation
@@ -32,7 +32,7 @@
 #   --no-containers      never set up Docker or the local stack
 #                        (neither: asked on a terminal; without one, containers are skipped)
 #   --provider NAME      openrouter | gemini | none   (default: ask on a terminal, else none)
-#   --workspace DIR      the workspace (default: $OMNI_HOME, else ~/code/omni)
+#   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else $OMNI_HOME, else ~/code/omni)
 #   --restart            forget completed phases and run every phase again
 #   --reissue-identity   request a fresh bus identity even if one is stored
 #   -h, --help           this text
@@ -80,7 +80,9 @@ case "$RETRIES" in ''|*[!0-9]*) RETRIES=3 ;; esac
 PREFLIGHT_ONLY=0
 WANT_CONTAINERS=""        # 1 --containers, 0 --no-containers, empty: ask
 PROVIDER=""
-WORKSPACE="${OMNI_HOME:-$HOME/code/omni}"
+# OMNIBASE_PATH is the workspace variable; OMNI_HOME is its legacy name, still
+# read by the reconcile scripts this run drives, so both are honoured and set.
+WORKSPACE="${OMNIBASE_PATH:-${OMNI_HOME:-$HOME/code/omni}}"
 RESTART=0
 REISSUE=0
 
@@ -635,7 +637,8 @@ write_profile_block() { # file
   awk -v b="$PROFILE_BEGIN" -v e="$PROFILE_END" '$0==b{skip=1} !skip{print} $0==e{skip=0}' "$f" >"$tmp"
   {
     printf '%s\n' "$PROFILE_BEGIN"
-    printf 'export OMNI_HOME="%s"\n' "$WORKSPACE"
+    printf 'export OMNIBASE_PATH="%s"\n' "$WORKSPACE"
+    printf 'export OMNI_HOME="%s"   # legacy name, still read by the reconcile scripts\n' "$WORKSPACE"
     # shellcheck disable=SC2016  # written literally; expands in the user's shell
     printf 'eval "$(%s shellenv)"\n' "$(brew_bin)"
     # shellcheck disable=SC2016
@@ -679,8 +682,8 @@ phase2() {
   done
   write_profile_block "$HOME/.zshrc"
   case "${SHELL:-}" in */bash) write_profile_block "$HOME/.bash_profile" ;; esac
-  export OMNI_HOME="$WORKSPACE"
-  say "  OMNI_HOME, Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
+  export OMNIBASE_PATH="$WORKSPACE" OMNI_HOME="$WORKSPACE"
+  say "  OMNIBASE_PATH (and legacy OMNI_HOME), Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
   if [ ! -f "${ONBOARD_LAB_FACTS:-$WORKSPACE/$LAB_FACTS_REL}" ]; then
     FAILED_STEP="read the lab's declared addresses"
     LAST_ERR="$LAB_FACTS_REL is missing from the omnibase_infra clone"
@@ -1212,7 +1215,7 @@ main() {
   hr
   say "Done. Set up: $SELECTED."
   say "Model: $([ "$MODEL_CHOICE" = none ] && echo "the lab model server" || echo "your $MODEL_CHOICE key")."
-  say "Open a new terminal (or run 'exec zsh') so OMNI_HOME and PATH take effect."
+  say "Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect."
   notify "Onboarding complete" "Every phase passed"
   printf 'result=COMPLETE\n' >>"$STATUS"
 }
