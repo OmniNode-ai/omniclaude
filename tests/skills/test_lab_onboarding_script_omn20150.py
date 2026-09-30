@@ -245,8 +245,9 @@ def test_one_question_after_preflight_decides_docker(
         "ONBOARD_TEST_ADMIN": "1",
     }
     script = (
-        f"set timeout 60; spawn /bin/bash {phase0_only}; "
-        f'expect "Also run the stack locally in Docker?"; send "{answer}\\r"; expect eof'
+        f"set timeout 60; spawn /bin/bash {phase0_only} --provider gemini; "
+        f'expect "Also run the stack locally in Docker?"; send "{answer}\\r"; '
+        'expect "key (input is hidden)"; send "not-a-real-key\\r"; expect eof'
     )
     result = subprocess.run(
         ["/usr/bin/expect", "-c", script],
@@ -261,3 +262,80 @@ def test_one_question_after_preflight_decides_docker(
         pytest.skip("the local stack's ports are held by something else on this host")
     assert "The lab is set up either way" in out
     assert outcome in out
+
+
+def _phase0_env(tmp_path: Path, **extra: str) -> dict[str, str]:
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)
+    (tmp_path / "run").mkdir(exist_ok=True)
+    return {
+        "HOME": str(home),
+        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+        "TMPDIR": str(tmp_path / "run") + "/",
+        "TERM": "dumb",
+        "ONBOARD_NOTIFY": "0",
+        "ONBOARD_TEST_NO_GUI": "1",
+        "ONBOARD_TEST_DISK_GB": "100",
+        "ONBOARD_TEST_ADMIN": "1",
+        **extra,
+    }
+
+
+def _phase0_only(tmp_path: Path) -> Path:
+    p = tmp_path / "phase0.sh"
+    p.write_text(SCRIPT.read_text().replace("\nmain\n", "\nphase0\n"))
+    return p
+
+
+def test_the_lab_model_is_not_a_provider(tmp_path: Path) -> None:
+    result = _run(tmp_path, "--provider", "none")
+    assert result.returncode == 2
+    assert "developers bring their own key" in result.stderr
+
+
+@macos_only
+def test_no_key_and_nobody_to_ask_stops_before_installing(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
+        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 1, result.stdout
+    assert "Nothing was installed" in result.stdout
+    assert sorted((tmp_path / "home").rglob("*")) == []
+
+
+@macos_only
+@pytest.mark.skipif(
+    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
+)
+@pytest.mark.parametrize(
+    ("key", "outcome"),
+    [("", "no key was given"), ("not-a-real-key", "Model key: received")],
+)
+def test_the_key_is_settled_in_preflight(
+    tmp_path: Path, key: str, outcome: str
+) -> None:
+    """Provider then key, both before anything installs; an empty key stops the run."""
+    script = (
+        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
+        'expect "Choose 1, 2 or 3:"; send "2\\r"; '
+        f'expect "key (input is hidden)"; send "{key}\\r"; expect eof'
+    )
+    result = subprocess.run(
+        ["/usr/bin/expect", "-c", script],
+        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout.replace("\r", "")
+    assert outcome in out
+    assert (
+        "not-a-real-key" not in out.split("key (input is hidden)")[-1]
+    )  # never echoed
+    assert sorted(p for p in (tmp_path / "home").rglob("*")) == []

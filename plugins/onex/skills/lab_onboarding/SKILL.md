@@ -23,7 +23,7 @@ args:
     description: "Answer the Docker question no in advance (lab only)"
     required: false
   - name: --provider
-    description: "Model key to use: openrouter | gemini | none (default: ask)"
+    description: "Your own model key's provider: openrouter | gemini | glm (default: asked). The lab's models are never used"
     required: false
   - name: --workspace
     description: "Workspace directory (default: $OMNIBASE_PATH, else ~/code/omni)"
@@ -85,13 +85,20 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/lab-onboarding.sh" --preflight-only <arg
   Desktop is installed but stopped, say the run will start it; if it is
   missing, say the run will install it. If the line says Docker is not
   offered, relay why: the lab alone covers delegations.
+- Then the model key. Developers bring their own key; the lab's models are
+  never used. Unless `--provider` was given, ask which provider their key is
+  from: OpenRouter, Gemini (a Google AI Studio key) or GLM (a z.ai general API
+  key; Coding Plan keys are refused). Pass it as `--provider openrouter|gemini|glm`.
+  The key itself is typed only in the Terminal window, at a hidden prompt that
+  comes right after preflight, before anything installs. If they have no key
+  yet, say where to get one and stop: the run refuses to start without one.
 
 If `--preflight-only` was the argument, stop here.
 
 ### 2. Start the run where the developer can answer prompts
 
 The run asks for the Mac administrator password (Homebrew, Xcode tools, Docker),
-a Tailscale sign-in, and optionally a provider key. A Claude Code tool call has no
+a Tailscale sign-in, and their model key (at the start, before anything installs). A Claude Code tool call has no
 terminal, so open one:
 
 ```bash
