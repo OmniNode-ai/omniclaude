@@ -233,6 +233,15 @@ def _sidecar_candidates(
     candidate that answers, so the glob over every project directory (1,476
     of them, 37 ms, on the operator Mac) runs only when the transcript-derived
     candidates did not. The candidates and their order are unchanged.
+
+    With a transcript path the glob does not run at all (OMN-20110). It could
+    not answer: a session id names one session directory, which the
+    transcript already locates, and a Workflow agent's sidecar sits under
+    ``subagents/workflows/<run id>/``, which the glob's pattern does not
+    match. Every hook event of every workflow agent paid for it anyway, 0.4
+    to 0.7 s at 24 concurrent captures over 1,478 project directories on
+    2026-09-30, the largest phase of the capture that blocked tool calls on
+    its 30 s budget.
     """
     name = f"agent-{agent_id}.meta.json"
     if transcript_path:
@@ -241,6 +250,7 @@ def _sidecar_candidates(
         yield transcript.with_suffix("") / "subagents" / name
         # already inside a session directory
         yield transcript.parent / "subagents" / name
+        return
     if session_id:
         root = os.environ.get(CLAUDE_PROJECTS_ENV)
         base = Path(root) if root else Path.home() / ".claude" / "projects"
