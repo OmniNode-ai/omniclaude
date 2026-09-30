@@ -1,6 +1,15 @@
 {
- "base": "b5f04266bb630d415a09a9d29bf685b2f7b56e12",
+ "base": "29030cf928216379711cbdb184c8c08d11c13b0e",
  "cases": {
+  "canonical\tB=$(cat base); git -C {WS}/omnibase_infra worktree add -b $B {DEST}": {
+   "pre_tool_use_worktree_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: the unquoted argument `$B` cannot be resolved: `$B` is set in this command to a value the guard cannot resolve. To disable this guard: onex hooks disable WORKTREE_GUARD"
+    },
+    "rc": 2
+   }
+  },
   "canonical\taws iam create-access-key --user-name operator-k8s": {
    "pre_tool_use_credential_rotation_guard.sh": {
     "out": {
@@ -188,6 +197,9 @@
    }
   },
   "canonical\tbash <<EOF\ngit worktree add {DEST}\nEOF": {},
+  "canonical\tcat <<'EOF' > note.md\nit's a git merge note, push later\nEOF": {},
+  "canonical\tcat <<'EOF' > note.md\nit's a note\nEOF\ngit -C {REG} reset --hard": {},
+  "canonical\tcat <<'EOF' | wc -l\ndon't\nEOF\ncd {REG} && git switch main": {},
   "canonical\tcat >": {},
   "canonical\tcat > /tmp/note.md <<'MD'": {},
   "canonical\tcat > /tmp/note.md <<'MD'\nthe lane's own note\nMD\naws secretsmanager rotate-secret --secret-id 'operator-k8s": {
@@ -201,6 +213,7 @@
   },
   "canonical\tcat > /tmp/row.md <<'ROW'\n2026-09-11T08:00:00Z | TERMINAL | lane=fixture-lane | the lane's own row: no identity-store operation of any kind, no secret read or written, no access-key minted, no kcadm call, and the phase's own probes printed no protected value.\nROW\npython3 scripts/ledger_lock.py docs/tracking/ROLLING_WORK_LEDGER.md --append-file /tmp/row.md": {},
   "canonical\tcat > f <<EOF\ngit worktree add /tmp/x\nEOF\ngit worktree add {DEST}": {},
+  "canonical\tcat > note.md <<'EOF'\nDon't git reset the branch; it's shared.\nEOF\necho done": {},
   "canonical\tcat > reports/findings.md <<'MD'\nThe cloud client is blocked. It resolves its client_secret_ref from the store, so the lane's next step is to re-issue nothing and read the api-key reference instead.\nMD": {},
   "canonical\tcat > tests/test_confidential_client.py <<'PY'\nFIXTURE = {'client_secret_ref': 'x', 'api-key': 'y'}  # don't re-issue\nPY": {},
   "canonical\tcat > {SP}/close.md <<'EOF'\n**Superseded**, it's the same head.\nEOF\ngh api repos/{REPO}/issues/2846/comments -F body=@{SP}/close.md --jq .html_url; gh api repos/{REPO}/pulls/2846 --jq '{state,merged}'": {},
@@ -224,6 +237,7 @@
   "canonical\tcd \"${OMN19229_WT}\" && git rebase origin/dev": {},
   "canonical\tcd && git reset --hard origin/main": {},
   "canonical\tcd /tmp\ngh pr edit 42 --repo": {},
+  "canonical\tcd /tmp\ngit -C {REG} reset --hard": {},
   "canonical\tcd /tmp && git worktree add \"$PWD/x\"": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
@@ -233,6 +247,9 @@
     "rc": 2
    }
   },
+  "canonical\tcd {REG}\ngit checkout -b lane/x": {},
+  "canonical\tcd {REG}\ngit clean -fd": {},
+  "canonical\tcd {REG}\ngit reset --hard origin/main": {},
   "canonical\tcd {REG} && cd \"$OLDPWD\" && cd {REG} && git reset --hard origin/main": {},
   "canonical\tcd {REG} && cd {WT} && git rebase origin/dev": {},
   "canonical\tcd {REG} && git -C \"$PWD\" reset --hard origin/main": {},
@@ -555,6 +572,15 @@
     "rc": 2
    }
   },
+  "canonical\tgh pr edit 42 --repo {REPO} --body-file $S/b.md": {
+   "pre_tool_use_pr_body_stamp_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: the path $S/b.md cannot be resolved: `$S` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tgh pr edit 42 --repo {REPO} --body-file {F}": {
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
@@ -704,6 +730,7 @@
    }
   },
   "canonical\tgit -C {REG} merge --no-edit origin/main": {},
+  "canonical\tgit -C {WS}/omnibase_infra worktree add {DEST} origin/$UNSET_BASE -b lane/x": {},
   "canonical\tgit -C {WS}/omnibase_infra worktree list | grep omni_worktrees": {},
   "canonical\tgit branch": {},
   "canonical\tgit branch --contains HEAD": {},
@@ -720,12 +747,14 @@
   "canonical\tgit branch lane/new-branch origin/main": {},
   "canonical\tgit cannot tell a ref from a path without `--`, so neither can this.": {},
   "canonical\tgit checkout": {},
+  "canonical\tgit checkout $HEAD -- src/guard.py": {},
   "canonical\tgit checkout -- .": {},
   "canonical\tgit checkout -- docs/standards/a.md": {},
   "canonical\tgit checkout -- docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout -B lane/some-branch": {},
   "canonical\tgit checkout -b lane/ledger-rows-1435-fix": {},
   "canonical\tgit checkout -b lane/some-branch": {},
+  "canonical\tgit checkout HEAD -- $TARGET": {},
   "canonical\tgit checkout HEAD -- ./docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout HEAD -- ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout HEAD -- docs/a.md docs/b.md": {},
@@ -733,6 +762,7 @@
   "canonical\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md.bak": {},
   "canonical\tgit checkout HEAD -- docs/tracking/archive/2026-09-18.md": {},
+  "canonical\tgit checkout HEAD -- src/{guard,other}.py": {},
   "canonical\tgit checkout docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout main": {},
   "canonical\tgit checkout origin/main": {},
@@ -744,6 +774,7 @@
   "canonical\tgit clean -n": {},
   "canonical\tgit clone https://github.com/o/r.git /tmp/scratch-clone": {},
   "canonical\tgit clone https://github.com/o/r.git {WS}/omni_worktrees/T/r": {},
+  "canonical\tgit commit -m \"$(cat <<'EOF'\nfix: don't merge the branch; git push later\nEOF\n)\"": {},
   "canonical\tgit commit -m \"$(cat <<'EOF'\nfix: it doesn't misread git worktree add\nEOF\n)\"": {},
   "canonical\tgit commit -m \"docs: explain why `uv run onex` is not the entrypoint\"": {
    "pre_tool_use_prose_command_substitution_guard.sh": {
@@ -929,6 +960,8 @@
   "canonical\tgit reset --soft HEAD~1": {},
   "canonical\tgit reset 637e93c5a8": {},
   "canonical\tgit reset origin/main": {},
+  "canonical\tgit restore $F": {},
+  "canonical\tgit restore --source=$SHA -- src/guard.py": {},
   "canonical\tgit rev-parse HEAD": {},
   "canonical\tgit show HEAD:docs/a.md": {},
   "canonical\tgit stash": {
@@ -1263,6 +1296,15 @@
   "canonical\ttrue": {},
   "canonical\tuv run onex": {},
   "canonical\tuv run pytest tests/x -q": {},
+  "worktree\tB=$(cat base); git -C {WS}/omnibase_infra worktree add -b $B {DEST}": {
+   "pre_tool_use_worktree_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: the unquoted argument `$B` cannot be resolved: `$B` is set in this command to a value the guard cannot resolve. To disable this guard: onex hooks disable WORKTREE_GUARD"
+    },
+    "rc": 2
+   }
+  },
   "worktree\taws iam create-access-key --user-name operator-k8s": {
    "pre_tool_use_credential_rotation_guard.sh": {
     "out": {
@@ -1450,6 +1492,9 @@
    }
   },
   "worktree\tbash <<EOF\ngit worktree add {DEST}\nEOF": {},
+  "worktree\tcat <<'EOF' > note.md\nit's a git merge note, push later\nEOF": {},
+  "worktree\tcat <<'EOF' > note.md\nit's a note\nEOF\ngit -C {REG} reset --hard": {},
+  "worktree\tcat <<'EOF' | wc -l\ndon't\nEOF\ncd {REG} && git switch main": {},
   "worktree\tcat >": {},
   "worktree\tcat > /tmp/note.md <<'MD'": {},
   "worktree\tcat > /tmp/note.md <<'MD'\nthe lane's own note\nMD\naws secretsmanager rotate-secret --secret-id 'operator-k8s": {
@@ -1463,6 +1508,7 @@
   },
   "worktree\tcat > /tmp/row.md <<'ROW'\n2026-09-11T08:00:00Z | TERMINAL | lane=fixture-lane | the lane's own row: no identity-store operation of any kind, no secret read or written, no access-key minted, no kcadm call, and the phase's own probes printed no protected value.\nROW\npython3 scripts/ledger_lock.py docs/tracking/ROLLING_WORK_LEDGER.md --append-file /tmp/row.md": {},
   "worktree\tcat > f <<EOF\ngit worktree add /tmp/x\nEOF\ngit worktree add {DEST}": {},
+  "worktree\tcat > note.md <<'EOF'\nDon't git reset the branch; it's shared.\nEOF\necho done": {},
   "worktree\tcat > reports/findings.md <<'MD'\nThe cloud client is blocked. It resolves its client_secret_ref from the store, so the lane's next step is to re-issue nothing and read the api-key reference instead.\nMD": {},
   "worktree\tcat > tests/test_confidential_client.py <<'PY'\nFIXTURE = {'client_secret_ref': 'x', 'api-key': 'y'}  # don't re-issue\nPY": {},
   "worktree\tcat > {SP}/close.md <<'EOF'\n**Superseded**, it's the same head.\nEOF\ngh api repos/{REPO}/issues/2846/comments -F body=@{SP}/close.md --jq .html_url; gh api repos/{REPO}/pulls/2846 --jq '{state,merged}'": {},
@@ -1486,6 +1532,7 @@
   "worktree\tcd \"${OMN19229_WT}\" && git rebase origin/dev": {},
   "worktree\tcd && git reset --hard origin/main": {},
   "worktree\tcd /tmp\ngh pr edit 42 --repo": {},
+  "worktree\tcd /tmp\ngit -C {REG} reset --hard": {},
   "worktree\tcd /tmp && git worktree add \"$PWD/x\"": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
@@ -1495,6 +1542,9 @@
     "rc": 2
    }
   },
+  "worktree\tcd {REG}\ngit checkout -b lane/x": {},
+  "worktree\tcd {REG}\ngit clean -fd": {},
+  "worktree\tcd {REG}\ngit reset --hard origin/main": {},
   "worktree\tcd {REG} && cd \"$OLDPWD\" && cd {REG} && git reset --hard origin/main": {},
   "worktree\tcd {REG} && cd {WT} && git rebase origin/dev": {},
   "worktree\tcd {REG} && git -C \"$PWD\" reset --hard origin/main": {},
@@ -1817,6 +1867,15 @@
     "rc": 2
    }
   },
+  "worktree\tgh pr edit 42 --repo {REPO} --body-file $S/b.md": {
+   "pre_tool_use_pr_body_stamp_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: the path $S/b.md cannot be resolved: `$S` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgh pr edit 42 --repo {REPO} --body-file {F}": {
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
@@ -1942,6 +2001,7 @@
   "worktree\tgit -C omnibase_infra worktree add omni_worktrees/OMN-19113/omnibase_infra -b feat/omn-19113 origin/dev": {},
   "worktree\tgit -C omnibase_infra worktree add omni_worktrees/X/omnibase_infra": {},
   "worktree\tgit -C {REG} merge --no-edit origin/main": {},
+  "worktree\tgit -C {WS}/omnibase_infra worktree add {DEST} origin/$UNSET_BASE -b lane/x": {},
   "worktree\tgit -C {WS}/omnibase_infra worktree list | grep omni_worktrees": {},
   "worktree\tgit branch": {},
   "worktree\tgit branch --contains HEAD": {},
@@ -1958,12 +2018,14 @@
   "worktree\tgit branch lane/new-branch origin/main": {},
   "worktree\tgit cannot tell a ref from a path without `--`, so neither can this.": {},
   "worktree\tgit checkout": {},
+  "worktree\tgit checkout $HEAD -- src/guard.py": {},
   "worktree\tgit checkout -- .": {},
   "worktree\tgit checkout -- docs/standards/a.md": {},
   "worktree\tgit checkout -- docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout -B lane/some-branch": {},
   "worktree\tgit checkout -b lane/ledger-rows-1435-fix": {},
   "worktree\tgit checkout -b lane/some-branch": {},
+  "worktree\tgit checkout HEAD -- $TARGET": {},
   "worktree\tgit checkout HEAD -- ./docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout HEAD -- ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout HEAD -- docs/a.md docs/b.md": {},
@@ -1971,6 +2033,7 @@
   "worktree\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md.bak": {},
   "worktree\tgit checkout HEAD -- docs/tracking/archive/2026-09-18.md": {},
+  "worktree\tgit checkout HEAD -- src/{guard,other}.py": {},
   "worktree\tgit checkout docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout main": {},
   "worktree\tgit checkout origin/main": {},
@@ -1982,6 +2045,7 @@
   "worktree\tgit clean -n": {},
   "worktree\tgit clone https://github.com/o/r.git /tmp/scratch-clone": {},
   "worktree\tgit clone https://github.com/o/r.git {WS}/omni_worktrees/T/r": {},
+  "worktree\tgit commit -m \"$(cat <<'EOF'\nfix: don't merge the branch; git push later\nEOF\n)\"": {},
   "worktree\tgit commit -m \"$(cat <<'EOF'\nfix: it doesn't misread git worktree add\nEOF\n)\"": {},
   "worktree\tgit commit -m \"docs: explain why `uv run onex` is not the entrypoint\"": {
    "pre_tool_use_prose_command_substitution_guard.sh": {
@@ -2159,6 +2223,8 @@
   "worktree\tgit reset --soft HEAD~1": {},
   "worktree\tgit reset 637e93c5a8": {},
   "worktree\tgit reset origin/main": {},
+  "worktree\tgit restore $F": {},
+  "worktree\tgit restore --source=$SHA -- src/guard.py": {},
   "worktree\tgit rev-parse HEAD": {},
   "worktree\tgit show HEAD:docs/a.md": {},
   "worktree\tgit stash": {
