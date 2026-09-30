@@ -534,6 +534,14 @@ components:
   backing_nodes:
   - node_integration_sweep_orchestrator
   rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: lab_onboarding
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: pure_skill
+  path: plugins/onex/skills/lab_onboarding/SKILL.md
+  backing_nodes: []
+  rationale: 'OMN-20150: developer-machine bootstrap. Runs a shell script (skills/_bin/lab-onboarding.sh) because it must install Python and uv before any node can run; hidden until walked on a clean Mac.'
 - id: lane_dispatch
   kind: skill
   exposure: hidden
