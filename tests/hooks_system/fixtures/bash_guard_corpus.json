@@ -1,5 +1,5 @@
 {
- "_about": "Bash commands the seven Bash PreToolUse guards are judged on (OMN-20118). Harvested from the per-guard unit tests' own command literals, plus plain commands and multi-guard shapes. Placeholders: {WT} a worktree, {REG} the canonical clone, {WS} the workspace root, {DEST} a new worktree path, {SP} a scratch directory, {F} a body file there, {REPO} the repository slug.",
+ "_about": "Bash commands the seven Bash PreToolUse guards are judged on (OMN-20118). Harvested from the per-guard unit tests' own command literals, plus plain commands and multi-guard shapes. Placeholders: {WT} a worktree, {REG} the canonical clone, {WS} the workspace root, {DEST} a new worktree path, {SP} a scratch directory, {F} a body file there, {REPO} the repository slug. The #2421 (OMN-17427) matcher-narrowing cases are included.",
  "commands": [
   "onex",
   "git stash push -- some_file.py",
@@ -329,6 +329,23 @@
   "git stash push -m wip && git stash pop",
   "git worktree add /tmp/onex-x -b x; git stash pop",
   "echo \"see `git stash pop` here\" >> notes.md; git stash pop",
-  "git log --oneline -1 | grep -c 'secret-branch-push'; echo 'the `git worktree add` note'; git stash list; gh api repos/o/r/pulls/1 --jq .title; printf '%s\\n' --body"
+  "git log --oneline -1 | grep -c 'secret-branch-push'; echo 'the `git worktree add` note'; git stash list; gh api repos/o/r/pulls/1 --jq .title; printf '%s\\n' --body",
+  "git checkout HEAD -- $TARGET",
+  "git checkout $HEAD -- src/guard.py",
+  "git restore $F",
+  "git restore --source=$SHA -- src/guard.py",
+  "git checkout HEAD -- src/{guard,other}.py",
+  "gh pr edit 42 --repo {REPO} --body-file $S/b.md",
+  "cat <<'EOF' > note.md\nit's a git merge note, push later\nEOF",
+  "cat > note.md <<'EOF'\nDon't git reset the branch; it's shared.\nEOF\necho done",
+  "git commit -m \"$(cat <<'EOF'\nfix: don't merge the branch; git push later\nEOF\n)\"",
+  "cat <<'EOF' > note.md\nit's a note\nEOF\ngit -C {REG} reset --hard",
+  "cd /tmp\ngit -C {REG} reset --hard",
+  "cd {REG}\ngit reset --hard origin/main",
+  "cd {REG}\ngit checkout -b lane/x",
+  "cd {REG}\ngit clean -fd",
+  "cat <<'EOF' | wc -l\ndon't\nEOF\ncd {REG} && git switch main",
+  "git -C {WS}/omnibase_infra worktree add {DEST} origin/$UNSET_BASE -b lane/x",
+  "B=$(cat base); git -C {WS}/omnibase_infra worktree add -b $B {DEST}"
  ]
 }
