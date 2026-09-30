@@ -1352,10 +1352,10 @@ def _git(cwd: Path, *args: str) -> str:
         scrub_git_location_env,
     )
 
-    return subprocess.run(
+    result = subprocess.run(
         ["git", *args],
         cwd=cwd,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         env={
@@ -1367,7 +1367,16 @@ def _git(cwd: Path, *args: str) -> str:
             "GIT_CONFIG_NOSYSTEM": "1",
             "HOME": str(cwd),
         },
-    ).stdout
+    )
+    # CalledProcessError's message carries only the exit status; the fixture
+    # clone has failed on CI runners with a bare exit 128 that never
+    # reproduced locally, so the failure has to name git's own reason.
+    if result.returncode != 0:
+        raise AssertionError(
+            f"git {' '.join(args)} (cwd {cwd}) exited {result.returncode}: "
+            f"{result.stderr.strip()}"
+        )
+    return result.stdout
 
 
 def _origin_with_branches(
