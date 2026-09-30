@@ -88,7 +88,7 @@
 #
 # Evidence: $OMNI_HOME/.onex_state/canonical-clone-converge/<repo>-<utc>/
 # Ledger:   the file named by $ONEX_LEDGER_PATH, appended only through a sanctioned writer
-#           (onex-ledger, else omnibase_internal by uv, else ledger_lock.py). With no
+#           (onex-ledger, else the project named by ONEX_LEDGER_PROJECT run by uv, else ledger_lock.py). With no
 #           ledger named or no writer, the row goes to
 #           $OMNI_HOME/.onex_state/canonical-clone-converge/pending-ledger-rows.md
 #           (untracked) and stderr says so. Never a raw edit of a tracked file.
@@ -198,20 +198,20 @@ append_ledger_row() {
     keep_row_untracked "$row" "ONEX_LEDGER_PATH is not set on this host (no ledger of record is named)"
     return 0
   fi
-  # Sanctioned writers, in order: the omnibase_internal `onex-ledger` command on
-  # PATH, the omnibase_internal clone beside the registry run by uv, then the
+  # Sanctioned writers, in order: the `onex-ledger` command on PATH, the operator
+  # tooling project named by ONEX_LEDGER_PROJECT (no default) run by uv, then the
   # registry's ledger_lock.py. Each takes the same `<ledger> --append <row>` form.
   local -a writer=()
-  local internal="${ONEX_LEDGER_PROJECT:-$(dirname "$OMNI_HOME")/omnibase_internal}"
+  local internal="${ONEX_LEDGER_PROJECT:-}"
   if command -v onex-ledger >/dev/null 2>&1; then
     writer=(onex-ledger)
-  elif [[ -f "$internal/pyproject.toml" ]] && command -v uv >/dev/null 2>&1; then
+  elif [[ -n "$internal" && -f "$internal/pyproject.toml" ]] && command -v uv >/dev/null 2>&1; then
     writer=(uv run --quiet --project "$internal" onex-ledger)
   elif [[ -f "$OMNI_HOME/scripts/ledger_lock.py" ]]; then
     writer=(python3 "$OMNI_HOME/scripts/ledger_lock.py")
   fi
   if (( ${#writer[@]} == 0 )); then
-    keep_row_untracked "$row" "no sanctioned ledger writer on this host (no onex-ledger, no omnibase_internal clone with uv, no ledger_lock.py)"
+    keep_row_untracked "$row" "no sanctioned ledger writer on this host (no onex-ledger, no ONEX_LEDGER_PROJECT with uv, no ledger_lock.py)"
     return 0
   fi
   if ! "${writer[@]}" "$ledger" --append "$row"; then

@@ -933,7 +933,7 @@ def test_named_ledger_with_no_writer_falls_back_to_the_state_file(
     scratch: Scratch,
 ) -> None:
     _dirty_like_the_incident(scratch)
-    # a PATH with no onex-ledger, and no omnibase_internal clone to run by uv
+    # a PATH with no onex-ledger, and no ledger project to run by uv
     proc = scratch.run(
         "omnimarket",
         "--execute",
