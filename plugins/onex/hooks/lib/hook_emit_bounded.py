@@ -28,6 +28,16 @@ This runner is that policy, in one place:
 
 There is no spool, no fail-open branch and no kill switch here, by ruling.
 
+A writer in this directory runs in a FORKED child, not a second interpreter
+(OMN-20118). The hooks pass ``<python> <this dir>/<writer>.py ARG...``; every
+such writer is a stdlib script of this directory, so the runner forks, the
+child runs the script as ``__main__`` with that argv, and exits with its code.
+The interpreter start and the shared imports are paid once instead of twice
+per emit, which was about half of every tool call's interpreter starts. The
+child is its own process group exactly as an exec'd emitter was, so the
+budget, the group kill, the blocking exit and the alarm are unchanged. Any
+other command (a test's ``/usr/bin/false``, the alarm) is still exec'd.
+
 Stdlib only, like every module on the hook fast path.
 
 Usage::
@@ -42,10 +52,13 @@ from __future__ import annotations
 import argparse
 import contextlib
 import os
+import runpy
+import shutil
 import signal
 import subprocess
 import sys
 import time
+import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -143,6 +156,116 @@ def _install_signal_handlers() -> None:
 _last_pgid = 0
 
 
+_LIB_DIR = Path(__file__).resolve().parent
+
+
+# A wrapper that execs this interpreter unchanged may declare itself here (the
+# hook system tests' counting shim does); it is then this interpreter too. No
+# production path sets it.
+PYTHON_WRAPPER_ENV = "ONEX_HOOK_PYTHON_WRAPPER"
+
+
+def _is_this_interpreter(program: str) -> bool:
+    """Whether ``program`` names the interpreter running this module."""
+    wrapper = os.environ.get(PYTHON_WRAPPER_ENV, "")
+    if wrapper and program == wrapper:
+        return True
+    found = shutil.which(program) if os.sep not in program else program
+    if not found:
+        return False
+    try:
+        return os.path.realpath(found) == os.path.realpath(sys.executable)
+    except OSError:
+        return False
+
+
+def in_process_writer(cmd: list[str]) -> Path | None:
+    """The writer script ``cmd`` runs, when it is ``<python> <lib>/<writer>.py ...``.
+
+    Only a ``.py`` file in this module's own directory qualifies, and only when
+    ``<python>`` is the interpreter this runner is already running on (the hooks
+    start both with the same ``$PYTHON_CMD``): then a fork runs the writer on
+    exactly the interpreter an exec would have started. A different interpreter,
+    or any other program (a wrapper script, say), is exec'd as before.
+    """
+    if len(cmd) < 2 or not _is_this_interpreter(cmd[0]):
+        return None
+    script = Path(cmd[1])
+    if script.suffix != ".py":
+        return None
+    try:
+        resolved = script.resolve()
+    except OSError:
+        return None
+    if resolved.parent != _LIB_DIR or not resolved.is_file():
+        return None
+    return resolved
+
+
+def _exit_code(code: object) -> int:
+    """``SystemExit.code`` as the process exit status the interpreter would use."""
+    if code is None:
+        return 0
+    if isinstance(code, int):
+        return code & 0xFF
+    print(code, file=sys.stderr)
+    return 1
+
+
+def _run_writer_in_child(script: Path, args: list[str]) -> int:
+    """Body of the forked child: run ``script`` as ``__main__``; return its code."""
+    with contextlib.suppress(OSError):
+        # Already a group leader when the parent's setpgid won the race.
+        os.setsid()
+    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(sig, signal.SIG_DFL)
+    sys.argv = [str(script), *args]
+    try:
+        runpy.run_path(str(script), run_name="__main__")
+    except SystemExit as exc:
+        return _exit_code(exc.code)
+    return 0
+
+
+class _ForkedWriter:
+    """A forked writer, with the two parts of ``Popen`` the budget loop uses."""
+
+    def __init__(self, script: Path, args: list[str]) -> None:
+        for stream in (sys.stdout, sys.stderr):
+            with contextlib.suppress(Exception):
+                stream.flush()
+        pid = os.fork()
+        if pid == 0:
+            code = 1
+            try:
+                code = _run_writer_in_child(script, args)
+            except BaseException:  # noqa: BLE001 -- the child's outermost frame
+                with contextlib.suppress(Exception):
+                    traceback.print_exc()
+            finally:
+                for stream in (sys.stdout, sys.stderr):
+                    with contextlib.suppress(Exception):
+                        stream.flush()
+                os._exit(code)
+        # Both sides set the group, so it is a group of its own before the
+        # budget starts whichever runs first (the setsid-or-setpgid idiom).
+        with contextlib.suppress(OSError):
+            os.setpgid(pid, pid)
+        self.pid = pid
+        self.returncode: int | None = None
+
+    def poll(self) -> int | None:
+        if self.returncode is None:
+            try:
+                done, status = os.waitpid(self.pid, os.WNOHANG)
+            except ChildProcessError:
+                self.returncode = 1
+                return self.returncode
+            if done:
+                self.returncode = os.waitstatus_to_exitcode(status)
+        return self.returncode
+
+
 def _run_bounded(cmd: list[str], budget_s: float) -> tuple[bool, int | None]:
     """Run ``cmd`` in its own process group. Returns (timed_out, returncode).
 
@@ -150,7 +273,12 @@ def _run_bounded(cmd: list[str], budget_s: float) -> tuple[bool, int | None]:
     child is left for init to reap once its syscall returns.
     """
     global _last_pgid
-    proc = subprocess.Popen(cmd, start_new_session=True)  # noqa: S603
+    script = in_process_writer(cmd)
+    proc: _ForkedWriter | subprocess.Popen[bytes]
+    if script is not None:
+        proc = _ForkedWriter(script, cmd[2:])
+    else:
+        proc = subprocess.Popen(cmd, start_new_session=True)  # noqa: S603
     _last_pgid = proc.pid
     _live_groups.add(proc.pid)
     try:
@@ -160,7 +288,7 @@ def _run_bounded(cmd: list[str], budget_s: float) -> tuple[bool, int | None]:
 
 
 def _poll_until(
-    proc: subprocess.Popen[bytes], budget_s: float
+    proc: _ForkedWriter | subprocess.Popen[bytes], budget_s: float
 ) -> tuple[bool, int | None]:
     deadline = time.monotonic() + budget_s
     while True:

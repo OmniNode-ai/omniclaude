@@ -27,6 +27,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.hooks._bash_guard_registration import is_live_on_bash_matcher
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LIB_DIR = REPO_ROOT / "plugins" / "onex" / "hooks" / "lib"
 HOOK_SCRIPT = (
@@ -709,16 +711,10 @@ def test_hook_script_logs_a_refusal(tmp_path: Path, fake_gh: Path) -> None:
 
 
 def test_hook_is_registered_on_the_bash_matcher() -> None:
-    hooks = json.loads(
-        (REPO_ROOT / "plugins" / "onex" / "hooks" / "hooks.json").read_text(
-            encoding="utf-8"
-        )
-    )["hooks"]["PreToolUse"]
-    bash_groups = [g for g in hooks if g.get("matcher") == "Bash"]
-    assert bash_groups, "the guard must be registered on the Bash matcher"
-    commands = [h.get("command", "") for h in bash_groups[0]["hooks"]]
-    assert any(c.endswith("pre_tool_use_pr_body_stamp_guard.sh") for c in commands), (
-        commands
+    # OMN-20118: registered through the one Bash guards entrypoint, which
+    # sources this guard in its former order.
+    assert is_live_on_bash_matcher("pre_tool_use_pr_body_stamp_guard.sh"), (
+        "the guard must be live on the Bash matcher"
     )
 
 

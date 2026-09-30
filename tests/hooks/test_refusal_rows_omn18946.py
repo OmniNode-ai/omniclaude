@@ -33,6 +33,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.hooks._bash_guard_registration import ENTRYPOINT, entrypoint_guards
+
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -400,6 +402,17 @@ class TestEveryRegisteredRefusalIsRecorded:
     def test_a_registered_hook_that_refuses_records_the_refusal(
         self, script: Path
     ) -> None:
+        if script.name == ENTRYPOINT:
+            # OMN-20118: the Bash guards entrypoint refuses only by relaying
+            # the refusal of a guard it sourced; each of those records its own.
+            guards = entrypoint_guards()
+            assert len(guards) == 7, guards
+            for name in guards:
+                guard_source = (script.parent / name).read_text(encoding="utf-8")
+                assert RECORD_FN in guard_source, (
+                    f"{name}, run by {script.name}, never calls `{RECORD_FN}`"
+                )
+            return
         source = script.read_text(encoding="utf-8")
         assert RECORD_FN in source, (
             f"{script.name} has a deny path (`exit 2`) but never calls "

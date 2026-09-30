@@ -765,7 +765,7 @@ def scripts_reachable_from_registered(
     hook's own declaration; requiring a second declaration for it would turn
     every helper into a finding and the gate into noise.
     """
-    sources = _script_sources(scripts_dir)
+    sources = _script_sources(scripts_dir) if sources is None else sources
     seen = set(registered)
     frontier = [name for name in registered if name in sources]
     while frontier:
@@ -1236,17 +1236,34 @@ def mask_findings(
     bits = defined_mask_bits(repo_root / inventory.hook_bits)
     mask = parse_mask(mask_literal)
     out: list[Finding] = []
+    # OMN-20118: an entry with no gate of its own may run guards that have one
+    # (pre_tool_use_bash_guards.sh sources the seven Bash guards). Each of those
+    # is dark on its own bit, so each is reported by its own name.
+    scripts_dir = repo_root / inventory.scripts_dir
+    sources: dict[str, str] | None = None
     for hook in inventory.expected:
-        call = hook.mask.gate_call
-        if call is None or call not in bits:
-            continue
-        if not mask & bits[call]:
+        gated: list[tuple[str, str]] = []
+        if hook.mask.gate_call is not None:
+            gated.append((hook.script, hook.mask.gate_call))
+        else:
+            if sources is None:
+                sources = _script_sources(scripts_dir)
+            for name in sorted(
+                scripts_reachable_from_registered({hook.script}, scripts_dir, sources)
+            ):
+                found = _GATE_CALL_RE.search(sources.get(name, ""))
+                if found:
+                    gated.append((name, found.group(1)))
+        for script, call in gated:
+            if call not in bits or mask & bits[call]:
+                continue
+            via = "" if script == hook.script else f" (run by {hook.script})"
             out.append(
                 Finding(
                     "MASKED_OFF",
-                    hook.script,
-                    f"registered, but its {call} bit ({bits[call]:#x}) is cleared in "
-                    f"ONEX_HOOKS_MASK={mask_literal}. The hook is dark on this "
+                    script,
+                    f"registered{via}, but its {call} bit ({bits[call]:#x}) is cleared "
+                    f"in ONEX_HOOKS_MASK={mask_literal}. The hook is dark on this "
                     "machine. Clear the stale literal in ~/.omnibase/.env or run "
                     f"`onex hooks enable {call}`.",
                 )

@@ -40,7 +40,12 @@ INCIDENT_HOOK_SECONDS_PER_CALL_UNDER_LOAD = (60, 175)
 # OMN-20114 (2026-09-29, lab h202, three runs each, highest kept): the hooks'
 # path preamble became parameter expansions and each payload is read with one
 # jq, which took the same calls from 261 / 166 / 90 on dev to 109 / 81 / 44.
-MEASURED_EXECS_PER_CALL = {"Bash": 109, "Skill": 81, "Read": 44}
+# OMN-20118 (2026-09-30, lab h202, three runs each, highest kept): the seven
+# Bash guards run from one entrypoint (one bash, at most one interpreter) and a
+# bounded emit forks its writer: 109 / 81 / 44 to 104 / 74 / 44. The guards
+# run concurrently inside the entrypoint (one process substitution each), which
+# the sampled count sees as processes; they are forks, not interpreter starts.
+MEASURED_EXECS_PER_CALL = {"Bash": 104, "Skill": 74, "Read": 44}
 # History of this instrument: 250 / 151 / 83 on dev before the OMN-20110
 # foreground runner; 261 / 167 / 91 with it (the bounded runner's own
 # interpreter start plus one process group per emit, paid to make every emit
@@ -48,7 +53,7 @@ MEASURED_EXECS_PER_CALL = {"Bash": 109, "Skill": 81, "Read": 44}
 
 # The enforced ceiling, per tool. Measured plus a small headroom for the
 # branches a hook takes only sometimes. It only ever moves down.
-CEILING_EXECS_PER_CALL = {"Bash": 125, "Skill": 93, "Read": 50}
+CEILING_EXECS_PER_CALL = {"Bash": 115, "Skill": 82, "Read": 50}
 
 # The target every tool call is held to. A ceiling above this is debt. After
 # OMN-20114 the remaining cost is one bash per registered hook (17 on a Bash
@@ -57,6 +62,20 @@ CEILING_EXECS_PER_CALL = {"Bash": 125, "Skill": 93, "Read": 50}
 # one entrypoint per event and a runner that does not start a second
 # interpreter are what is left between here and the target.
 TARGET_EXECS_PER_CALL = 60
+
+# Python interpreter starts per tool call, by the shapes of
+# tests/hooks_system/wall.py. After OMN-20114 these, not execs, were the wall
+# time: 0.2 to 0.85 s each on the operator Mac idle, 5 to 8 s under contention.
+# OMN-20118 (2026-09-30, lab h202, deterministic across runs): one interpreter
+# for the seven Bash guards' decision cores, and every bounded emit forks its
+# writer instead of starting a second interpreter.
+PYTHON_STARTS_BEFORE_OMN_20118 = {
+    "bash": 10,
+    "bash-guarded": 17,
+    "skill": 17,
+    "read": 8,
+}
+CEILING_PYTHON_STARTS_PER_CALL = {"bash": 6, "bash-guarded": 7, "skill": 10, "read": 4}
 
 # Wall time budgets, seconds. Claude Code gives a hook 60 s before it cancels it,
 # and a tool call that spends 60 s in hooks is the incident. These are set an

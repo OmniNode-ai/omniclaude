@@ -35,6 +35,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.hooks._bash_guard_registration import is_live_on_bash_matcher
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GUARD_PY = (
     REPO_ROOT
@@ -214,18 +216,13 @@ def test_unreadable_payload_naming_a_backtick_is_refused() -> None:
 
 @pytest.mark.unit
 def test_guard_is_registered_as_a_pretooluse_bash_hook() -> None:
-    """Rule 5: detection that is not wired is advisory and gets ignored."""
-    hooks_json = json.loads(
-        (REPO_ROOT / "plugins" / "onex" / "hooks" / "hooks.json").read_text()
-    )
-    commands = [
-        hook.get("command", "")
-        for matcher in hooks_json["hooks"].get("PreToolUse", [])
-        for hook in matcher.get("hooks", [])
-    ]
-    assert any(
-        "pre_tool_use_prose_command_substitution_guard.sh" in c for c in commands
-    ), "the guard is not registered as a PreToolUse hook"
+    """Rule 5: detection that is not wired is advisory and gets ignored.
+
+    OMN-20118: registered through the one Bash guards entrypoint, which sources
+    this guard in its former order."""
+    assert is_live_on_bash_matcher(
+        "pre_tool_use_prose_command_substitution_guard.sh"
+    ), "the guard is not registered as a PreToolUse Bash hook"
 
 
 WRAPPER_SH = (

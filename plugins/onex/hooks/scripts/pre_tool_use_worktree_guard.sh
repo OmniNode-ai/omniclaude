@@ -204,11 +204,20 @@ if [[ "$_JUDGE" -eq 1 ]]; then
         _block "decision core missing" \
             "BLOCKED: the worktree guard's decision core is missing at ${GUARD_PY}, so this \`git worktree add\` cannot be judged. Repair the plugin install, or disable the guard deliberately: onex hooks disable WORKTREE_GUARD"
     fi
-    _rc=0
-    GUARD_OUT=$(printf '%s' "$TOOL_INFO" \
-        | "$PYTHON_CMD" "$GUARD_PY" --root "$CANONICAL_ROOT" --also-root "$ALSO_ROOT" \
-            --cwd "$HOOK_ORIGINAL_CWD" \
-        2>>"$LOG_FILE") || _rc=$?
+    # OMN-20118: the decision core runs through onex_guard_core, which runs it in its
+    # own interpreter when this script runs on its own, and in the one shared
+    # interpreter when pre_tool_use_bash_guards.sh runs it. A missing runner is
+    # refused like a missing decision core.
+    source "${HOOKS_DIR}/lib/bash_guard_core.sh" 2>/dev/null || true
+    if ! declare -F onex_guard_core >/dev/null 2>&1; then
+        _block "decision core runner missing" \
+            "BLOCKED: the worktree guard cannot run its decision core: lib/bash_guard_core.sh is missing beside ${GUARD_PY}. Repair the plugin install, or disable the guard deliberately: onex hooks disable WORKTREE_GUARD"
+    fi
+    onex_guard_core --stdin "$TOOL_INFO" --stderr "append:${LOG_FILE}" -- \
+        "$PYTHON_CMD" "$GUARD_PY" --root "$CANONICAL_ROOT" --also-root "$ALSO_ROOT" \
+        --cwd "$HOOK_ORIGINAL_CWD"
+    GUARD_OUT="$ONEX_GUARD_OUT"
+    _rc="$ONEX_GUARD_RC"
     if [[ "$_rc" -eq 2 ]]; then
         _reason=$(printf '%s' "$GUARD_OUT" | jq -r '.reason // empty' 2>/dev/null || true)
         _block "worktree add refused" \
