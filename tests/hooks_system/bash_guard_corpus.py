@@ -70,6 +70,9 @@ _WORKSPACE_ENV = "OMNI_" + "HOME"
 # normalize, so the comparison stays exact).
 _WORKSPACE_NAME = "omni" + "_home"
 _WORKSPACE_NAME_RE = re.compile(r"\b" + _WORKSPACE_NAME + r"\b")
+# The workspace root's environment variable name, which also names the
+# private registry, likewise: {WSENV} in the corpus and in every record.
+_WORKSPACE_ENV_RE = re.compile(r"\b" + _WORKSPACE_ENV + r"\b")
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,7 @@ class Workspace:
             .replace("{SP}", str(self.scratch))
             .replace("{F}", str(self.scratch / "body.md"))
             .replace("{REPO}", _REPO_SLUG)
+            .replace("{WSENV}", _WORKSPACE_ENV)
         )
 
     def normalize(self, text: str) -> str:
@@ -109,6 +113,7 @@ class Workspace:
             pairs.append((str(path), name))
         for path, name in pairs:
             text = text.replace(path, name)
+        text = _WORKSPACE_ENV_RE.sub("{WSENV}", text)
         return _WORKSPACE_NAME_RE.sub("{WS_NAME}", text)
 
 

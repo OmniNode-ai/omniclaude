@@ -271,7 +271,7 @@ if ! declare -F onex_guard_core >/dev/null 2>&1; then
     _block "decision core runner missing" \
         "BLOCKED: the OMN-18798 shared-tree git admission gate cannot run its decision core: lib/bash_guard_core.sh is missing beside ${GUARD_PY}. Repair the plugin install, or disable the guard deliberately: onex hooks disable SCOPE_GATE"
 fi
-onex_guard_core --stdin "$TOOL_INFO" --stderr merge --unset PYTHONPATH --set OMNI_HOME="${OMNI_HOME:-}" --set ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-}" -- \
+onex_guard_core --stdin "$TOOL_INFO" --stderr merge --unset PYTHONPATH -- \
     "$GUARD_PYTHON" "$GUARD_PY"
 GUARD_OUT="$ONEX_GUARD_OUT"
 GUARD_RC="$ONEX_GUARD_RC"
