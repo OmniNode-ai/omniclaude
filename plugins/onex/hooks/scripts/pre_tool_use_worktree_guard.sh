@@ -87,7 +87,7 @@ else
 fi
 
 # Ensure log directory exists
-[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")"
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "${LOG_FILE%/*}"
 
 # Load environment variables (picks up OMNI_HOME / ONEX_WORKTREES_ROOT overrides)
 if [[ -f "$PROJECT_ROOT/.env" ]]; then

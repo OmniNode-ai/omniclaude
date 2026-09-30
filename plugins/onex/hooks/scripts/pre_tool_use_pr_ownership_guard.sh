@@ -96,7 +96,7 @@ HOOK_SCRIPT_DIR="${HOOK_SCRIPT_DIR:-$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)}"
 cd "$HOME" 2>/dev/null || cd /tmp || true
 source "${HOOK_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 LOG_FILE="${ONEX_HOOK_LOG:-${HOME}/.claude/onex-hooks.log}"
-[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")"
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "${LOG_FILE%/*}"
 
 source "${HOOKS_DIR}/scripts/common.sh"
 onex_hook_gate BASH_GUARD || exit 0
