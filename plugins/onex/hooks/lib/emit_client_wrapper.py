@@ -224,7 +224,7 @@ def _run_sync_in_thread(func: Callable[[], T]) -> T:  # noqa: UP047 - Python 3.1
 
 
 class _EmitClientProtocol(Protocol):
-    """Minimal emit client contract shared by local and omnimarket clients."""
+    """Minimal emit client contract."""
 
     _socket_path: str
 
@@ -234,50 +234,24 @@ class _EmitClientProtocol(Protocol):
 
 
 def _create_emit_client(socket_path: str, timeout: float) -> _EmitClientProtocol:
-    """Create an emit client, preferring omnimarket's portable client.
+    """Create the stdlib socket emit client.
 
-    Tries to import EmitClient from omnimarket.nodes.node_emit_daemon.client
-    first (portable, extracted implementation). Falls back to the built-in
-    _SocketEmitClient if omnimarket is not installed.
-
-    Sunset: This fallback can be removed once omnimarket is a required
-    dependency of omniclaude (tracked by OMN-7639).
+    OMN-20118: this used to prefer ``omnimarket.nodes.node_emit_daemon.client``
+    and fall back to :class:`_SocketEmitClient`. Importing that module pulled in
+    ``omnibase_core`` (about 2,190 modules, 1.13 s of CPU per process on the
+    operator Mac) in every hook process that emits, and the wire protocol it
+    speaks is the same newline-delimited JSON this client speaks. omnimarket#1246
+    already deleted that module's public path (OMN-15968), so the import was a
+    cost with no behaviour behind it.
     """
-    try:
-        # OMN-15968: omnimarket#1246 deleted node_emit_daemon.client's public
-        # module path months ago; the pin bump for the R4 repoint (routing_
-        # recorder/evidence_writer -> node_event_emit_effect) makes that
-        # loss visible to mypy for the first time. This site is a
-        # genuinely-guarded optional import with a working fallback
-        # (_SocketEmitClient below) -- not the ticket's fail-open case --
-        # so it stays as-is; only the static-analysis suppression is new.
-        from omnimarket.nodes.node_emit_daemon.client import (  # type: ignore[import-not-found]  # noqa: PLC0415
-            EmitClient,
-        )
-
-        return cast(
-            "_EmitClientProtocol",
-            EmitClient(socket_path=socket_path, timeout=timeout),
-        )
-    except ImportError:
-        import warnings  # noqa: PLC0415
-
-        warnings.warn(
-            "omnimarket.nodes.node_emit_daemon.client not available; "
-            "using built-in _SocketEmitClient. Install omnimarket to use "
-            "the portable emit client. (OMN-7639)",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return _SocketEmitClient(socket_path=socket_path, timeout=timeout)
+    return _SocketEmitClient(socket_path=socket_path, timeout=timeout)
 
 
 class _SocketEmitClient:
     """Minimal emit daemon client using raw Unix domain sockets.
 
-    DEPRECATED: Prefer omnimarket.nodes.node_emit_daemon.client.EmitClient.
-    This fallback exists for environments where omnimarket is not installed.
-    Sunset criteria: remove when omnimarket is a required dependency (OMN-7639).
+    The only emit client (OMN-20118): stdlib socket and json, so a hook process
+    that emits pays no import beyond the standard library.
 
     Implements the newline-delimited JSON protocol expected by the emit daemon.
     Protocol:
@@ -287,8 +261,6 @@ class _SocketEmitClient:
         Pong:     ``{"status": "ok", "queue_size": N, "spool_size": N}\\n``
 
     .. versionadded:: 0.2.1
-    .. deprecated:: 0.5.0
-        Use ``omnimarket.nodes.node_emit_daemon.client.EmitClient`` instead.
     """
 
     __slots__ = ("_socket_path", "_timeout")

@@ -546,8 +546,11 @@ def _load(path_str: str) -> RedactionContract:
         raise MalformedRedactionContractError(
             source=path_str, detail="capture redaction contract not found"
         )
+    # libyaml when PyYAML carries it (OMN-20118): the same safe parse, and
+    # every hook process that captures pays it.
+    loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
     try:
-        parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
+        parsed = yaml.load(path.read_text(encoding="utf-8"), Loader=loader)  # noqa: S506  # nosec B506
     except yaml.YAMLError as exc:
         raise MalformedRedactionContractError(
             source=path_str, detail=f"contract YAML does not parse: {exc}"
