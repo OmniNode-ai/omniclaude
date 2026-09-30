@@ -67,7 +67,11 @@ onex_guard_core() {
 
     case "${ONEX_BASH_GUARDS_PHASE:-}" in
         collect)
-            _onex_guard_core_collect "$@"
+            # A request that cannot be written must not trip the ERR/EXIT traps
+            # (error-guard.sh turns an unexpected error into exit 0, an allow):
+            # the entrypoint treats every collect exit as needing its core, and
+            # a missing request replays as a failed core, which refuses.
+            _onex_guard_core_collect "$@" 2>/dev/null || true
             trap - EXIT ERR 2>/dev/null || true
             exit "$ONEX_BASH_GUARDS_COLLECTED"
             ;;

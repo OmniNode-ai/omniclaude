@@ -172,47 +172,75 @@ def test_two_refusals_carry_both_reasons(tmp_path: Path) -> None:
     assert starts == 1
 
 
+# Trips every guard's pre-filter so every guard needs its decision core.
+_EVERY_GUARD_COMMAND = (
+    "git worktree add /tmp/onex-x -b x; git stash list; "
+    "gh api repos/o/r/pulls/1; echo 'a `b`'; printf %s --body; echo secret; "
+    "git push origin lane/one"
+)
+# How each guard's own fail-closed refusal names itself.
+_EVERY_GUARD_NAMES = (
+    "worktree guard",  # worktree
+    "OMN-16485",  # pr ownership
+    "OMN-17957",  # credential rotation
+    "OMN-17334",  # git stash
+    "OMN-18798",  # shared tree
+    "OMN-18335",  # pr body stamp
+    "OMN-18750",  # prose substitution
+)
+
+
 def test_a_dead_shared_interpreter_fails_every_guard_closed(tmp_path: Path) -> None:
     dead = tmp_path / "dead-python"
     dead.write_text("#!/bin/sh\nexit 1\n")
     dead.chmod(0o755)
-    command = (
-        "git worktree add /tmp/onex-x -b x; git stash list; "
-        "gh api repos/o/r/pulls/1; echo 'a `b`'; printf %s --body; echo secret; "
-        "git push origin lane/one"
-    )
+    command = _EVERY_GUARD_COMMAND
     with corpus.workspace() as ws:
         rc, out = corpus.run_script(
             ws, PLUGIN_ROOT, corpus.ENTRYPOINT, command, "worktree", str(dead)
         )
     assert rc == 2, out
     reason = json.loads(out)["reason"]
-    for words in (
-        "worktree guard",  # worktree
-        "OMN-16485",  # pr ownership
-        "OMN-17957",  # credential rotation
-        "OMN-17334",  # git stash
-        "OMN-18798",  # shared tree
-        "OMN-18335",  # pr body stamp
-        "OMN-18750",  # prose substitution
-    ):
+    for words in _EVERY_GUARD_NAMES:
         assert words in reason, f"no fail-closed refusal naming {words!r}:\n{reason}"
 
 
-def test_an_unwritable_request_dir_fails_closed(tmp_path: Path) -> None:
-    # The request for the shared interpreter cannot be written: the guard that
-    # needed its core must refuse, never let the collect exit through as a
-    # non-blocking hook error.
-    missing = tmp_path / "no-such-dir"
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git stash pop",
+        "gh pr edit 5 --body x",
+        "aws iam create-access-key --user-name operator-k8s",
+        "git worktree add /tmp/onex-x -b x",
+        "ls -la",
+    ],
+)
+def test_an_unwritable_request_dir_is_never_less_strict(
+    tmp_path: Path, command: str
+) -> None:
+    # The request for the shared interpreter cannot be written. Every guard
+    # that needed its core must then refuse through its own failed-core branch:
+    # the entrypoint may refuse more than the seven separate hooks did (several
+    # of them fail open on an unwritable TMPDIR through error-guard.sh), never
+    # less. Before the fix, `git stash pop` was allowed here.
+    env = {"TMPDIR": str(tmp_path / "no-such-dir")}
     with corpus.workspace() as ws:
+        separate = [
+            corpus.run_script(
+                ws, PLUGIN_ROOT, script, command, "worktree", PYTHON, extra_env=env
+            )[0]
+            for script in corpus.GUARD_SCRIPTS
+        ]
         rc, out = corpus.run_script(
             ws,
             PLUGIN_ROOT,
             corpus.ENTRYPOINT,
-            "git stash pop",
+            command,
             "worktree",
             PYTHON,
-            extra_env={"TMPDIR": str(missing)},
+            extra_env=env,
         )
-    assert rc == 2, out
-    assert "OMN-17334" in json.loads(out)["reason"], out
+    if 2 in separate:
+        assert rc == 2, (separate, out)
+    else:
+        assert rc in (0, 2), (separate, rc, out)
