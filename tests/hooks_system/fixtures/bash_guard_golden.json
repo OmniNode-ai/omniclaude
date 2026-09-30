@@ -1,5 +1,5 @@
 {
- "base": "29030cf928216379711cbdb184c8c08d11c13b0e",
+ "base": "1618db6e272da6ca4288c784906ea62ed7491a55",
  "cases": {
   "canonical\tB=$(cat base); git -C {WS}/omnibase_infra worktree add -b $B {DEST}": {
    "pre_tool_use_worktree_guard.sh": {
