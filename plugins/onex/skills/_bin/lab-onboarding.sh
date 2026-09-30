@@ -11,7 +11,7 @@
 #
 #   0 Preflight          reads the machine; changes nothing
 #   1 Base tools         Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv
-#   2 Workspace          the canonical clones, the workspace variable, PATH
+#   2 Workspace          the canonical clones, OMNI_HOME, PATH
 #   3 Tailnet            Tailscale installed and signed in to the OmniNode tailnet
 #   4 onex + model       dispatch venv, onex, local identity, one model path, one delegation
 #   5 Bus identity       this machine's lab principal, issued automatically; one lane delegation
@@ -29,7 +29,7 @@
 #   --preflight-only     run phase 0, print the verdict, exit
 #   --no-containers      never set up Docker or the local stack
 #   --provider NAME      openrouter | gemini | none   (default: ask on a terminal, else none)
-#   --workspace DIR      the workspace (default: the workspace variable, else ~/code/omni)
+#   --workspace DIR      the workspace (default: $OMNI_HOME, else ~/code/omni)
 #   --restart            forget completed phases and run every phase again
 #   --reissue-identity   request a fresh bus identity even if one is stored
 #   -h, --help           this text
@@ -74,10 +74,7 @@ case "$RETRIES" in ''|*[!0-9]*) RETRIES=3 ;; esac
 PREFLIGHT_ONLY=0
 NO_CONTAINERS=0
 PROVIDER=""
-# The workspace variable name is assembled here, once, so the public-repo hygiene gate
-# does not read it as a private repository name; it is the platform-wide variable.
-WS_VAR="OMNI_""HOME"
-WORKSPACE="${!WS_VAR:-$HOME/code/omni}"
+WORKSPACE="${OMNI_HOME:-$HOME/code/omni}"
 RESTART=0
 REISSUE=0
 
@@ -572,7 +569,7 @@ write_profile_block() { # file
   awk -v b="$PROFILE_BEGIN" -v e="$PROFILE_END" '$0==b{skip=1} !skip{print} $0==e{skip=0}' "$f" >"$tmp"
   {
     printf '%s\n' "$PROFILE_BEGIN"
-    printf 'export %s="%s"\n' "$WS_VAR" "$WORKSPACE"
+    printf 'export OMNI_HOME="%s"\n' "$WORKSPACE"
     # shellcheck disable=SC2016  # written literally; expands in the user's shell
     printf 'eval "$(%s shellenv)"\n' "$(brew_bin)"
     # shellcheck disable=SC2016
@@ -616,8 +613,8 @@ phase2() {
   done
   write_profile_block "$HOME/.zshrc"
   case "${SHELL:-}" in */bash) write_profile_block "$HOME/.bash_profile" ;; esac
-  export "$WS_VAR=$WORKSPACE"
-  say "  $WS_VAR, Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
+  export OMNI_HOME="$WORKSPACE"
+  say "  OMNI_HOME, Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
   if [ ! -f "${ONBOARD_LAB_FACTS:-$WORKSPACE/$LAB_FACTS_REL}" ]; then
     FAILED_STEP="read the lab's declared addresses"
     LAST_ERR="$LAB_FACTS_REL is missing from the omnibase_infra clone"
@@ -1100,7 +1097,7 @@ main() {
   hr
   say "Done. Set up: $SELECTED."
   say "Model: $([ "$MODEL_CHOICE" = none ] && echo "the lab model server" || echo "your $MODEL_CHOICE key")."
-  say "Open a new terminal (or run 'exec zsh') so $WS_VAR and PATH take effect."
+  say "Open a new terminal (or run 'exec zsh') so OMNI_HOME and PATH take effect."
   notify "Onboarding complete" "Every phase passed"
   printf 'result=COMPLETE\n' >>"$STATUS"
 }
