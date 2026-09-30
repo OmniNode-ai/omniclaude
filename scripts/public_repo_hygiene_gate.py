@@ -977,6 +977,31 @@ def _alternation(values: list[str]) -> str:
     return "|".join(re.escape(v) for v in sorted(values, key=len, reverse=True))
 
 
+_ENV_VAR_SHAPED_NAME_RE = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)+")
+
+
+def _env_var_exemption(names: list[str]) -> str:
+    """Negative lookahead: the UPPER-CASE environment variable is not a slug.
+
+    A repository slug and an environment variable can be the same word. The
+    variable (``$X``, ``${X}``, ``X=...``, ``os.environ["X"]``) is used across
+    public repositories and names no private repository, so the whole-token,
+    case-sensitive, upper-case spelling of an underscore-separated vocabulary
+    name is not a private-repo reference. The class is otherwise
+    case-insensitive and stays that way: the lower-case slug, a mixed-case
+    spelling, ``<org>/<NAME>`` and any path-segment or ``@`` use of the upper
+    case form are all still findings. The exemption is a property of the
+    matcher, never of a file, so it cannot be granted by an annotation.
+    """
+    upper = [n.upper() for n in names if _ENV_VAR_SHAPED_NAME_RE.fullmatch(n)]
+    if not upper:
+        return ""
+    return (
+        r"(?!(?<![/\\@])(?-i:" + "|".join(re.escape(u) for u in upper) + r")"
+        r"(?![A-Za-z0-9_-]))"
+    )
+
+
 def _raw_alternation(fragments: list[str]) -> str:
     """Alternation over vocabulary values that are already REGEX fragments.
 
@@ -1036,7 +1061,8 @@ def build_content_patterns(vocab: Vocabulary) -> dict[str, re.Pattern[str]]:
             re.IGNORECASE,
         ),
         "private-repo-name": re.compile(
-            rf"(?<![a-z0-9_-])(?:{_alternation(vocab.private_repo_names)})(?![a-z0-9_-])",
+            rf"(?<![a-z0-9_-]){_env_var_exemption(vocab.private_repo_names)}"
+            rf"(?:{_alternation(vocab.private_repo_names)})(?![a-z0-9_-])",
             re.IGNORECASE,
         ),
         "internal-kb-prose": re.compile(
