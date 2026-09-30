@@ -12,7 +12,7 @@ that no decision moved:
 * ``test_entrypoint_decides_what_the_seven_hooks_decided``: for every command in
   the corpus, from a lane worktree and from the canonical clone, the entrypoint's
   exit status and refusal equal what the seven separate scripts at origin/dev
-  ``b5f04266b`` decided (``fixtures/bash_guard_golden.json``), composed the way
+  ``29030cf92`` decided (``fixtures/bash_guard_golden.json``), composed the way
   Claude Code composes seven hooks: any refusal refuses, and every refusing
   guard's reason is shown.
 * ``test_each_guard_run_alone_still_decides_as_before``: every guard script run
