@@ -22,7 +22,9 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
     cat  # drain stdin
     exit 0
 fi
-source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+source "${_ONEX_HOOK_SELF_DIR}/hook-gate.sh" 2>/dev/null || true
 onex_hook_gate AUTO_CHECKPOINT || exit 0
 
 # -----------------------------------------------------------------------
@@ -49,7 +51,7 @@ fi
 # Gather checkpoint data (best-effort, fail open)
 # -----------------------------------------------------------------------
 CHECKPOINT_DIR="${HOME}/.claude/handoffs"
-mkdir -p "$CHECKPOINT_DIR" 2>/dev/null || true
+[[ -d "$CHECKPOINT_DIR" ]] || mkdir -p "$CHECKPOINT_DIR" 2>/dev/null || true
 
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 TIMESTAMP_FILE=$(date -u +"%Y%m%d-%H%M%S")

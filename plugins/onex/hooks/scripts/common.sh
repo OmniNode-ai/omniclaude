@@ -26,9 +26,12 @@
 # Sources hook_bits.sh once per session. Each GATE wrapper calls:
 #   onex_hook_gate <BIT_NAME> || exit 0
 # to silently skip when the bit is cleared in ONEX_HOOKS_MASK.
+# OMN-20109: this file's directory, resolved once without a dirname exec. A
+# hook sources common.sh on every tool call, so each exec here is paid per call.
+_ONEX_COMMON_SH_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_COMMON_SH_DIR=.; [[ -n "$_ONEX_COMMON_SH_DIR" ]] || _ONEX_COMMON_SH_DIR=/
 : "${ONEX_HOOK_BITS_SOURCED:=}"
 if [[ -z "$ONEX_HOOK_BITS_SOURCED" ]]; then
-  _hook_bits_path="${HOOKS_DIR:-$(dirname "${BASH_SOURCE[0]}")/..}/lib/hook_bits.sh"
+  _hook_bits_path="${HOOKS_DIR:-${_ONEX_COMMON_SH_DIR}/..}/lib/hook_bits.sh"
   if [[ -f "$_hook_bits_path" ]]; then
     source "$_hook_bits_path"
   fi
@@ -359,18 +362,25 @@ _normalize_bool() {
 # macOS date doesn't support %N, so we detect and fall back appropriately.
 
 # Detect if native millisecond timing is available (GNU date supports %N).
-# IMPORTANT: This check runs ONCE at script load time and caches the result.
+# IMPORTANT: This check runs ONCE per hook process and caches the result.
 # We intentionally cache rather than checking per-call because:
 #   1. Performance: Avoid subprocess overhead on every timing call
 #   2. Consistency: All timestamps in a session use the same method
 #   3. Reliability: No race conditions from method changing mid-execution
-if date +%s%3N 2>/dev/null | grep -qE '^[0-9]+$'; then
-    _USE_NATIVE_TIME=true
-else
-    _USE_NATIVE_TIME=false
-fi
+# OMN-20109: the probe runs on the first get_time_ms call, not at source time.
+# It cost two execs (date, grep) in every hook that sources this file, and
+# most of them never ask for the time.
+_USE_NATIVE_TIME=""
+_onex_detect_native_time() {
+    if date +%s%3N 2>/dev/null | grep -qE '^[0-9]+$'; then
+        _USE_NATIVE_TIME=true
+    else
+        _USE_NATIVE_TIME=false
+    fi
+}
 
 get_time_ms() {
+    [[ -n "$_USE_NATIVE_TIME" ]] || _onex_detect_native_time
     if [[ "$_USE_NATIVE_TIME" == "true" ]]; then
         date +%s%3N
     else
@@ -478,7 +488,7 @@ export KAFKA_ENABLED
 # Usage: ( slack_notify "daemon_startup" "Emit daemon failed to start..." ) &
 
 # shellcheck source=./alert-channel.sh
-source "$(dirname "${BASH_SOURCE[0]}")/alert-channel.sh" 2>/dev/null || true
+source "${_ONEX_COMMON_SH_DIR}/alert-channel.sh" 2>/dev/null || true
 
 # Cache hostname once at source time
 _SLACK_HOST="${HOSTNAME:-$(hostname -s 2>/dev/null || echo unknown)}"
@@ -688,7 +698,7 @@ emit_hook_error_event() {
 # is journalled with an explicit "unresolved" lane rather than a guessed one.
 
 # shellcheck source=../lib/emit_bounded.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../lib/emit_bounded.sh"
+source "${_ONEX_COMMON_SH_DIR}/../lib/emit_bounded.sh"
 
 emit_to_journal() {
     local event_type="$1"

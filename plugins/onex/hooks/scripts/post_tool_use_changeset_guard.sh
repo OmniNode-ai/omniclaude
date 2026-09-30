@@ -30,7 +30,9 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
     cat  # drain stdin
     exit 0
 fi
-source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+source "${_ONEX_HOOK_SELF_DIR}/hook-gate.sh" 2>/dev/null || true
 onex_hook_gate CHANGESET_GUARD_POST || exit 0
 
 # -----------------------------------------------------------------------
@@ -73,7 +75,7 @@ fi
 # Record the event for data-driven escalation decisions (local JSONL only).
 # -----------------------------------------------------------------------
 LOG_DIR="${HOME}/.claude/changeset-guard-events"
-mkdir -p "$LOG_DIR" 2>/dev/null || true
+[[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR" 2>/dev/null || true
 printf '{"timestamp":"%s","event":"large_changeset","file_count":%d,"threshold":%d}\n' \
     "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
     "$FILE_COUNT" \

@@ -37,19 +37,25 @@ INCIDENT_HOOK_SECONDS_PER_CALL_UNDER_LOAD = (60, 175)
 # What this harness measured on 2026-09-29 (lab host, sha at the head of the
 # branch that added it, idle host): processes EXECED by the hooks of one whole
 # tool call, PreToolUse phase plus PostToolUse phase.
-MEASURED_EXECS_PER_CALL = {"Bash": 261, "Skill": 167, "Read": 91}
-# The same instrument on dev before the OMN-20110 foreground runner: 250 / 151 / 83.
-# The bounded runner (its own interpreter start plus one process group per emit)
-# is the +11 / +16 / +8, paid to make every emit fail loudly instead of hanging.
+# OMN-20114 (2026-09-29, lab h202, three runs each, highest kept): the hooks'
+# path preamble became parameter expansions and each payload is read with one
+# jq, which took the same calls from 261 / 166 / 90 on dev to 109 / 81 / 44.
+MEASURED_EXECS_PER_CALL = {"Bash": 109, "Skill": 81, "Read": 44}
+# History of this instrument: 250 / 151 / 83 on dev before the OMN-20110
+# foreground runner; 261 / 167 / 91 with it (the bounded runner's own
+# interpreter start plus one process group per emit, paid to make every emit
+# fail loudly instead of hanging); 109 / 81 / 44 after OMN-20114.
 
 # The enforced ceiling, per tool. Measured plus a small headroom for the
 # branches a hook takes only sometimes. It only ever moves down.
-CEILING_EXECS_PER_CALL = {"Bash": 300, "Skill": 192, "Read": 104}
+CEILING_EXECS_PER_CALL = {"Bash": 125, "Skill": 93, "Read": 50}
 
-# The target every tool call is held to. A ceiling above this is debt: the
-# per-hook cost is dominated by re-sourcing common.sh (about 15 execs of
-# dirname, date and grep before a hook does anything) and by one jq per field in
-# the bus mirror (about a dozen), both of which one interpreter can replace.
+# The target every tool call is held to. A ceiling above this is debt. After
+# OMN-20114 the remaining cost is one bash per registered hook (17 on a Bash
+# call), about ten python interpreter starts per Bash call (the bounded emit
+# runner plus the writer it starts, per emit) and the payload reads that remain;
+# one entrypoint per event and a runner that does not start a second
+# interpreter are what is left between here and the target.
 TARGET_EXECS_PER_CALL = 60
 
 # Wall time budgets, seconds. Claude Code gives a hook 60 s before it cancels it,

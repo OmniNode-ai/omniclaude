@@ -60,6 +60,20 @@ _repo_guard_resolve_root() {
 
 # Returns 0 if the resolved repo root looks like an OmniNode repo, 1 otherwise.
 # Never blocks, never writes to stdout, never depends on network access.
+# OMN-20109: `grep -qE <ere> <file>` without the exec. Every registered hook
+# runs is_omninode_repo on every tool call, so this grep was paid once per hook
+# per call. Same contract as the grep it replaces: true when any line of the
+# file matches the extended regular expression, false otherwise, including
+# when the file cannot be read. A last line without a newline is still read.
+_repo_guard_file_matches_ere() {
+    local _rg_file="$1" _rg_ere="$2" _rg_line
+    [[ -r "$_rg_file" ]] || return 1
+    while IFS= read -r _rg_line || [[ -n "$_rg_line" ]]; do
+        [[ "$_rg_line" =~ $_rg_ere ]] && return 0
+    done 2>/dev/null <"$_rg_file"
+    return 1
+}
+
 is_omninode_repo() {
     local root
     root="$(_repo_guard_resolve_root)"
@@ -71,7 +85,7 @@ is_omninode_repo() {
 
     # Marker 1: pyproject.toml referencing an OmniNode package.
     if [[ -f "$root/pyproject.toml" ]]; then
-        if grep -qE '(omnibase_|omniclaude|omninode)' "$root/pyproject.toml" 2>/dev/null; then
+        if _repo_guard_file_matches_ere "$root/pyproject.toml" '(omnibase_|omniclaude|omninode)'; then
             return 0
         fi
     fi

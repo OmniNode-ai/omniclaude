@@ -36,7 +36,9 @@ case "$_payload" in
     *) exit 0 ;;
 esac
 
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || exit 0
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+_SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" 2>/dev/null && pwd)" || exit 0
 
 # Lite mode: an external contributor has no canonical registry.
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"

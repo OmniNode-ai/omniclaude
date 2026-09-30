@@ -33,7 +33,9 @@
 
 set -uo pipefail
 
-_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+_SELF="$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SELF}/../.." && pwd)}"
 
 # Session intent (OMN-18368): the fourth silencing axis, resolved before any

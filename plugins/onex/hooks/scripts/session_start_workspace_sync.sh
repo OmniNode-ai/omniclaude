@@ -53,7 +53,9 @@ say() { printf '%s %s\n' "$_PREFIX" "$*"; }
 # sees an EPIPE.
 cat >/dev/null 2>&1 || true
 
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || _SCRIPT_DIR="."
+# OMN-20109: this script's directory, resolved once without a dirname exec.
+_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
+_SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" 2>/dev/null && pwd)" || _SCRIPT_DIR="."
 
 # Lite mode: an external contributor has no canonical registry and must never
 # see ONEX-specific output.
