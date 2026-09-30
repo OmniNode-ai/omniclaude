@@ -420,21 +420,37 @@ lab_fact() { # key -> value from the flat developer-onboarding.yaml
 ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag.
   local a=""
   say ""
-  say "  The lab is set up either way: delegations run on the lab dev lane with no local containers."
-  say "  $1. Running the stack locally takes ${DOCKER_MEM_GB} GB of memory while it runs, and 10-20 minutes the first time."
+  say "  One optional extra: running the stack on this Mac"
+  say ""
+  say "  You're already covered. Your delegations run on your own model key, and this"
+  say "  Mac gets its own identity on the lab's dev lane."
+  say ""
+  say "  If you work on runtime, node or projection code, you can also run your own copy"
+  say "  of the stack here in Docker: a database, a message broker and the two runtime"
+  say "  kernels, all on this Mac, so you can try changes without touching anything shared."
+  say ""
+  say "  What it takes:"
+  say "    - about ${DOCKER_MEM_GB} GB of memory while it runs"
+  say "    - about 15 GB of disk for its images and data"
+  say "    - 10-20 minutes the first time, a few minutes after that"
+  say "    - $1"
+  say ""
+  say "  Not sure? Choose no. You can add it any time: run this again with --containers."
+  say ""
   if [ "$IS_TTY" -eq 1 ]; then
-    printf '  Also run the stack locally in Docker? [y/N] '
+    printf '  Set up the local stack in Docker too? [y/N] '
     IFS= read -r a
   elif [ "$GUI_SESSION" -eq 1 ]; then
-    a="$(/usr/bin/osascript - "$1" 2>/dev/null <<'OSA'
+    a="$(/usr/bin/osascript - "$1" "$DOCKER_MEM_GB" 2>/dev/null <<'OSA'
 on run argv
-  set r to display dialog ("The lab is set up either way. " & (item 1 of argv) & ".") & return & return & "Also run the stack locally in Docker?" with title "OmniNode onboarding" buttons {"No", "Yes"} default button "No"
-  if button returned of r is "Yes" then return "y"
+  set msg to "You're already covered: your delegations run on your own model key, and this Mac gets its own identity on the lab's dev lane." & return & return & "If you work on runtime, node or projection code, you can also run your own copy of the stack here in Docker (a database, a message broker and the runtime kernels), so you can try changes without touching anything shared." & return & return & "What it takes:" & return & "  • about " & (item 2 of argv) & " GB of memory while it runs" & return & "  • about 15 GB of disk" & return & "  • 10-20 minutes the first time" & return & "  • " & (item 1 of argv) & return & return & "Not sure? Choose Not now. You can add it any time by running onboarding again with --containers."
+  set r to display dialog msg with title "Run the stack locally in Docker?" buttons {"Not now", "Yes, set it up"} default button "Not now" with icon note
+  if button returned of r is "Yes, set it up" then return "y"
   return "n"
 end run
 OSA
 )"
-    say "  Also run the stack locally in Docker? ${a:-n} (answered in a dialog)"
+    say "  Set up the local stack in Docker too? ${a:-n} (answered in a dialog)"
   else
     say "  No terminal or desktop to ask on, so the stack is not run locally (--containers adds it)."
   fi
@@ -450,10 +466,12 @@ OSA
 PENDING_KEY=""
 MODEL_CHOICE=""
 
+provider_home() { case "$1" in openrouter) echo "OpenRouter" ;; gemini) echo "Google" ;; *) echo "$1" ;; esac; }
+
 provider_label() {
   case "$1" in
     openrouter) echo "OpenRouter" ;;
-    gemini) echo "Gemini (a Google AI Studio API key)" ;;
+    gemini) echo "Gemini (Google AI Studio)" ;;
     *) echo "$1" ;;
   esac
 }
@@ -472,15 +490,18 @@ ask_provider() { # -> MODEL_CHOICE, or empty when nobody can be asked
   local a=""
   if [ "$IS_TTY" -eq 1 ]; then
     say ""
-    say "  Your delegations run on your own model key. Which provider is it from?"
-    say "    1) OpenRouter"
-    say "    2) Gemini (a Google AI Studio API key)"
-    printf '  Choose 1 or 2: '
+    say "  Your model key"
+    say ""
+    say "  Delegations run on your own AI provider key. For the beta, that's one of:"
+    say "    1) OpenRouter  - openrouter.ai, then Keys (its free models work with no credit)"
+    say "    2) Gemini      - a Google AI Studio key, from aistudio.google.com/apikey"
+    say ""
+    printf '  Which one is yours? Choose 1 or 2: '
     IFS= read -r a
     case "$a" in 1) MODEL_CHOICE=openrouter ;; 2) MODEL_CHOICE=gemini ;; esac
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
-set r to choose from list {"OpenRouter", "Gemini (Google AI Studio)"} with title "OmniNode onboarding" with prompt "Your delegations run on your own model key. Which provider is it from?"
+set r to choose from list {"OpenRouter", "Gemini (Google AI Studio)"} with title "Your model key" with prompt "Delegations run on your own AI provider key. For the beta, that's OpenRouter (openrouter.ai, then Keys) or Gemini (a Google AI Studio key). Which one is yours?" OK button name "Continue" cancel button name "I don't have one yet"
 if r is false then return ""
 return item 1 of r
 OSA
@@ -503,7 +524,10 @@ settle_model_key() {
     LAST_ERR="no provider was chosen, and there is no terminal or desktop to ask on"
     phase_fail "run this in Terminal, or pass --provider openrouter|gemini. Nothing was installed"
   fi
-  read_secret "Paste your $(provider_label "$MODEL_CHOICE") key (input is hidden):"
+  say ""
+  say "  Your key stays on this Mac, in onex's key store. It is never shown or logged,"
+  say "  and it is only ever sent to $(provider_home "$MODEL_CHOICE")."
+  read_secret "  Paste your $(provider_label "$MODEL_CHOICE") API key (input is hidden):"
   PENDING_KEY="$SECRET"; SECRET=""
   if [ -z "$PENDING_KEY" ]; then
     FAILED_STEP="your model key"
@@ -601,9 +625,9 @@ phase0() {
   # preflight and only when this Mac can run it; the flags answer it in advance.
   local docker_note
   case "$dstate" in
-    running) docker_note="Docker Desktop is running" ;;
-    "installed, not running") docker_note="Docker Desktop is installed; it will be started" ;;
-    *) docker_note="Docker Desktop is not installed; it will be installed" ;;
+    running) docker_note="Docker Desktop: already running" ;;
+    "installed, not running") docker_note="Docker Desktop: installed but not running; we'll start it for you" ;;
+    *) docker_note="Docker Desktop: not installed; we'll install it for you (it may ask you to accept Docker's terms)" ;;
   esac
   if [ "$MODE2_OK" -eq 1 ]; then
     case "$WANT_CONTAINERS" in

@@ -246,7 +246,7 @@ def test_one_question_after_preflight_decides_docker(
     }
     script = (
         f"set timeout 60; spawn /bin/bash {phase0_only} --provider gemini; "
-        f'expect "Also run the stack locally in Docker?"; send "{answer}\\r"; '
+        f'expect "Set up the local stack in Docker too?"; send "{answer}\\r"; '
         'expect "key (input is hidden)"; send "not-a-real-key\\r"; expect eof'
     )
     result = subprocess.run(
@@ -260,7 +260,7 @@ def test_one_question_after_preflight_decides_docker(
     out = result.stdout.replace("\r", "")
     if "ports in use" in out:
         pytest.skip("the local stack's ports are held by something else on this host")
-    assert "The lab is set up either way" in out
+    assert "You're already covered" in out
     assert outcome in out
 
 
