@@ -17,10 +17,10 @@ args:
     description: "Check this Mac against the minimum requirements and stop; changes nothing"
     required: false
   - name: --containers
-    description: "Set up Docker Desktop and the local container stack (if this Mac can run them)"
+    description: "Answer the Docker question yes in advance (also run the stack locally in Docker)"
     required: false
   - name: --no-containers
-    description: "Never install Docker Desktop or boot the local stack"
+    description: "Answer the Docker question no in advance (lab only)"
     required: false
   - name: --provider
     description: "Model key to use: openrouter | gemini | none (default: ask)"
@@ -55,7 +55,7 @@ its prompts, then reports each phase to the developer the moment it finishes.
 | 3 | Tailnet: Tailscale installed and signed in | yes |
 | 4 | onex, the local identity, one model path, one delegation | yes |
 | 5 | This machine's lab bus identity, issued automatically; one delegation on the lab dev lane | yes |
-| 6 | Containers, if the developer wants them and the Mac can run them: Docker Desktop installed, or launched if installed but stopped; then the local stack | yes |
+| 6 | Docker (optional, in addition to the lab): only if the developer says yes to the one question; Docker Desktop installed, or started if stopped, then the local stack | yes |
 | 7 | Claude Code plugin `onex@omninode-tools` | yes |
 | 8 | Verify | no |
 
@@ -76,12 +76,15 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/lab-onboarding.sh" --preflight-only <arg
   recommended VM verbatim. **Stop.** Do not offer to install anyway.
 - Exit 1: a fixable condition (not an admin account, a Rosetta shell, not macOS).
   Relay the `Next:` line and stop.
-- Exit 0: relay the "Will set up" line. If it says containers are available,
-  ask the developer whether they want the local container stack (Docker Desktop
-  plus about 10 GB of memory while it runs, and 10-20 minutes the first time),
-  and pass `--containers` or `--no-containers` to the run. Skip the question if
-  either flag was already given. If Docker Desktop is installed but not
-  running, say the run will start it.
+- Exit 0: relay the "Will set up" line. The lab (this machine's own bus
+  identity) is set up on every run. If the line says Docker can be added, ask
+  the developer the one question the run would ask: whether to also run the
+  stack locally in Docker (about 10 GB of memory while it runs, and 10-20
+  minutes the first time). Pass their answer as `--containers` or
+  `--no-containers`, so the Terminal run does not ask it again. If Docker
+  Desktop is installed but stopped, say the run will start it; if it is
+  missing, say the run will install it. If the line says Docker is not
+  offered, relay why: the lab alone covers delegations.
 
 If `--preflight-only` was the argument, stop here.
 

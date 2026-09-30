@@ -15,8 +15,8 @@
 #   3 Tailnet            Tailscale installed and signed in to the OmniNode tailnet
 #   4 onex + model       dispatch venv, onex, local identity, one model path, one delegation
 #   5 Bus identity       this machine's lab principal, issued automatically; one lane delegation
-#   6 Containers         optional, the developer's choice: Docker Desktop (installed, or
-#                        launched if it is installed but stopped) and the local stack
+#   6 Docker             optional, in addition to the lab: asked once after preflight;
+#                        Docker Desktop installed, or started if stopped, then the stack
 #   7 Claude Code plugin onex@omninode-tools
 #   8 Verify             the checks for the selected modes, one line each
 #
@@ -28,9 +28,9 @@
 #
 # Options:
 #   --preflight-only     run phase 0, print the verdict, exit
-#   --containers         set up Docker and the local stack (if this Mac can run them)
-#   --no-containers      never set up Docker or the local stack
-#                        (neither: asked on a terminal; without one, containers are skipped)
+#   --containers         answer the Docker question yes in advance
+#   --no-containers      answer it no in advance
+#                        (neither: the one question is asked after preflight)
 #   --provider NAME      openrouter | gemini | none   (default: ask on a terminal, else none)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else $OMNI_HOME, else ~/code/omni)
 #   --restart            forget completed phases and run every phase again
@@ -416,6 +416,30 @@ lab_fact() { # key -> value from the flat developer-onboarding.yaml
   sed -n "s/^$1:[[:space:]]*//p" "$f" | head -n 1 | sed -e 's/[[:space:]]*#.*$//' -e 's/^"//' -e 's/"$//'
 }
 
+ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag.
+  local a=""
+  say ""
+  say "  The lab is set up either way: delegations run on the lab dev lane with no local containers."
+  say "  $1. Running the stack locally takes ${DOCKER_MEM_GB} GB of memory while it runs, and 10-20 minutes the first time."
+  if [ "$IS_TTY" -eq 1 ]; then
+    printf '  Also run the stack locally in Docker? [y/N] '
+    IFS= read -r a
+  elif [ "$GUI_SESSION" -eq 1 ]; then
+    a="$(/usr/bin/osascript - "$1" 2>/dev/null <<'OSA'
+on run argv
+  set r to display dialog ("The lab is set up either way. " & (item 1 of argv) & ".") & return & return & "Also run the stack locally in Docker?" with title "OmniNode onboarding" buttons {"No", "Yes"} default button "No"
+  if button returned of r is "Yes" then return "y"
+  return "n"
+end run
+OSA
+)"
+    say "  Also run the stack locally in Docker? ${a:-n} (answered in a dialog)"
+  else
+    say "  No terminal or desktop to ask on, so the stack is not run locally (--containers adds it)."
+  fi
+  case "$a" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+}
+
 # ===========================================================================
 # Phase 0: preflight. Reads only.
 # ===========================================================================
@@ -500,35 +524,37 @@ phase0() {
     exit 3
   fi
 
-  # Containers are the developer's choice, offered only when this Mac can run them.
+  # Every machine gets the lab. Docker is one question on top of it, asked after
+  # preflight and only when this Mac can run it; the flags answer it in advance.
+  local docker_note
+  case "$dstate" in
+    running) docker_note="Docker Desktop is running" ;;
+    "installed, not running") docker_note="Docker Desktop is installed; it will be started" ;;
+    *) docker_note="Docker Desktop is not installed; it will be installed" ;;
+  esac
   if [ "$MODE2_OK" -eq 1 ]; then
     case "$WANT_CONTAINERS" in
       1) ;;
-      0) MODE2_OK=0; MODE2_WHY=" you chose not to (--no-containers)" ;;
+      0) MODE2_OK=0; MODE2_WHY=" you said no" ;;
       *)
-        if [ "$IS_TTY" -eq 1 ] && [ "$PREFLIGHT_ONLY" -eq 0 ]; then
-          say "  This Mac can also run the local container stack (Docker Desktop: $dstate)."
-          say "  It needs ${DOCKER_MEM_GB} GB of memory for Docker while it runs, and 10-20 minutes the first time."
-          printf '  Set up the containers too? [y/N] '
-          IFS= read -r a
-          case "$a" in y|Y|yes|YES) ;; *) MODE2_OK=0; MODE2_WHY=" you chose not to" ;; esac
-        elif [ "$PREFLIGHT_ONLY" -eq 1 ]; then
+        if [ "$PREFLIGHT_ONLY" -eq 1 ]; then
           MODE2_OFFERED=1
         else
-          MODE2_OK=0; MODE2_WHY=" not requested (run with --containers to set them up)"
+          ask_docker "$docker_note" || { MODE2_OK=0; MODE2_WHY=" you said no"; }
         fi
         ;;
     esac
-  elif [ "$WANT_CONTAINERS" = "1" ]; then
-    say "  ⚠ You asked for containers, but this Mac cannot run them:$MODE2_WHY. Continuing without them."
+  else
+    say "  Docker is not offered on this Mac:$MODE2_WHY."
+    say "  That is fine: the lab dev lane runs your delegations."
   fi
 
   if [ "$MODE2_OK" -eq 1 ] && [ "$MODE2_OFFERED" -eq 1 ]; then
-    SELECTED="Mode 1 (native onex) and the lab bus; containers available if you want them (--containers)"
+    SELECTED="the lab (this machine's own bus identity) and native onex; Docker can be added (you will be asked)"
   elif [ "$MODE2_OK" -eq 1 ]; then
-    SELECTED="Mode 1 (native onex), the lab bus, and Mode 2 (containers)"
+    SELECTED="the lab (this machine's own bus identity), native onex, and the stack locally in Docker"
   else
-    SELECTED="Mode 1 (native onex) and the lab bus. Containers skipped:$MODE2_WHY"
+    SELECTED="the lab (this machine's own bus identity) and native onex. No local Docker:$MODE2_WHY"
   fi
   say "  Will set up: $SELECTED"
   phase_pass "$SELECTED"
@@ -1077,7 +1103,7 @@ point_bundle_model() { # local.bifrost.yaml defaults to host.docker.internal (gu
 }
 
 phase6() {
-  phase_start 6 "Containers (Docker Desktop and the local stack)" "10-20 minutes the first time"
+  phase_start 6 "Docker (optional, in addition to the lab)" "10-20 minutes the first time"
   if [ "$MODE2_OK" -ne 1 ]; then phase_skip "${MODE2_WHY# }"; return; fi
   if is_done 6 && docker_ready && stack_healthy; then phase_pass "already running"; return; fi
 

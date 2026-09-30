@@ -112,7 +112,7 @@ def test_a_vm_is_never_given_containers(tmp_path: Path) -> None:
         ONBOARD_TEST_CPUS="16",
     )
     assert result.returncode == 0
-    assert "Containers skipped" in result.stdout
+    assert "No local Docker" in result.stdout
     assert "Docker Desktop cannot run inside a macOS guest" in result.stdout
 
 
@@ -127,7 +127,7 @@ def test_containers_are_offered_not_imposed(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     if "ports in use" not in result.stdout:
-        assert "containers available if you want them (--containers)" in result.stdout
+        assert "Docker can be added (you will be asked)" in result.stdout
 
 
 @macos_only
@@ -142,7 +142,7 @@ def test_containers_when_asked_for(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     if "ports in use" not in result.stdout:
-        assert "and Mode 2 (containers)" in result.stdout
+        assert "and the stack locally in Docker" in result.stdout
 
 
 @macos_only
@@ -154,7 +154,7 @@ def test_no_containers_is_honoured(tmp_path: Path) -> None:
         ONBOARD_TEST_RAM_GB="32",
         ONBOARD_TEST_CPUS="10",
     )
-    assert "Containers skipped: you chose not to (--no-containers)" in result.stdout
+    assert "No local Docker: you said no" in result.stdout
 
 
 @macos_only
@@ -169,8 +169,8 @@ def test_containers_asked_for_on_a_mac_that_cannot_run_them_continue_without(
         ONBOARD_TEST_CPUS="4",
     )
     assert result.returncode == 0
-    assert "cannot run them" in result.stdout
-    assert "Continuing without them" in result.stdout
+    assert "Docker is not offered on this Mac" in result.stdout
+    assert "the lab dev lane runs your delegations" in result.stdout
 
 
 @macos_only
@@ -213,3 +213,51 @@ def test_skill_starts_the_run_in_a_terminal_and_keeps_secrets_out_of_the_session
     assert "--preflight-only" in text
     assert 'tell application \\"Terminal\\"' in text
     assert "Never ask the developer to paste a password or API key into this" in text
+
+
+@macos_only
+@pytest.mark.skipif(
+    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
+)
+@pytest.mark.parametrize(
+    ("answer", "outcome"),
+    [("y", "and the stack locally in Docker"), ("n", "No local Docker: you said no")],
+)
+def test_one_question_after_preflight_decides_docker(
+    tmp_path: Path, answer: str, outcome: str
+) -> None:
+    """No flag: the developer is asked once, on a terminal, and the answer decides Docker."""
+    phase0_only = tmp_path / "phase0.sh"
+    phase0_only.write_text(SCRIPT.read_text().replace("\nmain\n", "\nphase0\n"))
+    home = tmp_path / "home"
+    home.mkdir()
+    (tmp_path / "run").mkdir()
+    env = {
+        "HOME": str(home),
+        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+        "TMPDIR": str(tmp_path / "run") + "/",
+        "TERM": "dumb",
+        "ONBOARD_NOTIFY": "0",
+        "ONBOARD_TEST_DISK_GB": "100",
+        "ONBOARD_TEST_RAM_GB": "32",
+        "ONBOARD_TEST_CPUS": "10",
+        "ONBOARD_TEST_VM": "0",
+        "ONBOARD_TEST_ADMIN": "1",
+    }
+    script = (
+        f"set timeout 60; spawn /bin/bash {phase0_only}; "
+        f'expect "Also run the stack locally in Docker?"; send "{answer}\\r"; expect eof'
+    )
+    result = subprocess.run(
+        ["/usr/bin/expect", "-c", script],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout.replace("\r", "")
+    if "ports in use" in out:
+        pytest.skip("the local stack's ports are held by something else on this host")
+    assert "The lab is set up either way" in out
+    assert outcome in out
