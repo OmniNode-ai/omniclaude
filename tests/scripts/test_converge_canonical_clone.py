@@ -93,8 +93,19 @@ class Scratch:
     old_head: str
     upstream_head: str
 
-    def run(self, *args: str) -> subprocess.CompletedProcess[str]:
+    def run(
+        self,
+        *args: str,
+        drop_env: tuple[str, ...] = (),
+        strip_path_stub: bool = False,
+        extra_env: Mapping[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         env = scrub_git_location_env({**self.env, "OMNI_HOME": str(self.omni_home)})
+        for key in drop_env:
+            env.pop(key, None)
+        if strip_path_stub:
+            env["PATH"] = env["PATH"].split(os.pathsep, 1)[1]
+        env.update(extra_env or {})
         return subprocess.run(
             ["bash", str(SCRIPT), *args],
             cwd=self.home,
@@ -109,6 +120,22 @@ class Scratch:
         return self.omni_home / ".onex_state" / "canonical-clone-converge"
 
 
+def _install_stub_writer(home: Path, *, exit_code: int = 0) -> Path:
+    stub_bin = home / "stub-bin"
+    stub_bin.mkdir(exist_ok=True)
+    stub = stub_bin / "onex-ledger"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f'echo "$@" >> "{home}/writer-calls.log"\n'
+        f"[[ {exit_code} -eq 0 ]] || exit {exit_code}\n"
+        '[[ "$2" == "--append" ]] || exit 64\n'
+        'printf \'%s\\n\' "$3" >> "$1"\n',
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    return stub_bin
+
+
 @pytest.fixture
 def scratch(tmp_path: Path) -> Scratch:
     home = tmp_path / "home"
@@ -118,6 +145,12 @@ def scratch(tmp_path: Path) -> Scratch:
     ledger = omni_home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
     ledger.write_text("# ledger\n", encoding="utf-8")
     env = _git_env(home)
+    # OMN-18971: the script writes its row only through a sanctioned writer, and only
+    # to a ledger the environment names. The stub stands in for `onex-ledger`
+    # (same `<ledger> --append <row>` form) and logs each call.
+    stub_bin = _install_stub_writer(home)
+    env["ONEX_LEDGER_PATH"] = str(ledger)
+    env["PATH"] = f"{stub_bin}{os.pathsep}{env['PATH']}"
     (home / "gitconfig").write_text("[init]\n\tdefaultBranch = dev\n", encoding="utf-8")
 
     remote = tmp_path / "remote.git"
@@ -849,3 +882,85 @@ def test_the_reflog_still_wins_over_the_remote_default(
     assert proc.returncode == 0, out
     assert "re-attach to sidecar" in out, out
     assert "derived from HEAD reflog" in out, out
+
+
+# --- OMN-18971: the row never lands in a tracked file of a canonical clone --------
+#
+# The old writer appended to the tracked docs/tracking/ROLLING_WORK_LEDGER.md (a
+# tracked file of the registry's own clone on a lab host) by ledger_lock.py or a raw
+# `>>`. That made the registry clone dirty and blocked every later fast-forward of it.
+
+
+def _pending_rows(scratch: Scratch) -> Path:
+    return scratch.evidence_root / "pending-ledger-rows.md"
+
+
+@pytest.mark.unit
+def test_no_named_ledger_keeps_the_row_in_an_untracked_state_file(
+    scratch: Scratch,
+) -> None:
+    _dirty_like_the_incident(scratch)
+    proc = scratch.run(
+        "omnimarket",
+        "--execute",
+        drop_env=("ONEX_LEDGER_PATH",),
+        strip_path_stub=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert scratch.ledger.read_text(encoding="utf-8") == "# ledger\n"
+    rows = _pending_rows(scratch).read_text(encoding="utf-8")
+    assert "| STATUS |" in rows and "event=CONVERGED" in rows
+    assert "ONEX_LEDGER_PATH is not set" in proc.stderr
+    assert "pending-ledger-rows.md" in proc.stderr
+    assert not (scratch.home / "writer-calls.log").exists()
+
+
+@pytest.mark.unit
+def test_named_ledger_is_written_only_through_the_sanctioned_writer(
+    scratch: Scratch,
+) -> None:
+    _dirty_like_the_incident(scratch)
+    proc = scratch.run("omnimarket", "--execute")
+    assert proc.returncode == 0, proc.stderr
+    calls = (scratch.home / "writer-calls.log").read_text(encoding="utf-8")
+    assert calls.startswith(f"{scratch.ledger} --append ")
+    assert "event=CONVERGED" in scratch.ledger.read_text(encoding="utf-8")
+    assert not _pending_rows(scratch).exists()
+
+
+@pytest.mark.unit
+def test_named_ledger_with_no_writer_falls_back_to_the_state_file(
+    scratch: Scratch,
+) -> None:
+    _dirty_like_the_incident(scratch)
+    # a PATH with no onex-ledger, and no ledger project to run by uv
+    proc = scratch.run(
+        "omnimarket",
+        "--execute",
+        strip_path_stub=True,
+        extra_env={"ONEX_LEDGER_PROJECT": str(scratch.home / "no-such-clone")},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert scratch.ledger.read_text(encoding="utf-8") == "# ledger\n"
+    assert "event=CONVERGED" in _pending_rows(scratch).read_text(encoding="utf-8")
+    assert "no sanctioned ledger writer" in proc.stderr
+
+
+@pytest.mark.unit
+def test_a_refused_ledger_append_keeps_the_row_and_fails_loudly(
+    scratch: Scratch,
+) -> None:
+    _dirty_like_the_incident(scratch)
+    _install_stub_writer(scratch.home, exit_code=75)
+    proc = scratch.run("omnimarket", "--execute")
+    assert proc.returncode == 1
+    assert "the ref IS converged" in proc.stderr
+    assert "event=CONVERGED" in _pending_rows(scratch).read_text(encoding="utf-8")
+    assert scratch.ledger.read_text(encoding="utf-8") == "# ledger\n"
+
+
+@pytest.mark.unit
+def test_script_never_appends_to_a_ledger_file_directly() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "ROLLING_WORK_LEDGER.md" not in text.split("append_ledger_row() {")[1]
+    assert '>> "$ledger"' not in text
