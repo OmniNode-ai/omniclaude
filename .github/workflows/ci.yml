@@ -4282,7 +4282,7 @@ jobs:
           version: "0.8.3"
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --all-extras --python "${PYTHON_VERSION}"
 
       - name: Validate runtime_profiles on omniclaude contracts
         run: uv run python scripts/ci/run_runtime_profiles_validator.py
