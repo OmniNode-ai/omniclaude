@@ -260,3 +260,173 @@ class TestValkeyFailureModes:
         assert result is not None
         # Should have called classifier (cache miss due to schema mismatch)
         mock_tc_cls.assert_called_once()
+
+
+def _fresh_daemon_copy(monkeypatch: pytest.MonkeyPatch, name: str) -> Any:
+    """Execute delegation_daemon.py as a private module.
+
+    Reloading the shared ``delegation_daemon`` module would rebind its globals
+    (for example ``_agentic_jobs``) under other test files that imported them,
+    so the import-diagnostic tests load their own copy instead.
+    """
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    path = (
+        Path(__file__).resolve().parents[4]
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "lib"
+        / "delegation_daemon.py"
+    )
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.unit
+class TestImportDiagnostics:
+    @pytest.mark.parametrize(
+        "module_name",
+        [
+            "omniclaude.lib.task_classifier",
+            "delegation_orchestrator",
+            "agentic_loop",
+            "agentic_quality_gate",
+            "hook_quality_gate",
+        ],
+    )
+    def test_missing_import_is_reported_at_start_and_use(
+        self,
+        module_name: str,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        capsys: pytest.CaptureFixture[str],
+        tmp_path: Any,
+    ) -> None:
+        import builtins
+        import logging
+
+        original_import = builtins.__import__
+
+        def blocked_import(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == module_name:
+                raise ImportError("planted missing dependency")
+            return original_import(name, *args, **kwargs)
+
+        with monkeypatch.context() as scoped:
+            scoped.setattr(builtins, "__import__", blocked_import)
+            mod = _fresh_daemon_copy(monkeypatch, "delegation_daemon_blocked_copy")
+        assert mod._IMPORT_ERRORS[module_name] == "planted missing dependency"
+        # Stop immediately after the real startup diagnostic, before binding.
+        monkeypatch.setattr(
+            mod,
+            "_cleanup_stale",
+            MagicMock(side_effect=RuntimeError("stop startup")),
+        )
+        monkeypatch.setattr(mod, "_get_socket_path", lambda: str(tmp_path / "sock"))
+        monkeypatch.setattr(mod, "_get_pid_path", lambda: str(tmp_path / "pid"))
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(RuntimeError, match="stop startup"):
+                mod.start_daemon()
+        assert module_name in capsys.readouterr().err
+        assert any(
+            record.levelno == logging.ERROR
+            and module_name in record.message
+            and "planted missing dependency" in record.message
+            for record in caplog.records
+        )
+        caplog.clear()
+        # Exercise a path that would consume each missing symbol.
+        with caplog.at_level(logging.ERROR):
+            if module_name == "omniclaude.lib.task_classifier":
+                monkeypatch.setattr(mod, "_get_valkey", lambda: None)
+                mod._classify_with_cache("document this", "cid")
+            elif module_name == "delegation_orchestrator":
+                mod._handle_request(b'{"prompt": "document this"}')
+            elif module_name == "agentic_loop":
+                monkeypatch.setattr(mod, "_classify_with_cache", lambda *a: None)
+                monkeypatch.setattr(
+                    mod, "orchestrate_delegation", lambda **kw: {"agentic": True}
+                )
+                mod._handle_request(b'{"prompt": "document this"}')
+            elif module_name == "hook_quality_gate":
+                monkeypatch.setattr(mod, "_classify_with_cache", lambda *a: None)
+                monkeypatch.setattr(
+                    mod,
+                    "orchestrate_delegation",
+                    lambda **kw: {"response_content": "documented result"},
+                )
+                mod._handle_request(b'{"prompt": "document this"}')
+            else:
+                result = MagicMock(content="documented result", tool_names_used=set())
+                job = mod.AgenticJob("job", "session", "prompt")
+                job.status = mod.AgenticJobStatus.COMPLETED
+                job.result = result
+                monkeypatch.setattr(mod, "_agentic_jobs", {"job": job})
+                monkeypatch.setattr(mod, "run_hook_quality_gate", None)
+                monkeypatch.setattr(mod, "_emit_delegation_event", None)
+                mod._poll_agentic_jobs("session")
+        assert module_name in capsys.readouterr().err
+        assert any(
+            record.levelno == logging.ERROR and module_name in record.message
+            for record in caplog.records
+        )
+
+    def test_all_importable_is_silent(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        import logging
+        import sys
+        from types import ModuleType
+
+        # The retired orchestrator is absent in this checkout; supply an importable
+        # dependency to exercise the all-importable branch, without changing runtime.
+        orchestrator = ModuleType("delegation_orchestrator")
+        setattr(orchestrator, "orchestrate_delegation", MagicMock())
+        setattr(orchestrator, "_emit_delegation_event", MagicMock())
+        with monkeypatch.context() as scoped:
+            scoped.setitem(sys.modules, "delegation_orchestrator", orchestrator)
+            mod = _fresh_daemon_copy(scoped, "delegation_daemon_importable_copy")
+            assert not mod._IMPORT_ERRORS
+            scoped.setattr(
+                mod,
+                "_cleanup_stale",
+                MagicMock(side_effect=RuntimeError("stop startup")),
+            )
+            with caplog.at_level(logging.ERROR):
+                with pytest.raises(RuntimeError, match="stop startup"):
+                    mod.start_daemon()
+                mod._report_import_errors()
+            assert not caplog.records
+            assert capsys.readouterr().err == ""
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("cache_is_mapping", [True, False])
+def test_only_a_mapping_with_the_current_schema_is_a_cache_hit(
+    cache_is_mapping: bool,
+) -> None:
+    mod = TestClassifyWithCache()._import_module()
+    cached = {"schema_version": mod.CACHE_SCHEMA_VERSION, "intent": "cached"}
+    client = MagicMock()
+    client.get.return_value = json.dumps(cached if cache_is_mapping else [cached])
+    with (
+        patch.object(mod, "_get_valkey", return_value=client),
+        patch.object(mod, "TaskClassifier") as classifier,
+    ):
+        classifier.return_value.is_delegatable.return_value = MagicMock(
+            classified_intent="fresh", confidence=0.9, delegatable=True
+        )
+        result = mod._classify_with_cache("document this", "correlation")
+    assert result is not None
+    assert result["intent"] == ("cached" if cache_is_mapping else "fresh")
+    assert classifier.called is not cache_is_mapping

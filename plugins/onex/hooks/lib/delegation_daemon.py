@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import logging
 import os
@@ -73,19 +74,25 @@ CACHE_SCHEMA_VERSION = 1
 # ---------------------------------------------------------------------------
 # Module-level imports (after path setup)
 # ---------------------------------------------------------------------------
+_IMPORT_ERRORS: dict[str, str] = {}
+
 try:
-    from omniclaude.lib.task_classifier import TaskClassifier
-except ImportError:  # pragma: no cover
-    TaskClassifier = None  # type: ignore[assignment,misc]
+    from omniclaude.lib.task_classifier import TaskClassifier as ImportedTaskClassifier
+
+    TaskClassifier: type[ImportedTaskClassifier] | None = ImportedTaskClassifier
+except ImportError as exc:
+    _IMPORT_ERRORS["omniclaude.lib.task_classifier"] = str(exc)
+    TaskClassifier = None
 
 try:
     from delegation_orchestrator import (  # type: ignore[import-not-found]
         _emit_delegation_event,
         orchestrate_delegation,
     )
-except ImportError:  # pragma: no cover
-    orchestrate_delegation = None  # type: ignore[assignment]
-    _emit_delegation_event = None  # type: ignore[assignment]
+except ImportError as exc:
+    _IMPORT_ERRORS["delegation_orchestrator"] = str(exc)
+    orchestrate_delegation = None
+    _emit_delegation_event = None
 
 # ---------------------------------------------------------------------------
 # Agentic loop import (after path setup)
@@ -96,17 +103,19 @@ try:
         AgenticStatus,
         run_agentic_task,
     )
-except ImportError:  # pragma: no cover
-    AgenticResult = None  # type: ignore[assignment,misc]
-    AgenticStatus = None  # type: ignore[assignment,misc]
-    run_agentic_task = None  # type: ignore[assignment]
+except ImportError as exc:
+    _IMPORT_ERRORS["agentic_loop"] = str(exc)
+    AgenticResult = None
+    AgenticStatus = None
+    run_agentic_task = None
 
 try:
     from agentic_quality_gate import (  # type: ignore[import-not-found]
         check_agentic_quality,
     )
-except ImportError:  # pragma: no cover
-    check_agentic_quality = None  # type: ignore[assignment]
+except ImportError as exc:
+    _IMPORT_ERRORS["agentic_quality_gate"] = str(exc)
+    check_agentic_quality = None
 
 try:
     from hook_quality_gate import (  # type: ignore[import-not-found]
@@ -114,10 +123,23 @@ try:
         ModelHookQualityGateResult,
         run_hook_quality_gate,
     )
-except ImportError:  # pragma: no cover
-    ModelHookQualityGateInput = None  # type: ignore[assignment,misc]
-    ModelHookQualityGateResult = None  # type: ignore[assignment,misc]
-    run_hook_quality_gate = None  # type: ignore[assignment]
+except ImportError as exc:
+    _IMPORT_ERRORS["hook_quality_gate"] = str(exc)
+    ModelHookQualityGateInput = None
+    ModelHookQualityGateResult = None
+    run_hook_quality_gate = None
+
+
+def _report_import_errors(module_name: str | None = None) -> None:
+    """Keep degraded delegation visible without crashing the hook session."""
+    for name, error in _IMPORT_ERRORS.items():
+        if module_name is None or name == module_name:
+            diagnostic = (
+                f"Delegation daemon import failure: {name}: {error}. "
+                "Delegation functionality is unavailable; repair the hook dependencies."
+            )
+            logger.error("%s", diagnostic)
+            print(diagnostic, file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +172,7 @@ class AgenticJob:
     started_at: float = field(default_factory=time.monotonic)
     completed_at: float | None = None
     status: AgenticJobStatus = AgenticJobStatus.RUNNING
-    result: AgenticResult | None = None  # type: ignore[type-arg]
+    result: AgenticResult | None = None
     error: str | None = None
 
 
@@ -223,6 +245,7 @@ def _start_agentic_job(
     def _run() -> None:
         try:
             if run_agentic_task is None:
+                _report_import_errors("agentic_loop")
                 job.status = AgenticJobStatus.FAILED
                 job.error = "agentic_loop module not available"
                 job.completed_at = time.monotonic()
@@ -276,6 +299,8 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                 # check_agentic_quality is kept as a secondary check for backward compat.
                 # Both are NON-AUTHORITATIVE and non-blocking — failures are logged and
                 # included in telemetry but do not prevent the result from reaching Claude.
+                _report_import_errors("hook_quality_gate")
+                _report_import_errors("agentic_quality_gate")
                 quality_gate_reason = ""
                 hook_gate_result_dict: dict[str, Any] = {}
 
@@ -340,6 +365,7 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                 # NON-AUTHORITATIVE: task_type from local TaskClassifier
                 _job_task_type = job.task_type
                 del _agentic_jobs[job_id]
+                _report_import_errors("delegation_orchestrator")
                 if _emit_delegation_event is not None:
                     _emit_delegation_event(
                         session_id=job.session_id,
@@ -374,6 +400,7 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                 # NON-AUTHORITATIVE: task_type from local TaskClassifier
                 _job_task_type = job.task_type
                 del _agentic_jobs[job_id]
+                _report_import_errors("delegation_orchestrator")
                 if _emit_delegation_event is not None:
                     _emit_delegation_event(
                         session_id=job.session_id,
@@ -423,7 +450,7 @@ def _get_valkey() -> Any:
         return _valkey_client
     _valkey_init_attempted = True
     try:
-        import valkey  # type: ignore[import-untyped]
+        valkey = importlib.import_module("valkey")
 
         _valkey_client = valkey.Valkey(
             host=os.environ.get("VALKEY_HOST", "localhost"),
@@ -478,7 +505,10 @@ def _classify_with_cache(prompt: str, correlation_id: str) -> dict[str, Any] | N
             cached_raw = vk.get(cache_key)
             if cached_raw is not None:
                 cached = json.loads(cached_raw)
-                if cached.get("schema_version") == CACHE_SCHEMA_VERSION:
+                if (
+                    isinstance(cached, dict)
+                    and cached.get("schema_version") == CACHE_SCHEMA_VERSION
+                ):
                     logger.debug(
                         "Cache hit for %s (correlation=%s)",
                         cache_key[:40],
@@ -495,7 +525,7 @@ def _classify_with_cache(prompt: str, correlation_id: str) -> dict[str, Any] | N
 
     # Cache miss or Valkey unavailable — classify directly
     if TaskClassifier is None:
-        logger.debug("TaskClassifier unavailable")
+        _report_import_errors("omniclaude.lib.task_classifier")
         return None
 
     try:
@@ -566,6 +596,7 @@ def _handle_request(data: bytes) -> bytes:
     transcript_path = req.get("transcript_path", "")
 
     if orchestrate_delegation is None:
+        _report_import_errors("delegation_orchestrator")
         return json.dumps(
             {"delegated": False, "reason": "orchestrator_unavailable"}
         ).encode()
@@ -585,6 +616,8 @@ def _handle_request(data: bytes) -> bytes:
         # --- Agentic dispatch (OMN-5725) ---
         # If the orchestrator signals agentic eligibility, start a background
         # agentic loop and return immediately with a job_id.
+        if result.get("agentic"):
+            _report_import_errors("agentic_loop")
         if result.get("agentic") and run_agentic_task is not None:
             # Reject if session already has an active job (OMN-6957)
             with _agentic_jobs_lock:
@@ -637,6 +670,8 @@ def _handle_request(data: bytes) -> bytes:
         response_content = (
             result.get("response_content", "") if isinstance(result, dict) else ""
         )
+        if response_content:
+            _report_import_errors("hook_quality_gate")
         if (
             response_content
             and run_hook_quality_gate is not None
@@ -749,6 +784,7 @@ def start_daemon() -> None:
     Cleans up stale PID/socket, binds the Unix socket, writes PID file,
     and enters the serve_forever loop. Sets socket permissions to 0600.
     """
+    _report_import_errors()
     socket_path = _get_socket_path()
     pid_path = _get_pid_path()
 

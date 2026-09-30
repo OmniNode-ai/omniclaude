@@ -111,7 +111,7 @@ suites:
     repo: omniclaude
     job: Tests (Split n/m)
     mode: nodeids
-    max_skips: 58
+    max_skips: 45
     baseline_collected: 17363
     provenance:
       measured_at: '2026-09-18'
@@ -128,19 +128,6 @@ suites:
     node_ids:
     - tests.ci.test_receipt_gate_caller_pin_omn20132::test_floor_rejects_the_pre_tree_sha_inner_ref
     - tests.ci.test_receipt_gate_caller_pin_omn20132::test_pinned_workflow_inner_validator_accepts_tree_sha
-    - tests.delegation.test_e2e_smoke.TestFailOpenImplementTask::test_classifier_debug_blocked_end_to_end
-    - tests.delegation.test_e2e_smoke.TestFailOpenImplementTask::test_debug_classified_as_not_delegatable
-    - tests.delegation.test_e2e_smoke.TestFailOpenImplementTask::test_hook_runner_returns_not_delegatable_for_debug_task
-    - tests.delegation.test_e2e_smoke.TestHappyPathDocumentDelegation::test_classifier_marks_document_as_delegatable
-    - tests.delegation.test_e2e_smoke.TestHappyPathDocumentDelegation::test_full_e2e_pipeline_document_path
-    - tests.delegation.test_e2e_smoke.TestHappyPathDocumentDelegation::test_runner_returns_delegation_result_with_mock_http
-    - tests.delegation.test_e2e_smoke.TestHappyPathDocumentDelegation::test_sensitivity_gate_passes_clean_input
-    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_full_pipeline_short_circuits_on_sensitive_input
-    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_gate_catches_known_secret_patterns[AKIA1234567890ABCDEF-AWS access key (AKIA)]
-    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_gate_catches_known_secret_patterns[ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij-GitHub personal access token]
-    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_gate_catches_known_secret_patterns[password=supersecret123-Password or secret in key=value]
-    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_gate_catches_known_secret_patterns[sk-abcdefghijklmnopqrstu-Secret key (sk-)]
-    - tests.delegation.test_e2e_smoke.TestSensitiveInputRejected::test_hook_runner_returns_sensitive_for_api_key_input
     - tests.hooks.test_capture_redaction_omn17959::test_every_daemon_transform_name_is_mapped
     - tests.hooks.test_capture_redaction_omn17959::test_governed_topics_are_exactly_what_the_owner_governs
     - tests.hooks.test_capture_redaction_omn17959::test_mirrored_contract_posture_matches_the_omnimarket_owner

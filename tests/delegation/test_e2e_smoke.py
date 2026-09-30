@@ -6,11 +6,10 @@ Wires together:
   - SensitivityGate (OMN-10608)
   - TaskClassifier (on main)
   - delegation_hook_runner pipeline (OMN-10607)
-  - DelegationRunner (OMN-10610) with mocked HTTP
+  - InProcessDelegationRunner (OMN-10610) with mocked HTTP
   - quality_gate delta (omnimarket)
 
-Components from open PRs (not yet on main) are imported from their worktrees
-via sys.path injection, matching the pattern used by delegation_hook_runner.py.
+Components are imported from this repository tree, including the hook library.
 
 Three scenarios verified:
   1. DOCUMENT-class task → sensitivity clear → classifier delegates → runner returns result
@@ -24,6 +23,7 @@ import importlib
 import json
 import sys
 import uuid
+from functools import partial
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -31,35 +31,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.constants import MODEL_LOCAL_GENERAL
+
 # ---------------------------------------------------------------------------
-# Worktree path resolution for Phase 1 components not yet on main
+# Repository path resolution
 # ---------------------------------------------------------------------------
 
-_WT_ROOT = Path(
-    __file__
-).parents[
-    4
-]  # tests/delegation -> tests -> omniclaude -> OMN-10613 -> omni_worktrees  # noqa: E501
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SRC = _REPO_ROOT / "src"
+_HOOK_RUNNER_LIB = _REPO_ROOT / "plugins" / "onex" / "hooks" / "lib"
 
-_GATE_SRC = _WT_ROOT / "OMN-10608" / "omniclaude" / "src"
-_RUNNER_SRC = _WT_ROOT / "OMN-10610" / "omniclaude" / "src"
-_HOOK_RUNNER_LIB = (
-    _WT_ROOT / "OMN-10607" / "omniclaude" / "plugins" / "onex" / "hooks" / "lib"
-)
-
-_WORKTREES_AVAILABLE = (
-    _GATE_SRC.exists() and _RUNNER_SRC.exists() and _HOOK_RUNNER_LIB.exists()
-)
-
-pytestmark = pytest.mark.skipif(
-    not _WORKTREES_AVAILABLE,
-    reason=(
-        "Phase 1 worktrees (OMN-10607, OMN-10608, OMN-10610) not present — "
-        "run after PRs are merged or worktrees created."
-    ),
-)
-
-from tests.constants import MODEL_LOCAL_GENERAL  # noqa: E402
 
 _ROUTING_MODEL = MODEL_LOCAL_GENERAL
 
@@ -71,38 +52,19 @@ def _inject_path(p: Path) -> None:
 
 
 def _load_gate_module() -> ModuleType:
-    _inject_path(_GATE_SRC)
-    # Force reimport so injection takes effect even if partially imported.
-    mod_name = "omniclaude.delegation.sensitivity_gate"
-    if mod_name in sys.modules:
-        return sys.modules[mod_name]
-    return importlib.import_module(mod_name)
+    _inject_path(_SRC)
+    return importlib.import_module("omniclaude.delegation.sensitivity_gate")
 
 
 def _load_runner_module() -> ModuleType:
-    # Load by file path to avoid collision with the test venv's omniclaude package,
-    # which does not have the delegation subpackage (OMN-10610 not yet merged).
-    import importlib.util
-
-    mod_name = "omniclaude_delegation_runner_wt"
-    if mod_name in sys.modules:
-        return sys.modules[mod_name]
-    runner_file = _RUNNER_SRC / "omniclaude" / "delegation" / "runner.py"
-    spec = importlib.util.spec_from_file_location(mod_name, runner_file)
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[mod_name] = mod
-    spec.loader.exec_module(mod)  # type: ignore[attr-defined]
-    return mod
+    _inject_path(_SRC)
+    return importlib.import_module("omniclaude.delegation.inprocess_runner")
 
 
 def _load_hook_runner_module() -> ModuleType:
-    _inject_path(str(_HOOK_RUNNER_LIB))
-    _inject_path(_GATE_SRC)  # hook runner imports sensitivity_gate
-    mod_name = "delegation_hook_runner"
-    if mod_name in sys.modules:
-        return sys.modules[mod_name]
-    return importlib.import_module(mod_name)
+    _inject_path(_HOOK_RUNNER_LIB)
+    _inject_path(_SRC)
+    return importlib.import_module("delegation_hook_runner")
 
 
 # ---------------------------------------------------------------------------
@@ -115,9 +77,18 @@ def gate_module() -> ModuleType:
     return _load_gate_module()
 
 
-@pytest.fixture(scope="module")
-def runner_module() -> ModuleType:
-    return _load_runner_module()
+@pytest.fixture
+def runner_module(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    module = _load_runner_module()
+    # The old in-process adapter supplies no DoD. Declare the smoke task's
+    # acceptance check at the input boundary and keep the real quality gate:
+    # a documentation deliverable must contain a docstring, not merely text.
+    monkeypatch.setattr(
+        module,
+        "ModelQualityGateInput",
+        partial(module.ModelQualityGateInput, dod_deterministic=("docstring_present",)),
+    )
+    return module
 
 
 @pytest.fixture(scope="module")
@@ -139,6 +110,7 @@ def _fake_routing_decision(task_type: str = "document") -> Any:
         endpoint_url="http://localhost:9999",
         cost_tier="low",
         max_context_tokens=32768,
+        max_tokens=1024,
         system_prompt="You are a documentation assistant.",
         rationale="Mocked routing for unit test.",
     )
@@ -179,10 +151,6 @@ class TestHappyPathDocumentDelegation:
     def test_runner_returns_delegation_result_with_mock_http(
         self, runner_module: ModuleType
     ) -> None:
-        from omnimarket.nodes.node_delegation_routing_reducer.handlers import (
-            handler_delegation_routing,
-        )
-
         routing_decision = _fake_routing_decision("document")
 
         mock_llm_response = (
@@ -193,14 +161,12 @@ class TestHappyPathDocumentDelegation:
         )
 
         with (
-            patch.object(
-                handler_delegation_routing, "delta", return_value=routing_decision
-            ),
+            patch.object(runner_module, "routing_delta", return_value=routing_decision),
             patch(
                 f"{runner_module.__name__}._call_llm", return_value=mock_llm_response
             ),
         ):
-            runner = runner_module.DelegationRunner()
+            runner = runner_module.InProcessDelegationRunner()
             result = runner.run(
                 task_type="document",
                 prompt="document the process_results function in utils.py",
@@ -217,10 +183,6 @@ class TestHappyPathDocumentDelegation:
         self, gate_module: ModuleType, runner_module: ModuleType
     ) -> None:
         """Full pipeline: gate check → classifier → runner → result."""
-        from omnimarket.nodes.node_delegation_routing_reducer.handlers import (
-            handler_delegation_routing,
-        )
-
         from omniclaude.lib.task_classifier import TaskClassifier
 
         prompt = "document the process_results function in utils.py"
@@ -245,14 +207,12 @@ class TestHappyPathDocumentDelegation:
             _ROUTING_MODEL,
         )
         with (
-            patch.object(
-                handler_delegation_routing, "delta", return_value=routing_decision
-            ),
+            patch.object(runner_module, "routing_delta", return_value=routing_decision),
             patch(
                 f"{runner_module.__name__}._call_llm", return_value=mock_llm_response
             ),
         ):
-            runner = runner_module.DelegationRunner()
+            runner = runner_module.InProcessDelegationRunner()
             result = runner.run(
                 task_type=score.classified_intent,
                 prompt=prompt,
@@ -324,9 +284,6 @@ class TestFailOpenImplementTask:
         """Full pipeline: sensitivity gate passes, classifier blocks DEBUG intent."""
         from omniclaude.lib.task_classifier import TaskClassifier
 
-        if not _WORKTREES_AVAILABLE:
-            pytest.skip("gate worktree not present")
-
         gate_module = _load_gate_module()
         gate = gate_module.SensitivityGate()
         prompt = "why is this failing? investigate the broken authentication error bug"
@@ -395,7 +352,9 @@ class TestSensitiveInputRejected:
 
         assert exit_code == 0
         printed: str = mock_print.call_args[0][0]
-        assert printed.startswith("not_delegatable:sensitive:")
+        # The runner prints the bare verdict and never the raw reason, so no
+        # sensitive text leaks into the hook output (delegation_hook_runner.py).
+        assert printed == "not_delegatable:sensitive"
 
     def test_full_pipeline_short_circuits_on_sensitive_input(
         self, gate_module: ModuleType, runner_module: ModuleType
@@ -416,3 +375,31 @@ class TestSensitiveInputRejected:
             assert mock_call.call_count == 0, (
                 "LLM should not be called for sensitive input"
             )
+
+
+@pytest.mark.unit
+def test_document_acceptance_rejects_missing_docstring(
+    runner_module: ModuleType,
+) -> None:
+    with (
+        patch.object(
+            runner_module, "routing_delta", return_value=_fake_routing_decision()
+        ),
+        patch.object(
+            runner_module,
+            "_call_llm",
+            return_value=(
+                "Unrelated prose without a docstring.",
+                {},
+                42,
+                _ROUTING_MODEL,
+            ),
+        ),
+    ):
+        result = runner_module.InProcessDelegationRunner().run(
+            task_type="document",
+            prompt="document the process_results function in utils.py",
+            tool_input={"command": "Read", "path": "utils.py"},
+        )
+    assert result.quality_passed is False
+    assert "missing docstring" in result.failure_reason

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Run the runtime_profiles contract validator with the omniclaude allowlist.
 
-Mirrors the required CI gate `.github/workflows/validator-runtime-profiles.yml`
+Mirrors the required CI gate `.github/workflows/ci.yml (runtime-profiles)`
 exactly: it constructs `ValidatorRuntimeProfiles` with the repo-local
 `scripts/validation/runtime_profiles_allowlist.yaml` and validates `src/`.
 

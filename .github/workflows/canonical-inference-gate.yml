@@ -76,60 +76,7 @@ jobs:
             python -m omnibase_core.validation.validator_canonical_inference \
             --all --repo omniclaude --repo-root .
 
-      - name: Assert baseline did not grow (anti-gaming)
-        run: |
-          uv run --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@940d2f2ab44d2f455a607926674b90ecbc9b74ba" python - <<'PY'
-          import json
-          import subprocess
-          import sys
-          from pathlib import Path
-
-          # Locate the baseline inside the installed omnibase_core package.
-          import omnibase_core.validation.validator_canonical_inference as _m
-
-          baseline = Path(_m.__file__).parent / "baselines" / "canonical_inference_baseline.json"
-          head = json.loads(baseline.read_text())
-          head_repo = {
-              e["fingerprint"]
-              for e in head["violations"]
-              if e["repo"] == "omniclaude"
-          }
-          # Compare against the baseline on the PR base branch.
-          base_ref = "origin/${{ github.base_ref || 'dev' }}"
-          try:
-              prior_text = subprocess.check_output(
-                  ["git", "show", f"{base_ref}:{baseline.relative_to(Path.cwd())}"],
-                  text=True,
-              )
-              prior = json.loads(prior_text)
-              prior_repo = {
-                  e["fingerprint"]
-                  for e in prior["violations"]
-                  if e["repo"] == "omniclaude"
-              }
-          except (subprocess.CalledProcessError, ValueError):
-              # Baseline file is not present in this consumer repo working tree —
-              # the baseline is owned by omnibase_core, not this repo. There is no
-              # local prior to compare against; the anti-growth assertion is
-              # enforced in omnibase_core's own CI. Nothing grew here by
-              # definition.
-              print(
-                  "CANONICAL-INFERENCE BASELINE OK (consumer): baseline owned by "
-                  f"omnibase_core; omniclaude subset has {len(head_repo)} "
-                  "grandfathered fingerprints."
-              )
-              sys.exit(0)
-          grew = head_repo - prior_repo
-          if grew:
-              sys.stderr.write(
-                  "CANONICAL-INFERENCE BASELINE GREW: "
-                  f"{len(grew)} new fingerprint(s) added to the baseline. The "
-                  "baseline is burn-down only — fix the violation or annotate with "
-                  "# canonical-inference-ok:, never grow the baseline.\n"
-              )
-              sys.exit(1)
-          print(
-              "CANONICAL-INFERENCE BASELINE OK: "
-              f"omniclaude subset {len(head_repo)} (<= prior {len(prior_repo)})."
-          )
-          PY
+      - name: Assert baseline did not grow (anti-growth)
+        env:
+          BASE_REF: origin/${{ github.base_ref || 'dev' }}
+        run: python3 scripts/ci/check_canonical_inference_baseline_growth.py --base-ref "$BASE_REF"
