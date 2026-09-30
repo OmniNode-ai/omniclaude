@@ -131,13 +131,17 @@ def test_each_guard_run_alone_still_decides_as_before(script: str) -> None:
 def _count_pythons(tmp_path: Path, command: str) -> tuple[int, int, str]:
     log = tmp_path / "pythons.log"
     shim = tmp_path / "python-shim"
-    shim.write_text(f'#!/bin/sh\necho "$$" >> "{log}"\nexec "{PYTHON}" "$@"\n')
+    shim.write_text(f'#!/bin/sh\necho "$$ $*" >> "{log}"\nexec "{PYTHON}" "$@"\n')
     shim.chmod(0o755)
     with corpus.workspace() as ws:
         rc, out = corpus.run_script(
             ws, PLUGIN_ROOT, corpus.ENTRYPOINT, command, "worktree", str(shim)
         )
-    starts = len(log.read_text().splitlines()) if log.exists() else 0
+    lines = log.read_text().splitlines() if log.exists() else []
+    # A refusal also starts the refusal recorder, backgrounded and disowned so
+    # it is off the call's wall time (error-guard.sh hook_record_refusal); it is
+    # not a decision core and is not counted.
+    starts = sum(1 for line in lines if "hook_refusal_recorder.py" not in line)
     return starts, rc, out
 
 
@@ -193,3 +197,22 @@ def test_a_dead_shared_interpreter_fails_every_guard_closed(tmp_path: Path) -> N
         "OMN-18750",  # prose substitution
     ):
         assert words in reason, f"no fail-closed refusal naming {words!r}:\n{reason}"
+
+
+def test_an_unwritable_request_dir_fails_closed(tmp_path: Path) -> None:
+    # The request for the shared interpreter cannot be written: the guard that
+    # needed its core must refuse, never let the collect exit through as a
+    # non-blocking hook error.
+    missing = tmp_path / "no-such-dir"
+    with corpus.workspace() as ws:
+        rc, out = corpus.run_script(
+            ws,
+            PLUGIN_ROOT,
+            corpus.ENTRYPOINT,
+            "git stash pop",
+            "worktree",
+            PYTHON,
+            extra_env={"TMPDIR": str(missing)},
+        )
+    assert rc == 2, out
+    assert "OMN-17334" in json.loads(out)["reason"], out

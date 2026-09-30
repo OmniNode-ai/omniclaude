@@ -96,7 +96,11 @@ ONEX_BASH_GUARDS_PHASE=collect
 _obg_i=0
 while [[ $_obg_i -lt ${#_OBG_GUARDS[@]} ]]; do
     _obg_run_guard "$_obg_i"
-    if [[ $_OBG_RC -eq $ONEX_BASH_GUARDS_COLLECTED && -f "${ONEX_BASH_GUARDS_REQ}.${_obg_i}.req" ]]; then
+    if [[ $_OBG_RC -eq $ONEX_BASH_GUARDS_COLLECTED ]]; then
+        # Asked for its core. A request that could not be written (TMPDIR full
+        # or unwritable) is still a guard that needs its core: the run pass
+        # reports it unreadable, and the replay refuses fail-closed, rather
+        # than letting exit 99 through as a non-blocking hook error.
         _OBG_NEED+=("$_obg_i")
     else
         printf -v "_OBG_FINAL_RC_${_obg_i}" '%s' "$_OBG_RC"
@@ -107,16 +111,20 @@ done
 
 # --- Pass 2: one interpreter for every decision core ---------------------------
 if [[ ${#_OBG_NEED[@]} -gt 0 ]]; then
-    # The interpreter the first requesting guard resolved for its own core:
+    # The interpreter the first readable request's guard resolved for its core:
     # every guard resolves one the same way it always did, and the request
     # records it as argv[0].
     # Fields: magic, stderr mode, cwd, has-stdin, stdin, argc, argv[0].
     _OBG_PY=""
-    {
-        IFS= read -r -d '' _obg_f; IFS= read -r -d '' _obg_f; IFS= read -r -d '' _obg_f
-        IFS= read -r -d '' _obg_f; IFS= read -r -d '' _obg_f; IFS= read -r -d '' _obg_f
-        IFS= read -r -d '' _OBG_PY
-    } < "${ONEX_BASH_GUARDS_REQ}.${_OBG_NEED[0]}.req" || true
+    for _obg_i in "${_OBG_NEED[@]}"; do
+        [[ -f "${ONEX_BASH_GUARDS_REQ}.${_obg_i}.req" ]] || continue
+        {
+            IFS= read -r -d '' _obg_f; IFS= read -r -d '' _obg_f; IFS= read -r -d '' _obg_f
+            IFS= read -r -d '' _obg_f; IFS= read -r -d '' _obg_f; IFS= read -r -d '' _obg_f
+            IFS= read -r -d '' _OBG_PY
+        } < "${ONEX_BASH_GUARDS_REQ}.${_obg_i}.req" || true
+        [[ -n "$_OBG_PY" ]] && break
+    done
     if [[ -z "$_OBG_PY" ]]; then
         ONEX_BASH_GUARDS_FAILURE="the shared Bash guard interpreter could not be resolved from the guard's request (OMN-20118)"
     else

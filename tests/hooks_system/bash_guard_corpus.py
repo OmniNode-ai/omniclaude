@@ -143,7 +143,12 @@ def _base_env() -> dict[str, str]:
 @contextmanager
 def workspace() -> Iterator[Workspace]:
     """A workspace with a canonical clone and one lane worktree of it."""
-    with tempfile.TemporaryDirectory(prefix="bashguards-") as tmp:
+    # A refusal starts the refusal recorder in the background (disowned, by
+    # design: it is off the hook's wall time), and it can still be writing into
+    # the state directory when the case ends, so the cleanup tolerates it.
+    with tempfile.TemporaryDirectory(
+        prefix="bashguards-", ignore_cleanup_errors=True
+    ) as tmp:
         root = Path(tmp).resolve()
         ws = root / _WORKSPACE_NAME
         canonical = ws / "omniclaude"
@@ -184,6 +189,7 @@ def run_script(
     command: str,
     cwd_kind: str,
     python: str,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[int, str]:
     """Run one hook script for one Bash command; return (exit status, stdout)."""
     cwd = ws.cwd(cwd_kind)
@@ -200,6 +206,7 @@ def run_script(
         "CLAUDE_PROJECT_DIR": str(cwd),
         "PLUGIN_PYTHON_BIN": python,
         "ONEX_HOOKS_MASK": "",
+        **(extra_env or {}),
     }
     payload = {
         "hook_event_name": "PreToolUse",
