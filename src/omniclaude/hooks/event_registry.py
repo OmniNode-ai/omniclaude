@@ -67,7 +67,7 @@ Single-owner registry (OMN-15967 / OMN-13146):
     Two intentional, documented exceptions keep this from being a strict
     mirror of the daemon registry:
 
-    1. ``daemon.health.probe`` and ``delegation.request`` are daemon-internal
+    1. ``daemon.health.probe``, ``delegation.request`` and ``pr.state.observed`` are daemon-internal
        event types — the daemon handles/emits them entirely internally, no
        hook client ever constructs them, so there is no client-side
        registration to project. See
