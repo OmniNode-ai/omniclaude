@@ -32,7 +32,8 @@ from pathlib import Path
 
 PLUGIN_DIR = "plugins/onex/"
 PLUGIN_JSON = "plugins/onex/.claude-plugin/plugin.json"
-MARKETPLACE_JSON = "plugins/onex-dev-marketplace/.claude-plugin/marketplace.json"
+#: The in-repo directory marketplace(s) that pin the onex plugin version.
+MARKETPLACE_GLOB = "plugins/*-marketplace/.claude-plugin/marketplace.json"
 PLUGIN_NAME = "onex"
 _EXEMPT_PREFIXES = ("plugins/onex/tests/",)
 _EXEMPT_PARTS = ("__pycache__", ".venv")
@@ -85,20 +86,25 @@ def _plugin_version(text: str, source: str) -> str:
 
 def marketplace_skew(repo: Path) -> list[Finding]:
     plugin = _plugin_version((repo / PLUGIN_JSON).read_text(), PLUGIN_JSON)
-    try:
-        entries = json.loads((repo / MARKETPLACE_JSON).read_text())["plugins"]
-    except (ValueError, KeyError, TypeError) as exc:
-        raise GateError(f"{MARKETPLACE_JSON} has no readable plugins list") from exc
+    manifests = sorted(repo.glob(MARKETPLACE_GLOB))
+    if not manifests:
+        raise GateError(f"no marketplace manifest matches {MARKETPLACE_GLOB}")
     findings = []
-    for entry in entries:
-        if entry.get("name") == PLUGIN_NAME and entry.get("version") != plugin:
-            findings.append(
-                Finding(
-                    "MARKETPLACE_SKEW",
-                    f"{MARKETPLACE_JSON} pins {PLUGIN_NAME} {entry.get('version')} "
-                    f"but {PLUGIN_JSON} is {plugin}; bump both together.",
+    for manifest in manifests:
+        name = manifest.relative_to(repo).as_posix()
+        try:
+            entries = json.loads(manifest.read_text())["plugins"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise GateError(f"{name} has no readable plugins list") from exc
+        for entry in entries:
+            if entry.get("name") == PLUGIN_NAME and entry.get("version") != plugin:
+                findings.append(
+                    Finding(
+                        "MARKETPLACE_SKEW",
+                        f"{name} pins {PLUGIN_NAME} {entry.get('version')} "
+                        f"but {PLUGIN_JSON} is {plugin}; bump both together.",
+                    )
                 )
-            )
     return findings
 
 
@@ -127,7 +133,7 @@ def check(repo: Path, base: str) -> list[Finding]:
                 f"{PLUGIN_JSON} version is {current}, not above {previous} at the "
                 f"merge base with {base}. The plugin cache is version-keyed, so "
                 "without a bump the change never reaches an installed plugin. "
-                f"Bump {PLUGIN_JSON} and the onex entry in {MARKETPLACE_JSON}.",
+                f"Bump {PLUGIN_JSON} and the onex entry in the in-repo marketplace manifest.",
             ),
         )
     return findings

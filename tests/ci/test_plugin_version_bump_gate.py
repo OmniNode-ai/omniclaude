@@ -26,7 +26,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from scripts.validation import validate_plugin_version_bump as gate  # noqa: E402
 
 PLUGIN_JSON = "plugins/onex/.claude-plugin/plugin.json"
-MARKETPLACE_JSON = "plugins/onex-dev-marketplace/.claude-plugin/marketplace.json"
+MARKETPLACE_JSON = "plugins/local-marketplace/.claude-plugin/marketplace.json"
 
 
 def _git(repo: Path, *args: str) -> str:
