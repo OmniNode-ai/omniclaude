@@ -88,6 +88,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 __all__ = [
@@ -215,7 +216,7 @@ def _sidecar_candidates(
     transcript_path: str | Path | None,
     session_id: str | None,
     agent_id: str,
-) -> list[Path]:
+) -> Iterator[Path]:
     """Every place this lane's sidecar could be, most authoritative first.
 
     ``transcript_path`` on a ``PostToolUse`` payload is the PARENT session's
@@ -227,23 +228,27 @@ def _sidecar_candidates(
     The second candidate covers a payload whose transcript path is already the
     agent's own, and the third is the fallback when no transcript path was
     supplied at all.
+
+    A generator, in that order (OMN-20118): the caller stops at the first
+    candidate that answers, so the glob over every project directory (1,476
+    of them, 37 ms, on the operator Mac) runs only when the transcript-derived
+    candidates did not. The candidates and their order are unchanged.
     """
     name = f"agent-{agent_id}.meta.json"
-    candidates: list[Path] = []
     if transcript_path:
         transcript = Path(transcript_path)
         # <project>/<session>.jsonl -> <project>/<session>/subagents/
-        candidates.append(transcript.with_suffix("") / "subagents" / name)
+        yield transcript.with_suffix("") / "subagents" / name
         # already inside a session directory
-        candidates.append(transcript.parent / "subagents" / name)
+        yield transcript.parent / "subagents" / name
     if session_id:
         root = os.environ.get(CLAUDE_PROJECTS_ENV)
         base = Path(root) if root else Path.home() / ".claude" / "projects"
         try:
-            candidates.extend(base.glob(f"*/{session_id}/subagents/{name}"))
+            found = list(base.glob(f"*/{session_id}/subagents/{name}"))
         except OSError:
-            pass
-    return candidates
+            return
+        yield from found
 
 
 def sidecar_lane_name(
