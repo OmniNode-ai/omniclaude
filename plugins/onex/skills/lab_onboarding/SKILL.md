@@ -11,6 +11,7 @@ tags:
   - macos
   - lab
 author: OmniClaude Team
+skill_kind: methodology
 args:
   - name: --preflight-only
     description: "Check this Mac against the minimum requirements and stop; changes nothing"
@@ -25,7 +26,7 @@ args:
     description: "Model key to use: openrouter | gemini | none (default: ask)"
     required: false
   - name: --workspace
-    description: "Workspace directory (default: $OMNI_HOME, else ~/code/omni)"
+    description: "Workspace directory (default: the workspace variable if set, else ~/code/omni)"
     required: false
   - name: --restart
     description: "Run every phase again instead of resuming"
@@ -50,7 +51,7 @@ its prompts, then reports each phase to the developer the moment it finishes.
 |---|---|---|
 | 0 | Preflight: macOS version, CPU, RAM, disk, VM or physical, admin rights, ports, shell profile | no |
 | 1 | Base tools: Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv | yes |
-| 2 | Workspace: the canonical clones, OMNI_HOME and PATH in the shell profile | yes |
+| 2 | Workspace: the canonical clones, and the workspace variable and PATH in the shell profile | yes |
 | 3 | Tailnet: Tailscale installed and signed in | yes |
 | 4 | onex, the local identity, one model path, one delegation | yes |
 | 5 | This machine's lab bus identity, issued automatically; one delegation on the lab dev lane | yes |
@@ -127,8 +128,8 @@ failed phase; completed phases are verified, not redone.
 
 ### 4. Finish
 
-On `result=COMPLETE`, tell the developer to open a new terminal (so `OMNI_HOME`
-and `PATH` apply) and that `/onex:delegate` is available in a new Claude Code
+On `result=COMPLETE`, tell the developer to open a new terminal (so the workspace
+variable and `PATH` apply) and that `/onex:delegate` is available in a new Claude Code
 session. If phase 0 or phase 8 printed a warning about shell-profile exports,
 repeat it.
 
