@@ -67,10 +67,11 @@ Single-owner registry (OMN-15967 / OMN-13146):
     Two intentional, documented exceptions keep this from being a strict
     mirror of the daemon registry:
 
-    1. ``daemon.health.probe`` and ``delegation.request`` are daemon-internal
-       event types — the daemon handles/emits them entirely internally, no
-       hook client ever constructs them, so there is no client-side
-       registration to project. See
+    1. ``daemon.health.probe``, ``delegation.request`` and
+       ``pr.state.observed`` (emitted by omnimarket's PR watcher node,
+       OMN-19999) are daemon-side event types — no hook client ever
+       constructs them, so there is no client-side registration to
+       project. See
        ``generate_event_registry.DAEMON_INTERNAL_EVENT_TYPES``.
     2. ``diagnostic.daemon.health`` fans out, daemon-side, to one extra topic
        (``onex.evt.diagnostic.daemon-health.v1``) that is not ONEX-canonical
