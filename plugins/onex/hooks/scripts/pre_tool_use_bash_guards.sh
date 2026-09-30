@@ -26,14 +26,15 @@
 # How, in three passes, without changing any guard's decision:
 #
 #   1. collect  Each guard script is SOURCED in its own subshell, with the hook
-#               payload on its stdin, exactly as its own process ran it. A guard
+#               payload on its stdin, exactly as its own process ran it. The
+#               seven run concurrently, as the seven registered hooks did. A guard
 #               that allows, refuses or is disabled before it needs Python ends
 #               there with its own result. A guard that needs its decision core
 #               writes a request (lib/bash_guard_core.sh) and ends.
 #   2. run      One interpreter (lib/bash_guard_cores.py) runs every request, each
 #               core as a function, each with the argv, stdin, working
 #               directory and full environment its guard would have given it.
-#   3. replay   Each guard that asked is sourced again; this time its core call
+#   3. replay   Each guard that asked is sourced again, concurrently; its core call
 #               returns the recorded result, and the guard's own
 #               post-processing makes its decision and writes its own refusal.
 #
@@ -81,21 +82,59 @@ source "${_OBG_LIB}/bash_guard_core.sh"
 ONEX_BASH_GUARDS_REQ="${TMPDIR:-/tmp}"
 ONEX_BASH_GUARDS_REQ="${ONEX_BASH_GUARDS_REQ%/}/onex-bash-guards.$$.${RANDOM}${RANDOM}"
 
-_obg_run_guard() {
-    # $1 slot. Runs the guard script as its own process ran it: a subshell,
-    # the payload on stdin, the caller's working directory and environment.
-    local _obg_script="${_OBG_GUARDS[$1]}"
+_obg_job() {
+    # $1 slot, $2 phase. Runs the guard script as its own process ran it: a
+    # subshell, the payload on stdin, the caller's working directory and
+    # environment. Prints the guard's exit status, a NUL, then its stdout.
     ONEX_BASH_GUARDS_SLOT="$1"
-    _OBG_OUT="$(source "$_obg_script" <<<"$_OBG_INPUT")"
-    _OBG_RC=$?
+    ONEX_BASH_GUARDS_PHASE="$2"
+    local _obg_out _obg_rc
+    _obg_out="$(source "${_OBG_GUARDS[$1]}" <<<"$_OBG_INPUT")"
+    _obg_rc=$?
+    printf '%s\0%s' "$_obg_rc" "$_obg_out"
+}
+
+_obg_run_guards() {
+    # $1 phase, then the slots. The guards run CONCURRENTLY, as the seven
+    # registered hooks did: each is a process substitution on its own file
+    # descriptor (3, 4, ...; no temporary file, so an unwritable TMPDIR cannot
+    # lose a result), and the results are read back in slot order into
+    # _OBG_RC_<slot> and _OBG_OUT_<slot>. A job whose status cannot be read
+    # (it died) reads as 70, which no guard's caller treats as an allow.
+    local _obg_phase="$1" _obg_fd=3 _obg_slot _obg_r _obg_o
+    shift
+    for _obg_slot in "$@"; do
+        eval "exec ${_obg_fd}< <(_obg_job \"\$_obg_slot\" \"\$_obg_phase\")"
+        _obg_fd=$((_obg_fd + 1))
+    done
+    _obg_fd=3
+    for _obg_slot in "$@"; do
+        _obg_r=""
+        _obg_o=""
+        IFS= read -r -d '' _obg_r <&"$_obg_fd" || true
+        IFS= read -r -d '' _obg_o <&"$_obg_fd" || true
+        eval "exec ${_obg_fd}<&-"
+        [[ "$_obg_r" =~ ^[0-9]+$ ]] || _obg_r=70
+        printf -v "_OBG_RC_${_obg_slot}" '%s' "$_obg_r"
+        printf -v "_OBG_OUT_${_obg_slot}" '%s' "$_obg_o"
+        _obg_fd=$((_obg_fd + 1))
+    done
 }
 
 # --- Pass 1: collect ---------------------------------------------------------
 _OBG_NEED=()
-ONEX_BASH_GUARDS_PHASE=collect
+_OBG_ALL=()
 _obg_i=0
 while [[ $_obg_i -lt ${#_OBG_GUARDS[@]} ]]; do
-    _obg_run_guard "$_obg_i"
+    _OBG_ALL+=("$_obg_i")
+    _obg_i=$((_obg_i + 1))
+done
+_obg_run_guards collect "${_OBG_ALL[@]}"
+for _obg_i in "${_OBG_ALL[@]}"; do
+    _obg_rc_var="_OBG_RC_${_obg_i}"
+    _obg_out_var="_OBG_OUT_${_obg_i}"
+    _OBG_RC="${!_obg_rc_var}"
+    _OBG_OUT="${!_obg_out_var}"
     if [[ $_OBG_RC -eq $ONEX_BASH_GUARDS_COLLECTED ]]; then
         # Asked for its core. A request that could not be written (TMPDIR full
         # or unwritable) is still a guard that needs its core: the run pass
@@ -106,7 +145,6 @@ while [[ $_obg_i -lt ${#_OBG_GUARDS[@]} ]]; do
         printf -v "_OBG_FINAL_RC_${_obg_i}" '%s' "$_OBG_RC"
         printf -v "_OBG_FINAL_OUT_${_obg_i}" '%s' "$_OBG_OUT"
     fi
-    _obg_i=$((_obg_i + 1))
 done
 
 # --- Pass 2: one interpreter for every decision core ---------------------------
@@ -142,11 +180,12 @@ if [[ ${#_OBG_NEED[@]} -gt 0 ]]; then
     fi
 
     # --- Pass 3: replay ----------------------------------------------------------
-    ONEX_BASH_GUARDS_PHASE=replay
+    _obg_run_guards replay "${_OBG_NEED[@]}"
     for _obg_i in "${_OBG_NEED[@]}"; do
-        _obg_run_guard "$_obg_i"
-        printf -v "_OBG_FINAL_RC_${_obg_i}" '%s' "$_OBG_RC"
-        printf -v "_OBG_FINAL_OUT_${_obg_i}" '%s' "$_OBG_OUT"
+        _obg_rc_var="_OBG_RC_${_obg_i}"
+        _obg_out_var="_OBG_OUT_${_obg_i}"
+        printf -v "_OBG_FINAL_RC_${_obg_i}" '%s' "${!_obg_rc_var}"
+        printf -v "_OBG_FINAL_OUT_${_obg_i}" '%s' "${!_obg_out_var}"
     done
 
     # Whatever of a request is still on disk goes now: a request the
@@ -158,7 +197,6 @@ if [[ ${#_OBG_NEED[@]} -gt 0 ]]; then
         fi
     done
 fi
-unset ONEX_BASH_GUARDS_PHASE
 
 # --- The decision ------------------------------------------------------------
 _OBG_BLOCKS=()
