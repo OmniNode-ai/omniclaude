@@ -320,3 +320,47 @@ def test_drainer_drop_alarms_once_per_episode(
     assert all(a.startswith("hook_emit_journal_dropped|") for a in alarms)
     assert "dropped 3 oldest" in alarms[0] and "dropped 2 oldest" in alarms[1]
     assert marker.exists(), "the second episode is still open"
+
+
+# ---------------------------------------------------------------------------
+# OMN-20118: a writer of the hook lib directory runs in a forked child
+# ---------------------------------------------------------------------------
+
+
+def test_lib_writer_is_forked_not_exec_d(env: dict[str, str], tmp_path: Path) -> None:
+    """The interpreter named in the command is never started for a lib writer.
+
+    It does not exist here, so an exec would fail; the fork runs the writer
+    inside the runner's own interpreter and the record lands.
+    """
+    cmd = _append_cmd(tmp_path)
+    cmd[0] = str(tmp_path / "no-such-dir" / "python3")
+    proc = _run(env, *cmd)
+    assert proc.returncode == 0, proc.stderr
+    assert list((tmp_path / "state" / "hook_emit_journal").glob("*.json"))
+
+
+def test_forked_writer_failure_is_loud(env: dict[str, str], tmp_path: Path) -> None:
+    """A writer exiting non-zero in the fork fails the emit exactly as before."""
+    journal_file = tmp_path / "state" / "hook_emit_journal"
+    journal_file.parent.mkdir(parents=True)
+    journal_file.write_text("not a directory")
+    proc = _run(env, *_append_cmd(tmp_path))
+    assert proc.returncode == 2
+    assert "exited 1" in proc.stderr and "NOT journalled" in proc.stderr, proc.stderr
+    assert len(_alarms(env)) == 1
+
+
+def test_only_lib_writers_are_forked(tmp_path: Path) -> None:
+    code = (
+        "import sys\n"
+        f"sys.path.insert(0, {str(_LIB)!r})\n"
+        "import hook_emit_bounded as b\n"
+        f"assert b.in_process_writer(['python3', {str(_APPEND)!r}]) is not None\n"
+        f"assert b.in_process_writer(['/bin/bash', {str(_APPEND)!r}]) is None\n"
+        f"assert b.in_process_writer(['python3', {str(tmp_path / 'x.py')!r}]) is None\n"
+        f"assert b.in_process_writer(['python3', {str(_LIB / 'emit_bounded.sh')!r}]) is None\n"
+        "assert b.in_process_writer(['/usr/bin/false']) is None\n"
+    )
+    (tmp_path / "x.py").write_text("")
+    subprocess.run([sys.executable, "-c", code], check=True, timeout=30)

@@ -222,6 +222,23 @@ def _install_shims(shim_dir: Path, spawn_log: Path, path: str) -> Path:
     return shim_dir
 
 
+def _wedge_site(shim_dir: Path) -> Path:
+    """A sitecustomize that wedges every child the interpreter forks.
+
+    Only the bounded runner is ever started with it on its path (see
+    ``_python_shim``), so what it wedges is the forked writer: alive, waiting on
+    something that never comes, as the incident's writers were.
+    """
+    site = shim_dir / "wedge-site"
+    site.mkdir(parents=True, exist_ok=True)
+    (site / "sitecustomize.py").write_text(
+        "import os, time\n"
+        "os.register_at_fork(after_in_child=lambda: time.sleep(300))\n",
+        encoding="utf-8",
+    )
+    return site
+
+
 def _python_shim(shim_dir: Path, spawn_log: Path) -> Path:
     """The hook interpreter, counted. ``PLUGIN_PYTHON_BIN`` is the first thing
     ``find_python`` in common.sh consults, so the hooks run this wrapper, which
@@ -236,10 +253,16 @@ def _python_shim(shim_dir: Path, spawn_log: Path) -> Path:
         # argument is matched: the bounded runner is itself run through this shim with
         # the writer's path further along its argv, and it must not be wedged. So a test can require the
         # hook to notice, fail loudly and take the wedged process down with it.
+        # Since OMN-20118 the runner FORKS a writer instead of exec'ing a second
+        # interpreter, so the writer never passes through this shim: the runner
+        # gets a sitecustomize whose at-fork hook wedges every forked child the
+        # same way, before the child can take its own process group.
         f'if [ -n "${{{HANG_EMIT_ENV}:-}}" ]; then\n'
         '  case "$1" in\n'
         "    *hook_emit_append.py|*hook_claude_capture.py|*hook_content_capture.py)\n"
         "      exec /bin/sleep 300 ;;\n"
+        "    *hook_emit_bounded.py)\n"
+        f"      PYTHONPATH={shlex.quote(str(_wedge_site(shim_dir)))}; export PYTHONPATH ;;\n"
         "  esac\n"
         "fi\n"
         f'exec {shlex.quote(sys.executable)} "$@"\n',

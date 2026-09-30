@@ -193,6 +193,22 @@ _PR_BODY_STAMP_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_pr_body_stamp_guard.sh"
 )
 _PROSE_COMMAND_SUBSTITUTION_GUARD_COMMAND = "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_prose_command_substitution_guard.sh"
+# OMN-20118: the seven Bash guards above are registered as ONE entrypoint, which
+# sources each of them in its former order and runs their decision cores in one
+# interpreter. _BASH_GUARD_SCRIPTS pins that order inside the entrypoint.
+_BASH_GUARDS_COMMAND = "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_bash_guards.sh"
+_BASH_GUARD_SCRIPTS = tuple(
+    command.rsplit("/", 1)[1]
+    for command in (
+        _WORKTREE_GUARD_COMMAND,
+        _PR_OWNERSHIP_GUARD_COMMAND,
+        _CREDENTIAL_ROTATION_GUARD_COMMAND,
+        _GIT_STASH_GUARD_COMMAND,
+        _SHARED_TREE_GIT_GUARD_COMMAND,
+        _PR_BODY_STAMP_GUARD_COMMAND,
+        _PROSE_COMMAND_SUBSTITUTION_GUARD_COMMAND,
+    )
+)
 _POST_TOOL_USE_SECRET_REDACT_GUARD_COMMAND = (
     "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_secret_redact_guard.sh"
 )
@@ -445,13 +461,7 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     assert commands == [
         _DONE_FLIP_GUARD_COMMAND,
         _TICKET_CREATION_GATE_COMMAND,
-        _WORKTREE_GUARD_COMMAND,
-        _PR_OWNERSHIP_GUARD_COMMAND,
-        _CREDENTIAL_ROTATION_GUARD_COMMAND,
-        _GIT_STASH_GUARD_COMMAND,
-        _SHARED_TREE_GIT_GUARD_COMMAND,
-        _PR_BODY_STAMP_GUARD_COMMAND,
-        _PROSE_COMMAND_SUBSTITUTION_GUARD_COMMAND,
+        _BASH_GUARDS_COMMAND,
         _AGENT_MODEL_GUARD_COMMAND,
         _LANE_OPEN_COMMAND,
         _LANE_LIVENESS_GUARD_COMMAND,
@@ -460,11 +470,11 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
         _ACTOR_LINE_GUARD_COMMAND,
     ], (
         "hooks.json PreToolUse must register EXACTLY the Done-flip durable-evidence "
-        "guard, the ticket-creation admission gate, the worktree canonical-root "
-        "guard, the PR lane-ownership guard, the credential-rotation admission "
-        "gate, the git-stash worktree admission gate, the shared-tree git "
-        "admission gate, the pull-request body "
-        "stamp-preservation gate, the prose-sink command-substitution gate, "
+        "guard, the ticket-creation admission gate, the one Bash guards entrypoint "
+        "(OMN-20118: the worktree canonical-root guard, the PR lane-ownership "
+        "guard, the credential-rotation admission gate, the git-stash worktree "
+        "admission gate, the shared-tree git admission gate, the pull-request body "
+        "stamp-preservation gate and the prose-sink command-substitution gate), "
         "the background-agent model guard, the lane-dispatch recorder, the "
         "lane-liveness guard, the overseer foreground-block guard, the "
         "Skill-started capture hook, and the Linear comment actor-line guard, and "
@@ -1235,3 +1245,22 @@ def test_local_capture_carve_out_records_owner_reason_expiry_restoration() -> No
         "The OMN-17207 record must name OMN-17209 — the bus-egress gate that "
         "these hooks are deliberately kept local-only ahead of."
     )
+
+
+def test_bash_guards_entrypoint_runs_the_seven_guards_in_order() -> None:
+    """OMN-20118: the one Bash entrypoint sources exactly the seven guards, in
+    their former registration order. Dropping one there is the same regression
+    as unregistering it here used to be."""
+    import re
+
+    source = (
+        _REPO_ROOT / "plugins/onex/hooks/scripts/pre_tool_use_bash_guards.sh"
+    ).read_text(encoding="utf-8")
+    block = re.search(r"_OBG_GUARDS=\(\n(.*?)\n\)", source, re.DOTALL)
+    assert block is not None, "the entrypoint no longer declares _OBG_GUARDS"
+    listed = tuple(
+        line.strip().strip('"').rsplit("/", 1)[1]
+        for line in block.group(1).splitlines()
+        if line.strip()
+    )
+    assert listed == _BASH_GUARD_SCRIPTS

@@ -257,21 +257,33 @@ expected_hooks:
           - "not bound to a commitment"
         stdout_absent: []
 
-  - script: "pre_tool_use_worktree_guard.sh"
+  - script: "pre_tool_use_bash_guards.sh"
     event: "PreToolUse"
     matcher: "Bash"
     order: 2
-    ticket: "OMN-14330"
+    ticket: "OMN-20118"
     owner: "omniclaude hooks lane"
     purpose: >
-      OMN-7018 canonical-root enforcement, extracted to a minimal script:
-      blocks `git worktree add` targeting anything outside
-      $OMNI_HOME/omni_worktrees.
+      The one registration for the seven Bash PreToolUse guards, run in their
+      former order: the worktree guard (OMN-14330, WORKTREE_GUARD), the
+      pr-ownership guard (OMN-16485, BASH_GUARD), the credential-rotation gate
+      (OMN-17957, PRE_TOOL_AUTHORIZATION_SHIM), the git-stash gate (OMN-17334,
+      SWEEP_PREFLIGHT), the shared-tree git gate (OMN-18798, SCOPE_GATE), the
+      pull-request body stamp gate (OMN-18335, BRANCH_PROTECTION_GUARD) and the
+      prose command-substitution gate (OMN-18750, BASH_GUARD). Each guard
+      script is sourced in its own subshell and keeps its own gate bit,
+      pre-filter, fail-closed branches and refusal text; every decision core
+      the call needs runs in ONE interpreter (lib/bash_guard_cores.py) instead of
+      one interpreter per guard. The per-guard scripts stay on disk, reached
+      from this one, and each still runs on its own.
+      tests/hooks_system/test_bash_guards_differential.py proves every
+      decision identical to the seven separate registrations.
     enforcement: true
     lite_mode_exit: false
     mask:
-      gate_call: "WORKTREE_GUARD"
-      bit_defined: true
+      # No gate of its own: each sourced guard calls its own onex_hook_gate.
+      gate_call: null
+      bit_defined: false
     canary:
       kind: "block"
       stdin:
@@ -288,421 +300,10 @@ expected_hooks:
           - "must be created under"
         stdout_absent: []
 
-  - script: "pre_tool_use_pr_ownership_guard.sh"
-    event: "PreToolUse"
-    matcher: "Bash"
-    order: 3
-    ticket: "OMN-16485"
-    owner: "omniclaude hooks lane"
-    purpose: >
-      Refuses a cross-lane or unattributable GitHub mutation (`gh pr
-      close/reopen`, `gh run cancel`, `gh workflow run`, `gh api`). Ownership
-      that cannot be established fails closed.
-    enforcement: true
-    lite_mode_exit: false
-    mask:
-      gate_call: "BASH_GUARD"
-      bit_defined: true
-    canary:
-      kind: "block"
-      stdin:
-        tool_name: "Bash"
-        tool_input:
-          command: "gh pr close 999999 --repo OmniNode-ai/omniclaude"
-      env: {}
-      fixtures: {}
-      expect:
-        exit_code: 2
-        stdout_contains:
-          - '"decision": "block"'
-          - "REFUSED"
-        stdout_absent: []
-
-  - script: "pre_tool_use_credential_rotation_guard.sh"
-    event: "PreToolUse"
-    matcher: "Bash"
-    order: 4
-    ticket: "OMN-17957"
-    owner: "omniclaude hooks lane"
-    purpose: >
-      Refuses a Bash command that rotates, re-issues or revokes a credential
-      unless it carries "ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md:
-      <line>" resolving to an OPERATOR-CONSENT row (omni_home CLAUDE.md rule 18,
-      extended by rule 22 with approved_by=<operator|jake>) whose APPROVED SCOPE
-      names the credential and which carries a non-empty OUT OF SCOPE list.
-      Operator ruling 2026-09-05: a value in a local transcript, log, scratch
-      file or ledger is NOT exposure; rotation is for real exposure only, with
-      the exposure path recorded first, approved by the operator or Jake and by
-      nobody else, and every consumer enumerated and restarted in the same
-      action. Measured cause: the 2026-08-30 rotation of the Infisical
-      operator-k8s org-admin client secret, taken on an internal scope finding
-      with no claim the value had left the machine, restarted the three
-      application Deployments but not the Infisical operator itself and froze
-      managed secret sync cluster-wide for five days. Reads are never gated and
-      are not allowlisted -- every configured shape names only mutating
-      subcommands, so get/describe/list, -o name, get-secret-value, gh secret
-      list and kcadm get match nothing; kubectl rollout restart is outside the
-      vocabulary deliberately, because it is the consumer-restart half of the
-      remedy the ruling requires. Registered AFTER
-      pre_tool_use_pr_ownership_guard.sh on the same matcher, which never
-      inspects a credential shape, so the two never contend for the same call.
-    enforcement: true
-    lite_mode_exit: false
-    mask:
-      # BORROWED BIT, recorded rather than left for a reader to infer. This
-      # gate_call names a bit whose own script (pre_tool_use_authorization_shim.sh)
-      # is on disk and UNREGISTERED under the OMN-13244 baseline, and no other
-      # registered script gates on it, so `onex hooks disable
-      # PRE_TOOL_AUTHORIZATION_SHIM` disables exactly this guard and nothing
-      # else that is live. It is the faithful borrow rather than an arbitrary
-      # one: the namesake is this plugin's PreToolUse AUTHORIZATION gate, and
-      # this guard refuses an action for want of an authorization record.
-      #
-      # A dedicated bit is unavailable: EnumHookBit lives in omnibase_core, all
-      # 60 default-mask ordinals are allocated, 60-62 are the disabled-by-default
-      # trio, and knowledge-base-internal reference/hook-bitmask-bit-governance.md
-      # rule 7 forbids ordinal 63 (the sign bit of a signed 64-bit integer)
-      # outright. Same constraint, same resolution
-      # pre_tool_use_pr_ownership_guard.sh recorded for BASH_GUARD and
-      # pre_tool_use_ticket_creation_gate.sh recorded for LINEAR_DONE_VERIFY.
-      #
-      # BASH_GUARD was NOT a candidate even though this is a Bash-matcher guard:
-      # pre_tool_use_pr_ownership_guard.sh already borrows it, and putting two
-      # independent controls behind one switch means disabling either one
-      # silently disables both.
-      #
-      # The borrow is only safe while the namesake stays unregistered, so
-      # tests/hooks/test_credential_rotation_guard.py pins that: re-registering
-      # pre_tool_use_authorization_shim.sh turns the suite red instead.
-      gate_call: "PRE_TOOL_AUTHORIZATION_SHIM"
-      bit_defined: true
-    canary:
-      kind: "block"
-      stdin:
-        tool_name: "Bash"
-        tool_input:
-          command: "aws secretsmanager rotate-secret --secret-id hook-inventory-canary"
-      env: {}
-      fixtures: {}
-      expect:
-        exit_code: 2
-        stdout_contains:
-          - '"decision": "block"'
-          - "ROTATION-CONSENT"
-        stdout_absent: []
-
-  - script: "pre_tool_use_git_stash_guard.sh"
-    event: "PreToolUse"
-    matcher: "Bash"
-    order: 5
-    ticket: "OMN-17334"
-    owner: "omniclaude hooks lane"
-    purpose: >
-      Refuses a Bash command that mutates the git stash (`push`, `pop`,
-      `apply`, `drop`, `save`, `clear`, `store`, `branch`, or a bare
-      `git stash`) when the command's cwd or `-C <path>` target resolves to a
-      git WORKTREE (`.git` is a file pointing at the parent clone's real git
-      directory) or a canonical clone directly under `$OMNI_HOME`, shared by
-      every concurrent lane. git's stash is one repo-wide stack, so a scoped
-      `git stash push -- <path>` on a tree with no changes to that path
-      silently creates NO entry and still exits 0, and the paired
-      `git stash pop` then pops whatever is at stash@{0} -- another lane's
-      work. Measured six times by 2026-09-16 across omnibase_infra and
-      omnimarket (rolling work ledger rows on 2026-09-15T03:10Z,
-      2026-09-15T23:23Z and 2026-09-16T01:38Z), twice destroying a peer
-      lane's uncommitted work outright. Reads (`git stash list`,
-      `git stash show`) are never gated and are not allowlisted -- they
-      simply match no shape, because the policy's mutating-subcommand
-      vocabulary never names them; a stash mutation in an ordinary git clone
-      that is neither a worktree nor a canonical clone under `$OMNI_HOME` is likewise
-      outside both conditions and is never gated, since that lane owns the
-      whole stash stack alone. There is deliberately no consent-citation
-      escape hatch: the safe alternative (`git checkout origin/dev --
-      <path>` then `git checkout HEAD -- <path>`, scoped to named paths)
-      never touches the shared stash ref, so nothing legitimate needs an
-      exception. The shared-tree half of this hazard -- two concurrent lanes
-      racing push/pop inside the SAME canonical clone -- is OMN-18433 and is
-      deliberately untouched here. Registered AFTER
-      pre_tool_use_credential_rotation_guard.sh on the same matcher, which
-      never inspects a stash shape, so the two never contend for the same
-      call.
-    enforcement: true
-    lite_mode_exit: false
-    mask:
-      # BORROWED BIT, recorded rather than left for a reader to infer, same
-      # pattern as pre_tool_use_credential_rotation_guard.sh's
-      # PRE_TOOL_AUTHORIZATION_SHIM borrow. A dedicated bit is unavailable:
-      # all 60 default-mask ordinals in hook_bits.sh are allocated, 60-62 are
-      # the disabled-by-default trio, and bit-governance rule 7 forbids
-      # ordinal 63 outright.
-      #
-      # SWEEP_PREFLIGHT was chosen over SKILL_SUBSTITUTION_GUARD (also
-      # unregistered, also otherwise uncontested) because SWEEP_PREFLIGHT is
-      # `bit_defined: true` in hook_bits.sh and SKILL_SUBSTITUTION_GUARD is
-      # not -- a gate_call naming an undefined bit can never actually fire,
-      # since `hook_bits_bit_for_name` returns non-zero for it and
-      # `onex_hook_gate` then returns 0 unconditionally. SWEEP_PREFLIGHT's
-      # own namesake script (pre_tool_use_sweep_preflight.sh) is on disk and
-      # UNREGISTERED, and no other registered script gates on it, so
-      # `onex hooks disable SWEEP_PREFLIGHT` disables exactly this guard and
-      # nothing else that is live.
-      #
-      # tests/hooks/test_git_stash_guard.py pins the borrow: registering
-      # pre_tool_use_sweep_preflight.sh would silently share the switch
-      # between two independent controls.
-      gate_call: "SWEEP_PREFLIGHT"
-      bit_defined: true
-    canary:
-      kind: "block"
-      stdin:
-        tool_name: "Bash"
-        tool_input:
-          command: "git stash pop"
-      env:
-        # CLAUDE_PROJECT_DIR (set by _prepare to {repo_root}) is this canary's
-        # target directory, since the stdin carries no explicit `cwd`. In a
-        # worktree checkout {repo_root}'s own .git is already a FILE, so the
-        # WORKTREE branch fires regardless of OMNI_HOME. In a plain checkout
-        # (CI, and any non-worktree clone) .git is a directory, so this sets
-        # OMNI_HOME to {repo_root}'s PARENT -- satisfying the canonical-clone
-        # branch instead. Both branches block, so this value exercises
-        # whichever one applies without needing to know which.
-        OMNI_HOME: "{repo_root}/.."
-      fixtures: {}
-      expect:
-        exit_code: 2
-        stdout_contains:
-          - '"decision": "block"'
-          - "OMN-17334"
-        stdout_absent: []
-
-  - script: "pre_tool_use_shared_tree_git_guard.sh"
-    event: "PreToolUse"
-    matcher: "Bash"
-    order: 6
-    ticket: "OMN-18798"
-    owner: "omniclaude hooks lane"
-    purpose: >
-      Refuses a Bash command that moves the SHARED registry clone at
-      $OMNI_HOME out from under the lanes working in it -- `git reset`, a
-      non-path-scoped `git checkout`, `git checkout -b`/`-B`, `git switch`,
-      `git clean`, `git rebase`, a `git merge` that is not `--ff-only`, and a
-      `git branch` delete or rename whose
-      target is the checked-out branch -- when the command's effective git
-      root (its `-C <path>` argument, or its own cwd) IS that registry clone.
-      The registry clone at $OMNI_HOME is the one repository where many
-      concurrent agent lanes commit into the same working tree; code repos use per-ticket worktrees
-      and do not have this problem. Two measured classes, neither of which
-      any pre-commit hook or CI job can see, because both are commands typed
-      in a session: DESTRUCTION -- 20 `reset: moving to origin/main` reflog
-      entries in that clone on 2026-09-18 alone, twice re-orphaning a staged
-      1.9 MB ledger-roll archive of 1,258 append-only coordination rows
-      (untracked on one disk, in no commit, on no branch, on no remote, for
-      2h22m, where a `git clean -fd` would have destroyed them) and twice
-      dropping a peer lane's unpushed commit from local main; and STRANDING,
-      which destroys nothing and is quieter -- a feature branch checked out
-      in the shared clone makes commit_lock.py refuse EVERY other lane's
-      ledger commit with exit 78, STRANDED CLONE, for as long as it stays
-      checked out, the only signal being an exit code on somebody else's
-      terminal. Operating Rule 19 states the prohibition and was doctrine
-      only until this guard. Scope is narrow deliberately: the guard fires
-      ONLY when the effective git root is the registry clone ITSELF. A
-      worktree under omni_worktrees/ has its own .git file and so its own
-      root, and a code-repo canonical clone under $OMNI_HOME has root
-      $OMNI_HOME/<repo>; neither is matched, and both already carry the
-      OMN-7018/OMN-14330 worktree guard. Inside the registry clone,
-      everything not in the declared refused vocabulary passes untouched --
-      `git merge --ff-only` (which advances a pointer or refuses, so it can
-      never resolve a peer lane's rows away, unlike the ort merge measured
-      at 14:52:55Z on 2026-09-19), `git merge --abort`/`--quit`/`--continue`
-      (refusing those would strand the tree mid-conflict), `git fetch`,
-      `git pull --ff-only`, the Operating Rule 17 path-scoped restore recipe
-      (`git checkout <ref> -- <path>`) over a path with no uncommitted work,
-      and every read. A second arm (OMN-18874) reaches past the registry
-      clone to every canonical clone and worktree under $OMNI_HOME, and any
-      git worktree anywhere: it refuses a path-scoped `git checkout` or
-      `git restore` when content it would overwrite -- an unstaged edit, a
-      staged change, an untracked file the source carries -- exists in no
-      ref it can see, the loss four lanes suffered silently after reading
-      Rule 17. It runs read-only git probes to decide, fails closed when it
-      cannot, and names `git show <rev>:<path> > <scratch file>` and
-      commit-first as the alternatives. There is deliberately
-      no consent-citation escape hatch: every refused verb has a sanctioned
-      alternative reaching the same outcome without touching state a peer
-      lane owns. Registered AFTER pre_tool_use_git_stash_guard.sh on the same
-      matcher, which only ever inspects stash shapes and this one never does,
-      so the two can never contend for the same call.
-    enforcement: true
-    lite_mode_exit: false
-    mask:
-      # BORROWED BIT, recorded rather than left for a reader to infer, the
-      # same pattern as pre_tool_use_git_stash_guard.sh's SWEEP_PREFLIGHT
-      # borrow and pre_tool_use_credential_rotation_guard.sh's
-      # PRE_TOOL_AUTHORIZATION_SHIM borrow. A dedicated bit is unavailable:
-      # hook_bits.sh is GENERATED from omnibase_core's hook_activations.yaml,
-      # all 60 default-mask ordinals are allocated, 60-62 are the
-      # disabled-by-default trio, and bit-governance rule 7 forbids ordinal
-      # 63 outright.
-      #
-      # SCOPE_GATE is `bit_defined: true` in hook_bits.sh and is set in
-      # HOOK_BITS_DEFAULT_MASK, so a gate_call naming it can actually fire --
-      # unlike SKILL_SUBSTITUTION_GUARD, which is not bit_defined and whose
-      # gate_call therefore returns 0 unconditionally. Its own namesake
-      # script (pre_tool_use_scope_gate.sh) is on disk and UNREGISTERED, and
-      # no other registered script gates on it, so
-      # `onex hooks disable SCOPE_GATE` disables exactly this guard and
-      # nothing else that is live.
-      #
-      # tests/hooks/test_shared_tree_git_guard.py pins the borrow:
-      # registering pre_tool_use_scope_gate.sh would silently share the
-      # switch between two independent controls.
-      gate_call: "SCOPE_GATE"
-      bit_defined: true
-    canary:
-      kind: "block"
-      stdin:
-        tool_name: "Bash"
-        tool_input:
-          command: "git reset --hard origin/main"
-      env:
-        # CLAUDE_PROJECT_DIR (set by _prepare to {repo_root}) is this
-        # canary's target directory, since the stdin carries no explicit
-        # `cwd`. Pointing OMNI_HOME at {repo_root} makes that directory the
-        # registry clone from the guard's point of view, which is the
-        # condition under test. It works in a worktree checkout and a plain
-        # one alike: the registry test is an exact path comparison against
-        # the resolved env value, not a test of the .git entry's type.
-        OMNI_HOME: "{repo_root}"
-      fixtures: {}
-      expect:
-        exit_code: 2
-        stdout_contains:
-          - '"decision": "block"'
-          - "OMN-18798"
-        stdout_absent: []
-
-  - script: "pre_tool_use_pr_body_stamp_guard.sh"
-    event: "PreToolUse"
-    matcher: "Bash"
-    order: 7
-    ticket: "OMN-18335"
-    owner: "omniclaude hooks lane"
-    purpose: >
-      Refuses a Bash command that REPLACES a pull request's description --
-      gh pr edit --body / --body-file, or a REST PATCH of .../pulls/<n>
-      carrying a body field -- when the replacement text omits a
-      change-control evidence-source line the live description currently
-      carries, and prints the dropped line verbatim so the remedy is one
-      paste. Measured cause (mechanical ticket-closeout plan of record,
-      section 2 correction 1): the description is a surface a lane overwrites
-      wholesale, with no compare-and-swap, and it silently lost that line on
-      four of the last five misses, twice after the pull request had already
-      merged; one lost line makes every downstream reader conclude no
-      evidence exists. By the time any CI job reads the body the line is
-      already gone, so the tool seam is the only place the loss is observable
-      before it happens. Reads are never gated and are not allowlisted --
-      every shape names only body-REPLACING flags, so gh pr view --json body,
-      gh pr list, a bare gh api read, gh pr comment --body and gh pr edit
-      --add-label match nothing; the guard's own live read is gh pr view
-      --json body, outside every shape, so it can never recurse into itself.
-      The stamp pattern is config and is pinned byte-for-byte against
-      EVIDENCE_SOURCE_RE in scripts/ci/check_occ_companion_merged.py, so the
-      gate can never own a second spelling of the line. Sibling OMN-18334
-      repairs the loss after the fact by re-asserting the line; the two are
-      independent and neither claims the other's coverage. Registered LAST on
-      the Bash matcher, after pre_tool_use_credential_rotation_guard.sh,
-      which never inspects a pull-request body, so the two never contend for
-      the same call.
-    enforcement: true
-    lite_mode_exit: false
-    mask:
-      # BORROWED BIT, recorded rather than left for a reader to infer. This
-      # gate_call names a bit whose own script
-      # (pre_tool_use_branch_protection_guard.sh) is on disk and UNREGISTERED
-      # under the OMN-13244 baseline, and no other registered script gates on
-      # it, so `onex hooks disable BRANCH_PROTECTION_GUARD` disables exactly
-      # this guard and nothing else that is live. It is the faithful borrow
-      # rather than an arbitrary one: the namesake is a PreToolUse Bash-matcher
-      # guard over GitHub-mutating commands, and this guard refuses a
-      # GitHub-mutating command that would destroy a protected line.
-      #
-      # A dedicated bit is unavailable: EnumHookBit lives in omnibase_core, all
-      # 60 default-mask ordinals are allocated (60-62 are the
-      # disabled-by-default trio, and knowledge-base-internal
-      # reference/hook-bitmask-bit-governance.md rule 7 forbids ordinal 63
-      # outright), so minting one is a cross-repo release chain plus an
-      # architecture review. PRE_TOOL_AUTHORIZATION_SHIM and BASH_GUARD were
-      # NOT candidates: each is already borrowed by a live guard, and two
-      # independent controls behind one switch means disabling either silently
-      # disables both.
-      #
-      # The borrow is only safe while the namesake stays unregistered, so
-      # tests/hooks/test_pr_body_stamp_guard.py pins that: re-registering
-      # pre_tool_use_branch_protection_guard.sh turns the suite red instead.
-      gate_call: "BRANCH_PROTECTION_GUARD"
-      bit_defined: true
-    canary:
-      kind: "block"
-      stdin:
-        tool_name: "Bash"
-        tool_input:
-          command: "gh pr edit 1 --repo OmniNode-ai/hook-inventory-canary --body-file /nonexistent/hook-inventory-canary.md"
-      env: {}
-      fixtures: {}
-      expect:
-        exit_code: 2
-        stdout_contains:
-          - '"decision": "block"'
-          - "OMN-18335"
-        stdout_absent: []
-
-  - script: "pre_tool_use_prose_command_substitution_guard.sh"
-    event: "PreToolUse"
-    matcher: "Bash"
-    order: 8
-    ticket: "OMN-18750"
-    owner: "omniclaude hooks lane"
-    purpose: >
-      Refuses a Bash command carrying an unescaped backtick command
-      substitution inside a double-quoted string whose destination is a prose
-      sink -- a redirect or tee into a markdown, ledger or checkpoint path, or
-      the text argument of a body/append/message option. Inside double quotes
-      a backtick pair is command substitution, and markdown quotes command
-      names in backticks, so a note ABOUT a command executes it. Measured
-      twice on 2026-09-18: two lanes wrote a checkpoint note quoting the onex
-      CLI, the shell ran it, the quoted words were lost from the note, and the
-      spawn error read as a broken PostToolUse hook until every hook in the
-      plugin had been run against a fixture payload. Registered LAST on the
-      existing Bash matcher, after pre_tool_use_pr_body_stamp_guard.sh.
-    enforcement: true
-    lite_mode_exit: false
-    mask:
-      # BORROWED BIT. BASH_GUARD already governs the Bash-matcher guards on
-      # this edge and every default-mask ordinal is allocated, so a new bit is
-      # a cross-repo release chain. Recorded here rather than left to be
-      # inferred: clearing BASH_GUARD disables this guard along with its
-      # neighbours, and a disabled run is LOGGED rather than silent.
-      gate_call: "BASH_GUARD"
-      bit_defined: true
-    canary:
-      kind: "block"
-      stdin:
-        tool_name: "Bash"
-        tool_input:
-          command: 'echo "note: `uv run onex` misread" >> hook-inventory-canary.md'
-      env: {}
-      fixtures: {}
-      expect:
-        exit_code: 2
-        stdout_contains:
-          - '"decision": "block"'
-          - "OMN-18750"
-        stdout_absent: []
-
   - script: "pre_tool_use_agent_model_guard.sh"
     event: "PreToolUse"
     matcher: "^(Workflow|Agent)$"
-    order: 9
+    order: 3
     ticket: "OMN-17499"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -751,7 +352,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_open.sh"
     event: "PreToolUse"
     matcher: "^(Task|Agent|Workflow)$"
-    order: 10
+    order: 4
     ticket: "OMN-16471"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -780,7 +381,7 @@ expected_hooks:
   - script: "pre_tool_use_lane_liveness_guard.sh"
     event: "PreToolUse"
     matcher: "^SendMessage$"
-    order: 11
+    order: 5
     ticket: "OMN-16478"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -811,7 +412,7 @@ expected_hooks:
   - script: "pre_tool_use_overseer_foreground_block.sh"
     event: "PreToolUse"
     matcher: "^(Bash|Edit|Write|NotebookEdit|MultiEdit)$"
-    order: 12
+    order: 6
     ticket: "OMN-17006"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -1322,7 +923,7 @@ expected_hooks:
   - script: "pre_tool_use_skill_started.sh"
     event: "PreToolUse"
     matcher: "Skill"
-    order: 13
+    order: 7
     ticket: "OMN-16979"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -1344,7 +945,7 @@ expected_hooks:
   - script: "pre_tool_use_actor_line_guard.sh"
     event: "PreToolUse"
     matcher: "^mcp__linear-server__(save_comment|save_diff_comment)$"
-    order: 14
+    order: 8
     ticket: "OMN-13856"
     owner: "omniclaude hooks lane"
     purpose: >
@@ -1447,7 +1048,7 @@ expected_hooks:
     script: "claude_hook_capture.sh"
     event: "PreToolUse"
     matcher: ".*"
-    order: 15
+    order: 9
     ticket: "OMN-19513"
     owner: "omniclaude hooks lane"
     purpose: >

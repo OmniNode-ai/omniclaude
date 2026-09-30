@@ -262,10 +262,19 @@ if ! GUARD_PYTHON="$(_resolve_python)"; then
         "BLOCKED: no Python interpreter could be resolved to run the OMN-18798 shared-tree git admission gate, so this command cannot be checked. Repair the plugin install, or disable the guard deliberately: onex hooks disable SCOPE_GATE"
 fi
 
-set +e
-GUARD_OUT=$(printf '%s' "$TOOL_INFO" | env -u PYTHONPATH OMNI_HOME="${OMNI_HOME:-}" ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-}" "$GUARD_PYTHON" "$GUARD_PY" 2>&1)
-GUARD_RC=$?
-set -e
+# OMN-20118: the decision core runs through onex_guard_core, which runs it in its
+# own interpreter when this script runs on its own, and in the one shared
+# interpreter when pre_tool_use_bash_guards.sh runs it. A missing runner is
+# refused like a missing decision core.
+source "${SCRIPT_DIR}/../lib/bash_guard_core.sh" 2>/dev/null || true
+if ! declare -F onex_guard_core >/dev/null 2>&1; then
+    _block "decision core runner missing" \
+        "BLOCKED: the OMN-18798 shared-tree git admission gate cannot run its decision core: lib/bash_guard_core.sh is missing beside ${GUARD_PY}. Repair the plugin install, or disable the guard deliberately: onex hooks disable SCOPE_GATE"
+fi
+onex_guard_core --stdin "$TOOL_INFO" --stderr merge --unset PYTHONPATH --set OMNI_HOME="${OMNI_HOME:-}" --set ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-}" -- \
+    "$GUARD_PYTHON" "$GUARD_PY"
+GUARD_OUT="$ONEX_GUARD_OUT"
+GUARD_RC="$ONEX_GUARD_RC"
 
 if [[ $GUARD_RC -eq 0 ]]; then
     GUARD_NOTES=$(printf '%s' "$GUARD_OUT" | tail -n 1 \

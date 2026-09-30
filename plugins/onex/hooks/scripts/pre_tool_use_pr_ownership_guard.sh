@@ -144,7 +144,14 @@ _log "candidate mutation verb detected; evaluating ownership"
 # Repository implied by the caller's cwd, used only when --repo is omitted.
 DEFAULT_REPO="$(git -C "$HOOK_ORIGINAL_CWD" remote get-url origin 2>/dev/null || true)"
 
-CMD_FILE="$(mktemp -t onex-pr-ownership.XXXXXX)"
+if [[ -n "${ONEX_BASH_GUARDS_REQ:-}" ]]; then
+    # OMN-20118: under the shared entrypoint the command file belongs to this
+    # guard's request, which outlives this subshell until the shared interpreter
+    # has read it and then removes it.
+    CMD_FILE="${ONEX_BASH_GUARDS_REQ}.${ONEX_BASH_GUARDS_SLOT}.cmd"
+else
+    CMD_FILE="$(mktemp -t onex-pr-ownership.XXXXXX)"
+fi
 cleanup() { rm -f "$CMD_FILE"; }
 trap cleanup EXIT
 printf '%s' "$CMD" > "$CMD_FILE"
@@ -167,14 +174,24 @@ fi
 # now resolves its siblings from its own lib/ directory, so no PYTHONPATH or cwd
 # contract is needed. PYTHONPATH is cleared so an ambient value cannot shadow a
 # sibling module with a same-named one from another tree.
-set +e
-GUARD_OUT=$(cd "$PLUGIN_ROOT" 2>/dev/null || cd "$HOME"; \
-    env -u PYTHONPATH "${PYTHON_CMD:-python3}" "$GUARD_PY" \
+# OMN-20118: the decision core runs through onex_guard_core, which runs it in its
+# own interpreter when this script runs on its own, and in the one shared
+# interpreter when pre_tool_use_bash_guards.sh runs it. A missing runner is
+# refused like a missing decision core.
+source "${HOOK_SCRIPT_DIR}/../lib/bash_guard_core.sh" 2>/dev/null || true
+if ! declare -F onex_guard_core >/dev/null 2>&1; then
+    _block "decision core runner missing" \
+        "BLOCKED: the OMN-16485 lane-ownership guard cannot run its decision core: lib/bash_guard_core.sh is missing beside ${GUARD_PY}. Repair the plugin install, or disable the guard deliberately: onex hooks disable BASH_GUARD"
+fi
+_CORE_CWD="$PLUGIN_ROOT"
+[[ -d "$_CORE_CWD" ]] || _CORE_CWD="$HOME"
+onex_guard_core --stderr merge --cwd "$_CORE_CWD" --unset PYTHONPATH -- \
+    "${PYTHON_CMD:-python3}" "$GUARD_PY" \
     --command-file "$CMD_FILE" \
     --cwd "$HOOK_ORIGINAL_CWD" \
-    --default-repo "$DEFAULT_REPO" 2>&1)
-GUARD_RC=$?
-set -e
+    --default-repo "$DEFAULT_REPO"
+GUARD_OUT="$ONEX_GUARD_OUT"
+GUARD_RC="$ONEX_GUARD_RC"
 
 if [[ $GUARD_RC -eq 3 ]]; then
     REASON=$(printf '%s' "$GUARD_OUT" | jq -r '.reason // empty' 2>/dev/null || true)
