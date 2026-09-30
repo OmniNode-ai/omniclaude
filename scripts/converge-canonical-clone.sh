@@ -87,8 +87,11 @@
 # the clone is already converged; exit 1 on a failed git step.
 #
 # Evidence: $OMNI_HOME/.onex_state/canonical-clone-converge/<repo>-<utc>/
-# Ledger:   $OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md, appended through
-#           $OMNI_HOME/scripts/ledger_lock.py when present (direct append otherwise).
+# Ledger:   the file named by $ONEX_LEDGER_PATH, appended only through a sanctioned writer
+#           (onex-ledger, else omnibase_internal by uv, else ledger_lock.py). With no
+#           ledger named or no writer, the row goes to
+#           $OMNI_HOME/.onex_state/canonical-clone-converge/pending-ledger-rows.md
+#           (untracked) and stderr says so. Never a raw edit of a tracked file.
 # Never prints file contents or secrets; only paths, SHAs, counts and hashes.
 
 set -euo pipefail
@@ -170,18 +173,50 @@ export ONEX_CANONICAL_CONVERGE=1
 
 g() { git -C "$clone" "$@"; }
 
+# The row never lands in a tracked file of a canonical clone (OMN-18971). The old
+# body appended to $OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md, by
+# ledger_lock.py or by a raw `>>`. On a lab host that file is a tracked file of the
+# registry's own clone, so the first STATUS row made that clone dirty and every later
+# fast-forward of it refused (measured on a lab host, 448 commits behind). The row now
+# goes to the ledger of record only when the environment NAMES one, through the
+# sanctioned typed writer; a host with no named ledger or no writer keeps the row
+# in an untracked state file, and says so on stderr.
+pending_rows_file() { printf '%s\n' "$OMNI_HOME/.onex_state/canonical-clone-converge/pending-ledger-rows.md"; }
+
+keep_row_untracked() {
+  local row="$1" why="$2" pending
+  pending="$(pending_rows_file)"
+  mkdir -p "$(dirname "$pending")"
+  printf '%s\n' "$row" >> "$pending"
+  echo "NOTE: $why; the STATUS row was written to the untracked state file $pending, not to a ledger" >&2
+}
+
 append_ledger_row() {
   local row="$1"
-  local ledger="$OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md"
-  local lock="$OMNI_HOME/scripts/ledger_lock.py"
-  if [[ -f "$lock" ]]; then
-    python3 "$lock" "$ledger" --append "$row" \
-      || fail "ledger append via ledger_lock.py failed (the ref IS converged; evidence at $evidence)"
-  elif [[ -f "$ledger" ]]; then
-    printf '%s\n' "$row" >> "$ledger"
-  else
-    echo "WARN: no ledger at $ledger; row not recorded:" >&2
-    echo "$row" >&2
+  local ledger="${ONEX_LEDGER_PATH:-}"
+  if [[ -z "$ledger" ]]; then
+    keep_row_untracked "$row" "ONEX_LEDGER_PATH is not set on this host (no ledger of record is named)"
+    return 0
+  fi
+  # Sanctioned writers, in order: the omnibase_internal `onex-ledger` command on
+  # PATH, the omnibase_internal clone beside the registry run by uv, then the
+  # registry's ledger_lock.py. Each takes the same `<ledger> --append <row>` form.
+  local -a writer=()
+  local internal="${ONEX_LEDGER_PROJECT:-$(dirname "$OMNI_HOME")/omnibase_internal}"
+  if command -v onex-ledger >/dev/null 2>&1; then
+    writer=(onex-ledger)
+  elif [[ -f "$internal/pyproject.toml" ]] && command -v uv >/dev/null 2>&1; then
+    writer=(uv run --quiet --project "$internal" onex-ledger)
+  elif [[ -f "$OMNI_HOME/scripts/ledger_lock.py" ]]; then
+    writer=(python3 "$OMNI_HOME/scripts/ledger_lock.py")
+  fi
+  if (( ${#writer[@]} == 0 )); then
+    keep_row_untracked "$row" "no sanctioned ledger writer on this host (no onex-ledger, no omnibase_internal clone with uv, no ledger_lock.py)"
+    return 0
+  fi
+  if ! "${writer[@]}" "$ledger" --append "$row"; then
+    keep_row_untracked "$row" "the ledger writer refused the row"
+    fail "ledger append via ${writer[*]} failed (the ref IS converged; evidence at $evidence)"
   fi
 }
 
