@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Plugin Version Bump Gate
+
+# OMN-16913. The Claude Code plugin cache is keyed on the manifest version, so a
+# change under plugins/onex/ that lands without a bump never reaches an installed
+# cache. This fails a pull request that changes plugins/onex/ (tests and bytecode
+# excepted) without raising plugins/onex/.claude-plugin/plugin.json `version`
+# above its merge-base value, or whose dev marketplace entry pins another version.
+#
+# No `paths:` filter, deliberately: a filtered gate under a context something
+# waits for is skip-vector 1 (see hook-inventory-gate.yml). The job is a
+# sub-second git diff, so it runs on every pull request.
+on:
+  push:
+    branches: [main, dev, 'hotfix/**']
+  pull_request:
+    branches: [main, dev]
+
+# OMN-19644: cancel only superseded pull request runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+
+jobs:
+  # advisory-ok: OMN-16913 blocks through CI Summary layer-5 default-deny sweep over external check-runs; the branch-protection required-context row is a separate operator action requested in the PR body
+  plugin-version-bump-gate:
+    name: Plugin Version Bump Gate
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Require a plugin version bump for plugin changes
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # A push to dev/main has no base to compare with beyond the previous
+          # head; a new branch push reports an all-zero `before`, which is
+          # treated as "nothing to compare" only for the skew check.
+          if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
+            BASE_REF="HEAD"
+          fi
+          python scripts/validation/validate_plugin_version_bump.py --base "$BASE_REF"
