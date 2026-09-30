@@ -12,8 +12,9 @@ These tests pin both halves from the guard's side:
 
 * the exact edits the writer now performs -- foreign line replaced, stale own
   line moved forward, duplicate collapsed, duplicate demoted into a fence --
-  are still REFUSED when an agent
-  issues them by hand, over every body-replacing shape the guard parses;
+  are still REFUSED when an agent issues them by hand, over every
+  body-replacing shape the guard parses, unless the one stamp that stays names
+  a companion a live read shows MERGED (OMN-17427, the last two tests below);
 * the one agent action the rebind path needs, re-requesting the writer through
   the autobind manual-replay dispatch, names no body edit and is admitted.
 
@@ -112,6 +113,19 @@ def _reader(bodies: dict[str, str]):
     return _read
 
 
+def _merged(*numbers: int):
+    """A companion reader: those OCC pull requests are MERGED, none else is."""
+
+    def _read(number: str) -> bool | None:
+        return int(number) in numbers
+
+    return _read
+
+
+def _unreadable(number: str) -> bool | None:
+    return None
+
+
 def _edit_shapes(repo: str, number: int, body_file: Path) -> list[str]:
     """Every body-replacing shape an agent would reach for, over one body."""
     return [
@@ -170,11 +184,16 @@ def test_the_writers_edit_is_still_refused_when_an_agent_makes_it(
     body_file = tmp_path / "body.md"
     body_file.write_text(replacement, encoding="utf-8")
     bodies = {f"{repo}#{number}": live}
-    for command in _edit_shapes(repo, number, body_file):
-        findings = check_bash_command(command, policy, _reader(bodies))
-        assert findings, f"an agent rebind must stay refused: {command}"
-        assert findings[0].kind == "dropped_stamp", command
-        assert dropped in findings[0].dropped_lines, command
+    # No companion is MERGED: the kept stamp proves nothing, so the drop stays
+    # refused. Wiring no reader at all refuses it the same way.
+    for reader in (None, _merged(), _unreadable):
+        for command in _edit_shapes(repo, number, body_file):
+            findings = check_bash_command(
+                command, policy, _reader(bodies), companion_merged=reader
+            )
+            assert findings, f"an agent rebind must stay refused: {command}"
+            assert findings[0].kind == "dropped_stamp", command
+            assert dropped in findings[0].dropped_lines, command
 
 
 def test_the_writers_output_is_the_one_line_body_the_gate_wants(
@@ -226,3 +245,105 @@ def test_requesting_the_writer_is_admitted(policy: Policy, command: str) -> None
     flag, so the guard has nothing to judge and must not stand in the way.
     """
     assert check_bash_command(command, policy, _reader({})) == []
+
+
+@pytest.mark.parametrize(
+    ("replacement", "kept", "dropped"),
+    [
+        pytest.param(
+            DUPLICATE_COLLAPSED, 11171, _stamp(11170), id="duplicate-collapsed"
+        ),
+        pytest.param(DUPLICATE_FENCED, 11171, _stamp(11170), id="duplicate-fenced"),
+    ],
+)
+def test_the_drop_is_admitted_when_the_one_kept_companion_is_merged(
+    policy: Policy, tmp_path: Path, replacement: str, kept: int, dropped: str
+) -> None:
+    """OMN-17427: the only compliant edit for a two-stamp body is admitted.
+
+    Two canonical lines fail the receipt gate and dropping either fails this
+    guard, so without this admission no edit of the body is possible at all.
+    The proof it asks for is a live read of the companion that stays.
+    """
+    repo, number = "OmniNode-ai/omnibase_core", 1762
+    body_file = tmp_path / "body.md"
+    body_file.write_text(replacement, encoding="utf-8")
+    bodies = {f"{repo}#{number}": DUPLICATE_LIVE}
+    # Positive control: the same edit is refused when the companion is not merged.
+    refused = check_bash_command(
+        f"gh pr edit {number} --repo {repo} --body-file {body_file}",
+        policy,
+        _reader(bodies),
+        companion_merged=_merged(),
+    )
+    assert [f.kind for f in refused] == ["dropped_stamp"]
+    for command in _edit_shapes(repo, number, body_file):
+        assert (
+            check_bash_command(
+                command, policy, _reader(bodies), companion_merged=_merged(kept)
+            )
+            == []
+        ), command
+    # Only the kept companion's state counts: the dropped one being merged does
+    # not vouch for the stamp that stays.
+    assert check_bash_command(
+        f"gh pr edit {number} --repo {repo} --body-file {body_file}",
+        policy,
+        _reader(bodies),
+        companion_merged=_merged(int(dropped.rsplit("#", 1)[1])),
+    )
+
+
+def test_the_two_stamp_live_case_of_omnibase_infra_4316(
+    policy: Policy, tmp_path: Path
+) -> None:
+    """The live victim: a stale companion stamp beside the merged correct one."""
+    repo, number = "OmniNode-ai/omnibase_infra", 4316
+    live = (
+        "Bumps omnibase-core.\n\n"
+        f"{_stamp(11835)}\n"
+        f"{_stamp(11850)}\n"
+        "Evidence-Ticket: OMN-9050\n"
+    )
+    replacement = (
+        f"Bumps omnibase-core.\n\n{_stamp(11850)}\nEvidence-Ticket: OMN-9050\n"
+    )
+    body_file = tmp_path / "body.md"
+    body_file.write_text(replacement, encoding="utf-8")
+    command = f"gh pr edit {number} --repo {repo} --body-file {body_file}"
+    bodies = {f"{repo}#{number}": live}
+    assert (
+        check_bash_command(
+            command, policy, _reader(bodies), companion_merged=_merged(11850)
+        )
+        == []
+    )
+    assert check_bash_command(
+        command, policy, _reader(bodies), companion_merged=_merged(11835)
+    )
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        pytest.param("No evidence line at all.\n", id="sole-stamp-dropped"),
+        pytest.param(
+            f"{_stamp(11171)}\n{_stamp(11172)}\n", id="two-stamps-kept-one-new"
+        ),
+        pytest.param(f"{_PREFIX}{'a' * 40}\n", id="sha-value-is-not-a-companion"),
+    ],
+)
+def test_no_merged_companion_lets_any_other_shape_drop_a_stamp(
+    policy: Policy, tmp_path: Path, replacement: str
+) -> None:
+    repo, number = "OmniNode-ai/omnibase_core", 1762
+    body_file = tmp_path / "body.md"
+    body_file.write_text(replacement, encoding="utf-8")
+    bodies = {f"{repo}#{number}": DUPLICATE_LIVE}
+    findings = check_bash_command(
+        f"gh pr edit {number} --repo {repo} --body-file {body_file}",
+        policy,
+        _reader(bodies),
+        companion_merged=_merged(11170, 11171, 11172),
+    )
+    assert [f.kind for f in findings] == ["dropped_stamp"]
