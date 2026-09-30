@@ -886,7 +886,7 @@ def test_the_reflog_still_wins_over_the_remote_default(
 
 # --- OMN-18971: the row never lands in a tracked file of a canonical clone --------
 #
-# The old writer appended to $OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md (a
+# The old writer appended to the tracked docs/tracking/ROLLING_WORK_LEDGER.md (a
 # tracked file of the registry's own clone on a lab host) by ledger_lock.py or a raw
 # `>>`. That made the registry clone dirty and blocked every later fast-forward of it.
 
@@ -911,7 +911,7 @@ def test_no_named_ledger_keeps_the_row_in_an_untracked_state_file(
     rows = _pending_rows(scratch).read_text(encoding="utf-8")
     assert "| STATUS |" in rows and "event=CONVERGED" in rows
     assert "ONEX_LEDGER_PATH is not set" in proc.stderr
-    assert str(_pending_rows(scratch)) in proc.stderr
+    assert "pending-ledger-rows.md" in proc.stderr
     assert not (scratch.home / "writer-calls.log").exists()
 
 

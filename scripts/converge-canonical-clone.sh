@@ -90,7 +90,7 @@
 # Ledger:   the file named by $ONEX_LEDGER_PATH, appended only through a sanctioned writer
 #           (onex-ledger, else the project named by ONEX_LEDGER_PROJECT run by uv, else ledger_lock.py). With no
 #           ledger named or no writer, the row goes to
-#           $OMNI_HOME/.onex_state/canonical-clone-converge/pending-ledger-rows.md
+#           .onex_state/canonical-clone-converge/pending-ledger-rows.md under the registry root
 #           (untracked) and stderr says so. Never a raw edit of a tracked file.
 # Never prints file contents or secrets; only paths, SHAs, counts and hashes.
 
@@ -174,14 +174,14 @@ export ONEX_CANONICAL_CONVERGE=1
 g() { git -C "$clone" "$@"; }
 
 # The row never lands in a tracked file of a canonical clone (OMN-18971). The old
-# body appended to $OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md, by
+# body appended to the tracked docs/tracking/ROLLING_WORK_LEDGER.md, by
 # ledger_lock.py or by a raw `>>`. On a lab host that file is a tracked file of the
 # registry's own clone, so the first STATUS row made that clone dirty and every later
 # fast-forward of it refused (measured on a lab host, 448 commits behind). The row now
 # goes to the ledger of record only when the environment NAMES one, through the
 # sanctioned typed writer; a host with no named ledger or no writer keeps the row
 # in an untracked state file, and says so on stderr.
-pending_rows_file() { printf '%s\n' "$OMNI_HOME/.onex_state/canonical-clone-converge/pending-ledger-rows.md"; }
+pending_rows_file() { printf '%s\n' "$omni_home_abs/.onex_state/canonical-clone-converge/pending-ledger-rows.md"; }
 
 keep_row_untracked() {
   local row="$1" why="$2" pending
@@ -207,8 +207,8 @@ append_ledger_row() {
     writer=(onex-ledger)
   elif [[ -n "$internal" && -f "$internal/pyproject.toml" ]] && command -v uv >/dev/null 2>&1; then
     writer=(uv run --quiet --project "$internal" onex-ledger)
-  elif [[ -f "$OMNI_HOME/scripts/ledger_lock.py" ]]; then
-    writer=(python3 "$OMNI_HOME/scripts/ledger_lock.py")
+  elif [[ -f "$omni_home_abs/scripts/ledger_lock.py" ]]; then
+    writer=(python3 "$omni_home_abs/scripts/ledger_lock.py")
   fi
   if (( ${#writer[@]} == 0 )); then
     keep_row_untracked "$row" "no sanctioned ledger writer on this host (no onex-ledger, no ONEX_LEDGER_PROJECT with uv, no ledger_lock.py)"
