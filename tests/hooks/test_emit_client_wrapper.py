@@ -118,18 +118,6 @@ class TestModuleImport:
             "work.obligation.transferred",  # OMN-13902 - Work obligation lifecycle registry sync
             "content.captured",  # OMN-19551 - Full prompt/tool/reply content capture
             "hook.event",  # OMN-19513 - Lineage-carrying hook event, all hook types
-            "pr.state.observed",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.ack",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.claim",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.correction",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.friction",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.hold",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.msg",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.operator_consent",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.release",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.ruling",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.status",  # OMN-16913 - omnimarket ledger/PR-state registry sync
-            "work.ledger.terminal",  # OMN-16913 - omnimarket ledger/PR-state registry sync
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
