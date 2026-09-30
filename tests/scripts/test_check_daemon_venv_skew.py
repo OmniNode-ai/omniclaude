@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import importlib.util
 import os
@@ -269,3 +270,142 @@ def test_resolver_honors_default_path_when_env_unset(
     resolved = skew._live_venv_dir()
     assert resolved.name == ".venv"
     assert "onex-omninode-tools" in os.fspath(resolved)
+
+
+# --- OMN-20131: the live venvs are judged against the lock they are built from --
+#
+# ensure-plugin-venv.sh builds the plugin venv from the canonical clone, and
+# the hook interpreter is that clone's own .venv. A worktree that stages a new
+# uv.lock must not be refused because the host's venvs still match the lock the
+# canonical clone carries: they cannot be rebuilt from the new lock until it
+# lands, so that refusal has no remedy.
+
+_REAL_CANONICAL_CLONE = skew.git_source_pins.canonical_clone
+_BUMPED_LOCK = _SAMPLE_LOCK.replace('version = "1.17.3"', 'version = "1.17.4"')
+
+
+def _host(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    canonical_lock: str | None,
+    worktree_lock: str,
+    installed: dict[str, str],
+    marker_lock: str,
+) -> None:
+    """A host with a live venv, an optional canonical clone and a worktree."""
+    registry = tmp_path / "registry"
+    registry.mkdir()
+    if canonical_lock is not None:
+        clone = registry / "omniclaude"
+        (clone / ".git").mkdir(parents=True)
+        (clone / "uv.lock").write_text(canonical_lock, encoding="utf-8")
+    # The real clone resolver, pointed at this temp registry instead of the
+    # host's own clones.
+    monkeypatch.setattr(
+        skew.git_source_pins,
+        "canonical_clone",
+        functools.partial(_REAL_CANONICAL_CLONE, registry_root=str(registry)),
+    )
+    worktree = tmp_path / "worktree"
+    (worktree / "scripts").mkdir(parents=True)
+    (worktree / "uv.lock").write_text(worktree_lock, encoding="utf-8")
+    monkeypatch.setattr(skew, "_repo_root", lambda: worktree)
+    venv = tmp_path / "data" / ".venv"
+    _write_fake_venv(
+        venv, marker=f"2.3.0:{_canonical_hash(marker_lock)}:3.13", installed=installed
+    )
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "data"))
+    monkeypatch.setenv("PLUGIN_PYTHON_BIN", str(venv / "bin" / "python3"))
+
+
+@pytest.mark.unit
+def test_worktree_lock_bump_passes_when_venvs_match_the_canonical_clone_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _host(
+        tmp_path,
+        monkeypatch,
+        canonical_lock=_SAMPLE_LOCK,
+        worktree_lock=_BUMPED_LOCK,
+        installed={"wrapt": "1.17.3", "pyyaml": "6.0.2"},
+        marker_lock=_SAMPLE_LOCK,
+    )
+    rc = skew.main(["uv.lock"])
+    captured = capsys.readouterr()
+    assert rc == 0, captured.err
+    assert "PASS" in captured.out
+    canonical = tmp_path / "registry" / "omniclaude" / "uv.lock"
+    assert f"live venvs judged against {canonical}" in captured.out
+
+
+@pytest.mark.unit
+def test_a_venv_skewed_from_the_canonical_clone_lock_still_fails_from_a_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _host(
+        tmp_path,
+        monkeypatch,
+        canonical_lock=_SAMPLE_LOCK,
+        worktree_lock=_BUMPED_LOCK,
+        installed={"wrapt": "1.17.2", "pyyaml": "6.0.2"},
+        marker_lock=_SAMPLE_LOCK,
+    )
+    rc = skew.main(["uv.lock"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "live venv has 1.17.2, lock pins 1.17.3" in err
+    assert "hook interpreter" in err
+
+
+@pytest.mark.unit
+def test_a_venv_behind_the_canonical_clone_lock_still_fails_as_lock_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _host(
+        tmp_path,
+        monkeypatch,
+        canonical_lock=_BUMPED_LOCK,
+        worktree_lock=_BUMPED_LOCK,
+        installed={"wrapt": "1.17.3", "pyyaml": "6.0.2"},
+        marker_lock=_SAMPLE_LOCK,
+    )
+    rc = skew.main(["uv.lock"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "STALE uv.lock" in err
+
+
+@pytest.mark.unit
+def test_without_a_canonical_clone_the_checkouts_own_lock_is_the_judge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _host(
+        tmp_path,
+        monkeypatch,
+        canonical_lock=None,
+        worktree_lock=_BUMPED_LOCK,
+        installed={"wrapt": "1.17.3", "pyyaml": "6.0.2"},
+        marker_lock=_SAMPLE_LOCK,
+    )
+    rc = skew.main(["uv.lock"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "live venv has 1.17.3, lock pins 1.17.4" in err
+
+
+@pytest.mark.unit
+def test_an_unparseable_worktree_lock_still_fails_when_the_canonical_lock_is_fine(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _host(
+        tmp_path,
+        monkeypatch,
+        canonical_lock=_SAMPLE_LOCK,
+        worktree_lock="not = [valid",
+        installed={"wrapt": "1.17.3", "pyyaml": "6.0.2"},
+        marker_lock=_SAMPLE_LOCK,
+    )
+    rc = skew.main(["uv.lock"])
+    assert rc == 1
+    assert "unparseable" in capsys.readouterr().err
