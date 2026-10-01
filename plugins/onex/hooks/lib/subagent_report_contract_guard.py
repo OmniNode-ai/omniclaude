@@ -139,6 +139,15 @@ _HOOK_ECHO_MARKERS = (
     "guard: clean",
 )
 
+# A tool's own one-line result, returned verbatim: ``REFUSED <exit> ...`` /
+# ``RETRY <exit> ...`` or ``OK <ROW-TYPE> <iso timestamp> ...``. This is the
+# return the ledger-write / ledger-msg skills mandate for their forked
+# subagent. It is a verdict and command output at once, so it counts as both
+# classes; without it the guard blocked every refusal line that carried no
+# path or ticket, and the forced re-emit replaced the machine-readable line
+# the caller parses with prose (OMN-18946, 40 of 57 refusal lines on h202).
+_RESULT_LINE = r"(?:^(?:REFUSED|RETRY) \d+ \S)|(?:^OK [A-Z][A-Z-]+ \d{4}-\d{2}-\d{2}T)"
+
 # Evidence classes the report contract asks for. Order is stable so the
 # reason string is deterministic.
 _EVIDENCE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -156,12 +165,16 @@ _EVIDENCE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
             r"|(?:\b[\w.\-]+\.(?:py|sh|ya?ml|toml)\b)"
         ),
     ),
-    ("command_or_output", re.compile(r"(?:```)|(?:^\s*\$\s+\S)|(?:^\s*>\s+\S)", re.M)),
+    (
+        "command_or_output",
+        re.compile(r"(?:```)|(?:^\s*\$\s+\S)|(?:^\s*>\s+\S)|" + _RESULT_LINE, re.M),
+    ),
     (
         "verdict",
         re.compile(
             r"\b(?:PASS|PASSED|FAIL|FAILED|RED|GREEN|BLOCKED|VERIFIED|"
-            r"UNVERIFIED|PARTIAL|NO-OP|SKIPPED)\b"
+            r"UNVERIFIED|PARTIAL|NO-OP|SKIPPED|REFUSED|RETRY)\b|" + _RESULT_LINE,
+            re.M,
         ),
     ),
     # 7-40 hex chars with at least one digit -- keeps ordinary words
