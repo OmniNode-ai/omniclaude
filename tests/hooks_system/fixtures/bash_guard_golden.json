@@ -382,7 +382,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (api-pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> (the handle you registered in the rolling work ledger) and retry."
+     "reason": "REFUSED (api-pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
     },
     "rc": 2
    }
@@ -421,7 +421,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> (the handle you registered in the rolling work ledger) and retry."
+     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
     },
     "rc": 2
    }
@@ -430,7 +430,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> (the handle you registered in the rolling work ledger) and retry."
+     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
     },
     "rc": 2
    }
@@ -439,7 +439,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> (the handle you registered in the rolling work ledger) and retry."
+     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
     },
     "rc": 2
    }
@@ -448,7 +448,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> (the handle you registered in the rolling work ledger) and retry."
+     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
     },
     "rc": 2
    }
@@ -457,7 +457,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> (the handle you registered in the rolling work ledger) and retry.\n\nREFUSED (run-cancel): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> (the handle you registered in the rolling work ledger) and retry."
+     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry.\n\nREFUSED (run-cancel): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
     },
     "rc": 2
    }
@@ -466,7 +466,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> (the handle you registered in the rolling work ledger) and retry."
+     "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
     },
     "rc": 2
    }
@@ -632,7 +632,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-reopen): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> (the handle you registered in the rolling work ledger) and retry."
+     "reason": "REFUSED (pr-reopen): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
     },
     "rc": 2
    }
@@ -682,7 +682,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (workflow-dispatch): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> (the handle you registered in the rolling work ledger) and retry."
+     "reason": "REFUSED (workflow-dispatch): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
     },
     "rc": 2
    }
@@ -1677,7 +1677,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (api-pr-close) on OmniNode-ai/omniclaude#2019 (via gh api): no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 omniclaude/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (api-pr-close) on OmniNode-ai/omniclaude#2019 (via gh api): no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1725,7 +1725,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 omniclaude/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1734,7 +1734,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 omniclaude/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1743,7 +1743,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 omniclaude/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1752,7 +1752,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 omniclaude/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1761,7 +1761,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 omniclaude/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1927,7 +1927,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-reopen) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 omniclaude/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-reopen) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }

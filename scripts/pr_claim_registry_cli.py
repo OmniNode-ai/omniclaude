@@ -87,7 +87,7 @@ def _cmd_claim(
         print(
             "Error: no lane identity could be resolved and --lane was not given.\n"
             "A claim without a lane cannot authorize a mutation — the ownership "
-            "guard treats it as INDETERMINATE. Export ONEX_LANE_ID=<your-lane-handle> "
+            "guard treats it as INDETERMINATE. Export ONEX_LANE_ID (or ONEX_LANE)=<your-lane-handle> "
             "(the handle you registered in the rolling work ledger) or pass --lane.",
             file=sys.stderr,
         )
