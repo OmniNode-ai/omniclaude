@@ -937,3 +937,99 @@ allowed_extras:
       registration; the contract schema here cannot declare a foreign-domain
       publish topic.
     ticket: OMN-13092
+
+  - topic: "onex.evt.omnimarket.delegation-disposition-recorded.v1"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-ack.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-claim.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-correction.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-friction.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-hold.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-msg.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-operator-consent.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-release.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-ruling.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-status.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
+
+  - topic: "onex.evt.omnimarket.work-ledger-terminal.v2"
+    lifecycle: integration
+    reason: >
+      Owned and contract-declared by omnimarket (topics.yaml). omniclaude only
+      references it for hook-side event-type registration in EVENT_REGISTRY;
+      the contract schema here cannot declare a foreign-domain publish topic.
+    ticket: OMN-20001
