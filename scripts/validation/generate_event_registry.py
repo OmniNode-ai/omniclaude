@@ -65,6 +65,7 @@ DAEMON_INTERNAL_EVENT_TYPES: frozenset[str] = frozenset(
         "daemon.health.probe",
         "delegate_skill.completed",
         "delegate_skill.failed",
+        "delegation.disposition_recorded",
         "delegation.request",
         # omnimarket-owned work-ledger and PR-watcher events. They are written
         # by lanes and watchers through the daemon, never by a Claude Code hook
