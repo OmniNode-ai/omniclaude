@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# ai.omninode.hook-emit-drainer.service -- systemd --user unit for the
+# hook-emit journal drainer on a Linux lab host (OMN-20309). The Linux
+# counterpart of scripts/launchd/ai.omninode.hook-emit-drainer.plist.
+#
+# Same process, same semantics: one resident hook_emit_drainer.py that pays the
+# omnibase_infra import once and drains the journal. The singleton flock in
+# hook_emit_journal.SingletonLock keeps a restart from producing a second
+# publisher, and the kernel frees that lock when the holder dies.
+#
+# A USER unit, so installing it needs no root: no User=, no system directory,
+# WantedBy=default.target. It survives logout only while the account lingers
+# (loginctl enable-linger); the installer reports that state.
+#
+# Interpreter: the omniclaude project venv (uv sync), which carries
+# omnibase_infra and omnimarket. The brew-backed plugin venv the plist uses is
+# macOS-only.
+#
+# Template: __OMNI_HOME__ and __PYTHON__ are expanded by
+# install-hook-emit-drainer.sh, which installs the result under
+# ~/.config/systemd/user/.
+#
+# Install:   bash omniclaude/scripts/install-hook-emit-drainer.sh
+# Uninstall: bash omniclaude/scripts/install-hook-emit-drainer.sh --uninstall
+
+[Unit]
+Description=ONEX hook-emit journal drainer
+Documentation=file://__OMNI_HOME__/omniclaude/scripts/systemd/ai.omninode.hook-emit-drainer.service
+# A drainer that fails fast must be retried every RestartSec forever, the way
+# launchd KeepAlive does; never abandoned to a start-limit.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=__PYTHON__ __OMNI_HOME__/omniclaude/plugins/onex/hooks/lib/hook_emit_drainer.py --log-level INFO
+Restart=always
+# Restart backoff, the plist's ThrottleInterval: an unimportable omnimarket
+# during a venv rebuild must not respawn in a tight loop.
+RestartSec=30
+# Telemetry drain must never compete with the operator's own work.
+Nice=10
+Environment=OMNI_HOME=__OMNI_HOME__
+Environment=ONEX_STATE_DIR=__OMNI_HOME__/.onex_state
+WorkingDirectory=__OMNI_HOME__
+StandardOutput=append:__OMNI_HOME__/.onex_state/hooks/logs/hook-emit-drainer.log
+StandardError=append:__OMNI_HOME__/.onex_state/hooks/logs/hook-emit-drainer.log
+
+[Install]
+WantedBy=default.target

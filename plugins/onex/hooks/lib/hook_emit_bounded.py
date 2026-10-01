@@ -313,25 +313,27 @@ def _cell(text: str) -> str:
 
 
 def _ledger_paths() -> tuple[Path, Path] | None:
-    """The rolling ledger and its locked-append script, or None when unknown.
+    """The rendered ledger and packaged writer project, or None when unknown.
 
-    ``ONEX_LEDGER_PATH`` and ``ONEX_LEDGER_LOCK_SCRIPT`` when set (the canary
-    plist sets them). The launchd drainer sets neither, so they fall back to
-    the fixed locations under the workspace root, which is the parent of the
-    required ``ONEX_STATE_DIR`` (the drainer's environment carries that
-    variable and no ledger variable). No state dir, no guess.
+    The ledger defaults to the state directory's workspace parent until
+    cutover. The writer requires OMNI_HOME and defaults to its sibling clone;
+    OMNIBASE_INTERNAL_HOME declares an alternate canonical clone.
     """
     ledger = os.environ.get("ONEX_LEDGER_PATH")
-    lock = os.environ.get("ONEX_LEDGER_LOCK_SCRIPT")
+    root = os.environ.get("OMNI_HOME")
     state = os.environ.get("ONEX_STATE_DIR")
     home = Path(state).parent if state else None
     if not ledger and home:
         ledger = str(home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md")
-    if not lock and home:
-        lock = str(home / "scripts" / "ledger_lock.py")
-    if not ledger or not lock:
+    if not ledger or not root:
         return None
-    return Path(ledger), Path(lock)
+    project = Path(
+        os.environ.get("OMNIBASE_INTERNAL_HOME")
+        or Path(root).parent / "omnibase_internal"
+    )
+    if not project.is_absolute() or not (project / "pyproject.toml").is_file():
+        return None
+    return Path(ledger), project
 
 
 def record_undelivered_alarm(category: str, text: str, why: str) -> bool:
@@ -346,11 +348,11 @@ def record_undelivered_alarm(category: str, text: str, why: str) -> bool:
     if paths is None:
         print(
             "hook_emit_bounded: cannot record the undelivered alarm in the ledger: "
-            "set ONEX_LEDGER_PATH and ONEX_LEDGER_LOCK_SCRIPT (or ONEX_STATE_DIR)",
+            "set OMNI_HOME and ONEX_LEDGER_PATH (or ONEX_STATE_DIR)",
             file=sys.stderr,
         )
         return False
-    ledger, lock = paths
+    ledger, project = paths
     row = (
         f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} | STATUS | "
         f"lane=hook-emit-alarm | state=ALERT | host={_cell(os.uname().nodename)} | "
@@ -360,8 +362,12 @@ def record_undelivered_alarm(category: str, text: str, why: str) -> bool:
     try:
         done = subprocess.run(  # noqa: S603
             [
-                sys.executable,
-                str(lock),
+                "uv",
+                "run",
+                "--quiet",
+                "--project",
+                str(project),
+                "onex-ledger",
                 str(ledger),
                 "--timeout",
                 "5s",

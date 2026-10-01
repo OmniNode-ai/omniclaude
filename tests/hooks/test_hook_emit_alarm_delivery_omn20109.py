@@ -83,16 +83,24 @@ def slack() -> Iterator[FakeSlack]:
 
 @pytest.fixture
 def stub_ledger(tmp_path: Path) -> tuple[Path, Path]:
-    """A ledger file and a lock script that records its append instead of writing it."""
+    """A ledger and stub uv that records the packaged writer invocation."""
     ledger = tmp_path / "ledger.md"
     ledger.write_text("")
     appended = tmp_path / "appended.txt"
-    lock = tmp_path / "ledger_lock.py"
-    lock.write_text(
-        "import sys\n"
+    project = tmp_path / "omnibase_internal"
+    project.mkdir(exist_ok=True)
+    (project / "pyproject.toml").write_text("")
+    stub = tmp_path / "uv"
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        "import sys, os\n"
+        "assert sys.argv[1:4] == ['run', '--quiet', '--project']\n"
+        f"assert sys.argv[4] == os.environ.get('OMNIBASE_INTERNAL_HOME', {str(project)!r})\n"
+        "assert sys.argv[5] == 'onex-ledger'\n"
         f"open({str(appended)!r}, 'a').write(sys.argv[-1] + '\\n')\n"
         f"open({str(appended)!r}, 'a').write(' '.join(sys.argv[1:-1]) + '\\n')\n"
     )
+    stub.chmod(0o755)
     return ledger, appended
 
 
@@ -101,7 +109,8 @@ def _drainer_env(tmp_path: Path, slack: FakeSlack, **extra: str) -> dict[str, st
     home = tmp_path / "home"
     (home / ".omnibase").mkdir(parents=True, exist_ok=True)
     env = {
-        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+        "PATH": f"{tmp_path}:/usr/bin:/bin:/usr/sbin:/sbin",
+        "OMNI_HOME": str(tmp_path / "workspace"),
         "HOME": str(home),
         "ONEX_STATE_DIR": str(tmp_path / "workspace" / ".onex_state"),
         "SLACK_API_BASE_URL": f"{slack.url}/api",
@@ -168,7 +177,6 @@ def test_unresolvable_credential_fails_loud_on_three_channels(
         slack,
         ONEX_ALERT_LOCAL_NOTIFY_CMD=str(notifier),
         ONEX_LEDGER_PATH=str(ledger),
-        ONEX_LEDGER_LOCK_SCRIPT=str(appended.with_name("ledger_lock.py")),
     )
     marker = tmp_path / "drop-episode"
 
@@ -195,23 +203,49 @@ def test_unresolvable_credential_fails_loud_on_three_channels(
 
 
 def test_ledger_paths_fall_back_to_the_state_dir_parent_for_the_drainer(
-    tmp_path: Path, slack: FakeSlack
+    tmp_path: Path, slack: FakeSlack, stub_ledger: tuple[Path, Path]
 ) -> None:
     """The drainer's env has a state dir and no ledger variables."""
     omni = tmp_path / "workspace"
     (omni / "docs" / "tracking").mkdir(parents=True)
     (omni / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md").write_text("")
-    appended = tmp_path / "appended.txt"
-    (omni / "scripts").mkdir()
-    (omni / "scripts" / "ledger_lock.py").write_text(
-        f"import sys\nopen({str(appended)!r}, 'a').write(sys.argv[-1] + '\\n')\n"
-    )
+    _, appended = stub_ledger
     env = _drainer_env(tmp_path, slack)  # no credential anywhere
 
     result = _raise(env, tmp_path / "drop-episode")
 
     assert result.returncode == 0, result.stderr
     assert "state=ALERT" in appended.read_text()
+
+
+@pytest.mark.parametrize("override", ["declared", "missing", "relative"])
+def test_alarm_writer_uses_declared_internal_project_without_fallback(
+    tmp_path: Path, slack: FakeSlack, stub_ledger: tuple[Path, Path], override: str
+) -> None:
+    ledger, appended = stub_ledger
+    project = tmp_path / "declared" / "canonical"
+    project.mkdir(parents=True)
+    (project / "pyproject.toml").write_text("")
+    values = {
+        "declared": str(project),
+        "missing": str(tmp_path / "missing"),
+        "relative": "relative",
+    }
+    result = _raise(
+        _drainer_env(
+            tmp_path,
+            slack,
+            ONEX_LEDGER_PATH=str(ledger),
+            OMNIBASE_INTERNAL_HOME=values[override],
+        ),
+        tmp_path / "drop-episode",
+    )
+    assert result.returncode == 0, result.stderr
+    if override == "declared":
+        assert str(project) in appended.read_text()
+    else:
+        assert not appended.exists()
+        assert "cannot record" in result.stderr
 
 
 def test_undelivered_alarm_without_a_ledger_still_says_so_on_stderr(
@@ -232,7 +266,6 @@ def test_an_undelivered_alarm_is_retried_after_the_retry_window_not_swallowed(
         tmp_path,
         slack,
         ONEX_LEDGER_PATH=str(ledger),
-        ONEX_LEDGER_LOCK_SCRIPT=str(appended.with_name("ledger_lock.py")),
     )
     home_env = Path(env["HOME"]) / ".omnibase" / ".env"
     marker = tmp_path / "drop-episode"
