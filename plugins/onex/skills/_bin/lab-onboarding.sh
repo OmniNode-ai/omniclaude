@@ -128,6 +128,14 @@ case ":$PATH:" in *":/usr/sbin:"*) ;; *) PATH="$PATH:/usr/sbin" ;; esac
 case ":$PATH:" in *":/sbin:"*) ;; *) PATH="$PATH:/sbin" ;; esac
 case ":$PATH:" in *":/usr/bin:"*) ;; *) PATH="/usr/bin:$PATH" ;; esac
 case ":$PATH:" in *":/bin:"*) ;; *) PATH="/bin:$PATH" ;; esac
+# The tools phase 1 installs (Homebrew's prefix, and uv and onex in ~/.local/bin)
+# on PATH from the start of every run. Phase 1 adds them only when it installs
+# something, so a resumed run that skips it would otherwise send later phases
+# (make up-local runs uv) to a PATH without them.
+for _d in /usr/local/bin /opt/homebrew/bin "$HOME/.local/bin"; do
+  [ -d "$_d" ] || continue
+  case ":$PATH:" in *":$_d:"*) ;; *) PATH="$_d:$PATH" ;; esac
+done
 export PATH
 
 IS_TTY=0

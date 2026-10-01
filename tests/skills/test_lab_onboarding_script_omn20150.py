@@ -464,3 +464,22 @@ def test_nothing_connects_to_the_lab() -> None:
         assert gone not in text.lower(), gone
     assert "TOTAL_PHASES=6" in text
     assert 'DONE_FILE="$STATE_DIR/phases.v2.done"' in text
+
+
+@macos_only
+def test_a_resumed_run_finds_the_tools_phase_1_installed(tmp_path: Path) -> None:
+    """Phase 1 skipped on a re-run must not leave uv and onex off PATH for later phases."""
+    home = tmp_path / "home"
+    (home / ".local" / "bin").mkdir(parents=True)
+    probe = SCRIPT.read_text().split("\nIS_TTY=0\n", 1)[0] + '\necho "PATH=$PATH"\n'
+    script = tmp_path / "head.sh"
+    script.write_text(probe)
+    out = subprocess.run(
+        ["/bin/bash", str(script)],
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "TMPDIR": str(tmp_path) + "/"},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    ).stdout
+    assert f"{home}/.local/bin" in out.split("PATH=", 1)[1].split(":")
