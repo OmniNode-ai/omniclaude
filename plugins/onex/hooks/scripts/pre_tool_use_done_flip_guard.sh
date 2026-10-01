@@ -18,6 +18,11 @@
 
 set -eo pipefail
 
+# OMN-19381: named so its refusal row names it. This guard does not source
+# error-guard.sh (its EXIT trap would rewrite this guard's bare `exit 2`), so it sources
+# the refusal seam on its own, after common.sh.
+_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
+
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
 # OMN-20109: this script's directory, resolved once without a dirname exec.
@@ -48,6 +53,9 @@ LIB_PY="${PLUGIN_ROOT}/hooks/lib/done_flip_guard.py"
 # that invoke Python. Sourced here to satisfy the hooks-source-common invariant.
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/hooks/scripts/common.sh"
+# OMN-19381: hook_record_refusal, without error-guard.sh's EXIT trap.
+# shellcheck source=../lib/hook_refusal.sh
+source "${PLUGIN_ROOT}/hooks/lib/hook_refusal.sh" 2>/dev/null || true
 onex_hook_gate DONE_FLIP_GUARD || exit 0
 unset _SCRIPT_DIR _MODE_SH
 
@@ -61,8 +69,11 @@ PYTHON_BIN="${PYTHON_CMD:-python3}"
 # Only exit code 2 (blocking decision) should propagate. Any other non-zero
 # exit is a Python runtime error in the hook itself — fail open to avoid
 # blocking legitimate tool calls on a hook bug (never blocks on our own defect).
+# OMN-19381: the payload is read here, once, so the refusal recorder can
+# read the lane from it; the decision core gets the same bytes on its stdin.
+_OMNICLAUDE_HOOK_PAYLOAD="$(cat)"
 set +e
-"$PYTHON_BIN" "$LIB_PY"
+"$PYTHON_BIN" "$LIB_PY" <<<"$_OMNICLAUDE_HOOK_PAYLOAD"
 rc=$?
 set -e
 if [[ "$rc" -eq 2 ]]; then

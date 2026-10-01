@@ -120,6 +120,8 @@ _block() {
 }
 
 TOOL_INFO=$(cat)
+# OMN-19381: the payload the refusal recorder reads the lane from.
+_OMNICLAUDE_HOOK_PAYLOAD="$TOOL_INFO"
 
 if ! TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null); then
     # Only Workflow and Agent reach this hook, so refusing an unreadable

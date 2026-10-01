@@ -26,6 +26,11 @@
 
 set -eo pipefail
 
+# OMN-19381: named so its refusal row names it. This guard does not source
+# error-guard.sh (its EXIT trap would rewrite this guard's bare `exit 2`), so it sources
+# the refusal seam on its own, after common.sh.
+_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
+
 # Deliberately NO is_omninode_repo short-circuit, unlike the Done-flip guard.
 # Lane coordination is not repo-scoped: a lane can be declared dead from any
 # working directory, and the message that authorizes the takeover is the same
@@ -55,6 +60,9 @@ LIB_PY="${PLUGIN_ROOT}/hooks/lib/lane_liveness_guard.py"
 # that invoke Python. Sourced here to satisfy the hooks-source-common invariant.
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/hooks/scripts/common.sh"
+# OMN-19381: hook_record_refusal, without error-guard.sh's EXIT trap.
+# shellcheck source=../lib/hook_refusal.sh
+source "${PLUGIN_ROOT}/hooks/lib/hook_refusal.sh" 2>/dev/null || true
 unset _SCRIPT_DIR _MODE_SH
 
 if [[ ! -f "$LIB_PY" ]]; then
@@ -67,8 +75,11 @@ PYTHON_BIN="${PYTHON_CMD:-python3}"
 # Only exit code 2 (blocking decision) should propagate. Any other non-zero
 # exit is a Python runtime error in the hook itself — fail open to avoid
 # blocking legitimate sends on a hook bug (never blocks on our own defect).
+# OMN-19381: the payload is read here, once, so the refusal recorder can
+# read the lane from it; the decision core gets the same bytes on its stdin.
+_OMNICLAUDE_HOOK_PAYLOAD="$(cat)"
 set +e
-"$PYTHON_BIN" "$LIB_PY"
+"$PYTHON_BIN" "$LIB_PY" <<<"$_OMNICLAUDE_HOOK_PAYLOAD"
 rc=$?
 set -e
 if [[ "$rc" -eq 2 ]]; then

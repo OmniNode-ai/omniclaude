@@ -79,6 +79,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TextIO
 
 #: One row per (guard, reason, lane) per hour. An hour is the window the
 #: ticket names, and it is also the cadence the morning sweep reads at, so a
@@ -284,18 +285,45 @@ def build_row(
     )
 
 
+#: Most of a hook payload read from stdin. A Workflow payload carries the
+#: whole script; past this the payload is ignored rather than half-parsed.
+MAX_PAYLOAD_BYTES = 4 * 1024 * 1024
+
+
+def read_payload(stream: TextIO) -> dict[str, object] | None:
+    """The hook's own stdin payload, or ``None`` when absent or unreadable."""
+    try:
+        text = stream.read(MAX_PAYLOAD_BYTES + 1)
+    except (OSError, ValueError):
+        return None
+    if not text.strip() or len(text) > MAX_PAYLOAD_BYTES:
+        return None
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def resolve_lane_fields(
     cwd: str | None,
     transcript_path: str | None,
     session_id: str | None,
     agent_id: str | None,
+    *,
+    payload: dict[str, object] | None = None,
+    ledger: str | None = None,
 ) -> tuple[str, str]:
-    """``(lane, lane_source)`` from the canonical resolver, never a guess.
+    """``(lane, lane_source)`` from honest operands, never a guess (OMN-19381).
+
+    The chain -- sidecar, lane env, registry, open CLAIM, worktree label --
+    lives in ``hook_refusal_lane``; the payload's own fields win over the
+    environment-derived arguments, which stay as fallbacks.
 
     Imported lazily and defensively: this module must still write a row when
     the attribution module is missing or broken, naming the lane as
     unresolved rather than dropping the refusal. A row that names no lane is
-    far better than no row, and a GUESSED lane would be worse than either —
+    far better than no row, and a GUESSED lane would be worse than either --
     it would attribute one lane's friction to a neighbour.
     """
     try:
@@ -303,15 +331,17 @@ def resolve_lane_fields(
         # Resolved at runtime from this file's own directory, so it is
         # invisible to a type checker that does not have the hooks lib on
         # its path. Imported this way on purpose: see the docstring.
-        import hook_lane_attribution  # type: ignore[import-not-found] # noqa: PLC0415
+        import hook_refusal_lane  # type: ignore[import-not-found] # noqa: PLC0415
 
-        lane, lane_source, _ticket = hook_lane_attribution.resolve_lane(
-            cwd,
+        lane, lane_source = hook_refusal_lane.resolve_refusal_lane(
+            payload,
+            cwd=cwd,
             transcript_path=transcript_path,
             session_id=session_id,
             agent_id=agent_id,
+            ledger=ledger,
         )
-        return lane, lane_source
+        return str(lane), str(lane_source)
     except Exception:  # noqa: BLE001 - never raise on the refusal path
         return "", "unresolved"
 
@@ -370,6 +400,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--transcript-path", default=None)
     parser.add_argument("--session-id", default=None)
     parser.add_argument("--agent-id", default=None)
+    parser.add_argument(
+        "--payload-stdin",
+        action="store_true",
+        help="read the hook's own JSON payload from stdin (never from argv)",
+    )
     parser.add_argument("--window-seconds", type=int, default=DEFAULT_WINDOW_SECONDS)
     parser.add_argument("--ledger", default=None)
     parser.add_argument("--timeout", default="120s")
@@ -384,8 +419,14 @@ def main(argv: list[str] | None = None) -> int:
     reason = normalise_reason(redact(args.reason))
     detail = redact(args.detail)[:MAX_DETAIL_CHARS]
 
+    payload = read_payload(sys.stdin) if args.payload_stdin else None
     lane, lane_source = resolve_lane_fields(
-        args.cwd, args.transcript_path, args.session_id, args.agent_id
+        args.cwd,
+        args.transcript_path,
+        args.session_id,
+        args.agent_id,
+        payload=payload,
+        ledger=args.ledger,
     )
     key = dedupe_key(guard, reason, lane)
 

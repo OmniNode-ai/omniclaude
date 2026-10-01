@@ -307,14 +307,14 @@ class TestEachOperand:
         assert _cell(row, "lane") == "registered-lane"
         assert _cell(row, "lane_source") == "registry"
 
-    def test_registry_resolves_an_unexpanded_omni_home_path(
-        self, box: Sandbox
-    ) -> None:
+    def test_registry_resolves_an_unexpanded_omni_home_path(self, box: Sandbox) -> None:
         """Commands are written with ``$OMNI_HOME`` left for the shell."""
         wt = box.worktree("OMN-56")
         box.register(wt, "registered-lane-56", ticket="OMN-56")
         row = box.refuse(
-            box.payload('cd "$OMNI_HOME/omni_worktrees/OMN-56/omniclaude" && git status')
+            box.payload(
+                'cd "$OMNI_HOME/omni_worktrees/OMN-56/omniclaude" && git status'
+            )
         )
         assert _cell(row, "lane") == "registered-lane-56"
         assert _cell(row, "lane_source") == "registry"
@@ -352,9 +352,7 @@ class TestEachOperand:
         assert _cell(row, "lane") == "claim-lane-61"
         assert _cell(row, "lane_source") == "claim"
 
-    def test_two_open_claims_are_ambiguous_and_fall_through(
-        self, box: Sandbox
-    ) -> None:
+    def test_two_open_claims_are_ambiguous_and_fall_through(self, box: Sandbox) -> None:
         """Two lanes claim the worktree, so neither is named."""
         wt = box.worktree("OMN-62")
         box.ledger_rows(
@@ -379,9 +377,7 @@ class TestEachOperand:
         assert _cell(row, "lane") == "wt:OMN-63/omniclaude"
         assert _cell(row, "lane_source") == "worktree"
 
-    def test_the_worktree_label_is_the_last_honest_operand(
-        self, box: Sandbox
-    ) -> None:
+    def test_the_worktree_label_is_the_last_honest_operand(self, box: Sandbox) -> None:
         wt = box.worktree("OMN-64", repo="omnibase_core")
         row = box.refuse(box.payload(f"cd {wt} && git status"))
         assert _cell(row, "lane") == "wt:OMN-64/omnibase_core"
@@ -449,7 +445,9 @@ _NAME_SET = re.compile(r"^\s*_OMNICLAUDE_HOOK_NAME=", re.MULTILINE)
 _SOURCES_SEAM = re.compile(
     r"^\s*(?:source|\.)\s+\S*(?:error-guard\.sh|hook_refusal\.sh)", re.MULTILINE
 )
-_SOURCES_ERROR_GUARD = re.compile(r"^\s*(?:source|\.)\s+\S*error-guard\.sh", re.MULTILINE)
+_SOURCES_ERROR_GUARD = re.compile(
+    r"^\s*(?:source|\.)\s+\S*error-guard\.sh", re.MULTILINE
+)
 
 
 def _recording_scripts() -> list[Path]:
@@ -477,9 +475,7 @@ class TestEveryGuardIsNamed:
         assert len(_recording_scripts()) >= 15, _recording_scripts()
         assert len(_error_guard_sourcing_scripts()) >= 15
 
-    @pytest.mark.parametrize(
-        "script", _recording_scripts(), ids=lambda p: p.name
-    )
+    @pytest.mark.parametrize("script", _recording_scripts(), ids=lambda p: p.name)
     def test_refusal_row_guard_named_before_recording(self, script: Path) -> None:
         """A script that reaches ``hook_record_refusal`` without setting its
         hook name records as ``guard=unknown-hook`` -- 150 of the 584 live rows.
@@ -488,19 +484,21 @@ class TestEveryGuardIsNamed:
         """
         source = script.read_text(encoding="utf-8")
         name = _NAME_SET.search(source)
-        assert name, f"{script.name} records refusals but never sets _OMNICLAUDE_HOOK_NAME"
+        assert name, (
+            f"{script.name} records refusals but never sets _OMNICLAUDE_HOOK_NAME"
+        )
         seam = _SOURCES_SEAM.search(source)
         call = _RECORD_CALL.search(source)
         assert call is not None
-        assert name.start() < call.start(), f"{script.name} names itself after recording"
+        assert name.start() < call.start(), (
+            f"{script.name} names itself after recording"
+        )
         if seam is not None:
             assert name.start() < seam.start(), (
                 f"{script.name} sources the refusal seam before naming itself"
             )
 
-    @pytest.mark.parametrize(
-        "script", _recording_scripts(), ids=lambda p: p.name
-    )
+    @pytest.mark.parametrize("script", _recording_scripts(), ids=lambda p: p.name)
     def test_refusal_row_guard_named_and_the_recorder_is_in_scope(
         self, script: Path
     ) -> None:
