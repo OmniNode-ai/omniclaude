@@ -409,6 +409,31 @@ def reset_client() -> None:
         logger.debug("EmitClient reset, will reconnect on next emit")
 
 
+def _ledger_write_guard() -> Any:
+    """The ledger test-write guard (OMN-19513), imported as the package or loaded by path.
+
+    None when the module is in neither place: a plugin-cache copy with no source tree, which no
+    test suite runs from."""
+    try:
+        from omniclaude.handlers import handler_ledger_write_guard as guard
+    except ImportError:
+        import importlib.util
+
+        path = (
+            Path(__file__).resolve().parents[4]
+            / "src/omniclaude/handlers/handler_ledger_write_guard.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "handler_ledger_write_guard", path
+        )
+        if spec is None or spec.loader is None or not path.is_file():
+            return None
+        guard = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = guard
+        spec.loader.exec_module(guard)
+    return guard
+
+
 # =============================================================================
 # Public API
 # =============================================================================
@@ -507,6 +532,13 @@ def emit_event(
     if client is None:
         logger.debug("EmitClient not available, event dropped")
         return False
+
+    # OMN-19513: a test process never emits a v2 work-ledger event through a daemon that
+    # reaches the real topics. The one deliberate raise in this "never raises" function.
+    if event_type.startswith("work.ledger.typed."):
+        guard = _ledger_write_guard()
+        if guard is not None:
+            guard.check_emit_event(event_type, client._socket_path)
 
     try:
         # Use sync method for hooks (simpler, no event loop needed)
@@ -625,7 +657,14 @@ def _cli_emit(args: argparse.Namespace) -> int:
         return 1
 
     timeout_ms = args.timeout or DEFAULT_TIMEOUT_MS
-    success = emit_event(args.event_type, payload, timeout_ms)
+    try:
+        success = emit_event(args.event_type, payload, timeout_ms)
+    except Exception as exc:
+        guard = _ledger_write_guard()
+        if guard is None or not isinstance(exc, guard.LedgerTestWriteRefused):
+            raise
+        print(str(exc), file=sys.stderr)
+        return int(guard.EXIT_TEST_WRITE_REFUSED)
 
     if success:
         print("Event emitted successfully")
