@@ -929,7 +929,7 @@ def test_named_ledger_is_written_only_through_the_sanctioned_writer(
     assert proc.returncode == 0, proc.stderr
     calls = (scratch.home / "writer-calls.log").read_text(encoding="utf-8")
     assert calls.startswith(
-        f"run --quiet --project {scratch.env['OMNI_HOME']}/../omnibase_internal onex-ledger {scratch.ledger} --append "
+        f"run --quiet --project {scratch.clone.parent}/../omnibase_internal onex-ledger {scratch.ledger} --append "
     )
     assert "event=CONVERGED" in scratch.ledger.read_text(encoding="utf-8")
     assert not _pending_rows(scratch).exists()
