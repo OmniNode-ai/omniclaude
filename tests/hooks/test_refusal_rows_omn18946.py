@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -311,8 +312,8 @@ class TestTheProcessNeverBreaksAGuard:
 
 
 class TestItAppendsThroughTheLockedWriter:
-    def test_the_row_goes_through_ledger_lock_and_never_to_the_file(
-        self, tmp_path: Path
+    def test_the_row_goes_through_packaged_writer_and_never_to_the_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The ledger is a shared append-only file many lanes write at once.
         A direct write would be the collision class rule 19 exists to remove,
@@ -320,30 +321,45 @@ class TestItAppendsThroughTheLockedWriter:
         """
         ledger = tmp_path / "LEDGER.md"
         ledger.write_text("existing\n", encoding="utf-8")
-        fake_locker = tmp_path / "ledger_lock.py"
-        fake_locker.write_text(
-            "import sys, pathlib\n"
-            "ledger = pathlib.Path(sys.argv[1])\n"
-            "row = sys.argv[sys.argv.index('--append') + 1]\n"
-            "ledger.write_text(ledger.read_text() + row + '\\n')\n",
-            encoding="utf-8",
-        )
-        ok = recorder.append_row(
-            "2026-09-21T05:00:00Z | FRICTION | lane=x",
-            ledger=ledger,
-            locker=fake_locker,
-            timeout="5s",
-        )
-        assert ok is True
-        assert "FRICTION" in ledger.read_text()
+        project = tmp_path / "omnibase_internal"
+        project.mkdir()
+        (project / "pyproject.toml").write_text("")
+        seen: list[list[str]] = []
 
-    def test_a_missing_locker_is_a_dropped_row_not_a_direct_write(
+        def run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            seen.append(argv)
+            assert kwargs["timeout"] == 180
+            assert os.environ["ONEX_LEDGER_WRITE_VIA"] == "bus"
+            return subprocess.CompletedProcess(argv, 0)
+
+        monkeypatch.setenv("ONEX_LEDGER_WRITE_VIA", "bus")
+        monkeypatch.setattr(recorder.subprocess, "run", run)
+        row = "2026-09-21T05:00:00Z | FRICTION | lane=x"
+        assert recorder.append_row(row, ledger=ledger, project=project, timeout="5s")
+        assert seen == [
+            [
+                "uv",
+                "run",
+                "--quiet",
+                "--project",
+                str(project),
+                "onex-ledger",
+                str(ledger),
+                "--append",
+                row,
+                "--timeout",
+                "5s",
+            ]
+        ]
+        assert ledger.read_text() == "existing\n"
+
+    def test_a_missing_project_is_a_dropped_row_not_a_direct_write(
         self, tmp_path: Path
     ) -> None:
         ledger = tmp_path / "LEDGER.md"
         ledger.write_text("existing\n", encoding="utf-8")
         ok = recorder.append_row(
-            "row", ledger=ledger, locker=tmp_path / "nope.py", timeout="5s"
+            "row", ledger=ledger, project=tmp_path / "nope", timeout="5s"
         )
         assert ok is False
         assert ledger.read_text() == "existing\n"
@@ -473,7 +489,11 @@ class TestTheLockIsTakenOnlyWhenARowIsWritten:
     """
 
     def _run(
-        self, tmp_path: Path, ledger: Path, locker: Path
+        self,
+        tmp_path: Path,
+        ledger: Path,
+        locker: Path,
+        extra_env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
@@ -490,10 +510,11 @@ class TestTheLockIsTakenOnlyWhenARowIsWritten:
             text=True,
             check=False,
             env={
-                "PATH": "/usr/bin:/bin",
+                "PATH": f"{tmp_path}:/usr/bin:/bin",
                 "HOME": str(tmp_path),
                 "OMNI_HOME": str(tmp_path / "root"),
                 "ONEX_HOOK_REFUSAL_STATE_DIR": str(tmp_path / "state"),
+                **(extra_env or {}),
             },
         )
 
@@ -501,13 +522,19 @@ class TestTheLockIsTakenOnlyWhenARowIsWritten:
         self, tmp_path: Path
     ) -> None:
         root = tmp_path / "root"
-        (root / "scripts").mkdir(parents=True)
+        root.mkdir()
+        project = tmp_path / "omnibase_internal"
+        project.mkdir()
+        (project / "pyproject.toml").write_text("")
         ledger = tmp_path / "LEDGER.md"
         ledger.write_text("existing\n", encoding="utf-8")
         marker = tmp_path / "invocations.txt"
-        # A stand-in for ledger_lock.py that records that it ran at all.
-        (root / "scripts" / "ledger_lock.py").write_text(
+        # A stand-in for uv that records the packaged invocation.
+        stub = tmp_path / "uv"
+        stub.write_text(
+            f"#!{sys.executable}\n"
             "import pathlib, sys\n"
+            "sys.argv = sys.argv[5:]\n"
             f"pathlib.Path({str(marker)!r}).open('a').write('ran\\n')\n"
             "ledger = pathlib.Path(sys.argv[1])\n"
             "row = sys.argv[sys.argv.index('--append') + 1]\n"
@@ -515,6 +542,7 @@ class TestTheLockIsTakenOnlyWhenARowIsWritten:
             encoding="utf-8",
         )
 
+        stub.chmod(0o755)
         assert self._run(tmp_path, ledger, root).returncode == 0
         first = marker.read_text().count("ran")
         assert first == 1, "the first refusal must be written immediately"
@@ -528,3 +556,45 @@ class TestTheLockIsTakenOnlyWhenARowIsWritten:
             "behind one looping guard."
         )
         assert ledger.read_text().count("FRICTION") == 1
+
+    @pytest.mark.parametrize("override", ["declared", "missing", "relative"])
+    def test_declared_project_and_bus_mode_are_preserved_without_old_writer_fallback(
+        self, tmp_path: Path, override: str
+    ) -> None:
+        root = tmp_path / "root"
+        root.mkdir()
+        default = tmp_path / "omnibase_internal"
+        default.mkdir()
+        (default / "pyproject.toml").write_text("")
+        project = tmp_path / "declared" / "canonical"
+        project.mkdir(parents=True)
+        (project / "pyproject.toml").write_text("")
+        marker = tmp_path / "invoked"
+        stub = tmp_path / "uv"
+        stub.write_text(
+            f"#!{sys.executable}\n"
+            "import os, pathlib, sys\n"
+            f"assert sys.argv[4] == {str(project)!r}\n"
+            "assert os.environ['ONEX_LEDGER_WRITE_VIA'] == 'bus'\n"
+            f"pathlib.Path({str(marker)!r}).write_text('packaged writer invoked')\n"
+        )
+        stub.chmod(0o755)
+        ledger = tmp_path / "LEDGER.md"
+        ledger.write_text("existing\n")
+        values = {
+            "declared": str(project),
+            "missing": str(tmp_path / "missing"),
+            "relative": "relative",
+        }
+        result = self._run(
+            tmp_path,
+            ledger,
+            root,
+            {
+                "OMNIBASE_INTERNAL_HOME": values[override],
+                "ONEX_LEDGER_WRITE_VIA": "bus",
+            },
+        )
+        assert result.returncode == 0, result.stderr
+        assert marker.exists() == (override == "declared")
+        assert ledger.read_text() == "existing\n"

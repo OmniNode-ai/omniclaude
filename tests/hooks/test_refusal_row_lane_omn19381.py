@@ -46,9 +46,11 @@ ERROR_GUARD = SCRIPTS_DIR / "error-guard.sh"
 SESSION_ID = "5f0c2a8e-1111-4222-8333-944455556666"
 AGENT_ID = "a3f9c1d2e4b5a6c7"
 
-#: A stand-in for scripts/ledger_lock.py: appends the row it is handed.
+#: A stand-in for uv run --project omnibase_internal onex-ledger.
 _FAKE_LOCKER = (
+    f"#!{sys.executable}\n"
     "import pathlib, sys\n"
+    "sys.argv = sys.argv[5:]\n"
     "ledger = pathlib.Path(sys.argv[1])\n"
     "row = sys.argv[sys.argv.index('--append') + 1]\n"
     "with ledger.open('a', encoding='utf-8') as fh:\n"
@@ -73,10 +75,13 @@ class Sandbox:
     def __init__(self, tmp_path: Path) -> None:
         self.tmp = tmp_path
         self.home = tmp_path / "registry_root"
-        (self.home / "scripts").mkdir(parents=True)
-        (self.home / "scripts" / "ledger_lock.py").write_text(
-            _FAKE_LOCKER, encoding="utf-8"
-        )
+        self.home.mkdir()
+        project = tmp_path / "omnibase_internal"
+        project.mkdir()
+        (project / "pyproject.toml").write_text("")
+        stub = tmp_path / "uv"
+        stub.write_text(_FAKE_LOCKER, encoding="utf-8")
+        stub.chmod(0o755)
         self.ledger = self.home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
         self.ledger.parent.mkdir(parents=True)
         self.ledger.write_text("# ledger\n", encoding="utf-8")
@@ -143,7 +148,7 @@ class Sandbox:
 
     def env(self, extra: dict[str, str] | None = None) -> dict[str, str]:
         env = {
-            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "PATH": f"{self.tmp}:" + os.environ.get("PATH", "/usr/bin:/bin"),
             "HOME": str(self.tmp),
             "OMNI_HOME": str(self.home),
             "CLAUDE_PROJECT_DIR": str(self.home),

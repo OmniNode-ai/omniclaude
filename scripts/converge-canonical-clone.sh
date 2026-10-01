@@ -88,7 +88,7 @@
 #
 # Evidence: $OMNI_HOME/.onex_state/canonical-clone-converge/<repo>-<utc>/
 # Ledger:   the file named by $ONEX_LEDGER_PATH, appended only through a sanctioned writer
-#           (onex-ledger, else the project named by ONEX_LEDGER_PROJECT run by uv, else ledger_lock.py). With no
+#           (uv run --project $OMNI_HOME/../omnibase_internal onex-ledger). With no
 #           ledger named or no writer, the row goes to
 #           .onex_state/canonical-clone-converge/pending-ledger-rows.md under the registry root
 #           (untracked) and stderr says so. Never a raw edit of a tracked file.
@@ -198,22 +198,13 @@ append_ledger_row() {
     keep_row_untracked "$row" "ONEX_LEDGER_PATH is not set on this host (no ledger of record is named)"
     return 0
   fi
-  # Sanctioned writers, in order: the `onex-ledger` command on PATH, the operator
-  # tooling project named by ONEX_LEDGER_PROJECT (no default) run by uv, then the
-  # registry's ledger_lock.py. Each takes the same `<ledger> --append <row>` form.
-  local -a writer=()
-  local internal="${ONEX_LEDGER_PROJECT:-}"
-  if command -v onex-ledger >/dev/null 2>&1; then
-    writer=(onex-ledger)
-  elif [[ -n "$internal" && -f "$internal/pyproject.toml" ]] && command -v uv >/dev/null 2>&1; then
-    writer=(uv run --quiet --project "$internal" onex-ledger)
-  elif [[ -f "$omni_home_abs/scripts/ledger_lock.py" ]]; then
-    writer=(python3 "$omni_home_abs/scripts/ledger_lock.py")
-  fi
-  if (( ${#writer[@]} == 0 )); then
-    keep_row_untracked "$row" "no sanctioned ledger writer on this host (no onex-ledger, no ONEX_LEDGER_PROJECT with uv, no ledger_lock.py)"
+  # One packaged writer; inherit bus mode and never fall back to an old copy.
+  local internal="${OMNIBASE_INTERNAL_HOME:-$omni_home_abs/../omnibase_internal}"
+  if [[ "$internal" != /* || ! -f "$internal/pyproject.toml" ]] || ! command -v uv >/dev/null 2>&1; then
+    keep_row_untracked "$row" "no sanctioned ledger writer on this host (omnibase_internal project and uv required)"
     return 0
   fi
+  local -a writer=(uv run --quiet --project "$internal" onex-ledger)
   if ! "${writer[@]}" "$ledger" --append "$row"; then
     keep_row_untracked "$row" "the ledger writer refused the row"
     fail "ledger append via ${writer[*]} failed (the ref IS converged; evidence at $evidence)"
