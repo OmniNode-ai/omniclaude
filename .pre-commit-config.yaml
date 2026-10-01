@@ -39,13 +39,14 @@ repos:
   # A single rev means block staleness can never regress silently again; see
   # the pin-parity-check hook below, which fails closed if this rev and
   # ci.yml:3102's pin ever diverge.
+  # OMN-20304: no-noncanonical-lifecycle-classes moved to the
+  # check-hardcoded-model-config-compute block below (see the note there);
+  # this block keeps check-stub-implementations only, because that
+  # validator's source differs between 63635097 and the OMN-20304 commit.
   - repo: https://github.com/OmniNode-ai/omnibase_core
     rev: 63635097705d832e0ee9c4811093efb31349105c # pragma: allowlist secret
     hooks:
       - id: check-stub-implementations
-      - id: no-noncanonical-lifecycle-classes
-        args: [--allowlist, .onex_ratchets/noncanonical_class_allowlist.yaml, src/omniclaude]
-        files: ^src/omniclaude/.*\.py$
 
   # Shared ONEX governance hooks (onex_change_control)
   - repo: https://github.com/OmniNode-ai/onex_change_control
@@ -77,10 +78,30 @@ repos:
 
   # OMN-19183 plan task A3.x: shrink-only baseline config/hardcoded_model_config_baseline.yaml;
   # no inline suppression marker; pin must equal core_ref in .github/workflows/hardcoded-model-config.yml.
+  #
+  # OMN-20304: this block also carries the canonical-file-shape ratchet
+  # (operator ruling 2026-10-01). No new code file outside the canonical
+  # contract/node/handler/models/protocols/tests/docs locations, no new
+  # imperative lines in a SKILL.md, no new baseline, allowlist or suppression
+  # entry. Shrink-only baseline at .onex_ratchets/canonical_file_shape_baseline.txt.
+  # CI runs the same module at the same commit (ci.yml job "Canonical File
+  # Shape (OMN-20304)"). The rev moved from f873d2c3 (v0.47.24, the label the
+  # rev line still carries) to the OMN-20304 commit a3b56675, together with
+  # core_ref in hardcoded-model-config.yml; the hardcoded-model-config
+  # validator's source is identical at the two commits.
+  # no-noncanonical-lifecycle-classes moved here from the 63635097 block, and
+  # its ci.yml pin moved with it: the pin-parity check requires every
+  # omnibase-core pin in ci.yml to equal this hook's rev, and the new CI job
+  # pins a3b56675. The lifecycle validator's source is identical at 63635097
+  # and a3b56675.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: f873d2c30201c05d4be020fa0b281b5edbfb8307  # v0.47.24  # pragma: allowlist secret
+    rev: a3b56675fda87a1ba8cf7e19d8e60a7d0ab6c4ee  # v0.47.24  # pragma: allowlist secret
     hooks:
       - id: check-hardcoded-model-config-compute
+      - id: canonical-file-shape
+      - id: no-noncanonical-lifecycle-classes
+        args: [--allowlist, .onex_ratchets/noncanonical_class_allowlist.yaml, src/omniclaude]
+        files: ^src/omniclaude/.*\.py$
 
   # URL Authority Gate (OMN-13298, child of OMN-12803). OMN-20177: the CI job
   # had no pre-commit twin here. Ratchet against the shared baseline in the
