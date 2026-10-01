@@ -465,6 +465,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+    journal.emit_done()
     return 0
 
 

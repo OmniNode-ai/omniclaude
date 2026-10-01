@@ -266,33 +266,86 @@ class _ForkedWriter:
         return self.returncode
 
 
-def _run_bounded(cmd: list[str], budget_s: float) -> tuple[bool, int | None]:
+class _Progress:
+    """What the writer has reported on the ack pipe (see ``journal.signal_ack``)."""
+
+    def __init__(self) -> None:
+        self.read_fd, self.write_fd = os.pipe()
+        os.set_blocking(self.read_fd, False)
+        self.journalled = 0
+        self.done = False
+
+    def drain(self) -> None:
+        while True:
+            try:
+                data = os.read(self.read_fd, 256)
+            except (BlockingIOError, OSError):
+                return
+            if not data:
+                return
+            self.journalled += data.count(journal.ACK_JOURNALLED)
+            self.done = self.done or journal.ACK_DONE in data
+
+    def close(self) -> None:
+        for fd in (self.read_fd, self.write_fd):
+            with contextlib.suppress(OSError):
+                os.close(fd)
+
+
+def _run_bounded(
+    cmd: list[str], budget_s: float, progress: _Progress | None = None
+) -> tuple[bool, int | None]:
     """Run ``cmd`` in its own process group. Returns (timed_out, returncode).
 
     Never blocks past the budget: on a miss the group is SIGKILLed and the
-    child is left for init to reap once its syscall returns.
+    child is left for init to reap once its syscall returns. With ``progress``
+    the writer reports journalled records and completion on its pipe; a
+    completion report returns success at once, without waiting for the process
+    to exit (OMN-20110: a record that is in the journal is recorded).
     """
     global _last_pgid
     script = in_process_writer(cmd)
     proc: _ForkedWriter | subprocess.Popen[bytes]
+    ack_env = {} if progress is None else {journal.ACK_FD_ENV: str(progress.write_fd)}
     if script is not None:
-        proc = _ForkedWriter(script, cmd[2:])
+        os.environ.update(ack_env)  # inherited by the fork; undone below
+        try:
+            proc = _ForkedWriter(script, cmd[2:])
+        finally:
+            for key in ack_env:
+                os.environ.pop(key, None)
     else:
-        proc = subprocess.Popen(cmd, start_new_session=True)  # noqa: S603
+        proc = subprocess.Popen(  # noqa: S603
+            cmd,
+            start_new_session=True,
+            env={**os.environ, **ack_env},
+            pass_fds=() if progress is None else (progress.write_fd,),
+        )
+    if progress is not None:
+        # The parent keeps no write end, so the read end sees EOF at exit.
+        with contextlib.suppress(OSError):
+            os.close(progress.write_fd)
     _last_pgid = proc.pid
     _live_groups.add(proc.pid)
     try:
-        return _poll_until(proc, budget_s)
+        return _poll_until(proc, budget_s, progress)
     finally:
         _live_groups.discard(proc.pid)
 
 
 def _poll_until(
-    proc: _ForkedWriter | subprocess.Popen[bytes], budget_s: float
+    proc: _ForkedWriter | subprocess.Popen[bytes],
+    budget_s: float,
+    progress: _Progress | None = None,
 ) -> tuple[bool, int | None]:
     deadline = time.monotonic() + budget_s
     while True:
         rc = proc.poll()
+        if progress is not None:
+            progress.drain()
+            if progress.done and rc is None:
+                _kill_group(proc.pid)  # finished its work; do not wait on its exit
+                return False, 0
         if rc is not None:
             _kill_group(proc.pid)  # grandchildren the emitter left behind
             return False, rc
@@ -521,7 +574,12 @@ def main(argv: list[str] | None = None) -> int:
         os.dup2(log_fd, 1)
         os.dup2(log_fd, 2)
         started = time.monotonic()
-        timed_out, rc = _run_bounded(cmd, args.budget)
+        progress = _Progress()
+        try:
+            timed_out, rc = _run_bounded(cmd, args.budget, progress)
+            progress.drain()
+        finally:
+            progress.close()
         elapsed = time.monotonic() - started
     finally:
         os.dup2(saved_out, 1)
@@ -530,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
         os.close(saved_err)
         os.close(log_fd)
 
-    if not timed_out and rc == 0:
+    if progress.done or (not timed_out and rc == 0):
         close_episode()
         return 0
 
@@ -542,10 +600,19 @@ def main(argv: list[str] | None = None) -> int:
     else:
         cause = f"exited {rc} after {elapsed:.1f}s"
     detail = _tail(log, start)
+    if progress.journalled:
+        # Durable: renamed into the journal before the failure, so the
+        # drainer will publish it. Only the rest of the emit is lost.
+        recorded = (
+            f"{progress.journalled} record(s) ARE in the journal (written, not yet "
+            "published; the drainer publishes them) but the emit did not finish"
+        )
+    else:
+        recorded = "The event was NOT recorded (nothing reached the journal)"
     message = (
         f"BLOCKED: hook emit '{args.label}' {cause}"
         f"{' -- ' + detail if detail else ''}. "
-        f"The event was NOT recorded. Fix the emit path (journal "
+        f"{recorded}. Fix the emit path (journal "
         f"{journal.default_journal_dir()}, drainer ai.omninode.hook-emit-drainer)"
         f"{', log ' + str(log) if log else ''}. Ticket OMN-20110."
     )
