@@ -70,23 +70,48 @@ jobs:
       - name: Install PyYAML
         run: python -m pip install --quiet "pyyaml>=6.0.0"
 
-      # reusable-checkout-ref-ok: check-skip-vectors OMN-16726 pre-existing
-      # floating ref on a REQUIRED status check called at @dev, @main and three
-      # distinct SHAs; the flip needs each pin verified to carry the validator.
+      # The validator is read at `job.workflow_sha`, the commit this reusable
+      # workflow was resolved at, so the caller's single `uses:` pin fixes the
+      # workflow and its validator together and an omniclaude merge cannot
+      # change a caller's verdict. Same pattern as kb-doc-gate-reusable.yml.
       # reusable-checkout-sparse-ok: check-skip-vectors OMN-16726 existence
       # assertion lands with the ref flip, in one change per workflow.
+      - name: Resolve the validator pin
+        id: pin
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::workflow sha is empty or not a lowercase 40-hex commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"
+
       - name: Fetch validator (omniclaude canonical source)
         if: github.repository != 'OmniNode-ai/omniclaude'
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omniclaude
-          ref: dev
+          ref: ${{ steps.pin.outputs.sha }}
           path: .omniclaude-skip-guard
           persist-credentials: false
           sparse-checkout: |
             .github/actions/required-check-skip-guard/validate_no_required_check_skip_vectors.py
             .github/actions/required-check-skip-guard/_workflow_model.py
           sparse-checkout-cone-mode: false
+
+      - name: Assert the validator checkout is at the pin
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        env:
+          VALIDATOR_PIN: ${{ steps.pin.outputs.sha }}
+        run: |
+          set -euo pipefail
+          checked_out_sha="$(git -C .omniclaude-skip-guard rev-parse HEAD)"
+          if [ "$checked_out_sha" != "$VALIDATOR_PIN" ]; then
+            echo "::error::validator checkout is at $checked_out_sha, expected $VALIDATOR_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
 
       - name: Run skip-vector validator
         env:
