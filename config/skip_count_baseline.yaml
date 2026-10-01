@@ -112,7 +112,7 @@ suites:
     job: Tests (Split n/m)
     mode: nodeids
     max_skips: 52
-    baseline_collected: 17363
+    baseline_collected: 17496
     provenance:
       measured_at: '2026-09-18'
       measured_by: OMN-18790
