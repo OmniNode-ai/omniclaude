@@ -364,6 +364,227 @@ class EventRegistration:
 # Registry mapping event types to their fan-out rules
 # This is the central configuration for the emit daemon's routing logic
 EVENT_REGISTRY: dict[str, EventRegistration] = {
+    # OMN-20001: generated typed row routing projection of omnimarket topics.yaml.
+    "work.ledger.typed.ack": EventRegistration(
+        event_type="work.ledger.typed.ack",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_ACK_V2,
+                description="A core typed ack work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
+    "work.ledger.typed.claim": EventRegistration(
+        event_type="work.ledger.typed.claim",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_CLAIM_V2,
+                description="A core typed claim work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
+    "work.ledger.typed.correction": EventRegistration(
+        event_type="work.ledger.typed.correction",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_CORRECTION_V2,
+                description="A core typed correction work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
+    "work.ledger.typed.friction": EventRegistration(
+        event_type="work.ledger.typed.friction",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_FRICTION_V2,
+                description="A core typed friction work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
+    "work.ledger.typed.hold": EventRegistration(
+        event_type="work.ledger.typed.hold",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_HOLD_V2,
+                description="A core typed hold work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
+    "work.ledger.typed.msg": EventRegistration(
+        event_type="work.ledger.typed.msg",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_MSG_V2,
+                description="A core typed msg work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
+    "work.ledger.typed.operator_consent": EventRegistration(
+        event_type="work.ledger.typed.operator_consent",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_OPERATOR_CONSENT_V2,
+                description="A core typed operator-consent work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
+    "work.ledger.typed.release": EventRegistration(
+        event_type="work.ledger.typed.release",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_RELEASE_V2,
+                description="A core typed release work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
+    "work.ledger.typed.ruling": EventRegistration(
+        event_type="work.ledger.typed.ruling",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_RULING_V2,
+                description="A core typed ruling work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
+    "work.ledger.typed.status": EventRegistration(
+        event_type="work.ledger.typed.status",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_STATUS_V2,
+                description="A core typed status work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
+    "work.ledger.typed.terminal": EventRegistration(
+        event_type="work.ledger.typed.terminal",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.WORK_LEDGER_TERMINAL_V2,
+                description="A core typed terminal work-ledger event",
+            ),
+        ],
+        partition_key_field="ledger_id",
+        required_fields=[
+            "ledger_id",
+            "event_id",
+            "row_id",
+            "raw_row",
+            "source",
+            "provenance_kind",
+            "event",
+            "row_schema",
+        ],
+    ),
     # =========================================================================
     # Session Events
     # =========================================================================
