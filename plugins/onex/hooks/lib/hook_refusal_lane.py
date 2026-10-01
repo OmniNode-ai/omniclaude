@@ -162,10 +162,10 @@ def _expand(token: str, env: Mapping[str, str]) -> str:
     def sub(match: re.Match[str]) -> str:
         return env.get(match.group(1), match.group(0))
 
-    token = _VAR.sub(sub, token)
-    if token.startswith("~/") and env.get("HOME"):
-        token = env["HOME"] + token[1:]
-    return token
+    expanded = _VAR.sub(sub, token)
+    if expanded.startswith("~/") and env.get("HOME"):
+        expanded = env["HOME"] + expanded[1:]
+    return expanded
 
 
 def _as_path(raw: str, cwd: Path | None, env: Mapping[str, str]) -> Path | None:
