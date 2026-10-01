@@ -69,7 +69,8 @@ Single-owner registry (OMN-15967 / OMN-13146):
 
     1. ``daemon.health.probe``, ``delegation.request``, ``pr.state.observed``,
        the ``work.ledger.*`` row events (OMN-19513), and the OMN-20154
-       ``provider.quota.observed`` / ``delegate_skill.*`` terminals are
+       ``provider.quota.observed`` / ``delegate_skill.*`` terminals, and
+       ``delegation.disposition_recorded``, are
        daemon-internal event types — the daemon handles/emits them entirely internally, no
        hook client ever constructs them, so there is no client-side
        registration to project. See
@@ -363,26 +364,6 @@ class EventRegistration:
 # Registry mapping event types to their fan-out rules
 # This is the central configuration for the emit daemon's routing logic
 EVENT_REGISTRY: dict[str, EventRegistration] = {
-    "delegation.disposition_recorded": EventRegistration(
-        event_type="delegation.disposition_recorded",
-        fan_out=[
-            FanOutRule(
-                topic_base=TopicBase.DELEGATION_DISPOSITION_RECORDED,
-                description="A calling lane's disposition of one delegated answer, for the disposition projection",
-            ),
-        ],
-        partition_key_field="delegation_correlation_id",
-        required_fields=[
-            "tenant_id",
-            "delegation_correlation_id",
-            "disposition",
-            "reason_code",
-            "caller_lane",
-            "artifact_kind",
-            "recorded_at",
-            "disposition_id",
-        ],
-    ),
     # OMN-20001: generated typed row routing projection of omnimarket topics.yaml.
     "work.ledger.typed.ack": EventRegistration(
         event_type="work.ledger.typed.ack",

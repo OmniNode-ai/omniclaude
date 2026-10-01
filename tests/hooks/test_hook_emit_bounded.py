@@ -381,3 +381,57 @@ def test_only_lib_writers_are_forked(tmp_path: Path) -> None:
     )
     (tmp_path / "x.py").write_text("")
     subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
+
+
+# OMN-20110: a record in the journal is recorded, whatever the writer does next.
+
+_SLOW_TAIL = """
+import sys, time
+sys.path.insert(0, {lib!r})
+import hook_emit_journal as j
+j.append({jdir!r}, event_type="tool.executed", payload={{}}, correlation_id="s")
+{finish}
+time.sleep(60)  # the slow publish or drain attempt after the journal write
+"""
+
+
+def _tail_cmd(tmp_path: Path, *, finish: str) -> list[str]:
+    code = _SLOW_TAIL.format(
+        lib=str(_LIB), jdir=str(tmp_path / "journal"), finish=finish
+    )
+    return [sys.executable, "-c", code]
+
+
+def test_hook_returns_once_journalled_despite_a_slow_tail(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    t0 = time.monotonic()
+    proc = _run(env, *_tail_cmd(tmp_path, finish="j.emit_done()"), budget=20.0)
+    elapsed = time.monotonic() - t0
+    assert proc.returncode == 0, proc.stderr
+    assert elapsed < 10.0, f"waited {elapsed:.1f}s on a writer that had finished"
+    assert len(list((tmp_path / "journal").glob("*.json"))) == 1
+    assert _alarms(env) == []
+
+
+def test_timeout_after_journalling_reports_the_record_as_journalled(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    proc = _run(env, *_tail_cmd(tmp_path, finish="pass"), budget=1.5)
+    assert proc.returncode == 2, proc.stderr
+    assert "1 record(s) ARE in the journal" in proc.stderr, proc.stderr
+    assert "NOT recorded" not in proc.stderr
+    assert len(list((tmp_path / "journal").glob("*.json"))) == 1
+
+
+def test_failed_journal_write_still_blocks_loud(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    unwritable = tmp_path / "not-a-dir"
+    unwritable.write_text("a file where the journal directory should be")
+    cmd = _append_cmd(tmp_path)
+    cmd[cmd.index("--journal-dir") + 1] = str(unwritable)
+    proc = _run(env, *cmd, budget=10.0)
+    assert proc.returncode == 2, proc.stderr
+    assert "The event was NOT recorded" in proc.stderr, proc.stderr
+    assert len(_alarms(env)) == 1

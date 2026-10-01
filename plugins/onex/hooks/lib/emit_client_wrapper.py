@@ -103,7 +103,6 @@ DEFAULT_CLIENT_TIMEOUT_SECONDS = 5.0
 SUPPORTED_EVENT_TYPES = frozenset(
     [
         # OMN-20001: project the canonical generated registry membership.
-        "delegation.disposition_recorded",
         "work.ledger.typed.ack",
         "work.ledger.typed.claim",
         "work.ledger.typed.correction",

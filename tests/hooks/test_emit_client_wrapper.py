@@ -51,7 +51,6 @@ class TestModuleImport:
 
         expected_types = {
             # OMN-20001: canonical generated registry membership stays exact.
-            "delegation.disposition_recorded",
             "work.ledger.typed.ack",
             "work.ledger.typed.claim",
             "work.ledger.typed.correction",

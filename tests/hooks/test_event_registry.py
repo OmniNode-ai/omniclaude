@@ -752,8 +752,6 @@ class TestEventRegistryIntegration:
         from omniclaude.hooks.event_registry import EVENT_REGISTRY
 
         expected_types = {
-            # Restore the already-landed canonical disposition event.
-            "delegation.disposition_recorded",
             # OMN-20001: generated typed semantic ledger row family.
             "work.ledger.typed.ack",
             "work.ledger.typed.claim",

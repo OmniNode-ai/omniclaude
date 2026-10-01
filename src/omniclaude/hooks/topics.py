@@ -54,12 +54,6 @@ class TopicBase(StrEnum):
     WORK_OBLIGATION_SUPERSEDED = "onex.evt.omniclaude.work-obligation-superseded.v1"
     WORK_OBLIGATION_TRANSFERRED = "onex.evt.omniclaude.work-obligation-transferred.v1"
 
-    # ==========================================================================
-    # Restore the already-landed canonical delegation disposition projection.
-    DELEGATION_DISPOSITION_RECORDED = (
-        "onex.evt.omnimarket.delegation-disposition-recorded.v1"
-    )
-
     # OMN-20001: typed semantic ledger rows; the existing v1 family stays owned
     # by the daemon registry. These members project its canonical v2 wire topics.
     WORK_LEDGER_ACK_V2 = "onex.evt.omnimarket.work-ledger-ack.v2"
