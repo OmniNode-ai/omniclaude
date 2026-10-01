@@ -41,6 +41,22 @@ optional_fields:
     nullable: true
     description: "Producer-observed Claude Code version."
 
+# OMN-20031: payload keys present only on one event. Both are ids, never content;
+# the consumer allowlist (ALLOWED_PAYLOAD_KEYS) must declare them or dead-letters.
+payload_optional_fields:
+  - hook: PreToolUse
+    name: goal_id
+    type: uuid
+    description: >
+      Canonical lowercase uuid from a leading ONEX_GOAL=<uuid> assignment of a
+      Bash command. Absent on every other event.
+  - hook: PreToolUse
+    name: parent_goal_id
+    type: uuid
+    description: >
+      Canonical lowercase uuid from ONEX_PARENT_GOAL=<uuid> directly after
+      ONEX_GOAL. Only present together with goal_id.
+
 content_topic:
   name: "onex.cmd.omniintelligence.content-captured.v1"  # onex-topic-sot
   reference_only: true

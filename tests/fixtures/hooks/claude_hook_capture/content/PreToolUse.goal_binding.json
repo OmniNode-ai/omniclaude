@@ -1,0 +1,15 @@
+[
+  {
+    "agent_id": null,
+    "content_record_id": "c79fa8b4-9571-5009-9e7f-118dcc4220e4",
+    "event_id": "6ff3d9ba-246b-5d99-a593-aeeef54cafb3",
+    "field": "tool_input",
+    "hook_event_name": "PreToolUse",
+    "length": 142,
+    "matched_pattern_names": [],
+    "redaction_state": "clean",
+    "session_id": "session-fixture-1",
+    "sha256": "c18b14d60bbc81a655f6d3865911a8aeb884c76d67629fda07236103ef7be886",
+    "value": "{\"command\":\"ONEX_GOAL=0b8f5c1e-5d0c-4f43-9a52-3c7f1d2e9a10 ONEX_PARENT_GOAL=7a1d9e44-2b6f-4c8e-8f01-b5d3a9c60e27 printf fixture\",\"timeout\":30}"
+  }
+]

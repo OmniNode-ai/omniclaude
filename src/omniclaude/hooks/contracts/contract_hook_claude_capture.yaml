@@ -109,7 +109,7 @@ coverage:
     registered_today: true
     reaches_bus_today: false
     build_priority: P0
-    metadata_fields: [tool_name, mcp_server, tool_call_key, tool_input_keys]
+    metadata_fields: [tool_name, mcp_server, tool_call_key, tool_input_keys, goal_id, parent_goal_id]
     content_fields: {tool_input: capture_verbatim}
   - hook: PostToolUse
     registered_today: true
@@ -346,6 +346,10 @@ redaction:
     payload.mcp_server: capture_verbatim
     payload.tool_call_key: capture_verbatim
     payload.tool_input_keys: capture_verbatim
+    # OMN-20031: ids (never content) of the goal a Bash command opens; set only
+    # on the PreToolUse whose command begins ONEX_GOAL=<uuid>.
+    payload.goal_id: capture_verbatim
+    payload.parent_goal_id: capture_verbatim
     payload.tool_use_ids: capture_verbatim
     payload.tool_names: capture_verbatim
     payload.duration_ms: capture_verbatim
@@ -442,6 +446,8 @@ projection:
       - {name: payload, type: jsonb, nullable: false, content: "metadata only"}
       - {name: content_ref_ids, type: "text[]", nullable: false}
       - {name: source_topic, type: text, nullable: false}
+      - {name: goal_id, type: uuid, nullable: true, content: "OMN-20031: set only on the goal-binding PreToolUse"}
+      - {name: parent_goal_id, type: uuid, nullable: true}
       - {name: ingested_at, type: timestamptz, nullable: false}
   lineage_table:
     name: omninode_internal.claude_agent_spans

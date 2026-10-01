@@ -402,6 +402,9 @@ topics:
       payload.mcp_server: capture_verbatim
       payload.tool_call_key: capture_verbatim
       payload.tool_input_keys: capture_verbatim
+      # OMN-20031: goal ids, never content.
+      payload.goal_id: capture_verbatim
+      payload.parent_goal_id: capture_verbatim
       payload.tool_use_ids: capture_verbatim
       payload.tool_names: capture_verbatim
       payload.duration_ms: capture_verbatim

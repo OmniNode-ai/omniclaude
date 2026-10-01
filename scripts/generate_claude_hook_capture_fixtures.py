@@ -750,6 +750,53 @@ def _reference_projection(
     return event_rows, span_rows
 
 
+GOAL_FIXTURE_ID = "0b8f5c1e-5d0c-4f43-9a52-3c7f1d2e9a10"
+GOAL_FIXTURE_PARENT_ID = "7a1d9e44-2b6f-4c8e-8f01-b5d3a9c60e27"
+
+
+def _goal_outputs(start: datetime) -> dict[Path, str]:
+    """OMN-20031: the goal-binding PreToolUse and the consumer's refusal fixture.
+
+    ``PreToolUse.goal_binding`` is the real mapper output for a command that
+    begins ``ONEX_GOAL=<uuid> ONEX_PARENT_GOAL=<uuid>``. ``PreToolUse.goal_not_uuid``
+    is that event with ``goal_id`` replaced by a value the producer would never
+    stamp, so the consumer has a fixture it must dead-letter.
+    """
+    stdin = {
+        **_base("PreToolUse"),
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": (
+                f"ONEX_GOAL={GOAL_FIXTURE_ID} "
+                f"ONEX_PARENT_GOAL={GOAL_FIXTURE_PARENT_ID} printf fixture"
+            ),
+            "timeout": 30,
+        },
+        "tool_use_id": "toolu-goal-1",
+    }
+    result = map_hook_stdin(
+        stdin,
+        emitted_at=start,
+        sidecar=None,
+        claude_code_version="2.1.283",
+        turn_id="turn-fixed-1",
+        content_scrubber=mock_content_scrubber,
+    )
+    event = cast("dict[str, JsonValue]", _event_json(result.event))
+    payload = cast("dict[str, JsonValue]", event["payload"])
+    if payload.get("goal_id") != GOAL_FIXTURE_ID:
+        raise AssertionError("the goal-binding fixture must stamp goal_id")
+    refused = {**event, "payload": {**payload, "goal_id": "not-a-uuid"}}
+    return {
+        FIXTURE_ROOT / "stdin" / "PreToolUse.goal_binding.json": _pretty(stdin),
+        FIXTURE_ROOT / "events" / "PreToolUse.goal_binding.json": _pretty(event),
+        FIXTURE_ROOT / "content" / "PreToolUse.goal_binding.json": _pretty(
+            [_record_json(record) for record in result.content_records]
+        ),
+        FIXTURE_ROOT / "events" / "PreToolUse.goal_not_uuid.json": _pretty(refused),
+    }
+
+
 def build_outputs() -> dict[Path, str]:
     outputs: dict[Path, str] = {}
     all_stdin = _all_stdin()
@@ -773,6 +820,10 @@ def build_outputs() -> dict[Path, str]:
         outputs[FIXTURE_ROOT / "content" / f"{name.value}.json"] = _pretty(
             [_record_json(record) for record in result.content_records]
         )
+
+    outputs.update(
+        _goal_outputs(FIXED_TIME + timedelta(seconds=len(EnumClaudeHookEventName)))
+    )
 
     scenarios = {
         "subagent_tree": _subagent_scenario(),
