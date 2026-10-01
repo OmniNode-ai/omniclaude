@@ -38,7 +38,8 @@
 #   -h, --help           this text
 #
 # Exit codes: 0 all selected phases passed; 1 a phase failed; 2 bad usage;
-#             3 this machine is below the minimum requirements (nothing installed).
+#             3 this machine is below the minimum requirements (nothing installed);
+#             4 the developer chose "Quit setup" before anything installed.
 
 set -uo pipefail
 
@@ -382,7 +383,19 @@ ensure_sudo() {
   return 0
 }
 
-read_secret() { # prompt -> SECRET
+# The developer chose to stop. Only offered before anything installs, so it is
+# true that nothing was installed.
+quit_setup() {
+  PENDING_KEY=""; SECRET=""
+  say ""
+  say "  Nothing was installed. Run onboarding again when you're ready."
+  printf 'phase=0 name="Preflight" result=QUIT\n' >>"$STATUS"
+  notify "Setup stopped" "Nothing was installed. Run onboarding again when you're ready."
+  exit 4
+}
+
+QUIT_REQUESTED=0
+read_secret() { # prompt -> SECRET; QUIT_REQUESTED=1 when the developer chose "Quit setup"
   SECRET=""
   if [ "$IS_TTY" -eq 1 ]; then
     printf '%s ' "$1"
@@ -391,12 +404,16 @@ read_secret() { # prompt -> SECRET
   elif [ "$GUI_SESSION" -eq 1 ]; then
     SECRET="$(/usr/bin/osascript - "$1" 2>/dev/null <<'OSA'
 on run argv
-  set r to display dialog (item 1 of argv) with title "OmniNode onboarding" default answer "" with hidden answer buttons {"Skip","OK"} default button "OK"
-  if button returned of r is "Skip" then return ""
+  try
+    set r to display dialog (item 1 of argv) & return & return & "Your key stays on this Mac, in onex's key store. It is never shown or logged." with title "Your model key" default answer "" with hidden answer buttons {"Quit setup", "Continue"} default button "Continue" cancel button "Quit setup" with icon note
+  on error number -128
+    return "__ONBOARDING_QUIT__"
+  end try
   return text returned of r
 end run
 OSA
 )"
+    if [ "$SECRET" = "__ONBOARDING_QUIT__" ]; then SECRET=""; QUIT_REQUESTED=1; fi
   fi
 }
 
@@ -436,15 +453,20 @@ ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag
   say "    - $1"
   say ""
   say "  Not sure? Choose no. You can add it any time: run this again with --containers."
+  say "  To stop here instead, answer q: nothing has been installed yet."
   say ""
   if [ "$IS_TTY" -eq 1 ]; then
-    printf '  Set up the local stack in Docker too? [y/N] '
+    printf '  Set up the local stack in Docker too? [y/N, q to quit] '
     IFS= read -r a
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript - "$1" "$DOCKER_MEM_GB" 2>/dev/null <<'OSA'
 on run argv
   set msg to "You're already covered: your delegations run on your own model key, and this Mac gets its own identity on the lab's dev lane." & return & return & "If you work on runtime, node or projection code, you can also run your own copy of the stack here in Docker (a database, a message broker and the runtime kernels), so you can try changes without touching anything shared." & return & return & "What it takes:" & return & "  • about " & (item 2 of argv) & " GB of memory while it runs" & return & "  • about 15 GB of disk" & return & "  • 10-20 minutes the first time" & return & "  • " & (item 1 of argv) & return & return & "Not sure? Choose Not now. You can add it any time by running onboarding again with --containers."
-  set r to display dialog msg with title "Run the stack locally in Docker?" buttons {"Not now", "Yes, set it up"} default button "Not now" with icon note
+  try
+    set r to display dialog msg with title "Run the stack locally in Docker?" buttons {"Quit setup", "Not now", "Yes, set it up"} default button "Not now" cancel button "Quit setup" with icon note
+  on error number -128
+    return "q"
+  end try
   if button returned of r is "Yes, set it up" then return "y"
   return "n"
 end run
@@ -454,7 +476,7 @@ OSA
   else
     say "  No terminal or desktop to ask on, so the stack is not run locally (--containers adds it)."
   fi
-  case "$a" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+  case "$a" in y|Y|yes|YES) return 0 ;; q|Q|quit|QUIT) return 2 ;; *) return 1 ;; esac
 }
 
 # ---------------------------------------------------------------------------
@@ -496,17 +518,19 @@ ask_provider() { # -> MODEL_CHOICE, or empty when nobody can be asked
     say "    1) OpenRouter  - openrouter.ai, then Keys (its free models work with no credit)"
     say "    2) Gemini      - a Google AI Studio key, from aistudio.google.com/apikey"
     say ""
+    say "    q) quit setup (nothing has been installed yet)"
+    say ""
     printf '  Which one is yours? Choose 1 or 2: '
     IFS= read -r a
-    case "$a" in 1) MODEL_CHOICE=openrouter ;; 2) MODEL_CHOICE=gemini ;; esac
+    case "$a" in 1) MODEL_CHOICE=openrouter ;; 2) MODEL_CHOICE=gemini ;; q|Q) quit_setup ;; esac
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
-set r to choose from list {"OpenRouter", "Gemini (Google AI Studio)"} with title "Your model key" with prompt "Delegations run on your own AI provider key. For the beta, that's OpenRouter (openrouter.ai, then Keys) or Gemini (a Google AI Studio key). Which one is yours?" OK button name "Continue" cancel button name "I don't have one yet"
-if r is false then return ""
+set r to choose from list {"OpenRouter", "Gemini (Google AI Studio)"} with title "Your model key" with prompt "Delegations run on your own AI provider key. For the beta, that's OpenRouter (openrouter.ai, then Keys) or Gemini (a Google AI Studio key). Which one is yours?" OK button name "Continue" cancel button name "Quit setup"
+if r is false then return "QUIT"
 return item 1 of r
 OSA
 )"
-    case "$a" in OpenRouter) MODEL_CHOICE=openrouter ;; Gemini*) MODEL_CHOICE=gemini ;; esac
+    case "$a" in OpenRouter) MODEL_CHOICE=openrouter ;; Gemini*) MODEL_CHOICE=gemini ;; QUIT) quit_setup ;; esac
   fi
 }
 
@@ -528,6 +552,7 @@ settle_model_key() {
   say "  Your key stays on this Mac, in onex's key store. It is never shown or logged,"
   say "  and it is only ever sent to $(provider_home "$MODEL_CHOICE")."
   read_secret "  Paste your $(provider_label "$MODEL_CHOICE") API key (input is hidden):"
+  [ "$QUIT_REQUESTED" -eq 1 ] && quit_setup
   PENDING_KEY="$SECRET"; SECRET=""
   if [ -z "$PENDING_KEY" ]; then
     FAILED_STEP="your model key"
@@ -637,7 +662,10 @@ phase0() {
         if [ "$PREFLIGHT_ONLY" -eq 1 ]; then
           MODE2_OFFERED=1
         else
-          ask_docker "$docker_note" || { MODE2_OK=0; MODE2_WHY=" you said no"; }
+          local rc=0
+          ask_docker "$docker_note" || rc=$?
+          [ "$rc" -eq 2 ] && quit_setup
+          [ "$rc" -eq 1 ] && { MODE2_OK=0; MODE2_WHY=" you said no"; }
         fi
         ;;
     esac

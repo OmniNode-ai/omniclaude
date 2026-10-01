@@ -341,3 +341,41 @@ def test_the_key_is_settled_in_preflight(
         "not-a-real-key" not in out.split("key (input is hidden)")[-1]
     )  # never echoed
     assert sorted(p for p in (tmp_path / "home").rglob("*")) == []
+
+
+@macos_only
+@pytest.mark.skipif(
+    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
+)
+@pytest.mark.parametrize(
+    "answers",
+    [
+        'expect "Set up the local stack in Docker too?"; send "q\\r"; ',
+        'expect "Set up the local stack in Docker too?"; send "n\\r"; expect "Choose 1 or 2:"; send "q\\r"; ',
+    ],
+    ids=["quit-at-docker", "quit-at-provider"],
+)
+def test_quit_setup_stops_before_anything_installs(
+    tmp_path: Path, answers: str
+) -> None:
+    """ "Quit setup" (q on a terminal) is offered only before any install, and says so."""
+    script = f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)}; {answers}expect eof; catch wait result; exit [lindex $result 3]"
+    result = subprocess.run(
+        ["/usr/bin/expect", "-c", script],
+        env=_phase0_env(
+            tmp_path,
+            ONBOARD_TEST_RAM_GB="32",
+            ONBOARD_TEST_CPUS="10",
+            ONBOARD_TEST_VM="0",
+        ),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout.replace("\r", "")
+    if "ports in use" in out:
+        pytest.skip("the local stack's ports are held by something else on this host")
+    assert "Nothing was installed. Run onboarding again when you're ready." in out
+    assert result.returncode == 4, out[-400:]
+    assert sorted((tmp_path / "home").rglob("*")) == []
