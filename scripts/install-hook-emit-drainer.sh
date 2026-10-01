@@ -272,7 +272,7 @@ fi
 # CLAUDE.md rule 11: the literal brew interpreter path. launchd runs with a
 # restricted PATH so $(brew --prefix) is unavailable, and the macOS Local
 # Network grant is per-binary — a uv-managed interpreter silently
-# EHOSTUNREACHes on the LAN publish to the .201 broker.
+# EHOSTUNREACHes on the LAN publish to the broker.
 #
 # Resolved here rather than at the top of the file: --uninstall and --status
 # launch nothing, so requiring the interpreter for a read-only query is what

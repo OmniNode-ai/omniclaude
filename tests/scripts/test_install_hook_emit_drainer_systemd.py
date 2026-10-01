@@ -3,7 +3,7 @@
 """The installer has a Linux branch: a systemd --user unit. [OMN-20309]
 
 The hook-emit drainer shipped only as a launchd plist. On the Linux lab host
-omninode-pc (.201) nothing drained the journal: 1,064 records were queued when
+nothing drained the journal: 1,064 records were queued when
 the alert fired at 09:20 ET and the drainer reported no state, because no
 drainer existed there to report one.
 
@@ -16,7 +16,6 @@ runner.
 
 from __future__ import annotations
 
-import os
 import shutil
 import stat
 import subprocess
@@ -46,8 +45,8 @@ def _prepare(tmp_path: Path) -> tuple[Path, dict[str, str], Path, Path]:
     Returns the installer, the environment, the systemctl call log, and the
     per-user unit path the installer must write.
     """
-    omni_home = tmp_path / "omni_home"
-    repo_root = omni_home / "omniclaude"
+    workspace = tmp_path / "workspace"
+    repo_root = workspace / "omniclaude"
     installer = repo_root / "scripts" / "install-hook-emit-drainer.sh"
     installer.parent.mkdir(parents=True)
     shutil.copy2(_REPO_ROOT / "scripts" / "install-hook-emit-drainer.sh", installer)
@@ -57,7 +56,9 @@ def _prepare(tmp_path: Path) -> tuple[Path, dict[str, str], Path, Path]:
 
     # The omniclaude project venv is the Linux interpreter. The stub accepts
     # the installer's import probe so no real omnibase_infra is needed.
-    _write_executable(repo_root / ".venv" / "bin" / "python3", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(
+        repo_root / ".venv" / "bin" / "python3", "#!/usr/bin/env bash\nexit 0\n"
+    )
 
     calls = tmp_path / "systemctl.calls"
     fake_bin = tmp_path / "bin"
@@ -70,11 +71,11 @@ def _prepare(tmp_path: Path) -> tuple[Path, dict[str, str], Path, Path]:
 
     home = tmp_path / "home"
     home.mkdir()
-    state = omni_home / ".onex_state"
+    state = workspace / ".onex_state"
     (state / "hook_emit_journal").mkdir(parents=True)
     env = {
         "HOME": str(home),
-        "OMNI_HOME": str(omni_home),
+        "OMNI_HOME": str(workspace),
         "ONEX_STATE_DIR": str(state),
         "PATH": f"{fake_bin}:/usr/bin:/bin",
     }
@@ -96,7 +97,9 @@ def _run(
 def test_template_is_a_user_unit_that_restarts_forever() -> None:
     text = _SYSTEMD_TEMPLATE.read_text(encoding="utf-8")
     assert "Restart=always" in text, "a drainer that exits must come back (KeepAlive)"
-    assert "StartLimitIntervalSec=0" in text, "a fast-failing drainer must never be abandoned"
+    assert "StartLimitIntervalSec=0" in text, (
+        "a fast-failing drainer must never be abandoned"
+    )
     assert "WantedBy=default.target" in text, "a user unit hangs off default.target"
     assert "multi-user.target" not in text, "multi-user.target is a system unit"
     assert "\nUser=" not in text, "a user unit runs as the user; User= needs root"
@@ -111,10 +114,10 @@ def test_dry_run_renders_without_touching_the_host(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "__OMNI_HOME__" not in result.stdout and "__PYTHON__" not in result.stdout
-    omni_home = env["OMNI_HOME"]
+    workspace = env["OMNI_HOME"]
     assert (
-        f"ExecStart={omni_home}/omniclaude/.venv/bin/python3 "
-        f"{omni_home}/omniclaude/plugins/onex/hooks/lib/hook_emit_drainer.py"
+        f"ExecStart={workspace}/omniclaude/.venv/bin/python3 "
+        f"{workspace}/omniclaude/plugins/onex/hooks/lib/hook_emit_drainer.py"
     ) in result.stdout
     assert not unit.exists(), "--dry-run must not install"
     assert not calls.exists(), "--dry-run must not call systemctl"
