@@ -3,7 +3,7 @@
 
 # Agent Routing Contract (OMN-17427, W1/W2)
 #
-# Task-complexity routing for background agents. Source: knowledge-base-internal#955
+# Task-complexity routing for background agents. Source: the OMN-17427 routing design
 # sections 2, 3 and 5; moved out of agent_model_allowlist.json because the
 # canonical-file-shape ratchet (OMN-20304) refuses growing that file.
 #

@@ -100,7 +100,7 @@ the live corpus of 1895 workflow scripts, no real script carries one.
 Routing contract (OMN-17427)
 ----------------------------
 A named model is not yet a justified one. The sibling contract_agent_routing.yaml
-carries the task-complexity routing contract (knowledge-base-internal#955): seven scored
+carries the task-complexity routing contract (OMN-17427): seven scored
 dimensions, bands B0 to B5 with the models and efforts each allows, and the hard
 floors (R=3 or J=3 means Opus at least). Every ``agent()`` options object and
 every ``Agent`` input must carry one line in its prompt or label::
