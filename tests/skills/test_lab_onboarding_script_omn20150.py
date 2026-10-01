@@ -564,6 +564,9 @@ def test_retry_capture_stops_at_a_refusal() -> None:
 def test_phase7_installs_the_full_onex_tree_and_omni_where_reachable() -> None:
     text = SCRIPT.read_text()
     assert "plugin install onex@omninode-tools-dev" in text
-    assert "/omniclaude/plugins/onex-dev-marketplace" in text
+    assert (
+        'plugin marketplace add "$WORKSPACE/omniclaude/plugins/"*-dev-marketplace'
+        in text
+    )
     assert "for p in omni onex-overlays" in text
     assert "internal_plugins_reachable" in text

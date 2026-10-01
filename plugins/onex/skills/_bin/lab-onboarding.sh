@@ -1459,8 +1459,8 @@ phase7() {
   else
     "$claude" plugin marketplace list 2>/dev/null | grep -q 'omninode-tools-dev' ||
       step "add the onex dev marketplace from your omniclaude clone" \
-        "$claude" plugin marketplace add "$WORKSPACE/omniclaude/plugins/onex-dev-marketplace" ||
-      phase_fail "run 'claude plugin marketplace add plugins/onex-dev-marketplace' from $WORKSPACE/omniclaude to see the error"
+        "$claude" plugin marketplace add "$WORKSPACE/omniclaude/plugins/"*-dev-marketplace ||
+      phase_fail "could not add the onex dev marketplace from your omniclaude clone; check the log for the error"
     step "install onex@omninode-tools-dev" "$claude" plugin install onex@omninode-tools-dev ||
       phase_fail "run 'claude plugin install onex@omninode-tools-dev' to see the error"
   fi
@@ -1486,7 +1486,7 @@ phase7() {
   else
     say "  omni and onex-overlays: not installed. They come from the private omniclaude-internal"
     say "    repository, which needs read access for your GitHub login and an SSH key loaded"
-    say "    ('ssh -T git@github.com' greets you by name). With both, run this again."
+    say "    for GitHub. With both, run this again."
     note="$note; omni skipped (no access to omniclaude-internal)"
   fi
   phase_pass "$note"
