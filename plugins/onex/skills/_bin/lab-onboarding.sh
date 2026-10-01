@@ -2,24 +2,23 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# lab-onboarding.sh -- one command from a bare Mac to a lab-ready developer
-# machine.
+# lab-onboarding.sh -- one command from a bare Mac to a developer machine that
+# runs onex locally, on the developer's own model key. It never connects to the
+# lab: everything runs on this Mac, natively and optionally in Docker.
 #
 # Runs in phases. Each phase reports PASS or FAIL the moment it ends, in the
 # terminal, as a macOS notification, and as a line in the status file, so a
 # failure is never discovered at the end of a long run.
 #
-#   0 Preflight          reads the machine; changes nothing
+#   0 Preflight          reads the machine; changes nothing; your model key and the Docker question
 #   1 Base tools         Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv
 #   2 Workspace          the canonical clones, OMNIBASE_PATH (and legacy OMNI_HOME), PATH
-#   3 Tailnet            Tailscale installed and signed in to the OmniNode tailnet
-#   4 onex + model key   dispatch venv, onex, local identity, your own key, one delegation on it
-#   5 Bus identity       this machine's lab principal, issued automatically; one lane delegation
-#   6 Docker             optional, in addition to the lab: asked once after preflight;
-#                        Docker Desktop installed, or started if stopped, then the stack
-#   7 Claude Code      the full onex plugin from your omniclaude clone, and omni and
+#   3 onex + model key   dispatch venv, onex, local identity, your own key, one delegation on it
+#   4 Docker             optional: only if you said yes; Docker Desktop installed, or started
+#                        if stopped, then the local stack on your key
+#   5 Claude Code        the full onex plugin from your omniclaude clone, and omni and
 #                        onex-overlays when this GitHub login can read omniclaude-internal
-#   8 Verify             the checks for the selected modes, one line each
+#   6 Verify             the checks for the selected modes, one line each
 #
 # Compatible with macOS's stock /bin/bash 3.2: no associative arrays, no
 # ${var,,}, no mapfile, and no "${arr[@]}" of a possibly-empty array.
@@ -35,7 +34,6 @@
 #   --provider NAME      openrouter | gemini   (your own model key; default: asked up front)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else $OMNI_HOME, else ~/code/omni)
 #   --restart            forget completed phases and run every phase again
-#   --reissue-identity   request a fresh bus identity even if one is stored
 #   -h, --help           this text
 #
 # Exit codes: 0 all selected phases passed; 1 a phase failed; 2 bad usage;
@@ -67,9 +65,6 @@ VM_SPEC="a macOS 14 (or newer) VM with 4 vCPU, 8 GB RAM and 40 GB disk, on a hos
 
 REPOS="omnibase_compat omnibase_core omnibase_spi omnibase_infra omnimarket omniclaude omnidash"
 GITHUB_ORG_URL="https://github.com/OmniNode-ai"
-# The lab's addresses are declared in the workspace, never in this public script.
-LAB_FACTS_REL="omnibase_infra/deploy/lab/developer-onboarding.yaml"
-LANE_FILE_REL="omnimarket/config/ci_bus_lanes.yaml"
 
 # At least 3 attempts, 5-10 s apart, for everything that touches the network.
 RETRIES="${ONBOARD_RETRIES:-3}"
@@ -86,7 +81,6 @@ PROVIDER=""
 # read by the reconcile scripts this run drives, so both are honoured and set.
 WORKSPACE="${OMNIBASE_PATH:-${OMNI_HOME:-$HOME/code/omni}}"
 RESTART=0
-REISSUE=0
 
 usage() { sed -n '2,/^set -uo pipefail$/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; }
 
@@ -100,7 +94,6 @@ while [ $# -gt 0 ]; do
     --workspace) shift; WORKSPACE="${1:-}" ;;
     --workspace=*) WORKSPACE="${1#*=}" ;;
     --restart) RESTART=1 ;;
-    --reissue-identity) REISSUE=1 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'lab-onboarding: unknown option: %s (see --help)\n' "$1" >&2; exit 2 ;;
   esac
@@ -124,7 +117,9 @@ STATUS="$RUN_DIR/status"
 : >"$LOG"
 : >"$STATUS"
 STATE_DIR="$HOME/.omninode/onboarding"
-DONE_FILE="$STATE_DIR/phases.done"
+# v2: the phases were renumbered when the lab phases were removed, so a record
+# written under the old numbers is not read as completed phases of the new ones.
+DONE_FILE="$STATE_DIR/phases.v2.done"
 
 # The system directories first-class on PATH, whatever this was started from:
 # an app launched with `open` inherits this PATH, and Docker Desktop's own setup
@@ -172,7 +167,7 @@ PHASE_T0=0
 FAILED_STEP=""
 FAILED_ATTEMPTS=0
 LAST_ERR=""
-TOTAL_PHASES=8
+TOTAL_PHASES=6
 
 elapsed() { # seconds -> "Xm Ys"
   local s="$1"
@@ -247,11 +242,8 @@ retry() {
 }
 
 # retry_capture DESC CMD... : like retry, but CMD's stdout is returned in
-# CAPTURED and never written to the log (it may carry a credential). A CMD that
-# exits $REFUSED was answered with a refusal; asking again gets the same answer,
-# so it is not retried.
+# CAPTURED and never written to the log (it may carry a credential).
 CAPTURED=""
-REFUSED=86
 retry_capture() {
   local desc="$1"; shift
   local n=1 rc wait
@@ -263,7 +255,7 @@ retry_capture() {
     [ "$rc" -eq 0 ] && return 0
     CAPTURED=""
     LAST_ERR="$(last_log_lines)"
-    if [ "$n" -ge "$RETRIES" ] || [ "$rc" -eq "$REFUSED" ]; then
+    if [ "$n" -ge "$RETRIES" ]; then
       FAILED_STEP="$desc"; FAILED_ATTEMPTS=$n
       return "$rc"
     fi
@@ -430,21 +422,13 @@ cleanup() {
 trap cleanup EXIT
 
 # ---------------------------------------------------------------------------
-# Lab facts, read from the workspace.
-# ---------------------------------------------------------------------------
-lab_fact() { # key -> value from the flat developer-onboarding.yaml
-  local f="${ONBOARD_LAB_FACTS:-$WORKSPACE/$LAB_FACTS_REL}"
-  [ -f "$f" ] || return 1
-  sed -n "s/^$1:[[:space:]]*//p" "$f" | head -n 1 | sed -e 's/[[:space:]]*#.*$//' -e 's/^"//' -e 's/"$//'
-}
-
 ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag.
   local a=""
   say ""
   say "  One optional extra: running the stack on this Mac"
   say ""
-  say "  You're already covered. Your delegations run on your own model key, and this"
-  say "  Mac gets its own identity on the lab's dev lane."
+  say "  You're already covered: onex runs your delegations natively on this Mac, on your"
+  say "  own model key."
   say ""
   say "  If you work on runtime, node or projection code, you can also run your own copy"
   say "  of the stack here in Docker: a database, a message broker and the two runtime"
@@ -465,7 +449,7 @@ ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript - "$1" "$DOCKER_MEM_GB" 2>/dev/null <<'OSA'
 on run argv
-  set msg to "You're already covered: your delegations run on your own model key, and this Mac gets its own identity on the lab's dev lane." & return & return & "If you work on runtime, node or projection code, you can also run your own copy of the stack here in Docker (a database, a message broker and the runtime kernels), so you can try changes without touching anything shared." & return & return & "What it takes:" & return & "  • about " & (item 2 of argv) & " GB of memory while it runs" & return & "  • about 15 GB of disk" & return & "  • 10-20 minutes the first time" & return & "  • " & (item 1 of argv) & return & return & "Not sure? Choose Not now. You can add it any time by running onboarding again with --containers."
+  set msg to "You're already covered: onex runs your delegations natively on this Mac, on your own model key." & return & return & "If you work on runtime, node or projection code, you can also run your own copy of the stack here in Docker (a database, a message broker and the runtime kernels), so you can try changes without touching anything shared." & return & return & "What it takes:" & return & "  • about " & (item 2 of argv) & " GB of memory while it runs" & return & "  • about 15 GB of disk" & return & "  • 10-20 minutes the first time" & return & "  • " & (item 1 of argv) & return & return & "Not sure? Choose Not now. You can add it any time by running onboarding again with --containers."
   try
     set r to display dialog msg with title "Run the stack locally in Docker?" buttons {"Quit setup", "Not now", "Yes, set it up"} default button "Not now" cancel button "Quit setup" with icon note
   on error number -128
@@ -487,7 +471,7 @@ OSA
 # The model key. Developers bring their own (OpenRouter or Gemini); there
 # is no lab-model fallback. Settled in preflight, before anything installs, so
 # the run never stops mid-way to ask. The key is held only in this process
-# (never exported, logged or written) until phase 4 stores it in onex.
+# (never exported, logged or written) until phase 3 stores it in onex.
 # ---------------------------------------------------------------------------
 PENDING_KEY=""
 MODEL_CHOICE=""
@@ -563,7 +547,7 @@ settle_model_key() {
     LAST_ERR="no key was given; developers bring their own key and the lab's models are not used"
     phase_fail "get an OpenRouter or Google AI Studio key and run this again. Nothing was installed"
   fi
-  say "  Model key: received (held in memory; stored in onex in phase 4)."
+  say "  Model key: received (held in memory; stored in onex in phase 3)."
 }
 
 # ===========================================================================
@@ -650,7 +634,7 @@ phase0() {
     exit 3
   fi
 
-  # Every machine gets the lab. Docker is one question on top of it, asked after
+  # Every machine gets native onex. Docker is one question on top of it, asked after
   # preflight and only when this Mac can run it; the flags answer it in advance.
   local docker_note
   case "$dstate" in
@@ -675,15 +659,15 @@ phase0() {
     esac
   else
     say "  Docker is not offered on this Mac:$MODE2_WHY."
-    say "  That is fine: the lab dev lane runs your delegations."
+    say "  That is fine: onex runs your delegations natively on this Mac."
   fi
 
   if [ "$MODE2_OK" -eq 1 ] && [ "$MODE2_OFFERED" -eq 1 ]; then
-    SELECTED="the lab (this machine's own bus identity) and native onex; Docker can be added (you will be asked)"
+    SELECTED="native onex; Docker can be added (you will be asked)"
   elif [ "$MODE2_OK" -eq 1 ]; then
-    SELECTED="the lab (this machine's own bus identity), native onex, and the stack locally in Docker"
+    SELECTED="native onex, and the stack locally in Docker"
   else
-    SELECTED="the lab (this machine's own bus identity) and native onex. No local Docker:$MODE2_WHY"
+    SELECTED="native onex. No local Docker:$MODE2_WHY"
   fi
   [ "$PREFLIGHT_ONLY" -eq 1 ] || settle_model_key
   say "  Will set up: $SELECTED"
@@ -844,72 +828,11 @@ phase2() {
   case "${SHELL:-}" in */bash) write_profile_block "$HOME/.bash_profile" ;; esac
   export OMNIBASE_PATH="$WORKSPACE" OMNI_HOME="$WORKSPACE"
   say "  OMNIBASE_PATH (and legacy OMNI_HOME), Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
-  if [ ! -f "${ONBOARD_LAB_FACTS:-$WORKSPACE/$LAB_FACTS_REL}" ]; then
-    FAILED_STEP="read the lab's declared addresses"
-    LAST_ERR="$LAB_FACTS_REL is missing from the omnibase_infra clone"
-    phase_fail "update the omnibase_infra clone (its dev branch declares the file), then run this again"
-  fi
   phase_pass
 }
 
 # ===========================================================================
-# Phase 3: tailnet
-# ===========================================================================
-TS=""
-find_tailscale() {
-  if [ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ]; then TS=/Applications/Tailscale.app/Contents/MacOS/Tailscale
-  elif command -v tailscale >/dev/null 2>&1; then TS="$(command -v tailscale)"
-  else TS=""
-  fi
-}
-ts_state() { "$TS" status --json 2>/dev/null | jq -r '.BackendState // empty'; }
-ts_suffix() { "$TS" status --json 2>/dev/null | jq -r '.MagicDNSSuffix // empty'; }
-ts_running() { [ "$(ts_state)" = "Running" ]; }
-
-install_tailscale() {
-  brew_install tailscale-app --cask || brew_install tailscale --cask
-}
-
-phase3_verified() { find_tailscale; [ -n "$TS" ] && ts_running && [ "$(ts_suffix)" = "$(lab_fact tailnet_suffix)" ]; }
-
-phase3() {
-  phase_start 3 "Tailnet (Tailscale, signed in to the OmniNode tailnet)" "2-5 minutes, plus your sign-in"
-  if is_done 3 && phase3_verified; then phase_pass "already connected"; return; fi
-  local want; want="$(lab_fact tailnet_suffix)"
-  find_tailscale
-  if [ -z "$TS" ]; then
-    say "  Installing Tailscale…"
-    ensure_sudo || { FAILED_STEP="administrator password"; phase_fail "run again and enter your Mac password when asked"; }
-    retry "install Tailscale" install_tailscale || phase_fail "install Tailscale from tailscale.com/download, then run this again"
-    find_tailscale
-  else
-    say "  Tailscale: present"
-  fi
-  [ -n "$TS" ] || { FAILED_STEP="locate the Tailscale CLI"; phase_fail "open the Tailscale app once, then run this again"; }
-  open -g -a Tailscale 2>/dev/null || true
-
-  if ! ts_running; then
-    say "  Sign in to Tailscale with your OmniNode account (the Tailscale menu-bar icon, or the"
-    say "  browser window it opens). Waiting up to 15 minutes…"
-    notify "Action needed" "Sign in to Tailscale with your OmniNode account"
-    "$TS" up >>"$LOG" 2>&1 &
-    wait_until "Tailscale sign-in" 900 5 ts_running || {
-      if [ "$(ts_state)" = "NeedsMachineAuth" ]; then
-        LAST_ERR="this device is waiting for a tailnet admin to approve it"
-        phase_fail "ask a tailnet admin to approve this device in the Tailscale admin console, then run this again"
-      fi
-      phase_fail "finish signing in to Tailscale, then run this again"
-    }
-  fi
-  if [ -n "$want" ] && [ "$(ts_suffix)" != "$want" ]; then
-    FAILED_STEP="tailnet check"; LAST_ERR="signed in to $(ts_suffix), not the OmniNode tailnet"
-    phase_fail "switch Tailscale to your OmniNode account (menu-bar icon, Switch account), then run this again"
-  fi
-  phase_pass "on the OmniNode tailnet"
-}
-
-# ===========================================================================
-# Phase 4: onex, the local identity, one model path, one delegation
+# Phase 3: onex, the local identity, one model path, one delegation
 # ===========================================================================
 ONEX=""
 onex_run() { env -u PYTHONPATH "$ONEX" "$@"; }
@@ -1003,8 +926,8 @@ delegate_hello() { # -> stdout: the run's receipt.json (it names the endpoint an
   cat "$receipt"
 }
 
-phase4() {
-  phase_start 4 "onex, local identity and your model key" "3-10 minutes"
+phase3() {
+  phase_start 3 "onex, local identity and your model key" "3-10 minutes"
   local endpoint
 
   say "  Building the workspace dispatch environment (onex)…"
@@ -1082,131 +1005,13 @@ phase4() {
   phase_pass "model: your $choice key"
 }
 
-# ===========================================================================
-# Phase 5: this machine's lab bus identity, issued automatically
-# ===========================================================================
-lane_bootstrap() {
-  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$WORKSPACE/$LANE_FILE_REL" "$(lab_fact lane)" <<'PY' 2>>"$LOG"
-import sys, yaml
-lanes = yaml.safe_load(open(sys.argv[1]))["lanes"]
-print(lanes[sys.argv[2]]["broker"])
-PY
-}
-
-broker_reachable() { local hp="$1"; nc -z -G 5 "${hp%:*}" "${hp##*:}"; }
-
-lane_identity_stored() { # a stored by-reference identity in ~/.onex (onex auth lane-login)
-  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$(lab_fact lane)" <<'PY' 2>>"$LOG"
-import sys
-from pathlib import Path
-from omnibase_infra.cli.store_lane_credential import StoreLaneCredential
-sys.exit(0 if sys.argv[1] in StoreLaneCredential(onex_home=Path.home() / ".onex").declared_lanes() else 1)
-PY
-}
-
-# -> stdout: the issuer's JSON (principal + password). A 4xx is the issuer
-# refusing this machine (a tagged device, a login outside the allowed domains,
-# too many machines on one login): its reason goes to the log and the call exits
-# $REFUSED. No connection, or a 5xx, exits 1 and is retried.
-request_identity() {
-  local device out code body
-  device="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
-  out="$(curl -sS -m 60 -w '\n%{http_code}' -X POST "$(lab_fact principal_issuer_url)/v1/principals" \
-    -H 'content-type: application/json' \
-    --data "{\"lane\":\"$(lab_fact lane)\",\"device\":\"$device\"}")" || return 1
-  code="${out##*$'\n'}"
-  body="${out%$'\n'*}"
-  out=""
-  case "$code" in
-    2??) printf '%s' "$body" ;;
-    4??) echo "HTTP $code from the lab's identity service: $(printf '%s' "$body" | jq -r '.error // empty' 2>/dev/null)" >&2
-         return "$REFUSED" ;;
-    *) echo "HTTP $code from the lab's identity service: $(printf '%s' "$body" | jq -r '.error // empty' 2>/dev/null)" >&2
-       return 1 ;;
-  esac
-}
-
-# The next step for an identity request the issuer refused, from its status.
-refusal_next() {
-  case "$LAST_ERR" in
-    *"HTTP 403"*) echo "sign in to Tailscale as yourself on this Mac ('tailscale up'), not as a tagged device or with a login outside OmniNode, then run this again" ;;
-    *"HTTP 409"*) echo "your login holds the most machine identities allowed; ask the lab operator to retire one you no longer use, then run this again" ;;
-    *) echo "the reason is above; say so on the team channel" ;;
-  esac
-}
-
-store_identity() { # uses CAPTURED
-  local principal password
-  principal="$(printf '%s' "$CAPTURED" | jq -r '.principal // empty')"
-  password="$(printf '%s' "$CAPTURED" | jq -r '.password // empty')"
-  CAPTURED=""
-  [ -n "$principal" ] && [ -n "$password" ] || { echo "the issuer's answer had no principal or password" >&2; return 1; }
-  ISSUED_PRINCIPAL="$principal"
-  printf '%s' "$password" | onex_run auth lane-login --lane "$(lab_fact lane)" \
-    --sasl-username "$principal" --sasl-password-stdin
-  local rc=$?
-  password=""
-  return $rc
-}
-ISSUED_PRINCIPAL=""
-
 # accepted_backend JSON -> the backend id of the attempt whose answer was accepted
 accepted_backend() {
   printf '%s' "$1" | jq -r '[.. | objects | select(.backend_id? != null and .acceptance_decision? == "accept") | .backend_id] | first // empty' 2>/dev/null
 }
 
-LANE_ANSWERED_BY=""
-lane_delegate() { # from the workspace, as the local-dev guide requires; prints the run's JSON
-  local out
-  out="$(cd "$WORKSPACE" && env -u PYTHONPATH "$WORKSPACE/omnibase_infra/scripts/onex" delegate --json \
-    --bus kafka --lane "$(lab_fact lane)" "Reply with exactly one word: hello" 2>>"$LOG")" || return 1
-  out="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
-  [ "$(receipt_field "$out" status)" = "success" ] || { printf '%s\n' "$out" >>"$LOG"; return 1; }
-  printf '%s\n' "$out"
-}
-
-phase5() {
-  phase_start 5 "Lab bus identity (issued automatically)" "1-3 minutes"
-  [ -n "$ONEX" ] || ONEX="$HOME/.local/bin/onex"
-  local hp
-  hp="$(lane_bootstrap)" || { FAILED_STEP="read the dev lane's broker"; phase_fail "update the omnimarket clone, then run this again"; }
-  retry "reach the lab broker ($hp)" broker_reachable "$hp" ||
-    phase_fail "check that Tailscale is connected; if it is, the lab broker is down, so say so on the team channel"
-
-  if [ "$REISSUE" -eq 0 ] && lane_identity_stored; then
-    say "  A bus identity for lane $(lab_fact lane) is already stored; keeping it (--reissue-identity to replace it)."
-  else
-    say "  Requesting this machine's bus identity from the lab…"
-    retry_capture "request a bus identity" request_identity
-    case $? in
-      0) ;;
-      "$REFUSED") phase_fail "the lab's identity service refused this machine: $(refusal_next)" ;;
-      *) phase_fail "the lab's identity service did not answer. Tailscale is connected (phase 3), so the service is down; say so on the team channel, then run this again" ;;
-    esac
-    step "store the bus identity" store_identity ||
-      phase_fail "see the log; the identity was not stored"
-    say "  Stored bus identity '$ISSUED_PRINCIPAL' for lane $(lab_fact lane)."
-  fi
-
-  say "  Running one delegation on the lab dev lane…"
-  retry_capture "one delegation over the lab bus" lane_delegate ||
-    phase_fail "run 'omnibase_infra/scripts/onex delegate --bus kafka --lane dev \"hello\"' from $WORKSPACE to see the error"
-  LANE_ANSWERED_BY="$(accepted_backend "$CAPTURED")"
-  CAPTURED=""
-  say "  Answered by the lab's ${LANE_ANSWERED_BY:-own} route."
-  if [ "$MODEL_CHOICE" != "none" ]; then
-    # The lab lane is shared: it binds a delegation to a tenant from the
-    # authenticated principal, and the issuer records no tenant yet, so this run
-    # used the lab's house route and not your key. Saying so is the point: a
-    # bare "answered" here read as proof that the key was used.
-    say "  Your $MODEL_CHOICE key was not used on the lab lane: the lane does not bind a delegation to your tenant yet."
-    say "  Your key is used by the containers in phase 6, where your own tenant is bound."
-  fi
-  phase_pass "lane $(lab_fact lane) answered"
-}
-
 # ===========================================================================
-# Phase 6: containers (optional)
+# Phase 4: containers (optional)
 # ===========================================================================
 docker_settings_file() {
   local d="$HOME/Library/Group Containers/group.com.docker"
@@ -1291,18 +1096,6 @@ stack_healthy() {
     curl -fsS -m 5 http://localhost:8086/health | grep -q '"healthy"'
 }
 
-point_bundle_model() { # url model -> the overlay names the model server and the model it serves (guide D14)
-  local f="$HOME/.omnibase/local.bifrost.yaml" url="$1" model="$2"
-  [ -f "$f" ] || return 1
-  # An overlay the developer already pointed somewhere is theirs; only the
-  # untouched template is rewritten. The model is written from the lab's facts,
-  # never assumed to be what the template happens to carry.
-  grep -q '&model_endpoint "http://host.docker.internal' "$f" || return 0
-  cp -p "$f" "$f.pre-onboarding.$STAMP"
-  sed -i '' -e "s#&model_endpoint \"http://host.docker.internal[^\"]*\"#\\&model_endpoint \"$url\"#" \
-    -e "s#served_model_id: \"[^\"]*\"#served_model_id: \"$model\"#" "$f"
-}
-
 # A tenant on the stack means every delegation runs on a key registered for that
 # tenant and nothing else, so the stack only gets one when a key was chosen.
 STACK_TENANT_CHANGED=0
@@ -1335,10 +1128,10 @@ stack_delegate() { # -> stdout: the run's JSON; it names the backend that answer
   printf '%s\n' "$out"
 }
 
-phase6() {
-  phase_start 6 "Docker (optional, in addition to the lab)" "10-20 minutes the first time"
+phase4() {
+  phase_start 4 "Docker (optional: the local stack, on your key)" "10-20 minutes the first time"
   if [ "$MODE2_OK" -ne 1 ]; then phase_skip "${MODE2_WHY# }"; return; fi
-  if is_done 6 && docker_ready && stack_healthy; then phase_pass "already running"; return; fi
+  if is_done 4 && docker_ready && stack_healthy; then phase_pass "already running"; return; fi
 
   local host_ram mem_gb mem free disk
   host_ram="$(ram_gb)"
@@ -1387,8 +1180,6 @@ phase6() {
     say "  The local stack is already there; checking it instead of rebuilding it."
   else
     step "make local-env" make -C "$WORKSPACE/omnibase_infra" local-env || phase_fail "see the log for make local-env's message"
-    step "point the stack at the lab model server" point_bundle_model "$(lab_fact lab_model_url)" "$(lab_fact lab_model_name)" ||
-      phase_fail "set model_endpoint and served_model_id in ~/.omnibase/local.bifrost.yaml by hand, then run this again"
   fi
   # The key path: the stack serves a tenant of its own and holds your key for it.
   if [ "$MODEL_CHOICE" != "none" ]; then
@@ -1412,7 +1203,7 @@ phase6() {
     phase_fail "the stack is up but the delegation failed; see the log"
   local served; served="$(accepted_backend "$CAPTURED")"; CAPTURED=""
   if [ "$MODEL_CHOICE" != "none" ]; then
-    # A delegation that falls through to the lab model still reports success, so
+    # A delegation that falls through to another route still reports success, so
     # the accepted backend is what proves the key was used.
     case "$served" in
       "byok-$MODEL_CHOICE"*) say "  Answered by your $MODEL_CHOICE key ($served)." ;;
@@ -1427,7 +1218,7 @@ phase6() {
 }
 
 # ===========================================================================
-# Phase 7: Claude Code plugins
+# Phase 5: Claude Code plugins
 # ===========================================================================
 install_claude_code() {
   download https://claude.ai/install.sh "$RUN_DIR/claude-install.sh" && bash "$RUN_DIR/claude-install.sh"
@@ -1444,8 +1235,8 @@ internal_plugins_reachable() {
     grep -q 'successfully authenticated'
 }
 
-phase7() {
-  phase_start 7 "Claude Code plugins (the full onex tree; omni where you have access)" "1-2 minutes"
+phase5() {
+  phase_start 5 "Claude Code plugins (the full onex tree; omni where you have access)" "1-2 minutes"
   if ! command -v claude >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/claude" ]; then
     say "  Installing Claude Code…"
     retry "install Claude Code" install_claude_code || phase_fail "install Claude Code from claude.com/claude-code, then run this again"
@@ -1493,7 +1284,7 @@ phase7() {
 }
 
 # ===========================================================================
-# Phase 8: verify
+# Phase 6: verify
 # ===========================================================================
 CHECKS_FAILED=0
 check() { # label cmd...
@@ -1507,7 +1298,7 @@ no_shadow() { [ "$(readlink "$HOME/.local/bin/onex")" = "$WORKSPACE/omnibase_inf
 
 # The workspace floor the onex wrapper enforces before any --lane command. If dev
 # moved while this ran, the clones fast-forward here but the dispatch venv built
-# in phase 4 is behind; the floor's own remedy is to rebuild it and reconcile again.
+# in phase 3 is behind; the floor's own remedy is to rebuild it and reconcile again.
 reconcile_host() { nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-host.sh" --omni-home "$WORKSPACE"; }
 workspace_floor() {
   reconcile_host && return 0
@@ -1515,8 +1306,8 @@ workspace_floor() {
     reconcile_host
 }
 
-phase8() {
-  phase_start 8 "Verify" "about a minute"
+phase6() {
+  phase_start 6 "Verify" "about a minute"
   [ -n "$ONEX" ] || ONEX="$HOME/.local/bin/onex"
   check "onex starts ($(onex_run --version 2>/dev/null | tail -n 1))" onex_run --version
   check "local identity minted" onex_run local identity
@@ -1524,7 +1315,6 @@ phase8() {
   check "workspace floor proven (reconcile-host IN_SYNC)" retry "reconcile the workspace floor" workspace_floor
   check "a delegation row in the local store" sqlite_rows
   check "onex metering reads it" onex_run metering
-  check "lab bus identity stored for lane $(lab_fact lane)" lane_identity_stored
   check "the full onex plugin installed in Claude Code" plugin_installed onex@omninode-tools-dev
   if [ "$MODE2_OK" -eq 1 ]; then check "local stack healthy" stack_healthy; fi
   if [ -n "$AMBIENT_FOUND" ]; then
@@ -1539,7 +1329,7 @@ phase8() {
 
 # ===========================================================================
 main() {
-  say "OmniNode lab onboarding. Status file: $STATUS"
+  say "OmniNode developer onboarding (local runtime). Status file: $STATUS"
   [ "$RESTART" -eq 1 ] && rm -f "$DONE_FILE"
   phase0
   [ "$PREFLIGHT_ONLY" -eq 1 ] && { say "Preflight only: nothing was changed."; exit 0; }
@@ -1549,8 +1339,6 @@ main() {
   phase4
   phase5
   phase6
-  phase7
-  phase8
   hr
   say "Done. Set up: $SELECTED."
   say "Model: your own $MODEL_CHOICE key."

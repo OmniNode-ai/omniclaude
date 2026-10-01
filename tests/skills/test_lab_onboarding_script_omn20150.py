@@ -170,7 +170,7 @@ def test_containers_asked_for_on_a_mac_that_cannot_run_them_continue_without(
     )
     assert result.returncode == 0
     assert "Docker is not offered on this Mac" in result.stdout
-    assert "the lab dev lane runs your delegations" in result.stdout
+    assert "onex runs your delegations natively on this Mac" in result.stdout
 
 
 @macos_only
@@ -277,62 +277,6 @@ def _function_body(name: str) -> str:
     return "\n".join(lines[start : end + 1])
 
 
-_TEMPLATE_OVERLAY = (
-    'backends:\n  - backend_id: local-coder\n    endpoint_url: &model_endpoint "http://host.docker.internal:8000/v1/chat/completions"\n'
-    '    served_model_id: "a-placeholder-model"\n'
-    '  - backend_id: local-heavy-reasoning\n    endpoint_url: *model_endpoint\n    served_model_id: "a-placeholder-model"\n'
-)
-
-
-@macos_only
-def test_phase_6_writes_the_labs_model_into_the_overlay_not_the_templates(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "home"
-    (home / ".omnibase").mkdir(parents=True)
-    overlay = home / ".omnibase" / "local.bifrost.yaml"
-    overlay.write_text(_TEMPLATE_OVERLAY, encoding="utf-8")
-    snippet = (
-        f"{_function_body('point_bundle_model')}\n"
-        'point_bundle_model "http://lab.example:8000/v1/chat/completions" "lab-served-id"\n'
-    )
-    subprocess.run(
-        ["/bin/bash", "-c", snippet],
-        env={"HOME": str(home), "STAMP": "t", "PATH": "/usr/bin:/bin"},
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    text = overlay.read_text(encoding="utf-8")
-    assert '&model_endpoint "http://lab.example:8000/v1/chat/completions"' in text
-    assert text.count('served_model_id: "lab-served-id"') == 2
-    assert "a-placeholder-model" not in text
-    assert (home / ".omnibase" / "local.bifrost.yaml.pre-onboarding.t").exists()
-
-
-@macos_only
-def test_phase_6_leaves_an_overlay_the_developer_already_pointed_alone(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "home"
-    (home / ".omnibase").mkdir(parents=True)
-    overlay = home / ".omnibase" / "local.bifrost.yaml"
-    mine = _TEMPLATE_OVERLAY.replace("host.docker.internal:8000", "my-box:9000")
-    overlay.write_text(mine, encoding="utf-8")
-    snippet = (
-        f"{_function_body('point_bundle_model')}\n"
-        'point_bundle_model "http://lab.example:8000/v1/chat/completions" "lab-served-id"\n'
-    )
-    subprocess.run(
-        ["/bin/bash", "-c", snippet],
-        env={"HOME": str(home), "STAMP": "t", "PATH": "/usr/bin:/bin"},
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    assert overlay.read_text(encoding="utf-8") == mine
-
-
 def test_the_key_reaches_the_stack_by_pipe_and_never_as_an_argument_or_variable() -> (
     None
 ):
@@ -345,29 +289,23 @@ def test_the_key_reaches_the_stack_by_pipe_and_never_as_an_argument_or_variable(
         assert forbidden not in body
 
 
-def test_a_delegation_that_fell_through_to_the_lab_model_does_not_pass_phase_6() -> (
+def test_a_delegation_that_fell_through_to_another_route_does_not_pass_phase_4() -> (
     None
 ):
-    phase_6 = _function_body("phase6")
-    assert 'case "$served" in' in phase_6
-    assert '"byok-$MODEL_CHOICE"*' in phase_6
-    assert "not byok-$MODEL_CHOICE" in phase_6
-    assert "phase_fail" in phase_6.split('"byok-$MODEL_CHOICE"*', 1)[1]
+    phase_4 = _function_body("phase4")
+    assert 'case "$served" in' in phase_4
+    assert '"byok-$MODEL_CHOICE"*' in phase_4
+    assert "not byok-$MODEL_CHOICE" in phase_4
+    assert "phase_fail" in phase_4.split('"byok-$MODEL_CHOICE"*', 1)[1]
 
 
 def test_the_stack_only_gets_a_tenant_when_a_key_was_chosen() -> None:
-    phase_6 = _function_body("phase6")
+    phase_4 = _function_body("phase4")
     assert (
         'if [ "$MODEL_CHOICE" != "none" ]; then\n    step "give the stack a tenant'
-        in (phase_6)
+        in (phase_4)
     )
-    assert phase_6.index("ensure_stack_tenant") < phase_6.index("make up-local")
-
-
-def test_phase_5_does_not_let_a_bare_answered_read_as_proof_the_key_was_used() -> None:
-    phase_5 = _function_body("phase5")
-    assert "accepted_backend" in phase_5
-    assert "was not used on the lab lane" in phase_5
+    assert phase_4.index("ensure_stack_tenant") < phase_4.index("make up-local")
 
 
 def _phase0_env(tmp_path: Path, **extra: str) -> dict[str, str]:
@@ -500,68 +438,7 @@ def _functions(*names: str) -> str:
     return "\n".join(out)
 
 
-@pytest.mark.parametrize(
-    ("status", "rc", "next_words"),
-    [
-        (201, 0, None),
-        (403, 86, "sign in to Tailscale as yourself"),
-        (409, 86, "ask the lab operator to retire one"),
-        (502, 1, None),
-    ],
-)
-def test_an_issuer_refusal_is_reported_not_retried(
-    tmp_path: Path, status: int, rc: int, next_words: str | None
-) -> None:
-    """A 4xx is the issuer's answer about this machine, so asking again cannot help."""
-    import json
-    import threading
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-
-    class Issuer(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:
-            self.rfile.read(int(self.headers.get("Content-Length") or 0))
-            ok = {"principal": "dev-x", "password": "p"}  # pragma: allowlist secret
-            body = json.dumps(ok if status < 300 else {"error": "refused"}).encode()
-            self.send_response(status)
-            self.send_header("content-length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, *args: object) -> None:
-            pass
-
-    server = HTTPServer(("127.0.0.1", 0), Issuer)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    try:
-        harness = (
-            "REFUSED=86\n"
-            + _functions("request_identity", "refusal_next")
-            + "\nlab_fact() { case $1 in principal_issuer_url) "
-            + f"echo http://127.0.0.1:{server.server_port};; lane) echo dev;; esac; }}\n"
-            + 'out="$(request_identity 2>err)"; rc=$?; LAST_ERR="$(cat err)"\n'
-            + 'echo "rc=$rc"; [ "$rc" -eq "$REFUSED" ] && echo "next=$(refusal_next)"\n'
-        )
-        result = subprocess.run(
-            ["/bin/bash", "-c", harness],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-            cwd=tmp_path,
-        )
-    finally:
-        server.shutdown()
-    assert f"rc={rc}" in result.stdout, result.stdout + result.stderr
-    if next_words:
-        assert next_words in result.stdout
-
-
-def test_retry_capture_stops_at_a_refusal() -> None:
-    text = SCRIPT.read_text()
-    assert '[ "$n" -ge "$RETRIES" ] || [ "$rc" -eq "$REFUSED" ]' in text
-
-
-def test_phase7_installs_the_full_onex_tree_and_omni_where_reachable() -> None:
+def test_phase5_installs_the_full_onex_tree_and_omni_where_reachable() -> None:
     text = SCRIPT.read_text()
     assert "plugin install onex@omninode-tools-dev" in text
     assert (
@@ -570,3 +447,20 @@ def test_phase7_installs_the_full_onex_tree_and_omni_where_reachable() -> None:
     )
     assert "for p in omni onex-overlays" in text
     assert "internal_plugins_reachable" in text
+
+
+def test_nothing_connects_to_the_lab() -> None:
+    """Developers run onex locally only: no tailnet, no lab bus identity, no lab model."""
+    text = SCRIPT.read_text()
+    for gone in (
+        "tailscale",
+        "lane-login",
+        "principal_issuer_url",
+        "lab_model_url",
+        "developer-onboarding.yaml",
+        "--bus kafka",
+        "--reissue-identity",
+    ):
+        assert gone not in text.lower(), gone
+    assert "TOTAL_PHASES=6" in text
+    assert 'DONE_FILE="$STATE_DIR/phases.v2.done"' in text

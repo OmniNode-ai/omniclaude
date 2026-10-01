@@ -36,7 +36,7 @@ node_type: ORCHESTRATOR_GENERIC
 # Description
 description: >
   Orchestrator node for the lab_onboarding skill.
-  Take a Mac from bare to lab-ready in one run — tools, workspace, tailnet, onex, a model, this machine's own lab bus identity, and optionally the local container stack — reporting each phase as it finishes
+  Take a Mac from bare to a working local onex in one run — tools, workspace, onex on the developer's own model key, and optionally the local container stack — reporting each phase as it finishes. Never connects to the lab
   Dispatches skill invocations to the polymorphic agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
