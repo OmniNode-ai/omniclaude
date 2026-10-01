@@ -108,7 +108,7 @@ env:
 jobs:
   occ-preflight:
     # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@52851458622f368c3b596c82bf810bc6acce1d5e
     permissions:
       contents: read
       pull-requests: read
@@ -250,10 +250,16 @@ jobs:
       - name: Clone omniintelligence
         working-directory: ${{ github.workspace }}
         run: |
+          # Pinned to the omniintelligence rev this repo's uv.lock records
+          # (ruling 2026-10-01: a sibling is read at the pin, never its live dev).
+          pin_rev="$(grep -oE 'omniintelligence\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$pin_rev" ]] || { echo "::error::omniintelligence rev not found in uv.lock"; exit 1; }
           for attempt in {1..4}; do
             rm -rf ../omniintelligence
-            if git clone --depth=1 --filter=blob:none --branch dev \
-              https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence; then
+            if git init -q ../omniintelligence \
+              && git -C ../omniintelligence fetch --depth=1 --filter=blob:none \
+                https://github.com/OmniNode-ai/omniintelligence.git "$pin_rev" \
+              && git -C ../omniintelligence checkout -q FETCH_HEAD; then
               exit 0
             fi
             sleep $((attempt * 10))
@@ -263,9 +269,13 @@ jobs:
       - name: Clone omnibase_core
         working-directory: ${{ github.workspace }}
         run: |
+          # Pinned to the omnibase-core version this repo's uv.lock resolves
+          # (ruling 2026-10-01: a sibling is read at the pin, never its live dev).
+          pin_version="$(awk -v n=omnibase-core '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
+          [[ -n "$pin_version" ]] || { echo "::error::omnibase-core not found in uv.lock"; exit 1; }
           for attempt in {1..4}; do
             rm -rf ../omnibase_core
-            if git clone --depth=1 --filter=blob:none --branch dev \
+            if git clone --depth=1 --filter=blob:none --branch "v${pin_version}" \
               https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core; then
               exit 0
             fi
@@ -276,9 +286,13 @@ jobs:
       - name: Clone omnibase_compat
         working-directory: ${{ github.workspace }}
         run: |
+          # Pinned to the omnibase-compat version this repo's uv.lock resolves
+          # (ruling 2026-10-01: a sibling is read at the pin, never its live dev).
+          pin_version="$(awk -v n=omnibase-compat '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
+          [[ -n "$pin_version" ]] || { echo "::error::omnibase-compat not found in uv.lock"; exit 1; }
           for attempt in {1..4}; do
             rm -rf ../omnibase_compat
-            if git clone --depth=1 --filter=blob:none --branch dev \
+            if git clone --depth=1 --filter=blob:none --branch "v${pin_version}" \
               https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat; then
               exit 0
             fi

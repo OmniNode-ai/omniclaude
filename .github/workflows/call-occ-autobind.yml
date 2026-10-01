@@ -162,11 +162,21 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve the pinned omnimarket rev
+        id: om_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the rev this repo's uv.lock pins, never its live
+          # branch (ruling 2026-10-01).
+          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+
       - name: Fetch canonical OCC-autobind publisher (omnimarket)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omnimarket
-          ref: dev
+          ref: ${{ steps.om_pin.outputs.rev }}
           path: .occ-autobind-src
           persist-credentials: false
           sparse-checkout: |

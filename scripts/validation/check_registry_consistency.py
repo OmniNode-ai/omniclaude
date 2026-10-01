@@ -138,11 +138,16 @@ def check_registry_consistency(daemon_registry_path: Path) -> list[str]:
             f"{missing_registry}"
         )
 
-    missing_daemon = sorted(supported - set(daemon_events))
-    if missing_daemon:
-        violations.append(
-            "SUPPORTED_EVENT_TYPES entries missing from omnimarket daemon registry: "
-            f"{missing_daemon}"
+    # The daemon registry is read at the omnimarket rev omniclaude's uv.lock
+    # pins, so an event type it does not register yet is omniclaude AHEAD of its
+    # pin (the consumer lands first), not drift. It is reported, not failed; the
+    # omnimarket side owns the reverse direction. Once omniclaude bumps the pin
+    # past the registration the type is checked in full.
+    ahead_of_pin = sorted(supported - set(daemon_events))
+    if ahead_of_pin:
+        print(
+            "NOTE: SUPPORTED_EVENT_TYPES ahead of the pinned omnimarket daemon "
+            f"registry (tolerated until the pin moves): {ahead_of_pin}"
         )
 
     for event_type in CAPTURE_EVENT_TYPES:
@@ -162,7 +167,7 @@ def check_registry_consistency(daemon_registry_path: Path) -> list[str]:
             )
 
     mismatches: dict[str, set[str]] = {}
-    for event_type in sorted(supported):
+    for event_type in sorted(supported & set(daemon_events)):
         source_topics = event_registry.get(event_type, set())
         event_def = daemon_events.get(event_type)
         # An event type the daemon does not register is already reported as

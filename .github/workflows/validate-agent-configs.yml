@@ -25,7 +25,7 @@ concurrency:
 jobs:
   occ-preflight:
     # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@52851458622f368c3b596c82bf810bc6acce1d5e
     permissions:
       contents: read
       pull-requests: read
@@ -57,10 +57,21 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
+      - name: Resolve the pinned onex_change_control rev
+        id: occ_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the rev this repo's uv.lock pins, never its live
+          # branch (ruling 2026-10-01).
+          rev="$(grep -oE 'onex_change_control\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$rev" ]] || { echo "::error::onex_change_control rev not found in uv.lock"; exit 1; }
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout onex_change_control
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
+          ref: ${{ steps.occ_pin.outputs.rev }}
           path: _onex_change_control
           token: ${{ github.token }}
 

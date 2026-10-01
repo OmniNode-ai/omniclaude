@@ -116,7 +116,7 @@ jobs:
       contents: read
       pull-requests: read
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@52851458622f368c3b596c82bf810bc6acce1d5e
     with:
       contracts-dir: contracts
       receipts-dir: drift/dod_receipts
@@ -133,7 +133,7 @@ jobs:
   zone-filter:
     needs: occ-preflight
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@7631ef3321e1a6561f4b2c70019ee57d24160620
     with:
       python-version: "3.12"
 
@@ -430,10 +430,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Resolve the pinned omnibase-core version
+        id: core_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the version this repo's uv.lock pins, never its
+          # live branch (ruling 2026-10-01), so a merge there cannot turn this red.
+          version="$(awk -v n=omnibase-core '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
+          [[ -n "$version" ]] || { echo "::error::omnibase-core not found in uv.lock"; exit 1; }
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout omnibase_core
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
+          ref: ${{ steps.core_pin.outputs.tag }}
           path: omnibase_core
 
       - name: Verify handshake is current
@@ -474,11 +485,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Resolve the pinned omnibase-core version
+        id: core_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the version this repo's uv.lock pins, never its
+          # live branch (ruling 2026-10-01), so a merge there cannot turn this red.
+          version="$(awk -v n=omnibase-core '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
+          [[ -n "$version" ]] || { echo "::error::omnibase-core not found in uv.lock"; exit 1; }
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout omnibase_core validator source
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
-          ref: dev
+          ref: ${{ steps.core_pin.outputs.tag }}
           path: .ci/omnibase_core
 
       - name: Install uv
@@ -1527,11 +1548,21 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve the pinned omnimarket rev
+        id: om_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the rev this repo's uv.lock pins, never its live
+          # branch (ruling 2026-10-01), so a merge there cannot turn this red.
+          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout canonical omnimarket registry
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnimarket
-          ref: dev
+          ref: ${{ steps.om_pin.outputs.rev }}
           path: _registry/omnimarket
           persist-credentials: false
 
@@ -1600,11 +1631,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Resolve the pinned omnimarket rev
+        id: om_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the rev this repo's uv.lock pins, never its live
+          # branch (ruling 2026-10-01), so a merge there cannot turn this red.
+          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+
+      # The registry is read at the omnimarket rev uv.lock pins. The consistency
+      # scripts are strict: an event type omniclaude has that the pinned registry
+      # lacks fails the job.
       - name: Checkout canonical omnimarket registry
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnimarket
-          ref: dev
+          ref: ${{ steps.om_pin.outputs.rev }}
           path: _registry/omnimarket
 
       - name: Install uv
@@ -3252,11 +3296,21 @@ jobs:
           repositories: onex_change_control
           permission-contents: write
 
+      - name: Resolve the pinned onex_change_control rev
+        id: occ_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the rev this repo's uv.lock pins, never its live
+          # branch (ruling 2026-10-01), so a merge there cannot turn this red.
+          rev="$(grep -oE 'onex_change_control\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$rev" ]] || { echo "::error::onex_change_control rev not found in uv.lock"; exit 1; }
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout onex_change_control validator
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/onex_change_control
-          ref: main
+          ref: ${{ steps.occ_pin.outputs.rev }}
           token: ${{ steps.app-token.outputs.token || github.token }}
           path: onex_change_control
           sparse-checkout: |
@@ -4078,7 +4132,7 @@ jobs:
       }}
     if: needs.occ-preflight.result == 'success'
     steps:
-      - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@main
+      - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@47342e562a516b0278e22a974f35cbf2a64b33eb
         with:
           checks: "boundary-parity"
           warn-only: "false"
@@ -4365,11 +4419,16 @@ jobs:
           OMNI_HOME="${RUNNER_TEMP}/sibling-clones"
           echo "OMNI_HOME=${OMNI_HOME}" >> "$GITHUB_ENV"
           mkdir -p "$OMNI_HOME"
-          # OCC tracks main, as in Skill Contracts CI. omnibase_core tracks the
-          # uv.lock-pinned version tag so hook-bits-drift checks hook_bits.sh
-          # against the EnumHookBit version omniclaude actually runs.
-          git clone --quiet --depth 1 --filter=blob:none --sparse --branch main https://github.com/OmniNode-ai/onex_change_control.git "$OMNI_HOME/onex_change_control"
+          # OCC is read at the rev uv.lock pins (ruling 2026-10-01), as in Skill
+          # Contracts CI. omnibase_core tracks the uv.lock-pinned version tag so
+          # hook-bits-drift checks hook_bits.sh against the EnumHookBit version
+          # omniclaude actually runs.
+          occ_rev="$(grep -oE 'onex_change_control\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$occ_rev" ]] || { echo "::error::onex_change_control rev not found in uv.lock"; exit 1; }
+          git init --quiet "$OMNI_HOME/onex_change_control"
           git -C "$OMNI_HOME/onex_change_control" sparse-checkout set scripts/validation
+          git -C "$OMNI_HOME/onex_change_control" fetch --quiet --depth 1 --filter=blob:none https://github.com/OmniNode-ai/onex_change_control.git "$occ_rev"
+          git -C "$OMNI_HOME/onex_change_control" checkout --quiet FETCH_HEAD
           core_version="$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("omnibase-core"))')"
           git clone --quiet --depth 1 --branch "v${core_version}" https://github.com/OmniNode-ai/omnibase_core.git "$OMNI_HOME/omnibase_core"
       - name: Pin the whole-tree backstop's own shape (OMN-19612)

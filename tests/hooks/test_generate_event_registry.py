@@ -154,9 +154,14 @@ class TestDiffRegistries:
         violations = gen.diff_registries({"foo.bar": self._reg()}, {})
         assert any("missing from the committed" in v for v in violations)
 
-    def test_extra_in_committed_is_reported(self, gen: Any) -> None:
+    def test_extra_in_committed_is_ahead_of_the_pin_not_a_violation(
+        self, gen: Any, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # The daemon registry is read at the omnimarket rev uv.lock pins
+        # (OMN-20001): a committed type it lacks is omniclaude ahead of its pin.
         violations = gen.diff_registries({}, {"foo.bar": self._reg()})
-        assert any("not projected from the" in v for v in violations)
+        assert violations == []
+        assert "foo.bar" in capsys.readouterr().out
 
     def test_partition_key_field_mismatch_is_reported(self, gen: Any) -> None:
         generated = {"foo.bar": self._reg(partition_key_field="session_id")}
