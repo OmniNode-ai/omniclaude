@@ -68,13 +68,13 @@ jobs:
 
       - name: Run url-authority gate (full-repo, against frozen baseline)
         run: |
-          uv run --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@a596e248d2ae8a112295f5d9c6558d15e9ebb70f" \
+          uv run --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@d720f33cf02aca1886d43811337d80aa1a47720e" \
             python -m omnibase_core.validation.validator_url_authority \
             --all --repo omniclaude --repo-root .
 
       - name: Assert baseline did not grow (anti-gaming)
         run: |
-          uv run --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@a596e248d2ae8a112295f5d9c6558d15e9ebb70f" python - <<'PY'
+          uv run --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@d720f33cf02aca1886d43811337d80aa1a47720e" python - <<'PY'
           import json
           import subprocess
           import sys

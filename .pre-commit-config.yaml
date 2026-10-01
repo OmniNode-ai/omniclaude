@@ -82,6 +82,17 @@ repos:
     hooks:
       - id: check-hardcoded-model-config-compute
 
+  # URL Authority Gate (OMN-13298, child of OMN-12803). OMN-20177: the CI job
+  # had no pre-commit twin here. Ratchet against the shared baseline in the
+  # pinned omnibase_core; keep this rev equal to the pin in
+  # .github/workflows/url-authority-gate.yml. Suppress: # url-authority-ok: <reason>
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: d720f33cf02aca1886d43811337d80aa1a47720e # pragma: allowlist secret
+    hooks:
+      - id: check-url-authority
+        args: [--repo, omniclaude, --repo-root, .]
+        exclude: ^(tests/|archived/|archive/).*\.py$
+
   # Fast Python formatting and linting (staged files only)
   # Order: format -> fix -> check (matches CI behavior)
   # Note: To run on entire codebase, use: uv run ruff check src/ tests/
