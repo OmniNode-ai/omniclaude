@@ -261,3 +261,109 @@ def test_one_question_after_preflight_decides_docker(
         pytest.skip("the local stack's ports are held by something else on this host")
     assert "The lab is set up either way" in out
     assert outcome in out
+
+
+# ---------------------------------------------------------------------------
+# OMN-17099: the containers run the developer's model and key, not a template's.
+# ---------------------------------------------------------------------------
+
+
+def _function_body(name: str) -> str:
+    """The text of one top-level shell function, from its first line to its `}`."""
+    lines = SCRIPT.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"{name}() "))
+    end = next(i for i in range(start, len(lines)) if lines[i] == "}")
+    return "\n".join(lines[start : end + 1])
+
+
+_TEMPLATE_OVERLAY = (
+    'backends:\n  - backend_id: local-coder\n    endpoint_url: &model_endpoint "http://host.docker.internal:8000/v1/chat/completions"\n'
+    '    served_model_id: "a-placeholder-model"\n'
+    '  - backend_id: local-heavy-reasoning\n    endpoint_url: *model_endpoint\n    served_model_id: "a-placeholder-model"\n'
+)
+
+
+@macos_only
+def test_phase_6_writes_the_labs_model_into_the_overlay_not_the_templates(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    (home / ".omnibase").mkdir(parents=True)
+    overlay = home / ".omnibase" / "local.bifrost.yaml"
+    overlay.write_text(_TEMPLATE_OVERLAY, encoding="utf-8")
+    snippet = (
+        f"{_function_body('point_bundle_model')}\n"
+        'point_bundle_model "http://lab.example:8000/v1/chat/completions" "lab-served-id"\n'
+    )
+    subprocess.run(
+        ["/bin/bash", "-c", snippet],
+        env={"HOME": str(home), "STAMP": "t", "PATH": "/usr/bin:/bin"},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    text = overlay.read_text(encoding="utf-8")
+    assert '&model_endpoint "http://lab.example:8000/v1/chat/completions"' in text
+    assert text.count('served_model_id: "lab-served-id"') == 2
+    assert "a-placeholder-model" not in text
+    assert (home / ".omnibase" / "local.bifrost.yaml.pre-onboarding.t").exists()
+
+
+@macos_only
+def test_phase_6_leaves_an_overlay_the_developer_already_pointed_alone(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    (home / ".omnibase").mkdir(parents=True)
+    overlay = home / ".omnibase" / "local.bifrost.yaml"
+    mine = _TEMPLATE_OVERLAY.replace("host.docker.internal:8000", "my-box:9000")
+    overlay.write_text(mine, encoding="utf-8")
+    snippet = (
+        f"{_function_body('point_bundle_model')}\n"
+        'point_bundle_model "http://lab.example:8000/v1/chat/completions" "lab-served-id"\n'
+    )
+    subprocess.run(
+        ["/bin/bash", "-c", snippet],
+        env={"HOME": str(home), "STAMP": "t", "PATH": "/usr/bin:/bin"},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert overlay.read_text(encoding="utf-8") == mine
+
+
+def test_the_key_reaches_the_stack_by_pipe_and_never_as_an_argument_or_variable() -> (
+    None
+):
+    body = _function_body("register_key_in_stack")
+    assert "| make -s" in body
+    assert "secret-local PROVIDER=" in body
+    # The value is read and written inside the python heredoc only.
+    assert "sys.stdout.write(value)" in body
+    for forbidden in ("KEY=", "VALUE=", "export ", "SECRET="):
+        assert forbidden not in body
+
+
+def test_a_delegation_that_fell_through_to_the_lab_model_does_not_pass_phase_6() -> (
+    None
+):
+    phase_6 = _function_body("phase6")
+    assert 'case "$served" in' in phase_6
+    assert '"byok-$MODEL_CHOICE"*' in phase_6
+    assert "not byok-$MODEL_CHOICE" in phase_6
+    assert "phase_fail" in phase_6.split('"byok-$MODEL_CHOICE"*', 1)[1]
+
+
+def test_the_stack_only_gets_a_tenant_when_a_key_was_chosen() -> None:
+    phase_6 = _function_body("phase6")
+    assert (
+        'if [ "$MODEL_CHOICE" != "none" ]; then\n    step "give the stack a tenant'
+        in (phase_6)
+    )
+    assert phase_6.index("ensure_stack_tenant") < phase_6.index("make up-local")
+
+
+def test_phase_5_does_not_let_a_bare_answered_read_as_proof_the_key_was_used() -> None:
+    phase_5 = _function_body("phase5")
+    assert "accepted_backend" in phase_5
+    assert "was not used on the lab lane" in phase_5

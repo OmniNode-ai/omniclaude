@@ -1059,12 +1059,19 @@ store_identity() { # uses CAPTURED
 }
 ISSUED_PRINCIPAL=""
 
-lane_delegate() { # from the workspace, as the local-dev guide requires
+# accepted_backend JSON -> the backend id of the attempt whose answer was accepted
+accepted_backend() {
+  printf '%s' "$1" | jq -r '[.. | objects | select(.backend_id? != null and .acceptance_decision? == "accept") | .backend_id] | first // empty' 2>/dev/null
+}
+
+LANE_ANSWERED_BY=""
+lane_delegate() { # from the workspace, as the local-dev guide requires; prints the run's JSON
   local out
   out="$(cd "$WORKSPACE" && env -u PYTHONPATH "$WORKSPACE/omnibase_infra/scripts/onex" delegate --json \
     --bus kafka --lane "$(lab_fact lane)" "Reply with exactly one word: hello" 2>>"$LOG")" || return 1
   out="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
   [ "$(receipt_field "$out" status)" = "success" ] || { printf '%s\n' "$out" >>"$LOG"; return 1; }
+  printf '%s\n' "$out"
 }
 
 phase5() {
@@ -1087,8 +1094,19 @@ phase5() {
   fi
 
   say "  Running one delegation on the lab dev lane…"
-  retry "one delegation over the lab bus" lane_delegate ||
+  retry_capture "one delegation over the lab bus" lane_delegate ||
     phase_fail "run 'omnibase_infra/scripts/onex delegate --bus kafka --lane dev \"hello\"' from $WORKSPACE to see the error"
+  LANE_ANSWERED_BY="$(accepted_backend "$CAPTURED")"
+  CAPTURED=""
+  say "  Answered by the lab's ${LANE_ANSWERED_BY:-own} route."
+  if [ "$MODEL_CHOICE" != "none" ]; then
+    # The lab lane is shared: it binds a delegation to a tenant from the
+    # authenticated principal, and the issuer records no tenant yet, so this run
+    # used the lab's house route and not your key. Saying so is the point: a
+    # bare "answered" here read as proof that the key was used.
+    say "  Your $MODEL_CHOICE key was not used on the lab lane: the lane does not bind a delegation to your tenant yet."
+    say "  Your key is used by the containers in phase 6, where your own tenant is bound."
+  fi
   phase_pass "lane $(lab_fact lane) answered"
 }
 
@@ -1178,12 +1196,48 @@ stack_healthy() {
     curl -fsS -m 5 http://localhost:8086/health | grep -q '"healthy"'
 }
 
-point_bundle_model() { # local.bifrost.yaml defaults to host.docker.internal (guide D14)
-  local f="$HOME/.omnibase/local.bifrost.yaml" url="$1"
+point_bundle_model() { # url model -> the overlay names the model server and the model it serves (guide D14)
+  local f="$HOME/.omnibase/local.bifrost.yaml" url="$1" model="$2"
   [ -f "$f" ] || return 1
+  # An overlay the developer already pointed somewhere is theirs; only the
+  # untouched template is rewritten. The model is written from the lab's facts,
+  # never assumed to be what the template happens to carry.
   grep -q '&model_endpoint "http://host.docker.internal' "$f" || return 0
   cp -p "$f" "$f.pre-onboarding.$STAMP"
-  sed -i '' "s#&model_endpoint \"http://host.docker.internal[^\"]*\"#\\&model_endpoint \"$url\"#" "$f"
+  sed -i '' -e "s#&model_endpoint \"http://host.docker.internal[^\"]*\"#\\&model_endpoint \"$url\"#" \
+    -e "s#served_model_id: \"[^\"]*\"#served_model_id: \"$model\"#" "$f"
+}
+
+# A tenant on the stack means every delegation runs on a key registered for that
+# tenant and nothing else, so the stack only gets one when a key was chosen.
+STACK_TENANT_CHANGED=0
+ensure_stack_tenant() {
+  local out
+  out="$(make -s -C "$WORKSPACE/omnibase_infra" tenant-local 2>&1)" || { printf '%s\n' "$out" >>"$LOG"; return 1; }
+  printf '%s\n' "$out" >>"$LOG"
+  case "$out" in *"Added ONEX_TENANT_ID"*) STACK_TENANT_CHANGED=1 ;; esac
+  return 0
+}
+
+# Your key goes from your onex store into the stack's own store by a pipe: never
+# an argument, an environment variable or a file.
+register_key_in_stack() { # provider
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$1" <<'PY' | make -s -C "$WORKSPACE/omnibase_infra" secret-local PROVIDER="$1"
+import asyncio, sys
+from omnimarket.inference.local_byok_credential_adapter import LocalByokCredentialStore
+value = asyncio.run(LocalByokCredentialStore().get_secret(f"llm.{sys.argv[1]}.api_key"))
+if not value:
+    sys.exit(3)
+sys.stdout.write(value)
+PY
+}
+
+stack_delegate() { # -> stdout: the run's JSON; it names the backend that answered
+  local out
+  out="$(make -s -C "$WORKSPACE/omnibase_infra" delegate-local DELEGATE_FLAGS=--json PROMPT="Reply with exactly one word: hello" 2>>"$LOG")" || return 1
+  out="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
+  [ "$(receipt_field "$out" status)" = "success" ] || { printf '%s\n' "$out" >>"$LOG"; return 1; }
+  printf '%s\n' "$out"
 }
 
 phase6() {
@@ -1238,8 +1292,15 @@ phase6() {
     say "  The local stack is already there; checking it instead of rebuilding it."
   else
     step "make local-env" make -C "$WORKSPACE/omnibase_infra" local-env || phase_fail "see the log for make local-env's message"
-    step "point the stack at the lab model server" point_bundle_model "$(lab_fact lab_model_url)" ||
-      phase_fail "set model_endpoint in ~/.omnibase/local.bifrost.yaml by hand, then run this again"
+    step "point the stack at the lab model server" point_bundle_model "$(lab_fact lab_model_url)" "$(lab_fact lab_model_name)" ||
+      phase_fail "set model_endpoint and served_model_id in ~/.omnibase/local.bifrost.yaml by hand, then run this again"
+  fi
+  # The key path: the stack serves a tenant of its own and holds your key for it.
+  if [ "$MODEL_CHOICE" != "none" ]; then
+    step "give the stack a tenant for your key" ensure_stack_tenant ||
+      phase_fail "run 'make tenant-local' in omnibase_infra, then run this again"
+  fi
+  if [ "$STACK_RUNNING" -eq 0 ] || [ "$STACK_TENANT_CHANGED" -eq 1 ]; then
     say "  Building and starting the local stack (make up-local)…"
     retry "make up-local" nice -n 10 make -C "$WORKSPACE/omnibase_infra" up-local ||
       phase_fail "see the log; 'make status-local' from omnibase_infra shows what is not up"
@@ -1247,8 +1308,26 @@ phase6() {
   say "  Waiting for the stack to report healthy (a cold boot takes several minutes)…"
   wait_until "the local stack to become healthy" 900 15 stack_healthy ||
     phase_fail "run 'make status-local' in omnibase_infra; if the main kernel is still provisioning topics, wait and run this again"
-  retry "make delegate-local" make -C "$WORKSPACE/omnibase_infra" delegate-local PROMPT="Reply with exactly one word: hello" ||
+  if [ "$MODEL_CHOICE" != "none" ]; then
+    step "register your $MODEL_CHOICE key in the stack's own store" register_key_in_stack "$MODEL_CHOICE" ||
+      phase_fail "run 'make secret-local PROVIDER=$MODEL_CHOICE' in omnibase_infra and paste the key, then run this again"
+    sleep 10   # the tenant credentials projection turns the registration into your route
+  fi
+  retry_capture "one delegation through the stack" stack_delegate ||
     phase_fail "the stack is up but the delegation failed; see the log"
+  local served; served="$(accepted_backend "$CAPTURED")"; CAPTURED=""
+  if [ "$MODEL_CHOICE" != "none" ]; then
+    # A delegation that falls through to the lab model still reports success, so
+    # the accepted backend is what proves the key was used.
+    case "$served" in
+      "byok-$MODEL_CHOICE"*) say "  Answered by your $MODEL_CHOICE key ($served)." ;;
+      *) FAILED_STEP="check the delegation went to your $MODEL_CHOICE key"
+         LAST_ERR="the answer came from ${served:-no backend}, not byok-$MODEL_CHOICE"
+         phase_fail "the key is registered but did not route; see 'make status-local' and the runtime logs" ;;
+    esac
+  else
+    say "  Answered by ${served:-an unnamed backend}."
+  fi
   phase_pass "stack healthy, one delegation answered (stop it with 'make down-local' from the checkout that started it)"
 }
 
