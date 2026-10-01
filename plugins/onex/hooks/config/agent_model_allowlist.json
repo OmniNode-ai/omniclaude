@@ -21,10 +21,7 @@
     "model.",
     "",
     "Fable is absent on purpose (memory feedback_fable_foreground_orchestration_only):",
-    "Fable is a foreground-orchestration model and is banned for background work.",
-    "",
-    "Haiku is absent on purpose (operator ruling OMN-17427, 2026-10-01): trivial",
-    "text work goes to `onex delegate` (local lab models) instead."
+    "Fable is a foreground-orchestration model and is banned for background work."
   ],
   "allowed_models": [
     "opus",
