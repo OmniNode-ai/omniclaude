@@ -365,3 +365,30 @@ def test_the_decision_record_is_uploaded_even_on_a_refusal() -> None:
     )
     assert upload.get("if") == "always()"
     assert upload["with"]["path"].startswith(".runner-route/")
+
+
+def test_the_sync_is_bounded_per_attempt_and_retried_with_a_job_local_cache() -> None:
+    """OMN-20264: a stalled download must not consume the whole job budget.
+
+    omnibase_core run 36826579345 attempt 1 died at the 10 minute job timeout
+    in this step while attempt 2 passed. Each attempt is bounded, there are up
+    to three, and the uv cache directory is fixed so a retry reuses wheels an
+    earlier attempt finished. The cross-run cache stays off (see the test on
+    ephemeral runners).
+    """
+    steps = _route_job()["steps"]
+    sync = next(
+        s for s in steps if isinstance(s, dict) and "uv sync" in str(s.get("run", ""))
+    )
+    run = str(sync["run"])
+    match = re.search(r"timeout\s+(?:--\S+\s+)*(\d+)\s+uv sync --frozen --no-dev", run)
+    assert match, "the sync must run under a per-attempt `timeout`"
+    per_attempt = int(match.group(1))
+    attempts = re.search(r"attempts=(\d+)", run)
+    assert attempts, "the sync must declare its attempt count"
+    assert 1 < int(attempts.group(1)) <= 3
+    assert (
+        per_attempt * int(attempts.group(1)) < int(_route_job()["timeout-minutes"]) * 60
+    )
+    assert "UV_CACHE_DIR" in sync.get("env", {})
+    assert "exit 1" in run, "exhausted attempts must fail the step"

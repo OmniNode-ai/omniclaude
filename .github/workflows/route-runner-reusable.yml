@@ -166,9 +166,35 @@ jobs:
       # `uv run` includes the dev group by default, so a run whose flags differ
       # from its sync re-resolves and installs the difference inside the step
       # that was supposed to just decide.
+      #
+      # BOUNDED, RETRIED, AND WARM ON RETRY (OMN-20264). On omnibase_core run
+      # 36826579345 attempt 1 this step stalled downloading about 65 MB of
+      # PyPI wheels and the job died at its 10 minute timeout, while attempt 2
+      # of the same run passed. A stall is not a reason to spend the whole job
+      # budget: each attempt gets 150 seconds, there are up to three attempts (450 s, inside the
+      # job budget, which is not raised),
+      # and a stalled attempt is killed and retried instead of waited on.
+      # UV_CACHE_DIR is pinned to one directory so a wheel a failed attempt
+      # finished is not downloaded again by the next. That cache lives and dies
+      # with this job on purpose: the test beside the setup-uv step records why
+      # a cross-run cache save is a net loss on ephemeral runners (34 s of
+      # every 155 s, never read).
       - name: Sync the routing node's environment
         working-directory: .runner-route
-        run: uv sync --frozen --no-dev
+        env:
+          UV_CACHE_DIR: ${{ runner.temp }}/runner-route-uv-cache
+          UV_HTTP_TIMEOUT: "60"
+        run: |
+          set -uo pipefail
+          attempts=3
+          for attempt in $(seq 1 "${attempts}"); do
+            if timeout --kill-after=10 150 uv sync --frozen --no-dev; then
+              exit 0
+            fi
+            echo "::warning title=Runner route sync::attempt ${attempt} of ${attempts} failed or exceeded 150 seconds"
+          done
+          echo "::error title=Runner route sync failed::uv sync did not complete in ${attempts} attempts of 150 seconds"
+          exit 1
 
       - name: Decide runs-on
         id: decide
@@ -236,9 +262,11 @@ jobs:
           # would make every consuming job fail to SCHEDULE -- a failure with no
           # log to read.
           if [ ! -s "${GITHUB_OUTPUT}" ] || ! grep -q '^runs_on=' "${GITHUB_OUTPUT}"; then
-            echo 'runs_on=["ubuntu-latest"]' >> "${GITHUB_OUTPUT}"
-            echo 'decision=hosted' >> "${GITHUB_OUTPUT}"
-            echo 'reason=probe_error:module_unavailable' >> "${GITHUB_OUTPUT}"
+            {
+              echo 'runs_on=["ubuntu-latest"]'
+              echo 'decision=hosted'
+              echo 'reason=probe_error:module_unavailable'
+            } >> "${GITHUB_OUTPUT}"
           fi
           # THE REFUSAL, AFTER THE FLOOR. Exit 3 means the placement is
           # forbidden rather than merely unavailable: a private caller whose
