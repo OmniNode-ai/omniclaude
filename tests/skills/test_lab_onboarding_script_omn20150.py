@@ -155,7 +155,7 @@ def test_no_containers_is_honoured(tmp_path: Path) -> None:
         ONBOARD_TEST_RAM_GB="32",
         ONBOARD_TEST_CPUS="10",
     )
-    assert "No local Docker: you said no" in result.stdout
+    assert "No local Docker: --no-containers was passed" in result.stdout
 
 
 @macos_only

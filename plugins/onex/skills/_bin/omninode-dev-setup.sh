@@ -784,7 +784,7 @@ phase0() {
   if [ "$MODE2_OK" -eq 1 ]; then
     case "$WANT_CONTAINERS" in
       1) ;;
-      0) MODE2_OK=0; MODE2_WHY=" you said no" ;;
+      0) MODE2_OK=0; MODE2_WHY=" --no-containers was passed" ;;
       *)
         if [ "$PREFLIGHT_ONLY" -eq 1 ]; then
           MODE2_OFFERED=1
