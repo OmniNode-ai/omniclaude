@@ -12,6 +12,7 @@ stock macOS /bin/bash 3.2 (the D4 failure class).
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -570,3 +571,114 @@ def test_phase7_installs_the_full_onex_tree_and_omni_where_reachable() -> None:
     )
     assert "for p in omni onex-overlays" in text
     assert "internal_plugins_reachable" in text
+
+
+def _ci_bus_harness(tmp_path: Path, facts: str, issuer_port: int | None) -> str:
+    """ci_bus_identity with the machine-touching helpers stubbed out."""
+    facts_file = tmp_path / "facts.yaml"
+    url = f"http://127.0.0.1:{issuer_port}" if issuer_port else ""
+    facts_file.write_text(facts.replace("URL", url))
+    return (
+        "REFUSED=86; REISSUE=0; CI_BUS_NOTE=; ISSUED_PRINCIPAL=\n"
+        f"LOG={tmp_path}/log; ONBOARD_LAB_FACTS={facts_file}\n"
+        + _functions("lab_fact", "request_identity", "refusal_next", "ci_bus_identity")
+        + '\nsay() { echo "$*"; }\n'
+        'phase_fail() { echo "FAIL: $*"; exit 1; }\n'
+        "lane_identity_stored() { return 1; }\n"
+        'retry_capture() { shift; CAPTURED="$("$@")"; }\n'
+        'step() { shift; "$@"; }\n'
+        'store_identity() { ISSUED_PRINCIPAL=$(printf \'%s\' "$CAPTURED" | jq -r .principal); echo "stored for $1"; }\n'
+        'retry() { shift; "$@"; }\n'
+        'lab_work_hosts() { echo "hosts on $1"; }\n'
+        'ci_bus_identity; echo "note=$CI_BUS_NOTE"\n'
+    )
+
+
+def test_the_ci_bus_login_is_skipped_until_the_lab_offers_it(tmp_path: Path) -> None:
+    # A port nothing listens on: the issuer is not deployed yet.
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    harness = _ci_bus_harness(
+        tmp_path, "lane: dev\nci_bus_lane: work-lane\nci_bus_issuer_url: URL\n", port
+    )
+    out = subprocess.run(
+        ["/bin/bash", "-c", harness],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    ).stdout
+    assert "the lab does not offer it yet; skipped" in out
+    assert "note=no CI bus login yet" in out
+    assert "FAIL" not in out
+
+
+def test_an_older_workspace_without_ci_bus_facts_is_skipped(tmp_path: Path) -> None:
+    harness = _ci_bus_harness(tmp_path, "lane: dev\n", None)
+    out = subprocess.run(
+        ["/bin/bash", "-c", harness],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    ).stdout
+    assert "declares no CI bus issuer; skipped" in out
+    assert "FAIL" not in out
+
+
+def test_the_ci_bus_login_is_requested_for_its_own_lane_and_proven(
+    tmp_path: Path,
+) -> None:
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    asked: list[dict[str, str]] = []
+
+    class Issuer(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(200)
+            self.send_header("content-length", "2")
+            self.end_headers()
+            self.wfile.write(b"{}")
+
+        def do_POST(self) -> None:
+            asked.append(
+                json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            )
+            issued = {
+                "principal": "dev-x-mac",
+                "password": "p",  # pragma: allowlist secret
+            }
+            body = json.dumps(issued).encode()
+            self.send_response(201)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Issuer)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        harness = _ci_bus_harness(
+            tmp_path,
+            "lane: dev\nci_bus_lane: work-lane\nci_bus_issuer_url: URL\n",
+            server.server_port,
+        )
+        out = subprocess.run(
+            ["/bin/bash", "-c", harness],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        ).stdout
+    finally:
+        server.shutdown()
+    assert [a["lane"] for a in asked] == ["work-lane"]
+    assert "stored for work-lane" in out
+    assert "Stored bus identity 'dev-x-mac' for lane work-lane." in out
+    assert "hosts on work-lane" in out
+    assert "note=CI bus login for lab work stored" in out

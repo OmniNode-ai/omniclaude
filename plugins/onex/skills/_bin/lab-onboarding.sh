@@ -14,7 +14,8 @@
 #   2 Workspace          the canonical clones, OMNIBASE_PATH (and legacy OMNI_HOME), PATH
 #   3 Tailnet            Tailscale installed and signed in to the OmniNode tailnet
 #   4 onex + model key   dispatch venv, onex, local identity, your own key, one delegation on it
-#   5 Bus identity       this machine's lab principal, issued automatically; one lane delegation
+#   5 Bus identity       this machine's lab principal, issued automatically; one lane delegation;
+#                        and its CI bus login for lab work, once the lab offers one
 #   6 Docker             optional, in addition to the lab: asked once after preflight;
 #                        Docker Desktop installed, or started if stopped, then the stack
 #   7 Claude Code      the full onex plugin from your omniclaude clone, and omni and
@@ -1095,8 +1096,8 @@ PY
 
 broker_reachable() { local hp="$1"; nc -z -G 5 "${hp%:*}" "${hp##*:}"; }
 
-lane_identity_stored() { # a stored by-reference identity in ~/.onex (onex auth lane-login)
-  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$(lab_fact lane)" <<'PY' 2>>"$LOG"
+lane_identity_stored() { # [lane] -> a stored by-reference identity in ~/.onex (onex auth lane-login)
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "${1:-$(lab_fact lane)}" <<'PY' 2>>"$LOG"
 import sys
 from pathlib import Path
 from omnibase_infra.cli.store_lane_credential import StoreLaneCredential
@@ -1108,12 +1109,13 @@ PY
 # refusing this machine (a tagged device, a login outside the allowed domains,
 # too many machines on one login): its reason goes to the log and the call exits
 # $REFUSED. No connection, or a 5xx, exits 1 and is retried.
-request_identity() {
+request_identity() { # [issuer url] [lane]: the dev lane's by default
+  local url="${1:-$(lab_fact principal_issuer_url)}" lane="${2:-$(lab_fact lane)}"
   local device out code body
   device="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
-  out="$(curl -sS -m 60 -w '\n%{http_code}' -X POST "$(lab_fact principal_issuer_url)/v1/principals" \
+  out="$(curl -sS -m 60 -w '\n%{http_code}' -X POST "$url/v1/principals" \
     -H 'content-type: application/json' \
-    --data "{\"lane\":\"$(lab_fact lane)\",\"device\":\"$device\"}")" || return 1
+    --data "{\"lane\":\"$lane\",\"device\":\"$device\"}")" || return 1
   code="${out##*$'\n'}"
   body="${out%$'\n'*}"
   out=""
@@ -1135,14 +1137,14 @@ refusal_next() {
   esac
 }
 
-store_identity() { # uses CAPTURED
-  local principal password
+store_identity() { # [lane]; uses CAPTURED
+  local lane="${1:-$(lab_fact lane)}" principal password
   principal="$(printf '%s' "$CAPTURED" | jq -r '.principal // empty')"
   password="$(printf '%s' "$CAPTURED" | jq -r '.password // empty')"
   CAPTURED=""
   [ -n "$principal" ] && [ -n "$password" ] || { echo "the issuer's answer had no principal or password" >&2; return 1; }
   ISSUED_PRINCIPAL="$principal"
-  printf '%s' "$password" | onex_run auth lane-login --lane "$(lab_fact lane)" \
+  printf '%s' "$password" | onex_run auth lane-login --lane "$lane" \
     --sasl-username "$principal" --sasl-password-stdin
   local rc=$?
   password=""
@@ -1163,6 +1165,51 @@ lane_delegate() { # from the workspace, as the local-dev guide requires; prints 
   out="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
   [ "$(receipt_field "$out" status)" = "success" ] || { printf '%s\n' "$out" >>"$LOG"; return 1; }
   printf '%s\n' "$out"
+}
+
+# The CI bus that lab work runs on (`onex lab-work run`, the omni plugin's
+# lab-run --via bus) has its own broker and its own issuer. Onboarding asks it
+# only when it answers: until the operator deploys it, the run says so and goes on.
+lab_work_hosts() { # lane: reads the pool's capacity advertisements as this machine's login
+  # The workspace wrapper has no lab-work command; the omni plugin's lab-run
+  # calls the module from the dispatch venv the same way.
+  (cd "$WORKSPACE" && env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/python" -m omnimarket.lab_work.cli \
+    hosts --omnibase-path "$WORKSPACE" --bus kafka --bus-lane "$1" --window 25)
+}
+
+CI_BUS_NOTE=""
+ci_bus_identity() {
+  local url lane
+  url="$(lab_fact ci_bus_issuer_url)"
+  lane="$(lab_fact ci_bus_lane)"
+  if [ -z "$url" ] || [ -z "$lane" ]; then
+    CI_BUS_NOTE="no CI bus login (this workspace declares no CI bus issuer; update omnibase_infra)"
+    say "  CI bus login for lab work: this workspace declares no CI bus issuer; skipped."
+    return 0
+  fi
+  if [ "$REISSUE" -eq 0 ] && lane_identity_stored "$lane"; then
+    say "  A bus identity for lane $lane is already stored; keeping it."
+  elif ! curl -fsS -m 10 "$url/healthz" >/dev/null 2>>"$LOG"; then
+    CI_BUS_NOTE="no CI bus login yet (the lab does not offer it yet)"
+    say "  CI bus login for lab work: the lab does not offer it yet; skipped. Running this"
+    say "    again once it does picks it up; nothing else is redone."
+    return 0
+  else
+    say "  Requesting this machine's CI bus login (lab work runs there)…"
+    retry_capture "request a CI bus login" request_identity "$url" "$lane"
+    case $? in
+      0) ;;
+      "$REFUSED") phase_fail "the lab's CI bus identity service refused this machine: $(refusal_next)" ;;
+      *) phase_fail "the lab's CI bus identity service answered its health check but not the request; say so on the team channel, then run this again" ;;
+    esac
+    step "store the CI bus login" store_identity "$lane" ||
+      phase_fail "see the log; the CI bus login was not stored"
+    say "  Stored bus identity '$ISSUED_PRINCIPAL' for lane $lane."
+  fi
+  say "  Reading the lab-work pool on the CI bus…"
+  retry "read the lab-work pool on lane $lane" lab_work_hosts "$lane" ||
+    phase_fail "run '.onex-dispatch-venv/bin/python -m omnimarket.lab_work.cli hosts --omnibase-path . --bus-lane $lane' from $WORKSPACE to see the error"
+  CI_BUS_NOTE="CI bus login for lab work stored"
 }
 
 phase5() {
@@ -1202,7 +1249,8 @@ phase5() {
     say "  Your $MODEL_CHOICE key was not used on the lab lane: the lane does not bind a delegation to your tenant yet."
     say "  Your key is used by the containers in phase 6, where your own tenant is bound."
   fi
-  phase_pass "lane $(lab_fact lane) answered"
+  ci_bus_identity
+  phase_pass "lane $(lab_fact lane) answered; $CI_BUS_NOTE"
 }
 
 # ===========================================================================
@@ -1525,6 +1573,9 @@ phase8() {
   check "a delegation row in the local store" sqlite_rows
   check "onex metering reads it" onex_run metering
   check "lab bus identity stored for lane $(lab_fact lane)" lane_identity_stored
+  if [ "$CI_BUS_NOTE" = "CI bus login for lab work stored" ]; then
+    check "CI bus login stored for lane $(lab_fact ci_bus_lane)" lane_identity_stored "$(lab_fact ci_bus_lane)"
+  fi
   check "the full onex plugin installed in Claude Code" plugin_installed onex@omninode-tools-dev
   if [ "$MODE2_OK" -eq 1 ]; then check "local stack healthy" stack_healthy; fi
   if [ -n "$AMBIENT_FOUND" ]; then

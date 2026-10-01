@@ -54,7 +54,7 @@ its prompts, then reports each phase to the developer the moment it finishes.
 | 2 | Workspace: the canonical clones, and OMNIBASE_PATH and PATH in the shell profile | yes |
 | 3 | Tailnet: Tailscale installed and signed in | yes |
 | 4 | onex, the local identity, one model path, one delegation | yes |
-| 5 | This machine's lab bus identity, issued automatically; one delegation on the lab dev lane | yes |
+| 5 | This machine's lab bus identity, issued automatically; one delegation on the lab dev lane; and its CI bus login for lab work, once the lab offers one (skipped, and said so, until then) | yes |
 | 6 | Docker (optional, in addition to the lab): only if the developer says yes to the one question; Docker Desktop installed, or started if stopped, then the local stack | yes |
 | 7 | Claude Code plugins: the full onex tree (`onex@omninode-tools-dev`, from the omniclaude clone), and `omni` and `onex-overlays` when this GitHub login can read omniclaude-internal and an SSH key is loaded | yes |
 | 8 | Verify | no |
