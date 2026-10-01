@@ -413,7 +413,7 @@ on run argv
 end run
 OSA
 )"
-    if [ "$SECRET" = "__ONBOARDING_QUIT__" ]; then SECRET=""; QUIT_REQUESTED=1; fi
+    if [ "$SECRET" = "__ONBOARDING_QUIT__" ]; then SECRET=""; QUIT_REQUESTED=1; fi  # pragma: allowlist secret (a quit marker, not a credential)
   fi
 }
 
