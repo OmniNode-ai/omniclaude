@@ -535,6 +535,7 @@ _TEMPLATE_OVERLAY = (
 )
 
 
+@macos_only  # the script edits with BSD sed (-i '')
 @pytest.mark.parametrize("theirs", [False, True])
 def test_docker_with_ollama_points_only_the_untouched_template_at_it(
     tmp_path: Path, theirs: bool
