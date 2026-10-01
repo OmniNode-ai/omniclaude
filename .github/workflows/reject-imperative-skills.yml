@@ -53,7 +53,6 @@ jobs:
       receipts-dir: drift/dod_receipts
 
   scan-imperative-skills:
-    needs: occ-preflight
     name: gate / reject-imperative-skill-patterns
     runs-on: >-
       ${{

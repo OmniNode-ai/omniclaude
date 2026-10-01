@@ -57,8 +57,6 @@ jobs:
       receipts-dir: drift/dod_receipts
 
   canonical-inference-gate:
-    needs: occ-preflight
-    if: always()
     name: Canonical Inference Gate
     runs-on: ubuntu-latest
     steps:
