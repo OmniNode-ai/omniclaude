@@ -1484,11 +1484,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve pinned omnimarket rev from uv.lock (OMN-20001)
+        id: omnimarket_pin
+        run: |
+          rev="$(grep -m1 -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | grep -oE '[0-9a-f]{40}')"
+          test -n "${rev}" || { echo "no omnimarket rev pinned in uv.lock" >&2; exit 1; }
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout canonical omnimarket registry
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnimarket
-          ref: dev
+          # OMN-20001: the omnimarket rev this repo's uv.lock pins, not live dev
+          ref: ${{ steps.omnimarket_pin.outputs.rev }}
           path: _registry/omnimarket
           persist-credentials: false
 
@@ -1543,13 +1551,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Resolve pinned omnimarket rev from uv.lock (OMN-20001)
+        id: omnimarket_pin
+        run: |
+          rev="$(grep -m1 -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | grep -oE '[0-9a-f]{40}')"
+          test -n "${rev}" || { echo "no omnimarket rev pinned in uv.lock" >&2; exit 1; }
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout canonical omnimarket registry
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnimarket
-          # One-time landing order: pinned to the omnimarket branch that carries
-          # the typed work-ledger topics; restored to dev in the next commit.
-          ref: codex/omn-20001-m3-fg2
+          # OMN-20001: the omnimarket rev this repo's uv.lock pins, not a
+          # branch; a new omnimarket version moves here via the lock bump.
+          ref: ${{ steps.omnimarket_pin.outputs.rev }}
           path: _registry/omnimarket
 
       - name: Install uv
