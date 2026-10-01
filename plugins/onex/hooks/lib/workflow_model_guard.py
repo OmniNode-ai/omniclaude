@@ -97,6 +97,23 @@ alias are invisible to a scanner looking for ``agent(``, and a control that
 only holds against the accident it was built for is not a control. Measured on
 the live corpus of 1895 workflow scripts, no real script carries one.
 
+Routing contract (OMN-17427)
+----------------------------
+A named model is not yet a justified one. The sibling contract_agent_routing.yaml
+carries the task-complexity routing contract (knowledge-base-internal#955): seven scored
+dimensions, bands B0 to B5 with the models and efforts each allows, and the hard
+floors (R=3 or J=3 means Opus at least). Every ``agent()`` options object and
+every ``Agent`` input must carry one line in its prompt or label::
+
+    ROUTE: band=<B> score=<n> dims=S<s>A<a>R<r>V<v>N<n>C<c>J<j> dest=<d> model=<m> effort=<e>
+
+The gate refuses a missing or unparsable ROUTE like a missing model, and a ROUTE
+whose model is not the declared model or not in the band's set, whose effort is
+not in the band's set, whose score is not the sum of its dims, that sits below a
+hard floor, or that sits below the band its score implies. The contract is
+parsed with the standard library only (a strict in-module YAML-subset parser,
+because PyYAML cannot be assumed), on the same fail-closed path.
+
 ``meta.phases[].model`` is informational only and is not inspected: it declares
 UI phase metadata, not the model a dispatched agent runs on. The per-call
 ``model:`` is the only thing that decides where the work executes.
@@ -115,10 +132,13 @@ from typing import Final
 __all__ = [
     "AllowlistError",
     "DEFAULT_ALLOWLIST_PATH",
+    "DEFAULT_ROUTING_CONTRACT_PATH",
     "Finding",
+    "Routing",
     "check_agent_input",
     "check_workflow_script",
     "load_allowlist",
+    "load_routing",
     "render_block_reason",
 ]
 
@@ -127,6 +147,11 @@ __all__ = [
 #: cwd contract (the OMN-16983 lesson).
 DEFAULT_ALLOWLIST_PATH: Final[Path] = (
     Path(__file__).resolve().parent.parent / "config" / "agent_model_allowlist.json"
+)
+
+#: Shipped routing contract (OMN-17427), a sibling of the allowlist.
+DEFAULT_ROUTING_CONTRACT_PATH: Final[Path] = (
+    Path(__file__).resolve().parent.parent / "config" / "contract_agent_routing.yaml"
 )
 
 #: Characters that may appear in a JS identifier. Used to reject ``subagent(``
@@ -177,6 +202,39 @@ FIX_LINE: Final[str] = (
     "Fix: give every agent() options object an explicit model: "
     "'opus' | 'sonnet' | 'haiku'."
 )
+
+#: The one-line remedy for a missing or refused ROUTE line (OMN-17427).
+ROUTE_FIX_LINE: Final[str] = (
+    "Fix: carry one line in the prompt or label: ROUTE: band=<B> score=<n> "
+    "dims=S<s>A<a>R<r>V<v>N<n>C<c>J<j> dest=<d> model=<m> effort=<e> "
+    "(band B2 to B5 for a Claude agent; the model and effort must be in the "
+    "band's set, and R=3 or J=3 needs band B4 or B5)."
+)
+
+_ROUTE_MARKER: Final[str] = "ROUTE:"
+
+#: ``dest`` stops at whitespace or a backslash, and ``model``/``effort`` at the
+#: first character outside their alphabet, so a JS ``\n`` escape ends a token.
+_ROUTE_RE: Final[re.Pattern[str]] = re.compile(
+    r"ROUTE: band=(?P<band>B1c|B[0-5]) score=(?P<score>\d+) "
+    r"dims=S(?P<S>[0-3])A(?P<A>[0-3])R(?P<R>[0-3])V(?P<V>[0-3])"
+    r"N(?P<N>[0-3])C(?P<C>[0-3])J(?P<J>[0-3]) "
+    r"dest=(?P<dest>[^\s\\]+) model=(?P<model>[A-Za-z0-9_.-]+) "
+    r"effort=(?P<effort>[A-Za-z0-9_.-]+)"
+)
+
+_DIMENSION_KEYS: Final[tuple[str, ...]] = tuple("SARVNCJ")
+_BAND_NAMES: Final[tuple[str, ...]] = ("B0", "B1", "B1c", "B2", "B3", "B4", "B5")
+#: B1c is a typed-choice variant of B1, so it ranks with it.
+_BAND_RANK: Final[dict[str, int]] = {
+    "B0": 0,
+    "B1": 1,
+    "B1c": 1,
+    "B2": 2,
+    "B3": 3,
+    "B4": 4,
+    "B5": 5,
+}
 
 _AGENT_TOOL_FILE: Final[str] = "<Agent tool call>"
 
@@ -260,6 +318,367 @@ def load_allowlist(path: Path | None = None) -> frozenset[str]:
 
 def _allowed(allowlist: frozenset[str]) -> str:
     return ", ".join(sorted(allowlist))
+
+
+# ---------------------------------------------------------------------------
+# Routing contract
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Dimension:
+    key: str
+    name: str
+    max_value: int
+
+
+@dataclass(frozen=True, slots=True)
+class Band:
+    name: str
+    score_min: int | None
+    score_max: int | None
+    models: frozenset[str]
+    efforts: frozenset[str]
+    timeout_s: int
+    max_concurrent: int | None
+    destination: str
+
+
+@dataclass(frozen=True, slots=True)
+class HardFloor:
+    dimension: str
+    value: int
+    min_band: str
+
+
+@dataclass(frozen=True, slots=True)
+class Routing:
+    """The routing contract: dimensions, bands and the hard floors."""
+
+    dimensions: tuple[Dimension, ...]
+    bands: dict[str, Band]
+    hard_floors: tuple[HardFloor, ...]
+
+
+def _routing_error(path: Path, detail: str) -> AllowlistError:
+    return AllowlistError(f"routing contract at {path}: {detail}")
+
+
+def _string_set(raw: object, path: Path, where: str) -> frozenset[str]:
+    if not isinstance(raw, list):
+        raise _routing_error(path, f"{where} must be a list")
+    out: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, str) or not entry.strip():
+            raise _routing_error(path, f"{where} has a non-string or empty entry")
+        out.add(entry.strip())
+    return frozenset(out)
+
+
+def _optional_int(raw: object, path: Path, where: str) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
+        raise _routing_error(path, f"{where} must be null or a non-negative integer")
+    return raw
+
+
+_INT_RE: Final[re.Pattern[str]] = re.compile(r"\d+")
+
+
+def _yaml_scalar(cell: str, path: Path, lineno: int) -> object:
+    """One scalar of the contract subset: quoted string, integer, null, bare word."""
+    if cell.startswith('"'):
+        if len(cell) < 2 or not cell.endswith('"') or '"' in cell[1:-1]:
+            raise _routing_error(path, f"line {lineno}: malformed quoted string")
+        return cell[1:-1]
+    if " #" in cell or cell.startswith(("'", "{", "&", "*", "!", "|", ">", "[")):
+        raise _routing_error(path, f"line {lineno}: unsupported scalar {cell!r}")
+    if cell == "null":
+        return None
+    if _INT_RE.fullmatch(cell):
+        return int(cell)
+    return cell
+
+
+def _yaml_value(cell: str, path: Path, lineno: int) -> object:
+    """A value after ``key:`` or ``-``: a one-line flow list or a scalar."""
+    if cell.startswith("["):
+        if not cell.endswith("]"):
+            raise _routing_error(path, f"line {lineno}: unterminated flow list")
+        inner = cell[1:-1].strip()
+        if not inner:
+            return []
+        return [_yaml_scalar(part.strip(), path, lineno) for part in inner.split(",")]
+    return _yaml_scalar(cell, path, lineno)
+
+
+def _parse_contract_yaml(text: str, path: Path) -> object:
+    """Parse the contract's YAML subset with the standard library only.
+
+    The fail-closed path cannot depend on PyYAML, so this reads exactly what
+    ``contract_agent_routing.yaml`` uses: ``#`` comment and blank lines,
+    two-space block mappings, block sequences of scalars or of mappings, one-line
+    flow lists of scalars, double-quoted strings, non-negative integers, ``null``
+    and bare words. Anything else, a tab, a duplicate key or a bad indent raises
+    ``AllowlistError`` rather than being guessed at.
+    """
+    lines: list[tuple[int, int, str]] = []
+    for lineno, raw in enumerate(text.splitlines(), start=1):
+        if "\t" in raw:
+            raise _routing_error(path, f"line {lineno}: tab characters are not allowed")
+        body = raw.strip()
+        if not body or body.startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        if indent % 2:
+            raise _routing_error(path, f"line {lineno}: indent must be a multiple of 2")
+        lines.append((lineno, indent, body))
+    if not lines:
+        raise _routing_error(path, "is empty")
+
+    pos = 0
+
+    def parse_block(indent: int) -> object:
+        nonlocal pos
+        if lines[pos][2].startswith("- ") or lines[pos][2] == "-":
+            return parse_sequence(indent)
+        return parse_mapping(indent)
+
+    def parse_mapping(indent: int, first: tuple[int, str] | None = None) -> object:
+        nonlocal pos
+        out: dict[str, object] = {}
+        pending = first
+        while True:
+            if pending is not None:
+                lineno, body = pending
+                pending = None
+            else:
+                if pos >= len(lines):
+                    return out
+                lineno, line_indent, body = lines[pos]
+                if line_indent < indent:
+                    return out
+                if line_indent > indent:
+                    raise _routing_error(path, f"line {lineno}: unexpected indent")
+                if body.startswith("-"):
+                    return out
+                pos += 1
+            key, sep, rest = body.partition(":")
+            if not sep or not key or key != key.strip() or " " in key:
+                raise _routing_error(path, f"line {lineno}: expected 'key: value'")
+            if key in out:
+                raise _routing_error(path, f"line {lineno}: duplicate key {key!r}")
+            rest = rest.strip()
+            if rest:
+                out[key] = _yaml_value(rest, path, lineno)
+            elif pos < len(lines) and lines[pos][1] > indent:
+                out[key] = parse_block(lines[pos][1])
+            elif (
+                pos < len(lines)
+                and lines[pos][1] == indent
+                and lines[pos][2].startswith("- ")
+            ):
+                out[key] = parse_sequence(indent)
+            else:
+                out[key] = None
+
+    def parse_sequence(indent: int) -> object:
+        nonlocal pos
+        items: list[object] = []
+        while pos < len(lines):
+            lineno, line_indent, body = lines[pos]
+            if line_indent != indent or not (body.startswith("- ") or body == "-"):
+                break
+            pos += 1
+            rest = body[1:].strip()
+            if not rest:
+                raise _routing_error(path, f"line {lineno}: empty sequence item")
+            key, sep, _ = rest.partition(":")
+            if sep and key and " " not in key and not rest.startswith(("[", '"')):
+                items.append(parse_mapping(indent + 2, first=(lineno, rest)))
+            else:
+                items.append(_yaml_value(rest, path, lineno))
+        return items
+
+    first_indent = lines[0][1]
+    if first_indent != 0:
+        raise _routing_error(
+            path, f"line {lines[0][0]}: top level must not be indented"
+        )
+    result = parse_block(0)
+    if pos < len(lines):
+        raise _routing_error(path, f"line {lines[pos][0]}: unparsed content")
+    return result
+
+
+def load_routing(path: Path | None = None) -> Routing:
+    """Read the routing contract (``contract_agent_routing.yaml``).
+
+    Fail-fast like ``load_allowlist``: a missing section, a missing dimension or
+    band, a malformed band, or a hard floor naming an unknown dimension or band
+    raises ``AllowlistError``. A guard that cannot read its contract refuses.
+    """
+    resolved = path if path is not None else DEFAULT_ROUTING_CONTRACT_PATH
+    try:
+        text = resolved.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise _routing_error(resolved, f"not readable: {exc}") from exc
+    parsed = _parse_contract_yaml(text, resolved)
+    if not isinstance(parsed, dict):
+        raise _routing_error(resolved, "must be a mapping")
+
+    raw_dims = parsed.get("dimensions")
+    if not isinstance(raw_dims, list):
+        raise _routing_error(resolved, "has no 'dimensions' list")
+    dimensions: list[Dimension] = []
+    for entry in raw_dims:
+        if not isinstance(entry, dict):
+            raise _routing_error(resolved, "a dimension is not an object")
+        key, name, top = entry.get("key"), entry.get("name"), entry.get("max")
+        if (
+            not isinstance(key, str)
+            or not isinstance(name, str)
+            or isinstance(top, bool)
+            or not isinstance(top, int)
+            or top < 1
+        ):
+            raise _routing_error(resolved, f"malformed dimension {entry!r}")
+        dimensions.append(Dimension(key=key, name=name, max_value=top))
+    if tuple(d.key for d in dimensions) != _DIMENSION_KEYS:
+        raise _routing_error(
+            resolved, f"dimensions must be exactly {''.join(_DIMENSION_KEYS)} in order"
+        )
+
+    raw_bands = parsed.get("bands")
+    if not isinstance(raw_bands, dict):
+        raise _routing_error(resolved, "has no 'bands' object")
+    bands: dict[str, Band] = {}
+    for name in _BAND_NAMES:
+        entry = raw_bands.get(name)
+        if not isinstance(entry, dict):
+            raise _routing_error(resolved, f"band {name} is missing")
+        timeout = entry.get("timeout_s")
+        destination = entry.get("destination")
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, int)
+            or timeout <= 0
+            or not isinstance(destination, str)
+        ):
+            raise _routing_error(resolved, f"band {name} is malformed")
+        bands[name] = Band(
+            name=name,
+            score_min=_optional_int(
+                entry.get("score_min"), resolved, f"{name}.score_min"
+            ),
+            score_max=_optional_int(
+                entry.get("score_max"), resolved, f"{name}.score_max"
+            ),
+            models=_string_set(entry.get("models"), resolved, f"{name}.models"),
+            efforts=_string_set(entry.get("efforts"), resolved, f"{name}.efforts"),
+            timeout_s=timeout,
+            max_concurrent=_optional_int(
+                entry.get("max_concurrent"), resolved, f"{name}.max_concurrent"
+            ),
+            destination=destination,
+        )
+    if extra := set(raw_bands) - set(_BAND_NAMES):
+        raise _routing_error(resolved, f"unknown band(s): {', '.join(sorted(extra))}")
+
+    raw_floors = parsed.get("hard_floors")
+    if not isinstance(raw_floors, list):
+        raise _routing_error(resolved, "has no 'hard_floors' list")
+    floors: list[HardFloor] = []
+    for entry in raw_floors:
+        if not isinstance(entry, dict):
+            raise _routing_error(resolved, "a hard floor is not an object")
+        dim, value, min_band = (
+            entry.get("dimension"),
+            entry.get("value"),
+            entry.get("min_band"),
+        )
+        if (
+            dim not in _DIMENSION_KEYS
+            or isinstance(value, bool)
+            or not isinstance(value, int)
+            or min_band not in _BAND_NAMES
+        ):
+            raise _routing_error(resolved, f"malformed hard floor {entry!r}")
+        floors.append(HardFloor(dimension=dim, value=value, min_band=min_band))
+
+    return Routing(dimensions=tuple(dimensions), bands=bands, hard_floors=tuple(floors))
+
+
+def _score_band_rank(routing: Routing, score: int) -> int:
+    """Rank of the band whose score range holds ``score`` (0 when none does)."""
+    for band in routing.bands.values():
+        if (
+            band.score_min is not None
+            and band.score_max is not None
+            and band.score_min <= score <= band.score_max
+            and band.name != "B1c"
+        ):
+            return _BAND_RANK[band.name]
+    return 0
+
+
+def _route_problem(
+    routing: Routing, route_text: str, declared_model: str
+) -> str | None:
+    """Why the ROUTE line in ``route_text`` is refused, or ``None`` when it holds."""
+    start = route_text.find(_ROUTE_MARKER)
+    if start == -1:
+        return (
+            "the ROUTE line is missing, so the task's complexity band was never "
+            "scored; the model choice is unjustified"
+        )
+    match = _ROUTE_RE.match(route_text, start)
+    if match is None:
+        return (
+            "the ROUTE line is unparsable (expected 'ROUTE: band=<B> score=<n> "
+            "dims=S<s>A<a>R<r>V<v>N<n>C<c>J<j> dest=<d> model=<m> effort=<e>')"
+        )
+    band_name = match["band"]
+    score = int(match["score"])
+    dims = {key: int(match[key]) for key in _DIMENSION_KEYS}
+    if score != sum(dims.values()):
+        return f"ROUTE score={score} is not the sum of its dims ({sum(dims.values())})"
+    route_model = match["model"]
+    if route_model != declared_model:
+        return (
+            f"ROUTE model={route_model} does not match declared model "
+            f"{declared_model!r}"
+        )
+    band = routing.bands[band_name]
+    rank = _BAND_RANK[band_name]
+    for floor in routing.hard_floors:
+        if dims[floor.dimension] >= floor.value and rank < _BAND_RANK[floor.min_band]:
+            return (
+                f"hard floor: {floor.dimension}={dims[floor.dimension]} needs "
+                f"band {floor.min_band} or above, but ROUTE says band {band_name}"
+            )
+    if rank < _score_band_rank(routing, score):
+        return (
+            f"band {band_name} is below the band score {score} implies; "
+            "a task is never routed beneath its score"
+        )
+    if not band.models:
+        return (
+            f"band {band_name} dispatches no Claude agent (destination: "
+            f"{band.destination}); an agent() or Agent call needs band B2 to B5"
+        )
+    if route_model not in band.models:
+        return (
+            f"band {band_name} allows only: {_allowed(band.models)}; "
+            f"ROUTE model {route_model!r} is not in that set"
+        )
+    if match["effort"] not in band.efforts:
+        return (
+            f"ROUTE effort={match['effort']} is not allowed for band "
+            f"{band_name} (allowed: {_allowed(band.efforts)})"
+        )
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -828,11 +1247,13 @@ def check_workflow_script(
     allowlist: frozenset[str],
     *,
     filename: str = "<workflow script>",
+    routing: Routing | None = None,
 ) -> list[Finding]:
     """Refusal-worthy facts about every ``agent()`` call in a workflow script.
 
     An empty list means every call named an allowed model explicitly. Anything
-    else is a block.
+    else is a block. With ``routing`` supplied, every call must also carry a
+    ROUTE line in its prompt or label that the contract accepts.
     """
     scan = _mask(source)
     if scan.desyncs:
@@ -986,6 +1407,18 @@ def check_workflow_script(
                     ),
                 )
             )
+            continue
+
+        if routing is not None:
+            label_prop = [prop for prop in props if prop.key == "label"]
+            route_text = source[spans[0][0] : spans[0][1]] + "".join(
+                source[prop.value_start : prop.value_end] for prop in label_prop
+            )
+            problem = _route_problem(routing, route_text, literal)
+            if problem is not None:
+                findings.append(
+                    Finding(file=filename, line=line, label=label, reason=problem)
+                )
 
     return findings
 
@@ -1015,6 +1448,8 @@ def _matching_brace(masked: str, open_brace: int, limit: int) -> int | None:
 def check_agent_input(
     tool_input: dict[str, object],
     allowlist: frozenset[str],
+    *,
+    routing: Routing | None = None,
 ) -> list[Finding]:
     """Refusal-worthy facts about a single ``Agent`` tool call.
 
@@ -1077,6 +1512,16 @@ def check_agent_input(
             )
         ]
 
+    if routing is not None:
+        route_text = "\n".join(
+            value
+            for value in (tool_input.get("prompt"), description)
+            if isinstance(value, str)
+        )
+        problem = _route_problem(routing, route_text, model.strip())
+        if problem is not None:
+            return [Finding(file=_AGENT_TOOL_FILE, line=0, label=label, reason=problem)]
+
     return []
 
 
@@ -1101,6 +1546,7 @@ def render_block_reason(findings: list[Finding], allowlist: frozenset[str]) -> s
         [
             "",
             FIX_LINE,
+            ROUTE_FIX_LINE,
             f"Allowed models: {_allowed(allowlist)} "
             f"(config: {DEFAULT_ALLOWLIST_PATH}).",
             "To disable this guard deliberately: "
@@ -1167,6 +1613,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="override the shipped allowlist config (tests only)",
     )
+    parser.add_argument(
+        "--routing-contract",
+        type=Path,
+        default=None,
+        help="override the shipped routing contract (tests only)",
+    )
     args = parser.parse_args(argv)
 
     raw = sys.stdin.read()
@@ -1190,12 +1642,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         allowlist = load_allowlist(args.allowlist)
+        routing = load_routing(args.routing_contract)
     except AllowlistError as exc:
         sys.stderr.write(f"{exc}\n")
         return 1
 
     if tool_name == "Agent":
-        findings = check_agent_input(tool_input, allowlist)
+        findings = check_agent_input(tool_input, allowlist, routing=routing)
     else:
         try:
             sources = _resolve_script_sources(tool_input)
@@ -1207,7 +1660,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         findings = []
         for filename, source in sources:
-            findings.extend(check_workflow_script(source, allowlist, filename=filename))
+            findings.extend(
+                check_workflow_script(
+                    source, allowlist, filename=filename, routing=routing
+                )
+            )
 
     if findings:
         return _block(render_block_reason(findings, allowlist))

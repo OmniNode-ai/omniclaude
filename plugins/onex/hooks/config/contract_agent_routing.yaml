@@ -1,0 +1,122 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Agent Routing Contract (OMN-17427, W1/W2)
+#
+# Task-complexity routing for background agents. Source: knowledge-base-internal#955
+# sections 2, 3 and 5; moved out of agent_model_allowlist.json because the
+# canonical-file-shape ratchet (OMN-20304) refuses growing that file.
+#
+# Read by plugins/onex/hooks/lib/workflow_model_guard.py on the fail-closed
+# PreToolUse path with the standard library only (no PyYAML): the guard carries
+# a strict parser for exactly this subset (block mappings, block sequences,
+# one-line flow lists of scalars, quoted strings, integers, null) and refuses
+# every dispatch when the file is outside it. Keep to that subset.
+#
+# 'dimensions' are the seven complexity dimensions, 0 to max each. 'bands' map a
+# total score to the models and efforts a dispatch may use, with the band's
+# timeout_s and max_concurrent recorded as data. 'hard_floors' override the
+# score: a dimension at the given value needs at least min_band. Every agent()
+# and Agent dispatch must carry a ROUTE line:
+#   ROUTE: band=<B> score=<n> dims=S<s>A<a>R<r>V<v>N<n>C<c>J<j> dest=<d> model=<m> effort=<e>
+# Bands with an empty models set (B0, B1, B1c) dispatch no Claude agent. The V=3
+# floor ("output must be true" is never accepted from delegation alone) is a
+# lane-brief rule, not machine-checkable here.
+#
+# The set of models a background agent may run on stays in
+# agent_model_allowlist.json (allowed_models).
+
+contract_name: agent_routing
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+dimensions:
+  - key: "S"
+    name: "scope"
+    max: 3
+  - key: "A"
+    name: "ambiguity"
+    max: 3
+  - key: "R"
+    name: "blast_radius"
+    max: 3
+  - key: "V"
+    name: "verification"
+    max: 3
+  - key: "N"
+    name: "novelty"
+    max: 3
+  - key: "C"
+    name: "coupling"
+    max: 3
+  - key: "J"
+    name: "judgment"
+    max: 3
+
+bands:
+  B0:
+    score_min: null
+    score_max: null
+    models: []
+    efforts: []
+    timeout_s: 300
+    max_concurrent: null
+    destination: "landing controller / deterministic node"
+  B1:
+    score_min: 0
+    score_max: 4
+    models: []
+    efforts: []
+    timeout_s: 240
+    max_concurrent: null
+    destination: "onex delegate"
+  B1c:
+    score_min: 0
+    score_max: 4
+    models: []
+    efforts: []
+    timeout_s: 240
+    max_concurrent: null
+    destination: "Jev (node_typed_decision_effect)"
+  B2:
+    score_min: 5
+    score_max: 8
+    models: ["sonnet"]
+    efforts: ["medium", "high"]
+    timeout_s: 1800
+    max_concurrent: 4
+    destination: "Codex drafts, Sonnet lane verifies"
+  B3:
+    score_min: 9
+    score_max: 13
+    models: ["sonnet"]
+    efforts: ["high"]
+    timeout_s: 3600
+    max_concurrent: 15
+    destination: "Sonnet lane"
+  B4:
+    score_min: 14
+    score_max: 17
+    models: ["opus"]
+    efforts: ["high"]
+    timeout_s: 7200
+    max_concurrent: 5
+    destination: "Opus lane"
+  B5:
+    score_min: 18
+    score_max: 21
+    models: ["opus"]
+    efforts: ["xhigh"]
+    timeout_s: 10800
+    max_concurrent: 5
+    destination: "Opus lane plus adversarial verify lane"
+
+hard_floors:
+  - dimension: "R"
+    value: 3
+    min_band: "B4"
+  - dimension: "J"
+    value: 3
+    min_band: "B4"
