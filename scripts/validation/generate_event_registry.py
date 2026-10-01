@@ -63,11 +63,17 @@ EVENT_REGISTRY_MODULE = REPO_ROOT / "src" / "omniclaude" / "hooks" / "event_regi
 DAEMON_INTERNAL_EVENT_TYPES: frozenset[str] = frozenset(
     {
         "daemon.health.probe",
+        "delegate_skill.completed",
+        "delegate_skill.failed",
         "delegation.request",
         # omnimarket-owned work-ledger and PR-watcher events. They are written
         # by lanes and watchers through the daemon, never by a Claude Code hook
         # client, so there is nothing client-side to project.
         "pr.state.observed",
+        # omnimarket-owned: the delegate-skill node's terminal events and the
+        # provider-quota observation (OMN-20154). The daemon emits them; no
+        # hook client does.
+        "provider.quota.observed",
         "work.ledger.ack",
         "work.ledger.claim",
         "work.ledger.correction",
@@ -79,12 +85,6 @@ DAEMON_INTERNAL_EVENT_TYPES: frozenset[str] = frozenset(
         "work.ledger.ruling",
         "work.ledger.status",
         "work.ledger.terminal",
-        # OMN-20154: provider quota observations and the in-process delegation
-        # terminals. Their emitters are the in-process `onex delegate` port and
-        # the quality-gate judge, never a Claude Code hook client.
-        "delegate_skill.completed",
-        "delegate_skill.failed",
-        "provider.quota.observed",
     }
 )
 
