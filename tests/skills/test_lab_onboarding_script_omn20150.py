@@ -24,9 +24,9 @@ SCRIPT = (
     / "onex"
     / "skills"
     / "_bin"
-    / "lab-onboarding.sh"
+    / "omninode-dev-setup.sh"
 )
-SKILL = SCRIPT.parents[1] / "lab_onboarding" / "SKILL.md"
+SKILL = SCRIPT.parents[1] / "omninode_dev_setup" / "SKILL.md"
 
 pytestmark = pytest.mark.unit
 macos_only = pytest.mark.skipif(
@@ -483,3 +483,16 @@ def test_a_resumed_run_finds_the_tools_phase_1_installed(tmp_path: Path) -> None
         check=False,
     ).stdout
     assert f"{home}/.local/bin" in out.split("PATH=", 1)[1].split(":")
+
+
+def test_the_run_ends_by_saying_to_sign_in_to_claude_code() -> None:
+    text = SCRIPT.read_text()
+    assert (
+        "Open Claude Code (run 'claude') and sign in with your Anthropic account"
+        in text
+    )
+
+
+def test_the_key_dialog_is_not_indented_like_the_terminal_prompt() -> None:
+    body = _functions("read_secret")
+    assert "sed 's/^[[:space:]]*//'" in body

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# lab-onboarding.sh -- one command from a bare Mac to a developer machine that
+# omninode-dev-setup.sh -- one command from a bare Mac to a developer machine that
 # runs onex locally, on the developer's own model key. It never connects to the
 # lab: everything runs on this Mac, natively and optionally in Docker.
 #
@@ -24,7 +24,7 @@
 # ${var,,}, no mapfile, and no "${arr[@]}" of a possibly-empty array.
 #
 # Usage:
-#   bash lab-onboarding.sh [options]
+#   bash omninode-dev-setup.sh [options]
 #
 # Options:
 #   --preflight-only     run phase 0, print the verdict, exit
@@ -95,14 +95,14 @@ while [ $# -gt 0 ]; do
     --workspace=*) WORKSPACE="${1#*=}" ;;
     --restart) RESTART=1 ;;
     -h|--help) usage; exit 0 ;;
-    *) printf 'lab-onboarding: unknown option: %s (see --help)\n' "$1" >&2; exit 2 ;;
+    *) printf 'omninode-dev-setup: unknown option: %s (see --help)\n' "$1" >&2; exit 2 ;;
   esac
   shift
 done
 case "$PROVIDER" in ''|openrouter|gemini) ;; *)
-  printf 'lab-onboarding: --provider must be openrouter or gemini (developers bring their own key; the beta offers these two)\n' >&2; exit 2 ;;
+  printf 'omninode-dev-setup: --provider must be openrouter or gemini (developers bring their own key; the beta offers these two)\n' >&2; exit 2 ;;
 esac
-[ -n "$WORKSPACE" ] || { printf 'lab-onboarding: --workspace needs a directory\n' >&2; exit 2; }
+[ -n "$WORKSPACE" ] || { printf 'omninode-dev-setup: --workspace needs a directory\n' >&2; exit 2; }
 
 # ---------------------------------------------------------------------------
 # Run files. The log and status live under TMPDIR, never under $HOME, so a run
@@ -406,7 +406,8 @@ read_secret() { # prompt -> SECRET; QUIT_REQUESTED=1 when the developer chose "Q
     IFS= read -r -s SECRET
     printf '\n'
   elif [ "$GUI_SESSION" -eq 1 ]; then
-    SECRET="$(/usr/bin/osascript - "$1" 2>/dev/null <<'OSA'
+    # The terminal prompt is indented to line up with the run's output; a dialog is not.
+    SECRET="$(/usr/bin/osascript - "$(printf '%s' "$1" | sed 's/^[[:space:]]*//')" 2>/dev/null <<'OSA'
 on run argv
   try
     set r to display dialog (item 1 of argv) & return & return & "Your key stays on this Mac, in onex's key store. It is never shown or logged." with title "Your model key" default answer "" with hidden answer buttons {"Quit setup", "Continue"} default button "Continue" cancel button "Quit setup" with icon note
@@ -1349,9 +1350,11 @@ main() {
   phase6
   hr
   say "Done. Set up: $SELECTED."
-  say "Model: your own $MODEL_CHOICE key."
-  say "Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect,"
-  say "and start a new Claude Code session so the plugins load."
+  say "Model: your own $(provider_label "$MODEL_CHOICE") key."
+  say "Next:"
+  say "  1. Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect."
+  say "  2. Open Claude Code (run 'claude') and sign in with your Anthropic account the first"
+  say "     time it asks. The onex skills are already installed; /onex:delegate is one of them."
   notify "Onboarding complete" "Every phase passed"
   printf 'result=COMPLETE\n' >>"$STATUS"
 }
