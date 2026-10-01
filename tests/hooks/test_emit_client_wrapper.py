@@ -50,6 +50,19 @@ class TestModuleImport:
         from plugins.onex.hooks.lib.emit_client_wrapper import SUPPORTED_EVENT_TYPES
 
         expected_types = {
+            # OMN-20001: canonical generated registry membership stays exact.
+            "delegation.disposition_recorded",
+            "work.ledger.typed.ack",
+            "work.ledger.typed.claim",
+            "work.ledger.typed.correction",
+            "work.ledger.typed.friction",
+            "work.ledger.typed.hold",
+            "work.ledger.typed.msg",
+            "work.ledger.typed.operator_consent",
+            "work.ledger.typed.release",
+            "work.ledger.typed.ruling",
+            "work.ledger.typed.status",
+            "work.ledger.typed.terminal",
             "session.started",
             "session.ended",
             "session.outcome",

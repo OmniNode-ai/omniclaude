@@ -102,6 +102,19 @@ DEFAULT_CLIENT_TIMEOUT_SECONDS = 5.0
 # Supported event types (must match daemon's EventRegistry)
 SUPPORTED_EVENT_TYPES = frozenset(
     [
+        # OMN-20001: project the canonical generated registry membership.
+        "delegation.disposition_recorded",
+        "work.ledger.typed.ack",
+        "work.ledger.typed.claim",
+        "work.ledger.typed.correction",
+        "work.ledger.typed.friction",
+        "work.ledger.typed.hold",
+        "work.ledger.typed.msg",
+        "work.ledger.typed.operator_consent",
+        "work.ledger.typed.release",
+        "work.ledger.typed.ruling",
+        "work.ledger.typed.status",
+        "work.ledger.typed.terminal",
         "session.started",
         "session.ended",
         "session.outcome",
