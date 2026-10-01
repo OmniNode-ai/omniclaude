@@ -35,6 +35,8 @@ export POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=1
 export VALKEY_HOST=127.0.0.1 VALKEY_PORT=1
 export KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:1
 export OMNICLAUDE_MODE=full
+# This suite drives the built-in segment; a locally installed extension must not replace it.
+export ONEX_STATUSLINE_PR_EXT=none
 
 make_gh_stub() {
   # $1 = mode: ok | fail_all | graphql_fail_rest_ok | absent
