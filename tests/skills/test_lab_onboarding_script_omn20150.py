@@ -790,3 +790,37 @@ def test_the_model_is_asked_before_docker(tmp_path: Path) -> None:
     assert out.index("Choose 1, 2, 3 or 4:") < out.index(
         "Set up the local stack in Docker too?"
     )
+
+
+@macos_only
+def test_a_vm_is_told_before_any_question(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--provider", "ollama"],
+        env=_phase0_env(
+            tmp_path,
+            ONBOARD_TEST_VM="1",
+            ONBOARD_TEST_RAM_GB="32",
+            ONBOARD_TEST_CPUS="10",
+        ),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout
+    assert "We detected that this Mac is a virtual machine." in out
+    assert "Docker can't run inside a macOS VM" in out
+    assert out.index("We detected that this Mac is a virtual machine.") < out.index(
+        "Model: Ollama on this Mac"
+    )
+
+
+def test_the_docker_question_leads_with_what_was_found() -> None:
+    text = SCRIPT.read_text()
+    for found in (
+        "We found Docker Desktop on this Mac, and it's running.",
+        "We found Docker Desktop on this Mac, but it isn't running.",
+        "Docker Desktop isn't installed on this Mac.",
+    ):
+        assert found in text
+    assert "set msg to (item 1 of argv)" in _functions("ask_docker")

@@ -437,10 +437,35 @@ cleanup() {
 trap cleanup EXIT
 
 # ---------------------------------------------------------------------------
+# In a VM: said once, before any question, so no choice is made without knowing.
+vm_notice() {
+  local a=""
+  say ""
+  say "  We detected that this Mac is a virtual machine."
+  say "  Docker can't run inside a macOS VM, so the local stack isn't offered here."
+  say "  Everything else works. A model on this Mac (Ollama) will be slow in a VM;"
+  say "  a key (Gemini, OpenRouter or OpenAI) is the better choice."
+  say ""
+  if [ "$IS_TTY" -eq 0 ] && [ "$GUI_SESSION" -eq 1 ]; then
+    a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
+try
+  display dialog "We detected that this Mac is a virtual machine." & return & return & "Docker can't run inside a macOS VM, so the local stack isn't offered here. Everything else works." & return & return & "A model on this Mac (Ollama) will be slow in a VM; a key (Gemini, OpenRouter or OpenAI) is the better choice." with title "This is a virtual machine" buttons {"Quit setup", "Continue"} default button "Continue" cancel button "Quit setup" with icon note
+on error number -128
+  return "q"
+end try
+return "c"
+OSA
+)"
+    [ "$a" = "q" ] && quit_setup
+  fi
+}
+
 ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag.
   local a=""
   say ""
   say "  One optional extra: running the stack on this Mac"
+  say ""
+  say "  $1" | fold -s -w 84 | sed '2,$s/^/  /'
   say ""
   say "  You're already covered: onex runs your delegations natively on this Mac, on the"
   say "  model you chose."
@@ -453,7 +478,6 @@ ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag
   say "    - about ${DOCKER_MEM_GB} GB of memory while it runs"
   say "    - about 15 GB of disk for its images and data"
   say "    - 10-20 minutes the first time, a few minutes after that"
-  say "    - $1"
   say ""
   say "  Not sure? Choose no. You can add it any time: run this again with --containers."
   say "  To stop here instead, answer q: nothing has been installed yet."
@@ -464,7 +488,7 @@ ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript - "$1" "$DOCKER_MEM_GB" 2>/dev/null <<'OSA'
 on run argv
-  set msg to "You're already covered: onex runs your delegations natively on this Mac, on the model you chose." & return & return & "If you work on runtime, node or projection code, you can also run your own copy of the stack here in Docker (a database, a message broker and the runtime kernels), so you can try changes without touching anything shared." & return & return & "What it takes:" & return & "  • about " & (item 2 of argv) & " GB of memory while it runs" & return & "  • about 15 GB of disk" & return & "  • 10-20 minutes the first time" & return & "  • " & (item 1 of argv) & return & return & "Not sure? Choose Not now. You can add it any time by running onboarding again with --containers."
+  set msg to (item 1 of argv) & return & return & "You're already covered: onex runs your delegations natively on this Mac, on the model you chose." & return & return & "If you work on runtime, node or projection code, you can also run your own copy of the stack here in Docker (a database, a message broker and the runtime kernels), so you can try changes without touching anything shared." & return & return & "What it takes:" & return & "  • about " & (item 2 of argv) & " GB of memory while it runs" & return & "  • about 15 GB of disk" & return & "  • 10-20 minutes the first time" & return & return & "Not sure? Choose Not now. You can add it any time by running onboarding again with --containers."
   try
     set r to display dialog msg with title "Run the stack locally in Docker?" buttons {"Quit setup", "Not now", "Yes, set it up"} default button "Not now" cancel button "Quit setup" with icon note
   on error number -128
@@ -779,13 +803,14 @@ phase0() {
   # The model comes first: it is the one choice every run needs. Docker is one
   # question on top of it, asked only when this Mac can run it; the flags answer
   # either in advance.
+  if [ "$PREFLIGHT_ONLY" -eq 0 ] && is_vm; then vm_notice; fi
   [ "$PREFLIGHT_ONLY" -eq 1 ] || settle_model_key
 
   local docker_note
   case "$dstate" in
-    running) docker_note="Docker Desktop: already running" ;;
-    "installed, not running") docker_note="Docker Desktop: installed but not running; we'll start it for you" ;;
-    *) docker_note="Docker Desktop: not installed; we'll install it for you (it may ask you to accept Docker's terms)" ;;
+    running) docker_note="We found Docker Desktop on this Mac, and it's running. Do you want to use it to run the stack locally too?" ;;
+    "installed, not running") docker_note="We found Docker Desktop on this Mac, but it isn't running. If you want the stack, we'll start it for you." ;;
+    *) docker_note="Docker Desktop isn't installed on this Mac. If you want the stack, we'll install it for you (it may ask you to accept Docker's terms)." ;;
   esac
   if [ "$MODE2_OK" -eq 1 ]; then
     case "$WANT_CONTAINERS" in
