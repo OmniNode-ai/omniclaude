@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+name: planted-shape-gate
+on:
+  pull_request:
+jobs:
+  occ-preflight:
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+  canonical-inference-gate:
+    needs: occ-preflight
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo planted detector behind the preflight
