@@ -79,7 +79,13 @@ def _run_hook(
     env["HOME"] = str(sandbox_home)
     env["ONEX_STATE_DIR"] = str(sandbox_home / ".onex_state")
     env["OMNI_HOME"] = str(workspace)
-    for key in ("ONEX_WORKTREES_ROOT", "OMNI_WORKTREES_DIR", "ONEX_HOOKS_MASK", "WT"):
+    for key in (
+        "ONEX_WORKTREES_ROOT",
+        "OMNI_WORKTREES_DIR",
+        "OMNIBASE_INTERNAL_HOME",
+        "ONEX_HOOKS_MASK",
+        "WT",
+    ):
         env.pop(key, None)
     for key, value in (env_overrides or {}).items():
         if value is None:
@@ -726,6 +732,48 @@ class TestStrayWorktreeRoot:
         )
         assert decision.blocked
         assert str(internal.resolve()) in decision.reason
+
+    @pytest.mark.parametrize("target", ["workspace", "internal", "stray"])
+    def test_declared_split_layout_root_preserves_both_sanctioned_roots(
+        self, workspace: Path, sandbox_home: Path, target: str
+    ) -> None:
+        internal = sandbox_home / "canonical" / "omnibase_internal"
+        (internal / "omni_worktrees").mkdir(parents=True)
+        roots = {
+            "workspace": workspace / "omni_worktrees",
+            "internal": internal / "omni_worktrees",
+            "stray": self._stray(workspace),
+        }
+        result = _run_hook(
+            f"git worktree add {roots[target]}/OMN-19626/repo -b test",
+            workspace=workspace,
+            sandbox_home=sandbox_home,
+            cwd=workspace,
+            env_overrides={"OMNIBASE_INTERNAL_HOME": str(internal)},
+        )
+        if target == "stray":
+            assert "stray worktree root" in _assert_refused(result)
+        else:
+            _assert_allowed(result)
+
+    @pytest.mark.parametrize(
+        "invalid", ["relative/internal", "/missing/canonical/internal"]
+    )
+    def test_invalid_declared_internal_root_refuses_without_sibling_fallback(
+        self, workspace: Path, sandbox_home: Path, invalid: str
+    ) -> None:
+        sibling = workspace.parent / "omnibase_internal" / "omni_worktrees"
+        sibling.mkdir(parents=True)
+        reason = _assert_refused(
+            _run_hook(
+                f"git worktree add {sibling}/OMN-19626/repo -b test",
+                workspace=workspace,
+                sandbox_home=sandbox_home,
+                cwd=workspace,
+                env_overrides={"OMNIBASE_INTERNAL_HOME": invalid},
+            )
+        )
+        assert "OMNIBASE_INTERNAL_HOME" in reason
 
 
 @pytest.mark.unit

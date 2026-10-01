@@ -150,6 +150,8 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Checking Bash command for worktree-add 
 #                         Fail-fast: missing OMNI_HOME with no override blocks
 #                         with an actionable error rather than silently picking
 #                         a wrong default (omni_home CLAUDE.md rule #8).
+#   OMNIBASE_INTERNAL_HOME absolute directory -> declared second registry root;
+#                         invalid overrides refuse rather than use a sibling.
 # ---------------------------------------------------------------------------
 _block() {
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: $1: $2" >> "$LOG_FILE"
@@ -192,9 +194,19 @@ if [[ "$_JUDGE" -eq 1 ]]; then
     fi
     # A second sanctioned root, once it exists: omni_worktrees inside the
     # omnibase_internal registry clone beside the registry root (operator ruling
-    # 2026-09-24). Derived from OMNI_HOME only; never a default path.
+    # 2026-09-24). The same declared canonical override as the worktree tooling;
+    # otherwise derived from OMNI_HOME, never from the caller's current directory.
     ALSO_ROOT=""
-    if [[ -n "${OMNI_HOME:-}" ]]; then
+    if [[ -n "${OMNIBASE_INTERNAL_HOME:-}" ]]; then
+        if [[ "$OMNIBASE_INTERNAL_HOME" != /* || ! -d "$OMNIBASE_INTERNAL_HOME" ]]; then
+            _block "invalid internal registry root" \
+                "BLOCKED: OMNIBASE_INTERNAL_HOME must name an absolute existing canonical registry directory; the declared root cannot be judged."
+        fi
+        _internal_root="${OMNIBASE_INTERNAL_HOME%/}/omni_worktrees"
+        if [[ -d "$_internal_root" ]]; then
+            ALSO_ROOT="$_internal_root"
+        fi
+    elif [[ -n "${OMNI_HOME:-}" ]]; then
         _internal_root="$(dirname "${OMNI_HOME%/}")/omnibase_internal/omni_worktrees"
         if [[ -d "$_internal_root" ]]; then
             ALSO_ROOT="$_internal_root"

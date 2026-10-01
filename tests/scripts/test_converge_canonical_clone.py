@@ -123,11 +123,13 @@ class Scratch:
 def _install_stub_writer(home: Path, *, exit_code: int = 0) -> Path:
     stub_bin = home / "stub-bin"
     stub_bin.mkdir(exist_ok=True)
-    stub = stub_bin / "onex-ledger"
+    stub = stub_bin / "uv"
     stub.write_text(
         "#!/usr/bin/env bash\n"
         f'echo "$@" >> "{home}/writer-calls.log"\n'
         f"[[ {exit_code} -eq 0 ]] || exit {exit_code}\n"
+        '[[ "$1 $2 $3" == "run --quiet --project" && "$5" == "onex-ledger" ]] || exit 64\n'
+        "shift 5\n"
         '[[ "$2" == "--append" ]] || exit 64\n'
         'printf \'%s\\n\' "$3" >> "$1"\n',
         encoding="utf-8",
@@ -144,6 +146,9 @@ def scratch(tmp_path: Path) -> Scratch:
     (omni_home / "omni_worktrees").mkdir()
     ledger = omni_home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
     ledger.write_text("# ledger\n", encoding="utf-8")
+    internal = home / "omnibase_internal"
+    internal.mkdir()
+    (internal / "pyproject.toml").write_text("")
     env = _git_env(home)
     # OMN-18971: the script writes its row only through a sanctioned writer, and only
     # to a ledger the environment names. The stub stands in for `onex-ledger`
@@ -923,7 +928,9 @@ def test_named_ledger_is_written_only_through_the_sanctioned_writer(
     proc = scratch.run("omnimarket", "--execute")
     assert proc.returncode == 0, proc.stderr
     calls = (scratch.home / "writer-calls.log").read_text(encoding="utf-8")
-    assert calls.startswith(f"{scratch.ledger} --append ")
+    assert calls.startswith(
+        f"run --quiet --project {scratch.clone.parent}/../omnibase_internal onex-ledger {scratch.ledger} --append "
+    )
     assert "event=CONVERGED" in scratch.ledger.read_text(encoding="utf-8")
     assert not _pending_rows(scratch).exists()
 
@@ -933,7 +940,8 @@ def test_named_ledger_with_no_writer_falls_back_to_the_state_file(
     scratch: Scratch,
 ) -> None:
     _dirty_like_the_incident(scratch)
-    # a PATH with no onex-ledger, and no ledger project to run by uv
+    (scratch.home / "omnibase_internal" / "pyproject.toml").unlink()
+    # The canonical writer project is absent; old paths cannot substitute.
     proc = scratch.run(
         "omnimarket",
         "--execute",
@@ -944,6 +952,45 @@ def test_named_ledger_with_no_writer_falls_back_to_the_state_file(
     assert scratch.ledger.read_text(encoding="utf-8") == "# ledger\n"
     assert "event=CONVERGED" in _pending_rows(scratch).read_text(encoding="utf-8")
     assert "no sanctioned ledger writer" in proc.stderr
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("override", ["declared", "missing", "relative"])
+def test_canonical_writer_override_preserves_bus_mode_and_refuses_invalid_roots(
+    scratch: Scratch, override: str
+) -> None:
+    project = scratch.home / "declared" / "canonical"
+    project.mkdir(parents=True)
+    (project / "pyproject.toml").write_text("")
+    # A real default writer exists too; invalid declarations must never fall back.
+    stub = scratch.home / "stub-bin" / "uv"
+    stub.write_text(
+        stub.read_text().replace(
+            "shift 5\n", '[[ "$ONEX_LEDGER_WRITE_VIA" == bus ]] || exit 66\nshift 5\n'
+        )
+    )
+    _dirty_like_the_incident(scratch)
+    values = {
+        "declared": str(project),
+        "missing": str(scratch.home / "missing"),
+        "relative": "relative",
+    }
+    result = scratch.run(
+        "omnimarket",
+        "--execute",
+        extra_env={
+            "OMNIBASE_INTERNAL_HOME": values[override],
+            "ONEX_LEDGER_WRITE_VIA": "bus",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    calls = scratch.home / "writer-calls.log"
+    if override == "declared":
+        assert f"--project {project} onex-ledger" in calls.read_text()
+    else:
+        assert not calls.exists()
+        assert "no sanctioned ledger writer" in result.stderr
+        assert "event=CONVERGED" in _pending_rows(scratch).read_text()
 
 
 @pytest.mark.unit
