@@ -1611,7 +1611,8 @@ jobs:
   # Cross-registry consistency gate (OMN-13092)
   # Hook frozenset (emit_client_wrapper.SUPPORTED_EVENT_TYPES) must be a
   # subset of the omnimarket emit-daemon YAML registry. Checks out
-  # omnimarket@dev so the comparison targets the live routing authority.
+  # the omnimarket rev uv.lock pins (never live dev), the routing authority this
+  # repo was locked against.
   registry-consistency:
     name: Registry Consistency
     needs: [occ-preflight, zone-filter]
@@ -1695,7 +1696,7 @@ jobs:
 
       # OMN-15967: EVENT_REGISTRY in src/omniclaude/hooks/event_registry.py is
       # a generated projection of the daemon registry, not a hand-maintained
-      # copy — fail the build if it has drifted from omnimarket@dev.
+      # copy — fail the build if it has drifted from the pinned omnimarket rev.
       - name: Run event registry projection drift check
         working-directory: ${{ github.workspace }}
         run: >-
