@@ -90,7 +90,7 @@ on:
         description: >
           git ref of OmniNode-ai/omnimarket to source the canonical publisher
           (scripts/publish_occ_autobind_command.py), lane overlay
-          (config/ci_bus_lanes.yaml) and topic registry from. Pinned to `dev`
+          (config/ci_bus_lanes.yaml) and topic registry from. Defaults to a recorded pin (it tracked `dev`)
           because the `--lane` publisher, the `config/ci_bus_lanes.yaml` overlay,
           `_resolve_lane_broker`, the `RUNNER_IS_TRUSTED` fail-loud (sys.exit(1))
           and the stability->in-memory no-op ALL land on omnimarket `dev` via
@@ -102,8 +102,10 @@ on:
           `dev` branch.
         type: string
         required: false
-        # re-pin to `main` after OMN-14801 promotes to omnimarket main (follow-up OMN-14812)
-        default: dev
+        # A recorded omnimarket release tag (the version omniclaude's uv.lock holds), not the
+        # moving `dev` branch (ruling 2026-10-01). Bump it, in the same change as
+        # the lock, after the consumer integration-tests the new omnimarket rev.
+        default: v0.4.276
     # Secrets are passed by the caller via `secrets: inherit`. The ones that
     # matter are KAFKA_SASL_USERNAME / KAFKA_SASL_PASSWORD (the declared SASL
     # lane's credentials, OMN-18012). KAFKA_BOOTSTRAP_SERVERS is legacy and

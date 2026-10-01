@@ -75,27 +75,66 @@ jobs:
         uses: actions/checkout@v7
 
       # OMN-12564: the OCC checkout logic lives in omniclaude (this repo), but
-      # the job's GITHUB_WORKSPACE holds the *caller* repo's tree. Pull just the
-      # hardened checkout script from omniclaude@main into a side path so the
-      # step below can invoke it without polluting the caller checkout.
-      # reusable-checkout-ref-ok: deploy-gate OMN-16726 pre-existing floating ref
-      # on a REQUIRED status check with heterogeneous caller pins (@main and a
-      # SHA). The flip needs every caller pin verified to carry the validator.
-      # reusable-checkout-sparse-ok: deploy-gate OMN-16726 existence assertion
-      # lands with the ref flip; omniclaude main is release-synced, which is the
-      # exact condition that fetched an empty validator path for the kb-doc-gate.
+      # the job's GITHUB_WORKSPACE holds the *caller* repo's tree. Pull the
+      # hardened checkout script and the composite action from omniclaude at the
+      # workflow pin into a side path.
+      # The pin is validated `job.workflow_sha`: the commit of THIS workflow file,
+      # exactly what the caller pinned in its `uses:` (same pattern as
+      # kb-doc-gate-reusable.yml). omniclaude's live dev/main is never read, so a
+      # merge here cannot change what a downstream caller's required check runs.
+      - name: Resolve the deploy-gate pin
+        id: pin
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::deploy-gate pin is empty or is not a lowercase 40-hex commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$WORKFLOW_REPOSITORY" != "OmniNode-ai/omniclaude" ]; then
+            echo "::error::workflow repository is '$WORKFLOW_REPOSITORY', not OmniNode-ai/omniclaude. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"
+
       - name: Fetch deploy-gate support scripts (omniclaude)
         if: github.event_name != 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omniclaude
-          ref: main
+          ref: ${{ steps.pin.outputs.sha }}
           path: .omniclaude-deploy-gate
           persist-credentials: false
           sparse-checkout: |
             scripts/deploy-gate/checkout-occ-contracts.sh
+            .github/actions/deploy-gate
             .github/actions/deploy-gate/validate_pr_deploy_required.py
           sparse-checkout-cone-mode: false
+
+      - name: Assert the deploy-gate checkout is at the pin and carries its files
+        if: github.event_name != 'merge_group'
+        env:
+          GATE_PIN: ${{ steps.pin.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! checked_out_sha="$(git -C .omniclaude-deploy-gate rev-parse HEAD)"; then
+            echo "::error::could not resolve the fetched deploy-gate commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$checked_out_sha" != "$GATE_PIN" ]; then
+            echo "::error::deploy-gate checkout is at $checked_out_sha, expected $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ ! -f ".omniclaude-deploy-gate/scripts/deploy-gate/checkout-occ-contracts.sh" ]; then
+            echo "::error::.omniclaude-deploy-gate/scripts/deploy-gate/checkout-occ-contracts.sh is missing from the deploy-gate checkout at $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ ! -f ".omniclaude-deploy-gate/.github/actions/deploy-gate/action.yml" ]; then
+            echo "::error::.omniclaude-deploy-gate/.github/actions/deploy-gate/action.yml is missing from the deploy-gate checkout at $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
 
       - name: Resolve deploy-gate OCC evidence source
         if: github.event_name != 'merge_group'
@@ -167,7 +206,7 @@ jobs:
 
       - name: Run deploy gate (canonical composite action)
         if: github.event_name != 'merge_group'
-        uses: OmniNode-ai/omniclaude/.github/actions/deploy-gate@main
+        uses: ./.omniclaude-deploy-gate/.github/actions/deploy-gate
         with:
           pr-number: ${{ inputs.pr-number != 0 && inputs.pr-number || github.event.pull_request.number }}
           github-token: ${{ secrets.GITHUB_TOKEN }}

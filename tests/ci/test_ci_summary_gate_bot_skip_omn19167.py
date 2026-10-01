@@ -385,34 +385,25 @@ def _pinned_title_check_ref() -> str | None:
 
 
 class TestTheTitleRuleMirrorIsPinned:
-    def test_this_repo_tracks_main_so_the_mirror_is_NOT_sha_pinned_here(self) -> None:
-        """The residual, asserted rather than skipped past.
+    def test_the_caller_is_pinned_to_the_sha_the_mirror_was_read_from(self) -> None:
+        """OMN-20001: the caller reads the PR-title reusable at the recorded pin.
 
-        omnibase_infra pins the PR-title reusable at a 40-hex sha, so a test
-        there can compare the mirror's pin against the caller's and go red when
-        upstream moves. THIS repo's caller tracks ``@main``. That is a real,
-        weaker guarantee and it is recorded here instead of being hidden behind
-        a skip: an edit to that reusable's ``main`` changes the enforcer with no
-        file in this repository changing, so nothing local can go red for it.
-
-        The differential bash control below catches a TRANSCRIPTION error in
-        the mirror; it cannot catch upstream DRIFT, because it transcribes the
-        same upstream text. Closing that needs this caller sha-pinned, which is
-        a separate change with its own blast radius and is deliberately not
-        made here.
-
-        This test fails the day the caller IS sha-pinned, which is the prompt to
-        adopt the stronger form.
+        It used to track ``@main``, so an upstream edit changed the enforcer
+        with no file in this repository changing. The caller is now sha-pinned
+        to the commit ``title_rule_exempts_ticket`` was transcribed from, so the
+        mirror and the enforcer are one text, and moving the pin is a consumer
+        change that has to move the mirror with it.
         """
 
-        assert _TITLE_CHECK_CALLER.is_file()
-        text = _TITLE_CHECK_CALLER.read_text(encoding="utf-8")
-        assert f"{_UPSTREAM_SLUG}/{_UPSTREAM_PATH}@main" in text, (
-            "this caller no longer tracks @main. If it is now sha-pinned, "
-            "replace this test with the omnibase_infra form: assert the pin "
-            "equals the sha title_rule_exempts_ticket was read from."
+        source = (REPO_ROOT / "scripts/ci/ci_summary_gate.py").read_text(
+            encoding="utf-8"
         )
-        assert _pinned_title_check_ref() is None
+        pin = _pinned_title_check_ref()
+        assert pin is not None, "the PR-title caller must be sha-pinned"
+        assert pin in source, (
+            "the caller's pin is not the sha ci_summary_gate.py records the "
+            "mirror as read from; move them together"
+        )
 
     def test_the_module_comment_names_the_source_repo_path_and_pin(self) -> None:
         source = (REPO_ROOT / "scripts/ci/ci_summary_gate.py").read_text(

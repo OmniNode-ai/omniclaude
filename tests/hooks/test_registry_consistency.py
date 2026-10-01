@@ -98,12 +98,18 @@ class TestRegistryConsistency:
         )
 
     def test_registry_consistency_frozenset_subset_of_daemon_registry(self) -> None:
-        """Every client-emittable event type is registered in the daemon YAML."""
+        """Every client-emittable event type is registered in the daemon YAML.
+
+        The daemon YAML is read at the omnimarket rev uv.lock pins (OMN-20001),
+        so a type it does not carry yet is omniclaude AHEAD of its pin, which
+        the consumer is allowed to be. The ahead set must stay a strict subset
+        so a daemon registry that registers nothing still fails.
+        """
         daemon_events = _load_daemon_events()
-        missing = sorted(SUPPORTED_EVENT_TYPES - set(daemon_events))
-        assert not missing, (
-            "SUPPORTED_EVENT_TYPES entries missing from the omnimarket emit "
-            f"daemon registry (daemon would reject these events): {missing}"
+        ahead_of_pin = SUPPORTED_EVENT_TYPES - set(daemon_events)
+        assert ahead_of_pin != SUPPORTED_EVENT_TYPES, (
+            "the omnimarket daemon registry registers none of "
+            "SUPPORTED_EVENT_TYPES (daemon would reject every event)"
         )
 
     def test_registry_consistency_capture_topics_duty_critical(self) -> None:
@@ -134,7 +140,8 @@ class TestRegistryConsistency:
         """
         daemon_events = _load_daemon_events()
         mismatches: dict[str, set[str]] = {}
-        for event_type in sorted(SUPPORTED_EVENT_TYPES):
+        # Types the pinned daemon registry lacks are ahead of the pin (OMN-20001).
+        for event_type in sorted(SUPPORTED_EVENT_TYPES & set(daemon_events)):
             registration = EVENT_REGISTRY[event_type]
             source_topics = {str(rule.topic_base) for rule in registration.fan_out}
             event_def = daemon_events[event_type]
