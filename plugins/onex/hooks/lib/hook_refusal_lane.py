@@ -267,7 +267,7 @@ def _attribution() -> ModuleType | None:
         here = str(Path(__file__).resolve().parent)
         if here not in sys.path:
             sys.path.insert(0, here)
-        import hook_lane_attribution  # type: ignore[import-not-found] # noqa: PLC0415
+        import hook_lane_attribution  # type: ignore[import-not-found,unused-ignore] # noqa: PLC0415
     except Exception:  # noqa: BLE001 - never raise on the refusal path
         return None
     module: ModuleType = hook_lane_attribution

@@ -331,7 +331,7 @@ def resolve_lane_fields(
         # Resolved at runtime from this file's own directory, so it is
         # invisible to a type checker that does not have the hooks lib on
         # its path. Imported this way on purpose: see the docstring.
-        import hook_refusal_lane  # type: ignore[import-not-found] # noqa: PLC0415
+        import hook_refusal_lane  # type: ignore[import-not-found,unused-ignore] # noqa: PLC0415
 
         lane, lane_source = hook_refusal_lane.resolve_refusal_lane(
             payload,
