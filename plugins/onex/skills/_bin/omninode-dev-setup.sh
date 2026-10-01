@@ -31,8 +31,9 @@
 #   --containers         answer the Docker question yes in advance
 #   --no-containers      answer it no in advance
 #                        (neither: the one question is asked after preflight)
-#   --provider NAME      gemini | openrouter | ollama   (default: asked up front). Gemini and
-#                        OpenRouter take your own key; Ollama runs a model on this Mac, no key
+#   --provider NAME      gemini | openrouter | openai | ollama   (default: asked up front).
+#                        Gemini, OpenRouter and OpenAI take your own key; Ollama runs a
+#                        model on this Mac, no key
 #   --ollama-model NAME  the model Ollama downloads (default: chosen from this Mac's memory)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else $OMNI_HOME, else ~/code/omni)
 #   --restart            forget completed phases and run every phase again
@@ -104,8 +105,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-case "$PROVIDER" in ''|openrouter|gemini|ollama) ;; *)
-  printf 'omninode-dev-setup: --provider must be gemini, openrouter or ollama\n' >&2; exit 2 ;;
+case "$PROVIDER" in ''|openrouter|gemini|openai|ollama) ;; *)
+  printf 'omninode-dev-setup: --provider must be gemini, openrouter, openai or ollama\n' >&2; exit 2 ;;
 esac
 [ -n "$WORKSPACE" ] || { printf 'omninode-dev-setup: --workspace needs a directory\n' >&2; exit 2; }
 
@@ -490,11 +491,12 @@ OSA
 PENDING_KEY=""
 MODEL_CHOICE=""
 
-provider_home() { case "$1" in openrouter) echo "OpenRouter" ;; gemini) echo "Google" ;; *) echo "$1" ;; esac; }
+provider_home() { case "$1" in openrouter) echo "OpenRouter" ;; gemini) echo "Google" ;; openai) echo "OpenAI" ;; *) echo "$1" ;; esac; }
 
 provider_label() {
   case "$1" in
     openrouter) echo "OpenRouter" ;;
+    openai) echo "OpenAI" ;;
     gemini) echo "Gemini (Google AI Studio)" ;;
     ollama) echo "Ollama (on this Mac)" ;;
     *) echo "$1" ;;
@@ -505,7 +507,7 @@ stored_key_provider() { # an earlier run's key, if onex is already here
   [ -x "$HOME/.local/bin/onex" ] || return 1
   local p list
   list="$(env -u PYTHONPATH "$HOME/.local/bin/onex" secret list 2>/dev/null)" || return 1
-  for p in openrouter gemini; do
+  for p in openrouter gemini openai; do
     printf '%s\n' "$list" | grep -qE "^[[:space:]]+llm\.$p\.api_key[[:space:]]" && { echo "$p"; return 0; }
   done
   return 1
@@ -520,22 +522,23 @@ ask_provider() { # -> MODEL_CHOICE, or empty when nobody can be asked
     say "  Delegations run on a model you choose:"
     say "    1) Gemini      - your Google AI Studio key, from aistudio.google.com/apikey"
     say "    2) OpenRouter  - your openrouter.ai key (its free models work with no credit)"
-    say "    3) Ollama      - a model on this Mac, no key. Slower than a key, especially on"
+    say "    3) OpenAI      - your platform.openai.com key (it needs credits on the account)"
+    say "    4) Ollama      - a model on this Mac, no key. Slower than a key, especially on"
     say "                     Intel, and it downloads a model sized to this Mac"
     say ""
     say "    q) quit setup (nothing has been installed yet)"
     say ""
-    printf '  Which one? Choose 1, 2 or 3: '
+    printf '  Which one? Choose 1, 2, 3 or 4: '
     IFS= read -r a
-    case "$a" in 1) MODEL_CHOICE=gemini ;; 2) MODEL_CHOICE=openrouter ;; 3) MODEL_CHOICE=ollama ;; q|Q) quit_setup ;; esac
+    case "$a" in 1) MODEL_CHOICE=gemini ;; 2) MODEL_CHOICE=openrouter ;; 3) MODEL_CHOICE=openai ;; 4) MODEL_CHOICE=ollama ;; q|Q) quit_setup ;; esac
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
-set r to choose from list {"Gemini (your Google AI Studio key)", "OpenRouter (your key)", "Ollama (on this Mac, no key)"} with title "Your model" with prompt "Delegations run on a model you choose. Gemini and OpenRouter use your own key. Ollama runs a model on this Mac with no key: slower, especially on Intel, and it downloads a model sized to this Mac." OK button name "Continue" cancel button name "Quit setup"
+set r to choose from list {"Gemini (your Google AI Studio key)", "OpenRouter (your key)", "OpenAI (your key; needs credits)", "Ollama (on this Mac, no key)"} with title "Your model" with prompt "Delegations run on a model you choose. Gemini, OpenRouter and OpenAI use your own key. Ollama runs a model on this Mac with no key: slower, especially on Intel, and it downloads a model sized to this Mac." OK button name "Continue" cancel button name "Quit setup"
 if r is false then return "QUIT"
 return item 1 of r
 OSA
 )"
-    case "$a" in Gemini*) MODEL_CHOICE=gemini ;; OpenRouter*) MODEL_CHOICE=openrouter ;; Ollama*) MODEL_CHOICE=ollama ;; QUIT) quit_setup ;; esac
+    case "$a" in Gemini*) MODEL_CHOICE=gemini ;; OpenRouter*) MODEL_CHOICE=openrouter ;; OpenAI*) MODEL_CHOICE=openai ;; Ollama*) MODEL_CHOICE=ollama ;; QUIT) quit_setup ;; esac
   fi
 }
 
@@ -604,7 +607,7 @@ settle_ollama() { # preflight: no key, and an honest word on speed. The model is
   fi
   if is_vm; then
     say "  ⚠ This is a virtual machine: Ollama gets little or no GPU in a VM, so answers are"
-    say "    slow. Gemini or OpenRouter (a key) is the better choice here."
+    say "    slow. Gemini, OpenRouter or OpenAI (a key) is the better choice here."
   else
     case "$(arch)" in arm64) ;; *) say "  ⚠ This is an Intel Mac: local models run on the CPU here, so answers are slow." ;; esac
   fi
@@ -651,7 +654,7 @@ backends:
 YAML
 }
 
-uses_key() { case "$1" in gemini|openrouter) return 0 ;; *) return 1 ;; esac; }
+uses_key() { case "$1" in gemini|openrouter|openai) return 0 ;; *) return 1 ;; esac; }
 
 settle_model_key() {
   local stored
@@ -672,7 +675,7 @@ settle_model_key() {
   if [ -z "$MODEL_CHOICE" ]; then
     FAILED_STEP="choose your model"
     LAST_ERR="no model was chosen, and there is no terminal or desktop to ask on"
-    phase_fail "run this in Terminal, or pass --provider gemini|openrouter|ollama. Nothing was installed"
+    phase_fail "run this in Terminal, or pass --provider gemini|openrouter|openai|ollama. Nothing was installed"
   fi
   if [ "$MODEL_CHOICE" = "ollama" ]; then settle_ollama; return 0; fi
   say ""
@@ -684,7 +687,7 @@ settle_model_key() {
   if [ -z "$PENDING_KEY" ]; then
     FAILED_STEP="your model key"
     LAST_ERR="no key was given; developers bring their own key and the lab's models are not used"
-    phase_fail "get a Google AI Studio or OpenRouter key, or choose Ollama (no key), and run this again. Nothing was installed"
+    phase_fail "get a Google AI Studio, OpenRouter or OpenAI key, or choose Ollama (no key), and run this again. Nothing was installed"
   fi
   say "  Model key: received (held in memory; stored in onex in phase 3)."
 }
@@ -1093,7 +1096,7 @@ phase3() {
     PENDING_KEY=""
     FAILED_STEP="check that onex routes a $choice key"
     LAST_ERR="this onex's provider catalogue does not offer $choice yet; the key was not stored"
-    phase_fail "run this again with another provider's key (--provider openrouter|gemini)"
+    phase_fail "update the omnimarket clone, or run this again with another provider (--provider gemini|openrouter|openai|ollama)"
   fi
   if [ -n "$PENDING_KEY" ]; then
     # The CLI checks the key before storing it and refuses one the catalogue
@@ -1152,7 +1155,7 @@ phase3_ollama() {
   if ! ollama_has_model "$OLLAMA_MODEL" 2>/dev/null && [ "$(disk_free_gb)" -lt "$need" ]; then
     FAILED_STEP="free disk for $OLLAMA_MODEL"
     LAST_ERR="$(disk_free_gb) GB free; $OLLAMA_MODEL needs about $OLLAMA_DOWNLOAD_GB GB more ($need GB in all)"
-    phase_fail "free some disk, or run this again with --provider gemini or openrouter (a key, no download)"
+    phase_fail "free some disk, or run this again with --provider gemini, openrouter or openai (a key, no download)"
   fi
   if [ -z "$(ollama_bin)" ]; then
     say "  Installing Ollama (the app; it carries the ollama command)…"

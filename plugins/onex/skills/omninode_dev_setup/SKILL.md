@@ -23,7 +23,7 @@ args:
     description: "Answer the Docker question no in advance (native onex only)"
     required: false
   - name: --provider
-    description: "The model: gemini | openrouter (the developer's own key) | ollama (on this Mac, no key). Default: asked"
+    description: "The model: gemini | openrouter | openai (the developer's own key) | ollama (on this Mac, no key). Default: asked"
     required: false
   - name: --ollama-model
     description: "With --provider ollama: the model to download (default: chosen from the Mac's memory)"
@@ -87,14 +87,15 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/omninode-dev-setup.sh" --preflight-only 
   missing, say the run will install it. If the line says Docker is not
   offered, relay why: native onex alone covers delegations.
 - Then the model. Unless `--provider` was given, ask which one:
-  - **Gemini** (a Google AI Studio key) or **OpenRouter** (their key): the key
+  - **Gemini** (a Google AI Studio key), **OpenRouter** or **OpenAI** (their key;
+    OpenAI needs credits on the account): the key
     itself is typed only in the Terminal window or a macOS dialog, at a hidden
     prompt right after preflight, before anything installs. If they have no key,
     say where to get one, or suggest Ollama.
   - **Ollama**: no key. It runs a model on the Mac, so it downloads one
     (sized to the Mac's memory, as omnimarket's model config declares) and is slower,
     especially on Intel or in a VM.
-  Pass the answer as `--provider gemini|openrouter|ollama`.
+  Pass the answer as `--provider gemini|openrouter|openai|ollama`.
 
 If `--preflight-only` was the argument, stop here.
 

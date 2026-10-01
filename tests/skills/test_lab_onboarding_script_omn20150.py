@@ -333,10 +333,10 @@ def _phase0_only(tmp_path: Path) -> Path:
 
 @pytest.mark.parametrize("provider", ["none", "glm"])
 def test_only_the_beta_providers_are_accepted(tmp_path: Path, provider: str) -> None:
-    """No lab-model fallback, and GLM is out of the beta: gemini, openrouter or ollama."""
+    """No lab-model fallback, and GLM is out of the beta: gemini, openrouter, openai or ollama."""
     result = _run(tmp_path, "--provider", provider)
     assert result.returncode == 2
-    assert "must be gemini, openrouter or ollama" in result.stderr
+    assert "must be gemini, openrouter, openai or ollama" in result.stderr
 
 
 @macos_only
@@ -368,7 +368,7 @@ def test_the_key_is_settled_in_preflight(
     """Provider then key, both before anything installs; an empty key stops the run."""
     script = (
         f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
-        'expect "Choose 1, 2 or 3:"; send "1\\r"; '
+        'expect "Choose 1, 2, 3 or 4:"; send "1\\r"; '
         f'expect "key (input is hidden)"; send "{key}\\r"; expect eof'
     )
     result = subprocess.run(
@@ -395,7 +395,7 @@ def test_the_key_is_settled_in_preflight(
     "answers",
     [
         'expect "Set up the local stack in Docker too?"; send "q\\r"; ',
-        'expect "Set up the local stack in Docker too?"; send "n\\r"; expect "Choose 1, 2 or 3:"; send "q\\r"; ',
+        'expect "Set up the local stack in Docker too?"; send "n\\r"; expect "Choose 1, 2, 3 or 4:"; send "q\\r"; ',
     ],
     ids=["quit-at-docker", "quit-at-provider"],
 )
@@ -497,7 +497,7 @@ def test_a_resumed_run_finds_the_tools_phase_1_installed(tmp_path: Path) -> None
 def test_choosing_ollama_on_the_menu_skips_the_key(tmp_path: Path) -> None:
     script = (
         f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
-        'expect "Choose 1, 2 or 3:"; send "3\\r"; expect eof'
+        'expect "Choose 1, 2, 3 or 4:"; send "4\\r"; expect eof'
     )
     result = subprocess.run(
         ["/usr/bin/expect", "-c", script],
@@ -584,7 +584,10 @@ def test_ollama_in_a_vm_is_warned_it_will_be_slow(tmp_path: Path) -> None:
         "This is a virtual machine: Ollama gets little or no GPU in a VM"
         in result.stdout
     )
-    assert "Gemini or OpenRouter (a key) is the better choice here." in result.stdout
+    assert (
+        "Gemini, OpenRouter or OpenAI (a key) is the better choice here."
+        in result.stdout
+    )
 
 
 def test_the_run_ends_by_saying_to_sign_in_to_claude_code() -> None:
@@ -733,3 +736,26 @@ def test_ollama_routes_are_written_and_a_foreign_file_is_kept(tmp_path: Path) ->
     assert (
         target.parent / "bifrost_overrides.yaml.pre-onboarding.t"
     ).read_text() == "# mine\nbackends: []\n"
+
+
+@macos_only
+@pytest.mark.skipif(
+    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
+)
+def test_choosing_openai_on_the_menu_asks_for_an_openai_key(tmp_path: Path) -> None:
+    script = (
+        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
+        'expect "Choose 1, 2, 3 or 4:"; send "3\\r"; '
+        'expect "key (input is hidden)"; send "\\r"; expect eof'
+    )
+    result = subprocess.run(
+        ["/usr/bin/expect", "-c", script],
+        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout.replace("\r", "")
+    assert "Paste your OpenAI API key (input is hidden):" in out
+    assert "it is only ever sent to OpenAI" in out
