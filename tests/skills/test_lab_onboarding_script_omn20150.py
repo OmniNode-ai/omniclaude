@@ -244,6 +244,7 @@ def test_one_question_after_preflight_decides_docker(
         "ONBOARD_TEST_CPUS": "10",
         "ONBOARD_TEST_VM": "0",
         "ONBOARD_TEST_ADMIN": "1",
+        "ONBOARD_TEST_NO_GUI": "1",
     }
     script = (
         f"set timeout 60; spawn /bin/bash {phase0_only} --provider gemini; "
@@ -824,3 +825,22 @@ def test_the_docker_question_leads_with_what_was_found() -> None:
     ):
         assert found in text
     assert "set msg to (item 1 of argv)" in _functions("ask_docker")
+
+
+def test_questions_go_to_dialogs_whenever_there_is_a_desktop() -> None:
+    """The terminal shows progress; questions are dialogs unless there is no desktop."""
+    text = SCRIPT.read_text()
+    assert (
+        'if [ "$IS_TTY" -eq 1 ] && { [ "$GUI_SESSION" -eq 0 ] || [ "${ONBOARD_PROMPTS:-}" = "terminal" ]; }; then'
+        in text
+    )
+    for fn in (
+        "ask_provider",
+        "read_secret",
+        "ask_docker",
+        "ensure_sudo",
+        "accept_docker_terms",
+    ):
+        body = _functions(fn)
+        assert '"$IS_TTY"' not in body, fn
+        assert '"$PROMPT_TTY"' in body, fn

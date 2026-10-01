@@ -165,6 +165,14 @@ if command -v launchctl >/dev/null 2>&1 && [ "$(launchctl managername 2>/dev/nul
 fi
 [ "${ONBOARD_TEST_NO_GUI:-0}" = "1" ] && GUI_SESSION=0   # test seam: no desktop to ask on
 
+# Questions go to dialogs whenever there is a desktop, so they stand apart from
+# the progress the terminal is printing. Terminal prompts are for a Mac with no
+# desktop (over ssh), or when asked for with ONBOARD_PROMPTS=terminal.
+PROMPT_TTY=0
+if [ "$IS_TTY" -eq 1 ] && { [ "$GUI_SESSION" -eq 0 ] || [ "${ONBOARD_PROMPTS:-}" = "terminal" ]; }; then
+  PROMPT_TTY=1
+fi
+
 notify() { # title message
   [ "$GUI_SESSION" -eq 1 ] || return 0
   [ "${ONBOARD_NOTIFY:-1}" = "0" ] && return 0
@@ -374,7 +382,7 @@ SH
 SUDO_KEEPALIVE_PID=""
 ensure_sudo() {
   sudo -n true 2>/dev/null && return 0
-  if [ "$IS_TTY" -eq 1 ]; then
+  if [ "$PROMPT_TTY" -eq 1 ]; then
     say "  The next step needs your Mac administrator password (asked once, by sudo)."
     sudo -v || return 1
   elif [ "$GUI_SESSION" -eq 1 ]; then
@@ -407,7 +415,7 @@ quit_setup() {
 QUIT_REQUESTED=0
 read_secret() { # prompt -> SECRET; QUIT_REQUESTED=1 when the developer chose "Quit setup"
   SECRET=""
-  if [ "$IS_TTY" -eq 1 ]; then
+  if [ "$PROMPT_TTY" -eq 1 ]; then
     printf '%s ' "$1"
     IFS= read -r -s SECRET
     printf '\n'
@@ -446,7 +454,7 @@ vm_notice() {
   say "  Everything else works. A model on this Mac (Ollama) will be slow in a VM;"
   say "  a key (Gemini, OpenRouter or OpenAI) is the better choice."
   say ""
-  if [ "$IS_TTY" -eq 0 ] && [ "$GUI_SESSION" -eq 1 ]; then
+  if [ "$PROMPT_TTY" -eq 0 ] && [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
 try
   display dialog "We detected that this Mac is a virtual machine." & return & return & "Docker can't run inside a macOS VM, so the local stack isn't offered here. Everything else works." & return & return & "A model on this Mac (Ollama) will be slow in a VM; a key (Gemini, OpenRouter or OpenAI) is the better choice." with title "This is a virtual machine" buttons {"Quit setup", "Continue"} default button "Continue" cancel button "Quit setup" with icon note
@@ -482,7 +490,7 @@ ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag
   say "  Not sure? Choose no. You can add it any time: run this again with --containers."
   say "  To stop here instead, answer q: nothing has been installed yet."
   say ""
-  if [ "$IS_TTY" -eq 1 ]; then
+  if [ "$PROMPT_TTY" -eq 1 ]; then
     printf '  Set up the local stack in Docker too? [y/N, q to quit] '
     IFS= read -r a
   elif [ "$GUI_SESSION" -eq 1 ]; then
@@ -539,7 +547,7 @@ stored_key_provider() { # an earlier run's key, if onex is already here
 
 ask_provider() { # -> MODEL_CHOICE, or empty when nobody can be asked
   local a=""
-  if [ "$IS_TTY" -eq 1 ]; then
+  if [ "$PROMPT_TTY" -eq 1 ]; then
     say ""
     say "  Your model"
     say ""
@@ -1277,8 +1285,15 @@ accept_docker_terms() { # fresh install only, and only with the developer's yes
   local a="n"
   say "  Docker Desktop requires accepting the Docker Subscription Service Agreement:"
   say "    https://www.docker.com/legal/docker-subscription-service-agreement"
-  if [ "$IS_TTY" -eq 1 ]; then
+  if [ "$PROMPT_TTY" -eq 1 ]; then
     printf '  Accept it now? [y/N] '; IFS= read -r a
+  elif [ "$GUI_SESSION" -eq 1 ]; then
+    a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
+set r to display dialog "Docker Desktop requires accepting the Docker Subscription Service Agreement (docker.com/legal/docker-subscription-service-agreement)." & return & return & "Accept it now? If not, Docker Desktop shows its terms when it starts." with title "Docker's terms" buttons {"Not now", "Accept"} default button "Accept" with icon note
+if button returned of r is "Accept" then return "y"
+return "n"
+OSA
+)"
   fi
   # shellcheck disable=SC2024  # the log is the user's own file; only install needs root
   case "$a" in
