@@ -20,6 +20,11 @@
 # installer renders it (expanding __OMNI_HOME__ / __HOME__ / __PYTHON__),
 # flips Disabled=false, and loads it via launchctl bootstrap.
 #
+# Linux (OMN-20309): the same script installs a systemd --user unit
+# (scripts/systemd/ai.omninode.hook-emit-drainer.service) on a host that has
+# systemctl and no launchctl. No root: the unit lands under
+# ~/.config/systemd/user/. The flags below mean the same on both supervisors.
+#
 # Usage:
 #   bash omniclaude/scripts/install-hook-emit-drainer.sh            # install + load
 #   bash omniclaude/scripts/install-hook-emit-drainer.sh --uninstall
@@ -39,6 +44,136 @@ SRC_PLIST="${SCRIPT_DIR}/launchd/${LABEL}.plist"
 LAUNCH_AGENTS="${HOME}/Library/LaunchAgents"
 DST_PLIST="${LAUNCH_AGENTS}/${LABEL}.plist"
 UID_GUI="$(id -u)"
+
+# OMN-20309: pick the supervisor by what the host has. launchctl wins, so every
+# existing macOS path (and the tests that stub launchctl) is unchanged.
+if command -v launchctl >/dev/null 2>&1; then
+  SUPERVISOR=launchd
+elif command -v systemctl >/dev/null 2>&1; then
+  SUPERVISOR=systemd
+else
+  echo "ERROR: neither launchctl nor systemctl is on PATH; nothing can supervise the drainer." >&2
+  exit 1
+fi
+
+# Both backlogs under the state root, printed the same way by both supervisors.
+print_backlog() {
+  local state_dir="${ONEX_STATE_DIR:-${OMNI_HOME_RESOLVED}/.onex_state}"
+  local journal="${state_dir}/hook_emit_journal"
+  echo "Journal: ${journal}"
+  shopt -s nullglob
+  local pending=("${journal}"/*.json)
+  echo "Pending: ${#pending[@]}"
+  local spool="${state_dir}/emit_spool"
+  local spooled=("${spool}"/*.json)
+  echo "Spool:   ${spool} (emit_spool)"
+  echo "Spooled: ${#spooled[@]}"
+  shopt -u nullglob
+}
+
+if [[ "${SUPERVISOR}" == "systemd" ]]; then
+  UNIT="${LABEL}.service"
+  SRC_UNIT="${SCRIPT_DIR}/systemd/${UNIT}"
+  UNIT_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
+  DST_UNIT="${UNIT_DIR}/${UNIT}"
+  # The omniclaude project venv carries omnibase_infra and omnimarket; the
+  # brew-backed plugin venv the plist uses is macOS-only.
+  LINUX_PYTHON="${OMNI_HOME_RESOLVED}/omniclaude/.venv/bin/python3"
+
+  case "${1:-}" in
+    --uninstall)
+      echo "Uninstalling ${UNIT} (systemd --user)..."
+      systemctl --user disable --now "${UNIT}" 2>/dev/null || true
+      rm -f "${DST_UNIT}"
+      systemctl --user daemon-reload 2>/dev/null || true
+      echo "Done. ${UNIT} uninstalled."
+      echo "NOTE: hooks keep appending to the journal. It is bounded (oldest"
+      echo "      dropped and counted), so nothing grows without limit, but"
+      echo "      nothing publishes until a drainer runs again."
+      exit 0
+      ;;
+    --status)
+      echo "Unit:    ${UNIT}"
+      echo "Path:    ${DST_UNIT}"
+      systemctl --user status "${UNIT}" --no-pager 2>/dev/null | sed -n '1,12p' \
+        || echo "state:   NOT LOADED"
+      print_backlog
+      if [[ ! -f "${DST_UNIT}" ]]; then
+        echo "ERROR: ${DST_UNIT} is missing. Install it:" >&2
+        echo "         bash omniclaude/scripts/install-hook-emit-drainer.sh" >&2
+        exit 1
+      fi
+      if command -v loginctl >/dev/null 2>&1; then
+        echo "Linger:  $(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null || echo unknown) (yes = survives logout)"
+      fi
+      exit 0
+      ;;
+    ""|--dry-run) ;;
+    *)
+      echo "Usage: $0 [--dry-run|--uninstall|--status]" >&2
+      exit 2
+      ;;
+  esac
+
+  if [[ ! -x "${LINUX_PYTHON}" ]]; then
+    echo "ERROR: ${LINUX_PYTHON} not found." >&2
+    echo "       Build the omniclaude project venv first: (cd ${OMNI_HOME_RESOLVED}/omniclaude && uv sync)" >&2
+    exit 1
+  fi
+  if [[ "${1:-}" != "--dry-run" ]] \
+    && ! "${LINUX_PYTHON}" -c 'import omnibase_infra, omnimarket' 2>/dev/null; then
+    echo "ERROR: ${LINUX_PYTHON} cannot import omnibase_infra and omnimarket." >&2
+    echo "       Rebuild the venv: (cd ${OMNI_HOME_RESOLVED}/omniclaude && uv sync)" >&2
+    exit 1
+  fi
+
+  RENDERED="$(mktemp)"
+  trap 'rm -f "${RENDERED}"' EXIT
+  sed -e "s|__OMNI_HOME__|${OMNI_HOME_RESOLVED}|g" \
+      -e "s|__PYTHON__|${LINUX_PYTHON}|g" \
+      "${SRC_UNIT}" > "${RENDERED}"
+  if grep -q '__OMNI_HOME__\|__PYTHON__' "${RENDERED}"; then
+    echo "ERROR: rendered unit still contains unexpanded tokens." >&2
+    exit 1
+  fi
+  if command -v systemd-analyze >/dev/null 2>&1 \
+    && ! systemd-analyze --user verify "${RENDERED}" >/dev/null 2>&1; then
+    # verify also checks that ExecStart exists, so only a unit that systemd
+    # itself cannot parse is refused here; re-run it for the detail.
+    if systemd-analyze --user verify "${RENDERED}" 2>&1 | grep -qi "unknown section\|unknown key\|failed to parse\|bad unit"; then
+      echo "ERROR: rendered unit is not valid:" >&2
+      systemd-analyze --user verify "${RENDERED}" >&2 || true
+      exit 1
+    fi
+  fi
+
+  if [[ "${1:-}" == "--dry-run" ]]; then
+    echo "--- rendered unit (not installed) ---"
+    cat "${RENDERED}"
+    exit 0
+  fi
+
+  mkdir -p "${UNIT_DIR}" "${OMNI_HOME_RESOLVED}/.onex_state/hooks/logs"
+  cp "${RENDERED}" "${DST_UNIT}"
+  systemctl --user daemon-reload
+  systemctl --user enable --now "${UNIT}"
+  # `enable --now` on an already-running unit leaves the old process; a
+  # reinstall must pick up the new unit text.
+  systemctl --user restart "${UNIT}"
+
+  if command -v loginctl >/dev/null 2>&1 \
+    && [[ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" != "yes" ]]; then
+    loginctl enable-linger "$(id -un)" 2>/dev/null \
+      || echo "WARN: could not enable linger; the drainer stops when ${USER:-this user} logs out." >&2
+  fi
+
+  echo "Loaded ${UNIT}."
+  echo
+  echo "Verify:"
+  echo "  bash omniclaude/scripts/install-hook-emit-drainer.sh --status"
+  echo "  tail -f ${OMNI_HOME_RESOLVED}/.onex_state/hooks/logs/hook-emit-drainer.log"
+  exit 0
+fi
 
 if [[ "${1:-}" == "--uninstall" ]]; then
   echo "Uninstalling ${LABEL} LaunchAgent..."
@@ -137,7 +272,7 @@ fi
 # CLAUDE.md rule 11: the literal brew interpreter path. launchd runs with a
 # restricted PATH so $(brew --prefix) is unavailable, and the macOS Local
 # Network grant is per-binary — a uv-managed interpreter silently
-# EHOSTUNREACHes on the LAN publish to the .201 broker.
+# EHOSTUNREACHes on the LAN publish to the broker.
 #
 # Resolved here rather than at the top of the file: --uninstall and --status
 # launch nothing, so requiring the interpreter for a read-only query is what
