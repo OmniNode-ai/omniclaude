@@ -631,12 +631,12 @@ ollama:
   port: 11434
   chat_path: /v1/chat/completions
   models:
-    - min_memory_gb: 0
-      model: small-model:1b
-      download_gb: 1
     - min_memory_gb: 16
       model: big-model:7b
       download_gb: 5
+    - min_memory_gb: 0
+      model: small-model:1b
+      download_gb: 1
 """
 
 
