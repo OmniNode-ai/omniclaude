@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from enum import StrEnum
@@ -17,8 +18,10 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializerFunctionWrapHandler,
     TypeAdapter,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -224,6 +227,21 @@ class ModelPreToolUsePayload(BaseModel):
     tool_call_key: UUID
     tool_input_ref: ModelHookContentRef
     tool_input_keys: tuple[str, ...]
+    #: OMN-20031: ids of the goal a Bash command opens. Set only on the binding
+    #: event (see ``parse_goal_binding``); ids, never content.
+    goal_id: UUID | None = None
+    parent_goal_id: UUID | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_unbound_goal(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        """Leave the goal keys off every event that binds no goal."""
+        data: dict[str, object] = handler(self)
+        for key in ("goal_id", "parent_goal_id"):
+            if data.get(key) is None:
+                data.pop(key, None)
+        return data
 
 
 class ModelPostToolUsePayload(BaseModel):
@@ -770,6 +788,45 @@ def _tool_response_interrupted(value: object) -> bool | None:
     return interrupted
 
 
+_UUID_TEXT = (
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+#: A goal-open or delegate command begins with ``ONEX_GOAL=<uuid>`` and, when
+#: there is a parent, ``ONEX_PARENT_GOAL=<uuid>``. Anchored at the start; the
+#: lookahead refuses a parent assignment whose value did not match as a uuid.
+_GOAL_BINDING = re.compile(
+    rf"^\s*ONEX_GOAL=({_UUID_TEXT})(?:\s+ONEX_PARENT_GOAL=({_UUID_TEXT}))?"
+    r"\s+(?!ONEX_PARENT_GOAL=)\S"
+)
+
+
+def parse_goal_binding(
+    hook_name: EnumClaudeHookEventName, stdin: Mapping[str, object]
+) -> tuple[UUID | None, UUID | None]:
+    """Return ``(goal_id, parent_goal_id)`` when this event binds a goal.
+
+    Only a PreToolUse of the Bash tool whose raw command starts with the
+    ``ONEX_GOAL=<uuid>`` assignment binds one. The ids are read from the raw
+    command before the scrub hashes it; the command itself still rides only as
+    its scrubbed reference.
+    """
+    if hook_name is not EnumClaudeHookEventName.PRE_TOOL_USE:
+        return None, None
+    if stdin.get("tool_name") != "Bash":
+        return None, None
+    tool_input = stdin.get("tool_input")
+    if not isinstance(tool_input, Mapping):
+        return None, None
+    command = tool_input.get("command")
+    if not isinstance(command, str):
+        return None, None
+    match = _GOAL_BINDING.match(command)
+    if match is None:
+        return None, None
+    goal, parent = match.groups()
+    return UUID(goal), UUID(parent) if parent is not None else None
+
+
 def _payload_from_stdin(
     *,
     stdin: Mapping[str, object],
@@ -781,6 +838,7 @@ def _payload_from_stdin(
     if hook_name is EnumClaudeHookEventName.PRE_TOOL_USE:
         tool_input = _required(stdin, "tool_input", name)
         tool_use_id = _string(stdin, "tool_use_id", name)
+        goal_id, parent_goal_id = parse_goal_binding(hook_name, stdin)
         return _validated_payload(
             ModelPreToolUsePayload,
             hook_event_name=name,
@@ -789,6 +847,8 @@ def _payload_from_stdin(
             tool_call_key=make_tool_call_key(session_id, tool_use_id),
             tool_input_ref=capture.required("tool_input", tool_input),
             tool_input_keys=_mapping_keys(tool_input, "tool_input"),
+            goal_id=goal_id,
+            parent_goal_id=parent_goal_id,
         )
     if hook_name is EnumClaudeHookEventName.POST_TOOL_USE:
         response = _required(stdin, "tool_response", name)
@@ -1284,4 +1344,5 @@ __all__ = [
     "make_event_id",
     "make_tool_call_key",
     "map_hook_stdin",
+    "parse_goal_binding",
 ]

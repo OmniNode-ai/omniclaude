@@ -170,6 +170,88 @@ def test_content_is_scrubbed_before_it_is_hashed(jdir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# goal binding (OMN-20031): the ids ride on the one event that opens a goal
+# ---------------------------------------------------------------------------
+
+_GOAL = "0b8f5c1e-5d0c-4f43-9a52-3c7f1d2e9a10"
+_PARENT_GOAL = "7a1d9e44-2b6f-4c8e-8f01-b5d3a9c60e27"
+
+
+def _bash_pre(command: str, **extra: Any) -> dict[str, Any]:
+    stdin = _stdin("PreToolUse")
+    stdin["tool_name"] = "Bash"
+    stdin["tool_input"] = {"command": command}
+    stdin.update(extra)
+    return stdin
+
+
+def _journalled_goal_keys(stdin: dict[str, Any], jdir: Path) -> dict[str, Any]:
+    assert capture_mod.capture(stdin, journal_dir=jdir) == 1
+    (payload,) = _events(jdir)
+    ModelClaudeHookEvent.model_validate(payload)
+    return {
+        key: payload["payload"][key]
+        for key in ("goal_id", "parent_goal_id")
+        if key in payload["payload"]
+    }
+
+
+def test_goal_id_only_on_prefixed_command_and_is_uuid(
+    tmp_path: Path, jdir: Path
+) -> None:
+    import uuid
+
+    def stamped(stdin: dict[str, Any], sub: str) -> dict[str, Any]:
+        directory = tmp_path / sub / "state" / "hook_emit_journal"
+        directory.mkdir(parents=True)
+        _write_status(directory, ("hook.event", "tool.executed"))
+        return _journalled_goal_keys(stdin, directory)
+
+    # the binding event, goal only
+    assert stamped(_bash_pre(f"ONEX_GOAL={_GOAL} echo hi"), "a") == {"goal_id": _GOAL}
+    # the binding event with a parent; leading space allowed; uppercase is canonicalised
+    both = stamped(
+        _bash_pre(
+            f"  ONEX_GOAL={_GOAL.upper()} ONEX_PARENT_GOAL={_PARENT_GOAL} echo hi"
+        ),
+        "b",
+    )
+    assert both == {"goal_id": _GOAL, "parent_goal_id": _PARENT_GOAL}
+    for value in both.values():
+        assert str(uuid.UUID(value)) == value
+    # no prefix, mid-line mention, parent alone, non-uuid, malformed, quoted: nothing
+    for index, command in enumerate(
+        (
+            "echo hi",
+            f"echo ONEX_GOAL={_GOAL} hi",
+            f"cd /tmp && ONEX_GOAL={_GOAL} echo hi",
+            f"ONEX_PARENT_GOAL={_PARENT_GOAL} echo hi",
+            f"ONEX_PARENT_GOAL={_PARENT_GOAL} ONEX_GOAL={_GOAL} echo hi",
+            "ONEX_GOAL=not-a-uuid echo hi",
+            f"ONEX_GOAL={_GOAL} ONEX_PARENT_GOAL=not-a-uuid echo hi",
+            f"ONEX_GOAL={_GOAL}",
+            f'ONEX_GOAL="{_GOAL}" echo hi',
+            f"ONEX_GOAL={_GOAL.replace('-', '')} echo hi",
+        )
+    ):
+        assert stamped(_bash_pre(command), f"n{index}") == {}, command
+    # a non-Bash tool carrying the same text
+    other = _bash_pre(f"ONEX_GOAL={_GOAL} echo hi")
+    other["tool_name"] = "Write"
+    assert stamped(other, "w") == {}
+    # the same command on PostToolUse stays unstamped, and so do its siblings
+    post = _stdin("PostToolUse")
+    post["tool_name"] = "Bash"
+    post["tool_input"] = {"command": f"ONEX_GOAL={_GOAL} echo hi"}
+    assert stamped(post, "p") == {}
+    # the command text still rides only as its scrubbed reference
+    capture_mod.capture(_bash_pre(f"ONEX_GOAL={_GOAL} echo hi"), journal_dir=jdir)
+    (payload,) = _events(jdir)
+    assert "echo hi" not in json.dumps(payload)
+    assert [ref["field"] for ref in payload["content_refs"]] == ["tool_input"]
+
+
+# ---------------------------------------------------------------------------
 # the refusals
 # ---------------------------------------------------------------------------
 

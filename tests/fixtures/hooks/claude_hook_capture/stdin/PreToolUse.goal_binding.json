@@ -1,0 +1,17 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "tool_input": {
+    "command": "ONEX_GOAL=0b8f5c1e-5d0c-4f43-9a52-3c7f1d2e9a10 ONEX_PARENT_GOAL=7a1d9e44-2b6f-4c8e-8f01-b5d3a9c60e27 printf fixture",
+    "timeout": 30
+  },
+  "tool_name": "Bash",
+  "tool_use_id": "toolu-goal-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}
