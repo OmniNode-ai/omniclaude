@@ -1411,7 +1411,20 @@ def _origin_with_branches(
 def _checkout(tmp_path: Path, origin: Path, branch: str) -> Path:
     """The gate's own view: a clone of the event branch, every head fetched."""
     work = tmp_path / "checkout"
-    _git(tmp_path, "clone", "-q", "--branch", branch, str(origin), str(work))
+    # --no-local: a path clone otherwise hardlinks/copies the origin's object
+    # files one by one, and that copy failed on a CI runner with "failed to
+    # copy file ... No such file or directory". The pack transport sends one
+    # packfile instead and has no per-object copy step to fail.
+    _git(
+        tmp_path,
+        "clone",
+        "-q",
+        "--no-local",
+        "--branch",
+        branch,
+        str(origin),
+        str(work),
+    )
     _git(work, "fetch", "-q", "origin", "+refs/heads/*:refs/remotes/origin/*")
     return work
 
