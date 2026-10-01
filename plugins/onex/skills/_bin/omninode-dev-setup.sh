@@ -441,8 +441,8 @@ ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag
   say ""
   say "  One optional extra: running the stack on this Mac"
   say ""
-  say "  You're already covered: onex runs your delegations natively on this Mac, on your"
-  say "  own model key."
+  say "  You're already covered: onex runs your delegations natively on this Mac, on the"
+  say "  model you chose."
   say ""
   say "  If you work on runtime, node or projection code, you can also run your own copy"
   say "  of the stack here in Docker: a database, a message broker and the two runtime"
@@ -463,7 +463,7 @@ ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript - "$1" "$DOCKER_MEM_GB" 2>/dev/null <<'OSA'
 on run argv
-  set msg to "You're already covered: onex runs your delegations natively on this Mac, on your own model key." & return & return & "If you work on runtime, node or projection code, you can also run your own copy of the stack here in Docker (a database, a message broker and the runtime kernels), so you can try changes without touching anything shared." & return & return & "What it takes:" & return & "  • about " & (item 2 of argv) & " GB of memory while it runs" & return & "  • about 15 GB of disk" & return & "  • 10-20 minutes the first time" & return & "  • " & (item 1 of argv) & return & return & "Not sure? Choose Not now. You can add it any time by running onboarding again with --containers."
+  set msg to "You're already covered: onex runs your delegations natively on this Mac, on the model you chose." & return & return & "If you work on runtime, node or projection code, you can also run your own copy of the stack here in Docker (a database, a message broker and the runtime kernels), so you can try changes without touching anything shared." & return & return & "What it takes:" & return & "  • about " & (item 2 of argv) & " GB of memory while it runs" & return & "  • about 15 GB of disk" & return & "  • 10-20 minutes the first time" & return & "  • " & (item 1 of argv) & return & return & "Not sure? Choose Not now. You can add it any time by running onboarding again with --containers."
   try
     set r to display dialog msg with title "Run the stack locally in Docker?" buttons {"Quit setup", "Not now", "Yes, set it up"} default button "Not now" cancel button "Quit setup" with icon note
   on error number -128
