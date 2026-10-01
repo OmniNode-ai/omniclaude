@@ -93,6 +93,36 @@ __all__ = [
 DEFAULT_MAX_RECORDS = 50_000
 
 _SEQ_WIDTH = 20
+
+# OMN-20110: the bounded runner hands a writer a pipe it reports progress on.
+# A record renamed into the journal is durable whatever the process does next,
+# so the runner must not call the emit "NOT recorded" when it was.
+ACK_FD_ENV = "ONEX_HOOK_EMIT_ACK_FD"
+ACK_JOURNALLED = b"j"
+ACK_DONE = b"d"
+
+
+def signal_ack(kind: bytes) -> None:
+    """Tell the bounded runner, if there is one, that a record is journalled
+    (``ACK_JOURNALLED``) or that the emit is complete (``ACK_DONE``).
+
+    A no-op outside the runner. Never raises: a progress report must not turn
+    a good write into a failure.
+    """
+    raw = os.environ.get(ACK_FD_ENV)
+    if not raw or not raw.isdigit():
+        return
+    try:
+        os.write(int(raw), kind)
+    except OSError:
+        pass
+
+
+def emit_done() -> None:
+    """The writer is finished: the runner may return without waiting for exit."""
+    signal_ack(ACK_DONE)
+
+
 _last_seq = 0
 
 
@@ -245,6 +275,7 @@ def append(
         raise JournalWriteError(
             exc.errno, f"cannot write journal record in {journal_dir}: {exc.strerror}"
         ) from exc
+    signal_ack(ACK_JOURNALLED)
     return AppendOutcome(path=target)
 
 
