@@ -25,6 +25,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _CLI_PATH = _REPO_ROOT / "scripts" / "pr_claim_registry_cli.py"
 _LANE_ENV_VARS = (
     "ONEX_LANE_ID",
+    "ONEX_LANE",
     "ONEX_AGENT_NAME",
     "CLAUDE_AGENT_NAME",
     "CLAUDE_SUBAGENT_NAME",
@@ -215,3 +216,19 @@ def test_no_claim_cli_exits_zero(
     captured = capsys.readouterr()
     assert result == 0
     assert "No claim to release" in captured.out
+
+
+def test_claim_cli_resolves_lane_from_onex_lane_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """OMN-20262: the runner exports ONEX_LANE only; the claim must succeed."""
+    _clear_lane_env(monkeypatch)
+    monkeypatch.setenv("ONEX_LANE", LANE_A)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "")
+    cli = _load_cli()
+
+    result = cli.main(["claim", "omninode-ai/omniclaude#1", "--action", "close"])
+
+    assert result == 0, capsys.readouterr().err

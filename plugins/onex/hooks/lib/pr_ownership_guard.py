@@ -86,6 +86,7 @@ DISPATCH_KEY_PREFIX = "dispatch:"
 
 _LANE_ENV_VARS = (
     "ONEX_LANE_ID",
+    "ONEX_LANE",
     "ONEX_AGENT_NAME",
     "CLAUDE_AGENT_NAME",
     "CLAUDE_SUBAGENT_NAME",
@@ -518,7 +519,8 @@ def resolve_lane_id(
 
     Resolution order, most explicit first:
 
-    1. ``ONEX_LANE_ID`` (or an agent-name env var) — an explicitly declared lane.
+    1. ``ONEX_LANE_ID``, ``ONEX_LANE`` (what the remote-lane runner exports) or an
+       agent-name env var — an explicitly declared lane.
     2. The worktree the caller is standing in (``<ticket>/<repo>``).  Per
        Operating Rule #9 every lane gets its own worktree, so this is a real
        per-lane discriminator, not a guess.
@@ -586,11 +588,26 @@ def _lane_from_worktree(
 # ---------------------------------------------------------------------------
 
 
+def _cli_path() -> str:
+    """Absolute path of ``pr_claim_registry_cli.py``, independent of the cwd.
+
+    Resolved from this file's own location (source layout
+    ``<omniclaude>/plugins/onex/hooks/lib``).  The plugin cache has no
+    ``scripts/`` dir, so there it falls back to the canonical clone under
+    ``$OMNI_HOME``.
+    """
+    relative = Path("scripts") / "pr_claim_registry_cli.py"
+    source = Path(__file__).resolve().parents[4] / relative
+    if source.is_file():
+        return str(source)
+    workspace = os.environ.get("OMNI_HOME", "").strip()
+    if workspace:
+        return str(Path(workspace) / "omniclaude" / relative)
+    return str(source)
+
+
 def _claim_command(target_key: str) -> str:
-    return (
-        "python3 omniclaude/scripts/pr_claim_registry_cli.py claim "
-        f"'{target_key}' --action close"
-    )
+    return f"python3 {_cli_path()} claim '{target_key}' --action close"
 
 
 def decide(
@@ -613,7 +630,7 @@ def decide(
                 f"REFUSED ({verb}): this lane has no resolvable identity, so the "
                 "mutation cannot be attributed. Attribution that cannot be "
                 "established fails closed — it is never assumed. Export "
-                "ONEX_LANE_ID=<your-lane-handle> (the handle you registered in "
+                "ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in "
                 "the rolling work ledger) and retry."
             ),
         )
@@ -642,7 +659,7 @@ def decide(
                 f"REFUSED ({verb}) on {mutation.detail}: the ownership claim for "
                 f"'{target}' exists but is unreadable or malformed. An "
                 "unreadable claim is INDETERMINATE, not absent, and fails closed. "
-                "Inspect it with: python3 omniclaude/scripts/pr_claim_registry_cli.py list"
+                f"Inspect it with: python3 {_cli_path()} list"
             ),
         )
 
@@ -670,7 +687,7 @@ def decide(
                     f"'{claim_lane}', and you are lane '{lane_id}'. A lane may not "
                     "mutate a peer lane's work. Coordinate with that lane in the "
                     "rolling work ledger; if it is finished, it releases the claim "
-                    "with: python3 omniclaude/scripts/pr_claim_registry_cli.py "
+                    f"with: python3 {_cli_path()} "
                     f"release '{target}' <run-id>"
                 ),
             )
