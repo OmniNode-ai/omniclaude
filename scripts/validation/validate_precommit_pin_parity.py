@@ -41,6 +41,11 @@ PIN_PAIRS: tuple[tuple[str, str, str], ...] = (
         "https://github.com/OmniNode-ai/omnibase_core",
         "github.com/OmniNode-ai/omnibase_core",
     ),
+    (
+        "canonical-file-shape",
+        "https://github.com/OmniNode-ai/omnibase_core",
+        "github.com/OmniNode-ai/omnibase_core",
+    ),
 )
 
 _CI_PIN_RE = re.compile(

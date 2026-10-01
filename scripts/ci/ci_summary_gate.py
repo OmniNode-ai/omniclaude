@@ -110,6 +110,11 @@ GATE_JOBS: tuple[str, ...] = (
     # a skip is anomalous, which is why it is ALSO a STRICT_SUCCESS_JOBS member
     # below. Pinned by tests/ci/test_hook_system_tests_gate_omn20109.py.
     "Hook System Tests (OMN-20109)",  # hook-system-tests
+    # OMN-20304: the canonical-file-shape ratchet (operator ruling 2026-10-01:
+    # no new scripts, plugins or exceptions). Unconditional in ci.yml (no
+    # needs, no if), so a skip is anomalous; it is ALSO a STRICT_SUCCESS_JOBS
+    # member below and fails closed on anything but success.
+    "Canonical File Shape (OMN-20304)",  # canonical-file-shape
     "Cross-Repo Boundary Parity",  # boundary-parity (OMN-16000) — DIRECTLY REQUIRED live; was previously mis-marked SOFT_ALLOWLIST "warn-only" while a `contains()` substring bug in its `if:` silently skipped it on any PR whose changed-file count contained the digit '0' (10/20/100/...). Fixed 2026-08-13: `if:` no longer branches on changed_files, and the job is now a completeness-anchor member so CI Summary WAITS for it and only accepts success/skipped (occ-preflight's own legitimate skip carve-out), never a false green from the old bug.
 )
 
@@ -144,6 +149,8 @@ STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
         # OMN-20109: see the GATE_JOBS entry above. A skip means the hooks were
         # not exercised, and must fail closed rather than read as an opt-out.
         "Hook System Tests (OMN-20109)",
+        # OMN-20304: see the GATE_JOBS entry above.
+        "Canonical File Shape (OMN-20304)",
     }
 )
 
