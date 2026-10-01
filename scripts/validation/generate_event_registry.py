@@ -79,6 +79,12 @@ DAEMON_INTERNAL_EVENT_TYPES: frozenset[str] = frozenset(
         "work.ledger.ruling",
         "work.ledger.status",
         "work.ledger.terminal",
+        # omnimarket-owned provider-quota and in-process delegation terminals
+        # (OMN-20154). omnimarket's own nodes emit them; no Claude Code hook
+        # client does.
+        "delegate_skill.completed",
+        "delegate_skill.failed",
+        "provider.quota.observed",
     }
 )
 
