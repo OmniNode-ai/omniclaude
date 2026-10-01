@@ -1006,7 +1006,7 @@ repos:
       # Suppression: add ``# concurrency-ok`` to the flagged line.
       - id: concurrency-primitive-guard
         name: Concurrency primitive clause (OMN-13047)
-        entry: python scripts/validation/validate_no_blocking_primitive_without_tests.py
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_no_blocking_primitive_without_tests.py
         language: system
         pass_filenames: false
         always_run: true
@@ -1063,7 +1063,7 @@ repos:
       - id: aislop-prohibited-patterns
         name: Aislop prohibited pattern check
         language: system
-        entry: python scripts/ci/run_aislop_precommit.py
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/ci/run_aislop_precommit.py
         types: [python]
         pass_filenames: true
         stages: [pre-commit]
@@ -1107,7 +1107,7 @@ repos:
       - id: skill-hygiene
         name: Skill Hygiene
         language: system
-        entry: python scripts/validate_frontmatter.py
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validate_frontmatter.py
         pass_filenames: false
         stages: [pre-commit]
         files: ^plugins/onex/skills/
