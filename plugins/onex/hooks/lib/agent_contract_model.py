@@ -23,7 +23,6 @@ class EnumModel(StrEnum):
 
     OPUS = "opus"
     SONNET = "sonnet"
-    HAIKU = "haiku"
 
 
 class ModelAgentContract(BaseModel):

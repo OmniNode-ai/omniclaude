@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 schema_version: "1.0.0"
-model: haiku
+model: sonnet
 disallowedTools: []
 domain: type_validation
 purpose: "Validate Python type annotations, enforce strict typing standards, and detect Any-type violations."

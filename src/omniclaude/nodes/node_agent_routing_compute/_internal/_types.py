@@ -35,7 +35,7 @@ class AgentData(TypedDict, total=False):
         capabilities: Capability strings the agent provides.
         domain_context: Domain classification for context scoring.
         definition_path: Filesystem path to the agent YAML file.
-        model: Recommended Claude model (e.g., 'haiku', 'sonnet', 'opus').
+        model: Recommended Claude model (e.g., 'sonnet', 'opus').
         disallowed_tools: Tools this agent must not use.
         domain: Agent's primary domain classification.
         purpose: Extended description of agent's purpose.
