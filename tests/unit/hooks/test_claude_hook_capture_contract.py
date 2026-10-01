@@ -25,6 +25,7 @@ from omniclaude.hooks.model_claude_hook_event import (
     ModelHookLineage,
     ModelHookPayload,
     UnknownHookEventError,
+    bash_exit_code,
     make_tool_call_key,
     map_hook_stdin,
 )
@@ -420,3 +421,83 @@ def test_generator_check_passes() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+# ---------------------------------------------------------------------------
+# OMN-17427: host and the Bash exit code
+# ---------------------------------------------------------------------------
+
+
+def _map_stdin(
+    stdin: dict[str, object], host: str | None = None
+) -> ModelClaudeHookEvent:
+    return map_hook_stdin(
+        stdin,
+        emitted_at=datetime.fromisoformat("2026-09-26T12:00:00+00:00"),
+        sidecar=None,
+        claude_code_version="2.1.283",
+        turn_id=None,
+        content_scrubber=SCRUB,
+        host=host,
+    ).event
+
+
+def _stdin(name: str) -> dict[str, object]:
+    stdin = _load_json(FIXTURE_ROOT / "stdin" / f"{name}.json")
+    assert isinstance(stdin, dict)
+    return stdin
+
+
+def test_the_host_rides_the_event_and_is_omitted_when_unknown() -> None:
+    stdin = _stdin("PreToolUse")
+    assert _map_stdin(stdin, host="h201").model_dump(mode="json")["host"] == "h201"
+    assert "host" not in _map_stdin(stdin).model_dump(mode="json")
+    assert "host" not in _map_stdin(stdin, host="").model_dump(mode="json")
+
+
+def test_a_bash_post_tool_use_states_exit_code_zero() -> None:
+    event = _map_stdin(_stdin("PostToolUse"))
+    assert event.model_dump(mode="json")["payload"]["exit_code"] == 0
+
+
+def test_a_bash_failure_states_the_harness_exit_code() -> None:
+    for error, code in (
+        ("Exit code 2\nls: cannot access", 2),
+        ("Error: Exit code 127", 127),
+        ("Exit code 1", 1),
+    ):
+        stdin = _stdin("PostToolUseFailure") | {"error": error}
+        assert _map_stdin(stdin).model_dump(mode="json")["payload"]["exit_code"] == code
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        {"interrupted": True, "stdout": ""},
+        {"interrupted": False, "backgroundTaskId": "b1"},
+        {"interrupted": False, "returnCodeInterpretation": "No matches found"},
+        "not an object",
+    ],
+)
+def test_a_bash_response_that_states_no_status_reads_none(response: object) -> None:
+    stdin = _stdin("PostToolUse") | {"tool_response": response}
+    assert bash_exit_code(EnumClaudeHookEventName.POST_TOOL_USE, stdin) is None
+    assert "exit_code" not in _map_stdin(stdin).model_dump(mode="json")["payload"]
+
+
+def test_no_exit_code_for_another_tool_or_an_unstated_failure() -> None:
+    other = _stdin("PostToolUse") | {"tool_name": "Read"}
+    assert "exit_code" not in _map_stdin(other).model_dump(mode="json")["payload"]
+    timeout = _stdin("PostToolUseFailure") | {"error": "Command timed out"}
+    assert "exit_code" not in _map_stdin(timeout).model_dump(mode="json")["payload"]
+
+
+def test_the_contract_declares_host_exit_code_and_the_four_columns() -> None:
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    fields = contract["redaction"]["fields"]
+    assert fields["host"] == "capture_verbatim"
+    assert fields["payload.exit_code"] == "capture_verbatim"
+    columns = {
+        column["name"] for column in contract["projection"]["event_table"]["columns"]
+    }
+    assert {"lane", "model", "host", "exit_code"} <= columns
