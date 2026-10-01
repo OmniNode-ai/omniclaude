@@ -752,6 +752,18 @@ class TestEventRegistryIntegration:
         from omniclaude.hooks.event_registry import EVENT_REGISTRY
 
         expected_types = {
+            # OMN-20001: generated typed semantic ledger row family.
+            "work.ledger.typed.ack",
+            "work.ledger.typed.claim",
+            "work.ledger.typed.correction",
+            "work.ledger.typed.friction",
+            "work.ledger.typed.hold",
+            "work.ledger.typed.msg",
+            "work.ledger.typed.operator_consent",
+            "work.ledger.typed.release",
+            "work.ledger.typed.ruling",
+            "work.ledger.typed.status",
+            "work.ledger.typed.terminal",
             # Session events
             "session.started",
             "session.ended",

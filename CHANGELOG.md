@@ -1,4 +1,91 @@
-## Unreleased
+## v0.27.0 (2026-10-01)
+
+### Features
+- feat(OMN-20285): the status line PR segment is an optional bounded local extension; the launcher resolves the enabled onex plugin (#2460)
+- feat(OMN-20031): the Bash capture stamps goal_id on the one event that opens a goal (#2451)
+- feat(OMN-17099): onboarding containers run the developer's model and key; phase 5 stops reading as proof the key was used (#2449)
+- feat(OMN-20150): developers bring their own model key; it is settled before anything installs (#2448)
+- feat(OMN-20150): one command takes a Mac from bare to lab-ready (#2442)
+- feat(OMN-16913): a change under plugins/onex needs a plugin version bump; bump onex to 2.4.0 (#2435)
+- feat(OMN-20010): subagent hook lineage carries the sidecar model, description and workflow phase (#2405)
+- feat(OMN-19965): the delegate plugin ships exactly one skill and documents its permission rule (#2408)
+- feat(OMN-19513): every Claude Code hook journals a lineage-carrying hook.event; SessionEnd hooks survive headless cancellation (#2371)
+- feat(OMN-19551): hooks journal the full prompt, tool input, tool result and assistant reply through the redaction contract (#2343)
+- feat(OMN-19513): all-hooks capture contract and mock seam: 33 hook types, lineage, subagent spans (#2370)
+- feat(OMN-13856): PreToolUse hook refuses an agent-posted Linear comment with no actor line (#2353)
+- feat(OMN-19479): gh user shim caches the harness PR-link lookup; statusline refreshes every 900 s under one lock (#2349)
+- feat(OMN-19607): a PR merge fast-forwards the matching canonical clones, and a launchd timer catches merges made elsewhere (#2346)
+- feat(OMN-19399): opt-in open-pull-request fence for the unattended worktree prune (#2328)
+- feat(OMN-19246): every overlay-configured skill resolves ONEX_SKILL_OVERLAY_ROOTS (#2318)
+- feat(OMN-18874): refuse a path-scoped restore over uncommitted work (#2316)
+- feat(OMN-18530): the hook inventory gate reports a gate-shaped script declared nowhere (#2295)
+- feat(OMN-18946): give a hook refusal a durable, aggregated home (#2293)
+- feat(OMN-18948): the session-start surface prints the sixth dropped-work key (#2291)
+- feat(OMN-18961): the session-start goal surface announces a pending tick re-fire (#2289)
+- feat(OMN-18954): the session-start goal surface prints the four dropped-work counts and the cause behind a stale goal (#2288)
+- feat(OMN-18798): allow the ruled publish-loop merge, refuse branch creation, fix the mask test (#2277)
+- feat(OMN-18798): refuse force pushes and ledger-path checkouts in the shared clone (#2276)
+- feat(OMN-18798): refuse tree-moving git commands in the shared registry clone (#2274)
+
+### Bug Fixes
+- fix(OMN-20110): a journalled hook emit returns at once and is reported as journalled, not NOT recorded (#2470)
+- fix(OMN-19626): route hook ledger callers through packaged writer (#2463)
+- fix(OMN-20110): the hook capture finds a workflow agent's sidecar without listing every run (#2461)
+- fix(OMN-17427): rename local to 'expanded' in hook_refusal_lane (#2457)
+- fix(OMN-20262): lane identity reads ONEX_LANE and the pr-close refusal prints an absolute CLI path (#2454)
+- fix(OMN-20201): 105 orchestrator contracts declare runtime_profiles [main] and leave the runtime-profiles allowlist (#2450)
+- fix(OMN-19381): a hook refusal row names the lane from the payload sidecar, lane env, CLAIM or worktree path (#2452)
+- fix(OMN-20184): runtime profiles run inside CI Summary, the canonical-inference growth check fails closed, and the delegation smoke test runs (#2447)
+- fix(OMN-17427): the ticket-creation gate admits only a no-project create and the ticket skills create in Backlog (#2441)
+- fix(OMN-20110): a workflow agent's hook emit no longer globs every project directory (#2436)
+- fix(OMN-17427): pr_body_stamp_guard admits dropping a stamp when the one that stays names a merged companion (#2422)
+- fix(OMN-17427): narrow three guard matchers that refused valid commands (#2421)
+- fix(OMN-20109): hook alarms resolve their Slack credential and fail loud when they cannot deliver (#2420)
+- fix(OMN-20110): hook emits are O(1), bounded and fail loud with one operator alarm per episode (#2417)
+- fix(OMN-19852): the shared-tree git guard reads the command's own effective directory (assigned variables, subshell and brace groups, --work-tree) (#2411)
+- fix(OMN-19513): activate hook.event capture, the dev-lane produce grant is live so the lane contract stops holding it back (#2410)
+- fix(OMN-19913): a broker-refused event class pays the dead-letter threshold once, not once per record (#2396)
+- fix(OMN-19820): the plugin hooks.json description names no private repository, internal knowledge-base prose, lab configuration or person (#2376)
+- fix(OMN-16986): plugin_deploy_readback resolves the enabled onex plugin instead of a hardcoded default (#2365)
+- fix(OMN-19696): claim release refuses a live claim held by a different lane under a shared run id (#2364)
+- fix(OMN-19539): every worktree-removal path saves the diff and untracked files first (#2348)
+- fix(OMN-19695): claim registry reaps an expired claim instead of refusing on it (#2363)
+- fix(OMN-19682): ticket-creation policy pin matches the live PRD (#2361)
+- fix(OMN-13856): no-PR Done requires every acceptance criterion bound in the OCC contract to a fresh, attested receipt (#2347)
+- fix(OMN-13856): Done-flip guard false positives: REST PR reads, closing-note supersession, commit-anchored bare refs, live-state readback (#2345)
+- fix(OMN-19542): the PR-body stamp guard reads heredocs and create-then-edit commands instead of refusing them (#2341)
+- fix(OMN-19519): the hook-emit drainer log, hooks.log and the bus-mirror logs rotate at a size bound (#2336)
+- fix(OMN-19518): the hook-emit drainer reuses one Kafka bus for the life of the process (#2335)
+- fix(OMN-19517): a Claude Code hook record carries a turn id unique per session turn (#2334)
+- fix(OMN-19396): worktree guard refuses mkdir and clone into stray omni_worktrees roots, admits the omnibase_internal root (#2329)
+- fix(OMN-19367): customer onex plugin installs from PyPI like the public quickstart (#2323)
+- fix(OMN-19256): two ledger writers refused by the new row grammar (#2322)
+- fix(OMN-19229): shared-tree and PR-body guards expand paths with the shared helper (#2319)
+- fix(OMN-19254): the board skills treat an empty read as a failure, never as agreement (#2321)
+- fix(OMN-19255): lane_dispatch injects the committed rules block and brief, never the working-tree copy (#2320)
+- fix(OMN-19229): worktree guard reads git worktree add arguments the way git does (#2317)
+- fix(OMN-19118): say that replaying a dead-lettered record does not preserve order (#2304)
+- fix(OMN-19075): resolve an event class forwarded through a wrapper, and declare the three it hid (#2301)
+- fix(OMN-19074): dead-letter the journal head a broker refuses, instead of stopping behind it forever (#2303)
+- fix(OMN-19047): resolve a hook own path before it moves the working directory (#2299)
+- fix(OMN-17942): remove the rescinded unstarted-children admission cap (#2296)
+- fix(OMN-18974): follow a cd prefix, and refuse a force push to dev or main anywhere (#2294)
+- fix(OMN-18841): the open-PR status-line segment says when a refresh failed (#2275)
+- fix(OMN-18827): secret scrubber requires a value-shaped token instead of any word after is (#2273)
+- fix(OMN-17421): read lane death signatures only from harness lifecycle frames (#2252)
+- fix(OMN-18752): the plugin lock git pins follow the canonical clone, and the skew gate stops prescribing a downgrade (#2248)
+- fix(OMN-18750): refuse a backtick command substitution written into prose (#2247)
+- fix(OMN-18749): a closed-unmerged citation needs a declared merged successor (#2246)
+- fix(OMN-18746): read back the interpreter hooks run on, and assert the orphan hooks venv absent (#2244)
+- fix(OMN-18747): resolve a bare PR number the ticket itself anchors (#2245)
+- fix(OMN-18627): emit evidence through the registered class and refuse invisible topic overrides (#2243)
+- fix(OMN-18609): resolve the lane at emit time from the harness sidecar, not from cwd (#2242)
+
+### Changed
+- perf(OMN-20118): socket emits skip the omnibase_core import (1.30 s -> 0.10 s CPU per Bash call), lazy sidecar glob, libyaml contracts (#2426)
+- perf(OMN-20118): one interpreter for the seven Bash guards and a forked emit writer (interpreter starts 10/17/17/8 -> 6/7/10/4 per call) (#2423)
+- perf(OMN-20114): hooks resolve paths in bash and read each payload with one jq (261/166/90 -> 109/81/44 execs per call) (#2419)
+- refactor(OMN-18754): retire the rolling_plan_governor skill and its node (#2249)
 
 ### Removed
 - `rolling_plan_governor` — the skill (`plugins/onex/skills/rolling_plan_governor/`) and its
@@ -20,6 +107,10 @@
   No shim, no re-export and no stub SKILL.md is left behind: `onex:rolling_plan_governor` is gone
   from `plugins/distribution_manifest.yaml`, so nothing can dispatch it into a failure, and the
   frozen handler-shape ratchet baseline was regenerated rather than hand-edited.
+
+### Release metadata
+- Dependency pins in pyproject.toml unchanged; uv.lock sibling pins refreshed by the bot PR #2473 (omnimarket advanced to dev head)
+- Scope: commits since v0.26.0 touching src/, plugins/ or pyproject.toml; chore, docs, test and bot lock-refresh commits omitted
 
 ## v0.26.0 (2026-09-18)
 
