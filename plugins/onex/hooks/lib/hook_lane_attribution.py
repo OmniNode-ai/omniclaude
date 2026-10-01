@@ -100,6 +100,7 @@ __all__ = [
     "SIDECAR_NAME_KEYS",
     "WORKSPACE_ENV",
     "attribution_fields",
+    "read_sidecar",
     "record_key",
     "registry_base",
     "resolve_lane",
@@ -216,6 +217,8 @@ def _sidecar_candidates(
     transcript_path: str | Path | None,
     session_id: str | None,
     agent_id: str,
+    *,
+    include_workflows: bool = False,
 ) -> Iterator[Path]:
     """Every place this lane's sidecar could be, most authoritative first.
 
@@ -242,14 +245,34 @@ def _sidecar_candidates(
     to 0.7 s at 24 concurrent captures over 1,478 project directories on
     2026-09-30, the largest phase of the capture that blocked tool calls on
     its 30 s budget.
+
+    With ``include_workflows`` (OMN-19381) two more places are searched, both
+    derived from the transcript and so scoped to THIS session: the sibling of
+    a transcript that is already the agent's own, and
+    ``<session>/subagents/workflows/<run id>/``, where the harness writes a
+    Workflow agent's sidecar. The listing is of one session's workflow runs,
+    never of other sessions or projects. Off by default, so the journal and
+    capture paths keep the candidates and cost they had.
     """
     name = f"agent-{agent_id}.meta.json"
     if transcript_path:
         transcript = Path(transcript_path)
+        if include_workflows and transcript.name == f"agent-{agent_id}.jsonl":
+            # the agent's own transcript: its sidecar sits beside it
+            yield transcript.with_name(name)
+        session_dir = transcript.with_suffix("")
         # <project>/<session>.jsonl -> <project>/<session>/subagents/
-        yield transcript.with_suffix("") / "subagents" / name
+        yield session_dir / "subagents" / name
         # already inside a session directory
         yield transcript.parent / "subagents" / name
+        if include_workflows:
+            try:
+                runs = sorted(
+                    (session_dir / "subagents" / "workflows").glob(f"*/{name}")
+                )
+            except OSError:
+                return
+            yield from runs
         return
     if session_id:
         root = os.environ.get(CLAUDE_PROJECTS_ENV)
@@ -293,6 +316,35 @@ def sidecar_lane_name(
             if isinstance(value, str) and value.strip():
                 return value.strip()[:_LANE_NAME_CHARS]
     return ""
+
+
+def read_sidecar(
+    transcript_path: str | Path | None,
+    session_id: str | None,
+    agent_id: str | None,
+) -> dict[str, object] | None:
+    """The first readable sidecar for *agent_id*, Workflow locations included.
+
+    Returns the parsed object and leaves choosing a name to the caller. That
+    is how the refusal recorder (OMN-19381) skips a generic agent type such as
+    ``general-purpose`` without changing :data:`SIDECAR_NAME_KEYS`, which is
+    pinned to the close-time guard. ``None`` -- never a guess -- when there is
+    no agent id or no sidecar. Never raises.
+    """
+    if not agent_id:
+        return None
+    if "/" in agent_id or "\\" in agent_id or agent_id in (".", ".."):
+        return None
+    for candidate in _sidecar_candidates(
+        transcript_path, session_id, agent_id, include_workflows=True
+    ):
+        try:
+            payload = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return None
 
 
 def resolve_lane(

@@ -102,6 +102,8 @@ onex_hook_gate WORKTREE_GUARD || exit 0
 
 # Read stdin
 TOOL_INFO=$(cat)
+# OMN-19381: the payload the refusal recorder reads the lane from.
+_OMNICLAUDE_HOOK_PAYLOAD="$TOOL_INFO"
 if ! TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>>"$LOG_FILE"); then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: invalid hook JSON; failing open" >> "$LOG_FILE"
     echo "$TOOL_INFO"

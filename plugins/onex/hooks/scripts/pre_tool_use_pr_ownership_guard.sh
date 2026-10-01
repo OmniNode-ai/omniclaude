@@ -52,6 +52,9 @@
 
 set -euo pipefail
 
+# OMN-19381: named before error-guard.sh is sourced, or every refusal row and
+# the per-hook log say unknown-hook.
+_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
 # OMN-20109: this script's directory, resolved once without a dirname exec.
@@ -116,6 +119,8 @@ _block() {
 }
 
 TOOL_INFO=$(cat)
+# OMN-19381: the payload the refusal recorder reads the lane from.
+_OMNICLAUDE_HOOK_PAYLOAD="$TOOL_INFO"
 if ! TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>>"$LOG_FILE"); then
     _log "ERROR: invalid hook JSON; passing through"
     echo "$TOOL_INFO"

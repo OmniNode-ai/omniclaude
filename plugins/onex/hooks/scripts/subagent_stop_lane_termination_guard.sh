@@ -39,6 +39,11 @@
 
 set -eo pipefail
 
+# OMN-19381: named so its refusal row names it. This guard does not source
+# error-guard.sh (its EXIT trap would rewrite a non-zero exit), so it sources
+# the refusal seam on its own, after common.sh.
+_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
+
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
 # OMN-20109: this script's directory, resolved once without a dirname exec.
@@ -66,8 +71,12 @@ export LOG_FILE
 
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/hooks/scripts/common.sh"
+# OMN-19381: hook_record_refusal, without error-guard.sh's EXIT trap.
+# shellcheck source=../lib/hook_refusal.sh
+source "${PLUGIN_ROOT}/hooks/lib/hook_refusal.sh" 2>/dev/null || true
 
 STDIN_JSON="$(cat || true)"
+_OMNICLAUDE_HOOK_PAYLOAD="$STDIN_JSON"
 
 set +e
 OUTPUT="$(printf '%s' "${STDIN_JSON}" | "${PYTHON_CMD}" "${PLUGIN_ROOT}/hooks/lib/lane_termination_guard.py" 2>>"${LOG_FILE}")"

@@ -1309,43 +1309,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
-        uses: actions/cache/restore@v6
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          attempt=1
-          until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
-            status=$?
-            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
-              echo "::error::uv sync failed after ${attempt} attempt(s)"
-              exit "$status"
-            fi
-            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
-            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
-            sleep "$sleep_seconds"
-            attempt=$((attempt + 1))
-          done
-
+      # This is a stdlib-only regex scan (imports: re, sys, pathlib) — it does not
+      # need the project venv. The former `uv sync --frozen --group dev` step stalled
+      # on wheel downloads past the 5-minute job timeout (omniclaude#2450, both
+      # attempts of run 36827581117), cancelling a check that runs in <1s.
       - name: Check no hardcoded internal IPs
         working-directory: ${{ github.workspace }}
-        run: uv run python scripts/validation/validate_no_hardcoded_ip.py
+        run: python3 scripts/validation/validate_no_hardcoded_ip.py
 
   # ============================================================================
   # F5 ARCHITECTURAL CHECKS (OMN-2595: Consumer Group Rules)

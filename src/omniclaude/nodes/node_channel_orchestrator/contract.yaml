@@ -23,6 +23,9 @@ node_version:
   minor: 1
   patch: 0
 
+# Runtime profile
+runtime_profiles: [main]
+
 node_type: ORCHESTRATOR_GENERIC
 
 description: >

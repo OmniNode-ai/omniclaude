@@ -203,6 +203,8 @@ _block() {
 }
 
 TOOL_INFO=$(cat)
+# OMN-19381: the payload the refusal recorder reads the lane from.
+_OMNICLAUDE_HOOK_PAYLOAD="$TOOL_INFO"
 
 # Cheap OVER-matching pre-filter. It decides nothing: anything it lets through
 # is decided by credential_rotation_guard.py, which tokenises the command. A

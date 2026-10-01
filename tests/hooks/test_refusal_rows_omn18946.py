@@ -43,6 +43,8 @@ SCRIPTS_DIR = HOOKS_DIR / "scripts"
 LIB_DIR = HOOKS_DIR / "lib"
 HOOKS_JSON = HOOKS_DIR / "hooks.json"
 ERROR_GUARD = SCRIPTS_DIR / "error-guard.sh"
+#: Where the function lives since OMN-19381; error-guard.sh sources it.
+REFUSAL_SEAM = LIB_DIR / "hook_refusal.sh"
 RECORDER = LIB_DIR / "hook_refusal_recorder.py"
 
 #: The shell function every deny path must call.
@@ -425,8 +427,16 @@ class TestEveryRegisteredRefusalIsRecorded:
 
 
 class TestTheSeamItself:
-    def test_error_guard_defines_the_function(self) -> None:
-        assert f"{RECORD_FN}()" in ERROR_GUARD.read_text(encoding="utf-8")
+    def test_the_seam_defines_the_function(self) -> None:
+        assert f"{RECORD_FN}()" in REFUSAL_SEAM.read_text(encoding="utf-8")
+
+    def test_error_guard_sources_the_seam(self) -> None:
+        """Every hook that sources error-guard.sh keeps the function in scope."""
+        assert re.search(
+            r"^source \S*/lib/hook_refusal\.sh",
+            ERROR_GUARD.read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
 
     def test_the_recorder_it_invokes_exists(self) -> None:
         """The OMN-18702 failure exactly: ten call sites survived a refactor
@@ -434,19 +444,19 @@ class TestTheSeamItself:
         guards watching that surface matched the call-site token as text and
         never asked whether the callee existed.
         """
-        source = ERROR_GUARD.read_text(encoding="utf-8")
+        source = REFUSAL_SEAM.read_text(encoding="utf-8")
         assert "hook_refusal_recorder.py" in source
         assert RECORDER.is_file()
 
     def test_the_call_is_backgrounded(self) -> None:
         """The operator's refusal message must never wait on a ledger lock."""
-        source = ERROR_GUARD.read_text(encoding="utf-8")
+        source = REFUSAL_SEAM.read_text(encoding="utf-8")
         body = source.split(f"{RECORD_FN}()", 1)[1]
         assert "disown" in body.split("\n}\n", 1)[0]
 
     def test_the_function_always_returns_zero(self) -> None:
         """A recorder that could break a guard would be worse than the gap."""
-        source = ERROR_GUARD.read_text(encoding="utf-8")
+        source = REFUSAL_SEAM.read_text(encoding="utf-8")
         body = source.split(f"{RECORD_FN}()", 1)[1].split("\n}\n", 1)[0]
         assert "return 0" in body
 
