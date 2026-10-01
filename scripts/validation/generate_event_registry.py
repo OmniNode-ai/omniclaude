@@ -79,6 +79,12 @@ DAEMON_INTERNAL_EVENT_TYPES: frozenset[str] = frozenset(
         "work.ledger.ruling",
         "work.ledger.status",
         "work.ledger.terminal",
+        # OMN-20154: provider quota observations and the in-process delegation
+        # terminals. Their emitters are the in-process `onex delegate` port and
+        # the quality-gate judge, never a Claude Code hook client.
+        "delegate_skill.completed",
+        "delegate_skill.failed",
+        "provider.quota.observed",
     }
 )
 
