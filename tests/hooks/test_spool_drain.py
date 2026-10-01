@@ -79,7 +79,7 @@ class TestResolveSpoolDir:
     def test_derives_from_state_dir(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from omnibase_infra.cli.receipt_mode import SPOOL_DIR_NAME
+        from omniclaude.hooks.spool_drain import SPOOL_DIR_NAME
 
         monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path))
         assert resolve_spool_dir(None) == tmp_path / SPOOL_DIR_NAME

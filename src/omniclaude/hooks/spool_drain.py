@@ -42,12 +42,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
-
-# omnibase_infra.cli.receipt_mode.SPOOL_DIR_NAME — the single source of truth
-# for the directory name the spool writer uses under ONEX_STATE_DIR. Imported
-# rather than re-literaled so a rename on that side is a visible import error
-# here, not a silent divergence.
-from omnibase_infra.cli.receipt_mode import SPOOL_DIR_NAME
 from pydantic import ValidationError
 
 from omniclaude.hooks.models_spool_drain import (
@@ -68,6 +62,10 @@ logger = logging.getLogger(__name__)
 WORKFLOW_TYPE = "hook-event-capture"
 DEFAULT_SOURCE = "local_macos_claude_hooks"
 SHIPPED_DIR_NAME = "shipped"
+# Directory under ONEX_STATE_DIR holding the spool. omnibase_infra 0.38.61 no
+# longer writes a spool (OMN-20146) and dropped its SPOOL_DIR_NAME export, so
+# this drainer owns the name for spool files left behind by older writers.
+SPOOL_DIR_NAME = "emit_spool"
 
 TERMINAL_ACCEPT_STATUSES = ("completed",)
 PUBLISHED_ACCEPT_STATUSES = ("published", "completed")
