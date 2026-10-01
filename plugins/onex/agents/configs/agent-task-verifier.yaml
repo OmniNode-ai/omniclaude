@@ -6,7 +6,7 @@
 # Spawned by quorum gate; not auto-triggered by routing
 
 schema_version: "1.0.0"
-model: haiku
+model: sonnet
 disallowedTools:
   - CronCreate
   - CronDelete

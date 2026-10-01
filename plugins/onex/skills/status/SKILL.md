@@ -55,7 +55,7 @@ else:
     Agent(
         name="status-snapshot",
         prompt=ONE_SHOT_SNAPSHOT_PROMPT,
-        model="claude-haiku-4-5-20251001",
+        model="sonnet",
     )
     # surface agent output to user
 ```
@@ -90,8 +90,8 @@ Never query repository state directly. Never open PRs or push code. Read-only
 snapshot only.
 ````
 
-Use `model="claude-haiku-4-5-20251001"` for the snapshot agent — this is a
-read-only reporting task, not a reasoning task.
+Use `model="sonnet"` for the snapshot agent (haiku is removed from background
+dispatch; trivial text work goes to `onex delegate`).
 
 ## Failure modes
 

@@ -84,8 +84,13 @@ def _check(source: str) -> list[Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_shipped_allowlist_is_exactly_the_three_background_models() -> None:
-    assert set(ALLOWLIST) == {"opus", "sonnet", "haiku"}
+def test_shipped_allowlist_is_exactly_the_two_background_models() -> None:
+    assert set(ALLOWLIST) == {"opus", "sonnet"}
+
+
+def test_shipped_allowlist_has_no_haiku() -> None:
+    """Operator ruling OMN-17427: haiku is removed from background dispatch."""
+    assert "haiku" not in ALLOWLIST
 
 
 def test_shipped_allowlist_has_no_inherit_escape_hatch() -> None:
@@ -102,8 +107,8 @@ def test_shipped_allowlist_has_no_inherit_escape_hatch() -> None:
 
 def test_allowlist_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
     override = tmp_path / "allowlist.json"
-    override.write_text(json.dumps({"allowed_models": ["haiku"]}), encoding="utf-8")
-    assert _GUARD.load_allowlist(override) == frozenset({"haiku"})
+    override.write_text(json.dumps({"allowed_models": ["sonnet"]}), encoding="utf-8")
+    assert _GUARD.load_allowlist(override) == frozenset({"sonnet"})
 
 
 @pytest.mark.parametrize(
@@ -197,7 +202,7 @@ def test_fable_fails_and_the_message_quotes_the_offending_value() -> None:
     assert len(findings) == 1
     assert "'fable'" in findings[0].reason
     assert "not an allowed background model" in findings[0].reason
-    assert "haiku, opus, sonnet" in findings[0].reason
+    assert "opus, sonnet" in findings[0].reason
     assert findings[0].label == "fable-call"
 
 
@@ -219,7 +224,7 @@ def test_model_only_inside_the_prompt_string_fails() -> None:
 def test_agent_call_written_inside_a_prompt_is_not_a_call_site() -> None:
     source = (
         "await agent(`Do not call agent({ label: 'x' }) yourself.`, "
-        "{ label: 'quoted-agent', model: 'haiku' })"
+        "{ label: 'quoted-agent', model: 'sonnet' })"
     )
     assert _check(source) == []
 
@@ -277,7 +282,21 @@ def test_options_argument_that_is_not_an_object_literal_fails() -> None:
 
 
 def test_double_quoted_model_passes() -> None:
-    assert _check('await agent("x", { label: "dq", model: "haiku" })') == []
+    assert _check('await agent("x", { label: "dq", model: "sonnet" })') == []
+
+
+@pytest.mark.parametrize("model", ["sonnet", "opus"])
+def test_workflow_agent_on_an_allowed_model_passes(model: str) -> None:
+    assert _check(f"await agent(`x`, {{ label: 'ok', model: '{model}' }})") == []
+
+
+@pytest.mark.parametrize("model", ["haiku", "claude-haiku-4-5-20251001"])
+def test_workflow_agent_on_haiku_is_refused_and_says_it_is_removed(model: str) -> None:
+    findings = _check(f"await agent(`x`, {{ label: 'h', model: '{model}' }})")
+    assert len(findings) == 1
+    assert "not an allowed background model" in findings[0].reason
+    assert "haiku is removed" in findings[0].reason
+    assert "onex delegate" in findings[0].reason
 
 
 def test_line_numbers_point_at_the_offending_call() -> None:
@@ -373,6 +392,25 @@ def test_agent_with_allowed_model_passes() -> None:
         )
         == []
     )
+
+
+def test_agent_with_opus_passes() -> None:
+    assert (
+        _GUARD.check_agent_input(
+            {"subagent_type": "general-purpose", "model": "opus"}, ALLOWLIST
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize("model", ["haiku", "claude-haiku-4-5-20251001"])
+def test_agent_on_haiku_is_refused_and_says_it_is_removed(model: str) -> None:
+    findings = _GUARD.check_agent_input(
+        {"subagent_type": "general-purpose", "model": model}, ALLOWLIST
+    )
+    assert len(findings) == 1
+    assert "haiku is removed" in findings[0].reason
+    assert "onex delegate" in findings[0].reason
 
 
 def test_agent_with_no_model_fails() -> None:
@@ -511,7 +549,8 @@ def test_registered_hook_blocks_a_workflow_with_no_model(tmp_path: Path) -> None
     assert "background agent model not chosen explicitly" in combined
     assert "e2e-canary" in combined
     assert "line 1" in combined
-    assert "opus" in combined and "sonnet" in combined and "haiku" in combined
+    assert "opus" in combined and "sonnet" in combined
+    assert "onex delegate" in combined
 
 
 def test_registered_hook_blocks_an_agent_fork(tmp_path: Path) -> None:

@@ -175,7 +175,13 @@ _CLOSERS: Final[frozenset[str]] = frozenset(")]}")
 #: The one-line remedy printed with every block.
 FIX_LINE: Final[str] = (
     "Fix: give every agent() options object an explicit model: "
-    "'opus' | 'sonnet' | 'haiku'."
+    "'opus' | 'sonnet'. Trivial text work goes to `onex delegate` (local lab models)."
+)
+
+#: Appended to a refusal whose offending value names haiku.
+HAIKU_REMOVED_NOTE: Final[str] = (
+    "haiku is removed from the background-agent allowlist (OMN-17427); "
+    "trivial text work goes to `onex delegate` (local lab models) instead"
 )
 
 _AGENT_TOOL_FILE: Final[str] = "<Agent tool call>"
@@ -260,6 +266,11 @@ def load_allowlist(path: Path | None = None) -> frozenset[str]:
 
 def _allowed(allowlist: frozenset[str]) -> str:
     return ", ".join(sorted(allowlist))
+
+
+def _removed_note(value: str) -> str:
+    """Name the haiku removal when the refused value is a haiku spelling."""
+    return f"; {HAIKU_REMOVED_NOTE}" if "haiku" in value.lower() else ""
 
 
 # ---------------------------------------------------------------------------
@@ -983,6 +994,7 @@ def check_workflow_script(
                     reason=(
                         f"model: {literal!r} is not an allowed background model "
                         f"(allowed: {_allowed(allowlist)})"
+                        f"{_removed_note(literal)}"
                     ),
                 )
             )
@@ -1073,6 +1085,7 @@ def check_agent_input(
                 reason=(
                     f"model {model.strip()!r} is not an allowed background model "
                     f"(allowed: {_allowed(allowlist)})"
+                    f"{_removed_note(model)}"
                 ),
             )
         ]

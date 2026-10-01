@@ -124,7 +124,7 @@ if failures:
             print(err)
     print()
     print(f"ERROR: {failed} agent(s) failed contract validation.")
-    print("Add required fields: name, description (>=20 chars), model (opus/sonnet/haiku),")
+    print("Add required fields: name, description (>=20 chars), model (opus/sonnet),")
     print("triggers (non-empty for non-orchestrator), disallowedTools (list), domain, purpose (>=20 chars).")
     sys.exit(1)
 
