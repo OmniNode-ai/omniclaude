@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: hook_work_ledger_typed
+#
+# Declares the typed work-ledger v2 wire topics that EVENT_REGISTRY fans out
+# to (OMN-20001). The topics are owned by omnimarket (node_emit_daemon
+# registries/topics.yaml); this contract is what declares them to omniclaude's
+# topic governance (tests/unit/test_topic_governance.py), so they need no
+# topic_allowlist.yaml entry.
+
+name: "hook_work_ledger_typed"
+contract_name: "hook_work_ledger_typed"
+node_name: "hook_work_ledger_typed"
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_type: "EFFECT_GENERIC"
+
+description: >
+  Typed semantic work-ledger rows (ack, claim, correction, friction, hold,
+  msg, operator-consent, release, ruling, status, terminal) routed through the
+  emit daemon to omnimarket's v2 topics.
+
+event_bus:
+  publish_topics:
+    - "onex.evt.omnimarket.work-ledger-ack.v2"  # onex-topic-sot
+    - "onex.evt.omnimarket.work-ledger-claim.v2"  # onex-topic-sot
+    - "onex.evt.omnimarket.work-ledger-correction.v2"  # onex-topic-sot
+    - "onex.evt.omnimarket.work-ledger-friction.v2"  # onex-topic-sot
+    - "onex.evt.omnimarket.work-ledger-hold.v2"  # onex-topic-sot
+    - "onex.evt.omnimarket.work-ledger-msg.v2"  # onex-topic-sot
+    - "onex.evt.omnimarket.work-ledger-operator-consent.v2"  # onex-topic-sot
+    - "onex.evt.omnimarket.work-ledger-release.v2"  # onex-topic-sot
+    - "onex.evt.omnimarket.work-ledger-ruling.v2"  # onex-topic-sot
+    - "onex.evt.omnimarket.work-ledger-status.v2"  # onex-topic-sot
+    - "onex.evt.omnimarket.work-ledger-terminal.v2"  # onex-topic-sot
