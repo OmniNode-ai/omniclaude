@@ -40,7 +40,7 @@ repos:
   # the pin-parity-check hook below, which fails closed if this rev and
   # ci.yml:3102's pin ever diverge.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 63635097705d832e0ee9c4811093efb31349105c # pragma: allowlist secret
+    rev: 5220ecf1758b4475c2963ec13171b6431fdc2224 # pragma: allowlist secret
     hooks:
       - id: check-stub-implementations
       - id: no-noncanonical-lifecycle-classes
@@ -92,6 +92,16 @@ repos:
       - id: check-url-authority
         args: [--repo, omniclaude, --repo-root, .]
         exclude: ^(tests/|archived/|archive/).*\.py$
+
+  # Shape-gate independence (OMN-20298): a shape-gate detector job never waits on
+  # the change-control preflight and never reads its result. BLOCKING, zero
+  # baseline, no allowlist, no suppression comment. CI twin: the
+  # shape-gate-independence job in .github/workflows/ci.yml (CI Summary
+  # GATE_JOBS + STRICT_SUCCESS_JOBS).
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: 5220ecf1758b4475c2963ec13171b6431fdc2224 # pragma: allowlist secret
+    hooks:
+      - id: check-shape-gate-independence
 
   # Fast Python formatting and linting (staged files only)
   # Order: format -> fix -> check (matches CI behavior)

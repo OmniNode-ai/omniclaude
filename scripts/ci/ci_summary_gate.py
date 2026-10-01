@@ -67,6 +67,7 @@ GATE_JOBS: tuple[str, ...] = (
     "Contract Compliance",
     "Pre-commit Suite (OMN-19612)",
     "no-noncanonical-lifecycle-classes",  # OMN-14350 non-canonical lifecycle-class ratchet
+    "Shape-Gate Independence (OMN-20298)",  # shape-gate-independence: refuses a detector job behind the preflight
     "OCC Companion Merged Gate (OMN-15214)",  # occ-companion-merged — cited OCC evidence must be MERGED before product merge (OMN-15221/OMN-15224 port)
     # OMN-18031: the per-run runner-routing decision. THIS LINE IS HALF THE
     # MECHANISM, on the identical reasoning as the entries above. The
@@ -123,6 +124,7 @@ STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
     {
         "Runtime Profiles",
         "no-noncanonical-lifecycle-classes",
+        "Shape-Gate Independence (OMN-20298)",
         "Pre-commit Suite (OMN-19612)",
         "OCC Companion Merged Gate (OMN-15214)",
         # OMN-18031: see the GATE_JOBS entry above. GATE_JOBS membership alone

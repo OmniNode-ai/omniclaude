@@ -50,8 +50,6 @@ jobs:
       receipts-dir: drift/dod_receipts
 
   url-authority-gate:
-    needs: occ-preflight
-    if: always()
     name: URL Authority Gate
     runs-on: ubuntu-latest
     steps:

@@ -27,7 +27,6 @@ jobs:
       receipts-dir: drift/dod_receipts
 
   imperative-contract-guard:
-    needs: occ-preflight
     # self-gating-ok: central guard is intentionally shared across repos; caller PRs do not modify the referenced workflow.
     #
     # OMN-18494: pinned to a full sha rather than @main, deliberately. @main is
