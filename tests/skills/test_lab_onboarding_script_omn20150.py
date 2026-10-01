@@ -485,3 +485,85 @@ def test_quit_setup_stops_before_anything_installs(
     assert "Nothing was installed. Run onboarding again when you're ready." in out
     assert result.returncode == 4, out[-400:]
     assert sorted((tmp_path / "home").rglob("*")) == []
+
+
+def _functions(*names: str) -> str:
+    """The named top-level functions of the script, as bash source."""
+    out, keep = [], False
+    for line in SCRIPT.read_text().splitlines():
+        if any(line.startswith(f"{n}() {{") for n in names):
+            keep = True
+        if keep:
+            out.append(line)
+            if line == "}":
+                keep = False
+    return "\n".join(out)
+
+
+@pytest.mark.parametrize(
+    ("status", "rc", "next_words"),
+    [
+        (201, 0, None),
+        (403, 86, "sign in to Tailscale as yourself"),
+        (409, 86, "ask the lab operator to retire one"),
+        (502, 1, None),
+    ],
+)
+def test_an_issuer_refusal_is_reported_not_retried(
+    tmp_path: Path, status: int, rc: int, next_words: str | None
+) -> None:
+    """A 4xx is the issuer's answer about this machine, so asking again cannot help."""
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class Issuer(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            ok = {"principal": "dev-x", "password": "p"}  # pragma: allowlist secret
+            body = json.dumps(ok if status < 300 else {"error": "refused"}).encode()
+            self.send_response(status)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Issuer)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        harness = (
+            "REFUSED=86\n"
+            + _functions("request_identity", "refusal_next")
+            + "\nlab_fact() { case $1 in principal_issuer_url) "
+            + f"echo http://127.0.0.1:{server.server_port};; lane) echo dev;; esac; }}\n"
+            + 'out="$(request_identity 2>err)"; rc=$?; LAST_ERR="$(cat err)"\n'
+            + 'echo "rc=$rc"; [ "$rc" -eq "$REFUSED" ] && echo "next=$(refusal_next)"\n'
+        )
+        result = subprocess.run(
+            ["/bin/bash", "-c", harness],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+            cwd=tmp_path,
+        )
+    finally:
+        server.shutdown()
+    assert f"rc={rc}" in result.stdout, result.stdout + result.stderr
+    if next_words:
+        assert next_words in result.stdout
+
+
+def test_retry_capture_stops_at_a_refusal() -> None:
+    text = SCRIPT.read_text()
+    assert '[ "$n" -ge "$RETRIES" ] || [ "$rc" -eq "$REFUSED" ]' in text
+
+
+def test_phase7_installs_the_full_onex_tree_and_omni_where_reachable() -> None:
+    text = SCRIPT.read_text()
+    assert "plugin install onex@omninode-tools-dev" in text
+    assert "/omniclaude/plugins/onex-dev-marketplace" in text
+    assert "for p in omni onex-overlays" in text
+    assert "internal_plugins_reachable" in text

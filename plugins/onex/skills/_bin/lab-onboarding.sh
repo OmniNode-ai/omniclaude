@@ -17,7 +17,8 @@
 #   5 Bus identity       this machine's lab principal, issued automatically; one lane delegation
 #   6 Docker             optional, in addition to the lab: asked once after preflight;
 #                        Docker Desktop installed, or started if stopped, then the stack
-#   7 Claude Code plugin onex@omninode-tools
+#   7 Claude Code      the full onex plugin from your omniclaude clone, and omni and
+#                        onex-overlays when this GitHub login can read omniclaude-internal
 #   8 Verify             the checks for the selected modes, one line each
 #
 # Compatible with macOS's stock /bin/bash 3.2: no associative arrays, no
@@ -246,8 +247,11 @@ retry() {
 }
 
 # retry_capture DESC CMD... : like retry, but CMD's stdout is returned in
-# CAPTURED and never written to the log (it may carry a credential).
+# CAPTURED and never written to the log (it may carry a credential). A CMD that
+# exits $REFUSED was answered with a refusal; asking again gets the same answer,
+# so it is not retried.
 CAPTURED=""
+REFUSED=86
 retry_capture() {
   local desc="$1"; shift
   local n=1 rc wait
@@ -259,7 +263,7 @@ retry_capture() {
     [ "$rc" -eq 0 ] && return 0
     CAPTURED=""
     LAST_ERR="$(last_log_lines)"
-    if [ "$n" -ge "$RETRIES" ]; then
+    if [ "$n" -ge "$RETRIES" ] || [ "$rc" -eq "$REFUSED" ]; then
       FAILED_STEP="$desc"; FAILED_ATTEMPTS=$n
       return "$rc"
     fi
@@ -1100,12 +1104,35 @@ sys.exit(0 if sys.argv[1] in StoreLaneCredential(onex_home=Path.home() / ".onex"
 PY
 }
 
-request_identity() { # -> stdout: the issuer's JSON (principal + password)
-  local device
+# -> stdout: the issuer's JSON (principal + password). A 4xx is the issuer
+# refusing this machine (a tagged device, a login outside the allowed domains,
+# too many machines on one login): its reason goes to the log and the call exits
+# $REFUSED. No connection, or a 5xx, exits 1 and is retried.
+request_identity() {
+  local device out code body
   device="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
-  curl -fsS -m 60 -X POST "$(lab_fact principal_issuer_url)/v1/principals" \
+  out="$(curl -sS -m 60 -w '\n%{http_code}' -X POST "$(lab_fact principal_issuer_url)/v1/principals" \
     -H 'content-type: application/json' \
-    --data "{\"lane\":\"$(lab_fact lane)\",\"device\":\"$device\"}"
+    --data "{\"lane\":\"$(lab_fact lane)\",\"device\":\"$device\"}")" || return 1
+  code="${out##*$'\n'}"
+  body="${out%$'\n'*}"
+  out=""
+  case "$code" in
+    2??) printf '%s' "$body" ;;
+    4??) echo "HTTP $code from the lab's identity service: $(printf '%s' "$body" | jq -r '.error // empty' 2>/dev/null)" >&2
+         return "$REFUSED" ;;
+    *) echo "HTTP $code from the lab's identity service: $(printf '%s' "$body" | jq -r '.error // empty' 2>/dev/null)" >&2
+       return 1 ;;
+  esac
+}
+
+# The next step for an identity request the issuer refused, from its status.
+refusal_next() {
+  case "$LAST_ERR" in
+    *"HTTP 403"*) echo "sign in to Tailscale as yourself on this Mac ('tailscale up'), not as a tagged device or with a login outside OmniNode, then run this again" ;;
+    *"HTTP 409"*) echo "your login holds the most machine identities allowed; ask the lab operator to retire one you no longer use, then run this again" ;;
+    *) echo "the reason is above; say so on the team channel" ;;
+  esac
 }
 
 store_identity() { # uses CAPTURED
@@ -1150,8 +1177,12 @@ phase5() {
     say "  A bus identity for lane $(lab_fact lane) is already stored; keeping it (--reissue-identity to replace it)."
   else
     say "  Requesting this machine's bus identity from the lab…"
-    retry_capture "request a bus identity" request_identity ||
-      phase_fail "the lab's identity service did not answer. Tailscale is connected (phase 3), so the service is down or not deployed on the lab host; say so on the team channel, then run this again"
+    retry_capture "request a bus identity" request_identity
+    case $? in
+      0) ;;
+      "$REFUSED") phase_fail "the lab's identity service refused this machine: $(refusal_next)" ;;
+      *) phase_fail "the lab's identity service did not answer. Tailscale is connected (phase 3), so the service is down; say so on the team channel, then run this again" ;;
+    esac
     step "store the bus identity" store_identity ||
       phase_fail "see the log; the identity was not stored"
     say "  Stored bus identity '$ISSUED_PRINCIPAL' for lane $(lab_fact lane)."
@@ -1396,29 +1427,69 @@ phase6() {
 }
 
 # ===========================================================================
-# Phase 7: Claude Code plugin
+# Phase 7: Claude Code plugins
 # ===========================================================================
 install_claude_code() {
   download https://claude.ai/install.sh "$RUN_DIR/claude-install.sh" && bash "$RUN_DIR/claude-install.sh"
 }
 
+claude_bin() { command -v claude || echo "$HOME/.local/bin/claude"; }
+plugin_installed() { "$(claude_bin)" plugin list 2>/dev/null | grep -Eq "[[:space:]]$1[[:space:]]*\$"; }
+
+# omni and onex-overlays come from a private repository that the marketplace
+# clones over SSH: this GitHub login must read it, and an SSH key must be loaded.
+internal_plugins_reachable() {
+  gh api repos/OmniNode-ai/omniclaude-internal --silent >>"$LOG" 2>&1 || return 1
+  ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 |
+    grep -q 'successfully authenticated'
+}
+
 phase7() {
-  phase_start 7 "Claude Code plugin (onex@omninode-tools)" "about a minute"
+  phase_start 7 "Claude Code plugins (the full onex tree; omni where you have access)" "1-2 minutes"
   if ! command -v claude >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/claude" ]; then
     say "  Installing Claude Code…"
     retry "install Claude Code" install_claude_code || phase_fail "install Claude Code from claude.com/claude-code, then run this again"
   fi
-  local claude; claude="$(command -v claude || echo "$HOME/.local/bin/claude")"
-  if "$claude" plugin list 2>/dev/null | grep -q 'onex@omninode-tools'; then
-    say "  onex@omninode-tools: installed"
+  local claude; claude="$(claude_bin)"
+
+  # The full onex tree (every /onex: skill and guard hook) is a directory
+  # marketplace in the omniclaude clone, so it moves with that clone.
+  if plugin_installed onex@omninode-tools-dev; then
+    say "  onex@omninode-tools-dev: installed"
   else
-    "$claude" plugin marketplace list 2>/dev/null | grep -q 'omninode-tools' ||
-      retry "add the OmniNode plugin marketplace" "$claude" plugin marketplace add OmniNode-ai/omniclaude ||
-      phase_fail "run 'claude plugin marketplace add OmniNode-ai/omniclaude' to see the error"
-    retry "install onex@omninode-tools" "$claude" plugin install onex@omninode-tools ||
-      phase_fail "run 'claude plugin install onex@omninode-tools' to see the error"
+    "$claude" plugin marketplace list 2>/dev/null | grep -q 'omninode-tools-dev' ||
+      step "add the onex dev marketplace from your omniclaude clone" \
+        "$claude" plugin marketplace add "$WORKSPACE/omniclaude/plugins/onex-dev-marketplace" ||
+      phase_fail "run 'claude plugin marketplace add plugins/onex-dev-marketplace' from $WORKSPACE/omniclaude to see the error"
+    step "install onex@omninode-tools-dev" "$claude" plugin install onex@omninode-tools-dev ||
+      phase_fail "run 'claude plugin install onex@omninode-tools-dev' to see the error"
   fi
-  phase_pass "use /onex:delegate in a new Claude Code session"
+  if plugin_installed onex@omninode-tools; then
+    say "  ⚠ The public onex@omninode-tools (two skills) is also installed; the full tree includes them."
+    say "    Remove it with 'claude plugin uninstall onex@omninode-tools' so each /onex: skill appears once."
+  fi
+
+  local note="start a new Claude Code session to load them"
+  if internal_plugins_reachable; then
+    "$claude" plugin marketplace list 2>/dev/null | grep -q 'omninode-internal' ||
+      retry "add the omniclaude-internal marketplace" "$claude" plugin marketplace add OmniNode-ai/omniclaude-internal ||
+      phase_fail "run 'claude plugin marketplace add OmniNode-ai/omniclaude-internal' to see the error"
+    local p
+    for p in omni onex-overlays; do
+      if plugin_installed "$p@omninode-internal"; then
+        say "  $p@omninode-internal: installed"
+      else
+        retry "install $p@omninode-internal" "$claude" plugin install "$p@omninode-internal" ||
+          phase_fail "run 'claude plugin install $p@omninode-internal' to see the error"
+      fi
+    done
+  else
+    say "  omni and onex-overlays: not installed. They come from the private omniclaude-internal"
+    say "    repository, which needs read access for your GitHub login and an SSH key loaded"
+    say "    ('ssh -T git@github.com' greets you by name). With both, run this again."
+    note="$note; omni skipped (no access to omniclaude-internal)"
+  fi
+  phase_pass "$note"
 }
 
 # ===========================================================================
@@ -1454,6 +1525,7 @@ phase8() {
   check "a delegation row in the local store" sqlite_rows
   check "onex metering reads it" onex_run metering
   check "lab bus identity stored for lane $(lab_fact lane)" lane_identity_stored
+  check "the full onex plugin installed in Claude Code" plugin_installed onex@omninode-tools-dev
   if [ "$MODE2_OK" -eq 1 ]; then check "local stack healthy" stack_healthy; fi
   if [ -n "$AMBIENT_FOUND" ]; then
     say "  ⚠ Your shell profile still exports settings that redirect onex (listed in phase 0)."
@@ -1482,7 +1554,8 @@ main() {
   hr
   say "Done. Set up: $SELECTED."
   say "Model: your own $MODEL_CHOICE key."
-  say "Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect."
+  say "Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect,"
+  say "and start a new Claude Code session so the plugins load."
   notify "Onboarding complete" "Every phase passed"
   printf 'result=COMPLETE\n' >>"$STATUS"
 }

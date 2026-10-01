@@ -56,7 +56,7 @@ its prompts, then reports each phase to the developer the moment it finishes.
 | 4 | onex, the local identity, one model path, one delegation | yes |
 | 5 | This machine's lab bus identity, issued automatically; one delegation on the lab dev lane | yes |
 | 6 | Docker (optional, in addition to the lab): only if the developer says yes to the one question; Docker Desktop installed, or started if stopped, then the local stack | yes |
-| 7 | Claude Code plugin `onex@omninode-tools` | yes |
+| 7 | Claude Code plugins: the full onex tree (`onex@omninode-tools-dev`, from the omniclaude clone), and `omni` and `onex-overlays` when this GitHub login can read omniclaude-internal and an SSH key is loaded | yes |
 | 8 | Verify | no |
 
 Minimum requirements are printed by phase 0. A Mac below them gets nothing
@@ -139,8 +139,9 @@ failed phase; completed phases are verified, not redone.
 ### 4. Finish
 
 On `result=COMPLETE`, tell the developer to open a new terminal (so `OMNIBASE_PATH`
-and `PATH` apply) and that `/onex:delegate` is available in a new Claude Code
-session. If phase 0 or phase 8 printed a warning about shell-profile exports,
+and `PATH` apply) and to start a new Claude Code session, where the `/onex:` skills
+(and `/omni:` ones, if phase 7 installed them) are loaded. A running session keeps
+the plugins it started with. If phase 0 or phase 8 printed a warning about shell-profile exports,
 repeat it.
 
 ## What this skill does NOT do
