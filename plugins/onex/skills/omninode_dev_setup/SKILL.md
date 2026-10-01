@@ -86,7 +86,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/omninode-dev-setup.sh" --preflight-only 
   Desktop is installed but stopped, say the run will start it; if it is
   missing, say the run will install it. If the line says Docker is not
   offered, relay why: native onex alone covers delegations.
-- Then the model. Unless `--provider` was given, ask which one:
+- The model (the run asks it before the Docker question). Unless `--provider` was given, ask which one:
   - **Gemini** (a Google AI Studio key), **OpenRouter** or **OpenAI** (their key;
     OpenAI needs credits on the account): the key
     itself is typed only in the Terminal window or a macOS dialog, at a hidden

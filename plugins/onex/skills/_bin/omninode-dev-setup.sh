@@ -776,8 +776,11 @@ phase0() {
     exit 3
   fi
 
-  # Every machine gets native onex. Docker is one question on top of it, asked after
-  # preflight and only when this Mac can run it; the flags answer it in advance.
+  # The model comes first: it is the one choice every run needs. Docker is one
+  # question on top of it, asked only when this Mac can run it; the flags answer
+  # either in advance.
+  [ "$PREFLIGHT_ONLY" -eq 1 ] || settle_model_key
+
   local docker_note
   case "$dstate" in
     running) docker_note="Docker Desktop: already running" ;;
@@ -811,7 +814,6 @@ phase0() {
   else
     SELECTED="native onex. No local Docker:$MODE2_WHY"
   fi
-  [ "$PREFLIGHT_ONLY" -eq 1 ] || settle_model_key
   say "  Will set up: $SELECTED"
   uses_key "$MODEL_CHOICE" && say "  Model: your own $(provider_label "$MODEL_CHOICE") key"
   phase_pass "$SELECTED"

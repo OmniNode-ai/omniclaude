@@ -247,8 +247,8 @@ def test_one_question_after_preflight_decides_docker(
     }
     script = (
         f"set timeout 60; spawn /bin/bash {phase0_only} --provider gemini; "
-        f'expect "Set up the local stack in Docker too?"; send "{answer}\\r"; '
-        'expect "key (input is hidden)"; send "not-a-real-key\\r"; expect eof'
+        'expect "key (input is hidden)"; send "not-a-real-key\\r"; '
+        f'expect "Set up the local stack in Docker too?"; send "{answer}\\r"; expect eof'
     )
     result = subprocess.run(
         ["/usr/bin/expect", "-c", script],
@@ -394,8 +394,8 @@ def test_the_key_is_settled_in_preflight(
 @pytest.mark.parametrize(
     "answers",
     [
-        'expect "Set up the local stack in Docker too?"; send "q\\r"; ',
-        'expect "Set up the local stack in Docker too?"; send "n\\r"; expect "Choose 1, 2, 3 or 4:"; send "q\\r"; ',
+        'expect "Choose 1, 2, 3 or 4:"; send "4\\r"; expect "Set up the local stack in Docker too?"; send "q\\r"; ',
+        'expect "Choose 1, 2, 3 or 4:"; send "q\\r"; ',
     ],
     ids=["quit-at-docker", "quit-at-provider"],
 )
@@ -759,3 +759,34 @@ def test_choosing_openai_on_the_menu_asks_for_an_openai_key(tmp_path: Path) -> N
     out = result.stdout.replace("\r", "")
     assert "Paste your OpenAI API key (input is hidden):" in out
     assert "it is only ever sent to OpenAI" in out
+
+
+@macos_only
+@pytest.mark.skipif(
+    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
+)
+def test_the_model_is_asked_before_docker(tmp_path: Path) -> None:
+    script = (
+        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)}; "
+        'expect "Choose 1, 2, 3 or 4:"; send "4\\r"; '
+        'expect "Set up the local stack in Docker too?"; send "n\\r"; expect eof'
+    )
+    result = subprocess.run(
+        ["/usr/bin/expect", "-c", script],
+        env=_phase0_env(
+            tmp_path,
+            ONBOARD_TEST_RAM_GB="32",
+            ONBOARD_TEST_CPUS="10",
+            ONBOARD_TEST_VM="0",
+        ),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout.replace("\r", "")
+    if "ports in use" in out:
+        pytest.skip("the local stack's ports are held by something else on this host")
+    assert out.index("Choose 1, 2, 3 or 4:") < out.index(
+        "Set up the local stack in Docker too?"
+    )
