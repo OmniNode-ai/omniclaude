@@ -60,6 +60,8 @@ LOG_FILE="${ONEX_HOOK_LOG}"
 
 # Read stdin
 TOOL_INFO=$(cat)
+# OMN-19381: the payload the refusal recorder reads the lane from.
+_OMNICLAUDE_HOOK_PAYLOAD="$TOOL_INFO"
 
 # Parse tool name — fail open on bad JSON
 TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null) || {

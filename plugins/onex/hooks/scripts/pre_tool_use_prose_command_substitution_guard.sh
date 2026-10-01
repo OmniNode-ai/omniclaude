@@ -25,6 +25,10 @@
 
 set -euo pipefail
 
+# OMN-19381: named before error-guard.sh is sourced, or every refusal row and
+# the per-hook log say unknown-hook.
+_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
+
 # error-guard.sh sources hook-gate.sh, which supplies onex_hook_gate and
 # _hook_status without common.sh. common.sh is deliberately NOT sourced: its
 # find_python() hard-fails with `exit 1` when no venv is present, and the
@@ -90,6 +94,8 @@ _block() {
 }
 
 TOOL_INFO=$(cat)
+# OMN-19381: the payload the refusal recorder reads the lane from.
+_OMNICLAUDE_HOOK_PAYLOAD="$TOOL_INFO"
 
 # Cheap OVER-matching pre-filter. It decides nothing. A command with no
 # backtick cannot carry a backtick substitution, so it never pays for an
