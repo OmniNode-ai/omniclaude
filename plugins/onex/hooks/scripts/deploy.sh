@@ -25,17 +25,41 @@ cat > "$SHIM" << 'SHIM_BODY'
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# Stable launcher for the ONEX statusline — auto-discovers the current
-# plugin cache version so settings.json never needs updating after deploys.
+# Stable launcher for the ONEX statusline — resolves the enabled onex plugin's
+# install path (falling back to the newest cached copy) so settings.json never
+# needs updating after deploys or a switch of marketplace.
 
-CACHE_ROOT="${ONEX_PLUGIN_CACHE_ROOT:-$HOME/.claude/plugins/cache/omninode-tools/onex}"
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+CACHE_ROOT="${ONEX_PLUGIN_CACHE_ROOT:-$CLAUDE_DIR/plugins/cache/omninode-tools/onex}"
+VERSIONED=""
 
-# Find the highest semver-sorted installed copy (sort -V avoids mtime races)
-VERSIONED=$(
-    ls "$CACHE_ROOT"/*/hooks/scripts/statusline.sh 2>/dev/null \
-    | sort -V \
-    | tail -1
-)
+# 1. The ENABLED onex plugin's own install path. Which marketplace copy is
+#    enabled (omninode-tools, or a development marketplace) is a setting, so a
+#    launcher pinned to one cache directory runs a stale copy when the other is
+#    the one enabled. Resolve it from enabledPlugins and installed_plugins.json.
+if command -v jq >/dev/null 2>&1 && [ -f "$CLAUDE_DIR/settings.json" ] \
+   && [ -f "$CLAUDE_DIR/plugins/installed_plugins.json" ]; then
+    ENABLED_KEY=$(jq -r '[(.enabledPlugins // {}) | to_entries[]
+        | select((.key | startswith("onex@")) and .value == true) | .key][0] // empty' \
+        "$CLAUDE_DIR/settings.json" 2>/dev/null)
+    if [ -n "$ENABLED_KEY" ]; then
+        INSTALL_PATH=$(jq -r --arg k "$ENABLED_KEY" '.plugins[$k][0].installPath // empty' \
+            "$CLAUDE_DIR/plugins/installed_plugins.json" 2>/dev/null)
+        if [ -n "$INSTALL_PATH" ] && [ -f "$INSTALL_PATH/hooks/scripts/statusline.sh" ]; then
+            VERSIONED="$INSTALL_PATH/hooks/scripts/statusline.sh"
+        fi
+    fi
+fi
+
+# 2. Fallback: highest semver-sorted copy under the cache root
+#    (sort -V avoids mtime races).
+if [ -z "$VERSIONED" ]; then
+    VERSIONED=$(
+        ls "$CACHE_ROOT"/*/hooks/scripts/statusline.sh 2>/dev/null \
+        | sort -V \
+        | tail -1
+    )
+fi
 
 if [ -z "$VERSIONED" ]; then
     # Fallback: emit minimal output so Claude Code doesn't show a blank statusline

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# ONEX Status Line - 3-line layout:
+# ONEX Status Line - 3-line layout (a 4th line only when a local PR extension supplies one):
 #   Line 1: Repo context + model + token usage + thinking status
 #   Line 2: Rate limit usage bars (current period / weekly / extra billing)
 #   Line 3: Tab bar of all active Claude Code sessions
@@ -421,6 +421,66 @@ if [ "$HAS_JQ" -eq 1 ]; then
   BUS_STR=$(cat "$_TMP_BUS")
   rm -f "$_TMP_PG" "$_TMP_RP" "$_TMP_VK" "$_TMP_RT" "$_TMP_IN" "$_TMP_PH" "$_TMP_BUS"
 
+  # Optional local extension for the PR segment (OMN-20285). When an executable
+  # named by ONEX_STATUSLINE_PR_EXT (the value none disables extensions), or the first one of statusline-prs under
+  # ONEX_STATE_DIR/bin or ~/.onex_state/bin, answers within EXT_BUDGET it
+  # replaces the built-in main/dev segment below: its first output line is the
+  # PR segment of line 3 and its optional second line becomes a fourth line.
+  # The last good output is cached and served when the extension is missing,
+  # slow or failing; with no extension at all the built-in segment runs. The
+  # extension owns its own data sources, so the built-in gh refresh is skipped.
+  EXT_OK=0
+  EXT_LINE4=""
+  EXT_BIN=""
+  [ "${ONEX_STATUSLINE_PR_EXT:-}" = "none" ] && _skip_ext=1 || _skip_ext=0
+  for _cand in "${ONEX_STATUSLINE_PR_EXT:-}" \
+               "${ONEX_STATE_DIR:+$ONEX_STATE_DIR/bin/statusline-prs}" \
+               "$HOME/.onex_state/bin/statusline-prs"; do
+    [ "$_skip_ext" -eq 1 ] && break
+    if [ -n "$_cand" ] && [ -f "$_cand" ] && [ -x "$_cand" ]; then EXT_BIN="$_cand"; break; fi
+  done
+  unset _cand _skip_ext
+  if [ -n "$EXT_BIN" ]; then
+    EXT_CACHE="${ONEX_STATUSLINE_EXT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/omniclaude/statusline-ext.out}"
+    EXT_BUDGET_MS="${ONEX_STATUSLINE_EXT_BUDGET_MS:-300}"
+    case "$EXT_BUDGET_MS" in ""|*[!0-9]*) EXT_BUDGET_MS=300 ;; esac
+    EXT_TMP=$(mktemp 2>/dev/null) || EXT_TMP=""
+    EXT_RAW=""
+    if [ -n "$EXT_TMP" ]; then
+      "$EXT_BIN" >"$EXT_TMP" 2>/dev/null </dev/null &
+      EXT_PID=$!
+      _steps=$(( EXT_BUDGET_MS / 20 )); [ "$_steps" -lt 1 ] && _steps=1
+      while [ "$_steps" -gt 0 ] && kill -0 "$EXT_PID" 2>/dev/null; do
+        sleep 0.02; _steps=$((_steps - 1))
+      done
+      if kill -0 "$EXT_PID" 2>/dev/null; then
+        kill -9 "$EXT_PID" 2>/dev/null
+        wait "$EXT_PID" 2>/dev/null
+      elif wait "$EXT_PID" 2>/dev/null; then
+        EXT_RAW=$(cat "$EXT_TMP" 2>/dev/null) || EXT_RAW=""
+        if [ -n "$EXT_RAW" ]; then
+          mkdir -p "$(dirname "$EXT_CACHE")" 2>/dev/null
+          printf '%s' "$EXT_RAW" > "${EXT_CACHE}.tmp.$$" 2>/dev/null \
+            && mv -f "${EXT_CACHE}.tmp.$$" "$EXT_CACHE" 2>/dev/null
+        fi
+      fi
+      rm -f "$EXT_TMP" 2>/dev/null
+    fi
+    if [ -z "$EXT_RAW" ] && [ -f "$EXT_CACHE" ]; then
+      # Last good output, honoured for an hour so a dead extension cannot
+      # freeze a stale picture on screen indefinitely.
+      _em=$(stat -c %Y "$EXT_CACHE" 2>/dev/null || stat -f %m "$EXT_CACHE" 2>/dev/null || echo 0)
+      case "$_em" in ""|*[!0-9]*) _em=0 ;; esac
+      [ $(( NOW - _em )) -le 3600 ] && EXT_RAW=$(cat "$EXT_CACHE" 2>/dev/null)
+    fi
+    if [ -n "$EXT_RAW" ]; then
+      EXT_OK=1
+      PR_LINE="${SEP}$(printf '%s\n' "$EXT_RAW" | sed -n 1p)"
+      EXT_LINE4=$(printf '%s\n' "$EXT_RAW" | sed -n 2p)
+    fi
+  fi
+
+  if [ "$EXT_OK" -ne 1 ]; then
   # PR cache — populated in background (first run may be empty; subsequent runs use cache).
   # Cache is best-effort: stale/missing/invalid JSON must never break rendering.
   #
@@ -546,6 +606,7 @@ if [ "$HAS_JQ" -eq 1 ]; then
     fi
     PR_LINE="${SEP}${DIM}PRs(main/dev):${RESET} ${PR_BODY}"
   fi
+  fi  # built-in PR segment (no extension answered)
 
   SVC="${DIM}pg:${RESET}${PG_DOT} ${DIM}rp:${RESET}${RP_DOT} ${DIM}vk:${RESET}${VK_DOT} ${DIM}rt:${RESET}${RT_DOT} ${DIM}intel:${RESET}${INTEL_DOT} ${DIM}phx:${RESET}${PHX_DOT}"
   LINE3="${SVC}${SEP}${BUS_STR}${PR_LINE}${RESET}"
@@ -555,8 +616,12 @@ else
 fi  # HAS_JQ for Section D
 
 ###############################################################################
-# Section E: Output — always exactly 3 lines
+# Section E: Output — 3 lines, or 4 when the PR extension returns two
 ###############################################################################
 
-printf '%b\n' "$LINE1" "$LINE2" "$LINE3"
+if [ -n "${EXT_LINE4:-}" ]; then
+  printf '%b\n' "$LINE1" "$LINE2" "$LINE3" "${EXT_LINE4}${RESET}"
+else
+  printf '%b\n' "$LINE1" "$LINE2" "$LINE3"
+fi
 exit 0
