@@ -71,7 +71,7 @@ import json
 import os
 import re
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
@@ -246,9 +246,108 @@ def make_scrubber(
 # ---------------------------------------------------------------------------
 
 
+#: Where a Workflow agent's run id is remembered once its sidecar is found,
+#: beside the journal: ``<state>/hook_sidecar_index/<session id>/<agent id>``.
+SIDECAR_INDEX_DIRNAME = "hook_sidecar_index"
+#: A session's index entries are pruned once nothing has touched them for this
+#: long. Pruning runs only on a lookup miss, which is once per workflow agent.
+SIDECAR_INDEX_STALE_AFTER_S = 7 * 24 * 3600
+_SAFE_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+
+def sidecar_index_dir_for(journal_dir: Path) -> Path:
+    """The workflow-run index for a journal: a sibling, under the same state dir."""
+    return journal_dir.parent / SIDECAR_INDEX_DIRNAME
+
+
+def _index_entry(
+    index_dir: Path | None, session_dir: Path, agent_id: str
+) -> Path | None:
+    if index_dir is None:
+        return None
+    session = session_dir.name
+    if not (_SAFE_ID.match(session) and _SAFE_ID.match(agent_id)):
+        return None
+    return index_dir / session / agent_id
+
+
+def _remember_run(entry: Path | None, run_id: str) -> None:
+    """Record the run id for the next hook call of this agent. Best effort."""
+    if entry is None:
+        return
+    try:
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        tmp = entry.with_name(f".{entry.name}.{os.getpid()}.tmp")
+        tmp.write_text(run_id, encoding="utf-8")
+        tmp.replace(entry)
+    except OSError as exc:
+        _log(f"sidecar index not written: {type(exc).__name__}")
+        return
+    _prune_index(entry.parent.parent, keep=entry.parent)
+
+
+def _prune_index(index_dir: Path, *, keep: Path) -> None:
+    """Drop session index directories untouched for a week. Miss path only."""
+    cutoff = datetime.now(UTC).timestamp() - SIDECAR_INDEX_STALE_AFTER_S
+    try:
+        sessions = list(os.scandir(index_dir))
+    except OSError:
+        return
+    for session in sessions:
+        try:
+            if session.path == str(keep) or not session.is_dir(follow_symlinks=False):
+                continue
+            if session.stat(follow_symlinks=False).st_mtime >= cutoff:
+                continue
+            stale = Path(session.path)
+            for child in stale.iterdir():
+                child.unlink()
+            stale.rmdir()
+        except OSError:
+            continue
+
+
+def _workflow_sidecars(
+    session_dir: Path, agent_id: str, index_dir: Path | None
+) -> Iterator[Path]:
+    """A Workflow agent's sidecar: the indexed run first, else one search.
+
+    The search lists every run directory of the session
+    (``subagents/workflows/*/``), one ``opendir`` each: 492 of them per hook
+    call on the operator session of 2026-10-01, growing for as long as the
+    session lives, and 0.5 to 0.6 s per call at 24 concurrent captures
+    (OMN-20110). An agent's sidecar never moves, so the run id is recorded the
+    first time it is found and every later hook call of that agent opens one
+    small file instead of searching.
+    """
+    name = f"agent-{agent_id}.meta.json"
+    workflows = session_dir / "subagents" / "workflows"
+    entry = _index_entry(index_dir, session_dir, agent_id)
+    if entry is not None:
+        try:
+            run_id = entry.read_text(encoding="utf-8").strip()
+        except OSError:
+            run_id = ""
+        if run_id and _SAFE_ID.match(run_id):
+            indexed = workflows / run_id / name
+            if indexed.is_file():
+                yield indexed
+                return
+    try:
+        found = sorted(workflows.glob(f"*/{name}"))
+    except OSError:
+        return
+    if found:
+        _remember_run(entry, found[0].parent.name)
+    yield from found
+
+
 def _sidecar_paths(
-    transcript_path: str | None, session_id: str | None, agent_id: str
-) -> list[Path]:
+    transcript_path: str | None,
+    session_id: str | None,
+    agent_id: str,
+    index_dir: Path | None = None,
+) -> Iterator[Path]:
     """Where the harness writes ``agent-<agent id>.meta.json``, best first.
 
     A Task/Agent spawn writes it to ``<session>/subagents/``; a Workflow agent
@@ -256,6 +355,10 @@ def _sidecar_paths(
     is the event's ``workflow_run_id``. The session directory is derived from
     the transcript path (``<project>/<session>.jsonl``) so this never depends
     on the harness's undocumented project-slug rule.
+
+    A generator: the caller stops at the first sidecar that reads, so a
+    Task/Agent spawn never reaches the workflow lookup at all, and a Workflow
+    agent reaches it through :func:`_workflow_sidecars`' index.
     """
     name = f"agent-{agent_id}.meta.json"
     session_dirs: list[Path] = []
@@ -272,15 +375,10 @@ def _sidecar_paths(
             session_dirs.extend(p for p in base.glob(f"*/{session_id}") if p.is_dir())
         except OSError:
             pass
-    paths: list[Path] = []
     for session_dir in session_dirs:
-        subagents = session_dir / "subagents"
-        paths.append(subagents / name)
-        try:
-            paths.extend(sorted((subagents / "workflows").glob(f"*/{name}")))
-        except OSError:
-            continue
-    return paths
+        yield session_dir / "subagents" / name
+    for session_dir in session_dirs:
+        yield from _workflow_sidecars(session_dir, agent_id, index_dir)
 
 
 def read_sidecar(
@@ -289,6 +387,7 @@ def read_sidecar(
     transcript_path: str | None,
     session_id: str | None,
     agent_id: str | None,
+    index_dir: Path | None = None,
 ) -> Any | None:
     """The parsed sidecar for a subagent event, or ``None`` when unreadable.
 
@@ -299,7 +398,7 @@ def read_sidecar(
     """
     if not agent_id:
         return None
-    for path in _sidecar_paths(transcript_path, session_id, agent_id):
+    for path in _sidecar_paths(transcript_path, session_id, agent_id, index_dir):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -340,6 +439,7 @@ def build_event_payload(
     turn_dir: Path,
     emitted_at: datetime,
     version: str | None,
+    sidecar_index_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Map one hook's stdin to the journal payload of its ``hook.event``.
 
@@ -363,6 +463,7 @@ def build_event_payload(
         transcript_path=transcript if isinstance(transcript, str) else None,
         session_id=session_id if isinstance(session_id, str) else None,
         agent_id=agent_id if isinstance(agent_id, str) else None,
+        index_dir=sidecar_index_dir,
     )
     result = contract.map_hook_stdin(
         hook_input,
@@ -426,6 +527,7 @@ def capture(
             turn_dir=hook_turn_id.turn_dir_for(target),
             emitted_at=now or datetime.now(UTC),
             version=claude_code_version(),
+            sidecar_index_dir=sidecar_index_dir_for(target),
         )
     except (contract.InvalidHookInputError, contract.UnknownHookEventError) as exc:
         # The error names a field, never its value: hook stdin is content.
