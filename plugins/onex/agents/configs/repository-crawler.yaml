@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 ---
-model: haiku
+model: sonnet
 disallowedTools: []
 domain: repository_analysis
 purpose: "Crawl repository structure, enumerate files, and build context maps for large codebase navigation."

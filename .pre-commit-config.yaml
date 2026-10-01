@@ -44,8 +44,14 @@ repos:
   # this block keeps check-stub-implementations only, because that
   # validator's source differs between 63635097 and the OMN-20304 commit.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 63635097705d832e0ee9c4811093efb31349105c # pragma: allowlist secret
+    rev: d17f5be8be88a8d35fc6a69e13cb8c1896c3025b # pragma: allowlist secret
     hooks:
+      # Shape-gate independence (OMN-20298): a shape-gate detector job never waits on
+      # the change-control preflight and never reads its result. BLOCKING, zero
+      # baseline, no allowlist, no suppression comment. CI twin: the
+      # shape-gate-independence job in .github/workflows/ci.yml (CI Summary
+      # GATE_JOBS + STRICT_SUCCESS_JOBS).
+      - id: check-shape-gate-independence
       - id: check-stub-implementations
 
   # Shared ONEX governance hooks (onex_change_control)
@@ -86,7 +92,7 @@ repos:
   # entry. Shrink-only baseline at .onex_ratchets/canonical_file_shape_baseline.txt.
   # CI runs the same module at the same commit (ci.yml job "Canonical File
   # Shape (OMN-20304)"). The rev moved from f873d2c3 (v0.47.24, the label the
-  # rev line still carries) to the OMN-20304 commit a3b56675, together with
+  # rev line still carries) to the OMN-20304 commit d17f5be8 (OMN-20298, containing the OMN-20304 squash 2497ec45), together with
   # core_ref in hardcoded-model-config.yml; the hardcoded-model-config
   # validator's source is identical at the two commits.
   # no-noncanonical-lifecycle-classes moved here from the 63635097 block, and
@@ -95,7 +101,7 @@ repos:
   # pins a3b56675. The lifecycle validator's source is identical at 63635097
   # and a3b56675.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: a3b56675fda87a1ba8cf7e19d8e60a7d0ab6c4ee  # v0.47.24  # pragma: allowlist secret
+    rev: d17f5be8be88a8d35fc6a69e13cb8c1896c3025b  # v0.47.24  # pragma: allowlist secret
     hooks:
       - id: check-hardcoded-model-config-compute
       - id: canonical-file-shape

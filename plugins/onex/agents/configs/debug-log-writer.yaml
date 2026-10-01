@@ -6,7 +6,7 @@
 # Purpose: Direct-to-database debug log writer with intelligence integration
 
 schema_version: "1.0.0"
-model: haiku
+model: sonnet
 disallowedTools:
   - CronCreate
   - CronDelete
