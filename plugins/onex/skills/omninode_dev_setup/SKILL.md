@@ -1,5 +1,5 @@
 ---
-description: Take a Mac from bare to a working local onex in one run — tools, workspace, onex on the developer's own model key, and optionally the local container stack — reporting each phase as it finishes. Never connects to the lab
+description: Take a Mac from bare to a working local onex in one run — tools, workspace, onex on the developer's model (their own key, or Ollama on the Mac with no key), and optionally the local container stack — reporting each phase as it finishes. Never connects to the lab
 mode: full
 version: 1.0.0
 level: basic
@@ -23,7 +23,10 @@ args:
     description: "Answer the Docker question no in advance (native onex only)"
     required: false
   - name: --provider
-    description: "Your own model key's provider: openrouter | gemini (default: asked). A key is required"
+    description: "The model: gemini | openrouter (the developer's own key) | ollama (on this Mac, no key). Default: asked"
+    required: false
+  - name: --ollama-model
+    description: "With --provider ollama: the model to download (default: chosen from the Mac's memory)"
     required: false
   - name: --workspace
     description: "Workspace directory (default: $OMNIBASE_PATH, else ~/code/omni)"
@@ -43,7 +46,7 @@ Mac or inside a macOS VM. This skill starts it where the developer can answer
 its prompts, then reports each phase to the developer the moment it finishes.
 
 Everything runs on the developer's own Mac: native onex, and optionally the stack
-in Docker, both on the developer's own model key. Nothing connects to the lab.
+in Docker, both on the developer's own model key or on Ollama running on the Mac. Nothing connects to the lab.
 
 ## Phases
 
@@ -52,7 +55,7 @@ in Docker, both on the developer's own model key. Nothing connects to the lab.
 | 0 | Preflight: macOS version, CPU, RAM, disk, VM or physical, admin rights, ports, shell profile | no |
 | 1 | Base tools: Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv | yes |
 | 2 | Workspace: the canonical clones, and OMNIBASE_PATH and PATH in the shell profile | yes |
-| 3 | onex, the local identity, the developer's model key, one delegation on it | yes |
+| 3 | onex, the local identity, the developer's model (their key, or Ollama installed with one model downloaded), one delegation on it | yes |
 | 4 | Docker (optional): only if the developer says yes to the one question; Docker Desktop installed, or started if stopped, then the local stack on the same key | yes |
 | 5 | Claude Code plugins: the full onex tree (`onex@omninode-tools-dev`, from the omniclaude clone), and `omni` and `onex-overlays` when this GitHub login can read omniclaude-internal and an SSH key is loaded | yes |
 | 6 | Verify | no |
@@ -83,19 +86,22 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/omninode-dev-setup.sh" --preflight-only 
   Desktop is installed but stopped, say the run will start it; if it is
   missing, say the run will install it. If the line says Docker is not
   offered, relay why: native onex alone covers delegations.
-- Then the model key. Developers bring their own key, and it is required. Unless `--provider` was given, ask which provider their key is
-  from: OpenRouter or Gemini (a Google AI Studio key); the beta offers only
-  these two. Pass it as `--provider openrouter|gemini`.
-  The key itself is typed only in the Terminal window, at a hidden prompt that
-  comes right after preflight, before anything installs. If they have no key
-  yet, say where to get one and stop: the run refuses to start without one.
+- Then the model. Unless `--provider` was given, ask which one:
+  - **Gemini** (a Google AI Studio key) or **OpenRouter** (their key): the key
+    itself is typed only in the Terminal window or a macOS dialog, at a hidden
+    prompt right after preflight, before anything installs. If they have no key,
+    say where to get one, or suggest Ollama.
+  - **Ollama**: no key. It runs a model on the Mac, so it downloads one
+    (sized to the Mac's memory, as omnimarket's model config declares) and is slower,
+    especially on Intel or in a VM.
+  Pass the answer as `--provider gemini|openrouter|ollama`.
 
 If `--preflight-only` was the argument, stop here.
 
 ### 2. Start the run where the developer can answer prompts
 
 The run asks for the Mac administrator password (Homebrew, Xcode tools, Docker)
-and their model key (at the start, before anything installs). A Claude Code tool call has no
+and their model key unless they chose Ollama (at the start, before anything installs). A Claude Code tool call has no
 terminal, so open one:
 
 ```bash
@@ -119,7 +125,7 @@ The script appends one line per phase event to
 
 ```
 phase=2 name="Workspace (…)" result=PASS elapsed="1m 12s" note="…"
-phase=3 name="onex, local identity and your model key" result=FAIL elapsed="2m 03s" step="…" next="…"
+phase=3 name="onex, local identity and your model" result=FAIL elapsed="2m 03s" step="…" next="…"
 result=COMPLETE
 ```
 

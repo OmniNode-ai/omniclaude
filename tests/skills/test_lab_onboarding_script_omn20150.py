@@ -12,6 +12,7 @@ stock macOS /bin/bash 3.2 (the D4 failure class).
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -301,9 +302,8 @@ def test_a_delegation_that_fell_through_to_another_route_does_not_pass_phase_4()
 
 def test_the_stack_only_gets_a_tenant_when_a_key_was_chosen() -> None:
     phase_4 = _function_body("phase4")
-    assert (
-        'if [ "$MODEL_CHOICE" != "none" ]; then\n    step "give the stack a tenant'
-        in (phase_4)
+    assert 'if uses_key "$MODEL_CHOICE"; then\n    step "give the stack a tenant' in (
+        phase_4
     )
     assert phase_4.index("ensure_stack_tenant") < phase_4.index("make up-local")
 
@@ -333,10 +333,10 @@ def _phase0_only(tmp_path: Path) -> Path:
 
 @pytest.mark.parametrize("provider", ["none", "glm"])
 def test_only_the_beta_providers_are_accepted(tmp_path: Path, provider: str) -> None:
-    """No lab-model fallback, and GLM is out of the beta: only openrouter and gemini."""
+    """No lab-model fallback, and GLM is out of the beta: gemini, openrouter or ollama."""
     result = _run(tmp_path, "--provider", provider)
     assert result.returncode == 2
-    assert "must be openrouter or gemini" in result.stderr
+    assert "must be gemini, openrouter or ollama" in result.stderr
 
 
 @macos_only
@@ -368,7 +368,7 @@ def test_the_key_is_settled_in_preflight(
     """Provider then key, both before anything installs; an empty key stops the run."""
     script = (
         f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
-        'expect "Choose 1 or 2:"; send "2\\r"; '
+        'expect "Choose 1, 2 or 3:"; send "1\\r"; '
         f'expect "key (input is hidden)"; send "{key}\\r"; expect eof'
     )
     result = subprocess.run(
@@ -395,7 +395,7 @@ def test_the_key_is_settled_in_preflight(
     "answers",
     [
         'expect "Set up the local stack in Docker too?"; send "q\\r"; ',
-        'expect "Set up the local stack in Docker too?"; send "n\\r"; expect "Choose 1 or 2:"; send "q\\r"; ',
+        'expect "Set up the local stack in Docker too?"; send "n\\r"; expect "Choose 1, 2 or 3:"; send "q\\r"; ',
     ],
     ids=["quit-at-docker", "quit-at-provider"],
 )
@@ -485,6 +485,108 @@ def test_a_resumed_run_finds_the_tools_phase_1_installed(tmp_path: Path) -> None
     assert f"{home}/.local/bin" in out.split("PATH=", 1)[1].split(":")
 
 
+# ---------------------------------------------------------------------------
+# Ollama: a model on this Mac, no key.
+# ---------------------------------------------------------------------------
+
+
+@macos_only
+@pytest.mark.skipif(
+    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
+)
+def test_choosing_ollama_on_the_menu_skips_the_key(tmp_path: Path) -> None:
+    script = (
+        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
+        'expect "Choose 1, 2 or 3:"; send "3\\r"; expect eof'
+    )
+    result = subprocess.run(
+        ["/usr/bin/expect", "-c", script],
+        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout.replace("\r", "")
+    assert "Model: Ollama on this Mac, no key." in out
+    assert "key (input is hidden)" not in out
+
+
+def _shell(snippet: str, home: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["/bin/bash", "-c", snippet],
+        env={
+            "HOME": str(home),
+            "STAMP": "t",
+            "PATH": "/usr/bin:/bin",
+            "LOG": "/dev/null",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+_TEMPLATE_OVERLAY = (
+    'backends:\n  - backend_id: local-coder\n    endpoint_url: &model_endpoint "http://host.docker.internal:8000/v1/chat/completions"\n'
+    '    served_model_id: "a-placeholder-model"\n'
+    '  - backend_id: local-heavy-reasoning\n    endpoint_url: *model_endpoint\n    served_model_id: "a-placeholder-model"\n'
+)
+
+
+@pytest.mark.parametrize("theirs", [False, True])
+def test_docker_with_ollama_points_only_the_untouched_template_at_it(
+    tmp_path: Path, theirs: bool
+) -> None:
+    home = tmp_path / "home"
+    (home / ".omnibase").mkdir(parents=True)
+    overlay = home / ".omnibase" / "local.bifrost.yaml"
+    original = (
+        _TEMPLATE_OVERLAY.replace("host.docker.internal:8000", "my-box:9000")
+        if theirs
+        else _TEMPLATE_OVERLAY
+    )
+    overlay.write_text(original)
+    _shell(
+        _functions("point_bundle_model")
+        + '\npoint_bundle_model "http://host.docker.internal:11434/v1/chat/completions" "qwen2.5-coder:7b"\n',
+        home,
+    )
+    text = overlay.read_text()
+    if theirs:
+        assert text == original
+    else:
+        assert (
+            '&model_endpoint "http://host.docker.internal:11434/v1/chat/completions"'
+            in text
+        )
+        assert text.count('served_model_id: "qwen2.5-coder:7b"') == 2
+        assert "a-placeholder-model" not in text
+
+
+@macos_only
+def test_ollama_in_a_vm_is_warned_it_will_be_slow(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--provider", "ollama"],
+        env=_phase0_env(
+            tmp_path,
+            ONBOARD_TEST_VM="1",
+            ONBOARD_TEST_RAM_GB="32",
+            ONBOARD_TEST_CPUS="10",
+        ),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        "This is a virtual machine: Ollama gets little or no GPU in a VM"
+        in result.stdout
+    )
+    assert "Gemini or OpenRouter (a key) is the better choice here." in result.stdout
+
+
 def test_the_run_ends_by_saying_to_sign_in_to_claude_code() -> None:
     text = SCRIPT.read_text()
     assert (
@@ -496,3 +598,138 @@ def test_the_run_ends_by_saying_to_sign_in_to_claude_code() -> None:
 def test_the_key_dialog_is_not_indented_like_the_terminal_prompt() -> None:
     body = _functions("read_secret")
     assert "sed 's/^[[:space:]]*//'" in body
+
+
+@macos_only
+def test_ollama_asks_for_no_key_and_chooses_the_model_later(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(_phase0_only(tmp_path)),
+            "--provider",
+            "ollama",
+            "--no-containers",
+        ],
+        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        "Model: Ollama on this Mac, no key. The model is chosen for this Mac's 32 GB"
+        in result.stdout
+    )
+    assert "API key" not in result.stdout
+    assert sorted((tmp_path / "home").rglob("*")) == []
+
+
+_OLLAMA_BLOCK = """\
+backends: []
+ollama:
+  port: 11434
+  chat_path: /v1/chat/completions
+  models:
+    - min_memory_gb: 0
+      model: small-model:1b
+      download_gb: 1
+    - min_memory_gb: 16
+      model: big-model:7b
+      download_gb: 5
+"""
+
+
+def _workspace_with_config(tmp_path: Path, block: str) -> Path:
+    ws = tmp_path / "ws"
+    cfg = (
+        ws / "omnimarket" / "src" / "omnimarket" / "configs" / "bifrost_delegation.yaml"
+    )
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(block)
+    venv_bin = ws / ".onex-dispatch-venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    shim = venv_bin / "python"
+    shim.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    shim.chmod(0o755)
+    return ws
+
+
+def _ollama_config(
+    ws: Path, ram: str, model: str = ""
+) -> subprocess.CompletedProcess[str]:
+    consts = "\n".join(
+        line
+        for line in SCRIPT.read_text().splitlines()
+        if line.startswith("OLLAMA_CONFIG_REL=")
+    )
+    return subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            f"WORKSPACE={ws}\n{consts}\n"
+            + _functions("ollama_config")
+            + f'\nollama_config {ram} "{model}"\n',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("ram", "model", "expected"),
+    [
+        ("32", "", "11434 /v1/chat/completions big-model:7b 5"),
+        ("16", "", "11434 /v1/chat/completions big-model:7b 5"),
+        ("8", "", "11434 /v1/chat/completions small-model:1b 1"),
+        ("8", "big-model:7b", "11434 /v1/chat/completions big-model:7b 5"),
+        ("8", "unlisted:3b", "11434 /v1/chat/completions unlisted:3b 5"),
+    ],
+)
+def test_the_ollama_model_comes_from_the_model_config_by_memory(
+    tmp_path: Path, ram: str, model: str, expected: str
+) -> None:
+    result = _ollama_config(_workspace_with_config(tmp_path, _OLLAMA_BLOCK), ram, model)
+    assert result.stdout.strip() == expected, result.stderr
+
+
+def test_a_model_config_without_the_ollama_block_is_refused(tmp_path: Path) -> None:
+    result = _ollama_config(_workspace_with_config(tmp_path, "backends: []\n"), "32")
+    assert result.returncode != 0
+    assert "no complete ollama block" in result.stderr
+
+
+def test_the_script_holds_no_model_name_port_or_model_path() -> None:
+    """The hardcoded-model-config gate's rule: those live in the model config."""
+    text = SCRIPT.read_text()
+    assert not re.search(r"qwen|gpt-oss|llama[0-9]|11434", text)
+    assert "/v1/chat/completions" not in text
+
+
+def test_ollama_routes_are_written_and_a_foreign_file_is_kept(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    target = home / ".omninode" / "delegation" / "bifrost_overrides.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text("# mine\nbackends: []\n")
+    consts = "\n".join(
+        line
+        for line in SCRIPT.read_text().splitlines()
+        if line.startswith(("OVERRIDES_FILE_REL=", "OLLAMA_MARK="))
+    )
+    _shell(
+        consts
+        + '\nOLLAMA_URL="http://127.0.0.1:11434"; OLLAMA_CHAT_PATH="/v1/chat/completions"'
+        + "\nsay() { :; }\n"
+        + _functions("ollama_overrides_ours", "write_ollama_overrides")
+        + '\nwrite_ollama_overrides "big-model:7b"\n',
+        home,
+    )
+    text = target.read_text()
+    assert text.startswith("# Written by omninode-dev-setup: Ollama on this Mac.")
+    assert text.count('endpoint_url: "http://127.0.0.1:11434/v1/chat/completions"') == 2
+    assert text.count('model_name: "big-model:7b"') == 2
+    assert (
+        target.parent / "bifrost_overrides.yaml.pre-onboarding.t"
+    ).read_text() == "# mine\nbackends: []\n"

@@ -31,7 +31,9 @@
 #   --containers         answer the Docker question yes in advance
 #   --no-containers      answer it no in advance
 #                        (neither: the one question is asked after preflight)
-#   --provider NAME      openrouter | gemini   (your own model key; default: asked up front)
+#   --provider NAME      gemini | openrouter | ollama   (default: asked up front). Gemini and
+#                        OpenRouter take your own key; Ollama runs a model on this Mac, no key
+#   --ollama-model NAME  the model Ollama downloads (default: chosen from this Mac's memory)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else $OMNI_HOME, else ~/code/omni)
 #   --restart            forget completed phases and run every phase again
 #   -h, --help           this text
@@ -81,6 +83,7 @@ PROVIDER=""
 # read by the reconcile scripts this run drives, so both are honoured and set.
 WORKSPACE="${OMNIBASE_PATH:-${OMNI_HOME:-$HOME/code/omni}}"
 RESTART=0
+OLLAMA_MODEL=""
 
 usage() { sed -n '2,/^set -uo pipefail$/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; }
 
@@ -91,6 +94,8 @@ while [ $# -gt 0 ]; do
     --no-containers) WANT_CONTAINERS=0 ;;
     --provider) shift; PROVIDER="${1:-}" ;;
     --provider=*) PROVIDER="${1#*=}" ;;
+    --ollama-model) shift; OLLAMA_MODEL="${1:-}" ;;
+    --ollama-model=*) OLLAMA_MODEL="${1#*=}" ;;
     --workspace) shift; WORKSPACE="${1:-}" ;;
     --workspace=*) WORKSPACE="${1#*=}" ;;
     --restart) RESTART=1 ;;
@@ -99,8 +104,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-case "$PROVIDER" in ''|openrouter|gemini) ;; *)
-  printf 'omninode-dev-setup: --provider must be openrouter or gemini (developers bring their own key; the beta offers these two)\n' >&2; exit 2 ;;
+case "$PROVIDER" in ''|openrouter|gemini|ollama) ;; *)
+  printf 'omninode-dev-setup: --provider must be gemini, openrouter or ollama\n' >&2; exit 2 ;;
 esac
 [ -n "$WORKSPACE" ] || { printf 'omninode-dev-setup: --workspace needs a directory\n' >&2; exit 2; }
 
@@ -491,6 +496,7 @@ provider_label() {
   case "$1" in
     openrouter) echo "OpenRouter" ;;
     gemini) echo "Gemini (Google AI Studio)" ;;
+    ollama) echo "Ollama (on this Mac)" ;;
     *) echo "$1" ;;
   esac
 }
@@ -509,30 +515,153 @@ ask_provider() { # -> MODEL_CHOICE, or empty when nobody can be asked
   local a=""
   if [ "$IS_TTY" -eq 1 ]; then
     say ""
-    say "  Your model key"
+    say "  Your model"
     say ""
-    say "  Delegations run on your own AI provider key. For the beta, that's one of:"
-    say "    1) OpenRouter  - openrouter.ai, then Keys (its free models work with no credit)"
-    say "    2) Gemini      - a Google AI Studio key, from aistudio.google.com/apikey"
+    say "  Delegations run on a model you choose:"
+    say "    1) Gemini      - your Google AI Studio key, from aistudio.google.com/apikey"
+    say "    2) OpenRouter  - your openrouter.ai key (its free models work with no credit)"
+    say "    3) Ollama      - a model on this Mac, no key. Slower than a key, especially on"
+    say "                     Intel, and it downloads a model sized to this Mac"
     say ""
     say "    q) quit setup (nothing has been installed yet)"
     say ""
-    printf '  Which one is yours? Choose 1 or 2: '
+    printf '  Which one? Choose 1, 2 or 3: '
     IFS= read -r a
-    case "$a" in 1) MODEL_CHOICE=openrouter ;; 2) MODEL_CHOICE=gemini ;; q|Q) quit_setup ;; esac
+    case "$a" in 1) MODEL_CHOICE=gemini ;; 2) MODEL_CHOICE=openrouter ;; 3) MODEL_CHOICE=ollama ;; q|Q) quit_setup ;; esac
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
-set r to choose from list {"OpenRouter", "Gemini (Google AI Studio)"} with title "Your model key" with prompt "Delegations run on your own AI provider key. For the beta, that's OpenRouter (openrouter.ai, then Keys) or Gemini (a Google AI Studio key). Which one is yours?" OK button name "Continue" cancel button name "Quit setup"
+set r to choose from list {"Gemini (your Google AI Studio key)", "OpenRouter (your key)", "Ollama (on this Mac, no key)"} with title "Your model" with prompt "Delegations run on a model you choose. Gemini and OpenRouter use your own key. Ollama runs a model on this Mac with no key: slower, especially on Intel, and it downloads a model sized to this Mac." OK button name "Continue" cancel button name "Quit setup"
 if r is false then return "QUIT"
 return item 1 of r
 OSA
 )"
-    case "$a" in OpenRouter) MODEL_CHOICE=openrouter ;; Gemini*) MODEL_CHOICE=gemini ;; QUIT) quit_setup ;; esac
+    case "$a" in Gemini*) MODEL_CHOICE=gemini ;; OpenRouter*) MODEL_CHOICE=openrouter ;; Ollama*) MODEL_CHOICE=ollama ;; QUIT) quit_setup ;; esac
   fi
 }
 
+# ---------------------------------------------------------------------------
+# Ollama: a model served on this Mac, with no key. onex reaches it through its
+# local routes (the same OpenAI-style API), declared in its overrides file.
+# ---------------------------------------------------------------------------
+# Port, chat path and the default model for each memory size come from the
+# `ollama:` block of omnimarket's model config (bifrost_delegation.yaml), read
+# from the workspace once it is cloned. This script holds no model name. It
+# chooses only the host, which depends on where the call comes from: this Mac,
+# or the Docker stack.
+OLLAMA_CONFIG_REL="omnimarket/src/omnimarket/configs/bifrost_delegation.yaml"
+OVERRIDES_FILE_REL=".omninode/delegation/bifrost_overrides.yaml"
+OLLAMA_MARK="# Written by omninode-dev-setup: Ollama on this Mac."
+OLLAMA_PORT=""; OLLAMA_CHAT_PATH=""; OLLAMA_DOWNLOAD_GB=""; OLLAMA_URL=""
+
+# ram_gb [model] -> "port chat_path model download_gb": the first `models` entry
+# whose min_memory_gb fits this Mac, or the named model (its size when listed,
+# else the largest listed).
+ollama_config() {
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$WORKSPACE/$OLLAMA_CONFIG_REL" "$1" "${2:-}" <<'PYCFG'
+import sys
+import yaml
+block = (yaml.safe_load(open(sys.argv[1])) or {}).get("ollama") or {}
+port, path, models = block.get("port"), block.get("chat_path"), block.get("models") or []
+if not port or not path or not models:
+    sys.exit("the model config has no complete ollama block (port, chat_path, models)")
+ram, wanted = int(sys.argv[2]), sys.argv[3]
+models = sorted(models, key=lambda m: int(m["min_memory_gb"]), reverse=True)
+if wanted:
+    size = next((m["download_gb"] for m in models if m["model"] == wanted), max(m["download_gb"] for m in models))
+    print(port, path, wanted, size)
+else:
+    pick = next((m for m in models if int(m["min_memory_gb"]) <= ram), models[-1])
+    print(port, path, pick["model"], pick["download_gb"])
+PYCFG
+}
+
+load_ollama_config() { # -> OLLAMA_PORT OLLAMA_CHAT_PATH OLLAMA_MODEL OLLAMA_DOWNLOAD_GB OLLAMA_URL
+  local out
+  out="$(ollama_config "$(ram_gb)" "$OLLAMA_MODEL" 2>>"$LOG")" || return 1
+  set -- $out
+  [ $# -eq 4 ] || return 1
+  OLLAMA_PORT="$1"; OLLAMA_CHAT_PATH="$2"; OLLAMA_MODEL="$3"; OLLAMA_DOWNLOAD_GB="$4"
+  OLLAMA_URL="http://127.0.0.1:$OLLAMA_PORT"
+}
+
+ollama_bin() {
+  if command -v ollama >/dev/null 2>&1; then command -v ollama
+  elif [ -x /Applications/Ollama.app/Contents/Resources/ollama ]; then echo /Applications/Ollama.app/Contents/Resources/ollama
+  fi
+}
+ollama_up() { curl -fsS -m 3 "$OLLAMA_URL/api/version" >/dev/null 2>&1; }
+ollama_has_model() { curl -fsS -m 5 "$OLLAMA_URL/api/tags" 2>/dev/null | grep -qF "\"$1\""; }
+ollama_overrides_ours() { head -n 1 "$HOME/$OVERRIDES_FILE_REL" 2>/dev/null | grep -qF "$OLLAMA_MARK"; }
+
+settle_ollama() { # preflight: no key, and an honest word on speed. The model is chosen in phase 3.
+  # A re-run keeps the model an earlier run downloaded.
+  [ -n "$OLLAMA_MODEL" ] || OLLAMA_MODEL="$(sed -n 's/^    model_name: "\(.*\)"$/\1/p' "$HOME/$OVERRIDES_FILE_REL" 2>/dev/null | head -n 1)"
+  if [ -n "$OLLAMA_MODEL" ]; then
+    say "  Model: Ollama on this Mac, no key. Model: $OLLAMA_MODEL."
+  else
+    say "  Model: Ollama on this Mac, no key. The model is chosen for this Mac's $(ram_gb) GB of memory"
+    say "    once the workspace is in place, and downloaded then."
+  fi
+  if is_vm; then
+    say "  ⚠ This is a virtual machine: Ollama gets little or no GPU in a VM, so answers are"
+    say "    slow. Gemini or OpenRouter (a key) is the better choice here."
+  else
+    case "$(arch)" in arm64) ;; *) say "  ⚠ This is an Intel Mac: local models run on the CPU here, so answers are slow." ;; esac
+  fi
+}
+
+# Homebrew remembers a cask whose app was later deleted by hand and then skips
+# installing it, so a missing app is reinstalled rather than trusted to be there.
+install_ollama() {
+  if "$(brew_bin)" list --cask ollama-app >/dev/null 2>&1; then
+    HOMEBREW_NO_ENV_HINTS=1 "$(brew_bin)" reinstall --cask ollama-app
+  else
+    brew_install ollama-app --cask
+  fi
+}
+
+start_ollama() { # the app when there is a desktop (it starts at login), else the server alone
+  ollama_up && return 0
+  if [ "$GUI_SESSION" -eq 1 ] && [ -d /Applications/Ollama.app ]; then
+    open -g -a Ollama 2>>"$LOG"
+    wait_until "Ollama to start" 60 2 ollama_up && return 0
+  fi
+  nohup "$(ollama_bin)" serve >>"$RUN_DIR/ollama-serve.log" 2>&1 &
+  OLLAMA_HEADLESS=1
+  wait_until "Ollama to start" 60 2 ollama_up
+}
+OLLAMA_HEADLESS=0
+
+write_ollama_overrides() { # model: onex's local routes go to Ollama
+  local f="$HOME/$OVERRIDES_FILE_REL"
+  mkdir -p "$(dirname "$f")"
+  if [ -f "$f" ] && ! ollama_overrides_ours; then
+    cp -p "$f" "$f.pre-onboarding.$STAMP"
+    say "  Saved your earlier $f as $(basename "$f").pre-onboarding.$STAMP"
+  fi
+  cat >"$f" <<YAML
+$OLLAMA_MARK
+backends:
+  - backend_id: local-coder
+    endpoint_url: "$OLLAMA_URL$OLLAMA_CHAT_PATH"
+    model_name: "$1"
+  - backend_id: local-heavy-reasoning
+    endpoint_url: "$OLLAMA_URL$OLLAMA_CHAT_PATH"
+    model_name: "$1"
+YAML
+}
+
+uses_key() { case "$1" in gemini|openrouter) return 0 ;; *) return 1 ;; esac; }
+
 settle_model_key() {
   local stored
+  # An earlier run that chose Ollama left its routes in place; they still route first.
+  if [ -z "$PROVIDER" ] && ollama_overrides_ours; then PROVIDER=ollama; fi
+  if [ "$PROVIDER" = "ollama" ]; then
+    MODEL_CHOICE=ollama
+    settle_ollama
+    return 0
+  fi
   if stored="$(stored_key_provider)" && { [ -z "$PROVIDER" ] || [ "$PROVIDER" = "$stored" ]; }; then
     MODEL_CHOICE="$stored"
     say "  Model key: your $stored key is already stored; it will be used."
@@ -541,10 +670,11 @@ settle_model_key() {
   MODEL_CHOICE="$PROVIDER"
   [ -n "$MODEL_CHOICE" ] || ask_provider
   if [ -z "$MODEL_CHOICE" ]; then
-    FAILED_STEP="choose your model key's provider"
-    LAST_ERR="no provider was chosen, and there is no terminal or desktop to ask on"
-    phase_fail "run this in Terminal, or pass --provider openrouter|gemini. Nothing was installed"
+    FAILED_STEP="choose your model"
+    LAST_ERR="no model was chosen, and there is no terminal or desktop to ask on"
+    phase_fail "run this in Terminal, or pass --provider gemini|openrouter|ollama. Nothing was installed"
   fi
+  if [ "$MODEL_CHOICE" = "ollama" ]; then settle_ollama; return 0; fi
   say ""
   say "  Your key stays on this Mac, in onex's key store. It is never shown or logged,"
   say "  and it is only ever sent to $(provider_home "$MODEL_CHOICE")."
@@ -554,7 +684,7 @@ settle_model_key() {
   if [ -z "$PENDING_KEY" ]; then
     FAILED_STEP="your model key"
     LAST_ERR="no key was given; developers bring their own key and the lab's models are not used"
-    phase_fail "get an OpenRouter or Google AI Studio key and run this again. Nothing was installed"
+    phase_fail "get a Google AI Studio or OpenRouter key, or choose Ollama (no key), and run this again. Nothing was installed"
   fi
   say "  Model key: received (held in memory; stored in onex in phase 3)."
 }
@@ -680,7 +810,7 @@ phase0() {
   fi
   [ "$PREFLIGHT_ONLY" -eq 1 ] || settle_model_key
   say "  Will set up: $SELECTED"
-  [ -n "$MODEL_CHOICE" ] && say "  Model: your own $(provider_label "$MODEL_CHOICE") key"
+  uses_key "$MODEL_CHOICE" && say "  Model: your own $(provider_label "$MODEL_CHOICE") key"
   phase_pass "$SELECTED"
 }
 AMBIENT_FOUND=""
@@ -898,9 +1028,9 @@ key_stored() { onex_run secret list 2>/dev/null | grep -qE "^[[:space:]]+llm\.$1
 retire_lab_model_overrides() {
   local f="$HOME/.omninode/delegation/bifrost_overrides.yaml"
   [ -f "$f" ] || return 0
-  if head -n 1 "$f" | grep -q '^# Written by lab-onboarding'; then
+  if head -n 1 "$f" | grep -qE '^# Written by (lab-onboarding|omninode-dev-setup)'; then
     mv "$f" "$f.pre-key.$STAMP"
-    say "  Moved aside the lab-model overrides an earlier run wrote, so your key is used."
+    say "  Moved aside the local-model routes an earlier run wrote, so your key is used."
   else
     say "  ⚠ $f declares a local model; it is used before your key. Remove it if you want the key used."
   fi
@@ -936,7 +1066,7 @@ delegate_hello() { # -> stdout: the run's receipt.json (it names the endpoint an
 }
 
 phase3() {
-  phase_start 3 "onex, local identity and your model key" "3-10 minutes"
+  phase_start 3 "onex, local identity and your model" "3-10 minutes"
   local endpoint
 
   say "  Building the workspace dispatch environment (onex)…"
@@ -955,9 +1085,10 @@ phase3() {
     say "  Local identity: minted"
   fi
 
+  local choice="$MODEL_CHOICE"
+  if [ "$choice" = "ollama" ]; then phase3_ollama; return; fi
   # The key settled in preflight. No lab-model fallback: without a routable key
   # the phase fails.
-  local choice="$MODEL_CHOICE"
   if ! provider_offered "$choice"; then
     PENDING_KEY=""
     FAILED_STEP="check that onex routes a $choice key"
@@ -1012,6 +1143,50 @@ phase3() {
   say "  Delegation answered by $(receipt_field "$CAPTURED" model) at ${endpoint:-an endpoint the receipt does not name}"
   CAPTURED=""
   phase_pass "model: your $choice key"
+}
+
+phase3_ollama() {
+  step "read the Ollama settings from the workspace's model config" load_ollama_config ||
+    phase_fail "update the omnimarket clone (its model config declares the ollama block), then run this again"
+  local need=$((M1_DISK_GB + OLLAMA_DOWNLOAD_GB))
+  if ! ollama_has_model "$OLLAMA_MODEL" 2>/dev/null && [ "$(disk_free_gb)" -lt "$need" ]; then
+    FAILED_STEP="free disk for $OLLAMA_MODEL"
+    LAST_ERR="$(disk_free_gb) GB free; $OLLAMA_MODEL needs about $OLLAMA_DOWNLOAD_GB GB more ($need GB in all)"
+    phase_fail "free some disk, or run this again with --provider gemini or openrouter (a key, no download)"
+  fi
+  if [ -z "$(ollama_bin)" ]; then
+    say "  Installing Ollama (the app; it carries the ollama command)…"
+    retry "install Ollama" install_ollama ||
+      phase_fail "install Ollama from ollama.com/download, then run this again"
+    [ -n "$(ollama_bin)" ] || { FAILED_STEP="find Ollama after installing it"; phase_fail "install Ollama from ollama.com/download, then run this again"; }
+  else
+    say "  Ollama: present"
+  fi
+  step "start Ollama" start_ollama || phase_fail "open the Ollama app once, then run this again"
+  if ollama_has_model "$OLLAMA_MODEL"; then
+    say "  Model $OLLAMA_MODEL: present"
+  else
+    say "  Downloading $OLLAMA_MODEL (about $OLLAMA_DOWNLOAD_GB GB)…"
+    retry "download $OLLAMA_MODEL" "$(ollama_bin)" pull "$OLLAMA_MODEL" ||
+      phase_fail "run 'ollama pull $OLLAMA_MODEL' to see the error, then run this again"
+  fi
+  step "point onex's local routes at Ollama" write_ollama_overrides "$OLLAMA_MODEL" ||
+    phase_fail "see the log; $HOME/$OVERRIDES_FILE_REL was not written"
+
+  say "  Running one delegation on $OLLAMA_MODEL (a local model can take a minute)…"
+  retry_capture "one onex delegate" delegate_hello ||
+    phase_fail "run 'onex delegate \"Reply with exactly one word: hello\"' to see the error"
+  local endpoint model
+  endpoint="$(receipt_field "$CAPTURED" endpoint)"; model="$(receipt_field "$CAPTURED" model)"
+  CAPTURED=""
+  if [ "$endpoint" != "$OLLAMA_URL$OLLAMA_CHAT_PATH" ]; then
+    FAILED_STEP="check the delegation went to Ollama"
+    LAST_ERR="the receipt names ${endpoint:-no endpoint}, not $OLLAMA_URL$OLLAMA_CHAT_PATH"
+    phase_fail "a key stored by an earlier run may be routing first; run 'onex delegate --json \"hello\"' to see the route"
+  fi
+  say "  Delegation answered by $model at $endpoint"
+  [ "$OLLAMA_HEADLESS" -eq 1 ] && say "  Ollama is running without its app here; after a restart, start it with 'ollama serve'."
+  phase_pass "model: $OLLAMA_MODEL on this Mac (Ollama)"
 }
 
 # accepted_backend JSON -> the backend id of the attempt whose answer was accepted
@@ -1105,6 +1280,17 @@ stack_healthy() {
     curl -fsS -m 5 http://localhost:8086/health | grep -q '"healthy"'
 }
 
+point_bundle_model() { # url model -> the stack's local-model slot names that server and model
+  local f="$HOME/.omnibase/local.bifrost.yaml" url="$1" model="$2"
+  [ -f "$f" ] || return 1
+  # An overlay the developer already pointed somewhere is theirs; only the
+  # untouched template (a model server on this Mac) is rewritten.
+  grep -q '&model_endpoint "http://host.docker.internal' "$f" || return 0
+  cp -p "$f" "$f.pre-onboarding.$STAMP"
+  sed -i '' -e "s#&model_endpoint \"http://host.docker.internal[^\"]*\"#\\&model_endpoint \"$url\"#" \
+    -e "s#served_model_id: \"[^\"]*\"#served_model_id: \"$model\"#" "$f"
+}
+
 # A tenant on the stack means every delegation runs on a key registered for that
 # tenant and nothing else, so the stack only gets one when a key was chosen.
 STACK_TENANT_CHANGED=0
@@ -1189,9 +1375,13 @@ phase4() {
     say "  The local stack is already there; checking it instead of rebuilding it."
   else
     step "make local-env" make -C "$WORKSPACE/omnibase_infra" local-env || phase_fail "see the log for make local-env's message"
+    if [ "$MODEL_CHOICE" = "ollama" ]; then
+      step "point the stack's local model at Ollama" point_bundle_model "http://host.docker.internal:$OLLAMA_PORT$OLLAMA_CHAT_PATH" "$OLLAMA_MODEL" ||
+        phase_fail "set model_endpoint and served_model_id in ~/.omnibase/local.bifrost.yaml by hand, then run this again"
+    fi
   fi
   # The key path: the stack serves a tenant of its own and holds your key for it.
-  if [ "$MODEL_CHOICE" != "none" ]; then
+  if uses_key "$MODEL_CHOICE"; then
     step "give the stack a tenant for your key" ensure_stack_tenant ||
       phase_fail "run 'make tenant-local' in omnibase_infra, then run this again"
   fi
@@ -1203,7 +1393,7 @@ phase4() {
   say "  Waiting for the stack to report healthy (a cold boot takes several minutes)…"
   wait_until "the local stack to become healthy" 900 15 stack_healthy ||
     phase_fail "run 'make status-local' in omnibase_infra; if the main kernel is still provisioning topics, wait and run this again"
-  if [ "$MODEL_CHOICE" != "none" ]; then
+  if uses_key "$MODEL_CHOICE"; then
     step "register your $MODEL_CHOICE key in the stack's own store" register_key_in_stack "$MODEL_CHOICE" ||
       phase_fail "run 'make secret-local PROVIDER=$MODEL_CHOICE' in omnibase_infra and paste the key, then run this again"
     sleep 10   # the tenant credentials projection turns the registration into your route
@@ -1211,7 +1401,14 @@ phase4() {
   retry_capture "one delegation through the stack" stack_delegate ||
     phase_fail "the stack is up but the delegation failed; see the log"
   local served; served="$(accepted_backend "$CAPTURED")"; CAPTURED=""
-  if [ "$MODEL_CHOICE" != "none" ]; then
+  if [ "$MODEL_CHOICE" = "ollama" ]; then
+    case "$served" in
+      local-*) say "  Answered by Ollama on this Mac ($served)." ;;
+      *) FAILED_STEP="check the stack's delegation went to Ollama"
+         LAST_ERR="the answer came from ${served:-no backend}, not a local route"
+         phase_fail "check that Ollama is running and ~/.omnibase/local.bifrost.yaml names it" ;;
+    esac
+  elif uses_key "$MODEL_CHOICE"; then
     # A delegation that falls through to another route still reports success, so
     # the accepted backend is what proves the key was used.
     case "$served" in
@@ -1324,6 +1521,10 @@ phase6() {
   check "workspace floor proven (reconcile-host IN_SYNC)" retry "reconcile the workspace floor" workspace_floor
   check "a delegation row in the local store" sqlite_rows
   check "onex metering reads it" onex_run metering
+  if [ "$MODEL_CHOICE" = "ollama" ]; then
+    check "Ollama answers on this Mac" ollama_up
+    check "Ollama has $OLLAMA_MODEL" ollama_has_model "$OLLAMA_MODEL"
+  fi
   check "the full onex plugin installed in Claude Code" plugin_installed onex@omninode-tools-dev
   if [ "$MODE2_OK" -eq 1 ]; then check "local stack healthy" stack_healthy; fi
   if [ -n "$AMBIENT_FOUND" ]; then
@@ -1350,7 +1551,11 @@ main() {
   phase6
   hr
   say "Done. Set up: $SELECTED."
-  say "Model: your own $(provider_label "$MODEL_CHOICE") key."
+  if [ "$MODEL_CHOICE" = "ollama" ]; then
+    say "Model: $OLLAMA_MODEL on this Mac, through Ollama (no key)."
+  else
+    say "Model: your own $(provider_label "$MODEL_CHOICE") key."
+  fi
   say "Next:"
   say "  1. Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect."
   say "  2. Open Claude Code (run 'claude') and sign in with your Anthropic account the first"
