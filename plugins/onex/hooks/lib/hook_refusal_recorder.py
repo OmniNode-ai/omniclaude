@@ -18,7 +18,7 @@ reporting it. A gate whose refusals reach no aggregated surface cannot be
 told apart from a gate that never fires.
 
 WHAT THIS DOES. One ``FRICTION``-class row per refusal, appended to the
-rolling work ledger through ``scripts/ledger_lock.py`` — the same locked
+rolling work ledger through ``onex-ledger`` — the same locked
 writer every other lane uses, never a direct write — carrying the guard, a
 stable reason token, the resolved lane and a redacted first line of the
 refusal text. The morning friction sweep and the fleet failure sink both read
@@ -346,20 +346,28 @@ def resolve_lane_fields(
         return "", "unresolved"
 
 
-def append_row(row: str, *, ledger: Path, locker: Path, timeout: str) -> bool:
-    """Append through ``ledger_lock.py``. Never a direct write to the ledger.
+def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
+    """Append through packaged ``onex-ledger``. Never a direct ledger write.
 
     The ledger is a shared append-only file many lanes write concurrently;
     the locked writer is the only sanctioned path and it also carries the
     dedupe-on-retry behaviour this caller would otherwise need itself.
     """
-    if not locker.is_file() or not ledger.is_file():
+    if (
+        not project.is_absolute()
+        or not (project / "pyproject.toml").is_file()
+        or not ledger.is_file()
+    ):
         return False
     try:
         completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
             [
-                sys.executable,
-                str(locker),
+                "uv",
+                "run",
+                "--quiet",
+                "--project",
+                str(project),
+                "onex-ledger",
                 str(ledger),
                 "--append",
                 row,
@@ -461,12 +469,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.ledger
         else registry_root / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
     )
-    locker = registry_root / "scripts" / "ledger_lock.py"
+    project = Path(
+        os.environ.get("OMNIBASE_INTERNAL_HOME")
+        or registry_root.parent / "omnibase_internal"
+    )
+    if not project.is_absolute():
+        return 0
     # The return value is deliberately discarded. A failed append is a
     # dropped row, which is bad; a non-zero exit from a process the refusing
     # hook backgrounded would be worse than bad in a different way, because
     # the hook's own log would then carry a failure that is not the guard's.
-    append_row(row, ledger=ledger, locker=locker, timeout=args.timeout)
+    append_row(row, ledger=ledger, project=project, timeout=args.timeout)
     return 0
 
 
