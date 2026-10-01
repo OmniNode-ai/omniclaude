@@ -469,3 +469,22 @@ def test_registry_release_is_scoped_to_the_holding_run(tmp_path: Path) -> None:
 
     registry.release(PR_KEY, run_id="run-1")
     assert registry.get_claim(PR_KEY) is None
+
+
+def test_lane_id_from_runner_onex_lane_env() -> None:
+    """The remote-lane runner exports ONEX_LANE only (OMN-20262)."""
+    assert resolve_lane_id(env={"ONEX_LANE": LANE_A}, cwd="/tmp") == LANE_A
+
+
+def test_lane_id_prefers_onex_lane_id_over_onex_lane() -> None:
+    env = {"ONEX_LANE_ID": LANE_A, "ONEX_LANE": LANE_B}
+    assert resolve_lane_id(env=env, cwd="/tmp") == LANE_A
+
+
+def test_refusal_prints_absolute_existing_cli_path() -> None:
+    from plugins.onex.hooks.lib.pr_ownership_guard import _claim_command
+
+    command = _claim_command("o/r#1")
+    cli = command.split()[1]
+    assert Path(cli).is_absolute()
+    assert Path(cli).is_file()

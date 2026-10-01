@@ -108,6 +108,7 @@ class Workspace:
             (self.scratch, "{SP}"),
             (self.workspace, "{WS}"),
             (self.root, "{ROOT}"),
+            (REPO_ROOT, "{CLONE}"),
         ):
             pairs.append((str(path.resolve()), name))
             pairs.append((str(path), name))
