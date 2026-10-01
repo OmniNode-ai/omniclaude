@@ -72,7 +72,7 @@ class Sandbox:
 
     def __init__(self, tmp_path: Path) -> None:
         self.tmp = tmp_path
-        self.home = tmp_path / "omni_home"
+        self.home = tmp_path / "registry_root"
         (self.home / "scripts").mkdir(parents=True)
         (self.home / "scripts" / "ledger_lock.py").write_text(
             _FAKE_LOCKER, encoding="utf-8"
@@ -82,7 +82,7 @@ class Sandbox:
         self.ledger.write_text("# ledger\n", encoding="utf-8")
         self.worktrees = self.home / "omni_worktrees"
         self.worktrees.mkdir()
-        self.projects = tmp_path / "projects" / "-omni-home"
+        self.projects = tmp_path / "projects" / "-registry-root"
         self.projects.mkdir(parents=True)
         self.transcript = self.projects / f"{SESSION_ID}.jsonl"
         self.transcript.write_text("", encoding="utf-8")
@@ -307,7 +307,9 @@ class TestEachOperand:
         assert _cell(row, "lane") == "registered-lane"
         assert _cell(row, "lane_source") == "registry"
 
-    def test_registry_resolves_an_unexpanded_omni_home_path(self, box: Sandbox) -> None:
+    def test_registry_resolves_an_unexpanded_registry_root_variable(
+        self, box: Sandbox
+    ) -> None:
         """Commands are written with ``$OMNI_HOME`` left for the shell."""
         wt = box.worktree("OMN-56")
         box.register(wt, "registered-lane-56", ticket="OMN-56")
@@ -533,3 +535,35 @@ class TestEveryGuardIsNamed:
     def test_refusal_row_guard_named_on_the_row(self, box: Sandbox) -> None:
         row = box.refuse(box.payload(), env={"TEST_HOOK_NAME": "pre_tool_use_x.sh"})
         assert _cell(row, "guard") == "pre_tool_use_x.sh"
+
+
+class TestARelativelySourcedSeamSurvivesACd:
+    def test_refusal_row_written_after_the_guard_cds_home(self, box: Sandbox) -> None:
+        """Several guards ``cd "$HOME"`` after sourcing error-guard.sh. A seam
+        sourced by a relative path must still find its recorder afterwards.
+        """
+        script = (
+            'cd "$(dirname "${TEST_ERROR_GUARD}")" && '
+            '_OMNICLAUDE_HOOK_NAME="relative.sh" && source ./error-guard.sh && '
+            'cd "$HOME" && TOOL_INFO=$(cat) && '
+            'hook_record_refusal "relative seam" "d"; trap - EXIT'
+        )
+        before = box.ledger.read_text(encoding="utf-8").count("guard=relative.sh")
+        result = subprocess.run(
+            ["bash", "-c", script],
+            input=json.dumps(box.payload()),
+            capture_output=True,
+            text=True,
+            check=False,
+            env=box.env({"ONEX_LANE": "relative-lane"}),
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stderr
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            text = box.ledger.read_text(encoding="utf-8")
+            if text.count("guard=relative.sh") > before:
+                break
+            time.sleep(0.05)
+        row = [line for line in text.splitlines() if "guard=relative.sh" in line][-1]
+        assert _cell(row, "lane") == "relative-lane"

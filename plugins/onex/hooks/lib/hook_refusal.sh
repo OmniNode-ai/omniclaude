@@ -54,17 +54,20 @@
 # The guard is always $_OMNICLAUDE_HOOK_NAME, which every recording hook sets
 # before sourcing this file (pinned by tests/hooks/test_refusal_row_lane_omn19381.py).
 
+# This file's directory, made absolute NOW: several guards `cd "$HOME"` after
+# sourcing, and a relative path resolved at call time would then miss the
+# recorder. No exec and no fork (OMN-20109).
+_ONEX_HOOK_REFUSAL_LIB="${BASH_SOURCE[0]%/*}"
+[[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_REFUSAL_LIB=.
+[[ "$_ONEX_HOOK_REFUSAL_LIB" == /* ]] || _ONEX_HOOK_REFUSAL_LIB="${PWD}/${_ONEX_HOOK_REFUSAL_LIB}"
+
 hook_record_refusal() {
     local guard="${_OMNICLAUDE_HOOK_NAME:-unknown-hook}"
     local reason="${1:-unspecified}"
     local detail="${2:-}"
     local payload="${_OMNICLAUDE_HOOK_PAYLOAD:-${TOOL_INFO:-${STDIN_JSON:-}}}"
 
-    local lib_dir="${HOOKS_LIB:-}"
-    if [[ -z "$lib_dir" ]]; then
-        lib_dir="${BASH_SOURCE[0]%/*}"
-        [[ "${BASH_SOURCE[0]}" == */* ]] || lib_dir=.
-    fi
+    local lib_dir="${HOOKS_LIB:-$_ONEX_HOOK_REFUSAL_LIB}"
     local recorder="${lib_dir}/hook_refusal_recorder.py"
     [[ -f "$recorder" ]] || return 0
 
