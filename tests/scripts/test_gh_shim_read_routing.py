@@ -59,6 +59,17 @@ def routed_env(tmp_path: Path) -> dict[str, str]:
             }
         with open(os.environ["FAKE_GH_LOG"], "a") as fh:
             fh.write(json.dumps(record) + "\\n")
+        refuse = os.environ.get("FAKE_GH_REFUSE_TOKEN")
+        if refuse and os.environ.get("GH_TOKEN") == refuse:
+            # The real gh prints an HTTP error BODY to stdout and the reason to
+            # stderr; only the stderr copy carries the refusal phrase.
+            body = os.environ.get(
+                "FAKE_GH_REFUSE_STDOUT",
+                '{"message":"Resource not accessible by integration",'
+                '"documentation_url":"https://docs.github.com/rest","status":"403"}')
+            sys.stdout.write(body)
+            sys.stderr.write("gh: Resource not accessible by integration (HTTP 403)\\n")
+            sys.exit(1)
         sys.stdout.write(os.environ.get("FAKE_GH_STDOUT", "served\\n"))
         sys.stderr.write(os.environ.get("FAKE_GH_STDERR", ""))
         raise SystemExit(int(os.environ.get("FAKE_GH_RC", "0")))
@@ -321,6 +332,38 @@ def test_route_graphql_never_reaches_the_router(
         "operator",
         "shim-not-a-read",
     )
+
+
+def test_route_refused_app_call_leaves_stdout_with_only_the_fallbacks_document(
+    routed_env: dict[str, str],
+) -> None:
+    """Friction 2026-10-02T00:46:17Z / 2026-10-02T01:35:48Z: advisory_job_gate
+    json.loads saw two documents, commits were refused, and lanes escaped with
+    ONEX_GH_READ_ROUTING=0.
+    """
+    argv = [
+        "api",
+        "repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks",
+        "--jq",
+        ".contexts",
+    ]
+    result = _run(
+        routed_env,
+        *argv,
+        extra={
+            "ONEX_GH_READ_ROUTING": "1",
+            "FAKE_GH_REFUSE_TOKEN": APP_TOKEN,
+            "FAKE_GH_STDOUT": '{"contexts": ["Quality Gate"]}',
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"contexts": ["Quality Gate"]}
+    calls = _gh_calls(routed_env)
+    assert len(calls) == 2
+    assert [call["gh_token"] for call in calls] == [APP_TOKEN, OPERATOR_TOKEN]
+    (row,) = _usage(routed_env)
+    assert row["identity"] == "operator-fallback"
+    assert row["route_reason"] == "integration-refused"
 
 
 def test_route_fallback_when_token_command_is_unset(routed_env: dict[str, str]) -> None:

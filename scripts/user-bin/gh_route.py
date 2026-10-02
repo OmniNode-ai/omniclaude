@@ -48,6 +48,8 @@ token, no cache home), the read runs on the operator and the recorder receives
 ``identity=operator-fallback`` with the reason. If the App answers "Resource
 not accessible by integration", the call is retried once on the operator and
 recorded the same way. The recorder is the usage log of T0.5 (OMN-19585).
+A refused attempt's output never reaches the caller's stdout; stdout always holds
+exactly one document, the answer of whichever identity served it.
 
 OFF BY DEFAULT. Nothing routes unless ``ONEX_GH_READ_ROUTING=1``. The flag is
 turned on only after the operator has created the App and the post-setup
@@ -583,13 +585,18 @@ def route_and_run(
         return record(IDENTITY_FALLBACK, tok.reason, _run_inherit(real_gh, argv, env))
 
     app_env = {**env, "GH_TOKEN": tok.token}
+    # gh api prints the HTTP error body to stdout; a 403 plus the operator's answer
+    # gave advisory_job_gate json.loads two documents (friction 2026-10-02T00:46:17Z,
+    # "Extra data: line 1 column 175"), so buffer stdout until refusal is ruled out.
     proc = subprocess.run(
-        [real_gh, *argv], env=app_env, stderr=subprocess.PIPE, check=False
+        [real_gh, *argv], env=app_env, capture_output=True, check=False
     )
     if proc.returncode != 0 and INTEGRATION_REFUSAL.encode() in proc.stderr:
         return record(
             IDENTITY_FALLBACK, "integration-refused", _run_inherit(real_gh, argv, env)
         )
+    sys.stdout.buffer.write(proc.stdout)
+    sys.stdout.flush()
     sys.stderr.buffer.write(proc.stderr)
     sys.stderr.flush()
     return record(IDENTITY_APP, cls.reason, proc.returncode)
