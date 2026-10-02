@@ -185,6 +185,71 @@ def test_the_multibyte_expansion_guard_would_catch_the_regression() -> None:
     )
 
 
+def test_phase_2_declares_the_workspace_runtime_config() -> None:
+    """OMN-20371: a bound workspace root with no tier-1 config is REFUSED.
+
+    Phase 2 exports OMNIBASE_PATH, which makes the workspace a registry
+    workspace, and `resolve_embedded_runtime_config` then refuses a bound root
+    that declares no `config/onex/runtime/runtime_config.yaml` rather than
+    answering with the shipped in-memory default (OMN-19193). Before this, a
+    freshly onboarded machine could not run a bare `onex delegate` at all, and
+    `/onex:delegate` in Claude Code failed on its first attempt.
+    """
+    text = SCRIPT.read_text()
+    assert "config/onex/runtime/runtime_config.yaml" in text, (
+        "phase 2 must declare the workspace's tier-1 runtime config; a bound "
+        "root without it is refused"
+    )
+    assert "write_workspace_runtime_config" in text
+    # Written in phase 2, and a resumed run repairs a workspace that lacks it.
+    assert "workspace_runtime_config_present || return 1" in text, (
+        "phase2_verified must require the config, so a re-run on a workspace "
+        "set up before this change writes it"
+    )
+
+
+def test_the_declared_transport_names_no_lab_address() -> None:
+    """The config is generated, never vendored from the canonical tree.
+
+    The canonical workspace's own tier-1 config declares the lab's dev lane.
+    Copying it here
+    would put a lab address on a developer machine, which AC5 of OMN-20150
+    forbids, so the generated file declares the in-memory bus instead.
+    """
+    text = SCRIPT.read_text()
+    start = text.index("write_workspace_runtime_config()")
+    body = text[start : text.index("workspace_runtime_config_present()")]
+    assert 'type: "inmemory"' in body
+    assert 'profile: "local"' in body
+    # No dotted-quad address, no tailnet name, no lane: built from parts so this
+    # assertion does not itself become the hardcoded-address it forbids.
+    assert not re.search(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", body)
+    assert "ts" + ".net" not in body
+    assert "lane:" not in body
+
+
+def test_the_scripts_own_delegation_uses_the_developers_command() -> None:
+    """The phase-3 check must not pass through a flag a developer never types.
+
+    It used to run `onex delegate --bus inmemory`, which succeeded on machines
+    where the bare command a developer runs was refused -- so phase 6 reported
+    a delegation row while `/onex:delegate` failed. The check now runs the bare
+    command, against the transport phase 2 declared.
+    """
+    text = SCRIPT.read_text()
+    start = text.index("delegate_hello() {")
+    whole = text[start : text.index("\n}", start)]
+    # Comments may name the flag to explain its absence; only code counts.
+    body = "\n".join(
+        line for line in whole.splitlines() if not line.lstrip().startswith("#")
+    )
+    assert "--bus" not in body, (
+        "delegate_hello must not select a transport: the declared workspace "
+        "config is what a developer's own command resolves"
+    )
+    assert 'onex_run delegate --json "Reply with exactly one word: hello"' in body
+
+
 def test_the_script_names_no_lab_host() -> None:
     """The plugin is public: lab addresses come from the workspace, never the script."""
     text = SCRIPT.read_text()
