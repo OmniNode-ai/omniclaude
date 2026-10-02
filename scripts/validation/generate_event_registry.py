@@ -461,8 +461,7 @@ def check_vendored_capture_contract(
 
 
 def diff_registries(
-    generated: dict[str, dict[str, Any]],
-    committed: dict[str, dict[str, Any]],
+    generated: dict[str, dict[str, Any]], committed: dict[str, dict[str, Any]]
 ) -> list[str]:
     violations: list[str] = []
 

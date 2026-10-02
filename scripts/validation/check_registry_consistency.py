@@ -162,7 +162,7 @@ def check_registry_consistency(daemon_registry_path: Path) -> list[str]:
             )
 
     mismatches: dict[str, set[str]] = {}
-    for event_type in sorted(supported & set(daemon_events)):
+    for event_type in sorted(supported):
         source_topics = event_registry.get(event_type, set())
         event_def = daemon_events.get(event_type)
         # An event type the daemon does not register is already reported as

@@ -227,10 +227,10 @@ def test_review_step_invokes_cli_review_with_model(
     )
 
 
-def test_dependency_clones_track_dev_and_review_install_excludes_rl(
+def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
     workflow: dict[object, object],
 ) -> None:
-    """Reviewer support repos must track dev and avoid the Torch/RL install path."""
+    """Reviewer support repos are read at the uv.lock pin and avoid the RL install path."""
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
     review_job = jobs["hostile-review"]
@@ -248,8 +248,18 @@ def test_dependency_clones_track_dev_and_review_install_excludes_rl(
     for repo in ("omniintelligence", "omnibase_core", "omnibase_compat"):
         repo_url = f"https://github.com/OmniNode-ai/{repo}.git"
         assert repo_url in combined, f"{repo} clone must be present"
-        assert "--branch dev" in combined, "dependency clones must track dev"
-        assert "--branch main" not in combined, f"{repo} clone must not track main"
+    # A sibling is read at the pin this repo's uv.lock records, never a live branch
+    # (ruling 2026-10-01): omniintelligence by rev, core and compat by release tag.
+    assert "--branch dev" not in combined, "dependency clones must not track dev"
+    assert "--branch main" not in combined, "dependency clones must not track main"
+    assert "omniintelligence\\.git\\?rev=" in combined, (
+        "omniintelligence must be fetched at the rev uv.lock pins"
+    )
+    for pinned in ("omnibase-core", "omnibase-compat"):
+        assert f"n={pinned}" in combined, f"{pinned} version must be read from uv.lock"
+    assert combined.count('--branch "v${pin_version}"') == 2, (
+        "omnibase_core and omnibase_compat must be cloned at v<uv.lock version>"
+    )
 
     assert "uv sync --locked --all-extras --python 3.12" in combined, (
         "reviewer dependency install must use the locked review path"
