@@ -380,6 +380,8 @@ topics:
       emitted_at: capture_verbatim
       actor: capture_verbatim
       claude_code_version: capture_verbatim
+      # OMN-17427: the emitting machine's hostname, a name and never a path.
+      host: capture_verbatim
       lineage.session_id: capture_verbatim
       lineage.agent_id: capture_verbatim
       lineage.agent_type: capture_verbatim
@@ -409,6 +411,8 @@ topics:
       payload.tool_names: capture_verbatim
       payload.duration_ms: capture_verbatim
       payload.interrupted: capture_verbatim
+      # OMN-17427: a Bash call's exit status, an integer.
+      payload.exit_code: capture_verbatim
       payload.is_interrupt: capture_verbatim
       payload.notification_type: capture_verbatim
       payload.prompt_length: capture_verbatim

@@ -70,6 +70,7 @@ import importlib.util
 import json
 import os
 import re
+import socket
 import sys
 from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime
@@ -440,6 +441,7 @@ def build_event_payload(
     emitted_at: datetime,
     version: str | None,
     sidecar_index_dir: Path | None = None,
+    host: str | None = None,
 ) -> dict[str, Any]:
     """Map one hook's stdin to the journal payload of its ``hook.event``.
 
@@ -472,6 +474,7 @@ def build_event_payload(
         claude_code_version=version,
         turn_id=turn_id,
         content_scrubber=scrubber,
+        host=host,
     )
     payload: dict[str, Any] = result.event.model_dump(mode="json")
     payload["session_id"] = result.event.lineage.session_id
@@ -528,6 +531,7 @@ def capture(
             emitted_at=now or datetime.now(UTC),
             version=claude_code_version(),
             sidecar_index_dir=sidecar_index_dir_for(target),
+            host=socket.gethostname(),
         )
     except (contract.InvalidHookInputError, contract.UnknownHookEventError) as exc:
         # The error names a field, never its value: hook stdin is content.

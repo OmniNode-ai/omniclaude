@@ -43,6 +43,8 @@ The fail direction, which is the whole point
 --------------------------------------------
 Every failure resolves to an explicit marker, never to a lane name:
 
+* ``sidecar``    -- the harness's spawn sidecar named the lane
+* ``env``        -- the launcher declared the lane in ``ONEX_LANE``
 * ``registry``   -- a record was found for this path or one of its parents
 * ``unresolved`` -- the registry is readable and holds no record for this path
 * ``unavailable``-- the registry root itself could not be resolved or read
@@ -72,6 +74,17 @@ enough to find it. That is a fact the harness authored, not one the agent can
 assert, so it is checked FIRST -- ahead of a worktree registration, which
 outlives the lane that wrote it.
 
+The main thread of a dispatched lane has no sidecar, and its ``cwd`` is the
+workspace root, so neither operand above names it: 104,492 of 104,492
+``claude_hook_events`` rows on the dev lane carried an empty lane on
+2026-10-01 (OMN-17427). Its launcher does name it. ``onex-remote-lane`` exports
+``ONEX_LANE=<lane>`` before ``claude -p``, and a session's ``session.env``
+carries the session lane under the same name. The harness passes its own
+environment to every hook, and nothing the agent runs in a tool call can change
+that environment, so the value is the launcher's declaration, checked after the
+sidecar (a subagent inherits its parent's environment, and the sidecar names
+the subagent) and before the registry.
+
 **The upward walk stops below the workspace root.** ``lane_identity.resolve``
 walks to the filesystem root so a lane working in a subdirectory of its own
 worktree still resolves. That is right for a commit trailer and wrong here: if
@@ -92,6 +105,8 @@ from collections.abc import Iterator
 from pathlib import Path
 
 __all__ = [
+    "LANE_ENV",
+    "LANE_SOURCE_ENV",
     "LANE_SOURCE_REGISTRY",
     "LANE_SOURCE_SIDECAR",
     "LANE_SOURCE_UNAVAILABLE",
@@ -122,7 +137,11 @@ STATE_SUBDIR = ".onex_state"
 REGISTRY_SUBDIR = "lane_identity"
 
 LANE_SOURCE_REGISTRY = "registry"
+LANE_SOURCE_ENV = "env"
 LANE_SOURCE_SIDECAR = "sidecar"
+
+#: The lane its launcher declared for this Claude Code process (OMN-17427).
+LANE_ENV = "ONEX_LANE"
 LANE_SOURCE_UNRESOLVED = "unresolved"
 LANE_SOURCE_UNAVAILABLE = "unavailable"
 
@@ -356,9 +375,10 @@ def resolve_lane(
 ) -> tuple[str, str, str]:
     """Return ``(lane, lane_source, ticket)`` for one tool call.
 
-    Two operands, tried in order. The harness sidecar names the lane the
-    harness itself dispatched and is checked first; the worktree registry is
-    the fallback, and answers for a process that really does work from a
+    Three operands, tried in order. The harness sidecar names the lane the
+    harness itself dispatched and is checked first; the launcher's
+    :data:`LANE_ENV` declaration is second; the worktree registry is the
+    fallback, and answers for a process that really does work from a
     registered directory. ``lane`` is empty whenever ``lane_source`` is
     :data:`LANE_SOURCE_UNRESOLVED` or :data:`LANE_SOURCE_UNAVAILABLE`.
 
@@ -373,6 +393,9 @@ def resolve_lane(
     lane = sidecar_lane_name(transcript_path, session_id, agent_id)
     if lane:
         return lane, LANE_SOURCE_SIDECAR, ""
+    declared = os.environ.get(LANE_ENV, "").strip()[:_LANE_NAME_CHARS]
+    if declared:
+        return declared, LANE_SOURCE_ENV, ""
     if not cwd:
         return "", LANE_SOURCE_UNRESOLVED, ""
     base = registry_base()
