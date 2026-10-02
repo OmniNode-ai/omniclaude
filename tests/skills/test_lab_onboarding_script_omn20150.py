@@ -5,16 +5,21 @@
 Preflight reads the machine and changes nothing. A machine below the minimum
 exits 3 having written nothing under $HOME, and a VM is never given containers.
 Readings are overridden through the script's ONBOARD_TEST_* seams, so these run
-on any macOS host and install nothing. The script must also parse under the
+on Linux and macOS hosts and install nothing. The script must also parse under the
 stock macOS /bin/bash 3.2 (the D4 failure class).
 """
 
 from __future__ import annotations
 
+import errno
 import os
+import pty
 import re
+import select
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -30,9 +35,84 @@ SCRIPT = (
 SKILL = SCRIPT.parents[1] / "omninode_dev_setup" / "SKILL.md"
 
 pytestmark = pytest.mark.unit
-macos_only = pytest.mark.skipif(
-    sys.platform != "darwin", reason="the script targets macOS only"
-)
+
+
+def _drive_tty(
+    argv: list[str],
+    env: dict[str, str],
+    steps: list[tuple[str, str]],
+    timeout: float = 120,
+) -> tuple[str, int]:
+    """Answer prompts on a controlling terminal and reap the child even on failure."""
+    fd, slave = pty.openpty()
+    proc = subprocess.Popen(
+        argv,
+        stdin=slave,
+        stdout=slave,
+        stderr=slave,
+        env=env,
+        start_new_session=True,
+        close_fds=True,
+    )
+    os.close(slave)
+
+    output = bytearray()
+    deadline = time.monotonic() + timeout
+    eof = False
+
+    def remaining() -> float:
+        seconds = deadline - time.monotonic()
+        if seconds <= 0:
+            raise TimeoutError(
+                f"Terminal driver timed out: {output.decode(errors='replace')}"
+            )
+        return seconds
+
+    def read_output() -> None:
+        nonlocal eof
+        if not select.select([fd], [], [], remaining())[0]:
+            raise TimeoutError(
+                f"Terminal driver timed out: {output.decode(errors='replace')}"
+            )
+        try:
+            chunk = os.read(fd, 65536)
+        except OSError as exc:
+            if exc.errno != errno.EIO:
+                raise
+            # Linux reports EIO when the slave closes; BSD returns an empty read.
+            chunk = b""
+        if chunk:
+            output.extend(chunk)
+        else:
+            eof = True
+
+    try:
+        cursor = 0
+        for prompt, answer in steps:
+            expected = prompt.encode()
+            while (position := output.find(expected, cursor)) < 0:
+                if eof:
+                    raise AssertionError(
+                        f"Child exited before prompt {prompt!r}: {output.decode(errors='replace')}"
+                    )
+                read_output()
+            cursor = position + len(expected)
+            # Give the shell time to enter read (and read -s to disable echo).
+            time.sleep(min(0.05, remaining()))
+            os.write(fd, (answer + "\r").encode())
+        while not eof:
+            read_output()
+        returncode = proc.wait(timeout=remaining())
+        return output.decode(errors="replace").replace("\r", ""), returncode
+    finally:
+        if proc.poll() is None:
+            # start_new_session made the child a group leader: kill its subprocesses too.
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.wait()
+        os.close(fd)
 
 
 def _run(tmp_path: Path, *args: str, **seams: str) -> subprocess.CompletedProcess[str]:
@@ -43,7 +123,13 @@ def _run(tmp_path: Path, *args: str, **seams: str) -> subprocess.CompletedProces
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
         "TMPDIR": str(tmp_path / "run") + "/",
         "ONBOARD_NOTIFY": "0",
+        "ONBOARD_TEST_OS": "Darwin",
+        "ONBOARD_TEST_MACOS": "14.5",
+        "ONBOARD_TEST_PORTS_BUSY": "",
         "ONBOARD_TEST_DISK_GB": "100",
+        "ONBOARD_TEST_RAM_GB": "32",
+        "ONBOARD_TEST_CPUS": "10",
+        "ONBOARD_TEST_VM": "0",
         "ONBOARD_TEST_ADMIN": "1",
         **seams,
     }
@@ -85,7 +171,6 @@ def test_the_script_names_no_lab_host() -> None:
         assert needle not in text, needle
 
 
-@macos_only
 def test_below_minimum_exits_3_and_writes_nothing_under_home(tmp_path: Path) -> None:
     result = _run(tmp_path, ONBOARD_TEST_RAM_GB="4")
     assert result.returncode == 3, result.stdout + result.stderr
@@ -95,7 +180,6 @@ def test_below_minimum_exits_3_and_writes_nothing_under_home(tmp_path: Path) -> 
     assert _home_files(tmp_path) == []
 
 
-@macos_only
 def test_preflight_only_changes_nothing(tmp_path: Path) -> None:
     result = _run(tmp_path, "--preflight-only")
     assert result.returncode == 0, result.stdout + result.stderr
@@ -103,7 +187,6 @@ def test_preflight_only_changes_nothing(tmp_path: Path) -> None:
     assert _home_files(tmp_path) == []
 
 
-@macos_only
 def test_a_vm_is_never_given_containers(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
@@ -117,7 +200,6 @@ def test_a_vm_is_never_given_containers(tmp_path: Path) -> None:
     assert "Docker Desktop cannot run inside a macOS guest" in result.stdout
 
 
-@macos_only
 def test_containers_are_offered_not_imposed(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
@@ -131,7 +213,6 @@ def test_containers_are_offered_not_imposed(tmp_path: Path) -> None:
         assert "Docker can be added (you will be asked)" in result.stdout
 
 
-@macos_only
 def test_containers_when_asked_for(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
@@ -146,7 +227,6 @@ def test_containers_when_asked_for(tmp_path: Path) -> None:
         assert "and the stack locally in Docker" in result.stdout
 
 
-@macos_only
 def test_no_containers_is_honoured(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
@@ -158,7 +238,6 @@ def test_no_containers_is_honoured(tmp_path: Path) -> None:
     assert "No local Docker: --no-containers was passed" in result.stdout
 
 
-@macos_only
 def test_containers_asked_for_on_a_mac_that_cannot_run_them_continue_without(
     tmp_path: Path,
 ) -> None:
@@ -174,7 +253,6 @@ def test_containers_asked_for_on_a_mac_that_cannot_run_them_continue_without(
     assert "onex runs your delegations natively on this Mac" in result.stdout
 
 
-@macos_only
 @pytest.mark.parametrize(
     ("docker", "floor"),
     [("not installed", "30 GB"), ("installed, not running", "20 GB")],
@@ -193,7 +271,6 @@ def test_disk_floor_depends_on_whether_docker_is_installed(
     assert f"Docker Desktop         {docker}" in result.stdout
 
 
-@macos_only
 def test_status_file_records_each_phase(tmp_path: Path) -> None:
     _run(tmp_path, "--preflight-only")
     status = (tmp_path / "run" / "omninode-onboarding" / "status").read_text()
@@ -216,10 +293,6 @@ def test_skill_starts_the_run_in_a_terminal_and_keeps_secrets_out_of_the_session
     assert "Never ask the developer to paste a password or API key into this" in text
 
 
-@macos_only
-@pytest.mark.skipif(
-    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
-)
 @pytest.mark.parametrize(
     ("answer", "outcome"),
     [("y", "and the stack locally in Docker"), ("n", "No local Docker: you said no")],
@@ -239,6 +312,9 @@ def test_one_question_after_preflight_decides_docker(
         "TMPDIR": str(tmp_path / "run") + "/",
         "TERM": "dumb",
         "ONBOARD_NOTIFY": "0",
+        "ONBOARD_TEST_OS": "Darwin",
+        "ONBOARD_TEST_MACOS": "14.5",
+        "ONBOARD_TEST_PORTS_BUSY": "",
         "ONBOARD_TEST_DISK_GB": "100",
         "ONBOARD_TEST_RAM_GB": "32",
         "ONBOARD_TEST_CPUS": "10",
@@ -246,22 +322,14 @@ def test_one_question_after_preflight_decides_docker(
         "ONBOARD_TEST_ADMIN": "1",
         "ONBOARD_TEST_NO_GUI": "1",
     }
-    script = (
-        f"set timeout 60; spawn /bin/bash {phase0_only} --provider gemini; "
-        'expect "key (input is hidden)"; send "not-a-real-key\\r"; '
-        f'expect "Set up the local stack in Docker too?"; send "{answer}\\r"; expect eof'
+    out, returncode = _drive_tty(
+        ["/bin/bash", str(phase0_only), "--provider", "gemini"],
+        env,
+        [
+            ("key (input is hidden)", "not-a-real-key"),
+            ("Set up the local stack in Docker too?", answer),
+        ],
     )
-    result = subprocess.run(
-        ["/usr/bin/expect", "-c", script],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
-    )
-    out = result.stdout.replace("\r", "")
-    if "ports in use" in out:
-        pytest.skip("the local stack's ports are held by something else on this host")
     assert "You're already covered" in out
     assert outcome in out
 
@@ -319,8 +387,14 @@ def _phase0_env(tmp_path: Path, **extra: str) -> dict[str, str]:
         "TMPDIR": str(tmp_path / "run") + "/",
         "TERM": "dumb",
         "ONBOARD_NOTIFY": "0",
+        "ONBOARD_TEST_OS": "Darwin",
+        "ONBOARD_TEST_MACOS": "14.5",
+        "ONBOARD_TEST_PORTS_BUSY": "",
         "ONBOARD_TEST_NO_GUI": "1",
         "ONBOARD_TEST_DISK_GB": "100",
+        "ONBOARD_TEST_RAM_GB": "32",
+        "ONBOARD_TEST_CPUS": "10",
+        "ONBOARD_TEST_VM": "0",
         "ONBOARD_TEST_ADMIN": "1",
         **extra,
     }
@@ -340,7 +414,6 @@ def test_only_the_beta_providers_are_accepted(tmp_path: Path, provider: str) -> 
     assert "must be gemini, openrouter, openai or ollama" in result.stderr
 
 
-@macos_only
 def test_no_key_and_nobody_to_ask_stops_before_installing(tmp_path: Path) -> None:
     result = subprocess.run(
         ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
@@ -355,10 +428,6 @@ def test_no_key_and_nobody_to_ask_stops_before_installing(tmp_path: Path) -> Non
     assert sorted((tmp_path / "home").rglob("*")) == []
 
 
-@macos_only
-@pytest.mark.skipif(
-    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
-)
 @pytest.mark.parametrize(
     ("key", "outcome"),
     [("", "no key was given"), ("not-a-real-key", "Model key: received")],
@@ -367,20 +436,11 @@ def test_the_key_is_settled_in_preflight(
     tmp_path: Path, key: str, outcome: str
 ) -> None:
     """Provider then key, both before anything installs; an empty key stops the run."""
-    script = (
-        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
-        'expect "Choose 1, 2, 3 or 4:"; send "1\\r"; '
-        f'expect "key (input is hidden)"; send "{key}\\r"; expect eof'
+    out, returncode = _drive_tty(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
+        _phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        [("Choose 1, 2, 3 or 4:", "1"), ("key (input is hidden)", key)],
     )
-    result = subprocess.run(
-        ["/usr/bin/expect", "-c", script],
-        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
-    )
-    out = result.stdout.replace("\r", "")
     assert outcome in out
     assert (
         "not-a-real-key" not in out.split("key (input is hidden)")[-1]
@@ -388,41 +448,33 @@ def test_the_key_is_settled_in_preflight(
     assert sorted(p for p in (tmp_path / "home").rglob("*")) == []
 
 
-@macos_only
-@pytest.mark.skipif(
-    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
-)
 @pytest.mark.parametrize(
     "answers",
     [
-        'expect "Choose 1, 2, 3 or 4:"; send "4\\r"; expect "Set up the local stack in Docker too?"; send "q\\r"; ',
-        'expect "Choose 1, 2, 3 or 4:"; send "q\\r"; ',
+        [
+            ("Choose 1, 2, 3 or 4:", "4"),
+            ("Set up the local stack in Docker too?", "q"),
+        ],
+        [("Choose 1, 2, 3 or 4:", "q")],
     ],
     ids=["quit-at-docker", "quit-at-provider"],
 )
 def test_quit_setup_stops_before_anything_installs(
-    tmp_path: Path, answers: str
+    tmp_path: Path, answers: list[tuple[str, str]]
 ) -> None:
     """ "Quit setup" (q on a terminal) is offered only before any install, and says so."""
-    script = f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)}; {answers}expect eof; catch wait result; exit [lindex $result 3]"
-    result = subprocess.run(
-        ["/usr/bin/expect", "-c", script],
-        env=_phase0_env(
+    out, returncode = _drive_tty(
+        ["/bin/bash", str(_phase0_only(tmp_path))],
+        _phase0_env(
             tmp_path,
             ONBOARD_TEST_RAM_GB="32",
             ONBOARD_TEST_CPUS="10",
             ONBOARD_TEST_VM="0",
         ),
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
+        answers,
     )
-    out = result.stdout.replace("\r", "")
-    if "ports in use" in out:
-        pytest.skip("the local stack's ports are held by something else on this host")
     assert "Nothing was installed. Run onboarding again when you're ready." in out
-    assert result.returncode == 4, out[-400:]
+    assert returncode == 4, out[-400:]
     assert sorted((tmp_path / "home").rglob("*")) == []
 
 
@@ -467,7 +519,6 @@ def test_nothing_connects_to_the_lab() -> None:
     assert 'DONE_FILE="$STATE_DIR/phases.v2.done"' in text
 
 
-@macos_only
 def test_a_resumed_run_finds_the_tools_phase_1_installed(tmp_path: Path) -> None:
     """Phase 1 skipped on a re-run must not leave uv and onex off PATH for later phases."""
     home = tmp_path / "home"
@@ -491,24 +542,12 @@ def test_a_resumed_run_finds_the_tools_phase_1_installed(tmp_path: Path) -> None
 # ---------------------------------------------------------------------------
 
 
-@macos_only
-@pytest.mark.skipif(
-    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
-)
 def test_choosing_ollama_on_the_menu_skips_the_key(tmp_path: Path) -> None:
-    script = (
-        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
-        'expect "Choose 1, 2, 3 or 4:"; send "4\\r"; expect eof'
+    out, returncode = _drive_tty(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
+        _phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        [("Choose 1, 2, 3 or 4:", "4")],
     )
-    result = subprocess.run(
-        ["/usr/bin/expect", "-c", script],
-        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
-    )
-    out = result.stdout.replace("\r", "")
     assert "Model: Ollama on this Mac, no key." in out
     assert "key (input is hidden)" not in out
 
@@ -535,7 +574,6 @@ _TEMPLATE_OVERLAY = (
 )
 
 
-@macos_only  # the script edits with BSD sed (-i '')
 @pytest.mark.parametrize("theirs", [False, True])
 def test_docker_with_ollama_points_only_the_untouched_template_at_it(
     tmp_path: Path, theirs: bool
@@ -550,7 +588,7 @@ def test_docker_with_ollama_points_only_the_untouched_template_at_it(
     )
     overlay.write_text(original)
     _shell(
-        _functions("point_bundle_model")
+        _functions("sed_inplace", "point_bundle_model")
         + '\npoint_bundle_model "http://host.docker.internal:11434/v1/chat/completions" "qwen2.5-coder:7b"\n',
         home,
     )
@@ -566,7 +604,6 @@ def test_docker_with_ollama_points_only_the_untouched_template_at_it(
         assert "a-placeholder-model" not in text
 
 
-@macos_only
 def test_ollama_in_a_vm_is_warned_it_will_be_slow(tmp_path: Path) -> None:
     result = subprocess.run(
         ["/bin/bash", str(_phase0_only(tmp_path)), "--provider", "ollama"],
@@ -605,7 +642,6 @@ def test_the_key_dialog_is_not_indented_like_the_terminal_prompt() -> None:
     assert "sed 's/^[[:space:]]*//'" in body
 
 
-@macos_only
 def test_ollama_asks_for_no_key_and_chooses_the_model_later(tmp_path: Path) -> None:
     result = subprocess.run(
         [
@@ -740,61 +776,35 @@ def test_ollama_routes_are_written_and_a_foreign_file_is_kept(tmp_path: Path) ->
     ).read_text() == "# mine\nbackends: []\n"
 
 
-@macos_only
-@pytest.mark.skipif(
-    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
-)
 def test_choosing_openai_on_the_menu_asks_for_an_openai_key(tmp_path: Path) -> None:
-    script = (
-        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
-        'expect "Choose 1, 2, 3 or 4:"; send "3\\r"; '
-        'expect "key (input is hidden)"; send "\\r"; expect eof'
+    out, returncode = _drive_tty(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
+        _phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        [("Choose 1, 2, 3 or 4:", "3"), ("key (input is hidden)", "")],
     )
-    result = subprocess.run(
-        ["/usr/bin/expect", "-c", script],
-        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
-    )
-    out = result.stdout.replace("\r", "")
     assert "Paste your OpenAI API key (input is hidden):" in out
     assert "it is only ever sent to OpenAI" in out
 
 
-@macos_only
-@pytest.mark.skipif(
-    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
-)
 def test_the_model_is_asked_before_docker(tmp_path: Path) -> None:
-    script = (
-        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)}; "
-        'expect "Choose 1, 2, 3 or 4:"; send "4\\r"; '
-        'expect "Set up the local stack in Docker too?"; send "n\\r"; expect eof'
-    )
-    result = subprocess.run(
-        ["/usr/bin/expect", "-c", script],
-        env=_phase0_env(
+    out, returncode = _drive_tty(
+        ["/bin/bash", str(_phase0_only(tmp_path))],
+        _phase0_env(
             tmp_path,
             ONBOARD_TEST_RAM_GB="32",
             ONBOARD_TEST_CPUS="10",
             ONBOARD_TEST_VM="0",
         ),
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
+        [
+            ("Choose 1, 2, 3 or 4:", "4"),
+            ("Set up the local stack in Docker too?", "n"),
+        ],
     )
-    out = result.stdout.replace("\r", "")
-    if "ports in use" in out:
-        pytest.skip("the local stack's ports are held by something else on this host")
     assert out.index("Choose 1, 2, 3 or 4:") < out.index(
         "Set up the local stack in Docker too?"
     )
 
 
-@macos_only
 def test_a_vm_is_told_before_any_question(tmp_path: Path) -> None:
     result = subprocess.run(
         ["/bin/bash", str(_phase0_only(tmp_path)), "--provider", "ollama"],

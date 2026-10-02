@@ -116,13 +116,13 @@ coverage:
     reaches_bus_today: true
     legacy_without_lineage: true
     build_priority: P0
-    metadata_fields: [tool_name, duration_ms, interrupted]
+    metadata_fields: [tool_name, duration_ms, interrupted, exit_code]
     content_fields: {tool_response: capture_verbatim}
   - hook: PostToolUseFailure
     registered_today: false
     reaches_bus_today: false
     build_priority: P0
-    metadata_fields: [tool_name, duration_ms, is_interrupt]
+    metadata_fields: [tool_name, duration_ms, is_interrupt, exit_code]
     content_fields: {error: capture_verbatim}
   - hook: PostToolBatch
     registered_today: false
@@ -326,6 +326,8 @@ redaction:
     emitted_at: capture_verbatim
     actor: capture_verbatim
     claude_code_version: capture_verbatim
+    # OMN-17427: the emitting machine's hostname, a name and never a path.
+    host: capture_verbatim
     lineage.session_id: capture_verbatim
     lineage.agent_id: capture_verbatim
     lineage.agent_type: capture_verbatim
@@ -354,6 +356,8 @@ redaction:
     payload.tool_names: capture_verbatim
     payload.duration_ms: capture_verbatim
     payload.interrupted: capture_verbatim
+    # OMN-17427: a Bash call's exit status, an integer.
+    payload.exit_code: capture_verbatim
     payload.is_interrupt: capture_verbatim
     payload.notification_type: capture_verbatim
     payload.prompt_length: capture_verbatim
@@ -448,6 +452,10 @@ projection:
       - {name: source_topic, type: text, nullable: false}
       - {name: goal_id, type: uuid, nullable: true, content: "OMN-20031: set only on the goal-binding PreToolUse"}
       - {name: parent_goal_id, type: uuid, nullable: true}
+      - {name: lane, type: text, nullable: true, content: "OMN-17427: the emit seam's lane stamp; empty is NULL"}
+      - {name: model, type: text, nullable: true, content: "OMN-17427: lineage.agent_model, else SessionStart payload.model"}
+      - {name: host, type: text, nullable: true, content: "OMN-17427: the emitting machine's hostname"}
+      - {name: exit_code, type: integer, nullable: true, content: "OMN-17427: a Bash PostToolUse or PostToolUseFailure exit status"}
       - {name: ingested_at, type: timestamptz, nullable: false}
   lineage_table:
     name: omninode_internal.claude_agent_spans

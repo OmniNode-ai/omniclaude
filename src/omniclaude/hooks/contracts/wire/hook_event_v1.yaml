@@ -40,6 +40,10 @@ optional_fields:
     type: string
     nullable: true
     description: "Producer-observed Claude Code version."
+  - name: host
+    type: string
+    nullable: true
+    description: "OMN-17427: hostname of the emitting machine. Omitted when unknown."
 
 # OMN-20031: payload keys present only on one event. Both are ids, never content;
 # the consumer allowlist (ALLOWED_PAYLOAD_KEYS) must declare them or dead-letters.
@@ -56,6 +60,18 @@ payload_optional_fields:
     description: >
       Canonical lowercase uuid from ONEX_PARENT_GOAL=<uuid> directly after
       ONEX_GOAL. Only present together with goal_id.
+  - hook: PostToolUse
+    name: exit_code
+    type: integer
+    description: >
+      OMN-17427: 0 for a Bash call the harness reported as succeeded. Absent
+      for every other tool and when the response states no status.
+  - hook: PostToolUseFailure
+    name: exit_code
+    type: integer
+    description: >
+      OMN-17427: the n of the harness's "Exit code <n>" Bash failure text.
+      Absent for every other tool and failure.
 
 content_topic:
   name: "onex.cmd.omniintelligence.content-captured.v1"  # onex-topic-sot
