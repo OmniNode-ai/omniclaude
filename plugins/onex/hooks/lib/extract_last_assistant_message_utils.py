@@ -13,9 +13,28 @@ from pathlib import Path
 from typing import Any
 
 
+def _structured_return_from_content(content: Any) -> str | None:
+    """Return the schema-bound tool input, excluding same-entry narration."""
+
+    if isinstance(content, list):
+        for part in content:
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "tool_use"
+                and part.get("name") == "StructuredOutput"
+            ):
+                tool_input = part.get("input")
+                if isinstance(tool_input, dict) and tool_input:
+                    return json.dumps(tool_input, sort_keys=True)
+    return None
+
+
 def _text_from_content(content: Any) -> str:
     """Normalize Claude message content into plain assistant text."""
 
+    structured = _structured_return_from_content(content)
+    if structured is not None:
+        return structured
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -43,21 +62,26 @@ def _assistant_text_from_message_entry(entry: Any) -> str:
     return _text_from_content(entry.get("content"))
 
 
-def _assistant_text_from_transcript_entry(entry: Any) -> str:
+def _assistant_message_from_transcript_entry(entry: Any) -> dict[str, Any] | None:
     if not isinstance(entry, dict):
-        return ""
+        return None
 
     message = entry.get("message")
     if isinstance(message, dict):
         role = message.get("role")
         entry_type = entry.get("type")
         if role == "assistant" or entry_type == "assistant":
-            return _text_from_content(message.get("content"))
+            return message
 
     if entry.get("role") == "assistant":
-        return _text_from_content(entry.get("content"))
+        return entry
 
-    return ""
+    return None
+
+
+def _assistant_text_from_transcript_entry(entry: Any) -> str:
+    message = _assistant_message_from_transcript_entry(entry)
+    return _text_from_content(message.get("content")) if message is not None else ""
 
 
 def _extract_last_assistant_message_from_jsonl(transcript: str) -> str | None:
@@ -108,6 +132,57 @@ def _extract_last_assistant_message_from_path(raw_path: Any) -> str | None:
     return _extract_last_assistant_message_from_jsonl(transcript)
 
 
+def _carries_return(content: Any) -> bool:
+    """True when an assistant entry holds text or a tool call.
+
+    A thinking-only or empty entry after the final tool call is not a later
+    return, so it must not displace a StructuredOutput call before it.
+    """
+
+    if _text_from_content(content):
+        return True
+    return isinstance(content, list) and any(
+        isinstance(part, dict) and part.get("type") == "tool_use" for part in content
+    )
+
+
+def _final_structured_return(stop_event: dict[str, Any]) -> str | None:
+    """Prefer a StructuredOutput call only in the transcript's final assistant entry.
+
+    Validate the entire JSONL before accepting a return. Unreadable or malformed
+    sources stop this search; the existing extraction paths retain their fail
+    posture. A later assistant entry prevents an earlier tool return from
+    overriding direct event fields.
+    """
+
+    for key in ("agent_transcript_path", "transcript_path", "transcript"):
+        source = stop_event.get(key)
+        if not isinstance(source, str) or not source:
+            continue
+        if key == "transcript":
+            transcript = source
+        else:
+            try:
+                transcript = Path(source).read_text(encoding="utf-8")
+            except OSError:
+                return None
+
+        last_assistant = None
+        for raw_line in transcript.splitlines():
+            if not raw_line.strip():
+                continue
+            try:
+                entry = json.loads(raw_line)
+            except json.JSONDecodeError:
+                return None
+            message = _assistant_message_from_transcript_entry(entry)
+            if message is not None and _carries_return(message.get("content")):
+                last_assistant = message
+        if last_assistant is not None:
+            return _structured_return_from_content(last_assistant.get("content"))
+    return None
+
+
 def _extract_last_assistant_message(stop_event: dict[str, Any]) -> str:
     """Pull the final assistant message text out of a SubagentStop event.
 
@@ -116,6 +191,10 @@ def _extract_last_assistant_message(stop_event: dict[str, Any]) -> str:
     fall back to an empty string — the verifier treats missing text as
     "missing json-report block" (block).
     """
+
+    structured = _final_structured_return(stop_event)
+    if structured is not None:
+        return structured
 
     # Shape 1: direct field
     for key in (

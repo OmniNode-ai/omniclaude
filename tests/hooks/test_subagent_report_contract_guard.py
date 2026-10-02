@@ -22,6 +22,7 @@ through this guard: RED + blocking.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -37,6 +38,7 @@ if str(_LIB_DIR) not in sys.path:
 from subagent_report_contract_guard import (  # noqa: E402
     MIN_REPORT_CHARS,
     EnumReportContractVerdict,
+    _extract_last_assistant_message,
     _hook_output,
     classify_final_report,
     scan_stop_event,
@@ -58,6 +60,363 @@ _GOOD_REPORT = (
     "18 passed in 0.42s\n"
     "PR https://github.com/OmniNode-ai/omniclaude/pull/1953 - not merged."
 )
+
+
+def _structured_transcript(
+    tmp_path: pathlib.Path,
+    narration: str = "Now compute date drift and the new snapshot.",
+    *,
+    mixed_content: bool = False,
+) -> pathlib.Path:
+    entries = [
+        {"type": "user", "message": {"role": "user", "content": "Return the report."}},
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": narration}],
+            },
+        },
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_x",
+                        "name": "StructuredOutput",
+                        "input": {"outcome": "success", "snapshot": {"date_drift": 0}},
+                    },
+                ],
+            },
+        },
+        {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "toolu_x", "content": "OK"}
+                ],
+            },
+        },
+    ]
+    if mixed_content:
+        entries[2]["message"]["content"].insert(0, {"type": "text", "text": "Done."})
+    path = tmp_path / "agent.jsonl"
+    path.write_text("\n".join(json.dumps(entry) for entry in entries), encoding="utf-8")
+    return path
+
+
+class TestLiveStructuredReturns:
+    @pytest.mark.parametrize("mixed_content", [False, True])
+    @pytest.mark.parametrize(
+        "source", ["agent_transcript_path", "transcript_path", "transcript"]
+    )
+    @pytest.mark.parametrize(
+        "direct_field",
+        [
+            None,
+            "last_assistant_message",
+            "final_message",
+            "assistant_message",
+            "last_message",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "narration",
+        [
+            "Now compute date drift and the new snapshot.",
+            "Exit 1. I need the header lines and counts.",
+        ],
+    )
+    def test_structured_return_wins(
+        self, tmp_path, source, direct_field, narration, mixed_content
+    ) -> None:
+        path = _structured_transcript(tmp_path, narration, mixed_content=mixed_content)
+        event = {
+            source: path.read_text(encoding="utf-8")
+            if source == "transcript"
+            else str(path)
+        }
+        if direct_field:
+            event[direct_field] = "Structured output provided successfully"
+        result = scan_stop_event(event)
+        assert result.verdict is EnumReportContractVerdict.PASSED
+        assert result.reason == "schema_bound_return"
+        assert result.blocking is False
+        assert _extract_last_assistant_message(event) == json.dumps(
+            {"snapshot": {"date_drift": 0}, "outcome": "success"}, sort_keys=True
+        )
+
+    def test_shell_wrapper_passes_structured_return_silently(self, tmp_path) -> None:
+        path = _structured_transcript(tmp_path)
+        env = {
+            **os.environ,
+            "ONEX_STATE_DIR": str(tmp_path / "state"),
+            "CLAUDE_PROJECT_DIR": str(_LIB_DIR.parents[3]),
+            "PLUGIN_PYTHON_BIN": sys.executable,
+        }
+        proc = subprocess.run(
+            [
+                "bash",
+                str(
+                    _LIB_DIR.parent
+                    / "scripts"
+                    / "subagent_stop_report_contract_guard.sh"
+                ),
+            ],
+            input=json.dumps(
+                {
+                    "agent_transcript_path": str(path),
+                    "last_assistant_message": "Structured output provided successfully",
+                }
+            ),
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == ""
+
+
+class TestLiveReportEvidence:
+    @pytest.mark.parametrize(
+        "exit_citation",
+        ["exit 64", "exited 64", "exits 64", "EXIT CODE 64", "Exit status 64"],
+    )
+    def test_prose_ledger_refusal_passes(self, exit_citation) -> None:
+        report = (
+            "The ledger row was not written. The script refused the STATUS row "
+            "because it needs `--actor` and `--model`, and neither was passed in "
+            "the arguments. `ONEX_LANE_ACTOR` and `ONEX_LANE_MODEL` aren't both "
+            "set in the environment either. I won't retry or reword it. "
+            f"The script reported {exit_citation}. No TERMINAL row was written. "
+            "The caller must provide the actor and model before a new attempt; "
+            "the existing ledger remains unchanged and there is no successful "
+            "write to cite from this invocation."
+        )
+        assert 430 <= len(report) <= 830
+        result = classify_final_report(report)
+        assert result.verdict is EnumReportContractVerdict.PASSED
+        assert result.evidence_classes == ("command_or_output",)
+        assert result.blocking is False
+
+    @pytest.mark.parametrize(
+        "observation",
+        [
+            "Read at 08:49:46 EDT, nothing changed. The CPU is still at about 90 C.",
+            "No beep source shows up on host-b (box-two). Read at 00:07:56 ET Oct 2.",
+            "host-a (box-one), read at 00:08 ET Oct 2: I found no beep source.",
+            "Read at 2026-10-02T00:08Z, nothing changed.",
+        ],
+    )
+    def test_read_only_observation_passes(self, observation) -> None:
+        report = (
+            observation
+            + "\n"
+            + (
+                "The read was limited to observation. No settings were changed, "
+                "no services were restarted, and the measured state stayed steady. "
+            )
+            * 16
+        )
+        assert 2000 <= len(report) <= 3600
+        result = classify_final_report(report)
+        assert result.verdict is EnumReportContractVerdict.PASSED
+        assert result.evidence_classes == ("observation_time",)
+        assert result.blocking is False
+
+    def test_markdown_observation_table_passes(self) -> None:
+        report = (
+            "The CPU is still at about 90 C. Nothing changed during this read; "
+            "the baseline and current measurements are recorded below for comparison.\n"
+            "| Metric | Baseline | Now | Delta |\n"
+            "|---|---|---|---|\n"
+            "| CPU temperature | 90 C | 90 C | 0 C |"
+        )
+        result = classify_final_report(report)
+        assert result.verdict is EnumReportContractVerdict.PASSED
+        assert result.evidence_classes == ("table",)
+        assert result.blocking is False
+
+    def test_clock_and_table_evidence_order(self) -> None:
+        report = (
+            "Read at 08:49:46 EDT, nothing changed. The CPU is still at about 90 C.\n"
+            "| Metric | 08:37 baseline | Now (08:49) | Delta |\n"
+            "|---|---|---|---|"
+        )
+        result = classify_final_report(report)
+        assert result.verdict is EnumReportContractVerdict.PASSED
+        assert result.evidence_classes == ("observation_time", "table")
+
+    @pytest.mark.parametrize(
+        ("value", "classes"),
+        [
+            ("OMN-20331", ("ticket_id",)),
+            ("OMN-1", ()),
+            (
+                "MERGED c022c90de9f94aaee30d7a8bd28e4ecbabd73fa5 2026-10-01T23:20:04Z",
+                ("commit_sha", "observation_time"),
+            ),
+            ("OPEN OPEN 1adbd9e4fde2326a5c7501ee48129113e8c295a7", ("commit_sha",)),
+            ("CLOSED DRAFT APPROVED abc1234", ("commit_sha",)),
+        ],
+    )
+    def test_machine_value_return_passes(self, value, classes) -> None:
+        result = classify_final_report(value)
+        assert result.verdict is EnumReportContractVerdict.PASSED
+        assert result.reason == "machine_value_return"
+        assert result.evidence_classes == classes
+        assert result.blocking is False
+
+    def test_ledger_cite_as_return_passes(self) -> None:
+        result = classify_final_report(
+            "CITE-AS: RULING 2026-10-02T00:39:29Z lane=record-rename-ruling"
+        )
+        assert result.verdict is EnumReportContractVerdict.PASSED
+        assert result.evidence_classes == (
+            "command_or_output",
+            "verdict",
+            "observation_time",
+        )
+        assert result.blocking is False
+
+
+class TestMatcherBoundaries:
+    @pytest.mark.parametrize(
+        "prose",
+        [
+            "Acknowledged; I have received the report",
+            "I believe the work is finished and everything looks good to me now.",
+            "I believe the work is finished and everything looks good to me now. "
+            "I reviewed the outcome and have nothing further to add to this response.",
+        ],
+    )
+    def test_unsupported_prose_stays_red(self, prose) -> None:
+        result = classify_final_report(prose)
+        assert result.verdict is EnumReportContractVerdict.RED
+        assert result.reason == "no_evidence_citations"
+        assert result.blocking is True
+
+    def test_short_timed_hook_echo_stays_red(self) -> None:
+        result = classify_final_report(
+            "Acknowledged the SubagentStop hook notification at 12:30."
+        )
+        assert result.verdict is EnumReportContractVerdict.RED
+        assert result.reason == "hook_notification_echo"
+        assert result.blocking is True
+
+    @pytest.mark.parametrize("separator", ["\n\n", "\nordinary prose\n"])
+    def test_nonconsecutive_table_rows_are_not_evidence(self, separator) -> None:
+        report = (
+            "The observations remain unchanged and there is no new measurement "
+            "to report from the current read. The independent rows below summarize "
+            "the steady state.\n| Metric | Baseline |"
+            + separator
+            + "| CPU temperature | warm |"
+        )
+        result = classify_final_report(report)
+        assert result.verdict is EnumReportContractVerdict.RED
+        assert result.evidence_classes == ()
+
+    @pytest.mark.parametrize("name", ["structuredoutput", "OtherTool"])
+    def test_other_tool_names_do_not_count_as_returns(self, tmp_path, name) -> None:
+        path = _structured_transcript(tmp_path)
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("StructuredOutput", name),
+            encoding="utf-8",
+        )
+        result = scan_stop_event({"agent_transcript_path": str(path)})
+        assert result.verdict is EnumReportContractVerdict.RED
+        assert result.reason == "no_evidence_citations"
+
+    @pytest.mark.parametrize("unreadable", [False, True])
+    def test_agent_transcript_takes_precedence(self, tmp_path, unreadable) -> None:
+        path = _structured_transcript(tmp_path)
+        agent_path = tmp_path / "priority.jsonl"
+        if not unreadable:
+            agent_path.write_text(
+                json.dumps({"role": "assistant", "content": "Done."}), encoding="utf-8"
+            )
+        result = scan_stop_event(
+            {"agent_transcript_path": str(agent_path), "transcript_path": str(path)}
+        )
+        assert result.reason == (
+            "no_message_extracted" if unreadable else "bare_completion_claim"
+        )
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "OPEN",
+            "MERGED deadbeef",
+            "OPEN OMN-20331 extra",
+            "OMN-20331\nOPEN",
+            " ".join(["OMN-20331"] * 41),
+        ],
+    )
+    def test_invalid_machine_values_do_not_use_machine_rule(self, value) -> None:
+        assert classify_final_report(value).reason != "machine_value_return"
+
+    def test_later_text_clobbers_structured_return(self, tmp_path) -> None:
+        path = _structured_transcript(tmp_path)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(
+                "\n"
+                + json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {"role": "assistant", "content": "Done."},
+                    }
+                )
+            )
+        result = scan_stop_event({"agent_transcript_path": str(path)})
+        assert result.verdict is EnumReportContractVerdict.RED
+        assert result.reason == "bare_completion_claim"
+
+    def test_thinking_only_entry_after_the_call_is_not_a_later_return(
+        self, tmp_path
+    ) -> None:
+        path = _structured_transcript(tmp_path)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(
+                "\n"
+                + json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "thinking", "thinking": ""}],
+                        },
+                    }
+                )
+            )
+        result = scan_stop_event(
+            {
+                "agent_transcript_path": str(path),
+                "last_assistant_message": "Structured output provided successfully",
+            }
+        )
+        assert result.verdict is EnumReportContractVerdict.PASSED
+        assert result.reason == "schema_bound_return"
+
+    @pytest.mark.parametrize(
+        "source", ["agent_transcript_path", "transcript_path", "transcript"]
+    )
+    def test_malformed_transcript_does_not_accept_partial_return(
+        self, tmp_path, source
+    ) -> None:
+        path = _structured_transcript(tmp_path)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write("\n{malformed")
+        event = {
+            source: path.read_text(encoding="utf-8")
+            if source == "transcript"
+            else str(path)
+        }
+        assert scan_stop_event(event).reason == "no_message_extracted"
 
 
 class TestClobberedReturnIsRed:
@@ -188,7 +547,10 @@ class TestToolResultLinePasses:
     def test_result_line_passes(self, line: str) -> None:
         result = classify_final_report(line)
         assert result.verdict is EnumReportContractVerdict.PASSED
-        assert result.evidence_classes == ("command_or_output", "verdict")
+        expected = ("command_or_output", "verdict")
+        if line.startswith("OK "):
+            expected += ("observation_time",)
+        assert result.evidence_classes == expected
 
     @pytest.mark.parametrize(
         "text", ["REFUSED", "Refused.", "OK", "it was refused, retry 75 later"]
