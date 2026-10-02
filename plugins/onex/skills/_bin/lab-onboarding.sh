@@ -997,29 +997,29 @@ sync_clone() { # repo
 }
 
 # ---------------------------------------------------------------------------
-# The workspace's tier-1 runtime config (OMN-20371).
+# The workspace's tier-1 runtime config.
 #
 # Phase 2 binds OMNIBASE_PATH to the workspace root, and a bound root is a
 # registry workspace: its transport comes from its OWN tier-1 config and is
-# never answered with the shipped tier-0 default, because arriving at the
-# in-memory bus by silent fallback is how a workspace's delegation evidence
-# stranded in local storage (OMN-19193). A bound root with no config is
-# REFUSED, so without this file every default `onex delegate` on a freshly
-# onboarded machine fails -- including `/onex:delegate` in Claude Code.
+# never answered with the shipped default, because reaching the in-memory bus
+# by silent fallback is how a workspace's delegation evidence stranded in local
+# storage once before. A bound root with no config is REFUSED, so without this
+# file every default `onex delegate` on a freshly set-up machine fails --
+# including the delegate skill in Claude Code.
 #
-# WHY THE FILE IS GENERATED, NEVER VENDORED. omni_home carries its own tier-1
-# config naming the lab's dev lane. Copying it would put a lab address on a
-# developer machine, which this script must never do. A developer install runs
-# entirely on this Mac, so the in-memory bus IS the correct transport here, and
-# OMN-19193 forbids reaching it by fallback, not by declaration -- its own
-# refusal names "select a transport explicitly" as the sanctioned route. This
-# file is that choice, recorded once, instead of every developer having to know
-# `--bus inmemory`.
+# WHY THE FILE IS GENERATED, NEVER COPIED. The canonical internal workspace
+# carries its own tier-1 config naming a lab lane. Copying it would put a lab
+# address on a developer machine, which this script must never do. A developer
+# install runs entirely on this Mac, so the in-memory bus IS the correct
+# transport here, and what is forbidden is reaching it by fallback rather than
+# by declaration -- the refusal itself names selecting a transport explicitly as
+# the sanctioned route. This file is that choice, recorded once, instead of
+# every developer having to know `--bus inmemory`.
 #
-# Mode 2's container stack declares its own transport through the compose lane;
-# this file is the native Mode 1 answer and the CLI's default.
+# The container stack declares its own transport through its compose lane; this
+# file is the native answer and the CLI's default.
 WORKSPACE_RUNTIME_CONFIG_REL="config/onex/runtime/runtime_config.yaml"
-WORKSPACE_RUNTIME_CONFIG_MARK="# Written by omninode-dev-setup (OMN-20371)."
+WORKSPACE_RUNTIME_CONFIG_MARK="# Written by omninode-dev-setup."
 
 write_workspace_runtime_config() {
   local f="$WORKSPACE/$WORKSPACE_RUNTIME_CONFIG_REL"
@@ -1028,7 +1028,7 @@ write_workspace_runtime_config() {
 $WORKSPACE_RUNTIME_CONFIG_MARK
 # The tier-1 runtime configuration of this developer workspace. The workspace
 # root is bound through OMNIBASE_PATH, so its transport is declared here rather
-# than inherited (OMN-19193, OMN-20371). It names no lab address, deliberately.
+# than inherited. It names no lab address, deliberately.
 description: "Developer workspace tier-1 runtime configuration: in-memory bus, local profile"
 input_topic: "requests"
 output_topic: "responses"
@@ -1155,11 +1155,11 @@ provider_error() {
 receipt_field() { printf '%s' "$1" | jq -r --arg k "$2" '[.. | objects | .[$k]? // empty] | first // empty' 2>/dev/null; }
 
 delegate_hello() { # -> stdout: the run's receipt.json (it names the endpoint and model)
-  # NO --bus FLAG, deliberately (OMN-20371). Phase 2 declares the workspace's
-  # transport in its tier-1 runtime config, so the bare command a developer --
-  # and `/onex:delegate` in Claude Code -- actually types is what runs here. This
-  # used to pass `--bus inmemory`, which made this check pass on machines where
-  # the developer's own command was refused.
+  # NO TRANSPORT FLAG, deliberately. Phase 2 declares the workspace's transport
+  # in its tier-1 runtime config, so the bare command a developer -- and the
+  # delegate skill in Claude Code -- actually types is what runs here. This used
+  # to select the in-memory bus itself, which made the check pass on machines
+  # where the developer's own command was refused.
   local out line receipt
   # stderr too: the "delegate artifacts:" line naming receipt.json is printed there.
   out="$(cd "$HOME" && onex_run delegate --json "Reply with exactly one word: hello" 2>&1)" ||

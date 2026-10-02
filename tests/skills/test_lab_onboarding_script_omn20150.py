@@ -209,9 +209,10 @@ def test_phase_2_declares_the_workspace_runtime_config() -> None:
 
 
 def test_the_declared_transport_names_no_lab_address() -> None:
-    """The config is generated, never vendored from omni_home.
+    """The config is generated, never vendored from the canonical tree.
 
-    omni_home's own tier-1 config declares the lab's dev lane. Copying it here
+    The canonical workspace's own tier-1 config declares the lab's dev lane.
+    Copying it here
     would put a lab address on a developer machine, which AC5 of OMN-20150
     forbids, so the generated file declares the in-memory bus instead.
     """
@@ -236,7 +237,7 @@ def test_the_scripts_own_delegation_uses_the_developers_command() -> None:
     whole = text[start : text.index("\n}", start)]
     # Comments may name the flag to explain its absence; only code counts.
     body = "\n".join(
-        l for l in whole.splitlines() if not l.lstrip().startswith("#")
+        line for line in whole.splitlines() if not line.lstrip().startswith("#")
     )
     assert "--bus" not in body, (
         "delegate_hello must not select a transport: the declared workspace "
