@@ -173,6 +173,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -376,6 +377,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -493,6 +495,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -626,6 +629,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -800,6 +804,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --python "${PYTHON_VERSION}"; do
             status=$?
@@ -1367,6 +1372,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -1434,6 +1440,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -1549,6 +1556,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -1620,6 +1628,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -1690,6 +1699,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}" --extra kafka; do
             status=$?
@@ -2041,6 +2051,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --python "${PYTHON_VERSION}"; do
             status=$?
@@ -2196,6 +2207,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -2400,6 +2412,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -2551,6 +2564,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -2617,6 +2631,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -3008,6 +3023,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -3180,6 +3196,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -3494,6 +3511,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -3642,6 +3660,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --python "${PYTHON_VERSION}"; do
             status=$?
@@ -4158,6 +4177,7 @@ jobs:
         working-directory: onex_change_control_checker
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --all-extras --python "${PYTHON_VERSION}"; do
             status=$?
@@ -4326,6 +4346,7 @@ jobs:
       - name: Install dependencies
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --frozen --group dev --python "${PYTHON_VERSION}"; do
             status=$?
@@ -4487,6 +4508,7 @@ jobs:
       - name: Install dependencies
         run: |
           set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
           attempt=1
           until uv sync --all-extras --python "${PYTHON_VERSION}"; do
             status=$?
