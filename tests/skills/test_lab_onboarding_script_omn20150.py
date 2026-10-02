@@ -731,6 +731,28 @@ def test_the_run_ends_by_saying_to_sign_in_to_claude_code() -> None:
     )
 
 
+def test_every_dialog_activates_before_it_asks() -> None:
+    """A dialog that never activates cannot be typed into.
+
+    `osascript` shows the dialog but keyboard focus stays with the frontmost
+    app, so a `default answer` field reads as locked and the confirm button
+    returns an empty answer. Click-only dialogs still work, which is why this
+    surfaced on exactly the two that take typing: the model key and the
+    administrator password. Both are the developer's only way through the run
+    when there is no tty.
+    """
+    text = SCRIPT.read_text()
+    missing = []
+    for match in re.finditer(r"display dialog|choose from list", text):
+        window = text[max(0, match.start() - 900) : match.start()]
+        if "activate" not in window:
+            missing.append(text[match.start() : match.start() + 70])
+    assert not missing, (
+        "these dialogs never activate, so their fields cannot take keystrokes: "
+        f"{missing}"
+    )
+
+
 def test_the_key_dialog_is_not_indented_like_the_terminal_prompt() -> None:
     body = _functions("read_secret")
     assert "sed 's/^[[:space:]]*//'" in body
