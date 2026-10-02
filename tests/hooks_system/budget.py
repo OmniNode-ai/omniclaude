@@ -45,7 +45,13 @@ INCIDENT_HOOK_SECONDS_PER_CALL_UNDER_LOAD = (60, 175)
 # bounded emit forks its writer: 109 / 81 / 44 to 104 / 74 / 44. The guards
 # run concurrently inside the entrypoint (one process substitution each), which
 # the sampled count sees as processes; they are forks, not interpreter starts.
-MEASURED_EXECS_PER_CALL = {"Bash": 104, "Skill": 74, "Read": 44}
+# OMN-20150 (2026-10-02, lab h202, eight runs each, highest kept): the count no
+# longer includes sampled bash subshell forks. Whether the sampler caught one was
+# timing, and dev went red on a tree identical to the green one before it (Skill
+# 83 against a ceiling of 82, with 7 sampled copies of post-tool-use-quality.sh
+# where a lab run caught 3). The Skill and Read counts are now identical on every
+# run; Bash varies by 2. 104 / 74 / 44 to 81 / 66 / 37.
+MEASURED_EXECS_PER_CALL = {"Bash": 81, "Skill": 66, "Read": 37}
 # History of this instrument: 250 / 151 / 83 on dev before the OMN-20110
 # foreground runner; 261 / 167 / 91 with it (the bounded runner's own
 # interpreter start plus one process group per emit, paid to make every emit
@@ -53,7 +59,7 @@ MEASURED_EXECS_PER_CALL = {"Bash": 104, "Skill": 74, "Read": 44}
 
 # The enforced ceiling, per tool. Measured plus a small headroom for the
 # branches a hook takes only sometimes. It only ever moves down.
-CEILING_EXECS_PER_CALL = {"Bash": 115, "Skill": 82, "Read": 50}
+CEILING_EXECS_PER_CALL = {"Bash": 90, "Skill": 73, "Read": 41}
 
 # The target every tool call is held to. A ceiling above this is debt. After
 # OMN-20114 the remaining cost is one bash per registered hook (17 on a Bash

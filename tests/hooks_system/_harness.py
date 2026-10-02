@@ -378,15 +378,23 @@ class ProcInfo:
     ppid: int
     created: float
     cmdline: str
+    forked: bool = False
 
 
 def _info(proc: psutil.Process) -> ProcInfo | None:
     try:
+        ppid = proc.ppid()
+        cmdline = proc.cmdline()
+        try:
+            forked = psutil.Process(ppid).cmdline() == cmdline
+        except psutil.Error:
+            forked = False
         return ProcInfo(
             pid=proc.pid,
-            ppid=proc.ppid(),
+            ppid=ppid,
             created=proc.create_time(),
-            cmdline=" ".join(proc.cmdline())[:240],
+            cmdline=" ".join(cmdline)[:240],
+            forked=forked,
         )
     except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
         return None
@@ -427,6 +435,10 @@ class ProcessLedger:
 
     Runs a sampling thread for the life of the ``with`` block. ``seen`` is the
     set of distinct processes observed, a LOWER BOUND on what was spawned.
+    ``spawned`` counts execs, excluding sampled subshell forks unless a root or
+    shim records an exact exec. Whether the sampler catches a subshell fork is
+    timing-dependent, so the count is deterministic up to execs the sampler is
+    the only witness of.
     ``peak_tagged`` is the largest number of tagged processes alive at one
     sample of the full scan.
     """
@@ -485,15 +497,17 @@ class ProcessLedger:
 
     @property
     def spawned(self) -> int:
-        """Distinct processes the hooks started.
+        """Distinct processes the hooks execed.
 
         The union, by pid, of three sources: every hook root the caller
         registered, every command the PATH shims saw (exact), and every process
-        the sampler saw. Bash subshells that live under one sampling interval
-        are the one thing none of them sees, so this is a lower bound, and the
-        budget ceiling is set with this same instrument.
+        the sampler saw except subshell forks, unless a root or shim records an
+        exact exec. Whether the sampler catches a subshell fork is timing-
+        dependent, so the count is deterministic up to execs the sampler is the
+        only witness of. It remains a lower bound, and the budget ceiling is set
+        with this same instrument.
         """
-        pids = {pid for pid, _created in self.seen}
+        pids = {pid for (pid, _created), info in self.seen.items() if not info.forked}
         pids |= self._roots
         pids |= set(self.rig.shim_pids())
         return len(pids)
