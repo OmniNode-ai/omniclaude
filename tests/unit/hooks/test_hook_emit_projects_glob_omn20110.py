@@ -38,6 +38,12 @@ _SESSION = "11111111-2222-3333-4444-555555555555"
 _AGENT = "a0123456789abcdef"
 
 
+@pytest.fixture(autouse=True)
+def _no_declared_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A test run inside a dispatched lane inherits its ``ONEX_LANE``."""
+    monkeypatch.delenv("ONEX_LANE", raising=False)
+
+
 def _count_globs(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     globbed: list[str] = []
     real_glob = Path.glob

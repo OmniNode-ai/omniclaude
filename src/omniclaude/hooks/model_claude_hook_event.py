@@ -244,6 +244,13 @@ class ModelPreToolUsePayload(BaseModel):
         return data
 
 
+def _omit_absent_exit_code(data: dict[str, object]) -> dict[str, object]:
+    """Leave ``exit_code`` off every event that states none (OMN-17427)."""
+    if data.get("exit_code") is None:
+        data.pop("exit_code", None)
+    return data
+
+
 class ModelPostToolUsePayload(BaseModel):
     model_config = _EVENT_MODEL_CONFIG
 
@@ -252,6 +259,14 @@ class ModelPostToolUsePayload(BaseModel):
     duration_ms: int | float | None
     interrupted: bool | None
     tool_response_ref: ModelHookContentRef
+    #: OMN-17427: a Bash call's exit status; see ``bash_exit_code``.
+    exit_code: int | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_exit_code(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        return _omit_absent_exit_code(handler(self))
 
 
 class ModelPostToolUseFailurePayload(BaseModel):
@@ -262,6 +277,14 @@ class ModelPostToolUseFailurePayload(BaseModel):
     duration_ms: int | float | None
     is_interrupt: bool | None
     error_ref: ModelHookContentRef
+    #: OMN-17427: a Bash call's exit status; see ``bash_exit_code``.
+    exit_code: int | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_exit_code(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        return _omit_absent_exit_code(handler(self))
 
 
 class ModelPostToolBatchPayload(BaseModel):
@@ -588,9 +611,20 @@ class ModelClaudeHookEvent(BaseModel):
     emitted_at: datetime
     actor: Literal["claude"]
     claude_code_version: str | None
+    #: OMN-17427: the hostname of the machine that emitted the event.
+    host: str | None = Field(default=None, min_length=1)
     lineage: ModelHookLineage
     payload: ModelHookPayload
     content_refs: tuple[ModelHookContentRef, ...]
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_host(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        data: dict[str, object] = handler(self)
+        if data.get("host") is None:
+            data.pop("host", None)
+        return data
 
     @field_validator("emitted_at")
     @classmethod
@@ -777,6 +811,41 @@ def _mcp_server_name(stdin: Mapping[str, object]) -> str | None:
     raise InvalidHookInputError("mcp_server must be a name or an object with a name")
 
 
+#: The harness's failure text for a Bash command that exited non-zero.
+_BASH_EXIT_CODE = re.compile(r"\A(?:Error: )?Exit code (-?\d+)\b")
+
+
+def bash_exit_code(
+    hook_name: EnumClaudeHookEventName, stdin: Mapping[str, object]
+) -> int | None:
+    """A Bash call's exit status, where the hook input states it (OMN-17427).
+
+    Claude Code puts no exit status in a Bash ``tool_response``. It routes a
+    command that exited non-zero to ``PostToolUseFailure``, whose ``error``
+    opens ``Exit code <n>``, and a command that exited 0 to ``PostToolUse``.
+    Three ``PostToolUse`` responses do not state a status and read ``None``: an
+    interrupted command, a backgrounded one (``backgroundTaskId``), and one the
+    harness reinterpreted as success (``returnCodeInterpretation``, e.g. grep
+    exiting 1 with no match). Every other tool reads ``None``.
+    """
+    if stdin.get("tool_name") != "Bash":
+        return None
+    if hook_name is EnumClaudeHookEventName.POST_TOOL_USE_FAILURE:
+        error = stdin.get("error")
+        match = _BASH_EXIT_CODE.match(error) if isinstance(error, str) else None
+        return int(match.group(1)) if match else None
+    if hook_name is not EnumClaudeHookEventName.POST_TOOL_USE:
+        return None
+    response = stdin.get("tool_response")
+    if not isinstance(response, Mapping):
+        return None
+    if response.get("interrupted") is True or any(
+        key in response for key in ("backgroundTaskId", "returnCodeInterpretation")
+    ):
+        return None
+    return 0
+
+
 def _tool_response_interrupted(value: object) -> bool | None:
     if not isinstance(value, Mapping):
         return None
@@ -859,6 +928,7 @@ def _payload_from_stdin(
             duration_ms=_optional_duration(stdin),
             interrupted=_tool_response_interrupted(response),
             tool_response_ref=capture.required("tool_response", response),
+            exit_code=bash_exit_code(hook_name, stdin),
         )
     if hook_name is EnumClaudeHookEventName.POST_TOOL_USE_FAILURE:
         return _validated_payload(
@@ -868,6 +938,7 @@ def _payload_from_stdin(
             duration_ms=_optional_duration(stdin),
             is_interrupt=_optional_bool(stdin, "is_interrupt"),
             error_ref=capture.required("error", _string(stdin, "error", name)),
+            exit_code=bash_exit_code(hook_name, stdin),
         )
     if hook_name is EnumClaudeHookEventName.POST_TOOL_BATCH:
         calls = _sequence(stdin, "tool_calls", name)
@@ -1216,6 +1287,7 @@ def map_hook_stdin(
     claude_code_version: str | None,
     turn_id: str | None,
     content_scrubber: ContentScrubber,
+    host: str | None = None,
 ) -> ModelHookCaptureResult:
     """Map one decoded Claude Code hook stdin object without performing I/O.
 
@@ -1311,6 +1383,7 @@ def map_hook_stdin(
         emitted_at=emitted_at,
         actor="claude",
         claude_code_version=claude_code_version,
+        host=host or None,
         lineage=lineage,
         payload=payload,
         content_refs=tuple(capture.refs),
@@ -1339,6 +1412,7 @@ __all__ = [
     "ModelHookPayload",
     "ModelSubagentSidecar",
     "UnknownHookEventError",
+    "bash_exit_code",
     "canonical_json",
     "make_correlation_id",
     "make_event_id",

@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Canonical handler for the lab_onboarding skill orchestrator."""
+"""Canonical handler for the omninode_dev_setup skill orchestrator."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ TaskDispatcher = Callable[[str], Awaitable[str]]
 EventEmitter = Callable[[str, dict[str, object]], bool]
 
 
-class HandlerLabOnboardingSkill:
-    """Adapter that keeps lab_onboarding on the shared skill dispatch path."""
+class HandlerOmninodeDevSetupSkill:
+    """Adapter that keeps omninode_dev_setup on the shared skill dispatch path."""
 
     handler_key: str = "default"
 
@@ -29,7 +29,7 @@ class HandlerLabOnboardingSkill:
     async def handle(self, request: ModelSkillRequest) -> ModelSkillResult:
         """Dispatch the skill request through the shared skill handler."""
         if self._task_dispatcher is None:
-            raise RuntimeError("task_dispatcher is required for lab_onboarding")
+            raise RuntimeError("task_dispatcher is required for omninode_dev_setup")
         return await handle_skill_requested(
             request,
             task_dispatcher=self._task_dispatcher,
@@ -37,4 +37,4 @@ class HandlerLabOnboardingSkill:
         )
 
 
-__all__ = ["HandlerLabOnboardingSkill"]
+__all__ = ["HandlerOmninodeDevSetupSkill"]

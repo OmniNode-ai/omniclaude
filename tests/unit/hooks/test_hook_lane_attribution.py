@@ -59,6 +59,12 @@ def _register(
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_declared_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A test run inside a dispatched lane inherits its ``ONEX_LANE``."""
+    monkeypatch.delenv(attribution.LANE_ENV, raising=False)
+
+
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A workspace root with the registry beneath it, isolated from the host.
@@ -815,3 +821,57 @@ def test_every_bus_mirror_passes_the_agent_id_and_transcript_path(script: str) -
     assert "--transcript-path" in text
     assert ".agent_id" in text
     assert ".transcript_path" in text
+
+
+# ---------------------------------------------------------------------------
+# OMN-17427: the launcher's declared lane
+# ---------------------------------------------------------------------------
+
+
+def test_the_launchers_declared_lane_names_the_main_thread(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cwd is the workspace root and there is no sidecar: only the env names it."""
+    monkeypatch.setenv(attribution.LANE_ENV, "hook-projection-fields")
+    fields = attribution.attribution_fields(workspace, agent_id=None)
+    assert fields["lane"] == "hook-projection-fields"
+    assert fields["lane_source"] == attribution.LANE_SOURCE_ENV
+    assert fields["lane_ticket"] == ""
+
+
+def test_a_sidecar_outranks_the_declared_lane(
+    workspace: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A subagent inherits its parent's environment; its sidecar names it."""
+    monkeypatch.setenv(attribution.LANE_ENV, "parent-lane")
+    session = "9787a4a3-ec49-4819-8bdc-5044efb94550"
+    _harness_sidecar(
+        tmp_path / "projects", session, "achild-lane-deadbeef", {"name": "child-lane"}
+    )
+    transcript = tmp_path / "projects" / _PROJECT_SLUG / f"{session}.jsonl"
+    fields = attribution.attribution_fields(
+        workspace, transcript_path=str(transcript), agent_id="achild-lane-deadbeef"
+    )
+    assert (fields["lane"], fields["lane_source"]) == (
+        "child-lane",
+        attribution.LANE_SOURCE_SIDECAR,
+    )
+
+
+def test_the_declared_lane_outranks_the_registry(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    worktree = workspace / "omni_worktrees" / "OMN-1" / "omniclaude"
+    worktree.mkdir(parents=True)
+    _register(workspace / attribution.STATE_SUBDIR, worktree, "registered-lane")
+    monkeypatch.setenv(attribution.LANE_ENV, "declared-lane")
+    lane, source, _ = attribution.resolve_lane(worktree)
+    assert (lane, source) == ("declared-lane", attribution.LANE_SOURCE_ENV)
+
+
+def test_a_blank_declared_lane_is_not_a_lane(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(attribution.LANE_ENV, "   ")
+    lane, source, _ = attribution.resolve_lane(workspace)
+    assert (lane, source) == ("", attribution.LANE_SOURCE_UNRESOLVED)
