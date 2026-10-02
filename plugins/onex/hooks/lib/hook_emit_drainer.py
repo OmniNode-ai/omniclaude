@@ -33,6 +33,9 @@ leaves records queued. The journal's own bound
 (``hook_emit_journal.DEFAULT_MAX_RECORDS``) is what stops unbounded growth,
 dropping oldest and counting the drops.
 
+* Changes to the capture-redaction contract, emit registry or omnimarket
+  version trigger a supervisor restart before the next drain cycle.
+
 Which broker
 ------------
 The declared one, from ``hooks/contracts/hook_edge_lane.yaml`` (OMN-17204),
@@ -105,6 +108,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import importlib.metadata
 import json
 import logging
 import logging.handlers
@@ -168,6 +172,10 @@ DEFAULT_POLL_SECONDS = 2.0
 DEFAULT_IDLE_POLL_SECONDS = 10.0
 DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 DEFAULT_BATCH_LIMIT = 200
+
+# EX_TEMPFAIL: non-zero so launchd KeepAlive / systemd Restart=always start a
+# fresh process.
+RELOAD_EXIT_CODE = 75
 
 # How many CONSECUTIVE failures of the same head record before it is treated as
 # poison and moved to the dead-letter (OMN-19074).
@@ -483,6 +491,54 @@ class _Emitter:
             logger.warning("publish raised for %s: %s", record.event_id, exc)
             return False
         return bool(result.published)
+
+
+def _omnimarket_version() -> str:
+    try:
+        return importlib.metadata.version("omnimarket")
+    except importlib.metadata.PackageNotFoundError:
+        return "absent"
+
+
+def watched_sources() -> dict[str, Path]:
+    """Resolve the installed files whose changes require a fresh drainer."""
+    try:
+        from omnimarket.nodes.node_event_emit_effect.redaction import (
+            default_contract_path,
+        )
+        from omnimarket.nodes.node_event_emit_effect.spool.topic_resolver import (
+            default_registry_path,
+        )
+
+        return {
+            "capture-redaction contract": default_contract_path(),
+            "emit registry": default_registry_path(),
+        }
+    except ImportError as exc:
+        logger.error("cannot resolve the drainer's watched sources: %s", exc)
+        return {}
+
+
+def fingerprint(sources: dict[str, Path]) -> dict[str, str]:
+    """Fingerprint file metadata and the installed version without reading files."""
+    result: dict[str, str] = {}
+    for name, path in sources.items():
+        try:
+            info = path.stat()
+        except OSError:
+            result[name] = "absent"
+        else:
+            result[name] = f"{info.st_mtime_ns}:{info.st_size}:{info.st_ino}"
+    result["omnimarket version"] = _omnimarket_version()
+    return result
+
+
+def changed_names(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    return sorted(
+        name
+        for name in before.keys() | after.keys()
+        if before.get(name) != after.get(name)
+    )
 
 
 def publishable_event_types() -> tuple[str, ...] | None:
@@ -911,6 +967,8 @@ def run(
     # of the environment when it builds its adapter.
     apply_declared_lane()
 
+    sources = watched_sources()
+    started_with = fingerprint(sources)
     emitter = _Emitter()
     migrated, quarantined = migrate_legacy_journal(journal_dir)
     if migrated or quarantined:
@@ -941,8 +999,10 @@ def run(
     # and never reach the threshold (OMN-19074).
     failure_counts: dict[str, int] = {}
     refused_event_types: dict[str, str] = {}
-    # Read once per process: the installed registry cannot change under a
-    # running drainer, and a restart is what picks up a new one.
+    # The registry is read once per process. The loop re-fingerprints the
+    # registry, capture-redaction contract and omnimarket version every cycle
+    # and exits RELOAD_EXIT_CODE on a change, so the supervisor's restart
+    # picks up the new one.
     publishable = publishable_event_types()
 
     def _record_cycle() -> None:
@@ -966,6 +1026,16 @@ def run(
 
     try:
         while True:
+            if not once:
+                changed = changed_names(started_with, fingerprint(sources))
+                if changed:
+                    logger.warning(
+                        "drainer sources changed on disk since this drainer loaded it: "
+                        "%s; exiting %d so the supervisor restarts it",
+                        ", ".join(changed),
+                        RELOAD_EXIT_CODE,
+                    )
+                    return RELOAD_EXIT_CODE
             cycle_started = time.perf_counter()
             published, failed, dead_lettered = drain_once(
                 journal_dir,
