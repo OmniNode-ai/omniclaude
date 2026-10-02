@@ -372,6 +372,57 @@ def test_status_file_records_each_phase(tmp_path: Path) -> None:
     assert "result=PASS" in status
 
 
+def test_each_phase_reports_when_it_finishes_with_its_elapsed_time(
+    tmp_path: Path,
+) -> None:
+    """AC7: the developer learns a phase's result when it ends, not at the end.
+
+    The run prints the phase's start, then PASS or FAIL with elapsed time. A
+    preflight-only run is the whole of phase 0, so its own output carries both.
+    """
+    result = _run(tmp_path, "--preflight-only")
+    out = result.stdout + result.stderr
+    assert "Phase 0/6: Preflight" in out, out
+    # PASS and an elapsed time on the same line, the time in the script's own
+    # `elapsed` spelling (seconds, or minutes and seconds).
+    assert re.search(r"Phase 0/6 PASSED: Preflight[^\n]*\((?:\d+m )?\d+s\)", out), out
+
+
+def test_the_log_file_path_is_printed_before_any_work(tmp_path: Path) -> None:
+    """AC7: the log file's path is printed first.
+
+    A developer who has to ask where the log is has already lost the failure
+    they wanted it for, so the path precedes the first requirement line.
+    """
+    result = _run(tmp_path, "--preflight-only")
+    out = result.stdout + result.stderr
+    log_at = out.find("Log file:")
+    assert log_at != -1, out
+    for later in ("Requirement", "Phase 0/6 PASSED"):
+        assert out.find(later) > log_at, f"{later!r} precedes the log path\n{out}"
+
+
+def test_a_failure_names_the_step_the_attempts_the_error_and_what_to_do() -> None:
+    """AC7: a failure names the step, the attempt count, the last error and the
+    next thing to do -- at the moment it happens, not only in a final summary.
+
+    Asserted against `phase_fail`, which is the one place every phase failure is
+    reported. The OMN-20224 walk observed all four live: an injected network
+    failure printed `Step: download the Homebrew installer (after 3 attempt(s))`,
+    the curl error, and the next action, before the run ended.
+    """
+    text = SCRIPT.read_text()
+    start = text.index("phase_fail() {")
+    body = text[start : text.index("\n}", start)]
+    assert "FAILED: $PHASE_NAME" in body
+    assert "after $FAILED_ATTEMPTS attempt(s)" in body
+    assert "Step:" in body and "Last error:" in body and "Next:" in body
+    assert "Log:" in body
+    # Reported by `say`, which writes to the terminal as well as the log, so the
+    # failure is visible when it happens rather than in a summary.
+    assert "say " in body
+
+
 def test_retries_are_at_least_three_and_wait_five_to_ten_seconds() -> None:
     text = SCRIPT.read_text()
     assert '[ "$RETRIES" -lt 3 ] && RETRIES=3' in text
