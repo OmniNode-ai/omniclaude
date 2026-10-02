@@ -183,8 +183,12 @@ def test_the_workflow_no_longer_carries_a_hand_held_sha_literal() -> None:
     cannot go stale, so the way to keep it correct is for it not to exist.
     """
     text = _WORKFLOW.read_text(encoding="utf-8")
+    # A `uses:` line pins a reusable workflow to the commit it was validated at
+    # (OMN-20001); it is not the omnimarket expected sha this test guards.
     body = "\n".join(
-        line for line in text.splitlines() if not line.lstrip().startswith("#")
+        line
+        for line in text.splitlines()
+        if not line.lstrip().startswith(("#", "uses:"))
     )
     stale = re.findall(r"\b[0-9a-f]{40}\b", body)
     assert not stale, (

@@ -42,7 +42,7 @@ concurrency:
 jobs:
   occ-preflight:
     # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@52851458622f368c3b596c82bf810bc6acce1d5e
     permissions:
       contents: read
       pull-requests: read
@@ -57,14 +57,23 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Resolve the pinned omnibase-core version
+        id: core_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the version this repo's uv.lock pins, never its
+          # live branch (ruling 2026-10-01).
+          version="$(awk -v n=omnibase-core '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
+          [[ -n "$version" ]] || { echo "::error::omnibase-core not found in uv.lock"; exit 1; }
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout omnibase_core (provides the skill receipt-mode validator)
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
-          # The validator lands on omnibase_core dev in this same ticket
-          # (OMN-13098). Track dev so omniclaude CI sees it once the paired
-          # core PR merges; promote to main after dev→main promotion.
-          ref: dev
+          # Read at the omnibase-core version uv.lock pins (ruling 2026-10-01),
+          # not core's live dev.
+          ref: ${{ steps.core_pin.outputs.tag }}
           path: _omnibase_core
           token: ${{ github.token }}
       - name: Install uv

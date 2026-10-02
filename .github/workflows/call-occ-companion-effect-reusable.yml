@@ -115,7 +115,7 @@ on:
           (scripts/publish_occ_companion_effect_command.py), its file-path-
           loaded sibling (scripts/publish_occ_autobind_command.py), the lane
           overlay (config/ci_bus_lanes.yaml) and the topic registry
-          (src/omnimarket/events/topics.py) from. Pinned to `dev` because the
+          (src/omnimarket/events/topics.py) from. Defaults to a recorded pin (it tracked `dev`) because the
           companion-effect publisher lands on omnimarket `dev` via the
           OMN-14941 omnimarket PR and is NOT promoted to omnimarket `main` —
           at `main` the script does not exist, so a `main` pin is the exact
@@ -127,7 +127,11 @@ on:
         required: false
         # re-pin to `main` after OMN-14941 promotes to omnimarket main
         # (OMN-14812-style follow-up)
-        default: dev
+        # The omnimarket release tag for the version omniclaude's uv.lock holds
+        # (0.4.278), not the moving `dev` branch (ruling 2026-10-01). Bump it, in
+        # the same change as the lock, after the consumer integration-tests the
+        # new omnimarket rev.
+        default: v0.4.278
     # No `secrets:` block: KAFKA_SASL_USERNAME / KAFKA_SASL_PASSWORD arrive via
     # the caller's `secrets: inherit`, exactly as they do for the autobind
     # sibling. The BROKER is still never a secret (OMN-14813) — see the header.

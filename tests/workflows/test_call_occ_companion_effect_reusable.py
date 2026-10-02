@@ -189,15 +189,19 @@ def test_publish_step_carries_the_sasl_credentials() -> None:
     assert env["KAFKA_SASL_PASSWORD"] == "${{ secrets.KAFKA_SASL_PASSWORD }}"
 
 
-def test_omnimarket_ref_defaults_to_dev_the_only_resolvable_ref() -> None:
-    """E1/OMN-14811 failure class: a pin at a ref where the files are a 404."""
+def test_omnimarket_ref_defaults_to_a_recorded_pin_not_a_branch() -> None:
+    """E1/OMN-14811 failure class: a pin at a ref where the files are a 404.
+
+    OMN-20001 (ruling 2026-10-01): the default is the omnimarket rev omniclaude's
+    uv.lock records (a release tag), at which the companion-effect publisher exists,
+    not the moving ``dev`` branch.
+    """
     on_block = _on_block(_load_workflow())
     inputs = on_block["workflow_call"]["inputs"]
     ref_input = inputs["omnimarket-ref"]
-    assert ref_input["default"] == "dev", (
-        "omnimarket-ref must default to `dev`: the companion-effect publisher "
-        "exists only on omnimarket dev until OMN-14941 promotes to main "
-        "(re-pin to `main` then — OMN-14812-style follow-up)"
+    assert re.fullmatch(r"v\d+\.\d+\.\d+|[0-9a-f]{40}", str(ref_input["default"])), (
+        "omnimarket-ref must default to a release tag or a full commit sha, "
+        "not a branch"
     )
     assert ref_input.get("required") is False
 

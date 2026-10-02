@@ -70,23 +70,62 @@ jobs:
       - name: Install PyYAML
         run: python -m pip install --quiet "pyyaml>=6.0.0"
 
-      # reusable-checkout-ref-ok: check-skip-vectors OMN-16726 pre-existing
-      # floating ref on a REQUIRED status check called at @dev, @main and three
-      # distinct SHAs; the flip needs each pin verified to carry the validator.
-      # reusable-checkout-sparse-ok: check-skip-vectors OMN-16726 existence
-      # assertion lands with the ref flip, in one change per workflow.
+      # The pin is validated `job.workflow_sha`: the commit of THIS workflow file,
+      # exactly what the caller pinned in its `uses:` (same pattern as
+      # kb-doc-gate-reusable.yml). omniclaude's live dev/main is never read, so a
+      # merge here cannot change what a downstream caller's required check runs.
+      - name: Resolve the check-skip-vectors pin
+        id: pin
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::check-skip-vectors pin is empty or is not a lowercase 40-hex commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$WORKFLOW_REPOSITORY" != "OmniNode-ai/omniclaude" ]; then
+            echo "::error::workflow repository is '$WORKFLOW_REPOSITORY', not OmniNode-ai/omniclaude. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"
+
       - name: Fetch validator (omniclaude canonical source)
         if: github.repository != 'OmniNode-ai/omniclaude'
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omniclaude
-          ref: dev
+          ref: ${{ steps.pin.outputs.sha }}
           path: .omniclaude-skip-guard
           persist-credentials: false
           sparse-checkout: |
             .github/actions/required-check-skip-guard/validate_no_required_check_skip_vectors.py
             .github/actions/required-check-skip-guard/_workflow_model.py
           sparse-checkout-cone-mode: false
+
+      - name: Assert the skip-guard checkout is at the pin and carries its files
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        env:
+          GATE_PIN: ${{ steps.pin.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! checked_out_sha="$(git -C .omniclaude-skip-guard rev-parse HEAD)"; then
+            echo "::error::could not resolve the fetched skip-guard commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$checked_out_sha" != "$GATE_PIN" ]; then
+            echo "::error::skip-guard checkout is at $checked_out_sha, expected $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ ! -f ".omniclaude-skip-guard/.github/actions/required-check-skip-guard/validate_no_required_check_skip_vectors.py" ]; then
+            echo "::error::.omniclaude-skip-guard/.github/actions/required-check-skip-guard/validate_no_required_check_skip_vectors.py is missing from the skip-guard checkout at $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ ! -f ".omniclaude-skip-guard/.github/actions/required-check-skip-guard/_workflow_model.py" ]; then
+            echo "::error::.omniclaude-skip-guard/.github/actions/required-check-skip-guard/_workflow_model.py is missing from the skip-guard checkout at $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
 
       - name: Run skip-vector validator
         env:
