@@ -167,6 +167,36 @@ class TestContractSatisfyingReturnsPass:
         assert classify_final_report(failed).verdict is EnumReportContractVerdict.PASSED
 
 
+class TestToolResultLinePasses:
+    """OMN-18946: a forked ledger-write/ledger-msg subagent returns the script's
+    own result line, as its skill mandates. Verbatim lines the guard refused on
+    h202 on 2026-10-01; before the fix each classified ``no_evidence_citations``
+    and forced a re-emit that replaced the line with prose."""
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "REFUSED 64 usage: --displaces must name real displaced work\n"
+            "FIX: correct the arguments and run the command again",
+            "REFUSED 64 args: first word must be one of MSG, HOLD, ACK, RELEASE, "
+            "got '--from'\nFIX: invoke /omni:ledger-msg with arguments shaped as:",
+            "RETRY 75 bus: no receipt arrived, the outcome is unknown",
+            "OK MSG 2026-10-01T20:37:44Z lane=m3-order-r3 line=23537\n"
+            "CITE-AS: MSG 2026-10-01T20:37:44Z lane=m3-order-r3",
+        ],
+    )
+    def test_result_line_passes(self, line: str) -> None:
+        result = classify_final_report(line)
+        assert result.verdict is EnumReportContractVerdict.PASSED
+        assert result.evidence_classes == ("command_or_output", "verdict")
+
+    @pytest.mark.parametrize(
+        "text", ["REFUSED", "Refused.", "OK", "it was refused, retry 75 later"]
+    )
+    def test_verdict_word_without_result_line_stays_red(self, text: str) -> None:
+        assert classify_final_report(text).verdict is EnumReportContractVerdict.RED
+
+
 class TestClobberedTranscriptFixture:
     """The hermetic end-to-end anchor: real report, hook notification, 'Done.'"""
 
