@@ -127,10 +127,11 @@ on:
         required: false
         # re-pin to `main` after OMN-14941 promotes to omnimarket main
         # (OMN-14812-style follow-up)
-        # A recorded omnimarket release tag (the version omniclaude's uv.lock holds), not the
-        # moving `dev` branch (ruling 2026-10-01). Bump it, in the same change as
-        # the lock, after the consumer integration-tests the new omnimarket rev.
-        default: v0.4.276
+        # The omnimarket release tag for the version omniclaude's uv.lock holds
+        # (0.4.278), not the moving `dev` branch (ruling 2026-10-01). Bump it, in
+        # the same change as the lock, after the consumer integration-tests the
+        # new omnimarket rev.
+        default: v0.4.278
     # No `secrets:` block: KAFKA_SASL_USERNAME / KAFKA_SASL_PASSWORD arrive via
     # the caller's `secrets: inherit`, exactly as they do for the autobind
     # sibling. The BROKER is still never a secret (OMN-14813) — see the header.

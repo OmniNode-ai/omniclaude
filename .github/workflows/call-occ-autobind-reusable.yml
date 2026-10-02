@@ -102,10 +102,11 @@ on:
           `dev` branch.
         type: string
         required: false
-        # A recorded omnimarket release tag (the version omniclaude's uv.lock holds), not the
-        # moving `dev` branch (ruling 2026-10-01). Bump it, in the same change as
-        # the lock, after the consumer integration-tests the new omnimarket rev.
-        default: v0.4.276
+        # The omnimarket release tag for the version omniclaude's uv.lock holds
+        # (0.4.278), not the moving `dev` branch (ruling 2026-10-01). Bump it, in
+        # the same change as the lock, after the consumer integration-tests the
+        # new omnimarket rev.
+        default: v0.4.278
     # Secrets are passed by the caller via `secrets: inherit`. The ones that
     # matter are KAFKA_SASL_USERNAME / KAFKA_SASL_PASSWORD (the declared SASL
     # lane's credentials, OMN-18012). KAFKA_BOOTSTRAP_SERVERS is legacy and
