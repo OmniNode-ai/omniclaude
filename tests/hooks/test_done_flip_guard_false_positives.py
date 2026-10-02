@@ -70,6 +70,12 @@ import no_pr_bound_evidence as nbe  # noqa: E402  (sibling import needs sys.path
 _NOW = datetime(2026, 9, 25, 15, 0, tzinfo=UTC)
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_linear(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reaches Linear: the default fetcher reads an empty key as 'no live data'."""
+    monkeypatch.setenv("LINEAR_API_KEY", "")
+
+
 def _call(ticket_id: str, description: str) -> dict[str, Any]:
     return {
         "tool_name": "mcp__linear-server__save_issue",
@@ -79,6 +85,11 @@ def _call(ticket_id: str, description: str) -> dict[str, Any]:
 
 def _no_receipt_probe(_ticket_id: str, _description: str) -> Any:
     return nbe.BoundEvidenceVerdict(False, "no OCC contract on origin/dev")
+
+
+def _pass_probe(_ticket_id: str, _description: str) -> Any:
+    """Every criterion bound (OMN-20368): these tests are about PR resolution."""
+    return nbe.BoundEvidenceVerdict(True, "bound: AC1<-dod-001")
 
 
 def _no_receipts(_ticket_id: str) -> list[dict[str, str]]:
@@ -152,6 +163,18 @@ _CONTRACT: dict[str, Any] = {
 }
 
 
+def _entry_sha(item: str) -> str | None:
+    from omnibase_core.validation.validator_receipt_gate import (
+        ContractEntryNotFoundError,
+        compute_contract_entry_sha256,
+    )
+
+    try:
+        return str(compute_contract_entry_sha256(_CONTRACT, item))
+    except ContractEntryNotFoundError:
+        return None
+
+
 def _receipt(item: str, **overrides: Any) -> dict[str, Any]:
     receipt: dict[str, Any] = {
         "schema_version": "1.0.0",
@@ -165,6 +188,8 @@ def _receipt(item: str, **overrides: Any) -> dict[str, Any]:
         "target_identity": "host:operator-mac/worktrees",
         "probe_stdout": "8 of 8 flagged worktrees absent\n",
         "commit_sha": "abc1234",
+        # OMN-20368: the receipt names the contract entry it was taken against.
+        "contract_entry_sha256": _entry_sha(item),
     }
     receipt.update(overrides)
     return {k: v for k, v in receipt.items() if v is not None}
@@ -193,7 +218,7 @@ def test_a_bare_live_state_line_no_longer_closes() -> None:
         now=_NOW,
     )
     assert not d.allowed
-    assert "no_durable_evidence" in d.reason
+    assert "no_bound_dod_receipt" in d.reason
     assert not hasattr(ldv, "parse_live_state_marker")
 
 
@@ -314,7 +339,7 @@ def test_a_control_defective_receipt_is_refused(
         now=_NOW,
     )
     assert not d.allowed, why
-    assert "no_durable_evidence" in d.reason
+    assert "no_bound_dod_receipt" in d.reason
     assert expect in d.reason, (why, d.reason)
     assert "DOD2" in d.reason
 
@@ -449,12 +474,12 @@ def _omn_14642_table(
 def test_b_closed_pr_superseded_by_named_merged_successor_is_allowed() -> None:
     d = guard.decide(
         _call("OMN-14642", _OMN_14642_ATTACHED),
-        occ_probe=_no_receipt_probe,
+        occ_probe=_pass_probe,
         pr_fetcher=_table_fetcher(_omn_14642_table()),
         receipt_lister=_no_receipts,
     )
     assert d.allowed, d.reason
-    assert d.reason == "durable_evidence:all_prs_merged"
+    assert d.reason == "durable_evidence:occ_bound_receipts:all_prs_merged"
 
 
 def test_b_verify_records_the_proven_successor() -> None:
@@ -575,7 +600,7 @@ def _c_table(
 def test_c_commit_anchored_narrative_ref_resolves_to_its_merged_pr() -> None:
     d = guard.decide(
         _call("OMN-14642", _NARRATIVE + _CITED),
-        occ_probe=_no_receipt_probe,
+        occ_probe=_pass_probe,
         pr_fetcher=_table_fetcher(_c_table()),
         receipt_lister=_no_receipts,
     )

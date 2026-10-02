@@ -2,15 +2,20 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# Done-flip durable-evidence guard [OMN-13856] — L1 of the layered Done-flip
-# gate. PreToolUse hook on mcp__linear-server__{save,update}_issue.
+# Done-flip bound-receipt guard [OMN-13856, OMN-20368]. PreToolUse hook on
+# mcp__linear-server__{save,update}_issue.
 #
-# Restored as the MINIMAL Option A carve-out into the otherwise-empty
-# OMN-13244 measurement baseline: this is the SINGLE hook re-registered, guarding
-# the single most dangerous mutation class (a fabricated Done). The guard MERGES
-# the merged-PR (linear_done_verify) and receipt-PASS (dod_completion) semantics
-# into one fail-closed decision and mechanizes the receipt check on the
-# DETERMINISTIC LOCAL dod_verify path (no Kafka). See done_flip_guard.py.
+# A Linear ticket reaches Done only when its OCC contract binds every
+# acceptance criterion to a PASS receipt taken against the current contract
+# entry, and an acceptance box is ticked only under the same receipt. The
+# decision lives in done_flip_guard.py.
+#
+# FAIL CLOSED (OMN-20368). Before this ticket the wrapper let a call through
+# when the cwd was not an omninode repo, when mode.sh said lite, when the hooks
+# mask was set, when the decision library was missing, and when the library
+# crashed. A Linear ticket is global state, so none of those says anything
+# about whether a Done is earned; each one is now a refusal or is gone. There
+# is no skip token and no environment bypass.
 #
 # Exit codes:
 #   0 — allow the tool call
@@ -19,66 +24,52 @@
 set -eo pipefail
 
 # OMN-19381: named so its refusal row names it. This guard does not source
-# error-guard.sh (its EXIT trap would rewrite this guard's bare `exit 2`), so it sources
-# the refusal seam on its own, after common.sh.
+# error-guard.sh (its EXIT trap would rewrite this guard's bare `exit 2`), so it
+# sources the refusal seam on its own, after common.sh.
 _OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
 
-_OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
-# shellcheck source=../lib/repo_guard.sh
 # OMN-20109: this script's directory, resolved once without a dirname exec.
 _ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
-. "${_ONEX_HOOK_SELF_DIR}/../lib/repo_guard.sh" 2>/dev/null || true
-if declare -F is_omninode_repo >/dev/null 2>&1; then
-    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
-        is_omninode_repo || {
-        _OMNICLAUDE_PASSTHROUGH=$(cat)
-        echo "$_OMNICLAUDE_PASSTHROUGH"
-        trap - EXIT 2>/dev/null || true
-        exit 0
-    }
-fi
-
-# Lite mode guard [OMN-5398]
 _SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)"
-_MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
-if [[ -f "$_MODE_SH" ]]; then
-    source "$_MODE_SH"
-    [[ "$(omniclaude_mode)" == "lite" ]] && exit 0
-fi
-
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
 LIB_PY="${PLUGIN_ROOT}/hooks/lib/done_flip_guard.py"
+unset _SCRIPT_DIR
 
-# common.sh provides PYTHON_CMD resolution and shared helpers used by all hooks
-# that invoke Python. Sourced here to satisfy the hooks-source-common invariant.
+_done_flip_refuse() {
+    # $1: reason. Refuse the Linear write, loudly, in the hook's JSON shape.
+    printf '{"decision": "block", "reason": "[OMN-20368 done-flip bound-receipt gate] %s"}\n' "$1" >&2
+    exit 2
+}
+
+# The payload is read once, so the refusal recorder can read the lane from it
+# and the decision core gets the same bytes on its stdin (OMN-19381).
+_OMNICLAUDE_HOOK_PAYLOAD="$(cat)"
+
+# common.sh provides PYTHON_CMD resolution. A failure to source it is a
+# refusal, not an allow: without an interpreter nothing can be decided.
 # shellcheck source=/dev/null
-source "${PLUGIN_ROOT}/hooks/scripts/common.sh"
+source "${PLUGIN_ROOT}/hooks/scripts/common.sh" \
+    || _done_flip_refuse "guard_error: common.sh could not be sourced, so no interpreter is resolved"
 # OMN-19381: hook_record_refusal, without error-guard.sh's EXIT trap.
 # shellcheck source=../lib/hook_refusal.sh
 source "${PLUGIN_ROOT}/hooks/lib/hook_refusal.sh" 2>/dev/null || true
-onex_hook_gate DONE_FLIP_GUARD || exit 0
-unset _SCRIPT_DIR _MODE_SH
 
-if [[ ! -f "$LIB_PY" ]]; then
-    # Library missing — fail open so we never block on our own bug.
-    cat >/dev/null
-    exit 0
-fi
+[[ -f "$LIB_PY" ]] || _done_flip_refuse "guard_error: decision library ${LIB_PY} is missing"
 
-PYTHON_BIN="${PYTHON_CMD:-python3}"
-# Only exit code 2 (blocking decision) should propagate. Any other non-zero
-# exit is a Python runtime error in the hook itself — fail open to avoid
-# blocking legitimate tool calls on a hook bug (never blocks on our own defect).
-# OMN-19381: the payload is read here, once, so the refusal recorder can
-# read the lane from it; the decision core gets the same bytes on its stdin.
-_OMNICLAUDE_HOOK_PAYLOAD="$(cat)"
+PYTHON_BIN="${PYTHON_CMD:-}"
+[[ -n "$PYTHON_BIN" ]] || _done_flip_refuse "guard_error: no Python interpreter resolved for the guard"
+
 set +e
 "$PYTHON_BIN" "$LIB_PY" <<<"$_OMNICLAUDE_HOOK_PAYLOAD"
 rc=$?
 set -e
+if [[ "$rc" -eq 0 ]]; then
+    exit 0
+fi
 if [[ "$rc" -eq 2 ]]; then
     # OMN-18946: see hook_record_refusal in error-guard.sh.
-    hook_record_refusal "done flip refused without durable evidence" "a Done transition was refused by the durable-evidence guard" 2>/dev/null || true
+    hook_record_refusal "done flip refused without a bound dod receipt" "a Done transition or acceptance-box tick was refused by the bound-receipt guard" 2>/dev/null || true
     exit 2
 fi
-exit 0
+# Any other exit is the guard failing to decide. That refuses (OMN-20368).
+_done_flip_refuse "guard_error: done_flip_guard.py exited ${rc} without a decision"

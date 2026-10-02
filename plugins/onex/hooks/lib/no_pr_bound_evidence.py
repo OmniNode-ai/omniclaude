@@ -64,7 +64,10 @@ Pure logic apart from :func:`load_ticket_occ_evidence`, which reads git.
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
+import signal
 import subprocess  # noqa: S404 - fixed-argv git invocations, no shell
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -82,6 +85,10 @@ _CONTRACT_DIR = "contracts"
 _RECEIPT_DIR_PREFIX = "drift/dod_receipts"
 _RETIREMENT_FIELD = "supersedes_ac_binding"
 _ENVIRONMENT_FIELDS = ("target_identity", "working_dir")
+# OMN-20368: a receipt behind a MERGED product PR names the code it read by its
+# commit, so the commit is that receipt's environment. The no-PR bar keeps the
+# narrower pair above: a commit is not where a state readback was taken.
+MERGED_PR_ENVIRONMENT_FIELDS = ("target_identity", "working_dir", "commit_sha")
 
 _GIT_FETCH_TIMEOUT_SECONDS = 20
 _GIT_READ_TIMEOUT_SECONDS = 15
@@ -320,18 +327,99 @@ def _timestamp(value: object) -> datetime | None:
     return parsed if parsed.tzinfo is not None else None
 
 
+def _entry_hash(contract: dict[str, Any], item_id: str) -> str | None:
+    """The canonical per-entry hash OCC binds receipts to, or None.
+
+    Imported from omnibase_core (a runtime dependency of this plugin), never
+    reimplemented: occ-preflight and the Receipt Gate use the same function, so
+    a port here could disagree with them silently. None when it cannot be
+    computed, which the caller refuses.
+    """
+    try:
+        from omnibase_core.validation.validator_receipt_gate import (
+            compute_contract_entry_sha256,
+        )
+    except ImportError:
+        return None
+    try:
+        return str(compute_contract_entry_sha256(contract, item_id))
+    except (LookupError, TypeError, ValueError):
+        # ContractEntryNotFoundError is a LookupError: "cannot recompute",
+        # which the caller refuses.
+        return None
+
+
+def _normalised_hash(value: str) -> str:
+    text = value.strip().lower()
+    return text if text.startswith("sha256:") else f"sha256:{text}"
+
+
+def staleness_defect(
+    receipt: dict[str, Any],
+    *,
+    item: EvidenceItem,
+    contract: dict[str, Any],
+    contract_sha256: str,
+) -> str | None:
+    """Why ``receipt`` was taken against a different contract than today's, or None.
+
+    OMN-20368. A receipt is evidence about the contract it was run against. When
+    the contract entry it discharges has changed since, the receipt proves the
+    old entry, not the current one, and a Done resting on it is unearned.
+
+    * ``contract_entry_sha256`` present: it must equal the per-entry hash of
+      the item in the contract on ``origin/dev`` today.
+    * otherwise ``contract_sha256`` (legacy, whole file) must equal the hash of
+      today's contract bytes.
+    * neither: the receipt names no contract version at all, so nothing ties
+      it to today's criteria.
+    """
+    entry_hash = _str(receipt, "contract_entry_sha256")
+    if entry_hash:
+        current = _entry_hash(contract, item.item_id)
+        if current is None:
+            return (
+                "per-entry contract hash cannot be recomputed at hook time "
+                "(omnibase_core.validation.validator_receipt_gate unavailable)"
+            )
+        if _normalised_hash(entry_hash) != _normalised_hash(current):
+            return (
+                f"is stale: contract entry {item.item_id} changed since the "
+                "receipt was taken (contract_entry_sha256 does not match the "
+                "contract on origin/dev); re-run dod_verify and land a new receipt"
+            )
+        return None
+    whole = _str(receipt, "contract_sha256")
+    if whole:
+        if not contract_sha256 or _normalised_hash(whole) != _normalised_hash(
+            contract_sha256
+        ):
+            return (
+                "is stale: the contract changed since the receipt was taken "
+                "(contract_sha256 does not match the contract on origin/dev); "
+                "re-run dod_verify and land a new receipt"
+            )
+        return None
+    return "names no contract version (no contract_entry_sha256 or contract_sha256)"
+
+
 def receipt_defect(
     receipt: dict[str, Any],
     *,
     ticket_id: str,
     item: EvidenceItem,
     now: datetime,
-    max_age: timedelta = NO_PR_RECEIPT_MAX_AGE,
+    max_age: timedelta | None = NO_PR_RECEIPT_MAX_AGE,
+    environment_fields: tuple[str, ...] = _ENVIRONMENT_FIELDS,
+    contract: dict[str, Any] | None = None,
+    contract_sha256: str = "",
 ) -> str | None:
     """Why ``receipt`` does not discharge ``item`` for ``ticket_id``, or None.
 
-    None means the receipt names the subject, the environment and a fresh read
-    time, and is an independently attested PASS. Pure function.
+    None means the receipt names the subject, the environment and a read time
+    (fresh, when ``max_age`` is set), is an independently attested PASS, and,
+    when ``contract`` is given, was taken against today's contract entry
+    (OMN-20368). Pure function apart from the omnibase_core hash import.
     """
     if _str(receipt, "status").upper() != "PASS":
         return "not a PASS"
@@ -352,18 +440,22 @@ def receipt_defect(
         return "is self-attested or names no runner/verifier"
     if not _str(receipt, "probe_stdout"):
         return "carries no probe_stdout (no observation)"
-    if not any(_str(receipt, key) for key in _ENVIRONMENT_FIELDS):
-        return "names no environment (target_identity or working_dir)"
+    if not any(_str(receipt, key) for key in environment_fields):
+        return f"names no environment ({' or '.join(environment_fields)})"
     read_at = _timestamp(receipt.get("run_timestamp"))
     if read_at is None:
         return "has no timezone-aware run_timestamp (no read time)"
     now_utc = now.astimezone(UTC)
     if read_at - now_utc > _MAX_FUTURE_SKEW:
         return f"read time {read_at.isoformat()} is in the future"
-    if now_utc - read_at > max_age:
+    if max_age is not None and now_utc - read_at > max_age:
         return (
             f"read time {read_at.isoformat()} is older than the "
             f"{max_age.days}-day freshness window"
+        )
+    if contract is not None:
+        return staleness_defect(
+            receipt, item=item, contract=contract, contract_sha256=contract_sha256
         )
     return None
 
@@ -383,6 +475,9 @@ class OccTicketEvidence:
     contract: dict[str, Any] | None
     receipts: list[dict[str, Any]] = field(default_factory=list)
     error: str = ""
+    # OMN-20368: ``sha256:<hex>`` of the contract's bytes on the ref, the value
+    # a legacy whole-file ``contract_sha256`` receipt binding is compared to.
+    contract_sha256: str = ""
 
 
 def evaluate_bound_evidence(
@@ -391,9 +486,18 @@ def evaluate_bound_evidence(
     evidence: OccTicketEvidence,
     now: datetime,
     *,
-    max_age: timedelta = NO_PR_RECEIPT_MAX_AGE,
+    max_age: timedelta | None = NO_PR_RECEIPT_MAX_AGE,
+    environment_fields: tuple[str, ...] = _ENVIRONMENT_FIELDS,
+    check_staleness: bool = True,
 ) -> BoundEvidenceVerdict:
-    """Apply the no-PR bar (module docstring, steps 1-4). Pure function."""
+    """Apply the bound-receipt bar (module docstring, steps 1-4). Pure function.
+
+    OMN-20368: this is now the bar for EVERY Done flip, not only the no-PR one.
+    ``check_staleness`` refuses a receipt taken against a contract entry that
+    has changed since; ``max_age`` (None for no window) and
+    ``environment_fields`` let the merged-PR path judge a receipt about merged
+    code by its commit rather than by a state-read window.
+    """
     contract_path = f"{_CONTRACT_DIR}/{ticket_id}.yaml"
     if evidence.contract is None:
         why = f" ({evidence.error})" if evidence.error else ""
@@ -445,7 +549,14 @@ def evaluate_bound_evidence(
                 continue
             for receipt in candidates:
                 defect = receipt_defect(
-                    receipt, ticket_id=ticket_id, item=item, now=now, max_age=max_age
+                    receipt,
+                    ticket_id=ticket_id,
+                    item=item,
+                    now=now,
+                    max_age=max_age,
+                    environment_fields=environment_fields,
+                    contract=evidence.contract if check_staleness else None,
+                    contract_sha256=evidence.contract_sha256,
                 )
                 if defect is None:
                     discharged_by = item.item_id
@@ -489,6 +600,38 @@ def _git(
         return None
 
 
+def bounded_fetch(repo: Path, timeout: float = _GIT_FETCH_TIMEOUT_SECONDS) -> None:
+    """``git fetch --quiet origin dev`` in ``repo``, over within ``timeout`` seconds.
+
+    OMN-20368. A fetch run with captured output waits for EOF on its pipes,
+    and the ssh or https helper git spawns keeps them open after git itself is
+    killed, so ``subprocess.run(..., capture_output=True, timeout=...)`` can
+    hang well past its timeout. The hook harness then times the guard out and
+    lets the Linear write through, which is how two Done-class writes passed
+    unchecked during the live probe on a loaded host. Here nothing is captured,
+    the fetch runs in its own process group, and the whole group is killed at
+    the deadline. Any failure is ignored: the caller reads the last-known ref.
+    """
+    try:
+        proc = subprocess.Popen(
+            ["git", "-C", str(repo), "fetch", "--quiet", "origin", "dev"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        return
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        proc.wait()
+
+
 def load_ticket_occ_evidence(
     occ_repo: Path, ticket_id: str, *, ref: str = "origin/dev", fetch: bool = True
 ) -> OccTicketEvidence:
@@ -505,9 +648,7 @@ def load_ticket_occ_evidence(
         return OccTicketEvidence(None, error=f"no OCC clone at {occ_repo}")
     if fetch:
         # Best effort: a failed fetch still reads the last-known ref.
-        _git(
-            ["fetch", "--quiet", "origin", "dev"], occ_repo, _GIT_FETCH_TIMEOUT_SECONDS
-        )
+        bounded_fetch(occ_repo)
 
     shown = _git(
         ["show", f"{ref}:{_CONTRACT_DIR}/{ticket_id}.yaml"],
@@ -522,6 +663,9 @@ def load_ticket_occ_evidence(
         return OccTicketEvidence(None, error=f"contract YAML unreadable: {exc}")
     if not isinstance(contract, dict):
         return OccTicketEvidence(None, error="contract is not a mapping")
+    contract_sha256 = (
+        f"sha256:{hashlib.sha256(shown.stdout.encode('utf-8')).hexdigest()}"
+    )
 
     receipts: list[dict[str, Any]] = []
     listing = _git(
@@ -552,19 +696,22 @@ def load_ticket_occ_evidence(
                 continue
             if isinstance(parsed, dict):
                 receipts.append(parsed)
-    return OccTicketEvidence(contract, receipts)
+    return OccTicketEvidence(contract, receipts, contract_sha256=contract_sha256)
 
 
 __all__ = [
+    "MERGED_PR_ENVIRONMENT_FIELDS",
     "NO_PR_RECEIPT_MAX_AGE",
     "BoundEvidenceVerdict",
     "EvidenceItem",
     "OccTicketEvidence",
     "acceptance_criteria_items",
+    "bounded_fetch",
     "canonical_ac_label",
     "evaluate_bound_evidence",
     "evidence_items",
     "live_acceptance_criteria_items",
     "load_ticket_occ_evidence",
     "receipt_defect",
+    "staleness_defect",
 ]

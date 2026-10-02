@@ -25,60 +25,38 @@ required because the pass condition is a *disjunction* ("a merged-PR citation
 OR a receipt-PASS"), and a hook can only block or pass through — two independent
 hooks each pass on their own criterion and the fabricated Done slips through.
 
-Decision (fail-closed — the default outcome for a real Done-flip is BLOCK):
+Decision (OMN-20368 — fail-closed; the ONE sufficient condition for Done is
+the bound-receipt bar, and every other path is a further condition):
 
-1. Not a ``save_issue``/``update_issue`` call, or not a Done-class target state
-   → ALLOW (nothing to verify).
-2. cancel-class target state (``canceled/duplicate/won't do``) → ALLOW.
-2b. Unchecked acceptance-criteria checkbox gate (OMN-15030): if the ticket's
-    current description contains any unchecked GFM task-list box (``- [ ]``)
-    → BLOCK, unconditionally — no later evidence path (merged PR, OCC receipt,
-    exempt label) waives this. Every later path proves *some* evidence exists;
-    none of them prove the ticket's own stated acceptance criteria were met.
-    OMN-13991 is the concrete incident this closes: a genuinely merged, cited,
-    implementing PR still under-delivered against the ticket's own DoD text,
-    and passed every existing presence-check because "merged" was treated as
-    sufficient. See :func:`find_unchecked_acceptance_boxes`.
-2a. Durable evidence path C — deploy-readback marker (OMN-14792): a
-    runtime-deploy ticket whose DoD is a live readback, not a merged product PR
-    (``node_dod_verify`` structurally skips such tickets —
-    ``reference_dod_verify_cannot_close_deploy_tickets`` — and they close via an
-    operator deliberate-Done). When a ``deploy-readback-proven: <probe + exit-0
-    receipt>`` marker with real evidence is present, the merge check is SCOPED to
-    DoD-*implementing* PRs (``verify_implementing``): full-URL / resolvable bare
-    ``#N`` citations, EXCLUDING scratch/throwaway/live-mint-annotated PRs and
-    unresolvable merge-chain-narrative ``#N`` refs. No unmerged implementing PR
-    → ALLOW; an unmerged implementing PR still BLOCKS (the marker is not a
-    blanket bypass — the OMN-14641 lesson). This closes the OMN-14437 false block
-    where the guard treated a closed scratch live-mint PR and bare narrative
-    numbers as blocking DoD evidence.
-3. Durable evidence path A — merged PR: if the ticket cites (or links via a
-   Linear attachment) any *product* PR and every one is ``MERGED`` → ALLOW. If
-   any is open / unmerged → BLOCK. (A "superseded-by-merged-sibling" close is a
-   merged-PR citation and is accepted here.) ``onex_change_control`` evidence /
-   OCC-receipt PRs are WEAK signals and are filtered out — they never gate a
-   product Done in either direction (OMN-14641, deliverable 3).
-3a. Exemption carve-out — an explicit ``close-if-done`` label / frontmatter
-    (covers decision-only tickets and epic ALL_CHILDREN_DONE roll-ups) → ALLOW,
-    but ONLY when no product PR is cited/linked. OMN-14641: the label was
-    previously a blanket merge-check bypass, so a ticket carrying it flipped Done
-    with its linked product PR still OPEN (the OMN-14582 false-Done). The label
-    can no longer waive an open cited/linked PR — that path BLOCKS at step 3.
-4. Durable evidence path B — the no-PR bar (OMN-13856), reached only when the
-   ticket cites no PR at all. Read off ``origin/dev`` of the local
-   onex_change_control clone: the ticket's contract ``contracts/<TICKET>.yaml``
-   binds EVERY labelled acceptance criterion of the ticket through ``binds_ac``,
-   and for each criterion a binding item has a PASS receipt under
-   ``drift/dod_receipts/<TICKET>/`` that names the subject (ticket, item, a
-   declared check type), the environment (``target_identity`` or
-   ``working_dir``) and a read time (``run_timestamp``) inside the freshness
-   window, attested by a verifier other than its runner, with a non-empty
-   ``probe_stdout`` → ALLOW. This is the evidence closer's per-criterion bar;
-   see ``no_pr_bound_evidence``. Until OMN-13856 ANY PASS receipt for the
-   ticket passed here, whatever it proved and however old it was.
-5. Otherwise → BLOCK. A Done-flip with no merged-PR citation and no bound
-   evidence is refused; if the evidence cannot be resolved at all, the guard
-   STILL BLOCKS (never fail-open on a fake-Done — design requirement 4).
+1. Not a ``save_issue``/``update_issue`` call → ALLOW. A state passed by id
+   (not by name) is REFUSED: it cannot be classified without a network read.
+2. Cancel-class target state (``canceled/duplicate/won't do``) → ALLOW.
+3. Acceptance-box tick gate (OMN-20368), for every non-Done edit that writes a
+   description (``description`` or ``patch``): a box checked in the result that
+   was not checked before is a tick, and a tick needs the bound-receipt bar
+   (step 7). A create with a checked box is refused. When the current
+   description cannot be read, every checked box counts as a tick.
+4. Done: an unchecked GFM box in today's description or the written one →
+   BLOCK (OMN-15030). Ticking it is not the remedy; the receipt is.
+5. Done: every cited / linked product PR must be merged (OMN-8375/OMN-14641),
+   scoped to implementing PRs under a deploy-readback marker (OMN-14792), with
+   OMN-15712's closed-and-uncited/superseded attachments excused. A merged PR
+   used to ALLOW here; since OMN-20368 it is necessary and never sufficient.
+6. The close-if-done exemption label and the deploy-readback marker no longer
+   ALLOW anything on their own (OMN-20368).
+7. The bound-receipt bar (``no_pr_bound_evidence``), on ``origin/dev`` of the
+   local onex_change_control clone: ``contracts/<TICKET>.yaml`` binds EVERY
+   labelled acceptance criterion — of today's description and of the one the
+   call writes — through ``binds_ac``, and each criterion has a binding item
+   with a PASS receipt that names the subject, the environment and a read
+   time, is attested by a verifier other than its runner, and was taken
+   against the current contract entry (``contract_entry_sha256``, or the
+   legacy whole-file ``contract_sha256``). A ticket with no merged PR also
+   holds its receipts to the freshness window. Anything short → BLOCK, naming
+   what is missing. dod_verify's NO_ACCEPTANCE_CHECKS is the shape "no item
+   binds the criterion", and it is refused.
+8. A guard that cannot decide refuses (``main``), and the shell wrapper runs in
+   every cwd, in lite mode and under any hooks mask.
 
 Why ``origin/dev`` git-backed (freshness + determinism) — OMN-13857 findings:
     Two paths that LOOK authoritative are broken for a Done-flip gate:
@@ -105,6 +83,7 @@ Exit codes (via :func:`main`):
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import re
@@ -125,13 +104,15 @@ from linear_done_verify import (
     fetch_pr_status,
     is_cancel_state,
     is_done_state,
-    is_exempt,
     parse_deploy_readback_marker,
     verify,
     verify_implementing,
 )
 from no_pr_bound_evidence import (
+    MERGED_PR_ENVIRONMENT_FIELDS,
+    NO_PR_RECEIPT_MAX_AGE,
     BoundEvidenceVerdict,
+    bounded_fetch,
     evaluate_bound_evidence,
     load_ticket_occ_evidence,
 )
@@ -342,11 +323,7 @@ def list_ticket_receipt_fields(
         return []
 
     if fetch:
-        _run_git(
-            ["fetch", "--quiet", "origin", "dev"],
-            cwd=occ_repo,
-            timeout=_GIT_FETCH_TIMEOUT_SECONDS,
-        )
+        bounded_fetch(occ_repo)
 
     receipt_dir = f"{_RECEIPT_DIR_PREFIX}/{ticket_id}"
     listing = _run_git(
@@ -449,11 +426,147 @@ def _default_linear_fetcher(ticket_id: str) -> dict[str, Any] | None:
 # Core decision
 # ---------------------------------------------------------------------------
 
+# OMN-20368: a CHECKED task-list box. Every box counts, as for the unchecked
+# gate above: a lane that ticks a box is asserting a criterion was met.
+_CHECKED_BOX_RE = re.compile(
+    r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]+\[[xX]\][ \t]+(\S.*)$", re.MULTILINE
+)
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
+
+def _normalise_box_text(text: str) -> str:
+    """Box text compared across edits: Linear's backslash escapes and spacing removed."""
+    return " ".join(text.replace("\\", "").split()).casefold()
+
+
+def checked_acceptance_boxes(description: str) -> set[str]:
+    """The normalised text of every checked (``[x]``) task-list item. Pure."""
+    return {_normalise_box_text(m) for m in _CHECKED_BOX_RE.findall(description or "")}
+
+
+def newly_ticked_boxes(before: str | None, after: str) -> list[str]:
+    """Checked boxes in ``after`` that were not checked in ``before``.
+
+    ``before`` is None when the current description could not be read; every
+    checked box in ``after`` then counts as newly ticked (fail closed: an edit
+    whose effect cannot be compared is treated as the edit that ticks).
+    """
+    previously = checked_acceptance_boxes(before) if before is not None else set()
+    return sorted(checked_acceptance_boxes(after) - previously)
+
+
+def _patch_texts(ops: list[Any]) -> str:
+    parts: list[str] = []
+    for op in ops:
+        if isinstance(op, dict):
+            for key in ("new_string", "text"):
+                value = op.get(key)
+                if isinstance(value, str):
+                    parts.append(value)
+    return "\n".join(parts)
+
+
+def apply_description_patch(current: str, ops: list[Any]) -> str | None:
+    """Apply the Linear MCP ``patch`` operations to ``current``; None if any fails.
+
+    Mirrors the MCP's documented semantics (every anchor must match exactly
+    once, unless ``replace_all``). A None result is not an error to the caller:
+    it means the guard cannot predict the edit, and it fails closed on it.
+    """
+    text = current
+    for op in ops:
+        if not isinstance(op, dict):
+            return None
+        kind = op.get("op")
+        if kind == "replace":
+            old, new = op.get("old_string"), op.get("new_string")
+            if not isinstance(old, str) or not isinstance(new, str) or not old:
+                return None
+            if op.get("replace_all"):
+                if old not in text:
+                    return None
+                text = text.replace(old, new)
+            else:
+                if text.count(old) != 1:
+                    return None
+                text = text.replace(old, new, 1)
+        elif kind in ("insert_before", "insert_after"):
+            anchor, add = op.get("anchor"), op.get("text")
+            if not isinstance(anchor, str) or not isinstance(add, str):
+                return None
+            if text.count(anchor) != 1:
+                return None
+            joined = add + anchor if kind == "insert_before" else anchor + add
+            text = text.replace(anchor, joined, 1)
+        elif kind == "prepend":
+            add = op.get("text")
+            if not isinstance(add, str):
+                return None
+            text = add + text
+        elif kind == "append":
+            add = op.get("text")
+            if not isinstance(add, str):
+                return None
+            text = text + add
+        elif kind == "replace_range":
+            start, end, new = op.get("from"), op.get("to"), op.get("new_string")
+            if not all(isinstance(x, str) for x in (start, end, new)):
+                return None
+            assert isinstance(start, str) and isinstance(end, str)
+            assert isinstance(new, str)
+            if text.count(start) != 1:
+                return None
+            i = text.index(start)
+            j = text.find(end, i + len(start))
+            if j < 0 or text.count(end, i + len(start)) != 1:
+                return None
+            text = text[:i] + new + text[j:]
+        else:
+            return None
+    return text
+
+
+def _occ_lister(repo: Path) -> Callable[[str], list[dict[str, str]]]:
+    def lister(ticket_id: str) -> list[dict[str, str]]:
+        return list_ticket_receipt_fields(repo, ticket_id)
+
+    return lister
+
+
+def _accepts_merged_pr(probe: Callable[..., Any]) -> bool:
+    """Whether ``probe`` takes the ``merged_pr`` keyword (an injected test probe may not)."""
+    try:
+        params = inspect.signature(probe).parameters
+    except (TypeError, ValueError):
+        return False
+    return "merged_pr" in params or any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+    )
+
+
+def _refuse(reason: str) -> Decision:
+    return Decision(False, reason)
+
+
+def _bound_receipt_refusal(ticket_id: str, detail: str, *, why: str) -> Decision:
+    return _refuse(
+        f"no_bound_dod_receipt for {ticket_id}: {why}. The bar (OMN-20368) is "
+        f"contracts/{ticket_id}.yaml on {_OCC_REF} of onex_change_control binding "
+        "EVERY labelled acceptance criterion through `binds_ac`, each discharged "
+        f"by a PASS receipt under {_RECEIPT_DIR_PREFIX}/{ticket_id}/ taken "
+        "against the current contract entry. What is missing: "
+        f"{detail}. Ticked boxes, a merged PR, an evidence comment or an "
+        "exemption label do not substitute for it: run dod_verify, land the "
+        "binding and the receipts through an evidence PR, then flip."
+    )
+
 
 def decide(
     call: dict[str, Any],
     *,
-    occ_probe: Callable[[str, str], BoundEvidenceVerdict] | None = None,
+    occ_probe: Callable[..., BoundEvidenceVerdict] | None = None,
     pr_fetcher: Callable[[Any], Any] = fetch_pr_status,
     linear_fetcher: Callable[[str], dict[str, Any] | None] = _default_linear_fetcher,
     receipt_lister: Callable[[str], list[dict[str, str]]] | None = None,
@@ -461,21 +574,25 @@ def decide(
 ) -> Decision:
     """Return the guard decision for a PreToolUse tool call.
 
+    OMN-20368: a Done transition is allowed ONLY when the ticket's OCC contract
+    binds every acceptance criterion to a PASS receipt taken against the
+    current contract entry (``occ_probe``). Every other evidence path that used
+    to ALLOW on its own (all cited PRs merged, a deploy-readback marker, a
+    close-if-done label, OMN-15712's superseded attachments) is now a further
+    condition, never a substitute. The same bar is required for an edit that
+    ticks an acceptance box.
+
     All I/O boundaries are injectable so unit tests stay hermetic:
-      * ``occ_probe(ticket_id, description) -> BoundEvidenceVerdict`` — does
-        ``origin/dev`` of the OCC clone bind every acceptance criterion to a
-        fresh, attested receipt? Defaults to
-        :func:`no_pr_bound_evidence.evaluate_bound_evidence` over
-        :func:`no_pr_bound_evidence.load_ticket_occ_evidence` for the resolved
-        OCC clone.
-      * ``pr_fetcher(PRRef) -> PRStatus`` — GitHub PR state (default: ``gh``).
-      * ``linear_fetcher(ticket_id) -> issue|{}|None`` — live Linear read.
-      * ``receipt_lister(ticket_id) -> list[fields]`` — every OCC receipt's
-        parsed fields for the ticket (OMN-15712 supersession/citation check);
-        defaults to :func:`list_ticket_receipt_fields` bound to the resolved
-        OCC clone.
-      * ``now`` — the clock a no-PR receipt's read time is judged against
-        (OMN-13856); defaults to the current UTC time.
+      * ``occ_probe(ticket_id, description, merged_pr=bool)`` -> verdict on the
+        bound-receipt bar, read off ``origin/dev`` of the OCC clone. Defaults
+        to :func:`no_pr_bound_evidence.evaluate_bound_evidence` over one load of
+        :func:`no_pr_bound_evidence.load_ticket_occ_evidence`. A test probe may
+        take only ``(ticket_id, description)``.
+      * ``pr_fetcher(PRRef) -> PRStatus`` -- GitHub PR state (default: ``gh``).
+      * ``linear_fetcher(ticket_id) -> issue|{}|None`` -- live Linear read.
+      * ``receipt_lister(ticket_id) -> list[fields]`` -- OCC receipt fields for
+        the OMN-15712 supersession check.
+      * ``now`` -- the clock a no-PR receipt's read time is judged against.
     """
     tool_name = call.get("tool_name", "")
     if tool_name not in _LINEAR_TOOLS:
@@ -485,222 +602,244 @@ def decide(
     if not isinstance(params, dict):
         return Decision(True, "no_tool_input")
 
-    state_value = str(params.get("state") or params.get("status") or "")
+    ticket_id = str(params.get("id") or params.get("issueId") or "")
+    state_value = str(params.get("state") or params.get("status") or "").strip()
 
-    # (2) cancel-class carve-out: closing without shipping — no PR/receipt owed.
+    # A state passed by id (the MCP accepts "type, name, or ID") cannot be
+    # classified without a network read, and an unclassified Done would slip
+    # past every check below. Refused: pass the state by name.
+    if state_value and _UUID_RE.match(state_value):
+        return _refuse(
+            f"state_by_id: state {state_value} was passed by id, so the guard "
+            "cannot tell whether this is a Done transition. Pass the state by "
+            "name (Done, In Progress, ...)."
+        )
+
     if is_cancel_state(state_value):
         return Decision(True, "carve_out:cancel_state")
+    is_done = is_done_state(state_value)
 
-    # (1) not a Done-class transition — nothing to verify.
-    if not is_done_state(state_value):
+    # ---- the live description, read once ---------------------------------
+    issue: dict[str, Any] | None = None
+    live_read = False
+
+    def _live() -> dict[str, Any] | None:
+        nonlocal issue, live_read
+        if not live_read:
+            live_read = True
+            fetched = linear_fetcher(ticket_id) if ticket_id else None
+            issue = fetched if isinstance(fetched, dict) and fetched else None
+        return issue
+
+    # ---- the bound-receipt bar, loaded once -------------------------------
+    clock = now or datetime.now(UTC)
+    probe = occ_probe
+    probe_error = ""
+    if probe is None and ticket_id:
+        omni_home = resolve_omni_home()
+        if omni_home is None:
+            probe_error = (
+                "OMNI_HOME is unset/invalid, so the local onex_change_control "
+                "clone cannot be resolved"
+            )
+        else:
+            evidence = load_ticket_occ_evidence(occ_repo_path(omni_home), ticket_id)
+
+            def probe(tid: str, desc: str, merged_pr: bool = False) -> Any:
+                return evaluate_bound_evidence(
+                    tid,
+                    desc,
+                    evidence,
+                    clock,
+                    max_age=None if merged_pr else NO_PR_RECEIPT_MAX_AGE,
+                    environment_fields=(
+                        MERGED_PR_ENVIRONMENT_FIELDS
+                        if merged_pr
+                        else ("target_identity", "working_dir")
+                    ),
+                )
+
+    def _bar(descriptions: list[str], *, merged_pr: bool, why: str) -> Decision | None:
+        """None when every description's criteria are bound; else the refusal."""
+        if not ticket_id:
+            return _refuse(
+                "no_ticket_id: a Done transition or an acceptance-box tick needs "
+                "the issue id so its bound receipts can be read. Pass 'id'."
+            )
+        if probe is None:
+            return _bound_receipt_refusal(ticket_id, probe_error, why=why)
+        seen: set[str] = set()
+        for desc in descriptions:
+            if desc in seen:
+                continue
+            seen.add(desc)
+            if _accepts_merged_pr(probe):
+                verdict = probe(ticket_id, desc, merged_pr=merged_pr)
+            else:
+                verdict = probe(ticket_id, desc)
+            if not verdict.passed:
+                return _bound_receipt_refusal(ticket_id, verdict.detail, why=why)
+        return None
+
+    # ---- the description this call would leave behind ----------------------
+    has_description = isinstance(params.get("description"), str)
+    patch_ops = params.get("patch")
+    new_description: str | None = None
+    current_description: str | None = None
+    if has_description or isinstance(patch_ops, list):
+        live = _live() if ticket_id else None
+        current_description = (
+            str(live.get("description") or "") if live is not None else None
+        )
+        if not ticket_id:
+            current_description = ""  # a create: nothing was checked before it
+        if has_description:
+            new_description = str(params["description"])
+        elif isinstance(patch_ops, list):
+            applied = (
+                apply_description_patch(current_description, patch_ops)
+                if current_description is not None
+                else None
+            )
+            # An edit the guard cannot predict is judged by what it inserts.
+            new_description = (
+                applied if applied is not None else _patch_texts(patch_ops)
+            )
+            if applied is None:
+                current_description = None
+
+    # ---- (T) acceptance-box tick gate (OMN-20368) -------------------------
+    # A Done call is held to the full bar below on the description it writes,
+    # which is strictly stronger, so the tick gate serves every other edit.
+    if new_description is not None and not is_done:
+        ticked = newly_ticked_boxes(current_description, new_description)
+        if ticked:
+            if not ticket_id:
+                return _refuse(
+                    "ac_tick_without_receipt: a new ticket cannot be created with "
+                    f"checked acceptance boxes ({'; '.join(ticked[:3])}). Create "
+                    "it with every box unchecked; boxes are ticked only once a "
+                    "bound PASS dod_verify receipt exists (OMN-20368)."
+                )
+            preview = "; ".join(t[:120] for t in ticked[:3])
+            refused = _bar(
+                [new_description],
+                merged_pr=True,
+                why=(
+                    f"this edit ticks {len(ticked)} acceptance box(es) ({preview}) "
+                    "and no bound PASS receipt covers the criteria"
+                ),
+            )
+            if refused is not None:
+                return Decision(
+                    False,
+                    refused.reason.replace(
+                        "no_bound_dod_receipt", "ac_tick_without_receipt", 1
+                    ),
+                )
+
+    if not is_done:
         return Decision(True, "not_done_state")
 
-    ticket_id = str(params.get("id") or params.get("issueId") or "")
-    description = str(params.get("description") or "")
+    # ---- Done transition -------------------------------------------------
     labels: list[str] = [str(x) for x in (params.get("labels") or [])]
+    live = _live() if ticket_id else None
+    live_description = str(live.get("description") or "") if live else ""
+    if live is not None and not labels:
+        labels = [str(x) for x in (live.get("labels") or [])]
+    attachment_urls = (
+        [str(x) for x in (live.get("attachment_urls") or [])] if live else []
+    )
+    # The criteria a Done must satisfy: today's, and whatever this call writes.
+    # Evaluating only the proposed text would let a Done call drop a criterion.
+    descriptions = [d for d in (live_description, new_description) if d]
+    description = new_description if new_description is not None else live_description
+    pr_description = augment_description_with_attachments(description, attachment_urls)
 
-    # Status-only updates commonly omit the description; read it live so PR
-    # citations and exemption labels can be evaluated. None => Linear
-    # unreachable: do NOT allow on that basis — fall through to the OCC receipt
-    # path, which reads git-backed governance, not Linear.
-    if not description and ticket_id:
-        issue = linear_fetcher(ticket_id)
-        if isinstance(issue, dict) and issue:
-            description = str(issue.get("description") or "")
-            if not labels:
-                labels = [str(x) for x in (issue.get("labels") or [])]
-            # Fold in the linked-PR attachment URLs (Linear GitHub integration
-            # links the PR as an attachment, not a `#N` body mention) so the
-            # merge check sees the *linked* PR even when it is uncited. This is
-            # the OMN-14582 false-Done shape — a label-driven close while the
-            # linked product PR was still OPEN (OMN-14641).
-            description = augment_description_with_attachments(
-                description, [str(x) for x in (issue.get("attachment_urls") or [])]
+    # (U) an unchecked box is the ticket's own admission it is not done
+    # (OMN-15030). Checked against every description in play.
+    for desc in descriptions or [""]:
+        unchecked_boxes = find_unchecked_acceptance_boxes(desc)
+        if unchecked_boxes:
+            preview = "; ".join(unchecked_boxes[:5])
+            more = (
+                f" (+{len(unchecked_boxes) - 5} more)"
+                if len(unchecked_boxes) > 5
+                else ""
             )
-
-    # (2b) unchecked acceptance-criteria checkbox gate (OMN-15030). Runs BEFORE
-    # every evidence path below and is not waivable by any of them — a merged
-    # PR, a PASS OCC receipt, or an exempt label all prove *some* evidence
-    # exists, none of them prove the ticket's own stated acceptance criteria
-    # were met. An unchecked `- [ ]` box in the ticket's current description
-    # is the ticket author's own admission of incompleteness; refusing here is
-    # the mechanical, judgment-free proxy for "does the shipped PR satisfy
-    # this ticket's DoD" that no presence-check below can express.
-    unchecked_boxes = find_unchecked_acceptance_boxes(description)
-    if unchecked_boxes:
-        preview = "; ".join(unchecked_boxes[:5])
-        more = (
-            f" (+{len(unchecked_boxes) - 5} more)" if len(unchecked_boxes) > 5 else ""
-        )
-        return Decision(
-            False,
-            f"unchecked_acceptance_criteria: {len(unchecked_boxes)} unchecked "
-            f"box(es) remain in the ticket description: {preview}{more}. Check "
-            "every acceptance-criteria box (or remove/rewrite the ones that no "
-            "longer apply) before flipping Done — a merged PR or OCC receipt "
-            "does not waive this (OMN-15030 / OMN-13991).",
-        )
+            return _refuse(
+                f"unchecked_acceptance_criteria: {len(unchecked_boxes)} unchecked "
+                f"box(es) remain in the ticket description: {preview}{more}. "
+                "Ticking them is not the remedy: a box is ticked only once a "
+                "bound PASS dod_verify receipt covers it (OMN-15030 / OMN-20368)."
+            )
 
     default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
 
-    # (3-pre) durable evidence path C — deploy-readback marker (OMN-14792). A
-    # runtime-deploy ticket's DoD is a live readback (effects image rebuilt to
-    # dev-tip + a clean probe read off the deployed bytes), NOT a merged product
-    # PR: node_dod_verify structurally skips such tickets
-    # (reference_dod_verify_cannot_close_deploy_tickets) and they close via an
-    # operator deliberate-Done. Before this carve-out the guard false-blocked
-    # them (the OMN-14437 shape) because it treated every PR string in the body
-    # — a scratch/throwaway live-mint readback PR, and bare merge-chain-narrative
-    # numbers — as blocking DoD evidence.
-    #
-    # When a `deploy-readback-proven:` marker with real evidence is present, the
-    # merge check is SCOPED to DoD-*implementing* PRs only (verify_implementing:
-    # full-URL / resolvable bare #N, excluding scratch-annotated and
-    # unresolvable-narrative refs). If any implementing PR is unmerged the flip
-    # still BLOCKS — the marker is not a blanket bypass (the OMN-14641 lesson).
-    # Otherwise the live-readback attestation stands in for a merged PR.
-    if parse_deploy_readback_marker(description) is not None:
+    # (P) every cited / linked product PR must be merged. A further condition,
+    # never a sufficient one (OMN-20368).
+    merged_pr = False
+    if parse_deploy_readback_marker(pr_description) is not None:
         impl_result = verify_implementing(
-            description, labels, default_repo=default_repo, fetcher=pr_fetcher
+            pr_description, labels, default_repo=default_repo, fetcher=pr_fetcher
         )
         if not impl_result.allowed:
-            return Decision(False, f"pr_not_merged\n{impl_result.reason}")
-        return Decision(True, "durable_evidence:deploy_readback_proven")
-
-    # (3) durable evidence path A — merged product-PR citation. This runs BEFORE
-    # the close-if-done exemption carve-out (OMN-14641): the label was a blanket
-    # merge-check bypass, so a ticket carrying it could flip Done with its linked
-    # product PR still OPEN. verify() now blocks on any open cited product PR
-    # regardless of the label; the exemption is honored only below, when NO
-    # product PR is cited.
-    pr_result = verify(
-        description,
-        labels,
-        default_repo=default_repo,
-        fetcher=pr_fetcher,
-        ticket_id=ticket_id or None,
-    )
-    if not pr_result.allowed:
-        # A cited PR is open / unmerged / unresolvable — the classic OMN-8375
-        # "Done while PR still BLOCKED" shape (and the OMN-14582 label-bypass
-        # shape). Block outright — the close-if-done label does not waive this.
-        #
-        # OMN-15712: before blocking, check whether the ticket's own OCC DoD
-        # contract still considers each blocking PR load-bearing. A ticket
-        # that HAS OCC receipts (a real dod_verify contract instance) may have
-        # legitimately superseded a stale attachment (an explicit PASS
-        # `-superseded` receipt) or never cited it at all (a leftover
-        # attachment, e.g. an old release PR replaced by a later one) — in
-        # either case the stale PR's live state is not this ticket's evidence
-        # and must not block. A ticket with ZERO OCC receipts is unaffected —
-        # there is no contract data to reason "cited" from, so every blocking
-        # ref is treated exactly as before this feature existed.
-        if ticket_id:
-            lister = receipt_lister
-            if lister is None:
-                omni_home = resolve_omni_home()
-                if omni_home is not None:
-                    _repo = occ_repo_path(omni_home)
-                    lister = lambda tid: list_ticket_receipt_fields(_repo, tid)  # noqa: E731
-            if lister is not None:
-                receipts = lister(ticket_id)
-                if (
-                    receipts
-                ):  # ticket HAS an OCC contract — citation-aware filtering applies
-                    blocking = [
-                        s for s in pr_result.pr_statuses if classify_blocking(s)
-                    ]
-                    # OMN-15712 regression guard: the citation-awareness carve-out
-                    # is a supersession/leftover-attachment concept, NOT a general
-                    # "no receipt mentions it" bypass. An OPEN PR (or an
-                    # unresolvable probe, i.e. ``error`` set) is potentially
-                    # load-bearing in-flight work regardless of what the OCC
-                    # contract has or hasn't cited yet — it ALWAYS blocks, exactly
-                    # as the pre-OMN-15712 guard did. Only a CLOSED-unmerged ref
-                    # is eligible for the uncited/superseded carve-out, because
-                    # only a closed PR can be a *stale* attachment the contract
-                    # legitimately moved past.
-                    still_blocking = [
-                        s
-                        for s in blocking
-                        if s.error
-                        or s.state == "OPEN"
-                        or pr_citation_state(receipts, s.ref.number)
-                        not in ("uncited", "superseded")
-                    ]
-                    if not still_blocking:
-                        return Decision(
-                            True,
-                            "durable_evidence:blocking_refs_uncited_or_superseded_"
-                            "by_occ_contract",
-                        )
-                    return Decision(
-                        False,
-                        f"pr_not_merged\n{_format_blocking_lines(still_blocking)}",
+            return _refuse(f"pr_not_merged\n{impl_result.reason}")
+    else:
+        pr_result = verify(
+            pr_description,
+            labels,
+            default_repo=default_repo,
+            fetcher=pr_fetcher,
+            ticket_id=ticket_id or None,
+        )
+        if pr_result.allowed:
+            merged_pr = pr_result.reason == "all_prs_merged"
+        else:
+            still_blocking = [s for s in pr_result.pr_statuses if classify_blocking(s)]
+            receipts: list[dict[str, str]] = []
+            if ticket_id:
+                lister = receipt_lister
+                if lister is None:
+                    omni_home = resolve_omni_home()
+                    if omni_home is not None:
+                        lister = _occ_lister(occ_repo_path(omni_home))
+                if lister is not None:
+                    receipts = lister(ticket_id)
+            if receipts:
+                # OMN-15712: a CLOSED-unmerged attachment the contract never cited,
+                # or explicitly superseded, is not load-bearing. OPEN always blocks.
+                still_blocking = [
+                    s
+                    for s in still_blocking
+                    if s.error
+                    or s.state == "OPEN"
+                    or pr_citation_state(receipts, s.ref.number)
+                    not in ("uncited", "superseded")
+                ]
+                if still_blocking:
+                    return _refuse(
+                        f"pr_not_merged\n{_format_blocking_lines(still_blocking)}"
                     )
-        return Decision(False, f"pr_not_merged\n{pr_result.reason}")
-    if pr_result.reason == "all_prs_merged":
-        return Decision(True, "durable_evidence:all_prs_merged")
+                merged_pr = any(s.state == "MERGED" for s in pr_result.pr_statuses)
+            else:
+                return _refuse(f"pr_not_merged\n{pr_result.reason}")
 
-    # (2) explicit exemption label / close-if-done frontmatter. Covers
-    # decision-only tickets and epic ALL_CHILDREN_DONE roll-ups (which carry the
-    # label). Encoded explicitly — never inferred from ticket shape. Valid ONLY
-    # here, where no product PR is cited; an open cited PR already returned above
-    # (OMN-14641 — the label can no longer bypass an unmerged linked PR).
-    if is_exempt(description, labels):
-        return Decision(True, "carve_out:exempt_label")
-
-    # pr_result.allowed with reason "no_pr_references" is NOT durable evidence on
-    # its own — this is the incident shape (Done, no PR cited). Fall through to
-    # the git-backed OCC receipt path; do NOT allow here.
-
-    if not ticket_id:
-        return Decision(
-            False,
-            "no_ticket_id: cannot verify durable evidence for a Done-flip without "
-            "an issue id. Pass 'id' in the save_issue call.",
-        )
-
-    # (4) durable evidence path B — the no-PR bar (OMN-13856): every labelled
-    # acceptance criterion bound in the OCC contract to a fresh, attested
-    # receipt, read off origin/dev. Reached only when no PR is cited: every
-    # cited PR was decided above. A self-written description line is not
-    # evidence here; only the change-control record is.
-    probe = occ_probe
-    if probe is None:
-        omni_home = resolve_omni_home()
-        if omni_home is None:
-            return Decision(
-                False,
-                "no_durable_evidence: OMNI_HOME is unset/invalid, so the local "
-                "onex_change_control clone cannot be resolved and no merged-PR "
-                "citation was found. Failing closed (design requirement 4 — never "
-                "fail-open on a fake-Done). Set OMNI_HOME, or cite the merged "
-                "implementing PR in the ticket description.",
-            )
-        repo = occ_repo_path(omni_home)
-        clock = now or datetime.now(UTC)
-        probe = lambda tid, desc: evaluate_bound_evidence(  # noqa: E731
-            tid, desc, load_ticket_occ_evidence(repo, tid), clock
-        )
-
-    verdict = probe(ticket_id, description)
-    if verdict.passed:
-        return Decision(True, "durable_evidence:occ_bound_receipts")
-
+    # (B) the bound-receipt bar. The one sufficient condition, on every path.
+    refused = _bar(
+        descriptions or [description],
+        merged_pr=merged_pr,
+        why=(
+            "a Done transition needs a passing definition-of-done check for "
+            "every acceptance criterion"
+        ),
+    )
+    if refused is not None:
+        return refused
     return Decision(
-        False,
-        f"no_durable_evidence for {ticket_id}: no merged-PR citation in the "
-        f"description, and the no-PR bar is not met on {_OCC_REF} of the local "
-        f"onex_change_control clone: {verdict.detail}. Fail-closed (no fake "
-        "Done). Cite the merged implementing PR in the ticket description; or "
-        f"land contracts/{ticket_id}.yaml binding every labelled acceptance "
-        "criterion via `binds_ac`, each with a PASS receipt under "
-        f"{_RECEIPT_DIR_PREFIX}/{ticket_id}/ naming the ticket, the item, the "
-        "environment (target_identity or working_dir) and a run_timestamp "
-        "inside the freshness window, attested by a verifier other than its "
-        "runner; or apply an explicit close-if-done exemption for a legitimate "
-        "no-PR close.",
+        True,
+        "durable_evidence:occ_bound_receipts"
+        + (":all_prs_merged" if merged_pr else ""),
     )
 
 
@@ -718,14 +857,36 @@ def _load_stdin_call() -> dict[str, Any]:
 
 
 def main() -> int:
-    """Read a PreToolUse tool call on stdin; exit 0 (allow) or 2 (block)."""
+    """Read a PreToolUse tool call on stdin; exit 0 (allow) or 2 (block).
+
+    OMN-20368: fail CLOSED. A guard that cannot decide refuses the Linear
+    write and says why; before this a runtime error in the guard was an allow.
+    """
     call = _load_stdin_call()
-    decision = decide(call)
+    try:
+        decision = decide(call)
+    except (
+        ArithmeticError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+        subprocess.SubprocessError,
+    ) as exc:
+        decision = Decision(
+            False,
+            f"guard_error: the done-flip guard could not decide "
+            f"({type(exc).__name__}: {exc}). Refusing the Linear write rather "
+            "than letting it through unchecked (OMN-20368).",
+        )
     if decision.allowed:
         return 0
     payload = {
         "decision": "block",
-        "reason": f"[OMN-13856 done-flip durable-evidence gate] {decision.reason}",
+        "reason": f"[OMN-20368 done-flip bound-receipt gate] {decision.reason}",
     }
     sys.stderr.write(json.dumps(payload) + "\n")
     return 2
