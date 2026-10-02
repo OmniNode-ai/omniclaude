@@ -134,16 +134,22 @@ expected_hooks:
     event: "PreToolUse"
     matcher: "^mcp__linear-server__(save_issue|update_issue)$"
     order: 0
-    ticket: "OMN-13856"
+    ticket: "OMN-20368"
     owner: "omniclaude hooks lane"
     purpose: >
-      Refuses a Linear flip to Done when the ticket carries no merged-PR
-      citation and no PASS node_dod_verify receipt on OCC main. Fail-closed:
-      no fake Done.
+      Refuses a Linear flip to Done, and an edit that ticks an acceptance
+      box, unless the ticket's OCC contract on origin/dev binds every labelled
+      acceptance criterion to a PASS receipt taken against the current
+      contract entry (OMN-20368; the guard itself is OMN-13856). A merged PR,
+      ticked boxes, a deploy-readback marker or an exemption label are further
+      conditions, never substitutes. Fail-closed: it runs in every cwd and in
+      lite mode, has no mask bit, and refuses when it cannot decide.
     enforcement: true
-    lite_mode_exit: true
+    lite_mode_exit: false
     mask:
-      gate_call: "DONE_FLIP_GUARD"
+      # No gate (OMN-20368): a Done is global state, so no per-machine switch
+      # may turn its check off.
+      gate_call: null
       bit_defined: false
     canary:
       kind: "block"
@@ -158,7 +164,7 @@ expected_hooks:
         exit_code: 2
         stdout_contains:
           - '"decision": "block"'
-          - "no_durable_evidence"
+          - "no_bound_dod_receipt"
         stdout_absent: []
 
   - script: "pre_tool_use_ticket_creation_gate.sh"

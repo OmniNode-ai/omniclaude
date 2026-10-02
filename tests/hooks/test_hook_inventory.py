@@ -699,8 +699,10 @@ def test_lite_mode_darkness_is_declared_and_reported() -> None:
         if hook.lite_mode_exit and hook.enforcement
     }
 
+    # OMN-20368: the Done-flip gate left this set. It runs in lite mode, since
+    # a Linear Done is global state and the cwd says nothing about it.
+    assert "pre_tool_use_done_flip_guard.sh" not in enforcing_and_lite
     assert enforcing_and_lite == {
-        "pre_tool_use_done_flip_guard.sh",
         "pre_tool_use_lane_liveness_guard.sh",
         "post_tool_use_secret_redact_guard.sh",
         # OMN-13856 item 4: the actor-line comment guard exits in lite mode
@@ -739,7 +741,9 @@ def test_the_lite_mode_declaration_is_checked_against_the_script(mirror: Path) -
     path = mirror / _INVENTORY_REL
     raw = yaml.safe_load(path.read_text())
     for entry in raw["expected_hooks"]:
-        if entry["script"] == "pre_tool_use_done_flip_guard.sh":
+        # OMN-20368: the Done-flip gate no longer exits in lite mode, so the
+        # lane-liveness guard (which still does) is the subject of the flip.
+        if entry["script"] == "pre_tool_use_lane_liveness_guard.sh":
             entry["lite_mode_exit"] = False
     path.write_text(yaml.safe_dump(raw))
 

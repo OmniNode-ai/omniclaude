@@ -56,6 +56,13 @@ def _load_guard() -> Any:
 guard = _load_guard()
 import no_pr_bound_evidence as nbe  # noqa: E402  (sibling import needs sys.path)
 
+
+@pytest.fixture(autouse=True)
+def _hermetic_linear(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reaches Linear: the default fetcher reads an empty key as 'no live data'."""
+    monkeypatch.setenv("LINEAR_API_KEY", "")
+
+
 # --------------------------------------------------------------------------- #
 # Stub factories
 # --------------------------------------------------------------------------- #
@@ -139,7 +146,7 @@ def test_cancel_state_allows() -> None:
     assert d.reason == "carve_out:cancel_state"
 
 
-def test_exempt_label_allows() -> None:
+def test_exempt_label_alone_no_longer_closes_omn_20368() -> None:
     call = {
         "tool_name": "mcp__linear-server__save_issue",
         "tool_input": {
@@ -149,9 +156,12 @@ def test_exempt_label_allows() -> None:
             "labels": ["close-if-done"],
         },
     }
-    d = guard.decide(call, occ_probe=_never_called_probe)
-    assert d.allowed
-    assert d.reason == "carve_out:exempt_label"
+    d = guard.decide(call, occ_probe=_no_receipt_probe)
+    assert not d.allowed
+    assert "no_bound_dod_receipt" in d.reason
+    d = guard.decide(call, occ_probe=_receipt_probe)
+    assert d.allowed, d.reason
+    assert d.reason == "durable_evidence:occ_bound_receipts"
 
 
 # --------------------------------------------------------------------------- #
@@ -223,7 +233,7 @@ def test_close_if_done_label_allows_merged_linked_attachment_pr() -> None:
     }
     d = guard.decide(
         call,
-        occ_probe=_never_called_probe,
+        occ_probe=_receipt_probe,
         pr_fetcher=_merged_fetcher,
         linear_fetcher=lambda _t: {
             "description": "",
@@ -232,7 +242,7 @@ def test_close_if_done_label_allows_merged_linked_attachment_pr() -> None:
         },
     )
     assert d.allowed
-    assert d.reason == "durable_evidence:all_prs_merged"
+    assert d.reason == "durable_evidence:occ_bound_receipts:all_prs_merged"
 
 
 # --------------------------------------------------------------------------- #
@@ -262,7 +272,7 @@ def test_incident_backlog_to_done_no_evidence_is_blocked() -> None:
         linear_fetcher=_no_linear,
     )
     assert not d.allowed
-    assert "no_durable_evidence" in d.reason
+    assert "no_bound_dod_receipt" in d.reason
 
 
 def test_incident_status_only_update_no_evidence_is_blocked() -> None:
@@ -337,9 +347,9 @@ def test_legit_merged_pr_citation_is_allowed() -> None:
             ),
         },
     }
-    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_merged_fetcher)
+    d = guard.decide(call, occ_probe=_receipt_probe, pr_fetcher=_merged_fetcher)
     assert d.allowed
-    assert d.reason == "durable_evidence:all_prs_merged"
+    assert d.reason == "durable_evidence:occ_bound_receipts:all_prs_merged"
 
 
 def test_legit_occ_receipt_is_allowed() -> None:
@@ -454,9 +464,9 @@ def test_all_boxes_checked_is_not_blocked_by_the_checkbox_gate() -> None:
             ),
         },
     }
-    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_merged_fetcher)
+    d = guard.decide(call, occ_probe=_receipt_probe, pr_fetcher=_merged_fetcher)
     assert d.allowed
-    assert d.reason == "durable_evidence:all_prs_merged"
+    assert d.reason == "durable_evidence:occ_bound_receipts:all_prs_merged"
 
 
 def test_unchecked_box_blocks_even_with_occ_receipt_evidence() -> None:
@@ -553,12 +563,12 @@ def test_deploy_readback_ticket_with_scratch_and_narrative_is_allowed() -> None:
     }
     d = guard.decide(
         call,
-        occ_probe=_never_called_probe,
+        occ_probe=_receipt_probe,
         pr_fetcher=_never_called_fetcher,
         linear_fetcher=_no_linear,
     )
     assert d.allowed
-    assert d.reason == "durable_evidence:deploy_readback_proven"
+    assert d.reason == "durable_evidence:occ_bound_receipts"
 
 
 def test_deploy_readback_status_only_update_is_allowed() -> None:
@@ -569,7 +579,7 @@ def test_deploy_readback_status_only_update_is_allowed() -> None:
     }
     d = guard.decide(
         call,
-        occ_probe=_never_called_probe,
+        occ_probe=_receipt_probe,
         pr_fetcher=_never_called_fetcher,
         linear_fetcher=lambda _t: {
             "description": _OMN_14437_DESCRIPTION,
@@ -577,7 +587,7 @@ def test_deploy_readback_status_only_update_is_allowed() -> None:
         },
     )
     assert d.allowed
-    assert d.reason == "durable_evidence:deploy_readback_proven"
+    assert d.reason == "durable_evidence:occ_bound_receipts"
 
 
 def test_deploy_readback_marker_does_not_bypass_open_implementing_pr() -> None:
@@ -609,9 +619,9 @@ def test_deploy_readback_marker_allows_when_implementing_pr_merged() -> None:
         "tool_name": "mcp__linear-server__save_issue",
         "tool_input": {"id": "OMN-14998", "state": "Done", "description": desc},
     }
-    d = guard.decide(call, occ_probe=_never_called_probe, pr_fetcher=_merged_fetcher)
+    d = guard.decide(call, occ_probe=_receipt_probe, pr_fetcher=_merged_fetcher)
     assert d.allowed
-    assert d.reason == "durable_evidence:deploy_readback_proven"
+    assert d.reason == "durable_evidence:occ_bound_receipts"
 
 
 def test_empty_deploy_readback_marker_is_not_accepted() -> None:
@@ -629,7 +639,7 @@ def test_empty_deploy_readback_marker_is_not_accepted() -> None:
         linear_fetcher=_no_linear,
     )
     assert not d.allowed
-    assert "no_durable_evidence" in d.reason
+    assert "no_bound_dod_receipt" in d.reason
 
 
 def test_code_ticket_open_implementing_pr_blocked_without_marker() -> None:
@@ -773,6 +783,22 @@ probe_stdout: |
 commit_sha: "abc1234"
 """
 
+
+def _entry_sha(contract_text: str, item: str) -> str:
+    import yaml
+    from omnibase_core.validation.validator_receipt_gate import (
+        compute_contract_entry_sha256,
+    )
+
+    return str(compute_contract_entry_sha256(yaml.safe_load(contract_text), item))
+
+
+# OMN-20368: a receipt names the contract entry it was taken against.
+_BOUND_RECEIPT = (
+    _BOUND_RECEIPT
+    + f'contract_entry_sha256: "{_entry_sha(_BOUND_CONTRACT, "dod-001")}"\n'
+)
+
 _BOUND_DESCRIPTION = "## Acceptance criteria\n\n- AC1: no dirty worktree remains\n"
 _BOUND_NOW = datetime(2026, 9, 25, 15, 0, tzinfo=UTC)
 
@@ -841,7 +867,7 @@ def test_occ_bare_pass_receipt_no_longer_closes_a_no_pr_ticket(tmp_path: Path) -
     }
     d = guard.decide(call, occ_probe=_bound_probe(clone), linear_fetcher=_no_linear)
     assert not d.allowed
-    assert "no_durable_evidence" in d.reason
+    assert "no_bound_dod_receipt" in d.reason
     assert "no OCC contract" in d.reason
 
 
@@ -940,7 +966,7 @@ def test_uncited_stale_attachment_is_allowed_omn_15539_shape() -> None:
     }
     d = guard.decide(
         call,
-        occ_probe=_never_called_probe,
+        occ_probe=_receipt_probe,
         pr_fetcher=_closed_fetcher_for(1533),
         linear_fetcher=lambda _t: {
             "description": "Deterministic implementation contract shipped.",
@@ -954,10 +980,7 @@ def test_uncited_stale_attachment_is_allowed_omn_15539_shape() -> None:
         receipt_lister=lambda _t: receipts,
     )
     assert d.allowed
-    assert (
-        d.reason
-        == "durable_evidence:blocking_refs_uncited_or_superseded_by_occ_contract"
-    )
+    assert d.reason.startswith("durable_evidence:occ_bound_receipts"), d.reason
 
 
 def test_superseded_stale_attachment_is_allowed_omn_15422_shape() -> None:
@@ -976,7 +999,7 @@ def test_superseded_stale_attachment_is_allowed_omn_15422_shape() -> None:
     }
     d = guard.decide(
         call,
-        occ_probe=_never_called_probe,
+        occ_probe=_receipt_probe,
         pr_fetcher=_closed_fetcher_for(2596),
         linear_fetcher=lambda _t: {
             "description": "Fixture provenance and sanitization documented.",
@@ -989,10 +1012,7 @@ def test_superseded_stale_attachment_is_allowed_omn_15422_shape() -> None:
         receipt_lister=lambda _t: receipts,
     )
     assert d.allowed
-    assert (
-        d.reason
-        == "durable_evidence:blocking_refs_uncited_or_superseded_by_occ_contract"
-    )
+    assert d.reason.startswith("durable_evidence:occ_bound_receipts"), d.reason
 
 
 def test_adversarial_active_unmerged_pr_still_blocks_despite_receipts() -> None:
@@ -1222,7 +1242,7 @@ def test_anchored_bare_ref_is_verified_rather_than_refused_omn_18747() -> None:
 
     d = guard.decide(
         call,
-        occ_probe=_never_called_probe,
+        occ_probe=_receipt_probe,
         pr_fetcher=_errors_on_unresolvable,
         linear_fetcher=lambda _t: {
             "description": (
@@ -1235,4 +1255,4 @@ def test_anchored_bare_ref_is_verified_rather_than_refused_omn_18747() -> None:
         receipt_lister=lambda _t: [],
     )
     assert d.allowed, d.reason
-    assert d.reason == "durable_evidence:all_prs_merged"
+    assert d.reason == "durable_evidence:occ_bound_receipts:all_prs_merged"
