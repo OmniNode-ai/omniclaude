@@ -316,6 +316,7 @@ wait_until() {
 # ---------------------------------------------------------------------------
 # Machine facts (with test seams: ONBOARD_TEST_* overrides a reading)
 # ---------------------------------------------------------------------------
+os_name() { echo "${ONBOARD_TEST_OS:-$(uname -s)}"; }
 macos_version() { echo "${ONBOARD_TEST_MACOS:-$(sw_vers -productVersion 2>/dev/null || echo 0)}"; }
 cpu_count() { echo "${ONBOARD_TEST_CPUS:-$(sysctl -n hw.ncpu 2>/dev/null || echo 0)}"; }
 ram_gb() {
@@ -343,7 +344,13 @@ avail_mem_gb() { # free + inactive + speculative pages
     END { gsub(/\./, "", f); gsub(/\./, "", i); gsub(/\./, "", s);
           if (ps == 0) ps = 4096; printf "%d\n", (f + i + s) * ps / 1073741824 }'
 }
-port_busy() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+port_busy() {
+  # An explicitly empty override means no ports are busy.
+  if [ "${ONBOARD_TEST_PORTS_BUSY+x}" = "x" ]; then
+    case " $ONBOARD_TEST_PORTS_BUSY " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+  fi
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
 
 # Docker Desktop's CLI lives inside the app; a fresh install has not put it on PATH yet.
 export PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin:$HOME/.docker/bin"
@@ -780,8 +787,8 @@ phase0() {
   fi
 
   # Conditions that are fixable on this machine, not a hardware shortfall.
-  if [ "$(uname -s)" != "Darwin" ]; then
-    FAILED_STEP="operating system check"; LAST_ERR="$(uname -s) is not macOS"
+  if [ "$(os_name)" != "Darwin" ]; then
+    FAILED_STEP="operating system check"; LAST_ERR="$(os_name) is not macOS"
     phase_fail "run this on macOS; Linux and Windows are not supported yet"
   fi
   if is_rosetta; then
@@ -1328,6 +1335,14 @@ stack_healthy() {
     curl -fsS -m 5 http://localhost:8086/health | grep -q '"healthy"'
 }
 
+sed_inplace() { # sed expressions and file; no backup suffix on either implementation
+  if sed --version >/dev/null 2>&1; then
+    sed -i "$@"
+  else
+    sed -i '' "$@"
+  fi
+}
+
 point_bundle_model() { # url model -> the stack's local-model slot names that server and model
   local f="$HOME/.omnibase/local.bifrost.yaml" url="$1" model="$2"
   [ -f "$f" ] || return 1
@@ -1335,7 +1350,7 @@ point_bundle_model() { # url model -> the stack's local-model slot names that se
   # untouched template (a model server on this Mac) is rewritten.
   grep -q '&model_endpoint "http://host.docker.internal' "$f" || return 0
   cp -p "$f" "$f.pre-onboarding.$STAMP"
-  sed -i '' -e "s#&model_endpoint \"http://host.docker.internal[^\"]*\"#\\&model_endpoint \"$url\"#" \
+  sed_inplace -e "s#&model_endpoint \"http://host.docker.internal[^\"]*\"#\\&model_endpoint \"$url\"#" \
     -e "s#served_model_id: \"[^\"]*\"#served_model_id: \"$model\"#" "$f"
 }
 
