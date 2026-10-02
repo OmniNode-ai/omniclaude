@@ -34,34 +34,18 @@ def _load_checker() -> ModuleType:
     return module
 
 
-def test_an_event_type_ahead_of_the_pinned_daemon_registry_is_tolerated(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_an_event_type_missing_from_the_daemon_is_a_violation_not_a_crash(
+    tmp_path: Path,
 ) -> None:
-    """The daemon registry is read at the omnimarket rev uv.lock pins (OMN-20001).
-
-    A hook-side event type the pinned registry does not carry yet is omniclaude
-    ahead of its pin, so the consumer can land first. It is reported, not failed,
-    and not a crash (the earlier AttributeError on the missing daemon entry).
-    """
     registry = tmp_path / "topics.yaml"
     registry.write_text("events: {}\n", encoding="utf-8")
     violations = _load_checker().check_registry_consistency(registry)
-    assert not [v for v in violations if "missing from omnimarket daemon" in v]
-    assert not [v for v in violations if "fan-out topics missing" in v]
-    assert "ahead of the pinned omnimarket daemon registry" in capsys.readouterr().out
+    missing = [v for v in violations if "missing from omnimarket daemon registry" in v]
+    assert missing, violations
 
 
-def test_a_registered_type_with_a_missing_fan_out_topic_is_still_a_violation(
-    tmp_path: Path,
-) -> None:
-    """Ahead-of-pin tolerance must not mask drift on a type the pin does register."""
-    checker = _load_checker()
-    event_type = sorted(checker._supported_event_types(checker.EMIT_CLIENT))[0]
+def test_an_unregistered_event_type_is_a_violation(tmp_path: Path) -> None:
     registry = tmp_path / "topics.yaml"
-    registry.write_text(
-        f"events:\n  {event_type}:\n    fan_out:\n"
-        "      - topic: onex.evt.nobody.unrelated.v1\n",
-        encoding="utf-8",
-    )
-    violations = checker.check_registry_consistency(registry)
-    assert [v for v in violations if "fan-out topics missing" in v], violations
+    registry.write_text("events: {}\n", encoding="utf-8")
+    violations = _load_checker().check_registry_consistency(registry)
+    assert [v for v in violations if "missing from omnimarket daemon" in v], violations

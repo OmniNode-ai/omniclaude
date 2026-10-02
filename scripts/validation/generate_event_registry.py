@@ -461,7 +461,8 @@ def check_vendored_capture_contract(
 
 
 def diff_registries(
-    generated: dict[str, dict[str, Any]], committed: dict[str, dict[str, Any]]
+    generated: dict[str, dict[str, Any]],
+    committed: dict[str, dict[str, Any]],
 ) -> list[str]:
     violations: list[str] = []
 
@@ -471,15 +472,11 @@ def diff_registries(
             "Event types in the daemon projection but missing from the committed "
             f"EVENT_REGISTRY: {missing_from_committed}"
         )
-    # The daemon registry is read at the omnimarket rev omniclaude's uv.lock
-    # pins, so a committed type the pinned projection lacks is omniclaude AHEAD
-    # of its pin (the consumer lands first), not drift. Reported, not failed;
-    # the omnimarket side owns the reverse direction.
-    ahead_of_pin = sorted(set(committed) - set(generated))
-    if ahead_of_pin:
-        print(
-            "NOTE: committed EVENT_REGISTRY types ahead of the pinned omnimarket "
-            f"daemon registry (tolerated until the pin moves): {ahead_of_pin}"
+    extra_in_committed = sorted(set(committed) - set(generated))
+    if extra_in_committed:
+        violations.append(
+            "Event types in the committed EVENT_REGISTRY but not projected from the "
+            f"daemon registry (stale / hand-added?): {extra_in_committed}"
         )
 
     for event_type in sorted(set(generated) & set(committed)):
