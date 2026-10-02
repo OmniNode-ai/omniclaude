@@ -74,6 +74,63 @@ class TestScanStopEventCatchesRealLeakShapes:
         assert result.verdict is EnumSecretGuardVerdict.BLOCK
         assert result.redacted_count >= 1
 
+    @pytest.mark.parametrize("direct_field", [False, True])
+    def test_structured_output_secret_is_blocked(self, tmp_path, direct_field) -> None:
+        entries = [
+            {
+                "type": "user",
+                "message": {"role": "user", "content": "Return the report."},
+            },
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": "Now compute date drift and the new snapshot.",
+                },
+            },
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_x",
+                            "name": "StructuredOutput",
+                            "input": {
+                                "detail": f"Verified working: {_SYNTHETIC_GOOGLE_KEY}"
+                            },
+                        }
+                    ],
+                },
+            },
+            {
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_x",
+                            "content": "OK",
+                        }
+                    ],
+                },
+            },
+        ]
+        path = tmp_path / "agent.jsonl"
+        path.write_text(
+            "\n".join(json.dumps(entry) for entry in entries), encoding="utf-8"
+        )
+        event = {"agent_transcript_path": str(path)}
+        if direct_field:
+            event["last_assistant_message"] = "Structured output provided successfully"
+        result = scan_stop_event(event)
+        assert result.verdict is EnumSecretGuardVerdict.BLOCK
+        assert result.reason == "secret_pattern_matched"
+        assert result.redacted_count >= 1
+        assert _SYNTHETIC_GOOGLE_KEY not in json.dumps(_hook_output(result))
+
     def test_clean_report_is_allowed(self) -> None:
         """A report that describes the finding without quoting the value passes."""
         event = {
