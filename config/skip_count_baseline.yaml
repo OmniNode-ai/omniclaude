@@ -111,7 +111,7 @@ suites:
     repo: omniclaude
     job: Tests (Split n/m)
     mode: nodeids
-    max_skips: 52
+    max_skips: 61
     baseline_collected: 17496
     provenance:
       measured_at: '2026-09-18'
@@ -124,7 +124,7 @@ suites:
       - '35392248095'
       - '35404945505'
       - '35396322080'
-      notes: '35395348934 is a full-width run: 5 splits, 14793 collected, 43 unique skipped ids. Mode is nodeids because this job sits behind the impacted-test selector — vars.ENABLE_SMART_TESTS reads true on this repository live, so the ''Run tests (smart selection)'' step takes a 2-split narrowed path on most pull requests and the raw count legitimately varies: 35404945505 and 35396322080 each collected 6015 and skipped 6. A count comparison would read those as a 37-skip improvement and then miss a newly added skip inside the narrowed set. Both narrowed runs and both corroborating full-width runs had 0 ids outside this baseline. Positive control for that zero: injecting one synthetic id into the same comparison reports 1. Amended 2026-09-30 (OMN-20109): +1 id, tests.hooks_system.test_hook_canary::test_installer_renders_a_complete_plist, added by omniclaude#2418. It renders the launchd plist and lints it with plutil, so it is skipped by design on every non-darwin platform, and its Linux twin in the same file (the cron-line render) is skipped on darwin: a platform partition, not a test that failed to run. It surfaced on the full-width split run of omniclaude#2420 (44 unique skipped over 17115 collected). Amended 2026-09-30 (OMN-20132): +2 ids, tests.ci.test_receipt_gate_caller_pin_omn20132::test_pinned_workflow_inner_validator_accepts_tree_sha and ::test_floor_rejects_the_pre_tree_sha_inner_ref, added by omniclaude#2433. Each reads a workflow file from omnibase_core through gh api and calls pytest.skip when that read fails, so they are skipped by design wherever the runner token cannot read omnibase_core; observed skipped on the split run of omniclaude#2433 (8 unique skipped over 6791 collected, narrowed run). Both still execute on a workstation with gh access. Amended 2026-09-30 (OMN-20150): +12 ids, all tests.skills.test_lab_onboarding_script_omn20150, added by omniclaude#2442. They run plugins/onex/skills/_bin/lab-onboarding.sh, a macOS-only script, and are skipped by design on every non-darwin runner (macos_only skipif in the file): a platform partition, not tests that failed to run. They surfaced on the full-width split run of omniclaude#2442 (58 unique skipped over 17363 collected). Amended 2026-10-01 (OMN-20150): +7 ids, all tests.skills.test_lab_onboarding_script_omn20150, added by omniclaude#2448 (key settled in preflight, phase 6 overlay, quit-setup). Same macOS-only script and macos_only skipif as the 12 recorded above: a platform partition, skipped by design on every non-darwin runner. They surfaced on the split run of omniclaude#2450 head c5818c6e46c.'
+      notes: '35395348934 is a full-width run: 5 splits, 14793 collected, 43 unique skipped ids. Mode is nodeids because this job sits behind the impacted-test selector — vars.ENABLE_SMART_TESTS reads true on this repository live, so the ''Run tests (smart selection)'' step takes a 2-split narrowed path on most pull requests and the raw count legitimately varies: 35404945505 and 35396322080 each collected 6015 and skipped 6. A count comparison would read those as a 37-skip improvement and then miss a newly added skip inside the narrowed set. Both narrowed runs and both corroborating full-width runs had 0 ids outside this baseline. Positive control for that zero: injecting one synthetic id into the same comparison reports 1. Amended 2026-09-30 (OMN-20109): +1 id, tests.hooks_system.test_hook_canary::test_installer_renders_a_complete_plist, added by omniclaude#2418. It renders the launchd plist and lints it with plutil, so it is skipped by design on every non-darwin platform, and its Linux twin in the same file (the cron-line render) is skipped on darwin: a platform partition, not a test that failed to run. It surfaced on the full-width split run of omniclaude#2420 (44 unique skipped over 17115 collected). Amended 2026-09-30 (OMN-20132): +2 ids, tests.ci.test_receipt_gate_caller_pin_omn20132::test_pinned_workflow_inner_validator_accepts_tree_sha and ::test_floor_rejects_the_pre_tree_sha_inner_ref, added by omniclaude#2433. Each reads a workflow file from omnibase_core through gh api and calls pytest.skip when that read fails, so they are skipped by design wherever the runner token cannot read omnibase_core; observed skipped on the split run of omniclaude#2433 (8 unique skipped over 6791 collected, narrowed run). Both still execute on a workstation with gh access. Amended 2026-09-30 (OMN-20150): +12 ids, all tests.skills.test_lab_onboarding_script_omn20150, added by omniclaude#2442. They run plugins/onex/skills/_bin/lab-onboarding.sh, a macOS-only script, and are skipped by design on every non-darwin runner (macos_only skipif in the file): a platform partition, not tests that failed to run. They surfaced on the full-width split run of omniclaude#2442 (58 unique skipped over 17363 collected). Amended 2026-10-01 (OMN-20150): +7 ids, all tests.skills.test_lab_onboarding_script_omn20150, added by omniclaude#2448 (key settled in preflight, phase 6 overlay, quit-setup). Same macOS-only script and macos_only skipif as the 12 recorded above: a platform partition, skipped by design on every non-darwin runner. They surfaced on the split run of omniclaude#2450 head c5818c6e46c. Amended 2026-10-02 (OMN-20150): +9 ids, all tests.skills.test_lab_onboarding_script_omn20150, added by omniclaude#2462, skipped by design on every non-darwin runner by the macos_only skipif in the file (a platform partition), and observed on the split run of omniclaude#2481 (59 unique skipped over 17642 collected).'
     node_ids:
     - tests.ci.test_receipt_gate_caller_pin_omn20132::test_floor_rejects_the_pre_tree_sha_inner_ref
     - tests.ci.test_receipt_gate_caller_pin_omn20132::test_pinned_workflow_inner_validator_accepts_tree_sha
@@ -153,15 +153,23 @@ suites:
     - tests.runtime.test_wiring.TestServiceContractPublisherAPI::test_publish_handler_contracts_delegates_to_service_publisher
     - tests.runtime.test_wiring.TestServiceContractPublisherAPI::test_publish_handler_contracts_strips_whitespace_from_environment
     - tests.runtime.test_wiring.TestServiceContractPublisherAPI::test_requires_explicit_contract_source_config
+    - tests.skills.test_lab_onboarding_script_omn20150::test_a_resumed_run_finds_the_tools_phase_1_installed
     - tests.skills.test_lab_onboarding_script_omn20150::test_a_vm_is_never_given_containers
+    - tests.skills.test_lab_onboarding_script_omn20150::test_a_vm_is_told_before_any_question
     - tests.skills.test_lab_onboarding_script_omn20150::test_below_minimum_exits_3_and_writes_nothing_under_home
+    - tests.skills.test_lab_onboarding_script_omn20150::test_choosing_ollama_on_the_menu_skips_the_key
+    - tests.skills.test_lab_onboarding_script_omn20150::test_choosing_openai_on_the_menu_asks_for_an_openai_key
     - tests.skills.test_lab_onboarding_script_omn20150::test_containers_are_offered_not_imposed
     - tests.skills.test_lab_onboarding_script_omn20150::test_containers_asked_for_on_a_mac_that_cannot_run_them_continue_without
     - tests.skills.test_lab_onboarding_script_omn20150::test_containers_when_asked_for
     - 'tests.skills.test_lab_onboarding_script_omn20150::test_disk_floor_depends_on_whether_docker_is_installed[installed, not running-20 GB]'
     - 'tests.skills.test_lab_onboarding_script_omn20150::test_disk_floor_depends_on_whether_docker_is_installed[not installed-30 GB]'
+    - tests.skills.test_lab_onboarding_script_omn20150::test_docker_with_ollama_points_only_the_untouched_template_at_it[False]
+    - tests.skills.test_lab_onboarding_script_omn20150::test_docker_with_ollama_points_only_the_untouched_template_at_it[True]
     - tests.skills.test_lab_onboarding_script_omn20150::test_no_containers_is_honoured
     - tests.skills.test_lab_onboarding_script_omn20150::test_no_key_and_nobody_to_ask_stops_before_installing
+    - tests.skills.test_lab_onboarding_script_omn20150::test_ollama_asks_for_no_key_and_chooses_the_model_later
+    - tests.skills.test_lab_onboarding_script_omn20150::test_ollama_in_a_vm_is_warned_it_will_be_slow
     - 'tests.skills.test_lab_onboarding_script_omn20150::test_one_question_after_preflight_decides_docker[n-No local Docker: you said no]'
     - 'tests.skills.test_lab_onboarding_script_omn20150::test_one_question_after_preflight_decides_docker[y-and the stack locally in Docker]'
     - tests.skills.test_lab_onboarding_script_omn20150::test_phase_6_leaves_an_overlay_the_developer_already_pointed_alone
@@ -172,6 +180,7 @@ suites:
     - tests.skills.test_lab_onboarding_script_omn20150::test_status_file_records_each_phase
     - 'tests.skills.test_lab_onboarding_script_omn20150::test_the_key_is_settled_in_preflight[-no key was given]'
     - 'tests.skills.test_lab_onboarding_script_omn20150::test_the_key_is_settled_in_preflight[not-a-real-key-Model key: received]'
+    - tests.skills.test_lab_onboarding_script_omn20150::test_the_model_is_asked_before_docker
     - tests.unit.hooks.scripts.test_alert_channel_failloud.TestLocalNotifierDefaultsToOsascriptOnMacOS::test_default_notifier_is_osascript
     - tests.unit.hooks.test_skill_output_suppressor::test_hook_registered_in_hooks_json
     - tests.unit.nodes.node_channel_discord_adapter.test_handler_inbound
