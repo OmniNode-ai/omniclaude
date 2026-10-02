@@ -24,6 +24,7 @@ import pytest
 from tests.hooks_system import budget
 from tests.hooks_system._harness import (
     ProcessLedger,
+    ProcInfo,
     RegisteredHook,
     Rig,
     describe,
@@ -190,3 +191,24 @@ def test_interpreter_starts_per_call_stay_under_the_ceiling(shape: str) -> None:
         f"ceiling is {ceiling} (before OMN-20118: "
         f"{budget.PYTHON_STARTS_BEFORE_OMN_20118[shape]})"
     )
+
+
+def test_a_fork_of_a_root_add_root_missed_is_still_not_counted(rig: Rig) -> None:
+    """OMN-17427: dev run 37021373114 counted a Skill call at 41 against a
+    ceiling of 40. One hook root had exited before add_root read its command
+    line, so its sampled subshell fork counted as a process of its own. The
+    sampler's own read of the root is enough to recognise the fork."""
+    root_pid = 2**22 + 1
+    fork_pid = 2**22 + 2
+    assert root_pid not in rig.shim_pids()
+    assert fork_pid not in rig.shim_pids()
+    ledger = ProcessLedger(rig)
+    ledger._roots = {root_pid}
+    cmdline = "/bin/bash /x/hooks/scripts/demo.sh"
+    ledger.seen = {
+        (root_pid, 1.0): ProcInfo(pid=root_pid, ppid=1, created=1.0, cmdline=cmdline),
+        (fork_pid, 2.0): ProcInfo(
+            pid=fork_pid, ppid=root_pid, created=2.0, cmdline=cmdline
+        ),
+    }
+    assert ledger.spawned == len(set(rig.shim_pids()) | {root_pid})

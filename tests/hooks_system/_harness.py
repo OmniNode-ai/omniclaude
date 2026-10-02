@@ -536,6 +536,18 @@ class ProcessLedger:
         for key, info in scan.items():
             self.seen.setdefault(key, info)
 
+    def _known_root_cmdlines(self) -> set[str]:
+        """add_root's single read can miss a root that exits first; the sampler
+        may have read its command line while it was alive."""
+        with self._lock:
+            roots = set(self._roots)
+            cmdlines = set(self._root_cmdlines)
+        return cmdlines | {
+            info.cmdline
+            for info in self.seen.values()
+            if info.pid in roots and info.cmdline.strip()
+        }
+
     @property
     def spawned(self) -> int:
         """Distinct processes the hooks started.
@@ -546,7 +558,10 @@ class ProcessLedger:
         are the one thing none of them sees, so this is a lower bound, and the
         budget ceiling is set with this same instrument.
         """
-        forks = _subshell_forks(self.seen.values(), self._root_cmdlines) - self._roots
+        forks = (
+            _subshell_forks(self.seen.values(), self._known_root_cmdlines())
+            - self._roots
+        )
         # An empty command line is a process caught mid-exit (a zombie): it is a
         # fork or an exec the shims already count, never a process of its own.
         pids = {i.pid for i in self.seen.values() if i.cmdline.strip()} - forks
