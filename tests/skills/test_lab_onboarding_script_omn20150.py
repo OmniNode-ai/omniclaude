@@ -70,6 +70,40 @@ def test_the_script_parses_under_the_stock_bash() -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_no_unbraced_expansion_touches_a_multibyte_character() -> None:
+    """A bare $name before a multibyte byte is an unbound variable on bash 3.2.
+
+    `bash -n` cannot catch this: the script parses, then dies at expansion time.
+    Stock /bin/bash 3.2 absorbs the leading byte of a UTF-8 character into the
+    variable name, so `$f\u2026` expands as `$f` plus 0xE2 -- unbound, and
+    `set -u` ends the run. Braces settle it. Found by the OMN-20224 bare-Mac
+    walk, where it killed phase 1 right after Homebrew installed.
+    """
+    offenders = [
+        (i, line.decode("utf-8", "replace").strip())
+        for i, line in enumerate(SCRIPT.read_bytes().split(b"\n"), 1)
+        if re.search(rb"\$[A-Za-z_][A-Za-z0-9_]*[\x80-\xff]", line)
+    ]
+    assert not offenders, (
+        "brace these expansions; on bash 3.2 the multibyte character joins the "
+        f"variable name: {offenders}"
+    )
+
+
+def test_the_multibyte_expansion_guard_would_catch_the_regression(
+    tmp_path: Path,
+) -> None:
+    """The guard above is worthless if it cannot fail, so prove it fails."""
+    bash = "/bin/bash" if os.path.exists("/bin/bash") else "bash"
+    probe = tmp_path / "probe.sh"
+    probe.write_text('set -u\nf=gh\necho "Installing $f\u2026"\n', encoding="utf-8")
+    assert subprocess.run([bash, "-n", str(probe)], check=False).returncode == 0
+    # stderr carries the stray 0xE2 itself, so it is not decodable as UTF-8.
+    result = subprocess.run([bash, str(probe)], capture_output=True, check=False)
+    assert result.returncode != 0, "bash 3.2 should refuse the unbraced form"
+    assert b"unbound variable" in result.stderr
+
+
 def test_the_script_names_no_lab_host() -> None:
     """The plugin is public: lab addresses come from the workspace, never the script."""
     text = SCRIPT.read_text()
