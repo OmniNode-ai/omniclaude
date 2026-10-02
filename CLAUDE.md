@@ -105,6 +105,16 @@ Calibrated against the live corpus of 1895 workflow scripts: the new refusals fi
 them, and exactly one script's verdict changes — `pr-backlog-drain`, which the shipped revision
 wrongly refused as `<unparsed>` because of a real `.replace(/'/g, '')`.
 
+**Routing contract (OMN-17427).** A named model must also be a justified one. Every `agent()`
+options object and every `Agent` input carries one line in its prompt or label:
+`ROUTE: band=<B> score=<n> dims=S<s>A<a>R<r>V<v>N<n>C<c>J<j> dest=<d> model=<m> effort=<e>`.
+The dimensions, bands (allowed models, efforts, timeout, max_concurrent) and hard floors
+(R=3 or J=3 means band B4 or above) live in `plugins/onex/hooks/config/contract_agent_routing.yaml` (beside the allowlist, which keeps
+only `allowed_models`), parsed by a strict in-module YAML-subset parser with the standard library only. A missing or unparsable ROUTE, a model or effort outside the band's
+set, a score that is not the sum of its dims, a floor-triggered band below B4, and a band below
+the one the score implies are all refused. Bands B0, B1 and B1c dispatch no Claude agent, so an
+`agent()` call carrying one is refused.
+
 **How to see a block.** Feed the hook a violating payload directly:
 
 ```bash
