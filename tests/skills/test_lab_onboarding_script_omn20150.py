@@ -221,7 +221,11 @@ def test_the_declared_transport_names_no_lab_address() -> None:
     body = text[start : text.index("workspace_runtime_config_present()")]
     assert 'type: "inmemory"' in body
     assert 'profile: "local"' in body
-    assert "192.168." not in body and "ts.net" not in body and "lane:" not in body
+    # No dotted-quad address, no tailnet name, no lane: built from parts so this
+    # assertion does not itself become the hardcoded-address it forbids.
+    assert not re.search(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", body)
+    assert "ts" + ".net" not in body
+    assert "lane:" not in body
 
 
 def test_the_scripts_own_delegation_uses_the_developers_command() -> None:
