@@ -26,6 +26,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1003,3 +1004,122 @@ def test_the_dead_letter_log_line_carries_the_same_caveat() -> None:
         "sidecar carries, so what an operator knows depends on which surface "
         "they happened to read"
     )
+
+
+# --- OMN-20356: a drainer that outlives the contract it loaded restarts -------
+
+
+def _reload_harness(
+    jdir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    on_sleep: Callable[[int, Path, Path], None],
+    max_sleeps: int = 6,
+) -> tuple[int, int, FakeEmitter]:
+    """Run ``drainer.run`` over two real watched files; ``on_sleep`` edits them."""
+    contract = tmp_path / "capture_redaction.yaml"
+    registry = tmp_path / "emit_registry.yaml"
+    contract.write_text("exit_code: capture_hashed\n", encoding="utf-8")
+    registry.write_text("events: {}\n", encoding="utf-8")
+    journal.append(jdir, event_type="X", payload={}, correlation_id=None)
+    emitter = FakeEmitter(fail_after=0)  # the record stays queued: nothing to lose
+    monkeypatch.setattr(emitter, "close", lambda: None, raising=False)
+    monkeypatch.setattr(drainer, "_Emitter", lambda: emitter)
+    monkeypatch.setattr(drainer, "apply_declared_lane", lambda: None)
+    monkeypatch.setattr(drainer, "migrate_legacy_journal", lambda _: (0, 0))
+    monkeypatch.setattr(drainer, "publishable_event_types", lambda: ("X",))
+    monkeypatch.setattr(
+        drainer,
+        "watched_sources",
+        lambda: {"capture-redaction contract": contract, "emit registry": registry},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        drainer, "_omnimarket_version", lambda: "0.4.278", raising=False
+    )
+    monkeypatch.setattr(drainer, "_shutdown", False)
+    sleeps = 0
+
+    def sleep(_seconds: float) -> None:
+        nonlocal sleeps
+        sleeps += 1
+        on_sleep(sleeps, contract, registry)
+        if sleeps >= max_sleeps:  # bound a loop that never returns
+            monkeypatch.setattr(drainer, "_shutdown", True)
+
+    monkeypatch.setattr(drainer.time, "sleep", sleep)
+    rc = drainer.run(
+        jdir,
+        jdir.parent / "drainer.lock",
+        poll_seconds=0.25,
+        idle_poll_seconds=0.25,
+        once=False,
+    )
+    return rc, sleeps, emitter
+
+
+def test_drainer_reload_exits_for_restart_when_the_contract_changes(
+    jdir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def edit_contract(n: int, contract: Path, _registry: Path) -> None:
+        if n == 2:
+            contract.write_text(
+                "exit_code: capture_verbatim\n# longer\n", encoding="utf-8"
+            )
+
+    with caplog.at_level("INFO"):
+        rc, sleeps, _ = _reload_harness(
+            jdir, monkeypatch, tmp_path, on_sleep=edit_contract
+        )
+    assert rc == 75  # EX_TEMPFAIL: non-zero, so launchd/systemd start a fresh process
+    assert sleeps == 2  # noticed on the very next cycle, not after the bound
+    assert any(
+        "capture-redaction contract" in r.getMessage() and "changed" in r.getMessage()
+        for r in caplog.records
+    )
+    # Nothing is deleted or quarantined on the way out: the record replays.
+    assert len(journal.list_pending(jdir)) == 1
+    assert not list((jdir / "quarantine").glob("*.json"))
+
+
+def test_drainer_reload_exits_for_restart_when_the_installed_version_changes(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def bump_version(n: int, _contract: Path, _registry: Path) -> None:
+        if n == 1:
+            monkeypatch.setattr(
+                drainer, "_omnimarket_version", lambda: "0.4.279", raising=False
+            )
+
+    rc, sleeps, _ = _reload_harness(jdir, monkeypatch, tmp_path, on_sleep=bump_version)
+    assert rc == 75
+    assert sleeps == 1
+
+
+def test_drainer_reload_keeps_looping_when_nothing_changed(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    rc, sleeps, _ = _reload_harness(
+        jdir, monkeypatch, tmp_path, on_sleep=lambda *_: None, max_sleeps=5
+    )
+    assert rc == 0
+    assert sleeps == 5
+
+
+def test_drainer_reload_fingerprint_is_stat_only_and_names_the_changed_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    a = tmp_path / "a.yaml"
+    a.write_text("x: 1\n", encoding="utf-8")
+    monkeypatch.setattr(drainer, "_omnimarket_version", lambda: "1", raising=False)
+    sources = {"contract": a, "registry": tmp_path / "missing.yaml"}
+    before = drainer.fingerprint(sources)
+    assert drainer.fingerprint(sources) == before
+    assert before["registry"] == "absent"
+    a.write_text("x: 22\n", encoding="utf-8")
+    after = drainer.fingerprint(sources)
+    assert drainer.changed_names(before, after) == ["contract"]
