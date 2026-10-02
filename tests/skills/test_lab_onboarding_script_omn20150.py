@@ -33,6 +33,7 @@ SCRIPT = (
     / "lab-onboarding.sh"
 )
 SKILL = SCRIPT.parents[1] / "omninode_dev_setup" / "SKILL.md"
+UNBRACED_MULTIBYTE_EXPANSION = re.compile(rb"\$[A-Za-z_][A-Za-z0-9_]*[\x80-\xff]")
 
 pytestmark = pytest.mark.unit
 
@@ -168,7 +169,7 @@ def test_no_unbraced_expansion_touches_a_multibyte_character() -> None:
     offenders = [
         (i, line.decode("utf-8", "replace").strip())
         for i, line in enumerate(SCRIPT.read_bytes().split(b"\n"), 1)
-        if re.search(rb"\$[A-Za-z_][A-Za-z0-9_]*[\x80-\xff]", line)
+        if UNBRACED_MULTIBYTE_EXPANSION.search(line)
     ]
     assert not offenders, (
         "brace these expansions; on bash 3.2 the multibyte character joins the "
@@ -176,18 +177,12 @@ def test_no_unbraced_expansion_touches_a_multibyte_character() -> None:
     )
 
 
-def test_the_multibyte_expansion_guard_would_catch_the_regression(
-    tmp_path: Path,
-) -> None:
-    """The guard above is worthless if it cannot fail, so prove it fails."""
-    bash = "/bin/bash" if os.path.exists("/bin/bash") else "bash"
-    probe = tmp_path / "probe.sh"
-    probe.write_text('set -u\nf=gh\necho "Installing $f\u2026"\n', encoding="utf-8")
-    assert subprocess.run([bash, "-n", str(probe)], check=False).returncode == 0
-    # stderr carries the stray 0xE2 itself, so it is not decodable as UTF-8.
-    result = subprocess.run([bash, str(probe)], capture_output=True, check=False)
-    assert result.returncode != 0, "bash 3.2 should refuse the unbraced form"
-    assert b"unbound variable" in result.stderr
+def test_the_multibyte_expansion_guard_would_catch_the_regression() -> None:
+    """Prove the guard catches the regression and accepts the braced form."""
+    assert UNBRACED_MULTIBYTE_EXPANSION.search(b'echo "Installing $f\xe2\x80\xa6"')
+    assert not UNBRACED_MULTIBYTE_EXPANSION.search(
+        b'echo "Installing ${f}\xe2\x80\xa6"'
+    )
 
 
 def test_the_script_names_no_lab_host() -> None:
