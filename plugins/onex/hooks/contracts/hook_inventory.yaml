@@ -138,9 +138,14 @@ expected_hooks:
     owner: "omniclaude hooks lane"
     purpose: >
       Refuses a Linear flip to Done, and an edit that ticks an acceptance
-      box, unless the ticket's OCC contract on origin/dev binds every labelled
-      acceptance criterion to a PASS receipt taken against the current
-      contract entry (OMN-20368; the guard itself is OMN-13856). A merged PR,
+      box, unless the evidence binds every labelled acceptance criterion. The
+      product repository a PR merged into is read first (OMN-20071):
+      contracts/<ticket>.yaml at the merge commit plus a green
+      "repo-evidence / dod-verify" check run on the PR head decide, and OCC is
+      not consulted once the repository carries them. Otherwise the ticket's
+      OCC contract on origin/dev must bind every criterion to a PASS receipt
+      taken against the current contract entry (OMN-20368; the guard itself
+      is OMN-13856). A merged PR,
       ticked boxes, a deploy-readback marker or an exemption label are further
       conditions, never substitutes. Fail-closed: it runs in every cwd and in
       lite mode, has no mask bit, and refuses when it cannot decide.

@@ -23,8 +23,9 @@ Two independent checks; both must be satisfied for success:
    *completed*, and whose conclusion is not ``success``/``skipped`` fails the
    gate — UNLESS it is the poller itself or one of a small, explicit
    :data:`SOFT_ALLOWLIST` of jobs that already exist in ``ci.yml`` as
-   non-gating (downstream/artifact, deploy, informational, warn-only). This can
-   only ever be *stricter* than the old mechanism, never a rubber-stamp.
+   non-gating (downstream/artifact, deploy, informational, warn-only). The sweep
+   also WAITS for non-exempt running rows (PENDING, re-polled). This can only
+   ever be *stricter* than the old mechanism, never a rubber-stamp.
 
 2. **Completeness anchor.** Success additionally requires that every
    :data:`GATE_JOBS` aggregate gate is *present and completed* with a
@@ -35,9 +36,10 @@ Two independent checks; both must be satisfied for success:
    (``detect-changes`` → ``test`` → ``*-gate``) have even been instantiated: a
    pure "all currently-present jobs passed" check would go green too early.
 
-If a gate is missing or still running, the verdict is PENDING (poll again). At
-the caller's deadline, PENDING is converted to FAILURE (fail-closed): the
-required context always reaches a terminal state.
+If a gate is missing or still running, or another non-exempt job is still
+running without a failing verdict, the verdict is PENDING (poll again). At the
+caller's deadline, PENDING is converted to FAILURE (fail-closed): the required
+context always reaches a terminal state.
 
 Exit codes: ``0`` success, ``1`` failure, ``2`` pending.
 """
@@ -1788,7 +1790,7 @@ def evaluate(
     job_states = _job_states(jobs, run_attempt=run_attempt)
     latest = dedup_latest(jobs, run_attempt=run_attempt)
 
-    # (1) Default-deny failure sweep over every present+completed job.
+    # (1) Default-deny sweep: fail completed refusals and wait for running rows.
     sweep_failures = sorted(
         j.name
         for j in job_states
@@ -1796,6 +1798,16 @@ def evaluate(
         and j.name not in allowlist
         and j.status == "completed"
         and j.conclusion not in GOOD_CONCLUSIONS
+    )
+    sweep_running = sorted(
+        {
+            j.name
+            for j in job_states
+            if j.name != self_name
+            and j.name not in gate_jobs
+            and j.name not in allowlist
+            and j.status != "completed"
+        }
     )
 
     # (1b) OMN-14350: strict-success jobs must be EXACTLY 'success'. A skipped/
@@ -1825,6 +1837,7 @@ def evaluate(
             allowlist,
             sweep_failures,
             gate_missing_or_pending,
+            sweep_running=sweep_running,
         )
     if sweep_failures:
         return EXIT_FAILURE, _report(
@@ -1834,9 +1847,18 @@ def evaluate(
             allowlist,
             sweep_failures,
             gate_missing_or_pending,
+            sweep_running=sweep_running,
         )
-    return EXIT_SUCCESS, _report(
-        "SUCCESS", latest, gate_jobs, allowlist, sweep_failures, gate_missing_or_pending
+    # Aggregate incompleteness retains its precedence above. Once gates settle,
+    # a failure still wins over the new running-row hold (OMN-20066).
+    return (EXIT_PENDING if sweep_running else EXIT_SUCCESS), _report(
+        "PENDING" if sweep_running else "SUCCESS",
+        latest,
+        gate_jobs,
+        allowlist,
+        sweep_failures,
+        gate_missing_or_pending,
+        sweep_running=sweep_running,
     )
 
 
@@ -1847,6 +1869,8 @@ def _report(
     allowlist: frozenset[str],
     sweep_failures: list[str],
     gate_missing_or_pending: list[str],
+    *,
+    sweep_running: list[str] | None = None,
 ) -> str:
     lines = [f"CI Summary verdict: {verdict}", f"  jobs observed: {len(latest)}"]
     lines.append("  aggregate gates:")
@@ -1858,6 +1882,11 @@ def _report(
             lines.append(f"    - {g}: {st.status}/{st.conclusion}")
     if sweep_failures:
         lines.append(f"  default-deny sweep failures: {', '.join(sweep_failures)}")
+    if sweep_running:
+        lines.append(
+            "  default-deny sweep rows still running (PENDING, re-polled): "
+            + ", ".join(sweep_running)
+        )
     if gate_missing_or_pending:
         lines.append(f"  gates missing/pending: {', '.join(gate_missing_or_pending)}")
     return "\n".join(lines)
