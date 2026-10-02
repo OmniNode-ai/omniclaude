@@ -79,8 +79,23 @@ onex_rotate_log_if_over() {
 #   invocation in sixteen: hooks fire several times a minute, so the bound is
 #   still enforced within minutes, at a sixteenth of the cost.
 onex_maybe_rotate_log() {
-    if (( RANDOM % 16 == 0 )); then
-        onex_rotate_log_if_over "${1:-}" || true
+    # OMN-20109: the sixteenth invocation, counted in a file beside the log with
+    # builtins only, not drawn from $RANDOM. A random draw made the check's stat
+    # exec land in a different tool call each run, so one tool call's process
+    # count varied on an unchanged tree. A fresh state directory starts at zero
+    # and does not check until the sixteenth hook.
+    local file="${1:-}" tick_file n=0
+    [[ -n "$file" ]] || return 0
+    tick_file="${file}.tick"
+    [[ -r "$tick_file" ]] && { read -r n < "$tick_file" || true; }
+    [[ "$n" =~ ^[0-9]+$ ]] || n=0
+    n=$(( n + 1 ))
+    if (( n >= 16 )); then
+        n=0
+        printf '%s\n' "$n" > "$tick_file" 2>/dev/null || true
+        onex_rotate_log_if_over "$file" || true
+    else
+        printf '%s\n' "$n" > "$tick_file" 2>/dev/null || true
     fi
     return 0
 }

@@ -68,7 +68,7 @@ else
 fi
 
 # Ensure log directory exists
-[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")"
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "${LOG_FILE%/*}"
 
 # --- Log rotation guard [OMN-8429] ---
 # Trim-in-place when log exceeds ONEX_HOOK_LOG_MAX_MB (default 50MB).
@@ -156,7 +156,7 @@ if ! echo "$TOOL_INFO" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
 fi
 
 # Debug: Save JSON structure
-echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] PostToolUse JSON:" >> "$LOG_FILE"
+log "PostToolUse JSON:"
 echo "$TOOL_INFO" | jq '.' >> "$LOG_FILE" 2>&1 || echo "$TOOL_INFO" >> "$LOG_FILE"
 
 # OMN-20109: every field this hook reads from the payload is read by ONE jq
@@ -200,7 +200,7 @@ unset _Q_FIELDS
 
 # Extract tool name (non-critical: fall back to "unknown" on jq failure)
 TOOL_NAME="$_Q_TOOL_NAME"
-echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] PostToolUse hook triggered for $TOOL_NAME (plugin mode)" >> "$LOG_FILE"
+log "PostToolUse hook triggered for $TOOL_NAME (plugin mode)"
 
 # Extract session ID early — needed by pattern enforcement and Kafka emission.
 # Wrapped in set +e to ensure the fallback chain never kills the hook.
@@ -229,8 +229,9 @@ set -e
 # -----------------------------------------------------------------------
 source "${HOOK_SCRIPT_DIR}/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
 TRACE_LOG="${ONEX_LOG_DIR}/pipeline-trace.log"
-[[ -d "${TRACE_LOG%/*}" ]] || mkdir -p "$(dirname "${TRACE_LOG}")" 2>/dev/null
-TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+[[ -d "${TRACE_LOG%/*}" ]] || mkdir -p "${TRACE_LOG%/*}" 2>/dev/null
+onex_utc_now
+TS="$_ONEX_UTC_NOW"
 
 if [[ "$TOOL_NAME" == "Skill" ]]; then
     SKILL_NAME="$_Q_SKILL_NAME"
@@ -301,7 +302,7 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
     FILE_PATH=$(echo "$TOOL_INFO" | jq -r '.tool_input.file_path // .tool_response.filePath // empty' 2>/dev/null) || FILE_PATH=""
 
     if [ -n "$FILE_PATH" ]; then
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] File affected: $FILE_PATH" >> "$LOG_FILE"
+        log "File affected: $FILE_PATH"
 
         # Run Python enforcer if available
         ENFORCER_SCRIPT="${HOOKS_DIR}/scripts/post_tool_use_enforcer.py"
@@ -312,9 +313,9 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
             set -e
 
             if [ $EXIT_CODE -eq 0 ]; then
-                echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-fix completed successfully" >> "$LOG_FILE"
+                log "Auto-fix completed successfully"
             else
-                echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-fix failed with code $EXIT_CODE" >> "$LOG_FILE"
+                log "Auto-fix failed with code $EXIT_CODE"
             fi
         fi
 
@@ -374,7 +375,7 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
                             if ! [[ "$ADVISORY_COUNT" =~ ^[0-9]+$ ]]; then
                                 ADVISORY_COUNT=0
                             fi
-                            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pattern enforcement: $ADVISORY_COUNT advisory(ies)" >> "$LOG_FILE"
+                            log "Pattern enforcement: $ADVISORY_COUNT advisory(ies)"
                             if [[ "$ADVISORY_COUNT" -gt 0 ]]; then
                                 echo "$ENFORCE_RESULT" | jq -c '.' >> "$LOG_FILE" 2>/dev/null
 
@@ -394,18 +395,18 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
                         fi
                     fi
                 ) &
-                echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pattern enforcement started (async)" >> "$LOG_FILE"
+                log "Pattern enforcement started (async)"
             fi
         fi
     fi
 else
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool $TOOL_NAME not applicable for auto-fix" >> "$LOG_FILE"
+    log "Tool $TOOL_NAME not applicable for auto-fix"
 fi
 
 # Error detection and logging
 TOOL_ERROR="$_Q_TOOL_ERROR"
 if [[ -n "$TOOL_ERROR" ]]; then
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool error detected: $TOOL_ERROR" >> "$LOG_FILE"
+    log "Tool error detected: $TOOL_ERROR"
 fi
 
 # Emit tool.executed event to Kafka (async, non-blocking)
@@ -546,7 +547,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
 
         # Validate payload was constructed successfully
         if [[ -z "$PAYLOAD" || "$PAYLOAD" == "null" ]]; then
-            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] WARNING: Failed to construct tool payload (jq failed), skipping emission" >> "$LOG_FILE"
+            log "WARNING: Failed to construct tool payload (jq failed), skipping emission"
         else
 
             # Emit agent.action event (OMN-7569)
@@ -584,7 +585,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             fi
         fi
     ) &
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool event emission started" >> "$LOG_FILE"
+    log "Tool event emission started"
 
     # -----------------------------------------------------------------------
     # Intent Drift Detection (OMN-7141)
@@ -602,7 +603,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
                 ${FILE_PATH:+--file-path "$FILE_PATH"} \
                 >> "$LOG_FILE" 2>&1 || true
         ) &
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Intent drift check started (async)" >> "$LOG_FILE"
+        log "Intent drift check started (async)"
     fi
 fi
 
@@ -678,7 +679,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" =~ ^(Read|Write|Edit)$ ]]
                 >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool content emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
         fi
     ) &
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool content emission started for $TOOL_NAME" >> "$LOG_FILE"
+    log "Tool content emission started for $TOOL_NAME"
 fi
 
 # -----------------------------------------------------------------------
@@ -761,12 +762,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" == "Bash" ]]; then
                 ${CORRELATION_ID:+--correlation-id "$CORRELATION_ID"} \
                 >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash content emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
 
-            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash content captured (len=${BASH_CONTENT_LENGTH}, sanitized)" >> "$LOG_FILE"
+            log "Bash content captured (len=${BASH_CONTENT_LENGTH}, sanitized)"
         else
-            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash command too short to capture (len=${#BASH_COMMAND})" >> "$LOG_FILE"
+            log "Bash command too short to capture (len=${#BASH_COMMAND})"
         fi
     ) &
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash content emission started" >> "$LOG_FILE"
+    log "Bash content emission started"
 fi
 
 # -----------------------------------------------------------------------

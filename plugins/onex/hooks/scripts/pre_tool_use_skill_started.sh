@@ -18,7 +18,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
 LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/pre-tool-use-skill-started.log"
-[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "${LOG_FILE%/*}" 2>/dev/null || true
 
 export OMNICLAUDE_HOOK_CRITICALITY="advisory"
 source "${HOOKS_DIR}/scripts/common.sh" 2>/dev/null || {

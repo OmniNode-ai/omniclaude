@@ -39,38 +39,55 @@
 # =============================================================================
 
 _onex_hook_edge_lane_apply() {
-    local contract
-    contract="$(cd "$(dirname "${BASH_SOURCE[0]}")/../contracts" 2>/dev/null && pwd)/hook_edge_lane.yaml"
+    # OMN-20109: parsed with bash builtins only. The sed|head and awk this
+    # replaced were four execs and four forks on every hook invocation; the
+    # reads below are the same two reads, with the same anchors.
+    local self="${BASH_SOURCE[0]}" dir contract
+    dir="${self%/*}"; [[ "$self" == */* ]] || dir=.
+    contract="${dir}/../contracts/hook_edge_lane.yaml"
     [[ -r "$contract" ]] || return 0
 
-    local lane
+    local lane="" line
     # Top-level `lane:` only — anchored to column 0 so a nested key of the same
     # name inside known_lanes/relay can never be mistaken for the declaration.
-    lane="$(sed -n 's/^lane:[[:space:]]*"\{0,1\}\([^"#]*\)"\{0,1\}[[:space:]]*$/\1/p' "$contract" | head -n 1)"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^lane:[[:space:]]*\"?([^\"#]*)\"?[[:space:]]*$ ]]; then
+            lane="${BASH_REMATCH[1]}"
+            break
+        fi
+    done < "$contract"
     lane="${lane%"${lane##*[![:space:]]}"}"
     [[ -n "$lane" ]] || return 0
 
-    local brokers
+    local brokers="" in_lanes=0 in_want=0 key
     # Walk into known_lanes, stop at the named lane's block, take its
     # bootstrap_servers. Bounded to the block by the two-space indent level.
-    brokers="$(awk -v want="$lane" '
-        /^known_lanes:[[:space:]]*$/ { in_lanes = 1; next }
-        in_lanes && /^[^[:space:]]/  { in_lanes = 0 }
-        in_lanes && $0 ~ "^  [^ ]" {
-            key = $0
-            sub(/^  /, "", key); sub(/:.*$/, "", key)
-            in_want = (key == want)
-            next
-        }
-        in_lanes && in_want && $0 ~ /^    bootstrap_servers:/ {
-            line = $0
-            sub(/^[^:]*:[[:space:]]*/, "", line)
-            sub(/[[:space:]]*#.*$/, "", line)
-            gsub(/"/, "", line)
-            print line
-            exit
-        }
-    ' "$contract")"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^known_lanes:[[:space:]]*$ ]]; then
+            in_lanes=1
+            continue
+        fi
+        if (( in_lanes )) && [[ "$line" =~ ^[^[:space:]] ]]; then
+            in_lanes=0
+        fi
+        if (( in_lanes )) && [[ "$line" == "  "[!' ']* ]]; then
+            key="${line#  }"
+            key="${key%%:*}"
+            in_want=0
+            [[ "$key" == "$lane" ]] && in_want=1
+            continue
+        fi
+        if (( in_lanes && in_want )) && [[ "$line" == "    bootstrap_servers:"* ]]; then
+            line="${line#*:}"
+            line="${line#"${line%%[![:space:]]*}"}"
+            if [[ "$line" == *"#"* ]]; then
+                line="${line%%#*}"
+                line="${line%"${line##*[![:space:]]}"}"
+            fi
+            brokers="${line//\"/}"
+            break
+        fi
+    done < "$contract"
     [[ -n "$brokers" ]] || return 0
 
     export ONEX_HOOK_EDGE_LANE="$lane"

@@ -107,6 +107,31 @@ def test_one_tool_call_stays_inside_the_process_and_time_budget(
     )
 
 
+def test_skill_call_count_is_deterministic_across_five_runs(tmp_path: Path) -> None:
+    """OMN-20109: the same hooks on the same tree start the same number of
+    processes every time. The count used to move between 70 and 83 because a
+    sampler caught a shell's short-lived forks, a writer fork and a racing
+    mkdir in some runs and not in others; a flaky count is a ceiling with no
+    margin that can be trusted, or a margin that hides a leak."""
+    from tests.hooks_system._harness import kill_tagged, make_rig
+
+    counts: list[int] = []
+    for run in range(5):
+        run_rig = make_rig(tmp_path / f"run{run}")
+        try:
+            with ProcessLedger(run_rig) as ledger:
+                _run_phase(run_rig, ledger, "PreToolUse", "Skill", "onex:delegate", "t")
+                _run_phase(
+                    run_rig, ledger, "PostToolUse", "Skill", "onex:delegate", "t"
+                )
+                wait_for_settle(run_rig.token, budget.SETTLE_SECONDS)
+            counts.append(ledger.spawned)
+        finally:
+            kill_tagged(run_rig.token)
+    assert len(set(counts)) == 1, f"the Skill call count moved between runs: {counts}"
+    assert counts[0] == budget.MEASURED_EXECS_PER_CALL["Skill"], counts
+
+
 def test_budget_record_only_ratchets_down() -> None:
     """The ceiling starts at the measurement and may only tighten toward the
     target. Raising it past the measurement is how a leak gets a permit."""

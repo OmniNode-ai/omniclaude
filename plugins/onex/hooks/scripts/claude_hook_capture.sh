@@ -35,7 +35,13 @@ set -uo pipefail
 # gate unchanged. Other hooks keep the preamble in the foreground so the
 # capture reads the turn that is current when the hook fires.
 if [[ -z "${_ONEX_CAPTURE_DETACHED:-}" ]]; then
-    _ONEX_CAPTURE_INPUT="$(cat)"
+    # OMN-20109: the payload is read once, with the read builtin (no cat exec, no
+    # command-substitution fork) and kept in _ONEX_CAPTURE_INPUT, so stdin is not
+    # restored through a process substitution and read a second time below.
+    IFS= read -r -d '' _ONEX_CAPTURE_INPUT || true
+    while [[ "$_ONEX_CAPTURE_INPUT" == *$'\n' ]]; do
+        _ONEX_CAPTURE_INPUT="${_ONEX_CAPTURE_INPUT%$'\n'}"
+    done
     if [[ "$_ONEX_CAPTURE_INPUT" =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"SessionEnd\" ]]; then
         (
             printf '%s' "$_ONEX_CAPTURE_INPUT" \
@@ -44,8 +50,6 @@ if [[ -z "${_ONEX_CAPTURE_DETACHED:-}" ]]; then
         disown 2>/dev/null || true
         exit 0
     fi
-    # Every other hook continues in this process with its stdin restored.
-    exec < <(printf '%s' "$_ONEX_CAPTURE_INPUT")
 fi
 
 # OMN-20109: this script's directory, resolved once without a dirname exec.
@@ -121,7 +125,7 @@ LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/hook-claude-hook-capture.log"
 if declare -F onex_maybe_rotate_log >/dev/null 2>&1; then
     onex_maybe_rotate_log "$LOG_FILE"
 fi
-[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "${LOG_FILE%/*}" 2>/dev/null || true
 
 # Detect project root (same convention as session-end.sh).
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
@@ -169,7 +173,11 @@ onex_hook_gate CLAUDE_HOOK_CAPTURE || {
 }
 
 
-INPUT="$(cat)"
+if [[ -n "${_ONEX_CAPTURE_DETACHED:-}" ]]; then
+    INPUT="$(cat)"
+else
+    INPUT="$_ONEX_CAPTURE_INPUT"
+fi
 [[ -z "$INPUT" ]] && exit 0
 
 _HOOK_CAPTURE_PY="${HOOKS_LIB}/hook_claude_capture.py"

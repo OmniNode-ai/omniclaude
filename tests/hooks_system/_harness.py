@@ -222,18 +222,25 @@ def _install_shims(shim_dir: Path, spawn_log: Path, path: str) -> Path:
     return shim_dir
 
 
-def _wedge_site(shim_dir: Path) -> Path:
-    """A sitecustomize that wedges every child the interpreter forks.
+def _fork_site(shim_dir: Path, spawn_log: Path) -> Path:
+    """A sitecustomize for the bounded runner, started with it on its path.
 
-    Only the bounded runner is ever started with it on its path (see
-    ``_python_shim``), so what it wedges is the forked writer: alive, waiting on
-    something that never comes, as the incident's writers were.
+    Every writer the runner forks is a process the tool call started, and it is
+    short-lived, so a sampler catches it in some runs and misses it in others
+    (OMN-20109). The at-fork hook appends the child's pid to the spawn log, which
+    makes that count exact. With ``HANG_EMIT_ENV`` set it also wedges the child:
+    alive, waiting on something that never comes, as the incident's writers were.
     """
-    site = shim_dir / "wedge-site"
+    site = shim_dir / "fork-site"
     site.mkdir(parents=True, exist_ok=True)
     (site / "sitecustomize.py").write_text(
         "import os, time\n"
-        "os.register_at_fork(after_in_child=lambda: time.sleep(300))\n",
+        "def _child():\n"
+        f"    with open({str(spawn_log)!r}, 'a') as fh:\n"
+        "        fh.write(f'{os.getpid()} python-writer\\n')\n"
+        f"    if os.environ.get({HANG_EMIT_ENV!r}):\n"
+        "        time.sleep(300)\n"
+        "os.register_at_fork(after_in_child=_child)\n",
         encoding="utf-8",
     )
     return site
@@ -266,10 +273,11 @@ def _python_shim(shim_dir: Path, spawn_log: Path) -> Path:
         '  case "$1" in\n'
         "    *hook_emit_append.py|*hook_claude_capture.py|*hook_content_capture.py)\n"
         "      exec /bin/sleep 300 ;;\n"
-        "    *hook_emit_bounded.py)\n"
-        f"      PYTHONPATH={shlex.quote(str(_wedge_site(shim_dir)))}; export PYTHONPATH ;;\n"
         "  esac\n"
         "fi\n"
+        'case "$1" in\n'
+        f"  *hook_emit_bounded.py) PYTHONPATH={shlex.quote(str(_fork_site(shim_dir, spawn_log)))}; export PYTHONPATH ;;\n"
+        "esac\n"
         f'exec {shlex.quote(sys.executable)} "$@"\n',
         encoding="utf-8",
     )
@@ -310,6 +318,12 @@ def make_rig(root: Path) -> Rig:
     state_dir = root / "state"
     journal_dir = root / "journal"
     state_dir.mkdir(parents=True, exist_ok=True)
+    # The directories a hook creates on its first call and finds on every later
+    # one. Concurrent hooks race to make them (each sees it absent, each execs
+    # mkdir), which moved a tool call's count by one or two between runs; a
+    # session's hooks find them, so the rig starts from that state (OMN-20109).
+    (state_dir / "hooks" / "logs").mkdir(parents=True, exist_ok=True)
+    (state_dir / "logs").mkdir(parents=True, exist_ok=True)
     journal_dir.mkdir(parents=True, exist_ok=True)
     home = root / "home"
     home.mkdir(parents=True, exist_ok=True)
@@ -422,6 +436,26 @@ def tagged_processes(token: str) -> dict[tuple[int, float], ProcInfo]:
     return found
 
 
+_SHELLS = frozenset({"bash", "sh", "dash"})
+
+
+def _subshell_forks(seen: Iterable[ProcInfo], root_cmdlines: set[str]) -> set[int]:
+    """The pids of a shell's own forks: a command substitution, a pipeline
+    stage, a process substitution or a ``( ... ) &`` block. A fork is never an
+    exec, and a sampler catches it only when it outlives a sampling interval, so
+    counting it made the total vary from run to run on an unchanged tree
+    (OMN-20109). Everything a fork goes on to exec is counted by name through
+    the shims. A fork of a hook's shell has that shell's command line, and a
+    hook script is only ever started as a root by the harness, never exec'd by
+    another hook, so a sampled shell with a root's command line is a fork."""
+    return {
+        info.pid
+        for info in seen
+        if info.cmdline in root_cmdlines
+        and info.cmdline.split(" ", 1)[0].rsplit("/", 1)[-1] in _SHELLS
+    }
+
+
 class ProcessLedger:
     """Record every distinct process the hooks under test start.
 
@@ -435,6 +469,7 @@ class ProcessLedger:
         self.rig = rig
         self.token = rig.token
         self._roots: set[int] = set(root_pids)
+        self._root_cmdlines: set[str] = set()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -442,8 +477,15 @@ class ProcessLedger:
         self.peak_tagged = 0
 
     def add_root(self, pid: int) -> None:
+        info = None
+        try:
+            info = _info(psutil.Process(pid))
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
         with self._lock:
             self._roots.add(pid)
+            if info is not None:
+                self._root_cmdlines.add(info.cmdline)
 
     def _sample_tree(self) -> None:
         with self._lock:
@@ -493,7 +535,10 @@ class ProcessLedger:
         are the one thing none of them sees, so this is a lower bound, and the
         budget ceiling is set with this same instrument.
         """
-        pids = {pid for pid, _created in self.seen}
+        forks = _subshell_forks(self.seen.values(), self._root_cmdlines) - self._roots
+        # An empty command line is a process caught mid-exit (a zombie): it is a
+        # fork or an exec the shims already count, never a process of its own.
+        pids = {i.pid for i in self.seen.values() if i.cmdline.strip()} - forks
         pids |= self._roots
         pids |= set(self.rig.shim_pids())
         return len(pids)
