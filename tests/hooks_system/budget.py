@@ -60,11 +60,14 @@ MEASURED_EXECS_PER_CALL = {"Bash": 56, "Skill": 40, "Read": 16}
 # The enforced ceiling, per tool. Measured plus a small headroom for the
 # branches a hook takes only sometimes. It only ever moves down. After OMN-20109
 # the Skill and Read counts are deterministic
-# (test_skill_call_count_is_deterministic_across_five_runs), so their ceiling is
-# the measurement. The Bash call is not: the seven guards run concurrently
-# inside one entrypoint and one run in a few hundred forks one more process
-# (CI measured 57 against 56), so Bash keeps 4 of headroom, under the target.
-CEILING_EXECS_PER_CALL = {"Bash": 60, "Skill": 40, "Read": 16}
+# (test_call_count_is_deterministic_across_five_runs), so their ceiling is
+# the measurement. The Bash call is too, since OMN-17427 (2026-10-02): its
+# extra processes were never the concurrent guards but error-guard.sh's racing
+# mkdir of ${TMPDIR}/omniclaude-error-guard, made five or six times when the
+# runner's shared TMPDIR had not yet seen that directory (CI 57, 59, 61, 62,
+# each 56 plus the mkdirs). The rig now owns its TMPDIR and starts it in the
+# state a session's hooks find, so Bash drops its 4 of headroom.
+CEILING_EXECS_PER_CALL = {"Bash": 56, "Skill": 40, "Read": 16}
 
 # The target every tool call is held to. A ceiling above this is debt. After
 # OMN-20114 the remaining cost is one bash per registered hook (17 on a Bash

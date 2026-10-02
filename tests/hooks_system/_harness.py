@@ -325,6 +325,16 @@ def make_rig(root: Path) -> Rig:
     (state_dir / "hooks" / "logs").mkdir(parents=True, exist_ok=True)
     (state_dir / "logs").mkdir(parents=True, exist_ok=True)
     journal_dir.mkdir(parents=True, exist_ok=True)
+    # error-guard.sh keeps its logs under ${TMPDIR}/omniclaude-error-guard and
+    # makes the directory with the same check-then-mkdir race. Left on the
+    # runner's shared TMPDIR, the directory was absent for whichever test made
+    # the first hook call on a fresh runner and present for every later one, so
+    # the Bash call counted 56 plus five or six racing mkdirs (CI 57, 59, 61 and
+    # 62 against a ceiling of 60) depending on test order, not on the hooks. The
+    # rig owns its TMPDIR and starts it in the state a session's hooks find, and
+    # no hook under test writes into the operator's or the runner's temp dir.
+    tmp_dir = root / "tmp"
+    (tmp_dir / "omniclaude-error-guard").mkdir(parents=True, exist_ok=True)
     home = root / "home"
     home.mkdir(parents=True, exist_ok=True)
     token = uuid.uuid4().hex
@@ -340,6 +350,7 @@ def make_rig(root: Path) -> Rig:
     workspace.mkdir(parents=True, exist_ok=True)
     env[_WORKSPACE_ENV] = str(workspace)
     env["HOME"] = str(home)
+    env["TMPDIR"] = str(tmp_dir)
     env.pop("CLAUDE_PLUGIN_DATA", None)
     spawn_log = root / "spawn.log"
     spawn_log.write_text("", encoding="utf-8")

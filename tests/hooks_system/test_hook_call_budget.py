@@ -107,12 +107,26 @@ def test_one_tool_call_stays_inside_the_process_and_time_budget(
     )
 
 
-def test_skill_call_count_is_deterministic_across_five_runs(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("tool", "skill"),
+    [
+        pytest.param("Bash", None, id="bash-call"),
+        pytest.param("Skill", "onex:delegate", id="skill-call"),
+    ],
+)
+def test_call_count_is_deterministic_across_five_runs(
+    tmp_path: Path, tool: str, skill: str | None
+) -> None:
     """OMN-20109: the same hooks on the same tree start the same number of
     processes every time. The count used to move between 70 and 83 because a
     sampler caught a shell's short-lived forks, a writer fork and a racing
     mkdir in some runs and not in others; a flaky count is a ceiling with no
-    margin that can be trusted, or a margin that hides a leak."""
+    margin that can be trusted, or a margin that hides a leak.
+
+    OMN-17427: the Bash call moved between 56 and 62 on CI because
+    error-guard.sh raced to make its directory under the runner's shared
+    TMPDIR. Each run here starts from a fresh rig, so a racing mkdir in any
+    hook shows up as a moving count."""
     from tests.hooks_system._harness import kill_tagged, make_rig
 
     counts: list[int] = []
@@ -120,16 +134,14 @@ def test_skill_call_count_is_deterministic_across_five_runs(tmp_path: Path) -> N
         run_rig = make_rig(tmp_path / f"run{run}")
         try:
             with ProcessLedger(run_rig) as ledger:
-                _run_phase(run_rig, ledger, "PreToolUse", "Skill", "onex:delegate", "t")
-                _run_phase(
-                    run_rig, ledger, "PostToolUse", "Skill", "onex:delegate", "t"
-                )
+                _run_phase(run_rig, ledger, "PreToolUse", tool, skill, "t")
+                _run_phase(run_rig, ledger, "PostToolUse", tool, skill, "t")
                 wait_for_settle(run_rig.token, budget.SETTLE_SECONDS)
             counts.append(ledger.spawned)
         finally:
             kill_tagged(run_rig.token)
-    assert len(set(counts)) == 1, f"the Skill call count moved between runs: {counts}"
-    assert counts[0] == budget.MEASURED_EXECS_PER_CALL["Skill"], counts
+    assert len(set(counts)) == 1, f"the {tool} call count moved between runs: {counts}"
+    assert counts[0] == budget.MEASURED_EXECS_PER_CALL[tool], counts
 
 
 def test_budget_record_only_ratchets_down() -> None:
