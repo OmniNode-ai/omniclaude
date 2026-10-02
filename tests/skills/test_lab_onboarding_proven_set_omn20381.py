@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,25 @@ REPOS = ("omnibase_infra", "omnimarket", "omnibase_core", "omnibase_spi")
 
 pytestmark = pytest.mark.unit
 
+# OMN-18434: git exports GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE /
+# GIT_COMMON_DIR into every hook environment, and those OVERRIDE both ``cwd=``
+# and ``git -C``. A fixture that shells out to git under a pre-commit hook
+# would therefore rewrite the REAL invoking worktree rather than tmp_path.
+_GIT_LOCATION_VARS = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_NAMESPACE",
+)
+
+
+def scrub_git_location_env(env: Mapping[str, str]) -> dict[str, str]:
+    return {k: v for k, v in env.items() if k not in _GIT_LOCATION_VARS}
+
 
 def _git(repo: Path, *args: str, stdin: str | None = None) -> str:
     result = subprocess.run(
@@ -35,7 +55,7 @@ def _git(repo: Path, *args: str, stdin: str | None = None) -> str:
         check=True,
         timeout=30,
         env={
-            **os.environ,
+            **scrub_git_location_env(os.environ),
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_AUTHOR_NAME": "Fixture",
