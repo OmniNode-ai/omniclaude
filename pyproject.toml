@@ -288,7 +288,7 @@ override-dependencies = [
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "47342e562a516b0278e22a974f35cbf2a64b33eb" }  # pragma: allowlist secret  # OMN-14458: pinned to merged onex_change_control#4106 commit; never pin a branch head.
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
-omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "59edb2c991c71e464ffb9ade0d7d47a1a9f1684f" }  # pragma: allowlist secret
+omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "43be97b1f47435dfbbd835ff8f5b4484c4dee282" }  # pragma: allowlist secret
 # OMN-16979: pin an approved dispatch commit; never substitute a PyPI source,
 # because the dispatch-drift guard verifies direct VCS provenance.
 # OMN-18622 recorded that `sibling-lock-refresh.yml` could never move this
