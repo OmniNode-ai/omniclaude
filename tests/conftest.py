@@ -485,6 +485,11 @@ def pytest_configure(config):
     """
     # OMN-18434: before collection, before any test module is imported.
     _strip_inherited_git_environment()
+    # OMN-19513: the suite-wide second layer behind the write path's own test-write guard
+    # (omniclaude.handlers.handler_ledger_write_guard). ONEX_TEST_CONTEXT makes a subprocess a
+    # fixture starts before PYTEST_CURRENT_TEST exists a test context too.
+    _strip_inherited_ledger_bus_environment()
+    os.environ["ONEX_TEST_CONTEXT"] = "pytest"
 
     # Add custom markers
     config.addinivalue_line(
@@ -1086,6 +1091,37 @@ def _strip_inherited_git_environment() -> None:
             os.environ.pop(key)
 
 
+#: Exact names a lane's shell exports for the ledger bus write, the mirror and the emit journal.
+_LEDGER_BUS_ENV = (
+    "ONEX_LEDGER_WRITE_VIA",
+    "ONEX_LEDGER_BUS_APPEND_COMMAND",
+    "ONEX_LEDGER_BUS_MIRROR",
+    "ONEX_LEDGER_BUS_TIMEOUT_S",
+    "ONEX_LEDGER_HOST_NAME",
+    "ONEX_LEDGER_EMIT_APPENDER",
+    "ONEX_LEDGER_EMIT_DRAINER_STATUS",
+    "ONEX_HOOK_EMIT_JOURNAL_DIR",
+    "OMNICLAUDE_EMIT_SOCKET",
+)
+_BROKER_ENV_PREFIXES = ("KAFKA_", "ONEX_KAFKA_", "REDPANDA_", "ONEX_BUS_")
+
+
+def _ledger_bus_env_names() -> list[str]:
+    return [
+        name
+        for name in os.environ
+        if name in _LEDGER_BUS_ENV
+        or name.startswith(_BROKER_ENV_PREFIXES)
+        or name.endswith("_BOOTSTRAP_SERVERS")
+    ]
+
+
+def _strip_inherited_ledger_bus_environment() -> None:
+    """Drop every bus, broker and emit-socket variable the launching shell exports (OMN-19513)."""
+    for name in _ledger_bus_env_names():
+        os.environ.pop(name)
+
+
 @pytest.fixture(autouse=True)
 def _strip_test_local_git_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stop one test's git process state leaking into the next, and blind git
@@ -1132,5 +1168,10 @@ def _no_real_operator_alarm(
     monkeypatch.setenv("ONEX_ALERT_LOCAL_NOTIFY_CMD", "/usr/bin/true")
     monkeypatch.setenv("ONEX_ALERT_DELIVERY_LOG", str(scratch / "alert-failures.log"))
     monkeypatch.setenv("ONEX_ALERT_LOCAL_NOTIFY_RATE_DIR", str(scratch / "rate"))
+    # OMN-19513: no test inherits a bus, broker or emit socket from the lane's shell; each gets
+    # its own scratch ledger and an emit socket under the temporary directory.
+    for name in _ledger_bus_env_names():
+        monkeypatch.delenv(name)
+    monkeypatch.setenv("OMNICLAUDE_EMIT_SOCKET", str(scratch / "emit.sock"))
     monkeypatch.setenv("ONEX_LEDGER_PATH", str(scratch / "no-ledger.md"))
     monkeypatch.setenv("ONEX_LEDGER_LOCK_SCRIPT", str(scratch / "no-ledger-lock.py"))
