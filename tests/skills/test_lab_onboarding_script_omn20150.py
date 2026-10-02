@@ -12,6 +12,7 @@ stock macOS /bin/bash 3.2 (the D4 failure class).
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -26,7 +27,7 @@ SCRIPT = (
     / "_bin"
     / "lab-onboarding.sh"
 )
-SKILL = SCRIPT.parents[1] / "lab_onboarding" / "SKILL.md"
+SKILL = SCRIPT.parents[1] / "omninode_dev_setup" / "SKILL.md"
 
 pytestmark = pytest.mark.unit
 macos_only = pytest.mark.skipif(
@@ -154,7 +155,7 @@ def test_no_containers_is_honoured(tmp_path: Path) -> None:
         ONBOARD_TEST_RAM_GB="32",
         ONBOARD_TEST_CPUS="10",
     )
-    assert "No local Docker: you said no" in result.stdout
+    assert "No local Docker: --no-containers was passed" in result.stdout
 
 
 @macos_only
@@ -170,7 +171,7 @@ def test_containers_asked_for_on_a_mac_that_cannot_run_them_continue_without(
     )
     assert result.returncode == 0
     assert "Docker is not offered on this Mac" in result.stdout
-    assert "the lab dev lane runs your delegations" in result.stdout
+    assert "onex runs your delegations natively on this Mac" in result.stdout
 
 
 @macos_only
@@ -243,11 +244,12 @@ def test_one_question_after_preflight_decides_docker(
         "ONBOARD_TEST_CPUS": "10",
         "ONBOARD_TEST_VM": "0",
         "ONBOARD_TEST_ADMIN": "1",
+        "ONBOARD_TEST_NO_GUI": "1",
     }
     script = (
         f"set timeout 60; spawn /bin/bash {phase0_only} --provider gemini; "
-        f'expect "Set up the local stack in Docker too?"; send "{answer}\\r"; '
-        'expect "key (input is hidden)"; send "not-a-real-key\\r"; expect eof'
+        'expect "key (input is hidden)"; send "not-a-real-key\\r"; '
+        f'expect "Set up the local stack in Docker too?"; send "{answer}\\r"; expect eof'
     )
     result = subprocess.run(
         ["/usr/bin/expect", "-c", script],
@@ -277,62 +279,6 @@ def _function_body(name: str) -> str:
     return "\n".join(lines[start : end + 1])
 
 
-_TEMPLATE_OVERLAY = (
-    'backends:\n  - backend_id: local-coder\n    endpoint_url: &model_endpoint "http://host.docker.internal:8000/v1/chat/completions"\n'
-    '    served_model_id: "a-placeholder-model"\n'
-    '  - backend_id: local-heavy-reasoning\n    endpoint_url: *model_endpoint\n    served_model_id: "a-placeholder-model"\n'
-)
-
-
-@macos_only
-def test_phase_6_writes_the_labs_model_into_the_overlay_not_the_templates(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "home"
-    (home / ".omnibase").mkdir(parents=True)
-    overlay = home / ".omnibase" / "local.bifrost.yaml"
-    overlay.write_text(_TEMPLATE_OVERLAY, encoding="utf-8")
-    snippet = (
-        f"{_function_body('point_bundle_model')}\n"
-        'point_bundle_model "http://lab.example:8000/v1/chat/completions" "lab-served-id"\n'
-    )
-    subprocess.run(
-        ["/bin/bash", "-c", snippet],
-        env={"HOME": str(home), "STAMP": "t", "PATH": "/usr/bin:/bin"},
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    text = overlay.read_text(encoding="utf-8")
-    assert '&model_endpoint "http://lab.example:8000/v1/chat/completions"' in text
-    assert text.count('served_model_id: "lab-served-id"') == 2
-    assert "a-placeholder-model" not in text
-    assert (home / ".omnibase" / "local.bifrost.yaml.pre-onboarding.t").exists()
-
-
-@macos_only
-def test_phase_6_leaves_an_overlay_the_developer_already_pointed_alone(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "home"
-    (home / ".omnibase").mkdir(parents=True)
-    overlay = home / ".omnibase" / "local.bifrost.yaml"
-    mine = _TEMPLATE_OVERLAY.replace("host.docker.internal:8000", "my-box:9000")
-    overlay.write_text(mine, encoding="utf-8")
-    snippet = (
-        f"{_function_body('point_bundle_model')}\n"
-        'point_bundle_model "http://lab.example:8000/v1/chat/completions" "lab-served-id"\n'
-    )
-    subprocess.run(
-        ["/bin/bash", "-c", snippet],
-        env={"HOME": str(home), "STAMP": "t", "PATH": "/usr/bin:/bin"},
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    assert overlay.read_text(encoding="utf-8") == mine
-
-
 def test_the_key_reaches_the_stack_by_pipe_and_never_as_an_argument_or_variable() -> (
     None
 ):
@@ -345,29 +291,22 @@ def test_the_key_reaches_the_stack_by_pipe_and_never_as_an_argument_or_variable(
         assert forbidden not in body
 
 
-def test_a_delegation_that_fell_through_to_the_lab_model_does_not_pass_phase_6() -> (
+def test_a_delegation_that_fell_through_to_another_route_does_not_pass_phase_4() -> (
     None
 ):
-    phase_6 = _function_body("phase6")
-    assert 'case "$served" in' in phase_6
-    assert '"byok-$MODEL_CHOICE"*' in phase_6
-    assert "not byok-$MODEL_CHOICE" in phase_6
-    assert "phase_fail" in phase_6.split('"byok-$MODEL_CHOICE"*', 1)[1]
+    phase_4 = _function_body("phase4")
+    assert 'case "$served" in' in phase_4
+    assert '"byok-$MODEL_CHOICE"*' in phase_4
+    assert "not byok-$MODEL_CHOICE" in phase_4
+    assert "phase_fail" in phase_4.split('"byok-$MODEL_CHOICE"*', 1)[1]
 
 
 def test_the_stack_only_gets_a_tenant_when_a_key_was_chosen() -> None:
-    phase_6 = _function_body("phase6")
-    assert (
-        'if [ "$MODEL_CHOICE" != "none" ]; then\n    step "give the stack a tenant'
-        in (phase_6)
+    phase_4 = _function_body("phase4")
+    assert 'if uses_key "$MODEL_CHOICE"; then\n    step "give the stack a tenant' in (
+        phase_4
     )
-    assert phase_6.index("ensure_stack_tenant") < phase_6.index("make up-local")
-
-
-def test_phase_5_does_not_let_a_bare_answered_read_as_proof_the_key_was_used() -> None:
-    phase_5 = _function_body("phase5")
-    assert "accepted_backend" in phase_5
-    assert "was not used on the lab lane" in phase_5
+    assert phase_4.index("ensure_stack_tenant") < phase_4.index("make up-local")
 
 
 def _phase0_env(tmp_path: Path, **extra: str) -> dict[str, str]:
@@ -395,10 +334,10 @@ def _phase0_only(tmp_path: Path) -> Path:
 
 @pytest.mark.parametrize("provider", ["none", "glm"])
 def test_only_the_beta_providers_are_accepted(tmp_path: Path, provider: str) -> None:
-    """No lab-model fallback, and GLM is out of the beta: only openrouter and gemini."""
+    """No lab-model fallback, and GLM is out of the beta: gemini, openrouter, openai or ollama."""
     result = _run(tmp_path, "--provider", provider)
     assert result.returncode == 2
-    assert "must be openrouter or gemini" in result.stderr
+    assert "must be gemini, openrouter, openai or ollama" in result.stderr
 
 
 @macos_only
@@ -430,7 +369,7 @@ def test_the_key_is_settled_in_preflight(
     """Provider then key, both before anything installs; an empty key stops the run."""
     script = (
         f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
-        'expect "Choose 1 or 2:"; send "2\\r"; '
+        'expect "Choose 1, 2, 3 or 4:"; send "1\\r"; '
         f'expect "key (input is hidden)"; send "{key}\\r"; expect eof'
     )
     result = subprocess.run(
@@ -456,8 +395,8 @@ def test_the_key_is_settled_in_preflight(
 @pytest.mark.parametrize(
     "answers",
     [
-        'expect "Set up the local stack in Docker too?"; send "q\\r"; ',
-        'expect "Set up the local stack in Docker too?"; send "n\\r"; expect "Choose 1 or 2:"; send "q\\r"; ',
+        'expect "Choose 1, 2, 3 or 4:"; send "4\\r"; expect "Set up the local stack in Docker too?"; send "q\\r"; ',
+        'expect "Choose 1, 2, 3 or 4:"; send "q\\r"; ',
     ],
     ids=["quit-at-docker", "quit-at-provider"],
 )
@@ -485,3 +424,424 @@ def test_quit_setup_stops_before_anything_installs(
     assert "Nothing was installed. Run onboarding again when you're ready." in out
     assert result.returncode == 4, out[-400:]
     assert sorted((tmp_path / "home").rglob("*")) == []
+
+
+def _functions(*names: str) -> str:
+    """The named top-level functions of the script, as bash source."""
+    out, keep = [], False
+    for line in SCRIPT.read_text().splitlines():
+        if any(line.startswith(f"{n}() {{") for n in names):
+            keep = True
+        if keep:
+            out.append(line)
+            if line == "}":
+                keep = False
+    return "\n".join(out)
+
+
+def test_phase5_installs_the_full_onex_tree_and_omni_where_reachable() -> None:
+    text = SCRIPT.read_text()
+    assert "plugin install onex@omninode-tools-dev" in text
+    assert (
+        'plugin marketplace add "$WORKSPACE/omniclaude/plugins/"*-dev-marketplace'
+        in text
+    )
+    assert "for p in omni onex-overlays" in text
+    assert "internal_plugins_reachable" in text
+
+
+def test_nothing_connects_to_the_lab() -> None:
+    """Developers run onex locally only: no tailnet, no lab bus identity, no lab model."""
+    text = SCRIPT.read_text()
+    for gone in (
+        "tailscale",
+        "lane-login",
+        "principal_issuer_url",
+        "lab_model_url",
+        "developer-onboarding.yaml",
+        "--bus kafka",
+        "--reissue-identity",
+    ):
+        assert gone not in text.lower(), gone
+    assert "TOTAL_PHASES=6" in text
+    assert 'DONE_FILE="$STATE_DIR/phases.v2.done"' in text
+
+
+@macos_only
+def test_a_resumed_run_finds_the_tools_phase_1_installed(tmp_path: Path) -> None:
+    """Phase 1 skipped on a re-run must not leave uv and onex off PATH for later phases."""
+    home = tmp_path / "home"
+    (home / ".local" / "bin").mkdir(parents=True)
+    probe = SCRIPT.read_text().split("\nIS_TTY=0\n", 1)[0] + '\necho "PATH=$PATH"\n'
+    script = tmp_path / "head.sh"
+    script.write_text(probe)
+    out = subprocess.run(
+        ["/bin/bash", str(script)],
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "TMPDIR": str(tmp_path) + "/"},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    ).stdout
+    assert f"{home}/.local/bin" in out.split("PATH=", 1)[1].split(":")
+
+
+# ---------------------------------------------------------------------------
+# Ollama: a model on this Mac, no key.
+# ---------------------------------------------------------------------------
+
+
+@macos_only
+@pytest.mark.skipif(
+    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
+)
+def test_choosing_ollama_on_the_menu_skips_the_key(tmp_path: Path) -> None:
+    script = (
+        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
+        'expect "Choose 1, 2, 3 or 4:"; send "4\\r"; expect eof'
+    )
+    result = subprocess.run(
+        ["/usr/bin/expect", "-c", script],
+        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout.replace("\r", "")
+    assert "Model: Ollama on this Mac, no key." in out
+    assert "key (input is hidden)" not in out
+
+
+def _shell(snippet: str, home: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["/bin/bash", "-c", snippet],
+        env={
+            "HOME": str(home),
+            "STAMP": "t",
+            "PATH": "/usr/bin:/bin",
+            "LOG": "/dev/null",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+_TEMPLATE_OVERLAY = (
+    'backends:\n  - backend_id: local-coder\n    endpoint_url: &model_endpoint "http://host.docker.internal:8000/v1/chat/completions"\n'
+    '    served_model_id: "a-placeholder-model"\n'
+    '  - backend_id: local-heavy-reasoning\n    endpoint_url: *model_endpoint\n    served_model_id: "a-placeholder-model"\n'
+)
+
+
+@macos_only  # the script edits with BSD sed (-i '')
+@pytest.mark.parametrize("theirs", [False, True])
+def test_docker_with_ollama_points_only_the_untouched_template_at_it(
+    tmp_path: Path, theirs: bool
+) -> None:
+    home = tmp_path / "home"
+    (home / ".omnibase").mkdir(parents=True)
+    overlay = home / ".omnibase" / "local.bifrost.yaml"
+    original = (
+        _TEMPLATE_OVERLAY.replace("host.docker.internal:8000", "my-box:9000")
+        if theirs
+        else _TEMPLATE_OVERLAY
+    )
+    overlay.write_text(original)
+    _shell(
+        _functions("point_bundle_model")
+        + '\npoint_bundle_model "http://host.docker.internal:11434/v1/chat/completions" "qwen2.5-coder:7b"\n',
+        home,
+    )
+    text = overlay.read_text()
+    if theirs:
+        assert text == original
+    else:
+        assert (
+            '&model_endpoint "http://host.docker.internal:11434/v1/chat/completions"'
+            in text
+        )
+        assert text.count('served_model_id: "qwen2.5-coder:7b"') == 2
+        assert "a-placeholder-model" not in text
+
+
+@macos_only
+def test_ollama_in_a_vm_is_warned_it_will_be_slow(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--provider", "ollama"],
+        env=_phase0_env(
+            tmp_path,
+            ONBOARD_TEST_VM="1",
+            ONBOARD_TEST_RAM_GB="32",
+            ONBOARD_TEST_CPUS="10",
+        ),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        "This is a virtual machine: Ollama gets little or no GPU in a VM"
+        in result.stdout
+    )
+    assert (
+        "Gemini, OpenRouter or OpenAI (a key) is the better choice here."
+        in result.stdout
+    )
+
+
+def test_the_run_ends_by_saying_to_sign_in_to_claude_code() -> None:
+    text = SCRIPT.read_text()
+    assert (
+        "Open Claude Code (run 'claude') and sign in with your Anthropic account"
+        in text
+    )
+
+
+def test_the_key_dialog_is_not_indented_like_the_terminal_prompt() -> None:
+    body = _functions("read_secret")
+    assert "sed 's/^[[:space:]]*//'" in body
+
+
+@macos_only
+def test_ollama_asks_for_no_key_and_chooses_the_model_later(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(_phase0_only(tmp_path)),
+            "--provider",
+            "ollama",
+            "--no-containers",
+        ],
+        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        "Model: Ollama on this Mac, no key. The model is chosen for this Mac's 32 GB"
+        in result.stdout
+    )
+    assert "API key" not in result.stdout
+    assert sorted((tmp_path / "home").rglob("*")) == []
+
+
+_OLLAMA_BLOCK = """\
+backends: []
+ollama:
+  port: 11434
+  chat_path: /v1/chat/completions
+  models:
+    - min_memory_gb: 16
+      model: big-model:7b
+      download_gb: 5
+    - min_memory_gb: 0
+      model: small-model:1b
+      download_gb: 1
+"""
+
+
+def _workspace_with_config(tmp_path: Path, block: str) -> Path:
+    ws = tmp_path / "ws"
+    cfg = (
+        ws / "omnimarket" / "src" / "omnimarket" / "configs" / "bifrost_delegation.yaml"
+    )
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(block)
+    venv_bin = ws / ".onex-dispatch-venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    shim = venv_bin / "python"
+    shim.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    shim.chmod(0o755)
+    return ws
+
+
+def _ollama_config(
+    ws: Path, ram: str, model: str = ""
+) -> subprocess.CompletedProcess[str]:
+    consts = "\n".join(
+        line
+        for line in SCRIPT.read_text().splitlines()
+        if line.startswith("OLLAMA_CONFIG_REL=")
+    )
+    return subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            f"WORKSPACE={ws}\n{consts}\n"
+            + _functions("ollama_config")
+            + f'\nollama_config {ram} "{model}"\n',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("ram", "model", "expected"),
+    [
+        ("32", "", "11434 /v1/chat/completions big-model:7b 5"),
+        ("16", "", "11434 /v1/chat/completions big-model:7b 5"),
+        ("8", "", "11434 /v1/chat/completions small-model:1b 1"),
+        ("8", "big-model:7b", "11434 /v1/chat/completions big-model:7b 5"),
+        ("8", "unlisted:3b", "11434 /v1/chat/completions unlisted:3b 5"),
+    ],
+)
+def test_the_ollama_model_comes_from_the_model_config_by_memory(
+    tmp_path: Path, ram: str, model: str, expected: str
+) -> None:
+    result = _ollama_config(_workspace_with_config(tmp_path, _OLLAMA_BLOCK), ram, model)
+    assert result.stdout.strip() == expected, result.stderr
+
+
+def test_a_model_config_without_the_ollama_block_is_refused(tmp_path: Path) -> None:
+    result = _ollama_config(_workspace_with_config(tmp_path, "backends: []\n"), "32")
+    assert result.returncode != 0
+    assert "no complete ollama block" in result.stderr
+
+
+def test_the_script_holds_no_model_name_port_or_model_path() -> None:
+    """The hardcoded-model-config gate's rule: those live in the model config."""
+    text = SCRIPT.read_text()
+    assert not re.search(r"qwen|gpt-oss|llama[0-9]|11434", text)
+    assert "/v1/chat/completions" not in text
+
+
+def test_ollama_routes_are_written_and_a_foreign_file_is_kept(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    target = home / ".omninode" / "delegation" / "bifrost_overrides.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text("# mine\nbackends: []\n")
+    consts = "\n".join(
+        line
+        for line in SCRIPT.read_text().splitlines()
+        if line.startswith(("OVERRIDES_FILE_REL=", "OLLAMA_MARK="))
+    )
+    _shell(
+        consts
+        + '\nOLLAMA_URL="http://127.0.0.1:11434"; OLLAMA_CHAT_PATH="/v1/chat/completions"'
+        + "\nsay() { :; }\n"
+        + _functions("ollama_overrides_ours", "write_ollama_overrides")
+        + '\nwrite_ollama_overrides "big-model:7b"\n',
+        home,
+    )
+    text = target.read_text()
+    assert text.startswith("# Written by omninode-dev-setup: Ollama on this Mac.")
+    assert text.count('endpoint_url: "http://127.0.0.1:11434/v1/chat/completions"') == 2
+    assert text.count('model_name: "big-model:7b"') == 2
+    assert (
+        target.parent / "bifrost_overrides.yaml.pre-onboarding.t"
+    ).read_text() == "# mine\nbackends: []\n"
+
+
+@macos_only
+@pytest.mark.skipif(
+    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
+)
+def test_choosing_openai_on_the_menu_asks_for_an_openai_key(tmp_path: Path) -> None:
+    script = (
+        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)} --no-containers; "
+        'expect "Choose 1, 2, 3 or 4:"; send "3\\r"; '
+        'expect "key (input is hidden)"; send "\\r"; expect eof'
+    )
+    result = subprocess.run(
+        ["/usr/bin/expect", "-c", script],
+        env=_phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout.replace("\r", "")
+    assert "Paste your OpenAI API key (input is hidden):" in out
+    assert "it is only ever sent to OpenAI" in out
+
+
+@macos_only
+@pytest.mark.skipif(
+    not os.path.exists("/usr/bin/expect"), reason="needs expect to answer on a terminal"
+)
+def test_the_model_is_asked_before_docker(tmp_path: Path) -> None:
+    script = (
+        f"set timeout 60; spawn /bin/bash {_phase0_only(tmp_path)}; "
+        'expect "Choose 1, 2, 3 or 4:"; send "4\\r"; '
+        'expect "Set up the local stack in Docker too?"; send "n\\r"; expect eof'
+    )
+    result = subprocess.run(
+        ["/usr/bin/expect", "-c", script],
+        env=_phase0_env(
+            tmp_path,
+            ONBOARD_TEST_RAM_GB="32",
+            ONBOARD_TEST_CPUS="10",
+            ONBOARD_TEST_VM="0",
+        ),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout.replace("\r", "")
+    if "ports in use" in out:
+        pytest.skip("the local stack's ports are held by something else on this host")
+    assert out.index("Choose 1, 2, 3 or 4:") < out.index(
+        "Set up the local stack in Docker too?"
+    )
+
+
+@macos_only
+def test_a_vm_is_told_before_any_question(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--provider", "ollama"],
+        env=_phase0_env(
+            tmp_path,
+            ONBOARD_TEST_VM="1",
+            ONBOARD_TEST_RAM_GB="32",
+            ONBOARD_TEST_CPUS="10",
+        ),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    out = result.stdout
+    assert "We detected that this Mac is a virtual machine." in out
+    assert "Docker can't run inside a macOS VM" in out
+    assert out.index("We detected that this Mac is a virtual machine.") < out.index(
+        "Model: Ollama on this Mac"
+    )
+
+
+def test_the_docker_question_leads_with_what_was_found() -> None:
+    text = SCRIPT.read_text()
+    for found in (
+        "We found Docker Desktop on this Mac, and it's running.",
+        "We found Docker Desktop on this Mac, but it isn't running.",
+        "Docker Desktop isn't installed on this Mac.",
+    ):
+        assert found in text
+    assert "set msg to (item 1 of argv)" in _functions("ask_docker")
+
+
+def test_questions_go_to_dialogs_whenever_there_is_a_desktop() -> None:
+    """The terminal shows progress; questions are dialogs unless there is no desktop."""
+    text = SCRIPT.read_text()
+    assert (
+        'if [ "$IS_TTY" -eq 1 ] && { [ "$GUI_SESSION" -eq 0 ] || [ "${ONBOARD_PROMPTS:-}" = "terminal" ]; }; then'
+        in text
+    )
+    for fn in (
+        "ask_provider",
+        "read_secret",
+        "ask_docker",
+        "ensure_sudo",
+        "accept_docker_terms",
+    ):
+        body = _functions(fn)
+        assert '"$IS_TTY"' not in body, fn
+        assert '"$PROMPT_TTY"' in body, fn

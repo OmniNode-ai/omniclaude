@@ -1,5 +1,5 @@
 ---
-description: Take a Mac from bare to lab-ready in one run — tools, workspace, tailnet, onex, a model, this machine's own lab bus identity, and optionally the local container stack — reporting each phase as it finishes
+description: Take a Mac from bare to a working local onex in one run — tools, workspace, onex on the developer's model (their own key, or Ollama on the Mac with no key), and optionally the local container stack — reporting each phase as it finishes. Never connects to the lab
 mode: full
 version: 1.0.0
 level: basic
@@ -9,7 +9,7 @@ tags:
   - onboarding
   - setup
   - macos
-  - lab
+  - local
 author: OmniClaude Team
 skill_kind: methodology
 args:
@@ -20,10 +20,13 @@ args:
     description: "Answer the Docker question yes in advance (also run the stack locally in Docker)"
     required: false
   - name: --no-containers
-    description: "Answer the Docker question no in advance (lab only)"
+    description: "Answer the Docker question no in advance (native onex only)"
     required: false
   - name: --provider
-    description: "Your own model key's provider: openrouter | gemini (default: asked). The lab's models are never used"
+    description: "The model: gemini | openrouter | openai (the developer's own key) | ollama (on this Mac, no key). Default: asked"
+    required: false
+  - name: --ollama-model
+    description: "With --provider ollama: the model to download (default: chosen from the Mac's memory)"
     required: false
   - name: --workspace
     description: "Workspace directory (default: $OMNIBASE_PATH, else ~/code/omni)"
@@ -31,19 +34,19 @@ args:
   - name: --restart
     description: "Run every phase again instead of resuming"
     required: false
-  - name: --reissue-identity
-    description: "Request a fresh lab bus identity even if one is stored"
-    required: false
 ---
 
-# lab_onboarding
+# omninode_dev_setup
 
-**Announce at start:** "I'm using the lab_onboarding skill."
+**Announce at start:** "I'm using the omninode_dev_setup skill."
 
 One script, `plugins/onex/skills/_bin/lab-onboarding.sh`, does the work. It runs
 the same way from Claude Code or from a plain terminal, and works on a physical
 Mac or inside a macOS VM. This skill starts it where the developer can answer
 its prompts, then reports each phase to the developer the moment it finishes.
+
+Everything runs on the developer's own Mac: native onex, and optionally the stack
+in Docker, both on the developer's own model key or on Ollama running on the Mac. Nothing connects to the lab.
 
 ## Phases
 
@@ -52,12 +55,10 @@ its prompts, then reports each phase to the developer the moment it finishes.
 | 0 | Preflight: macOS version, CPU, RAM, disk, VM or physical, admin rights, ports, shell profile | no |
 | 1 | Base tools: Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv | yes |
 | 2 | Workspace: the canonical clones, and OMNIBASE_PATH and PATH in the shell profile | yes |
-| 3 | Tailnet: Tailscale installed and signed in | yes |
-| 4 | onex, the local identity, one model path, one delegation | yes |
-| 5 | This machine's lab bus identity, issued automatically; one delegation on the lab dev lane | yes |
-| 6 | Docker (optional, in addition to the lab): only if the developer says yes to the one question; Docker Desktop installed, or started if stopped, then the local stack | yes |
-| 7 | Claude Code plugin `onex@omninode-tools` | yes |
-| 8 | Verify | no |
+| 3 | onex, the local identity, the developer's model (their key, or Ollama installed with one model downloaded), one delegation on it | yes |
+| 4 | Docker (optional): only if the developer says yes to the one question; Docker Desktop installed, or started if stopped, then the local stack on the same key | yes |
+| 5 | Claude Code plugins: the full onex tree (`onex@omninode-tools-dev`, from the omniclaude clone), and `omni` and `onex-overlays` when this GitHub login can read omniclaude-internal and an SSH key is loaded | yes |
+| 6 | Verify | no |
 
 Minimum requirements are printed by phase 0. A Mac below them gets nothing
 installed and a recommended VM size instead (exit code 3).
@@ -76,29 +77,32 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/lab-onboarding.sh" --preflight-only <arg
   recommended VM verbatim. **Stop.** Do not offer to install anyway.
 - Exit 1: a fixable condition (not an admin account, a Rosetta shell, not macOS).
   Relay the `Next:` line and stop.
-- Exit 0: relay the "Will set up" line. The lab (this machine's own bus
-  identity) is set up on every run. If the line says Docker can be added, ask
+- Exit 0: relay the "Will set up" line. Native onex is set up on every run.
+  If the line says Docker can be added, ask
   the developer the one question the run would ask: whether to also run the
   stack locally in Docker (about 10 GB of memory while it runs, and 10-20
   minutes the first time). Pass their answer as `--containers` or
   `--no-containers`, so the Terminal run does not ask it again. If Docker
   Desktop is installed but stopped, say the run will start it; if it is
   missing, say the run will install it. If the line says Docker is not
-  offered, relay why: the lab alone covers delegations.
-- Then the model key. Developers bring their own key; the lab's models are
-  never used. Unless `--provider` was given, ask which provider their key is
-  from: OpenRouter or Gemini (a Google AI Studio key); the beta offers only
-  these two. Pass it as `--provider openrouter|gemini`.
-  The key itself is typed only in the Terminal window, at a hidden prompt that
-  comes right after preflight, before anything installs. If they have no key
-  yet, say where to get one and stop: the run refuses to start without one.
+  offered, relay why: native onex alone covers delegations.
+- The model (the run asks it before the Docker question). Unless `--provider` was given, ask which one:
+  - **Gemini** (a Google AI Studio key), **OpenRouter** or **OpenAI** (their key;
+    OpenAI needs credits on the account): the key
+    itself is typed only in the Terminal window or a macOS dialog, at a hidden
+    prompt right after preflight, before anything installs. If they have no key,
+    say where to get one, or suggest Ollama.
+  - **Ollama**: no key. It runs a model on the Mac, so it downloads one
+    (sized to the Mac's memory, as omnimarket's model config declares) and is slower,
+    especially on Intel or in a VM.
+  Pass the answer as `--provider gemini|openrouter|openai|ollama`.
 
 If `--preflight-only` was the argument, stop here.
 
 ### 2. Start the run where the developer can answer prompts
 
-The run asks for the Mac administrator password (Homebrew, Xcode tools, Docker),
-a Tailscale sign-in, and their model key (at the start, before anything installs). A Claude Code tool call has no
+The run asks for the Mac administrator password (Homebrew, Xcode tools, Docker)
+and their model key unless they chose Ollama (at the start, before anything installs). A Claude Code tool call has no
 terminal, so open one:
 
 ```bash
@@ -121,8 +125,8 @@ The script appends one line per phase event to
 `${TMPDIR}/omninode-onboarding/status`:
 
 ```
-phase=3 name="Tailnet (…)" result=PASS elapsed="1m 12s" note="…"
-phase=5 name="Lab bus identity (…)" result=FAIL elapsed="2m 03s" step="…" next="…"
+phase=2 name="Workspace (…)" result=PASS elapsed="1m 12s" note="…"
+phase=3 name="onex, local identity and your model" result=FAIL elapsed="2m 03s" step="…" next="…"
 result=COMPLETE
 ```
 
@@ -139,8 +143,10 @@ failed phase; completed phases are verified, not redone.
 ### 4. Finish
 
 On `result=COMPLETE`, tell the developer to open a new terminal (so `OMNIBASE_PATH`
-and `PATH` apply) and that `/onex:delegate` is available in a new Claude Code
-session. If phase 0 or phase 8 printed a warning about shell-profile exports,
+and `PATH` apply) and to open Claude Code and sign in with their Anthropic account
+(the first time it asks). In a new session the `/onex:` skills
+(and `/omni:` ones, if phase 5 installed them) are loaded. A running session keeps
+the plugins it started with. If phase 0 or phase 6 printed a warning about shell-profile exports,
 repeat it.
 
 ## What this skill does NOT do
@@ -148,6 +154,5 @@ repeat it.
 - Put any secret in this session. Passwords and keys go into the Terminal
   window or a macOS dialog, and from there over stdin into the tool that stores them.
 - Install anything on a Mac below the minimum requirements.
-- Set up a dedicated lab lane (compose project, ports, host account); the
-  bus identity it issues is on the shared lab dev lane.
+- Connect to the lab in any way: no tailnet, no lab bus identity, no lab models.
 - Linux or Windows.

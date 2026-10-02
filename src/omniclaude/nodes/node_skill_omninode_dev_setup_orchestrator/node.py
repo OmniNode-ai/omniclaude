@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""NodeSkillLabOnboardingOrchestrator — thin orchestrator shell for the lab_onboarding skill.
+"""NodeSkillOmninodeDevSetupOrchestrator — thin orchestrator shell for the omninode_dev_setup skill.
 
-Capability: skill.lab_onboarding
+Capability: skill.omninode_dev_setup
 All dispatch logic lives in the shared handle_skill_requested handler.
 """
 
@@ -16,17 +16,17 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeSkillLabOnboardingOrchestrator(NodeOrchestrator):
-    """Orchestrator node for the lab_onboarding skill.
+class NodeSkillOmninodeDevSetupOrchestrator(NodeOrchestrator):
+    """Orchestrator node for the omninode_dev_setup skill.
 
-    Capability: skill.lab_onboarding
+    Capability: skill.omninode_dev_setup
 
     All behavior defined in contract.yaml.
     Dispatches to the shared handle_skill_requested handler via ServiceRegistry.
     """
 
     def __init__(self, container: ModelONEXContainer) -> None:
-        """Initialize the NodeSkillLabOnboardingOrchestrator.
+        """Initialize the NodeSkillOmninodeDevSetupOrchestrator.
 
         Args:
             container: ONEX container for dependency injection.
@@ -34,4 +34,4 @@ class NodeSkillLabOnboardingOrchestrator(NodeOrchestrator):
         super().__init__(container)
 
 
-__all__ = ["NodeSkillLabOnboardingOrchestrator"]
+__all__ = ["NodeSkillOmninodeDevSetupOrchestrator"]

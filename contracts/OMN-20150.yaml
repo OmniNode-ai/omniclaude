@@ -1,18 +1,18 @@
 ---
 schema_version: "1.0.0"
 ticket_id: OMN-20150
-title: "Lab onboarding script and /onex:lab_onboarding skill"
+title: "Developer setup script (lab-onboarding.sh) and /onex:omninode_dev_setup skill"
 summary: >
-  OMN-20150 adds the lab onboarding script (plugins/onex/skills/_bin/lab-onboarding.sh)
-  and the /onex:lab_onboarding skill, introduced by PR 2442. The in-repo contract exists
+  OMN-20150 adds the developer setup script (plugins/onex/skills/_bin/lab-onboarding.sh)
+  and the /onex:omninode_dev_setup skill, introduced by PR 2442. The in-repo contract exists
   because validate-pr-contracts reads contracts/ in this repository.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 evidence_requirements:
   - kind: tests
-    description: "Lab onboarding script tests pass"
-    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q"
+    description: "Developer setup script tests pass"
+    command: "uv run pytest tests/skills/test_omninode_dev_setup_script_omn20150.py -q"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -20,10 +20,10 @@ emergency_bypass:
 dod_evidence:
   - id: dod-lab-onboarding-tests-pass
     description: >
-      The lab onboarding script suite passes; the macOS-only cases are recorded in the
+      The developer setup script suite passes; the macOS-only cases are recorded in the
       skip-count baseline.
     source: manual
     status: verified
     checks:
       - check_type: command
-        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q"
+        check_value: "uv run pytest tests/skills/test_omninode_dev_setup_script_omn20150.py -q"
