@@ -87,9 +87,16 @@ def fake_gh(tmp_path: Path) -> Path:
                                  "gh_token": os.environ.get("GH_TOKEN")}) + "\\n")
         refuse = os.environ.get("FAKE_GH_REFUSE_TOKEN")
         if refuse and os.environ.get("GH_TOKEN") == refuse:
+            # The real gh prints an HTTP error BODY to stdout and the reason to
+            # stderr; only the stderr copy carries the refusal phrase.
+            body = os.environ.get(
+                "FAKE_GH_REFUSE_STDOUT",
+                '{"message":"Resource not accessible by integration",'
+                '"documentation_url":"https://docs.github.com/rest","status":"403"}')
+            sys.stdout.write(body)
             sys.stderr.write("GraphQL: Resource not accessible by integration\\n")
             sys.exit(1)
-        sys.stdout.write("served\\n")
+        sys.stdout.write(os.environ.get("FAKE_GH_STDOUT", "served\\n"))
         sys.exit(int(os.environ.get("FAKE_GH_EXIT", "0")))
         """,
     )
@@ -408,6 +415,38 @@ def test_fallback_when_app_refuses_retries_once_on_operator(
     # The refused attempt's stderr is not replayed to the caller.
     assert "not accessible by integration" not in err
     assert len(records) == 1
+
+
+def test_fallback_refused_attempt_leaves_stdout_exactly_one_document(
+    tmp_path: Path, env: dict[str, str]
+) -> None:
+    """Friction 2026-10-02T00:46:17Z / 2026-10-02T01:35:48Z: advisory_job_gate
+    refused commits with "Extra data: line 1 column 175" when json.loads saw
+    both the App's 403 body and the operator's answer on stdout.
+    """
+    result = tmp_path / "route.result"
+    operator_document = {"contexts": ["Quality Gate"]}
+    env["FAKE_GH_REFUSE_TOKEN"] = APP_TOKEN
+    env["FAKE_GH_STDOUT"] = json.dumps(operator_document)
+    argv = [
+        "api",
+        "repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks",
+        "--jq",
+        ".contexts",
+    ]
+    proc = subprocess.run(
+        [sys.executable, str(_MODULE_PATH), "exec", "--result-file", str(result), "--"]
+        + argv,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout) == operator_document
+    assert "not accessible" not in proc.stdout
+    assert result.read_text() == "operator-fallback integration-refused\n"
 
 
 def test_fallback_not_taken_for_an_ordinary_read_failure(
