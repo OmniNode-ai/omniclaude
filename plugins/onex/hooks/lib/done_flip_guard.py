@@ -636,14 +636,16 @@ def decide(
     probe = occ_probe
     probe_error = ""
     if probe is None and ticket_id:
-        omni_home = resolve_omni_home()
-        if omni_home is None:
+        workspace_root = resolve_omni_home()
+        if workspace_root is None:
             probe_error = (
                 "OMNI_HOME is unset/invalid, so the local onex_change_control "
                 "clone cannot be resolved"
             )
         else:
-            evidence = load_ticket_occ_evidence(occ_repo_path(omni_home), ticket_id)
+            evidence = load_ticket_occ_evidence(
+                occ_repo_path(workspace_root), ticket_id
+            )
 
             def probe(tid: str, desc: str, merged_pr: bool = False) -> Any:
                 return evaluate_bound_evidence(
@@ -801,9 +803,9 @@ def decide(
             if ticket_id:
                 lister = receipt_lister
                 if lister is None:
-                    omni_home = resolve_omni_home()
-                    if omni_home is not None:
-                        lister = _occ_lister(occ_repo_path(omni_home))
+                    workspace_root = resolve_omni_home()
+                    if workspace_root is not None:
+                        lister = _occ_lister(occ_repo_path(workspace_root))
                 if lister is not None:
                     receipts = lister(ticket_id)
             if receipts:
