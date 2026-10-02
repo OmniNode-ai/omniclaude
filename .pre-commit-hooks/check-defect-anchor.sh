@@ -70,17 +70,17 @@ for file in "$@"; do
     fi
 
     # Skip if the file-level escape hatch is present
-    if grep -qE "$ESCAPE" <<<"$content"; then
+    if grep -qE "$ESCAPE" < <(printf '%s\n' "$content"); then
         continue
     fi
 
     # Check for defect markers
-    if ! grep -qiE "$DEFECT_PATTERN" <<<"$content"; then
+    if ! grep -qiE "$DEFECT_PATTERN" < <(printf '%s\n' "$content"); then
         continue
     fi
 
     # Defect marker found — check for OMN-XXXX reference
-    if ! grep -qE "$OMN_PATTERN" <<<"$content"; then
+    if ! grep -qE "$OMN_PATTERN" < <(printf '%s\n' "$content"); then
         echo "DEFECT_ANCHOR_MISSING: $file — defect markers present but no OMN-XXXX reference found" >&2
         echo "  Ticket: $TICKET_REF" >&2
         echo "  Add an OMN-XXXX reference for each unresolved defect, or file a ticket first." >&2

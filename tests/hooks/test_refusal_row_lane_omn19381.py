@@ -410,7 +410,9 @@ class TestThePayloadSeam:
         source = (HOOKS_DIR / "lib" / "hook_refusal.sh").read_text(encoding="utf-8")
         body = source.split("hook_record_refusal()", 1)[1].split("\n}\n", 1)[0]
         assert "--payload-stdin" in body
-        assert re.search(r'<<<\s*"\$payload"', body), body
+        # OMN-20389: a here-string deadlocks Homebrew bash 5.3 under macOS pipe
+        # pressure, so the payload reaches stdin through a process substitution.
+        assert re.search(r"<\s*<\(printf '%s\\n' \"\$payload\"\)", body), body
         assert not re.search(r'--payload\s+"\$', body)
 
     def test_hook_record_refusal_returns_before_a_slow_recorder(

@@ -96,7 +96,7 @@ hook_record_refusal() {
             --session-id "${SESSION_ID:-}" \
             --agent-id "${AGENT_ID:-}" \
             --payload-stdin \
-            <<<"$payload"
+            < <(printf '%s\n' "$payload")
     ) >>"${LOG_FILE:-/dev/null}" 2>&1 </dev/null &
     disown 2>/dev/null || true
     return 0

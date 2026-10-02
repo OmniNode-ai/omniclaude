@@ -97,7 +97,7 @@ while IFS= read -r VAR; do
     # Append placeholder
     printf '\n%s=<set_me>  # auto-added by omniclaude hook\n' "$VAR" >> "$ENV_FILE"
     ADDED+=("$VAR")
-done <<< "$REQUIRED_VARS"
+done < <(printf '%s\n' "$REQUIRED_VARS")
 
 # -----------------------------------------------------------------------
 # Report what was added
