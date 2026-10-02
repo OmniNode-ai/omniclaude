@@ -88,7 +88,7 @@ LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/hook-post-tool-use-bus-mirror.log"
 if declare -F onex_maybe_rotate_log >/dev/null 2>&1; then
     onex_maybe_rotate_log "$LOG_FILE"
 fi
-[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
+[[ -d "${LOG_FILE%/*}" ]] || mkdir -p "${LOG_FILE%/*}" 2>/dev/null || true
 
 # Detect project root (same convention as session_start_bus_mirror.sh).
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."

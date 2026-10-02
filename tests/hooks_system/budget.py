@@ -45,15 +45,26 @@ INCIDENT_HOOK_SECONDS_PER_CALL_UNDER_LOAD = (60, 175)
 # bounded emit forks its writer: 109 / 81 / 44 to 104 / 74 / 44. The guards
 # run concurrently inside the entrypoint (one process substitution each), which
 # the sampled count sees as processes; they are forks, not interpreter starts.
-MEASURED_EXECS_PER_CALL = {"Bash": 104, "Skill": 74, "Read": 44}
+# OMN-20109 (2026-10-02, lab h201, five runs each, the same number every time):
+# the hooks' own timestamps, directory names, lane-contract read and payload
+# reads are bash builtins, the log-rotation check is counted, not drawn from
+# $RANDOM, and the instrument counts execs exactly (see _harness.ProcessLedger):
+# 104 / 74 / 44 to 56 / 40 / 16. Before the cut, on the same instrument, the Skill
+# call measured 73 to 75 and one run in a few hundred exceeded the 82 ceiling.
+MEASURED_EXECS_PER_CALL = {"Bash": 56, "Skill": 40, "Read": 16}
 # History of this instrument: 250 / 151 / 83 on dev before the OMN-20110
 # foreground runner; 261 / 167 / 91 with it (the bounded runner's own
 # interpreter start plus one process group per emit, paid to make every emit
 # fail loudly instead of hanging); 109 / 81 / 44 after OMN-20114.
 
 # The enforced ceiling, per tool. Measured plus a small headroom for the
-# branches a hook takes only sometimes. It only ever moves down.
-CEILING_EXECS_PER_CALL = {"Bash": 115, "Skill": 82, "Read": 50}
+# branches a hook takes only sometimes. It only ever moves down. After OMN-20109
+# the Skill and Read counts are deterministic
+# (test_skill_call_count_is_deterministic_across_five_runs), so their ceiling is
+# the measurement. The Bash call is not: the seven guards run concurrently
+# inside one entrypoint and one run in a few hundred forks one more process
+# (CI measured 57 against 56), so Bash keeps 4 of headroom, under the target.
+CEILING_EXECS_PER_CALL = {"Bash": 60, "Skill": 40, "Read": 16}
 
 # The target every tool call is held to. A ceiling above this is debt. After
 # OMN-20114 the remaining cost is one bash per registered hook (17 on a Bash

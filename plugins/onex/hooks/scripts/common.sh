@@ -29,6 +29,17 @@
 # OMN-20109: this file's directory, resolved once without a dirname exec. A
 # hook sources common.sh on every tool call, so each exec here is paid per call.
 _ONEX_COMMON_SH_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_COMMON_SH_DIR=.; [[ -n "$_ONEX_COMMON_SH_DIR" ]] || _ONEX_COMMON_SH_DIR=/
+# OMN-20109: the UTC timestamp every hook log line carries, without a date exec.
+# Sets _ONEX_UTC_NOW (a command substitution would fork a subshell for it).
+# bash 4.2 has printf %(...)T; the bash 3.2 macOS ships does not and keeps date.
+onex_utc_now() {
+    if (( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 2) )); then
+        TZ=UTC printf -v _ONEX_UTC_NOW '%(%Y-%m-%dT%H:%M:%SZ)T' -1
+    else
+        _ONEX_UTC_NOW="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    fi
+}
+
 : "${ONEX_HOOK_BITS_SOURCED:=}"
 if [[ -z "$ONEX_HOOK_BITS_SOURCED" ]]; then
   _hook_bits_path="${HOOKS_DIR:-${_ONEX_COMMON_SH_DIR}/..}/lib/hook_bits.sh"
@@ -332,7 +343,8 @@ fi
 # Log resolved interpreter for debugging (only if LOG_FILE is available)
 # Uses inline printf instead of log() which is defined later in this file
 if [[ -n "${LOG_FILE:-}" ]]; then
-    printf "[%s] Resolved python: %s\n" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "${PYTHON_CMD}" >> "$LOG_FILE"
+    onex_utc_now
+    printf "[%s] Resolved python: %s\n" "$_ONEX_UTC_NOW" "${PYTHON_CMD}" >> "$LOG_FILE"
 fi
 
 # =============================================================================
@@ -833,7 +845,8 @@ redact_secrets() {
 # Usage: log "message to log"
 
 log() {
-    printf "[%s] %s\n" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$*" >> "$LOG_FILE"
+    onex_utc_now
+    printf "[%s] %s\n" "$_ONEX_UTC_NOW" "$*" >> "$LOG_FILE"
 }
 
 # =============================================================================

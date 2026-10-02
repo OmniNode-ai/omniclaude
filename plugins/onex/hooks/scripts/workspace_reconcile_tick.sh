@@ -123,12 +123,15 @@ _RECEIPTS="${ONEX_LOG_DIR:-${HOME}/.onex_state/logs}/workspace-reconcile.log"
 _INTERVAL="${ONEX_RECONCILE_TICK_SECONDS:-600}"
 
 [[ -d "$_STATE_DIR" && -d "${_RECEIPTS%/*}" ]] \
-    || mkdir -p "$_STATE_DIR" "$(dirname "$_RECEIPTS")" 2>/dev/null || true
+    || mkdir -p "$_STATE_DIR" "${_RECEIPTS%/*}" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Throttle
 # ---------------------------------------------------------------------------
-_now="$(date -u +%s)"
+# OMN-20109: no date exec on the throttle path; bash 3.2 (macOS) lacks %(...)T.
+_ONEX_PRINTF_T=0
+(( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 2) )) && _ONEX_PRINTF_T=1
+if (( _ONEX_PRINTF_T )); then printf -v _now '%(%s)T' -1; else _now="$(date -u +%s)"; fi
 _last=0
 if [[ -f "$_STAMP" ]]; then
     _last="$(cat "$_STAMP" 2>/dev/null || echo 0)"
@@ -151,7 +154,7 @@ printf '%s\n' "$_now" > "$_STAMP" 2>/dev/null || exit 0
 # ---------------------------------------------------------------------------
 _run_tick() {
     local ts reconciler bootstrap_note="" verdict rc
-    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if (( _ONEX_PRINTF_T )); then TZ=UTC printf -v ts '%(%Y-%m-%dT%H:%M:%SZ)T' -1; else ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; fi
 
     reconciler="$OMNI_HOME/omnibase_infra/scripts/reconcile-host.sh"
 
