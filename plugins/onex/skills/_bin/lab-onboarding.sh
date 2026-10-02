@@ -1004,6 +1004,36 @@ sync_clone() { # repo
   git clone --quiet --filter=blob:none "$GITHUB_ORG_URL/$1.git" "$d"
 }
 
+proven_pin() { # repo -> the CI-proven commit, empty when the repo has no pin
+  local pins="$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml"
+  [ -f "$pins" ] || return 0
+  sed -n "/^pins:[[:space:]]*$/,/^[^[:space:]]/s/^  $1: \([0-9a-fA-F]\{40\}\)[[:space:]]*$/\1/p" "$pins"
+}
+
+pin_clone_to_proven() { # repo
+  local d="$WORKSPACE/$1" pin changes
+  pin="$(proven_pin "$1")" || return 1
+  [ -n "$pin" ] || return 0
+  [ "$(git -C "$d" rev-parse HEAD)" = "$pin" ] && return 0
+  changes="$(git -C "$d" status --porcelain)" || return 1
+  if [ -n "$changes" ]; then
+    say "  $1: clone has uncommitted changes; cannot check out the proven commit"
+    return 1
+  fi
+  if ! git -C "$d" cat-file -e "$pin^{commit}" 2>/dev/null; then
+    git -C "$d" fetch --quiet origin || return 1
+    git -C "$d" cat-file -e "$pin^{commit}" 2>/dev/null || return 1
+  fi
+  git -C "$d" checkout --quiet --detach "$pin"
+}
+
+pin_clone_at_proven() { # repo
+  local pin
+  pin="$(proven_pin "$1")" || return 1
+  [ -n "$pin" ] || return 0
+  [ "$(git -C "$WORKSPACE/$1" rev-parse HEAD)" = "$pin" ]
+}
+
 # ---------------------------------------------------------------------------
 # The workspace's tier-1 runtime config.
 #
@@ -1057,7 +1087,11 @@ workspace_runtime_config_present() {
 
 phase2_verified() {
   local r
-  for r in $REPOS; do [ -d "$WORKSPACE/$r/.git" ] || return 1; done
+  [ -f "$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml" ] || return 1
+  for r in $REPOS; do
+    [ -d "$WORKSPACE/$r/.git" ] || return 1
+    pin_clone_at_proven "$r" || return 1
+  done
   workspace_runtime_config_present || return 1
   grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null
 }
@@ -1066,11 +1100,26 @@ phase2() {
   phase_start 2 "Workspace ($WORKSPACE)" "2-5 minutes"
   if is_done 2 && phase2_verified; then phase_pass "already in place"; return; fi
   mkdir -p "$WORKSPACE" || { FAILED_STEP="create $WORKSPACE"; phase_fail "choose another directory with --workspace"; }
-  local r
+  local r pin default_repos=""
   for r in $REPOS; do
     if [ -d "$WORKSPACE/$r/.git" ]; then say "  $r: present, fetching"; else say "  $r: cloning"; fi
     retry "clone or fetch $r" sync_clone "$r" || phase_fail "check that github.com is reachable, then run this again"
   done
+  [ -f "$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml" ] ||
+    { FAILED_STEP="read the proven set (omnibase_infra/.github/sibling-pins.yaml)"
+      phase_fail "restore the pins file in the omnibase_infra clone, or choose another --workspace"; }
+  for r in $REPOS; do
+    pin_clone_to_proven "$r" ||
+      { FAILED_STEP="check out the proven commit of $r"
+        phase_fail "move your changes out of the $r clone, or choose another --workspace; if the pin is missing, check origin and fetch it"; }
+    pin="$(proven_pin "$r")"
+    if [ -n "$pin" ]; then
+      say "  $r: proven ${pin:0:12}"
+    else
+      default_repos="${default_repos}${default_repos:+ }$r"
+    fi
+  done
+  say "  Default branch (no proven pin): ${default_repos:-none}"
   write_workspace_runtime_config ||
     { FAILED_STEP="declare the workspace runtime config"
       phase_fail "could not write $WORKSPACE/$WORKSPACE_RUNTIME_CONFIG_REL; check the directory is writable"; }
@@ -1163,14 +1212,14 @@ provider_error() {
 receipt_field() { printf '%s' "$1" | jq -r --arg k "$2" '[.. | objects | .[$k]? // empty] | first // empty' 2>/dev/null; }
 
 delegate_hello() { # -> stdout: the run's receipt.json (it names the endpoint and model)
+  # The floor does not exist until this run passes; the wrapper would refuse
+  # delegation. Prove the dispatch venv through its own entrypoint first.
   # NO TRANSPORT FLAG, deliberately. Phase 2 declares the workspace's transport
-  # in its tier-1 runtime config, so the bare command a developer -- and the
-  # delegate skill in Claude Code -- actually types is what runs here. This used
-  # to select the in-memory bus itself, which made the check pass on machines
-  # where the developer's own command was refused.
+  # in its tier-1 runtime config, so this check resolves the same transport as
+  # the developer's own command instead of selecting the in-memory bus itself.
   local out line receipt
   # stderr too: the "delegate artifacts:" line naming receipt.json is printed there.
-  out="$(cd "$HOME" && onex_run delegate --json "Reply with exactly one word: hello" 2>&1)" ||
+  out="$(cd "$HOME" && env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/onex" delegate --json "Reply with exactly one word: hello" 2>&1)" ||
     { printf '%s\n' "$out" >>"$LOG"; return 1; }
   line="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
   [ "$(receipt_field "$line" status)" = "success" ] || { printf '%s\n' "$out" >>"$LOG"; return 1; }
@@ -1179,12 +1228,24 @@ delegate_hello() { # -> stdout: the run's receipt.json (it names the endpoint an
   cat "$receipt"
 }
 
+# The floor moves only after a run passed on these commits. A failed run leaves
+# it untouched; stamp from the dispatch venv that answered, never clone HEAD.
+stamp_proven_floor() {
+  local -a sites
+  sites=( "$WORKSPACE"/.onex-dispatch-venv/lib/python*/site-packages )
+  [ "${#sites[@]}" -eq 1 ] && [ -d "${sites[0]}" ] || return 1
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" "$WORKSPACE/omnibase_infra/scripts/reconcile_verify_movement.py" \
+    floor-from-venv --site-packages "${sites[0]}" \
+    --lock "$WORKSPACE/omnibase_infra/uv.lock" --omni-home "$WORKSPACE" \
+    --output "$WORKSPACE/.onex-workspace-floor.json"
+}
+
 phase3() {
   phase_start 3 "onex, local identity and your model" "3-10 minutes"
   local endpoint
 
   say "  Building the workspace dispatch environment (onex)…"
-  retry "build the dispatch venv" nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" ||
+  retry "build the dispatch venv" nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --proven ||
     phase_fail "see the log; the script names the exact command to run by hand"
   step "point ~/.local/bin/onex at the workspace wrapper" link_onex ||
     phase_fail "remove ~/.local/bin/onex by hand, then run this again"
@@ -1256,6 +1317,8 @@ phase3() {
   fi
   say "  Delegation answered by $(receipt_field "$CAPTURED" model) at ${endpoint:-an endpoint the receipt does not name}"
   CAPTURED=""
+  step "stamp the proven workspace floor" stamp_proven_floor ||
+    phase_fail "see the log; the proven floor could not be written from the dispatch venv"
   phase_pass "model: your $choice key"
 }
 
@@ -1300,6 +1363,8 @@ phase3_ollama() {
   fi
   say "  Delegation answered by $model at $endpoint"
   [ "$OLLAMA_HEADLESS" -eq 1 ] && say "  Ollama is running without its app here; after a restart, start it with 'ollama serve'."
+  step "stamp the proven workspace floor" stamp_proven_floor ||
+    phase_fail "see the log; the proven floor could not be written from the dispatch venv"
   phase_pass "model: $OLLAMA_MODEL on this Mac (Ollama)"
 }
 
@@ -1632,14 +1697,17 @@ sqlite_rows() {
 }
 no_shadow() { [ "$(readlink "$HOME/.local/bin/onex")" = "$WORKSPACE/omnibase_infra/scripts/onex" ]; }
 
-# The workspace floor the onex wrapper enforces before any --lane command. If dev
-# moved while this ran, the clones fast-forward here but the dispatch venv built
-# in phase 3 is behind; the floor's own remedy is to rebuild it and reconcile again.
-reconcile_host() { nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-host.sh" --omni-home "$WORKSPACE"; }
+# The workspace floor the onex wrapper enforces before any --lane command. Phase 3
+# stamped it after its own delegation passed. This asks the wrapper itself, the way
+# a developer's own `onex delegate` will, and never reconciles: a reconcile here
+# would move the clones and the dispatch venv to dev head and restamp the floor
+# with commits no run has passed on.
 workspace_floor() {
-  reconcile_host && return 0
-  nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" &&
-    reconcile_host
+  local out line
+  out="$(cd "$HOME" && onex_run delegate --json "Reply with exactly one word: hello" 2>&1)" ||
+    { printf '%s\n' "$out"; return 1; }
+  line="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
+  [ "$(receipt_field "$line" status)" = "success" ] || { printf '%s\n' "$out"; return 1; }
 }
 
 phase6() {
@@ -1648,7 +1716,7 @@ phase6() {
   check "onex starts ($(onex_run --version 2>/dev/null | tail -n 1))" onex_run --version
   check "local identity minted" onex_run local identity
   check "onex is the workspace wrapper, not a PyPI copy" no_shadow
-  check "workspace floor proven (reconcile-host IN_SYNC)" retry "reconcile the workspace floor" workspace_floor
+  check "workspace floor proven (the onex wrapper delegates)" retry "delegate through the workspace wrapper" workspace_floor
   check "a delegation row in the local store" sqlite_rows
   check "onex metering reads it" onex_run metering
   if [ "$MODEL_CHOICE" = "ollama" ]; then
