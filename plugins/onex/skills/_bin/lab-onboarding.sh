@@ -936,7 +936,7 @@ phase1() {
     if "$(brew_bin)" list --versions "$f" >/dev/null 2>&1; then
       say "  $f: present"
     else
-      say "  Installing $f…"
+      say "  Installing ${f}…"
       retry "brew install $f" brew_install "$f" || phase_fail "run 'brew install $f' to see the error, then run this again"
     fi
   done

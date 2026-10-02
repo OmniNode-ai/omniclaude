@@ -33,6 +33,7 @@ SCRIPT = (
     / "lab-onboarding.sh"
 )
 SKILL = SCRIPT.parents[1] / "omninode_dev_setup" / "SKILL.md"
+UNBRACED_MULTIBYTE_EXPANSION = re.compile(rb"\$[A-Za-z_][A-Za-z0-9_]*[\x80-\xff]")
 
 pytestmark = pytest.mark.unit
 
@@ -154,6 +155,34 @@ def test_the_script_parses_under_the_stock_bash() -> None:
         [bash, "-n", str(SCRIPT)], capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_no_unbraced_expansion_touches_a_multibyte_character() -> None:
+    """A bare $name before a multibyte byte is an unbound variable on bash 3.2.
+
+    `bash -n` cannot catch this: the script parses, then dies at expansion time.
+    Stock /bin/bash 3.2 absorbs the leading byte of a UTF-8 character into the
+    variable name, so `$f\u2026` expands as `$f` plus 0xE2 -- unbound, and
+    `set -u` ends the run. Braces settle it. Found by the OMN-20224 bare-Mac
+    walk, where it killed phase 1 right after Homebrew installed.
+    """
+    offenders = [
+        (i, line.decode("utf-8", "replace").strip())
+        for i, line in enumerate(SCRIPT.read_bytes().split(b"\n"), 1)
+        if UNBRACED_MULTIBYTE_EXPANSION.search(line)
+    ]
+    assert not offenders, (
+        "brace these expansions; on bash 3.2 the multibyte character joins the "
+        f"variable name: {offenders}"
+    )
+
+
+def test_the_multibyte_expansion_guard_would_catch_the_regression() -> None:
+    """Prove the guard catches the regression and accepts the braced form."""
+    assert UNBRACED_MULTIBYTE_EXPANSION.search(b'echo "Installing $f\xe2\x80\xa6"')
+    assert not UNBRACED_MULTIBYTE_EXPANSION.search(
+        b'echo "Installing ${f}\xe2\x80\xa6"'
+    )
 
 
 def test_the_script_names_no_lab_host() -> None:
