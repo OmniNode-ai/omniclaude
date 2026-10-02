@@ -247,7 +247,10 @@ def test_the_scripts_own_delegation_uses_the_developers_command() -> None:
         "delegate_hello must not select a transport: the declared workspace "
         "config is what a developer's own command resolves"
     )
-    assert 'onex_run delegate --json "Reply with exactly one word: hello"' in body
+    assert (
+        'env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/onex" '
+        'delegate --json "Reply with exactly one word: hello"'
+    ) in body
 
 
 def test_the_script_names_no_lab_host() -> None:
