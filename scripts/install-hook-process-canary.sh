@@ -67,6 +67,8 @@ copy_scripts() {
   for f in hook_process_canary.py hook_canary_notify.sh hook_canary_ledger_append.sh; do
     install -m 0755 "${REPO_ROOT}/scripts/${f}" "${COPY_ROOT}/scripts/${f}"
   done
+  install -m 0644 "${REPO_ROOT}/src/omniclaude/handlers/handler_ledger_write_guard.py" \
+    "${COPY_ROOT}/scripts/handler_ledger_write_guard.py"
   install -m 0644 "${REPO_ROOT}/plugins/onex/hooks/scripts/alert-channel.sh" \
     "${COPY_ROOT}/plugins/onex/hooks/scripts/alert-channel.sh"
 }

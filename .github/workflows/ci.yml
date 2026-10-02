@@ -1544,9 +1544,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnimarket
-          # One-time landing order: pinned to the omnimarket branch that carries
-          # the typed work-ledger topics; restored to dev in the next commit.
-          ref: codex/omn-20001-m3-fg2
+          ref: dev
           path: _registry/omnimarket
 
       - name: Install uv

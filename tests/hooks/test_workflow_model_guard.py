@@ -957,3 +957,37 @@ def test_registered_hook_blocks_a_dirty_script_path_behind_a_clean_script(
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert "on-disk" in result.stdout
+
+
+def test_effort_is_read_from_the_agent_options_object() -> None:
+    """OMN-17427 W9: the Workflow ``agent()`` helper accepts ``opts.effort``,
+    observed as ``effort low`` in the subagent transcript.
+
+    Read it the way a ROUTE parser does, with the guard's own scanner
+    helpers: the top-level ``effort`` property of the options object is the
+    per-call value, and the ``effort`` nested inside the ``schema`` property
+    is NOT picked up. Effort is not the model gate's business, so the check
+    stays clean.
+    """
+    source = (
+        "await agent(`x`, { label: 'e', model: 'sonnet', effort: 'low', "
+        "schema: { type: 'object', properties: { effort: { type: 'string' } } } })"
+    )
+    masked = _GUARD._mask(source).text
+    open_paren = masked.find("agent(") + len("agent")
+    spans = _GUARD._split_arguments(masked, open_paren)
+    assert spans is not None and len(spans) >= 2
+    opt_start, opt_end = spans[1]
+    lead = len(masked[opt_start:opt_end]) - len(masked[opt_start:opt_end].lstrip())
+    brace = opt_start + lead
+    close = _GUARD._matching_brace(masked, brace, opt_end)
+    assert close is not None
+    props, _ = _GUARD._object_properties(masked, brace, close)
+    assert [prop.key for prop in props].count("effort") == 1
+    efforts = [
+        _GUARD._string_literal(source, masked, prop.value_start, prop.value_end)
+        for prop in props
+        if prop.key == "effort"
+    ]
+    assert efforts == ["low"]
+    assert _check(source) == []
