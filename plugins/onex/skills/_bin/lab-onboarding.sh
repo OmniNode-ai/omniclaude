@@ -2,9 +2,12 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# omninode-dev-setup.sh -- one command from a bare Mac to a developer machine that
+# lab-onboarding.sh (the omninode_dev_setup skill) -- one command from a bare Mac to a developer machine that
 # runs onex locally, on the developer's own model key. It never connects to the
 # lab: everything runs on this Mac, natively and optionally in Docker.
+#
+# The file keeps its old name until the canonical-file-shape check carries a
+# renamed file's baseline entry; the skill and command are omninode_dev_setup.
 #
 # Runs in phases. Each phase reports PASS or FAIL the moment it ends, in the
 # terminal, as a macOS notification, and as a line in the status file, so a
@@ -24,7 +27,7 @@
 # ${var,,}, no mapfile, and no "${arr[@]}" of a possibly-empty array.
 #
 # Usage:
-#   bash omninode-dev-setup.sh [options]
+#   bash lab-onboarding.sh [options]
 #
 # Options:
 #   --preflight-only     run phase 0, print the verdict, exit

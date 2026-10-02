@@ -40,7 +40,7 @@ args:
 
 **Announce at start:** "I'm using the omninode_dev_setup skill."
 
-One script, `plugins/onex/skills/_bin/omninode-dev-setup.sh`, does the work. It runs
+One script, `plugins/onex/skills/_bin/lab-onboarding.sh`, does the work. It runs
 the same way from Claude Code or from a plain terminal, and works on a physical
 Mac or inside a macOS VM. This skill starts it where the developer can answer
 its prompts, then reports each phase to the developer the moment it finishes.
@@ -70,7 +70,7 @@ installed and a recommended VM size instead (exit code 3).
 Always run preflight before anything else and show its table to the developer:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/omninode-dev-setup.sh" --preflight-only <args>
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/lab-onboarding.sh" --preflight-only <args>
 ```
 
 - Exit 3: the Mac is below the minimum. Relay the failed requirement and the
@@ -106,7 +106,7 @@ and their model key unless they chose Ollama (at the start, before anything inst
 terminal, so open one:
 
 ```bash
-/usr/bin/osascript -e "tell application \"Terminal\" to do script \"bash '${CLAUDE_PLUGIN_ROOT}/skills/_bin/omninode-dev-setup.sh' <args>\"" -e 'tell application "Terminal" to activate'
+/usr/bin/osascript -e "tell application \"Terminal\" to do script \"bash '${CLAUDE_PLUGIN_ROOT}/skills/_bin/lab-onboarding.sh' <args>\"" -e 'tell application "Terminal" to activate'
 ```
 
 Tell the developer a Terminal window opened, that it will ask for their Mac

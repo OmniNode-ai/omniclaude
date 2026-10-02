@@ -1,9 +1,9 @@
 ---
 schema_version: "1.0.0"
 ticket_id: OMN-20150
-title: "Developer setup script (omninode-dev-setup.sh) and /onex:omninode_dev_setup skill"
+title: "Developer setup script (lab-onboarding.sh) and /onex:omninode_dev_setup skill"
 summary: >
-  OMN-20150 adds the developer setup script (plugins/onex/skills/_bin/omninode-dev-setup.sh)
+  OMN-20150 adds the developer setup script (plugins/onex/skills/_bin/lab-onboarding.sh)
   and the /onex:omninode_dev_setup skill, introduced by PR 2442. The in-repo contract exists
   because validate-pr-contracts reads contracts/ in this repository.
 is_seam_ticket: false

@@ -25,7 +25,7 @@ SCRIPT = (
     / "onex"
     / "skills"
     / "_bin"
-    / "omninode-dev-setup.sh"
+    / "lab-onboarding.sh"
 )
 SKILL = SCRIPT.parents[1] / "omninode_dev_setup" / "SKILL.md"
 
