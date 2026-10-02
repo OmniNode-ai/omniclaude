@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 schema_version: "1.0.0"
-model: haiku
+model: sonnet
 disallowedTools: []
 domain: velocity_tracking
 purpose: "Track sprint velocity metrics, compute throughput, and surface delivery trends for planning."

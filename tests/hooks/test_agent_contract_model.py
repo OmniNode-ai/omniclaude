@@ -12,7 +12,7 @@ Coverage:
     test_agent_yaml_missing_purpose_fails
         Missing `purpose` raises ValidationError.
     test_agent_yaml_invalid_model_fails
-        `model` not in {opus, sonnet, haiku} raises ValidationError.
+        `model` not in {opus, sonnet} raises ValidationError.
     test_agent_yaml_invalid_name_pattern_fails
         `name` that doesn't match agent-[a-z][a-z0-9-]+ raises ValidationError.
     test_agent_yaml_disallowed_tools_missing_fails

@@ -25,7 +25,6 @@
   ],
   "allowed_models": [
     "opus",
-    "sonnet",
-    "haiku"
+    "sonnet"
   ]
 }

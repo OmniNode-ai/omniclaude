@@ -22,4 +22,4 @@ jobs:
   hardcoded-model-config:
     uses: OmniNode-ai/omniclaude/.github/workflows/hardcoded-model-config-reusable.yml@1ad181a3142367d7f4a04dd4d534dd27e4d40033
     with:
-      core_ref: a3b56675fda87a1ba8cf7e19d8e60a7d0ab6c4ee  # pragma: allowlist secret
+      core_ref: d17f5be8be88a8d35fc6a69e13cb8c1896c3025b  # pragma: allowlist secret

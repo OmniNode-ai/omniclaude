@@ -41,6 +41,7 @@ from types import ModuleType
 from typing import Any, Final
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.unit
 
@@ -73,10 +74,38 @@ def _load_guard() -> ModuleType:
 
 _GUARD = _load_guard()
 ALLOWLIST: frozenset[str] = _GUARD.load_allowlist()
+ROUTING: Any = _GUARD.load_routing()
+
+# Dimension sums are chosen so that no R or J is 3 unless a case says so.
+_ROUTE_B2 = (
+    "ROUTE: band=B2 score=5 dims=S1A1R1V1N1C0J0 dest=codex model=sonnet effort=medium"
+)
+_ROUTE_B3 = (
+    "ROUTE: band=B3 score=9 dims=S2A1R1V2N1C1J1 dest=lane model=sonnet effort=high"
+)
+_ROUTE_B4 = (
+    "ROUTE: band=B4 score=14 dims=S2A2R2V2N2C2J2 dest=lane model=opus effort=high"
+)
+_ROUTE_B5 = (
+    "ROUTE: band=B5 score=18 dims=S3A3R2V2N3C2J3 dest=lane model=opus effort=xhigh"
+)
 
 
 def _check(source: str) -> list[Any]:
     return list(_GUARD.check_workflow_script(source, ALLOWLIST, filename="case.js"))
+
+
+def _check_routed(source: str) -> list[Any]:
+    return list(
+        _GUARD.check_workflow_script(
+            source, ALLOWLIST, filename="case.js", routing=ROUTING
+        )
+    )
+
+
+def _routed_call(route: str | None, model: str) -> str:
+    body = f"{route}\\ndo a thing" if route else "do a thing"
+    return f"await agent(`{body}`, {{ label: 'r', model: '{model}' }})\n"
 
 
 # ---------------------------------------------------------------------------
@@ -84,8 +113,13 @@ def _check(source: str) -> list[Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_shipped_allowlist_is_exactly_the_three_background_models() -> None:
-    assert set(ALLOWLIST) == {"opus", "sonnet", "haiku"}
+def test_shipped_allowlist_is_exactly_the_two_background_models() -> None:
+    assert set(ALLOWLIST) == {"opus", "sonnet"}
+
+
+def test_shipped_allowlist_has_no_haiku() -> None:
+    """Operator ruling OMN-17427: haiku is removed from background dispatch."""
+    assert "haiku" not in ALLOWLIST
 
 
 def test_shipped_allowlist_has_no_inherit_escape_hatch() -> None:
@@ -102,8 +136,8 @@ def test_shipped_allowlist_has_no_inherit_escape_hatch() -> None:
 
 def test_allowlist_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
     override = tmp_path / "allowlist.json"
-    override.write_text(json.dumps({"allowed_models": ["haiku"]}), encoding="utf-8")
-    assert _GUARD.load_allowlist(override) == frozenset({"haiku"})
+    override.write_text(json.dumps({"allowed_models": ["sonnet"]}), encoding="utf-8")
+    assert _GUARD.load_allowlist(override) == frozenset({"sonnet"})
 
 
 @pytest.mark.parametrize(
@@ -197,7 +231,7 @@ def test_fable_fails_and_the_message_quotes_the_offending_value() -> None:
     assert len(findings) == 1
     assert "'fable'" in findings[0].reason
     assert "not an allowed background model" in findings[0].reason
-    assert "haiku, opus, sonnet" in findings[0].reason
+    assert "opus, sonnet" in findings[0].reason
     assert findings[0].label == "fable-call"
 
 
@@ -219,7 +253,7 @@ def test_model_only_inside_the_prompt_string_fails() -> None:
 def test_agent_call_written_inside_a_prompt_is_not_a_call_site() -> None:
     source = (
         "await agent(`Do not call agent({ label: 'x' }) yourself.`, "
-        "{ label: 'quoted-agent', model: 'haiku' })"
+        "{ label: 'quoted-agent', model: 'sonnet' })"
     )
     assert _check(source) == []
 
@@ -277,7 +311,21 @@ def test_options_argument_that_is_not_an_object_literal_fails() -> None:
 
 
 def test_double_quoted_model_passes() -> None:
-    assert _check('await agent("x", { label: "dq", model: "haiku" })') == []
+    assert _check('await agent("x", { label: "dq", model: "sonnet" })') == []
+
+
+@pytest.mark.parametrize("model", ["sonnet", "opus"])
+def test_workflow_agent_on_an_allowed_model_passes(model: str) -> None:
+    assert _check(f"await agent(`x`, {{ label: 'ok', model: '{model}' }})") == []
+
+
+@pytest.mark.parametrize("model", ["haiku", "claude-haiku-4-5-20251001"])
+def test_workflow_agent_on_haiku_is_refused_and_says_it_is_removed(model: str) -> None:
+    findings = _check(f"await agent(`x`, {{ label: 'h', model: '{model}' }})")
+    assert len(findings) == 1
+    assert "not an allowed background model" in findings[0].reason
+    assert "haiku is removed" in findings[0].reason
+    assert "onex delegate" in findings[0].reason
 
 
 def test_line_numbers_point_at_the_offending_call() -> None:
@@ -373,6 +421,25 @@ def test_agent_with_allowed_model_passes() -> None:
         )
         == []
     )
+
+
+def test_agent_with_opus_passes() -> None:
+    assert (
+        _GUARD.check_agent_input(
+            {"subagent_type": "general-purpose", "model": "opus"}, ALLOWLIST
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize("model", ["haiku", "claude-haiku-4-5-20251001"])
+def test_agent_on_haiku_is_refused_and_says_it_is_removed(model: str) -> None:
+    findings = _GUARD.check_agent_input(
+        {"subagent_type": "general-purpose", "model": model}, ALLOWLIST
+    )
+    assert len(findings) == 1
+    assert "haiku is removed" in findings[0].reason
+    assert "onex delegate" in findings[0].reason
 
 
 def test_agent_with_no_model_fails() -> None:
@@ -511,7 +578,8 @@ def test_registered_hook_blocks_a_workflow_with_no_model(tmp_path: Path) -> None
     assert "background agent model not chosen explicitly" in combined
     assert "e2e-canary" in combined
     assert "line 1" in combined
-    assert "opus" in combined and "sonnet" in combined and "haiku" in combined
+    assert "opus" in combined and "sonnet" in combined
+    assert "onex delegate" in combined
 
 
 def test_registered_hook_blocks_an_agent_fork(tmp_path: Path) -> None:
@@ -535,7 +603,10 @@ def test_registered_hook_passes_a_clean_workflow_silently(tmp_path: Path) -> Non
         {
             "tool_name": "Workflow",
             "tool_input": {
-                "script": "await agent(`do a thing`, { label: 'ok', model: 'sonnet' })\n"
+                "script": (
+                    f"await agent(`{_ROUTE_B3}\\ndo a thing`, "
+                    "{ label: 'ok', model: 'sonnet' })\n"
+                )
             },
         },
         tmp_path,
@@ -918,3 +989,287 @@ def test_registered_hook_blocks_a_dirty_script_path_behind_a_clean_script(
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert "on-disk" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Routing contract: bands, dimensions and the ROUTE line (OMN-17427 W1, W2)
+# ---------------------------------------------------------------------------
+
+
+def test_shipped_routing_declares_the_seven_dimensions_and_six_bands() -> None:
+    assert [d.key for d in ROUTING.dimensions] == list("SARVNCJ")
+    assert all(d.max_value == 3 for d in ROUTING.dimensions)
+    assert set(ROUTING.bands) == {"B0", "B1", "B1c", "B2", "B3", "B4", "B5"}
+    assert ROUTING.bands["B2"].models == frozenset({"sonnet"})
+    assert ROUTING.bands["B3"].models == frozenset({"sonnet"})
+    assert ROUTING.bands["B4"].models == frozenset({"opus"})
+    assert ROUTING.bands["B5"].models == frozenset({"opus"})
+    assert ROUTING.bands["B5"].efforts == frozenset({"xhigh"})
+    assert ROUTING.bands["B4"].timeout_s == 7200
+    assert ROUTING.bands["B4"].max_concurrent == 5
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda d: d.pop("bands"),
+        lambda d: d.pop("dimensions"),
+        lambda d: d["bands"].pop("B4"),
+        lambda d: d["dimensions"].pop(),
+        lambda d: d["bands"]["B4"].update(models="opus"),
+        lambda d: d["bands"]["B4"].update(timeout_s=0),
+        lambda d: d["hard_floors"][0].update(min_band="B9"),
+    ],
+)
+def test_malformed_routing_raises_rather_than_defaulting(
+    tmp_path: Path, mutate: Any
+) -> None:
+    data = yaml.safe_load(
+        _GUARD.DEFAULT_ROUTING_CONTRACT_PATH.read_text(encoding="utf-8")
+    )
+    mutate(data)
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(_GUARD.AllowlistError):
+        _GUARD.load_routing(bad)
+
+
+def test_contract_parser_agrees_with_pyyaml_on_the_shipped_contract() -> None:
+    path = _GUARD.DEFAULT_ROUTING_CONTRACT_PATH
+    text = path.read_text(encoding="utf-8")
+    assert _GUARD._parse_contract_yaml(text, path) == yaml.safe_load(text)
+
+
+def test_allowlist_holds_only_allowed_models() -> None:
+    data = json.loads(_GUARD.DEFAULT_ALLOWLIST_PATH.read_text(encoding="utf-8"))
+    assert set(data) == {"$comment", "allowed_models"}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "a:\n\tb: 1\n",
+        "a: 1\na: 2\n",
+        "a: {b: 1}\n",
+        "a: 'x'\n",
+        "a: &anchor 1\n",
+        "a: 1 # trailing\n",
+        "a: [1, 2\n",
+        "a:\n   b: 1\n",
+        "  a: 1\n",
+        "- 1\nb: 2\n",
+        "",
+    ],
+)
+def test_contract_parser_refuses_yaml_outside_its_subset(text: str) -> None:
+    with pytest.raises(_GUARD.AllowlistError):
+        _GUARD._parse_contract_yaml(text, Path("x.yaml"))
+
+
+@pytest.mark.parametrize(
+    ("route", "model"),
+    [
+        (_ROUTE_B2, "sonnet"),
+        (_ROUTE_B3, "sonnet"),
+        (_ROUTE_B4, "opus"),
+        (_ROUTE_B5, "opus"),
+    ],
+)
+def test_matching_route_passes(route: str, model: str) -> None:
+    assert _check_routed(_routed_call(route, model)) == []
+
+
+def test_b4_route_with_sonnet_model_is_refused() -> None:
+    findings = _check_routed(
+        _routed_call(_ROUTE_B4.replace("model=opus", "model=sonnet"), "sonnet")
+    )
+    assert len(findings) == 1
+    assert "band B4" in findings[0].reason
+    assert "sonnet" in findings[0].reason
+
+
+def test_route_model_must_match_the_declared_model() -> None:
+    findings = _check_routed(_routed_call(_ROUTE_B4, "sonnet"))
+    assert len(findings) == 1
+    assert "model=opus" in findings[0].reason
+
+
+def test_missing_route_is_refused() -> None:
+    findings = _check_routed(_routed_call(None, "sonnet"))
+    assert len(findings) == 1
+    assert "ROUTE" in findings[0].reason
+    assert "missing" in findings[0].reason
+
+
+def test_unparsable_route_is_refused() -> None:
+    findings = _check_routed(_routed_call("ROUTE: band=B3 model=sonnet", "sonnet"))
+    assert len(findings) == 1
+    assert "unparsable" in findings[0].reason
+
+
+def test_interpolated_route_is_refused_as_missing() -> None:
+    source = "await agent(`${route}\\nx`, { label: 'r', model: 'sonnet' })\n"
+    findings = _check_routed(source)
+    assert len(findings) == 1
+    assert "ROUTE" in findings[0].reason
+
+
+def test_route_in_label_is_accepted() -> None:
+    source = f"await agent(`do a thing`, {{ label: '{_ROUTE_B3}', model: 'sonnet' }})\n"
+    assert _check_routed(source) == []
+
+
+@pytest.mark.parametrize(
+    ("dims", "score"),
+    [("S1A1R3V1N1C1J1", 9), ("S1A1R1V1N1C1J3", 9), ("S0A0R3V0N0C0J0", 3)],
+)
+def test_floor_triggered_band_below_b4_is_refused(dims: str, score: int) -> None:
+    route = (
+        f"ROUTE: band=B3 score={score} dims={dims} dest=lane model=sonnet effort=high"
+    )
+    findings = _check_routed(_routed_call(route, "sonnet"))
+    assert len(findings) == 1
+    assert "hard floor" in findings[0].reason
+
+
+def test_floor_triggered_b4_with_low_score_passes() -> None:
+    route = (
+        "ROUTE: band=B4 score=3 dims=S0A0R3V0N0C0J0 dest=lane model=opus effort=high"
+    )
+    assert _check_routed(_routed_call(route, "opus")) == []
+
+
+def test_score_must_equal_the_sum_of_dims() -> None:
+    route = _ROUTE_B3.replace("score=9", "score=10")
+    findings = _check_routed(_routed_call(route, "sonnet"))
+    assert len(findings) == 1
+    assert "score" in findings[0].reason
+
+
+def test_band_below_the_score_band_is_refused() -> None:
+    route = _ROUTE_B4.replace("band=B4", "band=B3").replace(
+        "model=opus", "model=sonnet"
+    )
+    findings = _check_routed(_routed_call(route, "sonnet"))
+    assert len(findings) == 1
+    assert "below" in findings[0].reason
+
+
+def test_effort_must_be_in_the_band_set() -> None:
+    route = _ROUTE_B5.replace("effort=xhigh", "effort=low")
+    findings = _check_routed(_routed_call(route, "opus"))
+    assert len(findings) == 1
+    assert "effort" in findings[0].reason
+
+
+@pytest.mark.parametrize("band", ["B0", "B1", "B1c"])
+def test_non_model_band_cannot_dispatch_an_agent(band: str) -> None:
+    route = f"ROUTE: band={band} score=2 dims=S1A1R0V0N0C0J0 dest=x model=sonnet effort=high"
+    findings = _check_routed(_routed_call(route, "sonnet"))
+    assert len(findings) == 1
+    assert f"band {band}" in findings[0].reason
+
+
+def test_agent_tool_requires_a_route_in_the_prompt() -> None:
+    base = {"subagent_type": "general-purpose", "model": "sonnet", "description": "d"}
+    missing = _GUARD.check_agent_input(base, ALLOWLIST, routing=ROUTING)
+    assert len(missing) == 1 and "ROUTE" in missing[0].reason
+    ok = _GUARD.check_agent_input(
+        {**base, "prompt": f"{_ROUTE_B3}\nwork"}, ALLOWLIST, routing=ROUTING
+    )
+    assert ok == []
+    bad = _GUARD.check_agent_input(
+        {**base, "model": "sonnet", "prompt": _ROUTE_B4}, ALLOWLIST, routing=ROUTING
+    )
+    assert len(bad) == 1 and "model=opus" in bad[0].reason
+
+
+def test_registered_hook_blocks_b4_route_with_sonnet_model(tmp_path: Path) -> None:
+    route = _ROUTE_B4.replace("model=opus", "model=sonnet")
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {"script": _routed_call(route, "sonnet")},
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2
+    assert "band B4" in result.stdout
+
+
+def test_registered_hook_blocks_a_missing_route(tmp_path: Path) -> None:
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {"script": _routed_call(None, "sonnet")},
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2
+    assert "ROUTE" in result.stdout
+
+
+def test_registered_hook_blocks_a_floor_triggered_b3(tmp_path: Path) -> None:
+    route = _ROUTE_B3.replace("S2A1R1V2N1C1J1", "S2A1R3V2N1C1J1").replace(
+        "score=9", "score=11"
+    )
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {"script": _routed_call(route, "sonnet")},
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2
+    assert "hard floor" in result.stdout
+
+
+def test_registered_hook_blocks_an_agent_without_route(tmp_path: Path) -> None:
+    result = _run_hook(
+        {
+            "tool_name": "Agent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "model": "sonnet",
+                "description": "d",
+                "prompt": "work",
+            },
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2
+    assert "ROUTE" in result.stdout
+
+
+def test_effort_is_read_from_the_agent_options_object() -> None:
+    """OMN-17427 W9: the Workflow ``agent()`` helper accepts ``opts.effort``,
+    observed as ``effort low`` in the subagent transcript.
+
+    Read it the way a ROUTE parser does, with the guard's own scanner
+    helpers: the top-level ``effort`` property of the options object is the
+    per-call value, and the ``effort`` nested inside the ``schema`` property
+    is NOT picked up. Effort is not the model gate's business, so the check
+    stays clean.
+    """
+    source = (
+        "await agent(`x`, { label: 'e', model: 'sonnet', effort: 'low', "
+        "schema: { type: 'object', properties: { effort: { type: 'string' } } } })"
+    )
+    masked = _GUARD._mask(source).text
+    open_paren = masked.find("agent(") + len("agent")
+    spans = _GUARD._split_arguments(masked, open_paren)
+    assert spans is not None and len(spans) >= 2
+    opt_start, opt_end = spans[1]
+    lead = len(masked[opt_start:opt_end]) - len(masked[opt_start:opt_end].lstrip())
+    brace = opt_start + lead
+    close = _GUARD._matching_brace(masked, brace, opt_end)
+    assert close is not None
+    props, _ = _GUARD._object_properties(masked, brace, close)
+    assert [prop.key for prop in props].count("effort") == 1
+    efforts = [
+        _GUARD._string_literal(source, masked, prop.value_start, prop.value_end)
+        for prop in props
+        if prop.key == "effort"
+    ]
+    assert efforts == ["low"]
+    assert _check(source) == []

@@ -464,7 +464,6 @@ jobs:
   # omnibase_core module). CI-only matches the omnimarket/omnibase_infra
   # precedent.
   canon-shape-ratchet:
-    needs: occ-preflight
     name: Canonical Handler-Shape Ratchet
     # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
     # so required CI does not queue behind self-hosted fleet saturation.
@@ -1299,8 +1298,6 @@ jobs:
         run: python3 scripts/validation/validate_no_utcnow.py
 
   arch-no-hardcoded-ip:
-    needs: occ-preflight
-    if: always()
     name: "Arch: No hardcoded internal IPs (check 12)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
     runs-on: ubuntu-latest
@@ -1547,9 +1544,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnimarket
-          # One-time landing order: pinned to the omnimarket branch that carries
-          # the typed work-ledger topics; restored to dev in the next commit.
-          ref: codex/omn-20001-m3-fg2
+          ref: dev
           path: _registry/omnimarket
 
       - name: Install uv
@@ -3533,7 +3528,6 @@ jobs:
     # the saturated self-hosted fleet; it posts as soon as its needs are terminal.
     runs-on: ubuntu-latest
     needs:
-      - occ-preflight
       # OMN-15314: read for its `docs_only` OUTPUT only, never for its result.
       # It is the declared precondition the per-upstream skip policy below
       # re-evaluates, so this gate can tell an expected skip from a stranded one.
@@ -3611,16 +3605,6 @@ jobs:
           # skip, every unlisted upstream that skipped, failure, cancelled, and
           # any future result value GitHub might add fail closed.
           #
-          # occ-preflight is checked first and on its own: every job below is
-          # gated on it succeeding, so if it did not, their results carry no
-          # information and no skip below can be assessed.
-          PREFLIGHT="${{ needs.occ-preflight.result }}"
-          echo "occ-preflight: $PREFLIGHT"
-          if [ "$PREFLIGHT" != "success" ]; then
-            echo "::error::occ-preflight did not succeed (result: $PREFLIGHT) — every check in this gate is gated on it."
-            exit 1
-          fi
-
           # Declared-precondition inputs for the skip policy in the loop.
           DOCS_ONLY="${{ needs.zone-filter.outputs.docs_only }}"
           FORK_PR="${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}"
@@ -4084,11 +4068,33 @@ jobs:
       - name: Ratchet non-canonical lifecycle-word classes against frozen allowlist (OMN-14350)
         run: |
           uv run --no-project \
-            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@a3b56675fda87a1ba8cf7e19d8e60a7d0ab6c4ee' \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@d17f5be8be88a8d35fc6a69e13cb8c1896c3025b' \
             python -m omnibase_core.validators.no_noncanonical_lifecycle_classes \
             --check-stale \
             --allowlist .onex_ratchets/noncanonical_class_allowlist.yaml \
             src/omniclaude
+
+  # Shape-gate independence (OMN-20298): a shape-gate detector job never waits on
+  # the change-control preflight and never reads its result. Unconditional (no
+  # needs, no if), registered in scripts/ci/ci_summary_gate.py GATE_JOBS and
+  # STRICT_SUCCESS_JOBS and in .github/required-checks.yaml. No baseline,
+  # allowlist or suppression exists for it.
+  shape-gate-independence:
+    name: Shape-Gate Independence (OMN-20298)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.3"
+      - name: Refuse shape-gate detector jobs that depend on the preflight (OMN-20298)
+        run: |
+          uv run --no-project \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@d17f5be8be88a8d35fc6a69e13cb8c1896c3025b' \
+            python -m omnibase_core.handlers.handler_shape_gate_independence
 
   precommit-suite:
     name: Pre-commit Suite (OMN-19612)
@@ -4278,7 +4284,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      CANONICAL_FILE_SHAPE_CORE: "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@a3b56675fda87a1ba8cf7e19d8e60a7d0ab6c4ee"
+      CANONICAL_FILE_SHAPE_CORE: "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@d17f5be8be88a8d35fc6a69e13cb8c1896c3025b"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

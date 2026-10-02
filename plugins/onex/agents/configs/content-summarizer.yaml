@@ -6,7 +6,7 @@
 # Integration: general-purpose identity assumption
 
 schema_version: "1.0.0"
-model: haiku
+model: sonnet
 disallowedTools: []
 domain: documentation
 purpose: "Summarize long-form content, meeting notes, and documentation into concise structured summaries."

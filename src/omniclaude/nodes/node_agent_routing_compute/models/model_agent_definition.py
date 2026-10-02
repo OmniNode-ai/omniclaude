@@ -28,7 +28,7 @@ class ModelAgentDefinition(BaseModel):
         context_triggers: Context phrases that increase match confidence.
         capabilities: List of capability strings this agent provides.
         definition_path: Filesystem path to the agent's YAML file.
-        model: Recommended Claude model (e.g., 'haiku', 'sonnet', 'opus').
+        model: Recommended Claude model (e.g., 'sonnet', 'opus').
         disallowed_tools: Tools this agent must not use.
         domain: Agent's primary domain classification.
         purpose: Extended description of agent's purpose.
@@ -78,7 +78,7 @@ class ModelAgentDefinition(BaseModel):
     model: str | None = Field(
         default=None,
         max_length=50,
-        description="Recommended Claude model for this agent (e.g., 'haiku', 'sonnet', 'opus')",
+        description="Recommended Claude model for this agent (e.g., 'sonnet', 'opus')",
     )
     disallowed_tools: tuple[str, ...] = Field(
         default=(),

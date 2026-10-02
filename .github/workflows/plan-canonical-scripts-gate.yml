@@ -51,7 +51,6 @@ jobs:
       receipts-dir: drift/dod_receipts
 
   plan-canonical-scripts-gate:
-    needs: occ-preflight
     name: Plan Canonical Scripts Gate
     runs-on: >-
       ${{
