@@ -9,6 +9,7 @@ default-deny verdict so the required gate can never silently rubber-stamp.
 
 from __future__ import annotations
 
+import inspect
 import json
 import subprocess
 import sys
@@ -84,9 +85,26 @@ class TestRunningRowsHoldTheVerdictOmn20066:
             in report
         )
 
-    @pytest.mark.skip(reason="No event-specific in-run gate tiers in this repo")
-    def test_merge_group_running_unregistered_job_holds_pending(self) -> None:
+    def test_merge_group_running_unregistered_job_holds_pending(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Merge-group uses the same in-run evaluate() policy as every event."""
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "merge_group")
+        jobs = _all_gates() + [_job("Some New Job", None, status="in_progress")]
+        code, report = evaluate(jobs, run_attempt=1)
+        assert code == EXIT_PENDING, report
+        assert (
+            "  default-deny sweep rows still running (PENDING, re-polled): Some New Job"
+            in report
+        )
+
+        monkeypatch.delenv("GITHUB_EVENT_NAME")
+        baseline = evaluate(jobs, run_attempt=1)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "merge_group")
+        assert evaluate(jobs, run_attempt=1) == baseline
+        assert all(
+            "event" not in name for name in inspect.signature(evaluate).parameters
+        )
 
     def test_running_job_then_completed_success_concludes_success(self) -> None:
         """A successful completion clears the running row's pending verdict."""
