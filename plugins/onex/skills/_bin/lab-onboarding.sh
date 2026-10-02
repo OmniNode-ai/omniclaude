@@ -384,7 +384,7 @@ ASKPASS="$RUN_DIR/askpass.sh"
 make_askpass() {
   cat >"$ASKPASS" <<'SH'
 #!/bin/bash
-/usr/bin/osascript -e 'display dialog "OmniNode onboarding needs your Mac administrator password to install developer tools." with title "OmniNode onboarding" default answer "" with hidden answer buttons {"Cancel","OK"} default button "OK"' -e 'text returned of result' 2>/dev/null
+/usr/bin/osascript -e 'activate' -e 'display dialog "OmniNode onboarding needs your Mac administrator password to install developer tools." with title "OmniNode onboarding" default answer "" with hidden answer buttons {"Cancel","OK"} default button "OK"' -e 'text returned of result' 2>/dev/null
 SH
   chmod 700 "$ASKPASS"
 }
@@ -433,6 +433,11 @@ read_secret() { # prompt -> SECRET; QUIT_REQUESTED=1 when the developer chose "Q
     # The terminal prompt is indented to line up with the run's output; a dialog is not.
     SECRET="$(/usr/bin/osascript - "$(printf '%s' "$1" | sed 's/^[[:space:]]*//')" 2>/dev/null <<'OSA'
 on run argv
+  -- ACTIVATE FIRST. Without it the dialog appears without keyboard focus and the
+  -- text field cannot be typed into: the developer sees a locked field and a
+  -- Continue button that returns an empty answer. Click-only dialogs are
+  -- unaffected, which is why this showed up only on the two that take typing.
+  activate
   try
     set r to display dialog (item 1 of argv) & return & return & "Your key stays on this Mac, in onex's key store. It is never shown or logged." with title "Your model key" default answer "" with hidden answer buttons {"Quit setup", "Continue"} default button "Continue" cancel button "Quit setup" with icon note
   on error number -128
@@ -467,6 +472,7 @@ vm_notice() {
   if [ "$PROMPT_TTY" -eq 0 ] && [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
 try
+activate
   display dialog "We detected that this Mac is a virtual machine." & return & return & "Docker can't run inside a macOS VM, so the local stack isn't offered here. Everything else works." & return & return & "A model on this Mac (Ollama) will be slow in a VM; a key (Gemini, OpenRouter or OpenAI) is the better choice." with title "This is a virtual machine" buttons {"Quit setup", "Continue"} default button "Continue" cancel button "Quit setup" with icon note
 on error number -128
   return "q"
@@ -508,6 +514,7 @@ ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag
 on run argv
   set msg to (item 1 of argv) & return & return & "You're already covered: onex runs your delegations natively on this Mac, on the model you chose." & return & return & "If you work on runtime, node or projection code, you can also run your own copy of the stack here in Docker (a database, a message broker and the runtime kernels), so you can try changes without touching anything shared." & return & return & "What it takes:" & return & "  • about " & (item 2 of argv) & " GB of memory while it runs" & return & "  • about 15 GB of disk" & return & "  • 10-20 minutes the first time" & return & return & "Not sure? Choose Not now. You can add it any time by running onboarding again with --containers."
   try
+activate
     set r to display dialog msg with title "Run the stack locally in Docker?" buttons {"Quit setup", "Not now", "Yes, set it up"} default button "Not now" cancel button "Quit setup" with icon note
   on error number -128
     return "q"
@@ -575,6 +582,7 @@ ask_provider() { # -> MODEL_CHOICE, or empty when nobody can be asked
     case "$a" in 1) MODEL_CHOICE=gemini ;; 2) MODEL_CHOICE=openrouter ;; 3) MODEL_CHOICE=openai ;; 4) MODEL_CHOICE=ollama ;; q|Q) quit_setup ;; esac
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
+activate
 set r to choose from list {"Gemini (your Google AI Studio key)", "OpenRouter (your key)", "OpenAI (your key; needs credits)", "Ollama (on this Mac, no key)"} with title "Your model" with prompt "Delegations run on a model you choose. Gemini, OpenRouter and OpenAI use your own key. Ollama runs a model on this Mac with no key: slower, especially on Intel, and it downloads a model sized to this Mac." OK button name "Continue" cancel button name "Quit setup"
 if r is false then return "QUIT"
 return item 1 of r
@@ -1357,6 +1365,7 @@ accept_docker_terms() { # fresh install only, and only with the developer's yes
     printf '  Accept it now? [y/N] '; IFS= read -r a
   elif [ "$GUI_SESSION" -eq 1 ]; then
     a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
+activate
 set r to display dialog "Docker Desktop requires accepting the Docker Subscription Service Agreement (docker.com/legal/docker-subscription-service-agreement)." & return & return & "Accept it now? If not, Docker Desktop shows its terms when it starts." with title "Docker's terms" buttons {"Not now", "Accept"} default button "Accept" with icon note
 if button returned of r is "Accept" then return "y"
 return "n"
