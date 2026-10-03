@@ -243,7 +243,7 @@ def test_unresolvable_fails_closed(env: dict[str, str]) -> None:
 
 @pytest.mark.unit
 def test_unrelated_reads_never_reach_guard(env: dict[str, str]) -> None:
-    r = _run(env, "pr", "view", "9", "--repo", "o/r", "--json", "state")
+    r = _run(env, "api", "repos/o/r/issues/9")
     assert r.returncode == 0, r.stderr
     calls = _calls(env)
     # exactly the one read call -- no rules/branches probe was ever made for an unrelated read

@@ -102,6 +102,9 @@ def routed_env(tmp_path: Path) -> dict[str, str]:
         "FAKE_GH_LOG": str(tmp_path / "gh.jsonl"),
         "FAKE_MINT_LOG": str(tmp_path / "mint.log"),
         "GIT_CONFIG_NOSYSTEM": "1",
+        # These suites test shim mechanics, not callers: run them as the PR watcher so the
+        # PR-state read guard (OMN-19856) lets their pass-through shapes reach the fake gh.
+        "ONEX_PR_WATCHER": "1",
         "REPO": str(repo),
         "REAL_GH": str(real_dir / "gh"),
     }

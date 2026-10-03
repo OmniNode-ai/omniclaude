@@ -43,6 +43,12 @@
 # are refused unless ONEX_PR_WATCHER=1; readers use the watcher's local state
 # and the canonical clones instead.
 #
+# PR-state read guard (OMN-19856): `gh pr view|checks`, `gh run view` and the `gh api`
+# GET/HEAD reads of pulls, check-runs, check-suites, commit statuses, actions/runs and
+# actions/jobs are refused unless the caller is the PR watcher or the landing controller's
+# own process, or the call is a declared exact-head check (RULING 2026-09-27T18:05:21Z).
+# Full contract at the guard, below the search guard.
+#
 # Shared call log (OMN-19852): every allowed or refused call appends one
 # tab-separated line to ONEX_GH_CALLS_LOG, else ONEX_STATE_DIR/gh-calls.log
 # (no log is written when neither is set).
@@ -427,6 +433,246 @@ if [ "$_search_call" -eq 1 ] && [ "${ONEX_PR_WATCHER:-}" != "1" ]; then
 fi
 unset _search_call
 
+# owner/repo of the working directory's origin remote, or "" outside a clone.
+_origin_repo() {
+  local url
+  url="$(git config --get remote.origin.url 2>/dev/null)"
+  url="${url%.git}"
+  url="${url##*:}"
+  case "$url" in */*/*) url="${url#"${url%/*/*}"/}" ;; esac
+  printf '%s' "$url"
+}
+
+# --- PR-state read guard (OMN-19856) -------------------------------------------
+# RULING 2026-09-27T18:05:21Z: every PR-state read comes from the PR watcher's state
+# file; GitHub is for mutations and the exact-head check right before one. Between
+# 2026-10-03 18:49Z and 21:49Z one operator host logged 3,606 gh calls, 2,331 of them
+# PR-state reads (api pulls 826, api actions/runs 408, pr view 351, api check-runs
+# 304, api actions/jobs 199, run view 117, api check-suites 89, pr checks 37): the
+# ruling stood as prose in prompts and every lane kept reading GitHub, so this is
+# the refusal that holds whatever a prompt says. No off switch, no warning mode.
+#
+# Guarded (refused with the local alternatives, exit 1):
+#   gh pr view      except the two harness link shapes the cache below serves
+#                   (_cacheable) and the declared exact-head check
+#   gh pr checks, gh run view
+#   gh api, method GET or HEAD, endpoint (leading "/" and an
+#   https://api.github.com/ prefix stripped) repos/<o>/<r>/pulls or under it, or
+#   containing /check-runs, /check-suites, /commits/<ref>/status, /statuses,
+#   /actions/runs or /actions/jobs
+# Never guarded: any write (a non-GET api method, pr merge|ready|create|edit|
+# comment|close, run rerun|cancel, workflow run) and `api graphql` (a residual: it
+# cannot be told from a mutation here, and pr-land's pr_snapshot.py uses it).
+#
+# Allowed callers, decided only for a guarded shape (ps is never run for any other):
+#   (a) ONEX_PR_WATCHER=1, the marker the search guard above already uses;
+#   (b) the shim's DIRECT parent process runs landing_controller.py,
+#       landing_lab_prover.py or landing_worker_run.py from
+#       ${ONEX_LANDING_CONTROLLER_ROOT:-$HOME/.omninode/landing-controller}/skills/merge-drain/scripts/;
+#   (c) the direct parent's argv contains omnibase_internal.pr_watcher.
+# Direct parent only: never an ancestor walk and never an env marker for the
+# controller, because the workers it spawns inherit its environment and run under
+# its process tree, and they must stay refused.
+#
+# Declared exact-head check, the one narrow escape the ruling names: the call sets
+# ONEX_GH_EXACT_HEAD=<owner>/<repo>#<n> and is exactly
+#   gh pr view <n> --repo|-R <owner>/<repo> --json <fields>
+# with <n> and the repository matching the declaration, every field in {headRefOid,
+# headRefName, baseRefName, state, isDraft, mergedAt, mergeStateStatus, number}, and
+# no --jq, --template, --web or --comments. A declaration of any other shape is
+# refused with a message naming the part that failed.
+
+# Direct parent's argv, only on demand. -ww: a BSD ps would otherwise cut the line.
+_prs_caller_allowed() {
+  [ "${ONEX_PR_WATCHER:-}" = "1" ] && return 0
+  local args root scripts
+  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  [ -n "$args" ] || return 1
+  case "$args" in *omnibase_internal.pr_watcher*) return 0 ;; esac
+  root="${ONEX_LANDING_CONTROLLER_ROOT:-$HOME/.omninode/landing-controller}"
+  scripts="${root%/}/skills/merge-drain/scripts"
+  case " $args " in
+    *" $scripts/landing_controller.py "*) return 0 ;;
+    *" $scripts/landing_lab_prover.py "*) return 0 ;;
+    *" $scripts/landing_worker_run.py "*) return 0 ;;
+  esac
+  return 1
+}
+
+# Declared exact-head check over the argv in "$@". Returns 0 when allowed; otherwise
+# 1 with _prs_why naming the part that failed ("" when no declaration was made).
+_prs_exact_head() {
+  _prs_why=""
+  local decl="${ONEX_GH_EXACT_HEAD:-}" d_repo="" d_n="" a n="" repo="" fields="" f
+  local have_repo=0 have_json=0 bad=""
+  [ -n "$decl" ] || return 1
+  case "$decl" in
+    *#*) d_repo="${decl%%#*}"; d_n="${decl#*#}" ;;
+  esac
+  case "$d_repo" in ""|*/*/*|/*|*/|*[!A-Za-z0-9._/-]*) d_repo="" ;; */*) ;; *) d_repo="" ;; esac
+  case "$d_n" in ""|*[!0-9]*) d_n="" ;; esac
+  if [ -z "$d_repo" ] || [ -z "$d_n" ]; then
+    _prs_why="ONEX_GH_EXACT_HEAD is not <owner>/<repo>#<n> (got a differently shaped value)"
+    return 1
+  fi
+  if [ "${1:-}" != "pr" ] || [ "${2:-}" != "view" ]; then
+    _prs_why="ONEX_GH_EXACT_HEAD covers only: gh pr view <n> --repo <owner>/<repo> --json <fields>; this call is a different command, not a pr view"
+    return 1
+  fi
+  shift 2
+  while [ $# -gt 0 ]; do
+    a="$1"; shift
+    case "$a" in
+      --repo|-R)
+        if [ $# -eq 0 ]; then _prs_why="ONEX_GH_EXACT_HEAD: $a has no value"; return 1; fi
+        repo="$1"; have_repo=1; shift ;;
+      --repo=*) repo="${a#--repo=}"; have_repo=1 ;;
+      --json)
+        if [ $# -eq 0 ]; then _prs_why="ONEX_GH_EXACT_HEAD: --json has no value"; return 1; fi
+        fields="$1"; have_json=1; shift ;;
+      --json=*) fields="${a#--json=}"; have_json=1 ;;
+      --jq|--jq=*|-q|--template|--template=*|-t|--web|-w|--comments|-c)
+        _prs_why="ONEX_GH_EXACT_HEAD: ${a%%=*} is not allowed in an exact-head check (the fields are read whole)"
+        return 1 ;;
+      -*)
+        _prs_why="ONEX_GH_EXACT_HEAD: flag ${a%%=*} is not part of the exact-head shape"
+        return 1 ;;
+      *)
+        if [ -n "$n" ]; then
+          _prs_why="ONEX_GH_EXACT_HEAD: more than one PR number in the call"
+          return 1
+        fi
+        n="$a" ;;
+    esac
+  done
+  if [ -z "$n" ]; then
+    _prs_why="ONEX_GH_EXACT_HEAD: the PR number is missing; declared #$d_n"
+    return 1
+  fi
+  if [ "$n" != "$d_n" ]; then
+    _prs_why="ONEX_GH_EXACT_HEAD: PR number $n does not match the declared #$d_n"
+    return 1
+  fi
+  if [ "$have_repo" -ne 1 ]; then
+    _prs_why="ONEX_GH_EXACT_HEAD: --repo is missing; declared $d_repo"
+    return 1
+  fi
+  if [ "$repo" != "$d_repo" ]; then
+    _prs_why="ONEX_GH_EXACT_HEAD: repo $repo does not match the declared $d_repo"
+    return 1
+  fi
+  if [ "$have_json" -ne 1 ]; then
+    _prs_why="ONEX_GH_EXACT_HEAD: --json is missing; an exact-head check names its fields"
+    return 1
+  fi
+  if [ -z "$fields" ]; then
+    _prs_why="ONEX_GH_EXACT_HEAD: --json names no fields"
+    return 1
+  fi
+  set -f
+  local old_ifs="$IFS"
+  IFS=,
+  for f in $fields; do
+    case "$f" in
+      headRefOid|headRefName|baseRefName|state|isDraft|mergedAt|mergeStateStatus|number) ;;
+      *) bad="$f"; break ;;
+    esac
+  done
+  IFS="$old_ifs"
+  set +f
+  if [ -n "$bad" ]; then
+    _prs_why="ONEX_GH_EXACT_HEAD: field '$bad' is not allowed (allowed: headRefOid, headRefName, baseRefName, state, isDraft, mergedAt, mergeStateStatus, number)"
+    return 1
+  fi
+  return 0
+}
+
+# Resolve the owner, repository and PR number a refused argv names, for the
+# alternatives text. Sets _rs_owner, _rs_repo, _rs_n; each is "" when unresolved.
+_prs_resolve() {
+  _rs_owner=""; _rs_repo=""; _rs_n=""
+  local a prev="" v="" u="" rest="" seen_pos=0 slot_n="" ep
+  for a in "$@"; do
+    case "$prev" in -R|--repo) v="$a" ;; esac
+    case "$a" in --repo=*) v="${a#--repo=}" ;; esac
+    prev="$a"
+  done
+  if [ -n "$v" ]; then
+    _rs_repo="${v##*/}"
+    case "$v" in */*) rest="${v%/*}"; _rs_owner="${rest##*/}" ;; esac
+  fi
+  if [ "${1:-}" = "api" ]; then
+    ep="${_endpoint#https://api.github.com/}"; ep="${ep#/}"
+    case "$ep" in
+      repos/*/*)
+        rest="${ep#repos/}"
+        _rs_owner="${rest%%/*}"; rest="${rest#*/}"; _rs_repo="${rest%%/*}"
+        case "$rest" in
+          */pulls/[0-9]*) slot_n="${rest#*/pulls/}"; _rs_n="${slot_n%%[!0-9]*}" ;;
+        esac ;;
+    esac
+  elif [ "${1:-}" = "pr" ]; then
+    shift 2
+    for a in "$@"; do
+      case "$a" in
+        http://*/pull/*|https://*/pull/*)
+          u="${a#*://}"; u="${u#*/}"
+          _rs_owner="${u%%/*}"; rest="${u#*/}"; _rs_repo="${rest%%/*}"; rest="${rest#*/}"
+          slot_n="${rest#pull/}"; _rs_n="${slot_n%%[!0-9]*}"
+          break ;;
+        -*) ;;
+        *[!0-9]*|"") ;;
+        *) [ "$seen_pos" -eq 0 ] && { _rs_n="$a"; seen_pos=1; } ;;
+      esac
+    done
+  fi
+  if [ -z "$_rs_repo" ]; then
+    v="$(_origin_repo)"
+    case "$v" in */*) _rs_owner="${v%%/*}"; _rs_repo="${v#*/}" ;; esac
+  fi
+}
+
+_prs_guarded=0
+_prs_ep=""
+if [ "$_cls" = "api" ]; then
+  if [ "$_method" = "GET" ] || [ "$_method" = "HEAD" ]; then
+    _prs_ep="${_endpoint#https://api.github.com/}"
+    _prs_ep="${_prs_ep#/}"
+    case "$_prs_ep" in
+      repos/*/*/pulls|repos/*/*/pulls/*) _prs_guarded=1 ;;
+      */check-runs*|*/check-suites*|*/commits/*/status|*/statuses*) _prs_guarded=1 ;;
+      */actions/runs*|*/actions/jobs*) _prs_guarded=1 ;;
+    esac
+  fi
+else
+  case "$_cls" in
+    "pr view") _cacheable "$@" || _prs_guarded=1 ;;
+    "pr checks"|"run view") _prs_guarded=1 ;;
+  esac
+fi
+if [ "$_prs_guarded" -eq 1 ] && ! _prs_caller_allowed && ! _prs_exact_head "$@"; then
+  if [ "$_cls" = "api" ]; then _prs_class="gh api $_method $_prs_ep"; else _prs_class="gh $_cls"; fi
+  _prs_resolve "$@"
+  _prs_o="${_rs_owner:-OmniNode-ai}"; _prs_r="${_rs_repo:-<repo>}"; _prs_n="${_rs_n:-<n>}"
+  printf '%s\n' \
+    "REFUSED (OMN-19856): $_prs_class is a PR-state read; GitHub is for mutations and the declared exact-head check only (RULING 2026-09-27T18:05:21Z)." >&2
+  [ -n "$_prs_why" ] && printf '%s\n' "Declared exact-head check failed: $_prs_why" >&2
+  printf '%s\n' \
+    'Read it locally instead:' \
+    "  python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr $_prs_o/$_prs_r#$_prs_n   (--json for the whole record, --status for the state file's age)" \
+    "  python3 <omni plugin>/skills/merge-drain/scripts/drain_map.py --only-pr $_prs_r#$_prs_n   (where the PR sits in the drain)" \
+    "  git -C \$OMNI_HOME/$_prs_r log|diff origin/dev...   (files, diffs and history from the canonical clone)" \
+    'The one GitHub read allowed is the exact-head check right before a mutation:' \
+    '  ONEX_GH_EXACT_HEAD=<owner>/<repo>#<n> gh pr view <n> --repo <owner>/<repo> --json headRefOid,state,mergeStateStatus' >&2
+  if [ -n "$_rs_repo" ] && [ -n "$_rs_n" ]; then
+    printf '%s\n' \
+      "  e.g. ONEX_GH_EXACT_HEAD=$_prs_o/$_prs_r#$_prs_n gh pr view $_prs_n --repo $_prs_o/$_prs_r --json headRefOid,state,mergeStateStatus" >&2
+  fi
+  _call_log 1 refused
+  exit 1
+fi
+unset _prs_guarded _prs_ep _prs_class _prs_o _prs_r _prs_n _prs_why _rs_owner _rs_repo _rs_n
+
 # Run one gh call and leave its routing identity/reason in _route. With routing
 # disabled this is deliberately the same single command as the old shim path.
 _run_gh() {
@@ -498,16 +744,6 @@ _run_gh() {
     _route="operator-fallback router-failed"
   fi
   return "$rc"
-}
-
-# owner/repo of the working directory's origin remote, or "" outside a clone.
-_origin_repo() {
-  local url
-  url="$(git config --get remote.origin.url 2>/dev/null)"
-  url="${url%.git}"
-  url="${url##*:}"
-  case "$url" in */*/*) url="${url#"${url%/*/*}"/}" ;; esac
-  printf '%s' "$url"
 }
 
 # --- merge-queue bypass guard (OMN-17427) -------------------------------------

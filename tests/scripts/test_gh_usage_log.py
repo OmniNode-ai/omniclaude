@@ -65,6 +65,9 @@ def env(tmp_path: Path) -> dict[str, str]:
         "XDG_CACHE_HOME": str(tmp_path / "cache"),
         "FAKE_GH_LOG": str(tmp_path / "calls.jsonl"),
         "GIT_CONFIG_NOSYSTEM": "1",
+        # These suites test shim mechanics, not callers: run them as the PR watcher so the
+        # PR-state read guard (OMN-19856) lets their pass-through shapes reach the fake gh.
+        "ONEX_PR_WATCHER": "1",
     }
     subprocess.run(
         ["git", "init", "-q", "-b", "main"],
