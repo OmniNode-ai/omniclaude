@@ -55,11 +55,16 @@
 # timestamp, lane (ONEX_LANE; else ONEX_LANE_ID, ONEX_AGENT_NAME,
 # CLAUDE_AGENT_NAME or CLAUDE_SUBAGENT_NAME; else the lane registered for the
 # omni_worktrees/<ticket>/<dir> worktree the call is made from; else the Claude
-# Code session id; else the parent command, with lane_source saying which),
+# Code session id; else script:<name> when the parent is an interpreter running
+# a .py/.sh/.js/.mjs script (lane_source=script); else the parent command, with
+# lane_source saying which),
 # command class, HTTP method, repository, endpoint path (gh api only,
 # query string dropped), exit code and whether the cache answered. With routing
 # on it adds identity (app, operator, operator-fallback) and route_reason. Argv, stdin,
 # output and environment values are never written, so no token can reach it.
+# Every line also carries parent (ONEX_PARENT_LANE, the dispatching lane) and
+# host (ONEX_LANE_HOST, else the short $HOSTNAME), "" when unknown (OMN-20420);
+# the gh-calls.log TSV stays at 8 columns.
 # scripts/user-bin/gh_usage_report.py turns the log into requests per lane.
 # ONEX_GH_USAGE_LOG=0 turns the log off for one call.
 #
@@ -152,6 +157,19 @@ _clean() {
   printf '%s' "${v:0:200}"
 }
 
+# Optional launcher context from the remote-lane runner (OMN-20420): the
+# orchestrator lane that dispatched this one and the host it runs on. Both are
+# usage-log (JSONL) fields only; the call-log TSV keeps its 8 columns.
+_parent_lane=""; _lane_host=""
+_resolve_parent_host() {
+  _parent_lane="$(_clean "${ONEX_PARENT_LANE:-}")"
+  if [ -n "${ONEX_LANE_HOST:-}" ]; then
+    _lane_host="$(_clean "$ONEX_LANE_HOST")"
+  else
+    _lane_host="$(_clean "${HOSTNAME%%.*}")"
+  fi
+}
+
 # Resolve attribution once for both the usage line and the read router.
 _lane_done=0
 _resolve_lane() {
@@ -159,7 +177,7 @@ _resolve_lane() {
   _lane_done=1
   _lane=""; _lane_src=""
   local agent="" cwd="" suffix="" ticket="" repo_dir="" worktree=""
-  local registry_dir="" record="" hash="" registered="" parent=""
+  local registry_dir="" record="" hash="" registered="" parent="" pargs="" script="" w=""
   if [ -n "${ONEX_LANE:-}" ]; then
     _lane="$(_clean "$ONEX_LANE")"; _lane_src="env"
     return
@@ -203,7 +221,28 @@ _resolve_lane() {
     _lane="session:$(_clean "$CLAUDE_CODE_SESSION_ID")"; _lane_src="session"
     return
   fi
-  parent="$(basename "$(ps -o comm= -p "$PPID" 2>/dev/null)" 2>/dev/null)"
+  # Last resort, one `ps` fork: when the parent is an interpreter running a
+  # script (a launchd job, a cron tick), name the script; otherwise the command.
+  pargs="$(ps -o args= -p "$PPID" 2>/dev/null)"
+  set -f
+  set -- $pargs
+  set +f
+  parent="$(basename "${1:-}" 2>/dev/null)"
+  case "$parent" in
+    python|Python|python3*|bash|sh|zsh|node|uv|ruby)
+      shift
+      for w in "$@"; do
+        case "$w" in
+          -*) continue ;;
+          *.py|*.sh|*.js|*.mjs) script="$(basename "$w" 2>/dev/null)"; break ;;
+        esac
+      done
+      ;;
+  esac
+  if [ -n "$script" ]; then
+    _lane="script:$(_clean "$script")"; _lane_src="script"
+    return
+  fi
   _lane="parent:$(_clean "$parent")"; _lane_src="parent"
 }
 
@@ -322,17 +361,18 @@ _log() {
   esac
   mkdir -p "$dir" 2>/dev/null || return 0
   _resolve_lane
+  _resolve_parent_host
   if [ -n "$_route" ]; then
     identity="${_route%% *}"
     case "$_route" in *\ *) route_reason="${_route#* }" ;; esac
-    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","identity":"%s","route_reason":"%s","pid":%s}\n' \
+    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","identity":"%s","route_reason":"%s","parent":"%s","host":"%s","pid":%s}\n' \
       "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
-      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$(_clean "$identity")" "$(_clean "$route_reason")" "$$" \
+      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$(_clean "$identity")" "$(_clean "$route_reason")" "$_parent_lane" "$_lane_host" "$$" \
       >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
   else
-    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","pid":%s}\n' \
+    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","parent":"%s","host":"%s","pid":%s}\n' \
       "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
-      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$$" \
+      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$_parent_lane" "$_lane_host" "$$" \
       >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
   fi
 }
