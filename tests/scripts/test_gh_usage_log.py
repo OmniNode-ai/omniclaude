@@ -341,6 +341,26 @@ def test_record_script_lane_not_taken_without_script_word(
 
 
 @pytest.mark.unit
+def test_record_script_lane_not_taken_for_a_later_py_argument(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """``python -c <code> x.py``: only the first non-option word can be the script, so a later
+    .py word is an argument (the same shape as ``python -m pytest tests/x.py``)."""
+    rec = _script_lane(
+        env,
+        tmp_path,
+        [
+            "python3",
+            "-c",
+            "import subprocess; subprocess.run(['gh','pr','list'])",
+            "arg.py",
+        ],
+    )
+    assert rec["lane_source"] == "parent"
+    assert str(rec["lane"]).startswith("parent:")
+
+
+@pytest.mark.unit
 def test_record_script_lane_loses_to_session(
     env: dict[str, str], tmp_path: Path
 ) -> None:

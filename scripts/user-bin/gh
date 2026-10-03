@@ -231,11 +231,15 @@ _resolve_lane() {
   case "$parent" in
     python|Python|python3*|bash|sh|zsh|node|uv|ruby)
       shift
+      # Only the first non-option word can be the script; `-m <module>` runs a
+      # module, so a later .py word (`python -m pytest tests/x.py`) is an argument.
       for w in "$@"; do
         case "$w" in
+          -m) break ;;
           -*) continue ;;
-          *.py|*.sh|*.js|*.mjs) script="$(basename "$w" 2>/dev/null)"; break ;;
+          *.py|*.sh|*.js|*.mjs) script="$(basename "$w" 2>/dev/null)" ;;
         esac
+        break
       done
       ;;
   esac
