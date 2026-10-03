@@ -552,14 +552,96 @@ provider_label() {
   esac
 }
 
-stored_key_provider() { # an earlier run's key, if onex is already here
+stored_key_providers() { # every provider an earlier run already stored a key for
   [ -x "$HOME/.local/bin/onex" ] || return 1
-  local p list
+  local p list found=1
   list="$(env -u PYTHONPATH "$HOME/.local/bin/onex" secret list 2>/dev/null)" || return 1
   for p in openrouter gemini openai; do
-    printf '%s\n' "$list" | grep -qE "^[[:space:]]+llm\.$p\.api_key[[:space:]]" && { echo "$p"; return 0; }
+    printf '%s\n' "$list" | grep -qE "^[[:space:]]+llm\.$p\.api_key[[:space:]]" && { echo "$p"; found=0; }
   done
-  return 1
+  return "$found"
+}
+
+# Which stored key a run uses is the developer's choice, never this order: the
+# order below decides only when there is no terminal and no desktop to ask on,
+# and the run says so when it falls back to it.
+stored_key_provider() { # the first stored provider, for the unattended case
+  local first
+  first="$(stored_key_providers | head -n 1)" || return 1
+  [ -n "$first" ] || return 1
+  echo "$first"
+}
+
+# A stored key is an OFFER, not a decision. A first run on a bare Mac has
+# nothing stored and never reaches this; every later run does, and switching
+# provider is ordinary. Sets MODEL_CHOICE and REUSE_STORED=1 to keep the stored
+# key; leaves REUSE_STORED=0 to fall through to the full model menu.
+REUSE_STORED=0
+offer_stored_key() { # newline-separated stored providers
+  local stored="$1" n a p i
+  n="$(printf '%s\n' "$stored" | grep -c .)"
+  REUSE_STORED=0
+  if [ "$PROMPT_TTY" -eq 1 ]; then
+    say ""
+    say "  Your model"
+    say ""
+    if [ "$n" -eq 1 ]; then
+      say "  This Mac already has your $(provider_label "$stored") key stored."
+      say ""
+      printf '  Use it? [Y/n to choose a different model, q to quit] '
+      IFS= read -r a
+      case "$a" in
+        ''|y|Y|yes|YES) MODEL_CHOICE="$stored"; REUSE_STORED=1 ;;
+        q|Q|quit|QUIT) quit_setup ;;
+      esac
+    else
+      say "  This Mac already has keys stored for:"
+      i=0
+      for p in $stored; do i=$((i + 1)); say "    $i) $(provider_label "$p")"; done
+      say "    n) choose a different model, or replace one of these keys"
+      say ""
+      printf '  Which one? [1-%s, n, q to quit] ' "$n"
+      IFS= read -r a
+      case "$a" in
+        q|Q|quit|QUIT) quit_setup ;;
+        n|N) ;;
+        ''|*[!0-9]*) ;;
+        *) if [ "$a" -ge 1 ] && [ "$a" -le "$n" ]; then
+             MODEL_CHOICE="$(printf '%s\n' "$stored" | sed -n "${a}p")"; REUSE_STORED=1
+           fi ;;
+      esac
+    fi
+  elif [ "$GUI_SESSION" -eq 1 ]; then
+    a="$(/usr/bin/osascript - "$stored" 2>/dev/null <<'OSA'
+on run argv
+  set stored to paragraphs of (item 1 of argv)
+  set opts to {}
+  repeat with p in stored
+    if length of (p as text) > 0 then set end of opts to "Use my stored " & (p as text) & " key"
+  end repeat
+  set end of opts to "Choose a different model"
+  try
+activate
+    set r to choose from list opts with title "Your model" with prompt "This Mac already has a model key stored. Use it, or choose a different model (which also lets you replace a stored key)." OK button name "Continue" cancel button name "Quit setup"
+  on error number -128
+    return "QUIT"
+  end try
+  if r is false then return "QUIT"
+  return item 1 of r
+OSA
+)"
+    case "$a" in
+      QUIT) quit_setup ;;
+      "Use my stored "*)
+        p="${a#Use my stored }"; MODEL_CHOICE="${p% key}"; REUSE_STORED=1 ;;
+    esac
+  else
+    # Nobody to ask: the scan order decides, and the run names what it chose.
+    MODEL_CHOICE="$(printf '%s\n' "$stored" | sed -n 1p)"
+    REUSE_STORED=1
+    say "  No terminal or desktop to ask on, so the stored $(provider_label "$MODEL_CHOICE") key is used"
+    say "  (--provider names another one)."
+  fi
 }
 
 ask_provider() { # -> MODEL_CHOICE, or empty when nobody can be asked
@@ -715,12 +797,18 @@ settle_model_key() {
     settle_ollama
     return 0
   fi
-  if stored="$(stored_key_provider)" && { [ -z "$PROVIDER" ] || [ "$PROVIDER" = "$stored" ]; }; then
-    MODEL_CHOICE="$stored"
-    say "  Model key: your $stored key is already stored; it will be used."
-    return 0
+  # An explicit --provider is a decision already made, and it reaches the key
+  # prompt even when that provider's key is stored: replacing a key for the
+  # provider you already have is the only way to rotate one.
+  if [ -z "$PROVIDER" ] && stored="$(stored_key_providers)"; then
+    offer_stored_key "$stored"
+    if [ "$REUSE_STORED" -eq 1 ]; then
+      say "  Model key: your $MODEL_CHOICE key is already stored; it will be used."
+      return 0
+    fi
+    MODEL_CHOICE=""
   fi
-  MODEL_CHOICE="$PROVIDER"
+  [ -n "$MODEL_CHOICE" ] || MODEL_CHOICE="$PROVIDER"
   [ -n "$MODEL_CHOICE" ] || ask_provider
   if [ -z "$MODEL_CHOICE" ]; then
     FAILED_STEP="choose your model"
