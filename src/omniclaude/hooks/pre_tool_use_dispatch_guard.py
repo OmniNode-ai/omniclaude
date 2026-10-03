@@ -71,7 +71,7 @@ _HARDCODED_URL_PATTERNS: list[tuple[str, str]] = [
     (
         r"http://192\.168\.\d+\.\d+:\d+(?:/\S*)?",
         "Hardcoded private-network LLM endpoint detected. "
-        "Reference LLM_CODER_URL / LLM_EMBEDDING_URL env vars instead of inline IPs.",
+        "Reference the endpoint env vars the routing contract names (e.g. BIFROST_LOCAL_CODER_ENDPOINT_URL) instead of inline IPs.",
     ),
     # Passwords / secrets assigned literally in YAML/env style
     (

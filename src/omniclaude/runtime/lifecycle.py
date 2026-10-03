@@ -403,15 +403,16 @@ async def on_start(
     # VllmInferenceBackend (optional — failure is non-fatal)
     # ---------------------------------------------------------------
     try:
-        from omniclaude.config.model_local_llm_config import (
-            LocalLlmEndpointRegistry,
+        from omniclaude.handlers.handler_contract_endpoint_resolver import (
+            HandlerContractEndpointResolver,
         )
         from omniclaude.nodes.node_local_llm_inference_effect.backends import (
             VllmInferenceBackend,
         )
 
-        registry = LocalLlmEndpointRegistry()
-        state.vllm_backend = VllmInferenceBackend(registry=registry)
+        state.vllm_backend = VllmInferenceBackend(
+            endpoints=HandlerContractEndpointResolver()
+        )
         logger.info("VllmInferenceBackend initialised")
         diagnostics.append(
             ModelLifecycleDiagnostic(

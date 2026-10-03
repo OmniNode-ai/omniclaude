@@ -28,6 +28,7 @@ from route_via_events_wrapper import (
     RoutingPath,
     RoutingPolicy,
     _compute_routing_path,
+    _get_llm_routing_url,
     _route_via_llm,
     _use_llm_routing,
     main,
@@ -793,13 +794,13 @@ class TestUseLlmRouting:
     """Tests for the _use_llm_routing() feature flag function."""
 
     # Helpers for lazy-loader mocks: _get_llm_handler() returns a dict or
-    # None; _get_llm_registry() likewise.  The old boolean module-level
+    # None; _get_contract_endpoint_resolver() likewise.  The old boolean module-level
     # flags (_llm_handler_available / _llm_registry_available) were replaced
     # by these lazy-loader functions in OMN-3645.
     _FAKE_LLM_HANDLER = {"handler": MagicMock(), "routing_prompt_version": "test"}
-    _FAKE_LLM_REGISTRY = {
-        "LlmEndpointPurpose": MagicMock(),
-        "LocalLlmEndpointRegistry": MagicMock(),
+    _FAKE_CONTRACT_RESOLVER = {
+        "EnumContractCapability": MagicMock(),
+        "HandlerContractEndpointResolver": MagicMock(),
     }
 
     def test_disabled_by_default(self, monkeypatch):
@@ -813,8 +814,8 @@ class TestUseLlmRouting:
                 return_value=self._FAKE_LLM_HANDLER,
             ),
             patch(
-                "route_via_events_wrapper._get_llm_registry",
-                return_value=self._FAKE_LLM_REGISTRY,
+                "route_via_events_wrapper._get_contract_endpoint_resolver",
+                return_value=self._FAKE_CONTRACT_RESOLVER,
             ),
         ):
             assert _use_llm_routing() is False
@@ -830,8 +831,8 @@ class TestUseLlmRouting:
                 return_value=self._FAKE_LLM_HANDLER,
             ),
             patch(
-                "route_via_events_wrapper._get_llm_registry",
-                return_value=self._FAKE_LLM_REGISTRY,
+                "route_via_events_wrapper._get_contract_endpoint_resolver",
+                return_value=self._FAKE_CONTRACT_RESOLVER,
             ),
         ):
             assert _use_llm_routing() is False
@@ -847,8 +848,8 @@ class TestUseLlmRouting:
                 return_value=self._FAKE_LLM_HANDLER,
             ),
             patch(
-                "route_via_events_wrapper._get_llm_registry",
-                return_value=self._FAKE_LLM_REGISTRY,
+                "route_via_events_wrapper._get_contract_endpoint_resolver",
+                return_value=self._FAKE_CONTRACT_RESOLVER,
             ),
         ):
             assert _use_llm_routing() is False
@@ -867,8 +868,8 @@ class TestUseLlmRouting:
                 return_value=self._FAKE_LLM_HANDLER,
             ),
             patch(
-                "route_via_events_wrapper._get_llm_registry",
-                return_value=self._FAKE_LLM_REGISTRY,
+                "route_via_events_wrapper._get_contract_endpoint_resolver",
+                return_value=self._FAKE_CONTRACT_RESOLVER,
             ),
             patch("route_via_events_wrapper._get_latency_guard", return_value=None),
         ):
@@ -893,8 +894,8 @@ class TestUseLlmRouting:
                 return_value=self._FAKE_LLM_HANDLER,
             ),
             patch(
-                "route_via_events_wrapper._get_llm_registry",
-                return_value=self._FAKE_LLM_REGISTRY,
+                "route_via_events_wrapper._get_contract_endpoint_resolver",
+                return_value=self._FAKE_CONTRACT_RESOLVER,
             ),
             patch(
                 "route_via_events_wrapper._get_latency_guard",
@@ -914,14 +915,14 @@ class TestUseLlmRouting:
         with (
             patch("route_via_events_wrapper._get_llm_handler", return_value=None),
             patch(
-                "route_via_events_wrapper._get_llm_registry",
-                return_value=self._FAKE_LLM_REGISTRY,
+                "route_via_events_wrapper._get_contract_endpoint_resolver",
+                return_value=self._FAKE_CONTRACT_RESOLVER,
             ),
         ):
             assert _use_llm_routing() is False
 
-    def test_disabled_when_registry_unavailable(self, monkeypatch):
-        """LLM routing should be off when LocalLlmEndpointRegistry import failed."""
+    def test_disabled_when_resolver_unavailable(self, monkeypatch):
+        """LLM routing should be off when the contract endpoint resolver import failed."""
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("USE_LLM_ROUTING", "true")
 
@@ -930,9 +931,97 @@ class TestUseLlmRouting:
                 "route_via_events_wrapper._get_llm_handler",
                 return_value=self._FAKE_LLM_HANDLER,
             ),
-            patch("route_via_events_wrapper._get_llm_registry", return_value=None),
+            patch(
+                "route_via_events_wrapper._get_contract_endpoint_resolver",
+                return_value=None,
+            ),
         ):
             assert _use_llm_routing() is False
+
+
+class _FakeOpenAiServer:
+    """In-process OpenAI-compatible stub: GET /health and POST /v1/chat/completions."""
+
+    def __init__(self) -> None:
+        import threading
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+
+        self.posts: list[dict] = []
+        outer = self
+
+        class _Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args, **kwargs):  # silence stderr
+                return None
+
+            def serve_get(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def serve_post(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                outer.posts.append(
+                    {"path": self.path, "body": json.loads(self.rfile.read(length))}
+                )
+                body = json.dumps(
+                    {"choices": [{"message": {"content": "not-json"}}]}
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        # http.server dispatches on the do_<METHOD> attribute names.
+        setattr(_Handler, "do_GET", _Handler.serve_get)
+        setattr(_Handler, "do_POST", _Handler.serve_post)
+        self._server = HTTPServer(("127.0.0.1", 0), _Handler)
+        self.port = self._server.server_address[1]
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+
+    def __enter__(self) -> "_FakeOpenAiServer":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+
+
+class TestContractEndpointHookPath:
+    """The routing hook resolves its LLM endpoint from the routing contract (OMN-17103)."""
+
+    def test_routing_url_comes_from_the_contract_variable(self, monkeypatch):
+        monkeypatch.setenv(
+            "BIFROST_LOCAL_CODER_ENDPOINT_URL",
+            "http://lab-host:8000/v1/chat/completions",
+        )
+        monkeypatch.setenv("LLM_CODER_MODEL_NAME", "contract-coder")
+        monkeypatch.setenv("LLM_CODER_URL", "http://retired-var:1")
+        assert _get_llm_routing_url() == ("http://lab-host:8000", "contract-coder")
+
+    def test_no_routing_url_when_the_contract_variable_is_unset(self, monkeypatch):
+        monkeypatch.delenv("BIFROST_LOCAL_CODER_ENDPOINT_URL", raising=False)
+        monkeypatch.setenv("LLM_CODER_URL", "http://retired-var:1")
+        assert _get_llm_routing_url() is None
+
+    def test_route_via_llm_posts_to_the_contract_endpoint_end_to_end(self, monkeypatch):
+        """Real resolver, real health probe, real HTTP POST to the contract's URL."""
+        # The production budgets (100 ms) assume a warm process; a cold httpx
+        # import on a loaded CI runner exceeds them. This test asserts where the
+        # request goes, not how fast it gets there.
+        monkeypatch.setattr("route_via_events_wrapper._LLM_ROUTING_TIMEOUT_S", 5.0)
+        monkeypatch.setattr("route_via_events_wrapper._LLM_HEALTH_CHECK_TIMEOUT_S", 4.0)
+        with _FakeOpenAiServer() as server:
+            monkeypatch.setenv(
+                "BIFROST_LOCAL_CODER_ENDPOINT_URL",
+                f"http://127.0.0.1:{server.port}/v1/chat/completions",
+            )
+            monkeypatch.setenv("LLM_CODER_MODEL_NAME", "contract-coder")
+            _route_via_llm("debug this failing test", "corr-contract-e2e")
+
+        assert [p["path"] for p in server.posts] == ["/v1/chat/completions"]
+        assert server.posts[0]["body"]["model"] == "contract-coder"
 
 
 class TestRouteViaLlmFallback:

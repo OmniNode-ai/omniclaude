@@ -22,7 +22,7 @@ Read the sub-operation from the skill arguments. If none is specified, ask the u
 Before executing any sub-operation, verify:
 
 1. The worktree is on the correct branch (not `main`).
-2. `LLM_DEEPSEEK_R1_URL` is set (see `~/.claude/CLAUDE.md` for the endpoint URL).
+2. The routing contract's local endpoint variable (`BIFROST_LOCAL_CODER_ENDPOINT_URL`) is set, so the semantic check can reach a reasoning backend.
 3. `NodeDecisionStoreEffect` and `NodeDecisionStoreQueryCompute`
    are available in the current environment.
 

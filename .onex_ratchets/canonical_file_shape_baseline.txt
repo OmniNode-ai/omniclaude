@@ -720,7 +720,6 @@ src/omniclaude/cli/__init__.py
 src/omniclaude/cli/patterns.py
 src/omniclaude/cli/trace.py
 src/omniclaude/config/__init__.py
-src/omniclaude/config/model_local_llm_config.py
 src/omniclaude/config/settings.py
 src/omniclaude/coverage/__init__.py
 src/omniclaude/coverage/models.py

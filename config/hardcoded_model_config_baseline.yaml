@@ -132,9 +132,6 @@ entries:
   - path: plugins/onex/hooks/scripts/test-hooks.sh
     family: M
     content_sha1: 40996d07d356a43bb5edf52a131c2126af22be8d
-  - path: plugins/onex/skills/_lib/decision_store/semantic_check.py
-    family: M
-    content_sha1: 9543cecb1c8c57790f026c586db3fced45d103bb
   - path: plugins/onex/skills/_lib/status/status.py
     family: E
     content_sha1: 86450d8e1999bac5a6f230c48dece34a1b2904eb

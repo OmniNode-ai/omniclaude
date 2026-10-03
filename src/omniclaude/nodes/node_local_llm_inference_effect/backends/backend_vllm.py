@@ -3,9 +3,10 @@
 """vLLM inference backend for NodeLocalLlmInferenceEffect.
 
 Implements ProtocolLocalLlmInference by calling an OpenAI-compatible
-chat-completions endpoint (vLLM, TGI, or any compatible server). The request
-path comes from the endpoint config (``LlmEndpointConfig.chat_completions_path``),
-never from a literal in this module.
+chat-completions endpoint (vLLM, TGI, or any compatible server). The endpoint
+is resolved from the canonical bifrost routing contract
+(:class:`~omniclaude.handlers.handler_contract_endpoint_resolver.HandlerContractEndpointResolver`); the
+contract's complete URL is posted to verbatim.
 
 Concurrency is bounded by an asyncio.Semaphore (env: OMNICLAUDE_VLLM_MAX_CONCURRENT).
 A single httpx.AsyncClient is reused across calls for connection pooling.
@@ -26,10 +27,12 @@ from typing import Any  # any-ok: external API boundary
 
 import httpx
 
-from omniclaude.config.model_local_llm_config import (
-    DEFAULT_CHAT_COMPLETIONS_PATH,
-    LlmEndpointPurpose,
-    LocalLlmEndpointRegistry,
+from omniclaude.enums.enum_contract_capability import EnumContractCapability
+from omniclaude.handlers.handler_contract_endpoint_resolver import (
+    HandlerContractEndpointResolver,
+)
+from omniclaude.models.model_contract_endpoint import (
+    OPENAI_CHAT_COMPLETIONS_SUFFIX,
 )
 from omniclaude.nodes.node_local_llm_inference_effect.models import (
     ModelLocalLlmInferenceRequest,
@@ -41,17 +44,17 @@ from omniclaude.shared.models.model_skill_result import (
 
 logger = logging.getLogger(__name__)
 
-# Exhaustive mapping from model_purpose literals to LlmEndpointPurpose.
-# The keys match ModelSkillNodeExecution.model_purpose literals plus the
-# request-level defaults used by callers.
-_MAP_PURPOSE: dict[str, LlmEndpointPurpose] = {
-    "CODE_ANALYSIS": LlmEndpointPurpose.CODE_ANALYSIS,
-    "REASONING": LlmEndpointPurpose.REASONING,
-    "ROUTING": LlmEndpointPurpose.ROUTING,
-    "GENERAL": LlmEndpointPurpose.GENERAL,
-    "EMBEDDING": LlmEndpointPurpose.EMBEDDING,
-    "VISION": LlmEndpointPurpose.VISION,
-    "FUNCTION_CALLING": LlmEndpointPurpose.FUNCTION_CALLING,
+# Mapping from model_purpose literals to the routing-contract capability that
+# serves them. A purpose the contract declares no local capability for maps to
+# None and answers BACKEND_UNAVAILABLE; a key absent here is an unknown purpose.
+_MAP_PURPOSE: dict[str, EnumContractCapability | None] = {
+    "CODE_ANALYSIS": EnumContractCapability.CODE_GENERATION,
+    "REASONING": EnumContractCapability.REASONING,
+    "ROUTING": EnumContractCapability.CLASSIFICATION,
+    "GENERAL": EnumContractCapability.DOCUMENTATION,
+    "EMBEDDING": EnumContractCapability.EMBEDDING,
+    "VISION": None,
+    "FUNCTION_CALLING": None,
 }
 
 # Type alias for untyped dicts at the OpenAI API boundary.
@@ -173,7 +176,7 @@ class VllmInferenceBackend:
         tool_choice: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-        chat_completions_path: str = DEFAULT_CHAT_COMPLETIONS_PATH,
+        chat_completions_path: str = OPENAI_CHAT_COMPLETIONS_SUFFIX,
     ) -> ChatCompletionResult:
         """Synchronous chat completion with tool-calling support.
 
@@ -239,14 +242,14 @@ class VllmInferenceBackend:
 
     def __init__(
         self,
-        registry: LocalLlmEndpointRegistry,
+        endpoints: HandlerContractEndpointResolver,
         *,
         sync_transport: httpx.BaseTransport | None = None,
     ) -> None:
         """Initialize the vLLM inference backend.
 
         Args:
-            registry: Endpoint registry used to resolve model URLs by purpose.
+            endpoints: Resolver of local endpoints from the routing contract.
             sync_transport: Optional httpx transport for the synchronous
                 ``chat_completion_sync`` client. Defaults to ``None`` (httpx's
                 real network transport). Supplying a custom transport is the
@@ -255,7 +258,7 @@ class VllmInferenceBackend:
                 exercise the REAL request-serialization + error-handling paths
                 without a live endpoint.
         """
-        self._registry = registry
+        self._endpoints = endpoints
         self._client = httpx.AsyncClient(timeout=self._TIMEOUT)
         self._semaphore = asyncio.Semaphore(self._MAX_CONCURRENT)
         self._sync_transport = sync_transport
@@ -263,9 +266,9 @@ class VllmInferenceBackend:
     async def infer(self, request: ModelLocalLlmInferenceRequest) -> ModelSkillResult:
         """Submit a prompt to the vLLM endpoint and return a ModelSkillResult.
 
-        Resolves the endpoint from the registry using the request's model_purpose
-        (defaults to ``"CODE_ANALYSIS"`` when not specified). The prompt is sent
-        as a single user message to the endpoint's ``chat_completions_path``.
+        Resolves the endpoint from the routing contract using the request's
+        model_purpose (defaults to ``"CODE_ANALYSIS"`` when not specified). The
+        prompt is sent as a single user message to the contract's complete URL.
 
         Args:
             request: Inference request with prompt and optional parameters.
@@ -274,10 +277,9 @@ class VllmInferenceBackend:
             ModelSkillResult with status SUCCESS and the LLM output, or
             status FAILED with an appropriate error string.
         """
-        # Resolve purpose string to LlmEndpointPurpose enum.
+        # Resolve purpose string to a contract capability.
         purpose_key = request.model_purpose or "CODE_ANALYSIS"
-        purpose = _MAP_PURPOSE.get(purpose_key)
-        if purpose is None:
+        if purpose_key not in _MAP_PURPOSE:
             return ModelSkillResult(
                 skill_name=request.skill_name,
                 status=SkillResultStatus.FAILED,
@@ -285,7 +287,8 @@ class VllmInferenceBackend:
                 correlation_id=request.correlation_id,
             )
 
-        endpoint = self._registry.get_endpoint(purpose)
+        capability = _MAP_PURPOSE[purpose_key]
+        endpoint = self._endpoints.resolve(capability) if capability else None
         if endpoint is None:
             logger.warning(
                 "No endpoint configured for purpose=%s",
@@ -298,7 +301,7 @@ class VllmInferenceBackend:
                 correlation_id=request.correlation_id,
             )
 
-        url = f"{str(endpoint.url).rstrip('/')}{endpoint.chat_completions_path}"
+        url = endpoint.url
         payload: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
             str, Any
         ] = {  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary

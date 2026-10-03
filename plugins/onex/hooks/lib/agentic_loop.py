@@ -56,13 +56,14 @@ def _get_backend() -> Any:
         return _backend_instance
 
     try:
-        from omniclaude.config.model_local_llm_config import LocalLlmEndpointRegistry
+        from omniclaude.handlers.handler_contract_endpoint_resolver import (
+            HandlerContractEndpointResolver,
+        )
         from omniclaude.nodes.node_local_llm_inference_effect.backends.backend_vllm import (
             VllmInferenceBackend,
         )
 
-        registry = LocalLlmEndpointRegistry()
-        _backend_instance = VllmInferenceBackend(registry)
+        _backend_instance = VllmInferenceBackend(HandlerContractEndpointResolver())
         return _backend_instance
     except ImportError:
         logger.warning("VllmInferenceBackend not available; agentic loop disabled")
