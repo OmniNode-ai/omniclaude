@@ -34,7 +34,7 @@ the bound-receipt bar, and every other path is a further condition):
 3. Acceptance-box tick gate (OMN-20368), for every non-Done edit that writes a
    description (``description`` or ``patch``): a box checked in the result that
    was not checked before is a tick, and a tick needs the bound-receipt bar
-   (step 7). A create with a checked box is refused. When the current
+   (steps 7-8). A create with a checked box is refused. When the current
    description cannot be read, every checked box counts as a tick.
 4. Done: an unchecked GFM box in today's description or the written one →
    BLOCK (OMN-15030). Ticking it is not the remedy; the receipt is.
@@ -44,7 +44,13 @@ the bound-receipt bar, and every other path is a further condition):
    used to ALLOW here; since OMN-20368 it is necessary and never sufficient.
 6. The close-if-done exemption label and the deploy-readback marker no longer
    ALLOW anything on their own (OMN-20368).
-7. The bound-receipt bar (``no_pr_bound_evidence``), on ``origin/dev`` of the
+7. Repo evidence first (``no_pr_bound_evidence``): a merged product PR's
+   ``contracts/<TICKET>.yaml`` binds every labelled criterion, and a green
+   ``repo-evidence / dod-verify`` GitHub Actions check on its head verifies
+   the same contract that merged. Once engaged, this verdict is final and
+   OCC is not consulted. A contract without the check has not adopted it.
+8. When repo evidence is not engaged, the bound-receipt bar
+   (``no_pr_bound_evidence``), on ``origin/dev`` of the
    local onex_change_control clone: ``contracts/<TICKET>.yaml`` binds EVERY
    labelled acceptance criterion — of today's description and of the one the
    call writes — through ``binds_ac``, and each criterion has a binding item
@@ -55,7 +61,7 @@ the bound-receipt bar, and every other path is a further condition):
    holds its receipts to the freshness window. Anything short → BLOCK, naming
    what is missing. dod_verify's NO_ACCEPTANCE_CHECKS is the shape "no item
    binds the criterion", and it is refused.
-8. A guard that cannot decide refuses (``main``), and the shell wrapper runs in
+9. A guard that cannot decide refuses (``main``), and the shell wrapper runs in
    every cwd, in lite mode and under any hooks mask.
 
 Why ``origin/dev`` git-backed (freshness + determinism) — OMN-13857 findings:
@@ -112,8 +118,11 @@ from no_pr_bound_evidence import (
     MERGED_PR_ENVIRONMENT_FIELDS,
     NO_PR_RECEIPT_MAX_AGE,
     BoundEvidenceVerdict,
+    RepoEvidenceOutcome,
+    RepoEvidenceVerdict,
     bounded_fetch,
     evaluate_bound_evidence,
+    evaluate_repo_evidence,
     load_ticket_occ_evidence,
 )
 
@@ -563,10 +572,24 @@ def _bound_receipt_refusal(ticket_id: str, detail: str, *, why: str) -> Decision
     )
 
 
+def _repo_evidence_refusal(ticket_id: str, detail: str, *, why: str) -> Decision:
+    return _refuse(
+        f"no_bound_dod_receipt for {ticket_id}: {why}. The repo-evidence bar is "
+        f"the product repository's contracts/{ticket_id}.yaml binding EVERY "
+        "labelled acceptance criterion through `binds_ac`, plus a green "
+        '"repo-evidence / dod-verify" GitHub Actions check run on the merged '
+        "head verifying the same contract that merged. OCC is not consulted "
+        "once the repo carries the evidence. What is missing: "
+        f"{detail} Land the bindings and a passing check in the product repository."
+    )
+
+
 def decide(
     call: dict[str, Any],
     *,
     occ_probe: Callable[..., BoundEvidenceVerdict] | None = None,
+    repo_evidence_probe: Callable[[str, list[str], list[PRStatus]], RepoEvidenceVerdict]
+    | None = None,
     pr_fetcher: Callable[[Any], Any] = fetch_pr_status,
     linear_fetcher: Callable[[str], dict[str, Any] | None] = _default_linear_fetcher,
     receipt_lister: Callable[[str], list[dict[str, str]]] | None = None,
@@ -574,15 +597,19 @@ def decide(
 ) -> Decision:
     """Return the guard decision for a PreToolUse tool call.
 
-    OMN-20368: a Done transition is allowed ONLY when the ticket's OCC contract
-    binds every acceptance criterion to a PASS receipt taken against the
-    current contract entry (``occ_probe``). Every other evidence path that used
+    A Done transition needs repo-owned evidence binding every criterion and
+    passing the verified-head check; when the repo has not adopted that evidence,
+    OMN-20368's OCC contract must bind every criterion to a PASS receipt taken
+    against the current contract entry (``occ_probe``). Every evidence path that used
     to ALLOW on its own (all cited PRs merged, a deploy-readback marker, a
     close-if-done label, OMN-15712's superseded attachments) is now a further
     condition, never a substitute. The same bar is required for an edit that
     ticks an acceptance box.
 
     All I/O boundaries are injectable so unit tests stay hermetic:
+      * ``repo_evidence_probe(ticket_id, descriptions, merged_statuses)`` ->
+        repo verdict (default: :func:`no_pr_bound_evidence.evaluate_repo_evidence`
+        with its GitHub readers). An engaged verdict is final, before OCC.
       * ``occ_probe(ticket_id, description, merged_pr=bool)`` -> verdict on the
         bound-receipt bar, read off ``origin/dev`` of the OCC clone. Defaults
         to :func:`no_pr_bound_evidence.evaluate_bound_evidence` over one load of
@@ -635,7 +662,14 @@ def decide(
     clock = now or datetime.now(UTC)
     probe = occ_probe
     probe_error = ""
-    if probe is None and ticket_id:
+    occ_loaded = probe is not None
+    repo_bound = False
+
+    def _load_occ_probe() -> None:
+        nonlocal probe, probe_error, occ_loaded
+        if occ_loaded:
+            return
+        occ_loaded = True
         workspace_root = resolve_omni_home()
         if workspace_root is None:
             probe_error = (
@@ -661,15 +695,76 @@ def decide(
                     ),
                 )
 
-    def _bar(descriptions: list[str], *, merged_pr: bool, why: str) -> Decision | None:
+    def _repo_verdict(
+        descriptions: list[str], statuses: list[PRStatus] | None
+    ) -> RepoEvidenceVerdict | None:
+        if not ticket_id:
+            return None
+        if statuses is None:
+            live = _live()
+            description = (
+                new_description
+                if new_description is not None
+                else str(live.get("description") or "")
+                if live
+                else ""
+            )
+            labels = [str(x) for x in (params.get("labels") or [])]
+            if live is not None and not labels:
+                labels = [str(x) for x in (live.get("labels") or [])]
+            attachment_urls = (
+                [str(x) for x in (live.get("attachment_urls") or [])] if live else []
+            )
+            pr_description = augment_description_with_attachments(
+                description, attachment_urls
+            )
+            statuses = verify(
+                pr_description,
+                labels,
+                default_repo=os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None,
+                fetcher=pr_fetcher,
+                ticket_id=ticket_id or None,
+            ).pr_statuses
+        merged_statuses = [s for s in statuses if s.state == "MERGED"]
+        return (repo_evidence_probe or evaluate_repo_evidence)(
+            ticket_id, descriptions, merged_statuses
+        )
+
+    def _bar(
+        descriptions: list[str],
+        *,
+        merged_pr: bool,
+        why: str,
+        statuses: list[PRStatus] | None = None,
+    ) -> Decision | None:
         """None when every description's criteria are bound; else the refusal."""
+        nonlocal repo_bound
+        repo_verdict = _repo_verdict(descriptions, statuses)
+        if repo_verdict is not None:
+            if repo_verdict.outcome is RepoEvidenceOutcome.REFUSED:
+                return _repo_evidence_refusal(ticket_id, repo_verdict.detail, why=why)
+            if repo_verdict.outcome is RepoEvidenceOutcome.PASSED:
+                repo_bound = True
+                return None
+
+        def occ_refusal(detail: str) -> Decision:
+            refused = _bound_receipt_refusal(ticket_id, detail, why=why)
+            if (
+                repo_verdict is not None
+                and repo_verdict.outcome is RepoEvidenceOutcome.NOT_ENGAGED
+                and f"carries contracts/{ticket_id}.yaml but no " in repo_verdict.detail
+            ):
+                return Decision(False, f"{refused.reason} {repo_verdict.detail}")
+            return refused
+
         if not ticket_id:
             return _refuse(
                 "no_ticket_id: a Done transition or an acceptance-box tick needs "
                 "the issue id so its bound receipts can be read. Pass 'id'."
             )
+        _load_occ_probe()
         if probe is None:
-            return _bound_receipt_refusal(ticket_id, probe_error, why=why)
+            return occ_refusal(probe_error)
         seen: set[str] = set()
         for desc in descriptions:
             if desc in seen:
@@ -680,7 +775,7 @@ def decide(
             else:
                 verdict = probe(ticket_id, desc)
             if not verdict.passed:
-                return _bound_receipt_refusal(ticket_id, verdict.detail, why=why)
+                return occ_refusal(verdict.detail)
         return None
 
     # ---- the description this call would leave behind ----------------------
@@ -781,6 +876,7 @@ def decide(
     # (P) every cited / linked product PR must be merged. A further condition,
     # never a sufficient one (OMN-20368).
     merged_pr = False
+    merged_statuses: list[PRStatus] = []
     if parse_deploy_readback_marker(pr_description) is not None:
         impl_result = verify_implementing(
             pr_description, labels, default_repo=default_repo, fetcher=pr_fetcher
@@ -795,6 +891,7 @@ def decide(
             fetcher=pr_fetcher,
             ticket_id=ticket_id or None,
         )
+        merged_statuses = [s for s in pr_result.pr_statuses if s.state == "MERGED"]
         if pr_result.allowed:
             merged_pr = pr_result.reason == "all_prs_merged"
         else:
@@ -831,6 +928,7 @@ def decide(
     refused = _bar(
         descriptions or [description],
         merged_pr=merged_pr,
+        statuses=merged_statuses,
         why=(
             "a Done transition needs a passing definition-of-done check for "
             "every acceptance criterion"
@@ -840,7 +938,11 @@ def decide(
         return refused
     return Decision(
         True,
-        "durable_evidence:occ_bound_receipts"
+        (
+            "durable_evidence:repo_bound_checks"
+            if repo_bound
+            else "durable_evidence:occ_bound_receipts"
+        )
         + (":all_prs_merged" if merged_pr else ""),
     )
 

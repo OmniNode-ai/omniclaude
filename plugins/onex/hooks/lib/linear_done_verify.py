@@ -212,6 +212,8 @@ class PRStatus:
     # OMN-13856: the merge commit of a MERGED PR, read by REST. Used only to
     # match a commit-anchored bare reference; see _resolve_commit_anchored_refs.
     merge_commit_sha: str = ""
+    # The PR head commit, read by REST, where the repo-evidence check run ran.
+    head_sha: str = ""
 
     @property
     def is_blocking(self) -> bool:
@@ -687,6 +689,9 @@ def fetch_pr_status(ref: PRRef, timeout: float = 15.0) -> PRStatus:
         closing_notes=closing_notes,
         merge_commit_sha=str(data.get("merge_commit_sha") or "")
         if state == "MERGED"
+        else "",
+        head_sha=str(data["head"].get("sha") or "")
+        if isinstance(data.get("head"), dict)
         else "",
     )
 

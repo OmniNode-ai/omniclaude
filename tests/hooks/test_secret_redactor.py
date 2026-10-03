@@ -432,3 +432,145 @@ class TestValueShapedStillRedactedOmn18827:
     def test_ac3_pattern_set_is_not_empty(self) -> None:
         """A pattern set emptied to pass AC1/AC2 fails here explicitly."""
         assert len(SECRET_PATTERNS) >= 10
+
+
+class TestSubagentFalseRefusals:
+    """Live ledger, code, and prose output must not become secret leaks."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "OK CLAIM 2026-10-02T09:40:10Z lane=drainer-restart-0c2f "
+            "ticket=OMN-20356 claim-token=***REDACTED*** line=26301",
+            "claim-token=[redacted]",
+            "claim-token=[redacted],",
+            "claim-token=(redacted),",
+            "claim-token=<ReDaCtEd>",
+            'password= "***redacted***"',
+            "postgres://app:***REDACTED***@db.internal:5432/x",
+            "postgres://app:[ReDaCtEd]@db.internal:5432/x",
+            "The password is ***REDACTED***.",
+            "if total_tokens + section.token_estimate <= "
+            "self.settings.max_standards_tokens:\n"
+            "                selected_sections.append(section)",
+            "if total_tokens + part_tokens <= max_tokens:\n"
+            "    selected_parts.append(...)",
+            "base_tokens = code_complexity",
+            "total_standards_tokens=total_tokens",
+            "MAX_TOKENS=total_tokens",
+            "api_key= self.api_key",
+            "client_secret=selected_sections.append",
+            "client_secret=result.append",
+            "api_key:\n    self.api_key",
+            "client_secret:\n    code_complexity",
+            "auth: credential",
+            "password: required",
+            "token: unavailable",
+            'password: "required"',
+            "password:\trequired",
+        ],
+        ids=[
+            "ledger-placeholder",
+            "bracket-placeholder",
+            "bracket-placeholder-comma",
+            "parenthesis-placeholder-comma",
+            "angle-placeholder-mixed-case",
+            "quoted-placeholder",
+            "url-placeholder",
+            "url-bracket-placeholder",
+            "prose-placeholder",
+            "standards-token-count-condition",
+            "token-count-condition",
+            "base-token-count",
+            "standards-token-count-assignment",
+            "uppercase-token-count",
+            "generic-dotted-attribute",
+            "compound-dotted-attribute",
+            "compound-result-method",
+            "generic-newline",
+            "compound-newline",
+            "auth-prose",
+            "password-prose",
+            "token-prose",
+            "quoted-prose",
+            "tab-prose",
+        ],
+    )
+    def test_false_refusal_text_is_unchanged(self, text: str) -> None:
+        result = redact_secrets_with_count(text)
+        assert result.redacted_count == 0
+        assert result.text == text
+        assert redact_secrets(text) == text
+        assert not contains_secrets(text)
+
+    _REAL_SECRETS = pytest.mark.parametrize(
+        ("text", "secret"),
+        [
+            ("password=Hunter2Hunter2", "Hunter2Hunter2"),
+            ("export API_TOKEN=abc123def456ghi789", "abc123def456ghi789"),
+            ("token: ghp_" + "a1B2" * 9, "ghp_" + "a1B2" * 9),
+            ('"clientSecret": "d3adb33f0123456789abcdef"', "d3adb33f0123456789abcdef"),
+            ("db_password: Xk9fQ2mLp8vZr", "Xk9fQ2mLp8vZr"),
+            ("postgres://app:s3cretPass9@db.internal:5432/x", "s3cretPass9"),
+            (
+                "Authorization: Bearer abcdefghijklmnopqrstuvwx",
+                "abcdefghijklmnopqrstuvwx",
+            ),
+            ("claim-token=LCT1-4137128-4064", "LCT1-4137128-4064"),
+            ("password=correcthorse", "correcthorse"),
+            ("password:correcthorse", "correcthorse"),
+            ("token:abcdefgh1", "abcdefgh1"),
+            ("password: aBcDefGhij", "aBcDefGhij"),
+            ("password: correct!horse", "correct!horse"),
+            ('password: "correcthorse9"', "correcthorse9"),
+            ("api_key=Self.api_key", "Self.api_key"),
+            ("client_secret=self.api_key9", "self.api_key9"),
+            ("client_secret=self.api_key-extra", "self.api_key-extra"),
+        ],
+        ids=[
+            "password",
+            "export-api-token",
+            "github-token",
+            "json-client-secret",
+            "db-password",
+            "url-password",
+            "bearer-token",
+            "unmasked-claim-token",
+            "lowercase-equals-passphrase",
+            "lowercase-tight-colon-passphrase",
+            "tight-colon-token",
+            "colon-space-mixed-case",
+            "colon-space-special",
+            "colon-space-quoted-digit",
+            "uppercase-dotted-value",
+            "dotted-value-digit-suffix",
+            "dotted-value-hyphen-suffix",
+        ],
+    )
+
+    @_REAL_SECRETS
+    def test_real_secrets_stay_detected(self, text: str, secret: str) -> None:
+        """True-positive control: passes on dev and on the fix alike."""
+        result = redact_secrets_with_count(text)
+        assert result.redacted_count >= 1
+        assert secret not in result.text
+        assert redact_secrets(text) == result.text
+
+    @_REAL_SECRETS
+    def test_redaction_of_a_real_secret_is_idempotent(
+        self, text: str, secret: str
+    ) -> None:
+        result = redact_secrets_with_count(text)
+        assert redact_secrets(result.text) == result.text
+        assert redact_secrets_with_count(result.text) == RedactionResult(result.text, 0)
+
+    def test_placeholder_and_real_secret_count_only_the_real_secret(self) -> None:
+        placeholder_line = (
+            "OK CLAIM 2026-10-02T09:40:10Z lane=drainer-restart-0c2f "
+            "ticket=OMN-20356 claim-token=***REDACTED*** line=26301"
+        )
+        result = redact_secrets_with_count(
+            placeholder_line + "\npassword=Hunter2Hunter2"
+        )
+        assert result.redacted_count == 1
+        assert result.text == placeholder_line + "\npassword=***REDACTED***"

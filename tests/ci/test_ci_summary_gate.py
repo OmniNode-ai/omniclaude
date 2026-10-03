@@ -9,6 +9,7 @@ default-deny verdict so the required gate can never silently rubber-stamp.
 
 from __future__ import annotations
 
+import inspect
 import json
 import subprocess
 import sys
@@ -65,6 +66,117 @@ def _job(
 
 def _all_gates(conclusion: str = "success") -> list[dict]:
     return [_job(g, conclusion) for g in GATE_JOBS]
+
+
+@pytest.mark.unit
+class TestRunningRowsHoldTheVerdictOmn20066:
+    """In-run rows without a verdict must hold CI Summary at PENDING."""
+
+    @pytest.mark.parametrize("status", ["queued", "in_progress", "waiting", "pending"])
+    def test_running_unregistered_job_cannot_conclude_success(
+        self, status: str
+    ) -> None:
+        """Every running status holds an otherwise passing snapshot."""
+        jobs = _all_gates() + [_job("Some New Job", None, status=status)]
+        code, report = evaluate(jobs, run_attempt=1)
+        assert code == EXIT_PENDING, report
+        assert (
+            "  default-deny sweep rows still running (PENDING, re-polled): Some New Job"
+            in report
+        )
+
+    def test_merge_group_running_unregistered_job_holds_pending(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Merge-group uses the same in-run evaluate() policy as every event."""
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "merge_group")
+        jobs = _all_gates() + [_job("Some New Job", None, status="in_progress")]
+        code, report = evaluate(jobs, run_attempt=1)
+        assert code == EXIT_PENDING, report
+        assert (
+            "  default-deny sweep rows still running (PENDING, re-polled): Some New Job"
+            in report
+        )
+
+        monkeypatch.delenv("GITHUB_EVENT_NAME")
+        baseline = evaluate(jobs, run_attempt=1)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "merge_group")
+        assert evaluate(jobs, run_attempt=1) == baseline
+        assert all(
+            "event" not in name for name in inspect.signature(evaluate).parameters
+        )
+
+    def test_running_job_then_completed_success_concludes_success(self) -> None:
+        """A successful completion clears the running row's pending verdict."""
+        jobs = _all_gates() + [_job("Some New Job", None, status="in_progress")]
+        jobs[-1] = _job("Some New Job", "success")
+        code, report = evaluate(jobs, run_attempt=1)
+        assert code == EXIT_SUCCESS, report
+        assert "default-deny sweep rows still running" not in report
+
+    def test_running_job_then_completed_failure_fails(self) -> None:
+        """A failed completion remains a default-deny sweep failure."""
+        jobs = _all_gates() + [_job("Some New Job", None, status="in_progress")]
+        jobs[-1] = _job("Some New Job", "failure")
+        code, report = evaluate(jobs, run_attempt=1)
+        assert code == EXIT_FAILURE, report
+        assert "default-deny sweep failures: Some New Job" in report
+        assert "default-deny sweep rows still running" not in report
+
+    def test_failure_wins_over_a_running_row(self) -> None:
+        """A completed failure takes precedence over an undecided row."""
+        jobs = _all_gates() + [
+            _job("Failed New Job", "failure"),
+            _job("Some New Job", None, status="in_progress"),
+        ]
+        code, report = evaluate(jobs, run_attempt=1)
+        assert code == EXIT_FAILURE, report
+        assert "default-deny sweep failures: Failed New Job" in report
+
+    @pytest.mark.parametrize("name", [*sorted(SOFT_ALLOWLIST), "CI Summary"])
+    def test_allowlisted_running_rows_do_not_hold(self, name: str) -> None:
+        """Every advisory row and the poller itself stay exempt."""
+        jobs = _all_gates() + [_job(name, None, status="in_progress")]
+        code, report = evaluate(jobs, run_attempt=1)
+        assert code == EXIT_SUCCESS, report
+        assert "default-deny sweep rows still running" not in report
+
+    def test_every_job_needing_ci_summary_is_allowlisted(self) -> None:
+        """A direct dependent must be exempt to avoid deadlocking the poller."""
+        workflow = yaml.safe_load(CI_YML.read_text(encoding="utf-8"))
+        for job_id, job in workflow["jobs"].items():
+            needs = job.get("needs", [])
+            if isinstance(needs, str):
+                needs = [needs]
+            if "ci-summary" in needs:
+                display_name = job.get("name") or job_id
+                assert display_name in SOFT_ALLOWLIST, display_name
+
+    def test_running_duplicate_is_not_hidden_by_completed_success(self) -> None:
+        """All authoritative same-attempt rows must settle before success."""
+        jobs = _all_gates() + [
+            _job("Duplicate Job", None, status="in_progress"),
+            _job("Duplicate Job", "success"),
+        ]
+        code, report = evaluate(jobs, run_attempt=1)
+        assert code == EXIT_PENDING, report
+        assert (
+            "default-deny sweep rows still running (PENDING, re-polled): Duplicate Job"
+            in report
+        )
+
+    @pytest.mark.parametrize("run_attempt", [None, 2])
+    def test_stale_running_row_does_not_hold_current_attempt(
+        self, run_attempt: int | None
+    ) -> None:
+        """An older attempt's running row is not authoritative for a rerun."""
+        jobs = [_job(g, "success", attempt=2) for g in GATE_JOBS] + [
+            _job("Some New Job", None, status="in_progress", attempt=1),
+            _job("Some New Job", "success", attempt=2),
+        ]
+        code, report = evaluate(jobs, run_attempt=run_attempt)
+        assert code == EXIT_SUCCESS, report
+        assert "default-deny sweep rows still running" not in report
 
 
 @pytest.mark.unit

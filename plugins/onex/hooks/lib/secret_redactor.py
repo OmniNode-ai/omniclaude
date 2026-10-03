@@ -39,8 +39,16 @@ alphabetic passphrase narrated in prose ("the password is correcthorsestaple")
 is no longer caught here. That is deliberate: such a value is not
 distinguishable from prose by shape, and the alternative -- matching any long
 word after the copula -- silently rewrites the artifacts this codebase
-produces. Labeled values with an "=" or ":" separator are unaffected and are
-still matched on length alone.
+produces. Labeled values with an "=" or tight ":" separator are unaffected
+and are still matched on length alone.
+
+THIRD COVERAGE LIMIT: the generic label rule now applies the same value-shape
+floor after colon-space (or colon-tab), so ordinary prose such as
+"auth: credential" and "password: required" is not treated as a leak. An
+all-lowercase alphabetic passphrase after "label: " is therefore no longer
+matched by that rule. As with the prose limit above, shape alone cannot
+distinguish that passphrase from an ordinary word. The "=" and tight-colon
+forms are unaffected and continue to match on length alone.
 """
 
 from __future__ import annotations
@@ -89,7 +97,11 @@ SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
     # Bearer tokens
     (
-        re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE),
+        re.compile(
+            r"(Bearer\s+)(?!(?i:\*\*\*REDACTED\*\*\*|[\[(<]redacted))"
+            r"[a-zA-Z0-9._-]{20,}",
+            re.IGNORECASE,
+        ),
         r"\1***REDACTED***",
     ),
     # Password in URLs. Bounded to a URL authority -- no whitespace, `/`, or
@@ -101,11 +113,27 @@ SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # (no `/`, whitespace, or `@`) keeps real single-line connection
     # strings (postgres://user:pass@host, mysql://..., mongodb://...)  # pragma: allowlist secret
     # redacted while leaving multi-line report/log text alone.
-    (re.compile(r"(://[^:/\s@]+:)[^@/\s]+(@)"), r"\1***REDACTED***\2"),
+    (
+        re.compile(
+            r"(://[^:/\s@]+:)(?!(?i:\*\*\*REDACTED\*\*\*|[\[(<]redacted))"
+            r"[^@/\s]+(@)"
+        ),
+        r"\1***REDACTED***\2",
+    ),
     # Generic secret patterns in key=value format
     (
         re.compile(
-            r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)['\"]?[^\s'\"]{8,}['\"]?",
+            r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*"
+            # Colon-space needs credential shape; '=' and tight ':' only
+            # need length. Separator whitespace cannot consume a newline.
+            r"(?:=[ \t]*|:(?!\s)|:[ \t]+"
+            r"(?=['\"]?[^\s'\"]*(?:[0-9!@#$%^&*()+]|(?-i:[a-z][A-Z])))))"
+            r"['\"]?"
+            # Already masked values and lowercase dotted code expressions
+            # are not credentials, even when they meet the length floor.
+            r"(?!(?i:\*\*\*REDACTED\*\*\*|[\[(<]redacted))"
+            r"(?!(?-i:[a-z_]+(?:\.[a-z_]+)+)(?![A-Za-z0-9_.\-]))"
+            r"[^\s'\"]{8,}['\"]?",
             re.IGNORECASE,
         ),
         r"\1***REDACTED***",
@@ -119,14 +147,16 @@ SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # pattern anchors on KEY SHAPE instead: an identifier ending in one of
     # the label roots, immediately followed (optionally quoted) by `:`/`=`
     # and a token-shaped value with no embedded whitespace. Deliberately
-    # broader than a word-boundary match -- false positives here only
-    # over-redact a non-secret value (safe failure mode for a masking
-    # control, not a blocking one); false negatives are the costly failure.
+    # broader than a word-boundary match. Plural 'tokens' keys represent
+    # counts, and lowercase dotted values represent code attributes.
     (
         re.compile(
             r'(["\']?[A-Za-z][A-Za-z0-9_]*(?:secret|token|passwd|password|'
-            r'apikey|api_key|credential)[A-Za-z0-9_]*["\']?\s*[:=]\s*)'
-            r"""["']?[A-Za-z0-9+/=_.\-]{8,}""",
+            r'apikey|api_key|credential)[A-Za-z0-9_]*(?<!tokens)["\']?\s*[:=][ \t]*)'
+            r"""["']?"""
+            r"(?!(?i:\*\*\*REDACTED\*\*\*|[\[(<]redacted))"
+            r"(?!(?-i:[a-z_]+(?:\.[a-z_]+)+)(?![A-Za-z0-9_.\-]))"
+            r"[A-Za-z0-9+/=_.\-]{8,}",
             re.IGNORECASE,
         ),
         r"\1***REDACTED***",
@@ -147,6 +177,7 @@ SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
             # ``[a-z][A-Z]`` match any two letters and nullify it.
             r"((?i:\b(?:password|passwd|secret|credential|api[_ ]?key|token)\b"
             r"(?:\s+\S+){0,4}?\s+(?:is|was|[=:])\s*)[`'\"]?)"
+            r"(?!(?i:\*\*\*REDACTED\*\*\*|[\[(<]redacted))"
             # OMN-18827: the value must be VALUE-SHAPED, not merely long.
             # Same charset and the same 10-character floor as before, plus a
             # shape floor -- the token must carry a digit, a non-word special,

@@ -156,6 +156,46 @@ class TestScanStopEventCatchesRealLeakShapes:
         assert result.reason == "no_message_extracted"
 
 
+class TestLedgerClaimFinalMessage:
+    """Ledger acknowledgements allow masked claims and block raw secrets."""
+
+    def test_masked_claim_is_allowed(self) -> None:
+        event = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "OK CLAIM 2026-10-02T09:40:10Z lane=drainer-restart-0c2f "
+                        "ticket=OMN-20356 claim-token=***REDACTED*** line=26301"
+                    ),
+                }
+            ]
+        }
+        result = scan_stop_event(event)
+        assert result.verdict is EnumSecretGuardVerdict.ALLOW
+        assert result.redacted_count == 0
+        assert _hook_output(result)["hookSpecificOutput"]["decision"] == "allow"
+
+    def test_unmasked_claim_is_blocked(self) -> None:
+        event = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "OK CLAIM 2026-10-02T09:40:10Z lane=drainer-restart-0c2f "
+                        "ticket=OMN-20356 claim-token=LCT1-4137128-4064 line=26301"
+                    ),
+                }
+            ]
+        }
+        result = scan_stop_event(event)
+        assert result.verdict is EnumSecretGuardVerdict.BLOCK
+        assert result.redacted_count >= 1
+        output = _hook_output(result)
+        assert output["hookSpecificOutput"]["decision"] == "block"
+        assert "LCT1-4137128-4064" not in json.dumps(output)
+
+
 class TestFailSafePosture:
     """Fail SAFE, not open: a scan error must block, never pass through raw text."""
 
