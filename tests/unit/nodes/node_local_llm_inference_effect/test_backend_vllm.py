@@ -113,6 +113,28 @@ async def test_success_path() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_infer_uses_endpoint_configured_chat_completions_path() -> None:
+    """The request path comes from the endpoint config, not from backend code (OMN-17103)."""
+    endpoint = LlmEndpointConfig(
+        url="http://localhost:8000/v4",
+        model_name="test-model",
+        purpose=LlmEndpointPurpose.CODE_ANALYSIS,
+        chat_completions_path="/chat/completions",
+    )
+    backend = VllmInferenceBackend(registry=_make_registry(endpoint))
+    backend._client = AsyncMock(spec=httpx.AsyncClient)
+    backend._client.post = AsyncMock(return_value=_success_response())
+
+    result = await backend.infer(_make_request())
+
+    assert result.status == SkillResultStatus.SUCCESS
+    assert backend._client.post.call_args[0][0] == (
+        "http://localhost:8000/v4/chat/completions"
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_timeout_returns_timeout_error() -> None:
     """httpx.TimeoutException results in FAILED with TIMEOUT error."""
     registry = _make_registry()
