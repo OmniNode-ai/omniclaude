@@ -114,7 +114,8 @@ GUARDED = [
     ["pr", "view", "9002", "--json", "url,headRefOid"],
     ["pr", "checks", "9002", "--repo", "OmniNode-ai/omnimarket"],
     ["pr", "checks", "9002", "--watch"],
-    ["run", "view", "123456", "--repo", "OmniNode-ai/omnimarket", "--log-failed"],
+    ["run", "view", "123456", "--repo", "OmniNode-ai/omnimarket"],
+    ["run", "view", "123456", "--repo", "OmniNode-ai/omnimarket", "--json", "jobs"],
     ["api", "repos/OmniNode-ai/omnimarket/pulls"],
     ["api", "repos/OmniNode-ai/omnimarket/pulls/9002"],
     ["api", "repos/OmniNode-ai/omnimarket/pulls/9002/files", "--paginate"],
@@ -145,13 +146,79 @@ def test_guarded_shape_is_refused_with_alternatives(
     assert "pr_state_local.py --pr " in result.stderr
     assert "--json" in result.stderr
     assert "--status" in result.stderr
-    assert "drain_map.py --only-pr " in result.stderr
+    assert "drain_map" not in result.stderr
+    assert "--only-pr" not in result.stderr
     assert "git -C $OMNI_HOME/" in result.stderr
     assert "origin/dev..." in result.stderr
     assert (
         "ONEX_GH_EXACT_HEAD=<owner>/<repo>#<n> gh pr view <n> --repo <owner>/<repo>"
         in result.stderr
     )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("argv", GUARDED[:6], ids=lambda a: " ".join(a)[:70])
+def test_refusal_names_only_readers_that_exist(
+    env: dict[str, str], argv: list[str]
+) -> None:
+    """A refusal names pr_state_local.py (--pr, --json, --status) and canonical-clone git.
+
+    The first cut told callers to run `drain_map.py --only-pr`, a flag drain_map.py does not
+    have (OMN-20436): a refused caller followed the text into a second failure.
+    """
+    result = _run(env, *argv)
+
+    _assert_refused(env, result)
+    script_flags = re.findall(r"(\w+\.py)\s+(--[a-z-]+)", result.stderr)
+    assert script_flags, result.stderr
+    for script, flag in script_flags:
+        assert script == "pr_state_local.py", (script, flag)
+        assert flag in {"--pr", "--status"}, (script, flag)
+    for script in re.findall(r"(\w+\.py)", result.stderr):
+        assert script == "pr_state_local.py", script
+
+
+JOB_LOGS = [
+    ["run", "view", "123456", "--repo", "OmniNode-ai/omnimarket", "--log-failed"],
+    ["run", "view", "123456", "--log-failed", "--job", "555"],
+    ["run", "view", "--job", "555", "--repo", "OmniNode-ai/omnimarket", "--log"],
+    ["api", "repos/OmniNode-ai/omnimarket/actions/jobs/555/logs"],
+    ["api", "/repos/OmniNode-ai/omnimarket/actions/jobs/555/logs"],
+    [
+        "api",
+        "https://api.github.com/repos/OmniNode-ai/omnimarket/actions/jobs/555/logs",
+    ],
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("argv", JOB_LOGS, ids=lambda a: " ".join(a)[:70])
+def test_job_log_read_passes_the_guard(env: dict[str, str], argv: list[str]) -> None:
+    """A failing-job log is not PR state: the watcher does not hold it and a lane that
+    classifies a red must read it (OMN-20421 keeps that read in the landing worker brief)."""
+    result = _run(env, *argv)
+
+    assert result.returncode == 0, result.stderr
+    assert _calls(env) == [argv]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["run", "view", "123456", "--log-failed", "--json", "jobs"],
+        ["run", "view", "123456", "--log-failed", "--jq", ".jobs"],
+        ["api", "repos/OmniNode-ai/omnimarket/actions/jobs/555/logs/../../runs/9"],
+        ["api", "repos/OmniNode-ai/omnimarket/actions/jobs/555"],
+    ],
+    ids=lambda a: " ".join(a)[:70],
+)
+def test_job_log_carve_out_does_not_widen_to_state_reads(
+    env: dict[str, str], argv: list[str]
+) -> None:
+    result = _run(env, *argv)
+
+    _assert_refused(env, result)
 
 
 @pytest.mark.unit
@@ -162,7 +229,7 @@ def test_refusal_fills_repo_and_number_when_argv_resolves_them(
 
     _assert_refused(env, result)
     assert "pr_state_local.py --pr OmniNode-ai/omnimarket#9002" in result.stderr
-    assert "drain_map.py --only-pr omnimarket#9002" in result.stderr
+    assert "drain_map" not in result.stderr
     assert "git -C $OMNI_HOME/omnimarket " in result.stderr
     assert (
         "ONEX_GH_EXACT_HEAD=OmniNode-ai/omnimarket#9002 gh pr view 9002 "
