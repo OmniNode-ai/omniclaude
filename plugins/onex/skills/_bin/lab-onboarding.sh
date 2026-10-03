@@ -1373,6 +1373,31 @@ accepted_backend() {
   printf '%s' "$1" | jq -r '[.. | objects | select(.backend_id? != null and .acceptance_decision? == "accept") | .backend_id] | first // empty' 2>/dev/null
 }
 
+# The boot thresholds are an OR: either reading can stop the stack. The message
+# and the remedy therefore name ONLY the clause that failed. Naming both reports
+# a passing reading as a cause, which sends the developer after resources they
+# already have -- a run stopped on 3 GB of memory once said "and 276 GB disk
+# free (needs 15)" in the same breath.
+BOOT_SHORT=""
+BOOT_REMEDY=""
+boot_resources_ok() { # 0 when the stack may boot; else BOOT_SHORT/BOOT_REMEDY say why
+  local free disk
+  free="$(avail_mem_gb)"; disk="$(disk_free_gb)"
+  BOOT_SHORT=""; BOOT_REMEDY=""
+  if [ "$free" -lt "$BOOT_FREE_MEM_GB" ]; then
+    BOOT_SHORT="${free} GB memory available (needs $BOOT_FREE_MEM_GB)"
+    BOOT_REMEDY="close other apps"
+  fi
+  if [ "$disk" -lt "$BOOT_FREE_DISK_GB" ]; then
+    if [ -n "$BOOT_SHORT" ]; then
+      BOOT_SHORT="$BOOT_SHORT and "; BOOT_REMEDY="$BOOT_REMEDY and "
+    fi
+    BOOT_SHORT="${BOOT_SHORT}${disk} GB disk free (needs $BOOT_FREE_DISK_GB)"
+    BOOT_REMEDY="${BOOT_REMEDY}free disk space"
+  fi
+  [ -z "$BOOT_SHORT" ]
+}
+
 # ===========================================================================
 # Phase 4: containers (optional)
 # ===========================================================================
@@ -1523,7 +1548,7 @@ phase4() {
   if [ "$MODE2_OK" -ne 1 ]; then phase_skip "${MODE2_WHY# }"; return; fi
   if is_done 4 && docker_ready && stack_healthy; then phase_pass "already running"; return; fi
 
-  local host_ram mem_gb mem free disk
+  local host_ram mem_gb mem
   host_ram="$(ram_gb)"
   mem_gb=$DOCKER_MEM_GB
   [ $((host_ram - mem_gb)) -lt "$HOST_RESERVE_GB" ] && mem_gb=$((host_ram - HOST_RESERVE_GB))
@@ -1557,11 +1582,10 @@ phase4() {
   say "  Docker Desktop: running"
   step "docker compose 2.20 or newer" compose_ok || phase_fail "update Docker Desktop, then run this again"
 
-  free="$(avail_mem_gb)"; disk="$(disk_free_gb)"
-  if [ "$free" -lt "$BOOT_FREE_MEM_GB" ] || [ "$disk" -lt "$BOOT_FREE_DISK_GB" ]; then
+  if ! boot_resources_ok; then
     FAILED_STEP="resources at boot time"
-    LAST_ERR="${free} GB memory available (needs $BOOT_FREE_MEM_GB) and ${disk} GB disk free (needs $BOOT_FREE_DISK_GB)"
-    phase_fail "close other apps or free disk space, then run this again"
+    LAST_ERR="$BOOT_SHORT"
+    phase_fail "$BOOT_REMEDY, then run this again"
   fi
 
   # Launching Docker restarts a stack that was already there (restart policies).

@@ -172,7 +172,7 @@ for file in "$@"; do
         *) continue ;;
     esac
     body="$(read_staged "$file")" || continue
-    if grep -qiE "$STAMP_LINE_RE" <<< "$body"; then
+    if grep -qiE "$STAMP_LINE_RE" < <(printf '%s\n' "$body"); then
         ARTIFACT_LABELS+=("$file")
         ARTIFACT_BODIES+=("$body")
     fi

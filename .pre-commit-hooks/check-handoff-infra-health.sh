@@ -48,7 +48,7 @@ for file in "$@"; do
         continue
     fi
 
-    if ! grep -qE "$SECTION_PATTERN" <<< "$content"; then
+    if ! grep -qE "$SECTION_PATTERN" < <(printf '%s\n' "$content"); then
         echo "HANDOFF_MISSING_INFRA_HEALTH: $file — add ## Infra Health section" >&2
         echo "  Ticket: $TICKET_REF | Spec: OMN-8867" >&2
         FOUND_VIOLATION=1

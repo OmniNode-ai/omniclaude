@@ -1529,6 +1529,30 @@ class TestSweepFoldsIntoTheCombinedVerdict:
             in report
         )
 
+    def test_every_exclusion_applied_is_named_on_success_and_on_failure(self) -> None:
+        """AC-4 second half. The population size AND each exclusion print on
+        every verdict, so a green sweep that leaned on the registry says so."""
+        for failures, expected_code in (
+            ([], EXIT_SUCCESS),
+            (["Gate Y (failure)"], EXIT_FAILURE),
+        ):
+            code, report = combine_verdicts(
+                (EXIT_SUCCESS, "in-run: SUCCESS"),
+                "SUCCESS",
+                [],
+                [],
+                sweep_failures=failures,
+                sweep_names=["A", "B", "Gate Y"],
+                sweep_excluded=["Gate Z (failure; flaky)", "Gate X (failure; flaky)"],
+                sweep_ran=True,
+            )
+            assert code == expected_code
+            assert "3 unregistered context(s) judged" in report
+            assert (
+                "exclusions applied: Gate X (failure; flaky), Gate Z (failure; flaky)"
+                in report
+            )
+
     def test_the_layer_prints_nothing_about_itself_when_it_did_not_run(self) -> None:
         _code, report = combine_verdicts(
             (EXIT_SUCCESS, "in-run: SUCCESS"), "SUCCESS", [], []

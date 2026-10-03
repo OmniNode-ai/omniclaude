@@ -96,7 +96,7 @@ _obg_job() {
     ONEX_BASH_GUARDS_SLOT="$1"
     ONEX_BASH_GUARDS_PHASE="$2"
     local _obg_out _obg_rc
-    _obg_out="$(source "${_OBG_GUARDS[$1]}" <<<"$_OBG_INPUT")"
+    _obg_out="$(source "${_OBG_GUARDS[$1]}" < <(printf '%s\n' "$_OBG_INPUT"))"
     _obg_rc=$?
     printf '%s\0%s' "$_obg_rc" "$_obg_out"
 }
@@ -235,7 +235,7 @@ if [[ ${#_OBG_BLOCKS[@]} -gt 1 ]]; then
         _obg_args+=("${!_obg_out_var}")
     done
     jq -sc '{"decision": "block", "reason": ([.[] | (.reason // tostring)] | join("\n\n"))}' \
-        <<<"$(printf '%s\n' "${_obg_args[@]}")" 2>/dev/null \
+        < <(printf '%s\n' "${_obg_args[@]}") 2>/dev/null \
         || printf '{"decision": "block", "reason": "BLOCKED: %s Bash guards refused this command (OMN-20118); their reasons could not be combined."}\n' "${#_OBG_BLOCKS[@]}"
     exit 2
 fi
