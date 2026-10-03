@@ -122,7 +122,7 @@ def test_watcher_marker_allows_search_with_identical_argv(
 @pytest.mark.parametrize(
     "argv",
     [
-        ["api", "repos/o/r/pulls"],
+        ["api", "repos/o/r/issues"],
         ["api", "graphql", "-f", "query={viewer{login}}"],
         ["pr", "view", "1", "--json", "url"],
     ],
@@ -209,7 +209,7 @@ def test_shared_log_has_exact_shape_and_no_query_or_argv_leakage(
 def test_shared_log_is_skipped_without_resolvable_state_dir(
     env: dict[str, str], tmp_path: Path
 ) -> None:
-    result = _run(env, "api", "repos/o/r/pulls")
+    result = _run(env, "api", "repos/o/r/issues")
 
     assert result.returncode == 0, result.stderr
     assert list(tmp_path.rglob("gh-calls.log")) == []
@@ -224,10 +224,10 @@ def test_unwritable_log_location_never_fails_gh_call(
     result = _run(
         env,
         "api",
-        "repos/o/r/pulls",
+        "repos/o/r/issues",
         extra={"ONEX_GH_CALLS_LOG": str(blocked_parent / "gh-calls.log")},
     )
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == "ok"
-    assert _calls(env) == [["api", "repos/o/r/pulls"]]
+    assert _calls(env) == [["api", "repos/o/r/issues"]]
