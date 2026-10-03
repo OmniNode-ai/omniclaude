@@ -66,17 +66,17 @@ for file in "$@"; do
     lineno=0
     while IFS= read -r line; do
         lineno=$((lineno + 1))
-        if grep -qE "$ESCAPE" <<<"$line"; then
+        if grep -qE "$ESCAPE" < <(printf '%s\n' "$line"); then
             continue
         fi
-        if grep -qiE "$MTIME_MARKER" <<<"$line" && grep -qE "$Z_TIME" <<<"$line"; then
+        if grep -qiE "$MTIME_MARKER" < <(printf '%s\n' "$line") && grep -qE "$Z_TIME" < <(printf '%s\n' "$line"); then
             echo "UTC_MTIME_MISLABEL: ${file}:${lineno} — Z-suffixed time cited next to an mtime marker (${TICKET_REF})" >&2
             echo "  ${line}" >&2
             echo "  Local file mtimes are NOT UTC. Source the timestamp from 'date -u' or epoch conversion," >&2
             echo "  or drop the Z suffix and label the timezone explicitly. Escape hatch: 'utc-ok: <reason>'." >&2
             FOUND_VIOLATION=1
         fi
-    done <<<"$content"
+    done < <(printf '%s\n' "$content")
 done
 
 exit "$FOUND_VIOLATION"

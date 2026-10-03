@@ -116,7 +116,7 @@ set +e
 INJECTION_OUTPUT="$(
     PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}" \
     "$PYTHON_BIN" -m plugins.onex.hooks.lib.cost_accounting \
-    <<< "$HOOK_EVENT" 2>>"$LOG_FILE"
+    < <(printf '%s\n' "$HOOK_EVENT") 2>>"$LOG_FILE"
 )"
 PYTHON_EXIT=$?
 set -e

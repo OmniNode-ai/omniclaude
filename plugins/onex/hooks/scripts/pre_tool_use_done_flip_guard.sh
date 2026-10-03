@@ -60,7 +60,7 @@ PYTHON_BIN="${PYTHON_CMD:-}"
 [[ -n "$PYTHON_BIN" ]] || _done_flip_refuse "guard_error: no Python interpreter resolved for the guard"
 
 set +e
-"$PYTHON_BIN" "$LIB_PY" <<<"$_OMNICLAUDE_HOOK_PAYLOAD"
+"$PYTHON_BIN" "$LIB_PY" < <(printf '%s\n' "$_OMNICLAUDE_HOOK_PAYLOAD")
 rc=$?
 set -e
 if [[ "$rc" -eq 0 ]]; then
