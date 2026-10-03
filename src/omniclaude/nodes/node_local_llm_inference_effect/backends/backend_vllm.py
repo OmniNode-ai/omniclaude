@@ -3,7 +3,9 @@
 """vLLM inference backend for NodeLocalLlmInferenceEffect.
 
 Implements ProtocolLocalLlmInference by calling an OpenAI-compatible
-``/v1/chat/completions`` endpoint (vLLM, TGI, or any compatible server).
+chat-completions endpoint (vLLM, TGI, or any compatible server). The request
+path comes from the endpoint config (``LlmEndpointConfig.chat_completions_path``),
+never from a literal in this module.
 
 Concurrency is bounded by an asyncio.Semaphore (env: OMNICLAUDE_VLLM_MAX_CONCURRENT).
 A single httpx.AsyncClient is reused across calls for connection pooling.
@@ -25,6 +27,7 @@ from typing import Any  # any-ok: external API boundary
 import httpx
 
 from omniclaude.config.model_local_llm_config import (
+    DEFAULT_CHAT_COMPLETIONS_PATH,
     LlmEndpointPurpose,
     LocalLlmEndpointRegistry,
 )
@@ -128,7 +131,7 @@ def _parse_chat_completion_response(
     """Parse a full chat completion response into a ChatCompletionResult.
 
     Args:
-        data: The raw JSON response from ``/v1/chat/completions``.
+        data: The raw JSON response from the chat-completions endpoint.
 
     Returns:
         ChatCompletionResult with content and/or tool_calls populated.
@@ -148,7 +151,7 @@ def _parse_chat_completion_response(
 class VllmInferenceBackend:
     """vLLM/OpenAI-compatible inference backend.
 
-    Sends POST requests to ``<endpoint>/v1/chat/completions`` and parses
+    Sends POST requests to the endpoint's configured chat-completions path and parses
     ``choices[0].message.content`` from the response.
 
     Satisfies ``ProtocolLocalLlmInference`` (runtime-checkable).
@@ -170,10 +173,11 @@ class VllmInferenceBackend:
         tool_choice: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        chat_completions_path: str = DEFAULT_CHAT_COMPLETIONS_PATH,
     ) -> ChatCompletionResult:
         """Synchronous chat completion with tool-calling support.
 
-        Sends a full messages array (with optional tools) to a ``/v1/chat/completions``
+        Sends a full messages array (with optional tools) to a chat-completions
         endpoint and parses the response, including any ``tool_calls`` in the
         assistant message.
 
@@ -188,11 +192,14 @@ class VllmInferenceBackend:
             tool_choice: Optional tool choice directive (``"auto"``, ``"none"``, etc.).
             max_tokens: Optional max tokens for the response.
             temperature: Optional temperature for the response.
+            chat_completions_path: Path appended to ``endpoint_url``. Defaults to
+                the config-declared OpenAI-compatible path; pass the endpoint's
+                ``chat_completions_path`` for providers that differ.
 
         Returns:
             ChatCompletionResult with content and/or tool_calls.
         """
-        url = f"{endpoint_url.rstrip('/')}/v1/chat/completions"
+        url = f"{endpoint_url.rstrip('/')}{chat_completions_path}"
         payload: _JsonDict = {
             "model": model or "default",
             "messages": messages,
@@ -258,7 +265,7 @@ class VllmInferenceBackend:
 
         Resolves the endpoint from the registry using the request's model_purpose
         (defaults to ``"CODE_ANALYSIS"`` when not specified). The prompt is sent
-        as a single user message to ``/v1/chat/completions``.
+        as a single user message to the endpoint's ``chat_completions_path``.
 
         Args:
             request: Inference request with prompt and optional parameters.
@@ -291,7 +298,7 @@ class VllmInferenceBackend:
                 correlation_id=request.correlation_id,
             )
 
-        url = f"{endpoint.url}v1/chat/completions"
+        url = f"{str(endpoint.url).rstrip('/')}{endpoint.chat_completions_path}"
         payload: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
             str, Any
         ] = {  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary

@@ -387,3 +387,20 @@ class TestChatCompletionSync:
         assert sent_payload["tool_choice"] == "auto"
         assert sent_payload["max_tokens"] == 100
         assert sent_payload["temperature"] == 0.5
+
+    def test_chat_completions_path_is_caller_supplied(self) -> None:
+        """A non-default endpoint path is honoured, not overwritten (OMN-17103)."""
+        captured: dict[str, Any] = {}
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            captured["url"] = str(request.url)
+            return httpx.Response(200, json=_chat_response(content="done"))
+
+        backend = _make_backend(sync_transport=httpx.MockTransport(_handler))
+        backend.chat_completion_sync(
+            messages=[{"role": "user", "content": "hi"}],
+            endpoint_url=_ENDPOINT_URL,
+            chat_completions_path="/chat/completions",
+        )
+
+        assert captured["url"] == "http://localhost:8000/chat/completions"

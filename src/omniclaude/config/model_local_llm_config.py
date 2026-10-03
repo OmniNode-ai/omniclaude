@@ -67,6 +67,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+# OpenAI-compatible chat-completions path. Declared once, here, so inference
+# backends resolve the path from endpoint config rather than appending a
+# literal (OMN-17103).
+DEFAULT_CHAT_COMPLETIONS_PATH = "/v1/chat/completions"
+
 
 class LlmEndpointPurpose(StrEnum):
     """Purpose categories for LLM endpoints.
@@ -146,7 +151,7 @@ class LlmEndpointConfig(BaseModel):
         description="API key for authenticated endpoints (frontier models)",
     )
     chat_completions_path: str = Field(
-        default="/v1/chat/completions",
+        default=DEFAULT_CHAT_COMPLETIONS_PATH,
         description="Path appended to base URL for chat completions requests",
     )
 
@@ -611,7 +616,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
                         self.llm_gemini_max_latency_ms,
                         7,  # Frontier: preferred for research/review when available
                         self.gemini_api_key,
-                        "/v1/chat/completions",  # Gemini OpenAI-compat path
+                        DEFAULT_CHAT_COMPLETIONS_PATH,  # Gemini OpenAI-compat path
                     ),
                     (
                         self.llm_glm_url,
