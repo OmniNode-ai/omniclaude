@@ -1,0 +1,245 @@
+---
+# Baseline for check-direct-model-call (OMN-20295).
+# A model call must sit inside a sanctioned delegation
+# node package (omnibase_core nodes/node_direct_model_call_check_compute/policy.yaml).
+#
+# RULE: entries only leave. A site not listed here fails. An entry that no
+# longer matches a site fails until it is removed. An entry past its expiry no
+# longer covers its site. CI and the pre-commit hook refuse a change whose copy
+# of this file carries an entry, a later expiry or another ticket that its
+# base did not. Crush sites name OMN-20290 for their removal.
+#
+# Regenerate only to SHRINK it:
+#   python -m omnibase_core.nodes.node_direct_model_call_check_effect.runtime_direct_model_call \
+#     --repo <repo> --baseline <this file> --write-baseline
+
+schema_version: 1
+entries:
+  - path: plugins/onex/hooks/lib/code_graph_query.py
+    kind: http
+    symbol: _get_embedding
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: plugins/onex/hooks/lib/route_via_events_wrapper.py
+    kind: http
+    symbol: _check_llm_health
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: plugins/onex/hooks/lib/shadow_validation.py
+    kind: http
+    symbol: _call_shadow_claude
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: plugins/onex/skills/_bin/lab-onboarding.sh
+    kind: http
+    symbol: <script>
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: plugins/onex/skills/_bin/lab-onboarding.sh
+    kind: http
+    symbol: <script>
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: plugins/onex/skills/_lib/decision_store/semantic_check.py
+    kind: http
+    symbol: semantic_check_async
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: plugins/onex/skills/epic_team/run.sh
+    kind: cli_exec
+    symbol: <script>
+    target: claude
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: plugins/onex/skills/generate_node/regenerate
+    kind: http
+    symbol: extract_prompt_with_zai
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: scripts/cron-closeout.sh
+    kind: http
+    symbol: check_delegation_health
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: scripts/cron-closeout.sh
+    kind: http
+    symbol: check_delegation_health
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: scripts/cron-unstick-queue.sh
+    kind: cli_exec
+    symbol: <script>
+    target: claude
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: scripts/git-hooks/post-merge
+    kind: cli_exec
+    symbol: <script>
+    target: claude
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: scripts/headless-merge-sweep.sh
+    kind: cli_exec
+    symbol: <script>
+    target: claude
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: scripts/opencode-session-scanner.sh
+    kind: cli_exec
+    symbol: <script>
+    target: opencode
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: scripts/tests/test-cron-contract-verify.sh
+    kind: cli_exec
+    symbol: test_dry_run_uses_full_runtime_verification
+    target: claude
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/delegation/inprocess_runner.py
+    kind: http
+    symbol: _call_llm
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/hooks/lib/code_context_resolver.py
+    kind: http
+    symbol: CodeContextResolver._get_embedding
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/hooks/lib/test_offloader.py
+    kind: cli_exec
+    symbol: _run_offloaded
+    target: codex
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/hooks/lib/test_offloader.py
+    kind: cli_exec
+    symbol: _run_offloaded
+    target: gemini
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/lib/core/manifest_injector.py
+    kind: http
+    symbol: ManifestInjector._embed_text
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/lib/utils/consensus/quorum.py
+    kind: http
+    symbol: AIQuorum._score_with_gemini
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/lib/utils/consensus/quorum.py
+    kind: http
+    symbol: AIQuorum._score_with_openai
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/lib/utils/consensus/quorum.py
+    kind: http
+    symbol: AIQuorum._score_with_openai_compatible
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/nodes/node_agent_routing_compute/handler_routing_llm.py
+    kind: http
+    symbol: HandlerRoutingLlm._ask_llm
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/nodes/node_local_llm_inference_effect/backends/backend_vllm.py
+    kind: http
+    symbol: VllmInferenceBackend.chat_completion_sync
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/nodes/node_local_llm_inference_effect/backends/backend_vllm.py
+    kind: http
+    symbol: VllmInferenceBackend.infer
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/nodes/node_transition_selector_effect/node.py
+    kind: http
+    symbol: NodeTransitionSelectorEffect._call_model_once
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/nodes/node_transition_selector_effect/node.py
+    kind: http
+    symbol: NodeTransitionSelectorEffect._probe_endpoint
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: src/omniclaude/verification/local_verifier.py
+    kind: http
+    symbol: run_local_verification
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: tests/nodes/test_node_transition_selector_effect/test_integration.py
+    kind: http
+    symbol: _is_endpoint_available
+    target: http
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: tests/unit/delegation/test_runner.py
+    kind: call_via
+    symbol: TestCallLlmErrorHandling.test_call_llm_rejects_non_dict_json
+    target: src/omniclaude/delegation/inprocess_runner.py::_call_llm
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: tests/unit/delegation/test_runner.py
+    kind: call_via
+    symbol: TestCallLlmErrorHandling.test_call_llm_wraps_invalid_json
+    target: src/omniclaude/delegation/inprocess_runner.py::_call_llm
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: tests/unit/hooks/lib/test_code_graph_query.py
+    kind: exec_via
+    symbol: TestCLIEntryPoint.test_cli_always_exits_zero
+    target: plugins/onex/hooks/lib/code_graph_query.py
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: tests/unit/hooks/lib/test_code_graph_query.py
+    kind: exec_via
+    symbol: TestCLIEntryPoint.test_cli_structural_mode
+    target: plugins/onex/hooks/lib/code_graph_query.py
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: tests/unit/skills/_lib/test_decision_store_semantic_check.py
+    kind: call_via
+    symbol: test_unconfigured_endpoint_degrades_to_no_shift
+    target: plugins/onex/skills/_lib/decision_store/semantic_check.py::semantic_check_async
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: tests/unit/verification/test_local_verifier.py
+    kind: call_via
+    symbol: TestRunLocalVerification.test_missing_verifier_model_fails_without_default
+    target: src/omniclaude/verification/local_verifier.py::run_local_verification
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: tests/unit/verification/test_local_verifier.py
+    kind: call_via
+    symbol: TestRunLocalVerification.test_successful_verification
+    target: src/omniclaude/verification/local_verifier.py::run_local_verification
+    ticket: OMN-20295
+    expires: '2026-12-31'
+  - path: tests/unit/verification/test_local_verifier.py
+    kind: call_via
+    symbol: TestRunLocalVerification.test_unreachable_llm_returns_fallback
+    target: src/omniclaude/verification/local_verifier.py::run_local_verification
+    ticket: OMN-20295
+    expires: '2026-12-31'

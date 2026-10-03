@@ -105,6 +105,13 @@ repos:
     hooks:
       - id: check-hardcoded-model-config-compute
       - id: canonical-file-shape
+      # OMN-20295: direct-model-call gate, BLOCKING. A model call must sit in a
+      # sanctioned delegation node package named in omnibase_core's policy.yaml.
+      # Shrink-only baseline, declared here so the shape ratchet accepts it. No
+      # suppression marker. Server-side backstop: OMN-20299.
+      - id: check-direct-model-call
+        require_serial: true
+        args: [--repo, omniclaude, --baseline, .onex_ratchets/direct_model_call_baseline.yaml, --base, HEAD]
       - id: no-noncanonical-lifecycle-classes
         args: [--allowlist, .onex_ratchets/noncanonical_class_allowlist.yaml, src/omniclaude]
         files: ^src/omniclaude/.*\.py$
