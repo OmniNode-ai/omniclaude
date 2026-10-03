@@ -12,7 +12,7 @@ Claude Code integration layer for the ONEX (OmniNode eXecution) platform — hoo
 
 [![CI](https://github.com/OmniNode-ai/omniclaude/actions/workflows/ci.yml/badge.svg)](https://github.com/OmniNode-ai/omniclaude/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **`dev` is the live, default branch** — a plain `git clone` and the GitHub web UI both land
 > here. `main` is the promotion target and lags behind by design (it is not kept current
