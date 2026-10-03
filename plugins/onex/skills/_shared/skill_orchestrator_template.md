@@ -62,7 +62,7 @@ follows the same pre-push checklist before reporting "Primary task done":
 - Run `env -u PYTHONPATH uv run pytest tests/ -v` with no `-k` filter (full suite, no narrow filter); `env -u PYTHONPATH` prevents hook-exported PYTHONPATH from shadowing the worktree's local `src/`
 - Run ruff format + ruff check on `src/` and `tests/`
 - Run `pre-commit run --all-files` and address every failure
-- Open the PR, then call `gh pr checks <num> --watch` until green
+- Open the PR, then hand it to the landing lane (`/omni:pr-handoff`); never run `gh pr checks --watch` or poll CI
 - Send `Primary task done — awaiting further instruction or shutdown.` to the
   reporter via SendMessage; do not mark TaskUpdate completed unless tests are
   green and the PR is open
