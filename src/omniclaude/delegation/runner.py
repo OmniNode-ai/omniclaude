@@ -37,13 +37,13 @@ Related:
 from __future__ import annotations
 
 import asyncio
-import copy
+import importlib.util
 import logging
 import os
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -61,6 +61,9 @@ if TYPE_CHECKING:
     )
     from omnibase_infra.nodes.node_llm_inference_effect.handlers.handler_llm_openai_compatible import (
         HandlerLlmOpenaiCompatible,
+    )
+    from omnimarket.models.delegation.wire.model_bifrost_delegation_config import (
+        ModelDelegationBackendConfig,
     )
 
 logger = logging.getLogger(__name__)
@@ -137,190 +140,50 @@ class ModelBifrostRunnerResult(BaseModel):
     error_message: str = Field(default="", description="Structured error on failure")
 
 
-class ModelDelegationBackendContract(BaseModel):
-    """Backend entry from the packaged delegation routing contract."""
+def canonical_bifrost_contract_path() -> Path:
+    """Return the path of the canonical contract inside the installed omnimarket.
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    omniclaude owns no routing table (OMN-17102). The one routing authority is
+    ``omnimarket/configs/bifrost_delegation.yaml``, shipped in the omnimarket
+    package this repo pins; every omniclaude loader resolves it through here. A
+    forked copy once drifted to config_version 1.1.0 while the canonical contract
+    moved on, and kept naming backends the canonical contract had deleted.
 
-    backend_id: str
-    endpoint_url: str = ""
-    model_name: str = ""
-    tier: str
-    timeout_ms: int = Field(default=30000, gt=0)
-    capabilities: tuple[str, ...] = ()
-
-
-class ModelDelegationFallbackPolicyContract(BaseModel):
-    """Fallback policy entry from the packaged delegation routing contract."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    action: str
-    max_retries: int = Field(default=0, ge=0)
-    on_exhaust: str
-
-
-class ModelDelegationRoutingRuleContract(BaseModel):
-    """Routing rule entry from the packaged delegation routing contract."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    rule_id: UUID
-    priority: int
-    task_class: str
-    task_class_contract_version: str
-    backend_policy_version: str
-    match_operation_types: tuple[str, ...] = ()
-    match_capabilities: tuple[str, ...] = ()
-    latency_sla_ms: int | None = Field(default=None, gt=0)
-    # fmt: off
-    cost_ceiling_usd_per_1k_tokens: float | None = (  # secret-ok: cost limit config field, not a credential
-    # fmt: on
-        Field(
-            default=None,
-            gt=0,
+    Raises:
+        RuntimeError: omnimarket is not installed, or the installed release does
+            not ship the contract. There is no vendored fallback: a stale copy
+            is the defect this function exists to prevent.
+    """
+    spec = importlib.util.find_spec("omnimarket")
+    locations = list(spec.submodule_search_locations or []) if spec else []
+    if not locations:
+        raise RuntimeError(
+            "omnimarket is not installed, so the canonical bifrost delegation "
+            "contract cannot be resolved. Install the omnimarket release pinned "
+            "in pyproject.toml; omniclaude ships no copy of the contract."
         )
-    )
-    backend_ids: tuple[str, ...]
-    fallback_policy: ModelDelegationFallbackPolicyContract
-    shadow_policy_id: UUID
+    path = Path(locations[0]) / "configs" / "bifrost_delegation.yaml"
+    if not path.is_file():
+        raise RuntimeError(
+            f"Installed omnimarket does not ship the canonical bifrost delegation "
+            f"contract at {path}. Advance the omnimarket pin to a release that does."
+        )
+    return path
 
 
-class ModelDelegationFailoverContract(BaseModel):
-    """Failover settings from the packaged delegation routing contract."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    max_attempts: int = Field(default=3, gt=0)
-    backoff_base_ms: int = Field(default=500, ge=0)
-
-
-class ModelDelegationCircuitBreakerContract(BaseModel):
-    """Circuit breaker settings from the packaged delegation routing contract."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    failure_threshold: int = Field(default=5, gt=0)
-    window_seconds: int = Field(default=30, gt=0)
-
-
-class ModelDelegationBifrostContract(BaseModel):
-    """Packaged delegation routing contract consumed by DelegationRunner."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    config_version: str
-    schema_version: str
-    backends: tuple[ModelDelegationBackendContract, ...]
-    routing_rules: tuple[ModelDelegationRoutingRuleContract, ...]
-    default_backends: tuple[str, ...] = ()
-    failover: ModelDelegationFailoverContract = Field(
-        default_factory=ModelDelegationFailoverContract
-    )
-    circuit_breaker: ModelDelegationCircuitBreakerContract = Field(
-        default_factory=ModelDelegationCircuitBreakerContract
-    )
-
-
-_DEFAULT_BIFROST_CONTRACT_PATH = Path(__file__).parent / "bifrost_delegation.yaml"
+_DEFAULT_BIFROST_CONTRACT_PATH = canonical_bifrost_contract_path()
 _DEFAULT_BIFROST_OVERLAY_PATH = (
     Path.home() / ".omninode" / "delegation" / "bifrost_overrides.yaml"
 )
-_IDENTITY_KEYS = ("backend_id", "rule_id")
-YamlMapping = dict[str, object]
 
 
-def _deep_merge_bifrost_contract(
-    default_config: YamlMapping,
-    overlay_config: YamlMapping,
-) -> YamlMapping:
-    """Return default bifrost config deep-merged with an endpoint overlay."""
-    return cast("YamlMapping", _deep_merge(default_config, overlay_config))
+def _backend_has_credential(backend: ModelDelegationBackendConfig) -> bool:
+    """Whether the contract binds a credential to this backend.
 
-
-def _deep_merge(default_value: object, overlay_value: object) -> object:
-    if isinstance(default_value, dict) and isinstance(overlay_value, dict):
-        merged = copy.deepcopy(default_value)
-        for key, value in overlay_value.items():
-            if key in merged:
-                merged[key] = _deep_merge(merged[key], value)
-            else:
-                merged[key] = copy.deepcopy(value)
-        return merged
-
-    if isinstance(default_value, list) and isinstance(overlay_value, list):
-        return _merge_lists(default_value, overlay_value)
-
-    return copy.deepcopy(overlay_value)
-
-
-def _merge_lists(
-    default_items: list[object], overlay_items: list[object]
-) -> list[object]:
-    identity_key = _list_identity_key(default_items, overlay_items)
-    if identity_key is None:
-        return copy.deepcopy(overlay_items)
-
-    merged = copy.deepcopy(default_items)
-    index_by_id = {
-        item[identity_key]: index
-        for index, item in enumerate(merged)
-        if isinstance(item, dict) and identity_key in item
-    }
-
-    for overlay_item in overlay_items:
-        if not isinstance(overlay_item, dict) or identity_key not in overlay_item:
-            merged.append(copy.deepcopy(overlay_item))
-            continue
-        item_id = overlay_item[identity_key]
-        if item_id in index_by_id:
-            existing_index = index_by_id[item_id]
-            merged[existing_index] = _deep_merge(merged[existing_index], overlay_item)
-        else:
-            index_by_id[item_id] = len(merged)
-            merged.append(copy.deepcopy(overlay_item))
-
-    return merged
-
-
-def _list_identity_key(
-    default_items: list[object], overlay_items: list[object]
-) -> str | None:
-    mapping_items = [
-        item for item in [*default_items, *overlay_items] if isinstance(item, dict)
-    ]
-    if not mapping_items:
-        return None
-
-    for key in _IDENTITY_KEYS:
-        if all(key in item for item in mapping_items):
-            return key
-    return None
-
-
-def _read_yaml_mapping(path: Path) -> YamlMapping:
-    import yaml
-
-    try:
-        data = yaml.safe_load(path.read_text())
-    except yaml.YAMLError as exc:
-        raise ValueError(f"Invalid YAML at {path}: {exc}") from exc
-    if data is None:
-        return {}
-    if not isinstance(data, dict):
-        raise ValueError(f"Expected YAML mapping at {path}, got {type(data).__name__}")
-    return cast("YamlMapping", data)
-
-
-def _load_delegation_bifrost_contract(
-    default_path: Path,
-    overlay_path: Path,
-) -> ModelDelegationBifrostContract:
-    default_config = _read_yaml_mapping(default_path)
-    if overlay_path.exists():
-        overlay_config = _read_yaml_mapping(overlay_path)
-        default_config = _deep_merge_bifrost_contract(default_config, overlay_config)
-    return ModelDelegationBifrostContract.model_validate(default_config)
+    The in-process gateway attaches no credential to a backend call, so a backend
+    that needs one cannot be served from here.
+    """
+    return any((backend.secret_ref, backend.api_key_env, backend.api_key_ref))
 
 
 # ---------------------------------------------------------------------------
@@ -747,12 +610,16 @@ def _delegation_tenant_id() -> UUID:
 
 
 def _build_env_config() -> ModelBifrostConfig | None:
-    """Build a ModelBifrostConfig from the bifrost default plus endpoint overlay.
+    """Build a ModelBifrostConfig from the canonical contract plus endpoint overlay.
 
-    Loads the delegation routing contract and converts it to the gateway's
-    ModelBifrostConfig. Backend URLs are read from the merged endpoint_url field
-    after applying ``bifrost_overrides.yaml``. Backends with empty endpoint_url
-    are skipped.
+    Loads the canonical omnimarket delegation routing contract (through
+    omnimarket's own loader, so the schema and cross-reference checks are the
+    platform's) and converts it to the gateway's ModelBifrostConfig. Backend URLs
+    are read from the merged endpoint_url field after applying
+    ``bifrost_overrides.yaml``. The in-process gateway serves only backends that
+    are open to ordinary routing and need no credential: backends with an empty
+    endpoint_url, ``explicit_pin_only`` backends and credentialed backends are
+    skipped.
     """
     try:
         from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.model_bifrost_config import (
@@ -761,6 +628,9 @@ def _build_env_config() -> ModelBifrostConfig | None:
         )
         from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.model_bifrost_routing_rule import (
             ModelBifrostRoutingRule,
+        )
+        from omnimarket.adapters.llm.bifrost.config_loader_bifrost_delegation import (
+            load_bifrost_delegation_config,
         )
     except (ImportError, SyntaxError):
         return None
@@ -779,7 +649,7 @@ def _build_env_config() -> ModelBifrostConfig | None:
         return None
 
     try:
-        delegation_config = _load_delegation_bifrost_contract(
+        delegation_config = load_bifrost_delegation_config(
             default_config_path,
             overlay_path,
         )
@@ -789,17 +659,23 @@ def _build_env_config() -> ModelBifrostConfig | None:
 
     backends: dict[str, ModelBifrostBackendConfig] = {}
     for backend in delegation_config.backends:
-        url = backend.endpoint_url.strip()
+        url = (backend.endpoint_url or "").strip()
         if not url:
-            # frontier_api tier backends (e.g. cloud-sonnet, cloud-haiku) use OAuth
-            # and have no HTTP endpoint_url — they cannot be included in Bifrost config.
             logger.debug(
                 "skipping backend %s (tier=%s): no endpoint_url configured",
                 backend.backend_id,
                 backend.tier,
             )
             continue
-        if not backend.model_name.strip():
+        if backend.explicit_pin_only or _backend_has_credential(backend):
+            logger.debug(
+                "skipping backend %s (tier=%s): explicit pin or credentialed; "
+                "the in-process gateway attaches no credential",
+                backend.backend_id,
+                backend.tier,
+            )
+            continue
+        if not (backend.model_name or "").strip():
             raise RuntimeError(
                 f"model_name is required for configured backend "
                 f"{backend.backend_id}; no hardcoded Bifrost model fallback is "
@@ -808,12 +684,17 @@ def _build_env_config() -> ModelBifrostConfig | None:
         backends[backend.backend_id] = ModelBifrostBackendConfig(
             backend_id=backend.backend_id,
             base_url=url,
-            model_name=backend.model_name,
+            model_name=backend.model_name or "",
             timeout_ms=backend.timeout_ms,
         )
 
     if not backends:
         return None
+    logger.info(
+        "DelegationRunner: canonical bifrost contract config_version=%s backends=%s",
+        delegation_config.config_version,
+        sorted(backends),
+    )
 
     rules: list[ModelBifrostRoutingRule] = []
     for rule in delegation_config.routing_rules:

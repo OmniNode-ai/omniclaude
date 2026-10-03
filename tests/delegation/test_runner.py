@@ -15,7 +15,6 @@ Tests verify:
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
@@ -27,6 +26,7 @@ from omniclaude.delegation.runner import (
     ModelDelegationAuditEvent,
     _build_env_config,
     _extract_response_text,
+    canonical_bifrost_contract_path,
 )
 
 # ---------------------------------------------------------------------------
@@ -312,13 +312,7 @@ def _write_bifrost_with_endpoints(
     """Write a bifrost contract with endpoint/model overlay for given backends."""
     import shutil
 
-    src = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "omniclaude"
-        / "delegation"
-        / "bifrost_delegation.yaml"
-    )
+    src = canonical_bifrost_contract_path()
     dst = tmp_path / "bifrost_delegation.yaml"
     shutil.copy2(src, dst)
 
@@ -337,24 +331,17 @@ def _write_bifrost_with_endpoints(
 
 @pytest.mark.unit
 def test_packaged_bifrost_contract_has_empty_endpoint_urls() -> None:
-    """The repo default must not contain user- or host-specific endpoints."""
+    """The canonical contract must not pin a host for any local backend."""
     import yaml
 
-    src = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "omniclaude"
-        / "delegation"
-        / "bifrost_delegation.yaml"
-    )
+    src = canonical_bifrost_contract_path()
     data = yaml.safe_load(src.read_text())
 
-    endpoints = [backend.get("endpoint_url", "") for backend in data["backends"]]
-    model_names = [backend.get("model_name", "") for backend in data["backends"]]
+    local_backends = [b for b in data["backends"] if b.get("tier") == "local"]
 
-    assert endpoints
-    assert all(endpoint == "" for endpoint in endpoints)
-    assert all(model_name == "" for model_name in model_names)
+    assert local_backends
+    assert all(not b.get("endpoint_url") for b in local_backends)
+    assert all(not b.get("model_name") for b in local_backends)
 
 
 @pytest.mark.unit
@@ -362,8 +349,8 @@ def test_build_env_config_builds_config_from_single_var(monkeypatch, tmp_path) -
     """_build_env_config loads from contract and reads endpoint_url directly."""
     dst = _write_bifrost_with_endpoints(
         tmp_path,
-        {"local-deepseek-r1-14b": _CODER_FAST_URL},
-        {"local-deepseek-r1-14b": "configured-deepseek"},
+        {"local-heavy-reasoning": _CODER_FAST_URL},
+        {"local-heavy-reasoning": "configured-deepseek"},
     )
     monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
     monkeypatch.setenv("BIFROST_OVERLAY_PATH", str(tmp_path / "missing-overlay.yaml"))
@@ -371,9 +358,9 @@ def test_build_env_config_builds_config_from_single_var(monkeypatch, tmp_path) -
     cfg = _build_env_config()
 
     assert cfg is not None
-    assert "local-deepseek-r1-14b" in cfg.backends
-    assert cfg.backends["local-deepseek-r1-14b"].base_url == _CODER_FAST_URL
-    assert cfg.backends["local-deepseek-r1-14b"].model_name == "configured-deepseek"
+    assert "local-heavy-reasoning" in cfg.backends
+    assert cfg.backends["local-heavy-reasoning"].base_url == _CODER_FAST_URL
+    assert cfg.backends["local-heavy-reasoning"].model_name == "configured-deepseek"
     assert len(cfg.routing_rules) >= 1
 
 
@@ -383,7 +370,7 @@ def test_build_env_config_fails_when_endpoint_has_no_model(
 ) -> None:
     """Configured endpoint must not silently inherit a packaged model name."""
     dst = _write_bifrost_with_endpoints(
-        tmp_path, {"local-deepseek-r1-14b": _CODER_FAST_URL}
+        tmp_path, {"local-heavy-reasoning": _CODER_FAST_URL}
     )
     monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
     monkeypatch.setenv("BIFROST_OVERLAY_PATH", str(tmp_path / "missing-overlay.yaml"))
@@ -397,19 +384,13 @@ def test_build_env_config_merges_default_contract_with_overlay(
     monkeypatch, tmp_path
 ) -> None:
     """Overlay-only endpoint files are deep-merged over the default contract."""
-    src = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "omniclaude"
-        / "delegation"
-        / "bifrost_delegation.yaml"
-    )
+    src = canonical_bifrost_contract_path()
     default_path = tmp_path / "bifrost_delegation.yaml"
     default_path.write_text(src.read_text())
     overlay_path = tmp_path / "bifrost_overrides.yaml"
     overlay_path.write_text(
         "backends:\n"
-        "  - backend_id: local-deepseek-r1-14b\n"
+        "  - backend_id: local-heavy-reasoning\n"
         f'    endpoint_url: "{_CODER_FAST_URL}"\n'
         '    model_name: "configured-deepseek"\n'
     )
@@ -419,9 +400,9 @@ def test_build_env_config_merges_default_contract_with_overlay(
     cfg = _build_env_config()
 
     assert cfg is not None
-    assert "local-deepseek-r1-14b" in cfg.backends
-    assert cfg.backends["local-deepseek-r1-14b"].base_url == _CODER_FAST_URL
-    assert cfg.backends["local-deepseek-r1-14b"].model_name == "configured-deepseek"
+    assert "local-heavy-reasoning" in cfg.backends
+    assert cfg.backends["local-heavy-reasoning"].base_url == _CODER_FAST_URL
+    assert cfg.backends["local-heavy-reasoning"].model_name == "configured-deepseek"
 
 
 @pytest.mark.unit
@@ -429,8 +410,8 @@ def test_build_env_config_stable_rule_id_across_calls(monkeypatch, tmp_path) -> 
     """Contract-derived rule_ids are stable across loads."""
     dst = _write_bifrost_with_endpoints(
         tmp_path,
-        {"local-deepseek-r1-14b": _CODER_FAST_URL},
-        {"local-deepseek-r1-14b": "configured-deepseek"},
+        {"local-heavy-reasoning": _CODER_FAST_URL},
+        {"local-heavy-reasoning": "configured-deepseek"},
     )
     monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
     # Isolate from any host overlay (e.g. ~/.omninode/delegation/bifrost_overrides.yaml)
@@ -451,12 +432,12 @@ def test_build_env_config_multiple_backends(monkeypatch, tmp_path) -> None:
     dst = _write_bifrost_with_endpoints(
         tmp_path,
         {
-            "local-qwen-coder-30b": "http://host:8000",
-            "local-deepseek-r1-14b": "http://host:8001",
+            "local-coder": "http://host:8000",
+            "local-heavy-reasoning": "http://host:8001",
         },
         {
-            "local-qwen-coder-30b": "configured-qwen-coder",
-            "local-deepseek-r1-14b": "configured-deepseek",
+            "local-coder": "configured-qwen-coder",
+            "local-heavy-reasoning": "configured-deepseek",
         },
     )
     monkeypatch.setenv("BIFROST_CONTRACT_PATH", str(dst))
@@ -467,8 +448,8 @@ def test_build_env_config_multiple_backends(monkeypatch, tmp_path) -> None:
     cfg = _build_env_config()
 
     assert cfg is not None
-    assert "local-qwen-coder-30b" in cfg.backends
-    assert "local-deepseek-r1-14b" in cfg.backends
+    assert "local-coder" in cfg.backends
+    assert "local-heavy-reasoning" in cfg.backends
     assert cfg.failover_attempts == 3
 
 

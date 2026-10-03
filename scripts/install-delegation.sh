@@ -286,14 +286,13 @@ PY
 deploy_bifrost_contract() {
   log_step "write bifrost endpoint overlay to ${INSTALL_BIFROST_OVERLAY}"
 
-  # Locate the source bifrost contract. When --from-source is used, look in
-  # the omnibase_infra sibling directory (monorepo layout) or fall back to
-  # a bundled copy shipped alongside this script.
+  # Locate the canonical bifrost contract (omnimarket owns it; omniclaude ships
+  # no copy, OMN-17102). Prefer the omnimarket sibling clone (monorepo layout),
+  # then the omnimarket installed for PYTHON_BIN. The contract is only read to
+  # find the local backend ids an --endpoint-url applies to.
   local bifrost_source=""
   local search_paths=(
-    "${REPO_ROOT}/../omnibase_infra/src/omnibase_infra/configs/bifrost_delegation.yaml"
-    "${REPO_ROOT}/configs/bifrost_delegation.yaml"
-    "${REPO_ROOT}/src/omniclaude/delegation/bifrost_delegation.yaml"
+    "${REPO_ROOT}/../omnimarket/src/omnimarket/configs/bifrost_delegation.yaml"
   )
   for p in "${search_paths[@]}"; do
     if [[ -f "$p" ]]; then
@@ -301,9 +300,23 @@ deploy_bifrost_contract() {
       break
     fi
   done
-
   if [[ -z "${bifrost_source}" ]]; then
-    log_warn "bifrost_delegation.yaml not found in source tree — skipping endpoint overlay"
+    bifrost_source="$("${PYTHON_BIN}" - <<'PY' 2>/dev/null || true
+import importlib.util
+import pathlib
+
+spec = importlib.util.find_spec("omnimarket")
+for root in (spec.submodule_search_locations or []) if spec else []:
+    candidate = pathlib.Path(root) / "configs" / "bifrost_delegation.yaml"
+    if candidate.is_file():
+        print(candidate)
+        break
+PY
+)"
+  fi
+
+  if [[ -z "${bifrost_source}" && -n "${ENDPOINT_URL}" ]]; then
+    log_warn "canonical bifrost_delegation.yaml (omnimarket) not found — skipping endpoint overlay"
     log_warn "The routing handler will load the packaged default contract without endpoint overrides"
     return 0
   fi
@@ -345,7 +358,7 @@ endpoint_url = sys.argv[4]
 
 
 def load_mapping(path: pathlib.Path) -> dict:
-    if not path.exists():
+    if not path.is_file():
         return {}
     data = yaml.safe_load(path.read_text())
     if data is None:

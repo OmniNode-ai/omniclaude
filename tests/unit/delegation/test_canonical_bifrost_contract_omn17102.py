@@ -181,3 +181,21 @@ def test_runner_built_config_serves_only_keyless_canonical_backends(
     assert set(cfg.backends) == {"local-coder"}
     for deleted in _DELETED_BACKENDS:
         assert deleted not in cfg.backends
+
+
+@pytest.mark.unit
+def test_quorum_openai_model_without_base_url_is_refused_not_defaulted() -> None:
+    import asyncio
+
+    from omniclaude.lib.utils.consensus.quorum import (
+        AIQuorum,
+        ModelConfig,
+        ModelProvider,
+        QuorumUnconfiguredProviderError,
+    )
+
+    quorum = AIQuorum(stub_mode=True, enable_ai_scoring=False)
+    model = ModelConfig(name="gpt-x", provider=ModelProvider.OPENAI)
+
+    with pytest.raises(QuorumUnconfiguredProviderError):
+        asyncio.run(quorum._score_with_model(model, "prompt"))

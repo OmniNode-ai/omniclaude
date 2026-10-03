@@ -11,15 +11,14 @@ Used to guide manifest section selection and relevance filtering.
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from types import MappingProxyType
 from typing import ClassVar
 
 import yaml
 
-_BIFROST_YAML_PATH = (
-    Path(__file__).parent.parent / "delegation" / "bifrost_delegation.yaml"
-)
+from omniclaude.delegation.runner import canonical_bifrost_contract_path
+
+_BIFROST_YAML_PATH = canonical_bifrost_contract_path()
 
 
 def _load_delegate_model_name() -> str:
