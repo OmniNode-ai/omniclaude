@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -326,7 +327,7 @@ def _write_real_chain(occ_root: Path, item_id: str, *, order: tuple[str, str]) -
     _write_occ_evidence(occ_root, receipt_id=item_id)
     receipt_dir = occ_root / "drift" / "dod_receipts" / "OMN-9999" / item_id
     (receipt_dir / "command.yaml").rename(receipt_dir / "test_passes.yaml")
-    records = {
+    records: dict[str, dict[str, Any]] = {
         "FAIL": {
             "status": "FAIL",
             "commit_sha": _FAIL_COMMIT,
