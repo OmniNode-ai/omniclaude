@@ -139,12 +139,16 @@ check_delegation_health() {
     return 0
   fi
 
-  local coder_url="${LLM_CODER_URL:-}"
+  # The local coder endpoint is the one the bifrost routing contract names for
+  # backend local-coder (endpoint_url_env). The variable holds the COMPLETE chat
+  # URL, so the models probe is derived from it (OMN-17103).
+  local coder_chat_url="${BIFROST_LOCAL_CODER_ENDPOINT_URL:-}"
+  local coder_url="${coder_chat_url%/chat/completions}"
   local fast_url="${LLM_CODER_FAST_URL:-}"
   local failures=()
 
   if [[ -z "${coder_url}" && -z "${fast_url}" ]]; then
-    echo "WARN: Delegation enabled but LLM_CODER_URL and LLM_CODER_FAST_URL not set. Disabling delegation."
+    echo "WARN: Delegation enabled but BIFROST_LOCAL_CODER_ENDPOINT_URL and LLM_CODER_FAST_URL not set. Disabling delegation."
     ENABLE_DELEGATION=false
     export ENABLE_LOCAL_INFERENCE_PIPELINE=false
     return 0
@@ -154,7 +158,7 @@ check_delegation_health() {
     if curl -sf --max-time 5 "${coder_url}/v1/models" >/dev/null 2>&1; then
       echo "Delegation health: ${coder_url} OK"
     else
-      failures+=("LLM_CODER_URL (${coder_url})")
+      failures+=("BIFROST_LOCAL_CODER_ENDPOINT_URL (${coder_chat_url})")
     fi
   fi
 

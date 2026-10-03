@@ -125,7 +125,7 @@ jobs:
     # NOT a bare hardcoded label either.
     #
     # WHY NOT THE SEAM: this job calls DeepSeek-R1 on the lab host over the
-    # LAN (# onex-allow-internal-ip), reading LLM_DEEPSEEK_R1_URL and two
+    # LAN (# onex-allow-internal-ip), reading the lab endpoint variable and two
     # trust-boundary variables from the runner's own environment. Only the
     # self-hosted `omnibase-ci` fleet has any of the three. omniclaude is a
     # PUBLIC repository whose seam is deliberately `["ubuntu-latest"]` at org and

@@ -9,8 +9,11 @@ Non-blocking in MVP: results are delivered asynchronously and update the conflic
 record when they arrive. The pipeline does not wait for semantic results before
 continuing (unless the caller explicitly awaits).
 
-LLM endpoint: DeepSeek-R1 at LLM_DEEPSEEK_R1_URL (configurable via environment; falls
-back to a local default when unset)
+LLM endpoint: the first local reasoning backend in the canonical bifrost routing
+contract. The contract names the environment variable holding the
+backend's endpoint URL; nothing here carries a URL or a fallback host. When the
+endpoint is not configured the check returns a no-shift result with
+``error="endpoint_unconfigured"``.
 """
 
 from __future__ import annotations
@@ -18,7 +21,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from typing import TYPE_CHECKING
 
 import httpx
@@ -32,10 +34,31 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-_DEEPSEEK_DEFAULT = "http://localhost:8101"
-DEEPSEEK_R1_URL = os.environ.get("LLM_DEEPSEEK_R1_URL", _DEEPSEEK_DEFAULT)
 SEMANTIC_CHECK_TIMEOUT_S = 30.0
-SEMANTIC_CHECK_MODEL = "deepseek-r1"  # model tag served at the endpoint
+
+
+def _resolve_semantic_endpoint() -> tuple[str, str] | None:
+    """Return ``(complete_url, model_name)`` from the routing contract, or None.
+
+    Lazy import: this skill lib also runs where omniclaude is not installed, in
+    which case the check degrades to no-shift like any other LLM failure.
+    """
+    try:
+        from omniclaude.enums.enum_contract_capability import EnumContractCapability
+        from omniclaude.handlers.handler_contract_endpoint_resolver import (
+            HandlerContractEndpointResolver,
+        )
+
+        endpoint = HandlerContractEndpointResolver().resolve(
+            EnumContractCapability.REASONING
+        )
+    except (ImportError, OSError, RuntimeError) as exc:
+        logger.warning("semantic_check: contract endpoint unavailable (%s)", exc)
+        return None
+    if endpoint is None:
+        return None
+    return endpoint.url, endpoint.model_name
+
 
 # ---------------------------------------------------------------------------
 # Prompt template
@@ -144,8 +167,18 @@ async def semantic_check_async(
         base_severity=base_severity,
     )
 
+    resolved = _resolve_semantic_endpoint()
+    if resolved is None:
+        return {
+            "conflicts": True,
+            "severity_shift": 0,
+            "rationale": "endpoint_unconfigured",
+            "error": "endpoint_unconfigured",
+        }
+    endpoint_url, model_name = resolved
+
     payload = {
-        "model": SEMANTIC_CHECK_MODEL,
+        "model": model_name,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
@@ -157,7 +190,7 @@ async def semantic_check_async(
     try:
         async with httpx.AsyncClient(timeout=SEMANTIC_CHECK_TIMEOUT_S) as client:
             response = await client.post(
-                f"{DEEPSEEK_R1_URL}/v1/chat/completions",
+                endpoint_url,
                 json=payload,
             )
             response.raise_for_status()

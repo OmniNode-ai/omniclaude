@@ -6,7 +6,7 @@
 Tests verify:
 - OLLAMA is no longer a valid ModelProvider value
 - OPENAI_COMPATIBLE is the correct provider for vLLM/local endpoints
-- Default endpoint reads from LLM_CODER_URL env var
+- Default endpoint is resolved from the routing contract's endpoint_url_env (OMN-17103)
 - Default model uses OPENAI_COMPATIBLE provider
 """
 
@@ -18,7 +18,7 @@ from omniclaude.lib.utils.consensus.quorum import (
     AIQuorum,
     ModelConfig,
     ModelProvider,
-    _resolve_llm_coder_url,
+    _resolve_local_backend_base_url,
 )
 
 
@@ -57,41 +57,43 @@ class TestModelConfigDefaultEndpoint:
     def test_openai_compatible_default_endpoint(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """OPENAI_COMPATIBLE uses LLM_CODER_URL env var as default endpoint (lazy)."""
+        """OPENAI_COMPATIBLE resolves the contract's endpoint variable (lazy)."""
         # GPU server host:port used via env var — not a Kafka address.  # onex-allow-internal-ip
-        expected_host = "8000"
-        monkeypatch.setenv("LLM_CODER_URL", f"http://gpu-server:{expected_host}")
+        monkeypatch.setenv(
+            "BIFROST_LOCAL_CODER_ENDPOINT_URL",
+            "http://gpu-server:8000/v1/chat/completions",
+        )
         config = ModelConfig(
-            name="test-model",
+            name="local-coder",
             provider=ModelProvider.OPENAI_COMPATIBLE,
         )
         # Endpoint is resolved lazily via resolve_endpoint(), not at __post_init__
         assert config.endpoint is None
-        assert config.resolve_endpoint() == f"http://gpu-server:{expected_host}"
+        assert config.resolve_endpoint() == "http://gpu-server:8000"
 
     @pytest.mark.unit
     def test_openai_compatible_raises_when_env_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """ModelConfig.resolve_endpoint() must fail fast when LLM_CODER_URL is not set."""
-        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        """ModelConfig.resolve_endpoint() must fail fast when the contract variable is unset."""
+        monkeypatch.delenv("BIFROST_LOCAL_CODER_ENDPOINT_URL", raising=False)
         config = ModelConfig(
-            name="test-model",
+            name="local-coder",
             provider=ModelProvider.OPENAI_COMPATIBLE,
         )
         # Construction succeeds (deferred), but resolve_endpoint() fails
-        with pytest.raises(RuntimeError, match="LLM_CODER_URL"):
+        with pytest.raises(RuntimeError, match="No endpoint URL is configured"):
             config.resolve_endpoint()
 
     @pytest.mark.unit
     def test_openai_compatible_construction_without_env(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """ModelConfig can be constructed without LLM_CODER_URL set (deferred resolution)."""
-        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        """ModelConfig can be constructed without the endpoint variable (deferred resolution)."""
+        monkeypatch.delenv("BIFROST_LOCAL_CODER_ENDPOINT_URL", raising=False)
         # Must not raise at construction time
         config = ModelConfig(
-            name="test-model",
+            name="local-coder",
             provider=ModelProvider.OPENAI_COMPATIBLE,
         )
         assert config.endpoint is None
@@ -124,18 +126,42 @@ class TestAIQuorumDefaultModels:
         )
 
 
-class TestResolveLlmCoderUrl:
-    """Tests for _resolve_llm_coder_url() fail-fast behavior."""
+class TestResolveLocalBackendBaseUrl:
+    """Tests for _resolve_local_backend_base_url() fail-fast behavior."""
 
     @pytest.mark.unit
-    def test_requires_llm_coder_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Quorum must not silently fall back to hardcoded IP."""
-        monkeypatch.delenv("LLM_CODER_URL", raising=False)
-        with pytest.raises(RuntimeError, match="LLM_CODER_URL"):
-            _resolve_llm_coder_url()
+    def test_requires_the_contract_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Quorum must not silently fall back to a hardcoded IP."""
+        monkeypatch.delenv("BIFROST_LOCAL_CODER_ENDPOINT_URL", raising=False)
+        with pytest.raises(RuntimeError, match="No endpoint URL is configured"):
+            _resolve_local_backend_base_url("local-coder")
 
     @pytest.mark.unit
-    def test_returns_url_when_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Returns the configured URL."""
-        monkeypatch.setenv("LLM_CODER_URL", "http://gpu-server:8000")
-        assert _resolve_llm_coder_url() == "http://gpu-server:8000"
+    def test_unknown_backend_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A name the contract does not declare resolves to nothing."""
+        monkeypatch.setenv(
+            "BIFROST_LOCAL_CODER_ENDPOINT_URL",
+            "http://gpu-server:8000/v1/chat/completions",
+        )
+        with pytest.raises(RuntimeError, match="No endpoint URL is configured"):
+            _resolve_local_backend_base_url("test-model")
+
+    @pytest.mark.unit
+    def test_non_chat_url_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A URL that is not an OpenAI chat URL yields no derivable base."""
+        monkeypatch.setenv("BIFROST_LOCAL_CODER_ENDPOINT_URL", "http://gpu-server:8000")
+        with pytest.raises(RuntimeError, match="not an OpenAI chat"):
+            _resolve_local_backend_base_url("local-coder")
+
+    @pytest.mark.unit
+    def test_returns_base_url_when_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Returns the contract URL minus the chat path."""
+        monkeypatch.setenv(
+            "BIFROST_LOCAL_CODER_ENDPOINT_URL",
+            "http://gpu-server:8000/v1/chat/completions",
+        )
+        assert (
+            _resolve_local_backend_base_url("local-coder") == "http://gpu-server:8000"
+        )

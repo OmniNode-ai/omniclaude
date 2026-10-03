@@ -10,8 +10,8 @@
 
 patterns:
   - pattern: "OLLAMA_BASE_URL"
-    reason: "Ollama endpoint decommissioned; use LLM_CODER_URL, LLM_EMBEDDING_URL, or LLM_DEEPSEEK_R1_URL"
-    replacement_hint: "Select the appropriate LLM_*_URL based on task type (see ~/.claude/CLAUDE.md)"
+    reason: "Ollama endpoint decommissioned; use the endpoint env var the bifrost routing contract names for the backend (BIFROST_LOCAL_CODER_ENDPOINT_URL), or LLM_EMBEDDING_URL"
+    replacement_hint: "Resolve the endpoint from the bifrost routing contract (endpoint_url_env of the backend that serves the task type)"
 
   - pattern: "192.168.86.200:29092"  # cloud-bus-ok OMN-14655 onex-allow-internal-ip
     reason: "M2 Ultra Redpanda decommissioned (<TICKET>); local bus is localhost:19092, cloud bus via tunnel"

@@ -33,18 +33,18 @@ pytestmark = pytest.mark.unit
 class _StubVllmBackend:
     """Typed wiring stub for the ``on_start`` backend-init path.
 
-    ``on_start`` only CONSTRUCTS ``VllmInferenceBackend(registry=...)`` and stores
+    ``on_start`` only CONSTRUCTS ``VllmInferenceBackend(endpoints=...)`` and stores
     it on ``state.vllm_backend`` — it never calls ``infer`` / ``chat_completion``,
     so no inference egress is exercised here. This wiring-only assertion needs a
     real, typed, no-I/O double (not a ``MagicMock`` standing in for the inference
-    boundary): it accepts the same ``registry`` keyword the real backend does and
+    boundary): it accepts the same ``endpoints`` keyword the real backend does and
     exposes the ``aclose`` coroutine ``on_shutdown`` would call.
     """
 
     handler_key = "vllm"
 
-    def __init__(self, *, registry: object) -> None:
-        self._registry = registry
+    def __init__(self, *, endpoints: object) -> None:
+        self._endpoints = endpoints
 
     async def aclose(self) -> None:
         return None
@@ -141,8 +141,10 @@ class TestOnStart:
             patch.dict(
                 "sys.modules",
                 {
-                    "omniclaude.config.model_local_llm_config": MagicMock(
-                        LocalLlmEndpointRegistry=MagicMock(return_value=MagicMock())
+                    "omniclaude.handlers.handler_contract_endpoint_resolver": MagicMock(
+                        HandlerContractEndpointResolver=MagicMock(
+                            return_value=MagicMock()
+                        )
                     ),
                     "omniclaude.nodes.node_local_llm_inference_effect.backends": MagicMock(
                         VllmInferenceBackend=_StubVllmBackend
@@ -190,9 +192,9 @@ class TestOnStart:
             patch.dict(
                 "sys.modules",
                 {
-                    "omniclaude.config.model_local_llm_config": MagicMock(
-                        LocalLlmEndpointRegistry=MagicMock(
-                            side_effect=RuntimeError("registry fail")
+                    "omniclaude.handlers.handler_contract_endpoint_resolver": MagicMock(
+                        HandlerContractEndpointResolver=MagicMock(
+                            side_effect=RuntimeError("resolver fail")
                         )
                     ),
                 },

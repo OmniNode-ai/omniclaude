@@ -603,8 +603,8 @@ See [knowledge-base: architecture/service-boundaries.md](https://github.com/Omni
 ### Local LLM Delegation
 
 When `USE_LOCAL_DELEGATION=true`, `UserPromptSubmit` can delegate prompts
-to a local LLM endpoint (configured via `LLM_CODER_URL` or
-`LLM_CODER_FAST_URL`) before returning a response to Claude. Delegation
+to a local LLM endpoint (configured via `BIFROST_LOCAL_CODER_ENDPOINT_URL`
+(named by the routing contract) or `LLM_CODER_FAST_URL`) before returning a response to Claude. Delegation
 adds up to 8s to the worst-case `UserPromptSubmit` path.
 
 The delegation orchestrator (`delegation_orchestrator.py`) coordinates the

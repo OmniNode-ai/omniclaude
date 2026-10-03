@@ -48,23 +48,39 @@ class QuorumUnconfiguredProviderError(RuntimeError):
     """
 
 
-def _resolve_llm_coder_url() -> str:
-    """Resolve LLM_CODER_URL from environment. Fail fast if not configured."""
-    url = os.environ.get("LLM_CODER_URL", "")
+def _resolve_local_backend_base_url(backend_id: str) -> str:
+    """Resolve a local backend's base URL from the routing contract.
+
+    The contract names the environment variable holding the backend's complete
+    endpoint URL (``endpoint_url_env``); this is the only source. Fail fast when
+    the backend is unknown, its variable is unset, or the URL is not an
+    OpenAI-compatible chat URL this module can derive a base from.
+    """
+    from omniclaude.handlers.handler_contract_endpoint_resolver import HandlerContractEndpointResolver
+    from omniclaude.models.model_contract_endpoint import base_url_of
+
+    url = HandlerContractEndpointResolver(_BIFROST_YAML_PATH).resolve_backend_url(backend_id)
     if not url:
         raise RuntimeError(
-            "LLM_CODER_URL is not set. "
-            "The quorum system requires an explicit LLM endpoint. "
-            "Set LLM_CODER_URL in ~/.omnibase/.env or your environment."
+            f"No endpoint URL is configured for local backend {backend_id!r}. "
+            "The quorum system requires an explicit LLM endpoint: set the "
+            "endpoint_url_env variable that the bifrost delegation contract names "
+            "for this backend in ~/.omnibase/.env or your environment."
         )
-    return url
+    base = base_url_of(url)
+    if base is None:
+        raise RuntimeError(
+            f"Endpoint for local backend {backend_id!r} is not an OpenAI chat "
+            "completions URL, so the quorum cannot derive a base URL from it."
+        )
+    return base
 
 
 def _provider_for_backend(backend_id: str, *, provider: str | None) -> "ModelProvider":
     """Map a contract backend's declared ``provider`` to a quorum provider.
 
-    ``local`` resolves to OPENAI_COMPATIBLE (endpoint resolved lazily via
-    LLM_CODER_URL) and ``gemini`` to GEMINI (GEMINI_API_KEY). Every other
+    ``local`` resolves to OPENAI_COMPATIBLE (endpoint resolved lazily from the
+    contract's ``endpoint_url_env``) and ``gemini`` to GEMINI (GEMINI_API_KEY). Every other
     provider, including an undeclared one, is refused.
 
     Raises:
@@ -169,7 +185,7 @@ class ModelConfig:
 
         Note: OPENAI_COMPATIBLE endpoint resolution is deferred to
         ``resolve_endpoint()`` so that importing or constructing ModelConfig
-        does not require LLM_CODER_URL to be set at module-load time (needed
+        does not require the backend's endpoint variable at module-load time (needed
         for CI environments that don't have local LLM endpoints).
         """
         if self.endpoint is None:
@@ -183,13 +199,13 @@ class ModelConfig:
         """Return the endpoint URL, resolving lazily for OPENAI_COMPATIBLE.
 
         Raises:
-            RuntimeError: If the provider is OPENAI_COMPATIBLE and
-                LLM_CODER_URL is not set.
+            RuntimeError: If the provider is OPENAI_COMPATIBLE and the
+                contract backend named ``self.name`` has no configured URL.
         """
         if self.endpoint is not None:
             return self.endpoint
         if self.provider == ModelProvider.OPENAI_COMPATIBLE:
-            self.endpoint = _resolve_llm_coder_url()
+            self.endpoint = _resolve_local_backend_base_url(self.name)
             return self.endpoint
         raise RuntimeError(f"No endpoint configured for provider {self.provider}")
 
@@ -330,7 +346,7 @@ class AIQuorum:
                 if provider == ModelProvider.OPENAI and "base_url" in model_data:
                     endpoint = model_data["base_url"]
                 elif provider == ModelProvider.OPENAI_COMPATIBLE:
-                    # Allow per-model endpoint override; LLM_CODER_URL resolved
+                    # Allow per-model endpoint override; contract URL resolved
                     # lazily via ModelConfig.resolve_endpoint() at call time.
                     if "base_url" in model_data:
                         endpoint = model_data["base_url"]
@@ -600,7 +616,7 @@ Provide your evaluation:"""
     ) -> tuple[ModelConfig, dict[str, Any]]:
         """Score using an OpenAI-compatible endpoint (vLLM, etc.).
 
-        The endpoint is resolved from the model config or LLM_CODER_URL.
+        The endpoint is resolved from the model config or the routing contract.
 
         Args:
             model: Model configuration with OPENAI_COMPATIBLE provider.

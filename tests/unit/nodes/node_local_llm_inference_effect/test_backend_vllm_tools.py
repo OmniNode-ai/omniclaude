@@ -30,8 +30,8 @@ from omnibase_core.runtime.golden_chain import (
     load_fixture,
 )
 
-from omniclaude.config.model_local_llm_config import (
-    LocalLlmEndpointRegistry,
+from omniclaude.handlers.handler_contract_endpoint_resolver import (
+    HandlerContractEndpointResolver,
 )
 from omniclaude.nodes.node_local_llm_inference_effect.backends.backend_vllm import (
     VllmInferenceBackend,
@@ -76,13 +76,13 @@ def _make_backend(
 ) -> VllmInferenceBackend:
     """Create a VllmInferenceBackend.
 
-    The registry is a ``spec``-bound double: ``chat_completion_sync`` takes the
-    endpoint URL directly and never touches the registry (which only resolves
-    URLs for the async ``infer`` path), so the registry is genuinely out of this
+    The resolver is a ``spec``-bound double: ``chat_completion_sync`` takes the
+    endpoint URL directly and never touches the resolver (which only resolves
+    URLs for the async ``infer`` path), so the resolver is genuinely out of this
     method's boundary — it is not the inference egress under test.
     """
-    registry = MagicMock(spec=LocalLlmEndpointRegistry)
-    return VllmInferenceBackend(registry=registry, sync_transport=sync_transport)
+    resolver = MagicMock(spec=HandlerContractEndpointResolver)
+    return VllmInferenceBackend(endpoints=resolver, sync_transport=sync_transport)
 
 
 def _chat_response(

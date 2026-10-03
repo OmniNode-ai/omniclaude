@@ -21,11 +21,10 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 
-from omniclaude.config.model_local_llm_config import (
-    LlmEndpointConfig,
-    LlmEndpointPurpose,
-    LocalLlmEndpointRegistry,
+from omniclaude.handlers.handler_contract_endpoint_resolver import (
+    HandlerContractEndpointResolver,
 )
+from omniclaude.models.model_contract_endpoint import ModelContractEndpoint
 from omniclaude.nodes.node_local_llm_inference_effect.backends.backend_vllm import (
     VllmInferenceBackend,
 )
@@ -38,20 +37,20 @@ from omniclaude.shared.models.model_skill_result import SkillResultStatus
 # Fixtures
 # ---------------------------------------------------------------------------
 
-_FAKE_ENDPOINT = LlmEndpointConfig(
-    url="http://localhost:8000/",
+_FAKE_ENDPOINT = ModelContractEndpoint(
+    backend_id="local-coder",
+    url="http://localhost:8000/v1/chat/completions",
     model_name="test-model",
-    purpose=LlmEndpointPurpose.CODE_ANALYSIS,
-    max_latency_ms=5000,
-    priority=9,
 )
 
 
-def _make_registry(endpoint: LlmEndpointConfig | None = _FAKE_ENDPOINT) -> MagicMock:
-    """Create a mock LocalLlmEndpointRegistry."""
-    registry = MagicMock(spec=LocalLlmEndpointRegistry)
-    registry.get_endpoint.return_value = endpoint
-    return registry
+def _make_registry(
+    endpoint: ModelContractEndpoint | None = _FAKE_ENDPOINT,
+) -> MagicMock:
+    """Create a mock HandlerContractEndpointResolver."""
+    resolver = MagicMock(spec=HandlerContractEndpointResolver)
+    resolver.resolve.return_value = endpoint
+    return resolver
 
 
 def _make_request(
@@ -92,7 +91,7 @@ def _success_response(content: str = "world") -> httpx.Response:
 async def test_success_path() -> None:
     """Successful inference returns SUCCESS with output text."""
     registry = _make_registry()
-    backend = VllmInferenceBackend(registry=registry)
+    backend = VllmInferenceBackend(endpoints=registry)
 
     mock_response = _success_response("Hello from LLM")
     backend._client = AsyncMock(spec=httpx.AsyncClient)
@@ -113,15 +112,14 @@ async def test_success_path() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_infer_uses_endpoint_configured_chat_completions_path() -> None:
-    """The request path comes from the endpoint config, not from backend code (OMN-17103)."""
-    endpoint = LlmEndpointConfig(
-        url="http://localhost:8000/v4",
+async def test_infer_posts_to_the_contract_url_verbatim() -> None:
+    """The contract's complete URL is posted to as-is; the backend adds no path (OMN-17103)."""
+    endpoint = ModelContractEndpoint(
+        backend_id="local-coder",
+        url="http://localhost:8000/v4/chat/completions",
         model_name="test-model",
-        purpose=LlmEndpointPurpose.CODE_ANALYSIS,
-        chat_completions_path="/chat/completions",
     )
-    backend = VllmInferenceBackend(registry=_make_registry(endpoint))
+    backend = VllmInferenceBackend(endpoints=_make_registry(endpoint))
     backend._client = AsyncMock(spec=httpx.AsyncClient)
     backend._client.post = AsyncMock(return_value=_success_response())
 
@@ -138,7 +136,7 @@ async def test_infer_uses_endpoint_configured_chat_completions_path() -> None:
 async def test_timeout_returns_timeout_error() -> None:
     """httpx.TimeoutException results in FAILED with TIMEOUT error."""
     registry = _make_registry()
-    backend = VllmInferenceBackend(registry=registry)
+    backend = VllmInferenceBackend(endpoints=registry)
 
     backend._client = AsyncMock(spec=httpx.AsyncClient)
     backend._client.post = AsyncMock(
@@ -157,7 +155,7 @@ async def test_timeout_returns_timeout_error() -> None:
 async def test_network_error_returns_backend_unavailable() -> None:
     """httpx.NetworkError results in FAILED with BACKEND_UNAVAILABLE error."""
     registry = _make_registry()
-    backend = VllmInferenceBackend(registry=registry)
+    backend = VllmInferenceBackend(endpoints=registry)
 
     backend._client = AsyncMock(spec=httpx.AsyncClient)
     backend._client.post = AsyncMock(
@@ -176,7 +174,7 @@ async def test_network_error_returns_backend_unavailable() -> None:
 async def test_non_200_response_returns_http_error() -> None:
     """Non-200 HTTP status returns FAILED with status code in error."""
     registry = _make_registry()
-    backend = VllmInferenceBackend(registry=registry)
+    backend = VllmInferenceBackend(endpoints=registry)
 
     error_response = httpx.Response(status_code=503, json={"error": "overloaded"})
     backend._client = AsyncMock(spec=httpx.AsyncClient)
@@ -194,7 +192,7 @@ async def test_non_200_response_returns_http_error() -> None:
 async def test_missing_choices_returns_backend_unavailable() -> None:
     """Response without choices field returns FAILED with BACKEND_UNAVAILABLE."""
     registry = _make_registry()
-    backend = VllmInferenceBackend(registry=registry)
+    backend = VllmInferenceBackend(endpoints=registry)
 
     # Response body missing 'choices' key
     bad_response = httpx.Response(status_code=200, json={"id": "abc"})
@@ -213,7 +211,7 @@ async def test_missing_choices_returns_backend_unavailable() -> None:
 async def test_semaphore_blocks_beyond_max_concurrent() -> None:
     """Semaphore limits concurrency to MAX_CONCURRENT (4 default)."""
     registry = _make_registry()
-    backend = VllmInferenceBackend(registry=registry)
+    backend = VllmInferenceBackend(endpoints=registry)
     backend._semaphore = asyncio.Semaphore(4)
 
     call_count = 0
@@ -253,9 +251,9 @@ async def test_semaphore_blocks_beyond_max_concurrent() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_no_endpoint_returns_backend_unavailable() -> None:
-    """When registry has no endpoint for the purpose, return BACKEND_UNAVAILABLE."""
+    """When the contract resolves no endpoint for the purpose, return BACKEND_UNAVAILABLE."""
     registry = _make_registry(endpoint=None)
-    backend = VllmInferenceBackend(registry=registry)
+    backend = VllmInferenceBackend(endpoints=registry)
 
     request = _make_request()
     result = await backend.infer(request)
@@ -269,7 +267,7 @@ async def test_no_endpoint_returns_backend_unavailable() -> None:
 async def test_aclose_closes_client() -> None:
     """aclose() delegates to the httpx client."""
     registry = _make_registry()
-    backend = VllmInferenceBackend(registry=registry)
+    backend = VllmInferenceBackend(endpoints=registry)
 
     backend._client = AsyncMock(spec=httpx.AsyncClient)
     backend._client.aclose = AsyncMock()

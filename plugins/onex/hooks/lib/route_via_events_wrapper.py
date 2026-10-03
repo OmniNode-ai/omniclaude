@@ -199,41 +199,46 @@ def _get_llm_handler() -> dict[str, Any] | None:
             return None
 
 
-# LLM endpoint registry lazy loader
-_llm_registry_cache: dict[str, Any] = {}
-_llm_registry_lock = threading.Lock()
+# Contract endpoint resolver lazy loader
+_contract_resolver_cache: dict[str, Any] = {}
+_contract_resolver_lock = threading.Lock()
 
 
-def _get_llm_registry() -> dict[str, Any] | None:
-    """Lazy-load LLM endpoint registry imports on first call.
+def _get_contract_endpoint_resolver() -> dict[str, Any] | None:
+    """Lazy-load the routing-contract endpoint resolver on first call.
 
-    Returns a dict with keys: 'LlmEndpointPurpose', 'LocalLlmEndpointRegistry'
-    containing the enum and registry class. Returns None if imports fail.
+    Returns a dict with keys: 'EnumContractCapability', 'HandlerContractEndpointResolver'
+    containing the capability enum and the resolver class (OMN-17103: the
+    local-LLM endpoint registry and its LLM_*_URL variables are retired; the
+    routing contract is the one endpoint authority). Returns None if imports
+    fail.
 
     Uses double-checked locking for thread safety.
     """
-    if _llm_registry_cache:
-        return _llm_registry_cache
+    if _contract_resolver_cache:
+        return _contract_resolver_cache
 
-    with _llm_registry_lock:
+    with _contract_resolver_lock:
         # Double-check after acquiring lock
-        if _llm_registry_cache:
-            return _llm_registry_cache
+        if _contract_resolver_cache:
+            return _contract_resolver_cache
 
         try:
-            from omniclaude.config.model_local_llm_config import (
-                LlmEndpointPurpose,
-                LocalLlmEndpointRegistry,
+            from omniclaude.enums.enum_contract_capability import EnumContractCapability
+            from omniclaude.handlers.handler_contract_endpoint_resolver import (
+                HandlerContractEndpointResolver,
             )
 
             result = {
-                "LlmEndpointPurpose": LlmEndpointPurpose,
-                "LocalLlmEndpointRegistry": LocalLlmEndpointRegistry,
+                "EnumContractCapability": EnumContractCapability,
+                "HandlerContractEndpointResolver": HandlerContractEndpointResolver,
             }
-            _llm_registry_cache.update(result)
-            return _llm_registry_cache
+            _contract_resolver_cache.update(result)
+            return _contract_resolver_cache
         except ImportError:
-            logger.debug("LLM endpoint registry not available, USE_LLM_ROUTING ignored")
+            logger.debug(
+                "Contract endpoint resolver not available, USE_LLM_ROUTING ignored"
+            )
             return None
 
 
@@ -782,13 +787,13 @@ def _use_llm_routing() -> bool:
     Requires:
     - ENABLE_LOCAL_INFERENCE_PIPELINE=true  (parent gate)
     - USE_LLM_ROUTING=true                  (specific flag)
-    - HandlerRoutingLlm and LocalLlmEndpointRegistry importable (lazy-loaded)
+    - HandlerRoutingLlm and the contract endpoint resolver importable (lazy-loaded)
     - LatencyGuard allows it (circuit not open, agreement rate not low)
 
     Returns:
         True only when all conditions are met.
     """
-    if _get_llm_handler() is None or _get_llm_registry() is None:
+    if _get_llm_handler() is None or _get_contract_endpoint_resolver() is None:
         return False
     parent = os.environ.get(
         "ENABLE_LOCAL_INFERENCE_PIPELINE", ""
@@ -809,45 +814,49 @@ def _use_llm_routing() -> bool:
 def _get_llm_routing_url() -> tuple[str, str] | None:
     """Return the (url, model_name) pair to use for routing, or None.
 
-    Prefers LlmEndpointPurpose.ROUTING; falls back to GENERAL (Qwen2.5-14B),
-    then REASONING (Qwen3-Coder-30B-A3B) since no dedicated routing model is currently
-    deployed.
+    Resolves from the canonical bifrost routing contract: the first local
+    backend declaring ``classification``, then ``documentation``, then
+    ``reasoning``, then ``code_generation``. The handler appends the OpenAI chat
+    path itself, so the contract's complete URL is reduced to its base; a
+    contract URL that does not end in that path cannot serve the handler and
+    yields None.
 
     Returns:
         ``(url, model_name)`` tuple (url without trailing slash) or None.
     """
-    registry_cache = _get_llm_registry()
-    if registry_cache is None:
+    resolver_cache = _get_contract_endpoint_resolver()
+    if resolver_cache is None:
         return None
     try:
-        LocalLlmEndpointRegistry = registry_cache["LocalLlmEndpointRegistry"]
-        LlmEndpointPurpose = registry_cache["LlmEndpointPurpose"]
-
-        registry = LocalLlmEndpointRegistry()
-        # Try dedicated ROUTING purpose first, then GENERAL, REASONING, CODE_ANALYSIS.
-        # CODE_ANALYSIS last so that a coder model (e.g. .201) is picked up
-        # automatically once LLM_CODER_URL is set, without needing a code change.
-        endpoint = registry.get_endpoint(LlmEndpointPurpose.ROUTING)
-        if endpoint is None:
-            endpoint = registry.get_endpoint(LlmEndpointPurpose.GENERAL)
-        if endpoint is None:
-            endpoint = registry.get_endpoint(LlmEndpointPurpose.REASONING)
-        if endpoint is None:
-            endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
-        if endpoint is None:
-            logger.debug("No LLM endpoint configured for routing")
-            return None
-        url = str(endpoint.url).rstrip("/")
-        model_name = getattr(endpoint, "model_name", None) or "unknown"
-        logger.debug(
-            "Resolved LLM routing URL: purpose=%s url=%s model=%s",
-            endpoint.purpose if hasattr(endpoint, "purpose") else "unknown",
-            url,
-            model_name,
-        )
-        return url, model_name
+        EnumContractCapability = resolver_cache["EnumContractCapability"]
+        resolver = resolver_cache["HandlerContractEndpointResolver"]()
+        for capability in (
+            EnumContractCapability.CLASSIFICATION,
+            EnumContractCapability.DOCUMENTATION,
+            EnumContractCapability.REASONING,
+            EnumContractCapability.CODE_GENERATION,
+        ):
+            endpoint = resolver.resolve(capability)
+            if endpoint is None:
+                continue
+            base_url = endpoint.base_url
+            if base_url is None:
+                logger.debug(
+                    "Contract endpoint for %s is not an OpenAI chat URL; skipping",
+                    endpoint.backend_id,
+                )
+                continue
+            logger.debug(
+                "Resolved LLM routing URL: backend=%s url=%s model=%s",
+                endpoint.backend_id,
+                base_url,
+                endpoint.model_name,
+            )
+            return base_url, endpoint.model_name
+        logger.debug("No contract LLM endpoint configured for routing")
+        return None
     except Exception as exc:
-        logger.debug("Failed to load LLM endpoint registry: %s", exc)
+        logger.debug("Failed to resolve contract LLM endpoint: %s", exc)
         return None
 
 
