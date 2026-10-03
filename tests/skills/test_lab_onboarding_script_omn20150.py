@@ -675,6 +675,97 @@ def test_the_key_is_settled_in_preflight(
     assert sorted(p for p in (tmp_path / "home").rglob("*")) == []
 
 
+def _stored_keys(tmp_path: Path, *providers: str) -> None:
+    """A fake `onex` whose `secret list` reports keys an earlier run stored."""
+    bindir = tmp_path / "home" / ".local" / "bin"
+    bindir.mkdir(parents=True, exist_ok=True)
+    rows = "".join(f"    llm.{p}.api_key  (updated 2026-10-02)\n" for p in providers)
+    onex = bindir / "onex"
+    onex.write_text(f'#!/bin/sh\n[ "$1" = secret ] || exit 1\ncat <<EOF\n{rows}EOF\n')
+    onex.chmod(0o755)
+
+
+def test_a_stored_key_is_offered_and_not_assumed(tmp_path: Path) -> None:
+    """AC1 (OMN-20393): the run names the stored provider and offers to change it."""
+    _stored_keys(tmp_path, "openai")
+    out, _ = _drive_tty(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
+        _phase0_env(tmp_path),
+        [("Use it?", "n"), ("Choose 1, 2, 3 or 4:", "q")],
+    )
+    assert "already has your OpenAI key stored" in out
+    assert "Choose 1, 2, 3 or 4:" in out, (
+        "declining the stored key reached no model menu"
+    )
+
+
+def test_keeping_the_stored_key_asks_nothing_further(tmp_path: Path) -> None:
+    """AC1 (OMN-20393): keeping it is one keystroke, and no key is re-typed."""
+    _stored_keys(tmp_path, "openai")
+    out, _ = _drive_tty(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
+        _phase0_env(tmp_path),
+        [("Use it?", "y")],
+    )
+    assert "your openai key is already stored; it will be used" in out
+    assert "key (input is hidden)" not in out
+
+
+def test_an_unattended_run_still_uses_the_stored_key(tmp_path: Path) -> None:
+    """AC1 (OMN-20393): with nowhere to ask, the stored key is used and named."""
+    _stored_keys(tmp_path, "openai")
+    result = subprocess.run(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
+        env=_phase0_env(tmp_path),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert "No terminal or desktop to ask on" in result.stdout
+    assert "your openai key is already stored" in result.stdout
+
+
+def test_the_stored_providers_own_key_can_be_replaced(tmp_path: Path) -> None:
+    """AC2 (OMN-20393): --provider equal to the stored one reaches the key prompt."""
+    _stored_keys(tmp_path, "openai")
+    out, _ = _drive_tty(
+        [
+            "/bin/bash",
+            str(_phase0_only(tmp_path)),
+            "--no-containers",
+            "--provider",
+            "openai",
+        ],
+        _phase0_env(tmp_path),
+        [("key (input is hidden)", "replacement-key")],
+    )
+    assert "Model key: received" in out
+    assert "already stored; it will be used" not in out
+
+
+def test_two_stored_keys_let_the_developer_pick(tmp_path: Path) -> None:
+    """AC3 (OMN-20393): the developer's choice wins, not the scan order."""
+    _stored_keys(tmp_path, "openrouter", "gemini")
+    out, _ = _drive_tty(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
+        _phase0_env(tmp_path),
+        [("Which one?", "2")],
+    )
+    assert "your gemini key is already stored; it will be used" in out
+    assert "your openrouter key is already stored" not in out
+
+
+def test_the_scan_order_is_documented_as_a_fallback_only() -> None:
+    """AC3 (OMN-20393): nothing picks a stored provider by scan order while a
+    developer can be asked."""
+    body = _function_body("stored_key_provider")
+    assert "stored_key_providers | head -n 1" in body
+    offer = _function_body("offer_stored_key")
+    assert "No terminal or desktop to ask on" in offer
+
+
 @pytest.mark.parametrize(
     "answers",
     [
