@@ -460,7 +460,9 @@ _origin_repo() {
 #   https://api.github.com/ prefix stripped) repos/<o>/<r>/pulls or under it, or
 #   containing /check-runs, /check-suites, /commits/<ref>/status, /statuses,
 #   /actions/runs or /actions/jobs
-# Never guarded: any write (a non-GET api method, pr merge|ready|create|edit|
+# Never guarded: a failing-job log read (`gh run view ... --log-failed|--log` with no
+# --json/--jq/--template, and `gh api repos/<o>/<r>/actions/jobs/<id>/logs`; OMN-20436),
+# any write (a non-GET api method, pr merge|ready|create|edit|
 # comment|close, run rerun|cancel, workflow run) and `api graphql` (a residual: it
 # cannot be told from a mutation here, and pr-land's pr_snapshot.py uses it).
 #
@@ -632,6 +634,35 @@ _prs_resolve() {
   fi
 }
 
+# Failing-job logs are not PR state: the watcher does not hold them and a lane that
+# classifies a red has to read one (OMN-20436). Two shapes pass, and only these:
+#   gh run view ... --log-failed|--log   with no --json, --jq or --template
+#   gh api repos/<o>/<r>/actions/jobs/<digits>/logs   (the endpoint ends there, no "..")
+_prs_job_log() {
+  local a log=0
+  shift 2
+  for a in "$@"; do
+    case "$a" in
+      --log|--log-failed) log=1 ;;
+      --json|--json=*|--jq|--jq=*|-q|--template|--template=*|-t) return 1 ;;
+    esac
+  done
+  [ "$log" -eq 1 ]
+}
+
+_prs_job_log_endpoint() {
+  local rest id
+  case "$1" in
+    *..*|*\?*|*#*) return 1 ;;
+    repos/[!/]*/[!/]*/actions/jobs/*/logs)
+      rest="${1#*/actions/jobs/}"
+      id="${rest%/logs}"
+      case "$id" in ""|*[!0-9]*) return 1 ;; esac
+      return 0 ;;
+  esac
+  return 1
+}
+
 _prs_guarded=0
 _prs_ep=""
 if [ "$_cls" = "api" ]; then
@@ -641,13 +672,14 @@ if [ "$_cls" = "api" ]; then
     case "$_prs_ep" in
       repos/*/*/pulls|repos/*/*/pulls/*) _prs_guarded=1 ;;
       */check-runs*|*/check-suites*|*/commits/*/status|*/statuses*) _prs_guarded=1 ;;
-      */actions/runs*|*/actions/jobs*) _prs_guarded=1 ;;
+      */actions/runs*|*/actions/jobs*) _prs_job_log_endpoint "$_prs_ep" || _prs_guarded=1 ;;
     esac
   fi
 else
   case "$_cls" in
     "pr view") _cacheable "$@" || _prs_guarded=1 ;;
-    "pr checks"|"run view") _prs_guarded=1 ;;
+    "pr checks") _prs_guarded=1 ;;
+    "run view") _prs_job_log "$@" || _prs_guarded=1 ;;
   esac
 fi
 if [ "$_prs_guarded" -eq 1 ] && ! _prs_caller_allowed && ! _prs_exact_head "$@"; then
@@ -660,7 +692,6 @@ if [ "$_prs_guarded" -eq 1 ] && ! _prs_caller_allowed && ! _prs_exact_head "$@";
   printf '%s\n' \
     'Read it locally instead:' \
     "  python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr $_prs_o/$_prs_r#$_prs_n   (--json for the whole record, --status for the state file's age)" \
-    "  python3 <omni plugin>/skills/merge-drain/scripts/drain_map.py --only-pr $_prs_r#$_prs_n   (where the PR sits in the drain)" \
     "  git -C \$OMNI_HOME/$_prs_r log|diff origin/dev...   (files, diffs and history from the canonical clone)" \
     'The one GitHub read allowed is the exact-head check right before a mutation:' \
     '  ONEX_GH_EXACT_HEAD=<owner>/<repo>#<n> gh pr view <n> --repo <owner>/<repo> --json headRefOid,state,mergeStateStatus' >&2
