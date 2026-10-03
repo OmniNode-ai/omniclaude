@@ -131,7 +131,7 @@ VERIFIER_RESULT="$(
     REPO_HINT="$REPO_HINT" \
     OMN_CLAIM_RESOLVER_REPO_ROOT="${_OMNICLAUDE_CALLER_CWD}" \
     "$PYTHON_BIN" -m plugins.onex.hooks.lib.agent_result_verifier_runner \
-    <<< "$TURN_BODY" 2>&1
+    < <(printf '%s\n' "$TURN_BODY") 2>&1
 )"
 VERIFIER_EXIT=$?
 set -e

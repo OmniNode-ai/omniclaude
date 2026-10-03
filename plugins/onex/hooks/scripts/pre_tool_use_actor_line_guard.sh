@@ -75,7 +75,7 @@ PYTHON_BIN="${PYTHON_CMD:-python3}"
 # read the lane from it; the decision core gets the same bytes on its stdin.
 _OMNICLAUDE_HOOK_PAYLOAD="$(cat)"
 set +e
-"$PYTHON_BIN" "$LIB_PY" <<<"$_OMNICLAUDE_HOOK_PAYLOAD"
+"$PYTHON_BIN" "$LIB_PY" < <(printf '%s\n' "$_OMNICLAUDE_HOOK_PAYLOAD")
 rc=$?
 set -e
 if [[ "$rc" -eq 2 ]]; then

@@ -277,7 +277,7 @@ for arg in "$@"; do
         label="${PATTERN_LABELS[$i]}"
 
         # Filter out lines with the escape hatch annotation, then grep the rest.
-        violations=$(grep -nE "$pat" <<< "$content" | grep -v '#[[:space:]]*imperative-ok' || true)
+        violations=$(grep -nE "$pat" < <(printf '%s\n' "$content") | grep -v '#[[:space:]]*imperative-ok' || true)
 
         if [[ -n "$violations" ]]; then
             echo "ERROR: $file — imperative pattern detected: $label" >&2

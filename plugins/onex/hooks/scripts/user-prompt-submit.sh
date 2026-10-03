@@ -504,11 +504,11 @@ _DELEGATION_SOCK="/tmp/omniclaude-delegation.sock"
 if [[ -S "$_DELEGATION_SOCK" ]] && [[ -n "${SESSION_ID:-}" ]]; then
     _POLL_REQ=$(jq -cn --arg sess "$SESSION_ID" '{"action": "poll_agentic", "session_id": $sess}')
     _POLL_RESULT="$(printf '%s\n' "$_POLL_REQ" | socat -t2 - UNIX-CONNECT:"$_DELEGATION_SOCK" 2>/dev/null || echo "")"
-    if [[ -n "$_POLL_RESULT" ]] && jq -e '.agentic_completed == true' <<< "$_POLL_RESULT" >/dev/null 2>/dev/null; then
-        AGENTIC_WORK_PRODUCT="$(jq -r '.content // ""' <<< "$_POLL_RESULT")"
-        _AGENTIC_ITERATIONS="$(jq -r '.iterations // 0' <<< "$_POLL_RESULT")"
-        _AGENTIC_TOOLS="$(jq -r '.tool_calls_count // 0' <<< "$_POLL_RESULT")"
-        _AGENTIC_JOB_ID="$(jq -r '.job_id // "?"' <<< "$_POLL_RESULT")"
+    if [[ -n "$_POLL_RESULT" ]] && jq -e '.agentic_completed == true' < <(printf '%s\n' "$_POLL_RESULT") >/dev/null 2>/dev/null; then
+        AGENTIC_WORK_PRODUCT="$(jq -r '.content // ""' < <(printf '%s\n' "$_POLL_RESULT"))"
+        _AGENTIC_ITERATIONS="$(jq -r '.iterations // 0' < <(printf '%s\n' "$_POLL_RESULT"))"
+        _AGENTIC_TOOLS="$(jq -r '.tool_calls_count // 0' < <(printf '%s\n' "$_POLL_RESULT"))"
+        _AGENTIC_JOB_ID="$(jq -r '.job_id // "?"' < <(printf '%s\n' "$_POLL_RESULT"))"
         log "Agentic job completed: job=$_AGENTIC_JOB_ID iterations=$_AGENTIC_ITERATIONS tools=$_AGENTIC_TOOLS content_chars=${#AGENTIC_WORK_PRODUCT}"
         _TS_AGENTIC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         echo "[$_TS_AGENTIC] [UserPromptSubmit] AGENTIC_COLLECTED job=$_AGENTIC_JOB_ID iterations=$_AGENTIC_ITERATIONS tool_calls=$_AGENTIC_TOOLS" >> "$TRACE_LOG"
@@ -718,7 +718,7 @@ if [[ "$_TICKET_INJECT_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_conte
                         # jq unavailable — use Python to extract ticket_context
                         _FP_TICKET_CONTEXT=$("$PYTHON_CMD" -c \
                             "import sys,json; d=json.load(sys.stdin); print(d.get('ticket_context',''))" \
-                            <<< "$_FP_OUTPUT" 2>/dev/null) || _FP_TICKET_CONTEXT=""
+                            < <(printf '%s\n' "$_FP_OUTPUT") 2>/dev/null) || _FP_TICKET_CONTEXT=""
                         if [[ -n "$_FP_TICKET_CONTEXT" ]]; then
                             FIRST_PROMPT_TICKET_CONTEXT="$_FP_TICKET_CONTEXT"
                             log "First-prompt ticket injection: success for $_FP_TICKET (jq unavailable)"

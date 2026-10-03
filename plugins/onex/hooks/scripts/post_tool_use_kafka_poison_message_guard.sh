@@ -142,7 +142,7 @@ FRICTION_FILE="${FRICTION_DIR}/${DATE_PREFIX}-${PATTERN}-${TS_NS}.yaml"
 # Verbatim error excerpt — first 40 lines, YAML block-literal to preserve
 # formatting without injection risk. YAML block scalar literal content does
 # not need escaping of quotes/colons.
-VERBATIM_EXCERPT=$(sed -n '1,40{s/^/    /;p;}' <<<"$TOOL_OUTPUT")
+VERBATIM_EXCERPT=$(sed -n '1,40{s/^/    /;p;}' < <(printf '%s\n' "$TOOL_OUTPUT"))
 
 cat > "$FRICTION_FILE" <<___KAFKA_POISON_FRICTION_EOF___ || true
 id: kafka-poison-${PATTERN}-${SESSION_ID:0:8}-${TS_NS}

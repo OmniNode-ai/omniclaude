@@ -216,9 +216,9 @@ for file in "$@"; do
         continue
     fi
 
-    if grep -qiE "$SKIP_PATTERN" <<< "$staged_content"; then
+    if grep -qiE "$SKIP_PATTERN" < <(printf '%s\n' "$staged_content"); then
         # Check for explicit allowlist receipt in the staged content (also case-insensitive)
-        if grep -qiE "$ALLOWLIST_PATTERN" <<< "$staged_content"; then
+        if grep -qiE "$ALLOWLIST_PATTERN" < <(printf '%s\n' "$staged_content"); then
             echo "WARNING: [skip-*] token found in $file but explicit approval receipt present — allowed." >&2
             continue
         fi

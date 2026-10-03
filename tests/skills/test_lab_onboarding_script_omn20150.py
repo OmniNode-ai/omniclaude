@@ -507,6 +507,85 @@ def test_the_key_reaches_the_stack_by_pipe_and_never_as_an_argument_or_variable(
         assert forbidden not in body
 
 
+def _boot_resources(free: int, disk: int) -> tuple[int, str, str]:
+    """Run the boot-threshold check with the two readings stubbed."""
+    program = "\n".join(
+        [
+            "set -u",
+            f"BOOT_FREE_MEM_GB={BOOT_FREE_MEM_GB}",
+            f"BOOT_FREE_DISK_GB={BOOT_FREE_DISK_GB}",
+            f"avail_mem_gb() {{ echo {free}; }}",
+            f"disk_free_gb() {{ echo {disk}; }}",
+            _functions("boot_resources_ok"),
+            "boot_resources_ok; rc=$?",
+            'printf "%s\\n%s\\n" "$BOOT_SHORT" "$BOOT_REMEDY"',
+            "exit $rc",
+        ]
+    )
+    done = subprocess.run(
+        ["/bin/bash", "-c", program],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    short, remedy = (done.stdout.split("\n") + ["", ""])[:2]
+    return done.returncode, short, remedy
+
+
+def _constant(name: str) -> int:
+    match = re.search(rf"^{name}=(\d+)", SCRIPT.read_text(), re.M)
+    assert match, name
+    return int(match.group(1))
+
+
+BOOT_FREE_MEM_GB = _constant("BOOT_FREE_MEM_GB")
+BOOT_FREE_DISK_GB = _constant("BOOT_FREE_DISK_GB")
+
+
+def test_ample_resources_let_the_stack_boot() -> None:
+    """AC1 (OMN-20394): both readings above their floors is not a shortfall."""
+    rc, short, remedy = _boot_resources(BOOT_FREE_MEM_GB + 1, BOOT_FREE_DISK_GB + 300)
+    assert rc == 0
+    assert short == ""
+    assert remedy == ""
+
+
+def test_a_memory_shortfall_never_names_the_disk() -> None:
+    """AC1 (OMN-20394): the passing reading is not reported as a cause."""
+    rc, short, remedy = _boot_resources(BOOT_FREE_MEM_GB - 1, BOOT_FREE_DISK_GB + 261)
+    assert rc != 0
+    assert "memory available" in short
+    assert "disk" not in short, short
+    assert remedy == "close other apps"
+
+
+def test_a_disk_shortfall_never_names_the_memory() -> None:
+    """AC1 (OMN-20394): and the same the other way round."""
+    rc, short, remedy = _boot_resources(BOOT_FREE_MEM_GB + 8, BOOT_FREE_DISK_GB - 1)
+    assert rc != 0
+    assert "disk free" in short
+    assert "memory" not in short, short
+    assert remedy == "free disk space"
+
+
+def test_both_short_names_both_and_both_remedies() -> None:
+    """AC1 (OMN-20394): when both fail, both are named -- the AND was only wrong
+    when one of them passed."""
+    rc, short, remedy = _boot_resources(BOOT_FREE_MEM_GB - 1, BOOT_FREE_DISK_GB - 1)
+    assert rc != 0
+    assert "memory available" in short and "disk free" in short
+    assert remedy == "close other apps and free disk space"
+
+
+def test_the_failure_message_is_built_only_from_the_failing_clause() -> None:
+    """AC1 (OMN-20394): phase 4 reports the helper's text, not both thresholds."""
+    phase_4 = _function_body("phase4")
+    assert "boot_resources_ok" in phase_4
+    assert "$BOOT_SHORT" in phase_4
+    assert "needs $BOOT_FREE_DISK_GB" not in phase_4
+
+
 def test_a_delegation_that_fell_through_to_another_route_does_not_pass_phase_4() -> (
     None
 ):
