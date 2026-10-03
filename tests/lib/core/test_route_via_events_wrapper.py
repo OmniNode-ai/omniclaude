@@ -1007,6 +1007,11 @@ class TestContractEndpointHookPath:
 
     def test_route_via_llm_posts_to_the_contract_endpoint_end_to_end(self, monkeypatch):
         """Real resolver, real health probe, real HTTP POST to the contract's URL."""
+        # The production budgets (100 ms) assume a warm process; a cold httpx
+        # import on a loaded CI runner exceeds them. This test asserts where the
+        # request goes, not how fast it gets there.
+        monkeypatch.setattr("route_via_events_wrapper._LLM_ROUTING_TIMEOUT_S", 5.0)
+        monkeypatch.setattr("route_via_events_wrapper._LLM_HEALTH_CHECK_TIMEOUT_S", 4.0)
         with _FakeOpenAiServer() as server:
             monkeypatch.setenv(
                 "BIFROST_LOCAL_CODER_ENDPOINT_URL",
