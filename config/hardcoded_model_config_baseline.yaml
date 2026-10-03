@@ -234,24 +234,6 @@ entries:
   - path: scripts/tests/test_intelligence_functionality.sh
     family: E-LAN
     content_sha1: c8fe78d2371528521def3ba35e8d4357c3013ef5
-  - path: src/omniclaude/delegation/bifrost_delegation.yaml
-    family: M
-    content_sha1: 0341e5c38d1d334d295bd9899c4a0f39e57ba4e7
-  - path: src/omniclaude/delegation/bifrost_delegation.yaml
-    family: M
-    content_sha1: 639e8b507ee3e2cfda19acf03d1397b0cebcdf68
-  - path: src/omniclaude/delegation/bifrost_delegation.yaml
-    family: M
-    content_sha1: 7e9339aff4644d45857302efea7b32acf1611dde
-  - path: src/omniclaude/delegation/bifrost_delegation.yaml
-    family: M
-    content_sha1: 7e9339aff4644d45857302efea7b32acf1611dde
-  - path: src/omniclaude/delegation/bifrost_delegation.yaml
-    family: M
-    content_sha1: 7e9339aff4644d45857302efea7b32acf1611dde
-  - path: src/omniclaude/delegation/bifrost_delegation.yaml
-    family: M
-    content_sha1: ab02cb1cce3f8d522e2ef443d87db403260b7e25
   - path: src/omniclaude/delegation/savings.py
     family: M
     content_sha1: 08cad76ed76b6ffb53a8fe16019a70afcdc4105c

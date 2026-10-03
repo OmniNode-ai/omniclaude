@@ -21,6 +21,8 @@ from typing import Any
 
 import yaml
 
+from omniclaude.delegation.runner import canonical_bifrost_contract_path
+
 try:
     import httpx
 except ImportError:
@@ -28,11 +30,22 @@ except ImportError:
     print("Warning: httpx not available, AI scoring will be disabled", file=sys.stderr)
 
 
-_BIFROST_YAML_PATH = (
-    Path(__file__).parent.parent.parent.parent
-    / "delegation"
-    / "bifrost_delegation.yaml"
+_BIFROST_YAML_PATH = canonical_bifrost_contract_path()
+
+#: Capabilities that make a backend able to score a correction. An
+#: embedding-only or judge-only backend cannot answer a scoring prompt.
+_QUORUM_SCORING_CAPABILITIES = frozenset(
+    {"code_generation", "reasoning", "deep_reasoning"}
 )
+
+
+class QuorumUnconfiguredProviderError(RuntimeError):
+    """A backend's provider is one the quorum has no configured, keyed route to.
+
+    Raised instead of falling back to a default provider: mapping an unknown
+    backend to OpenAI would send scoring traffic to a provider this
+    organisation holds no key for (OMN-17102).
+    """
 
 
 def _resolve_llm_coder_url() -> str:
@@ -47,54 +60,74 @@ def _resolve_llm_coder_url() -> str:
     return url
 
 
-def _build_default_models_from_bifrost() -> list["ModelConfig"]:
-    """Build DEFAULT_MODELS from bifrost_delegation.yaml backends.
+def _provider_for_backend(backend_id: str, *, provider: str | None) -> "ModelProvider":
+    """Map a contract backend's declared ``provider`` to a quorum provider.
 
-    Maps tier -> ModelProvider:
-      local        → OPENAI_COMPATIBLE (endpoint resolved lazily via LLM_CODER_URL)
-      frontier_api -> GEMINI if backend_id contains "gemini", else OPENAI
+    ``local`` resolves to OPENAI_COMPATIBLE (endpoint resolved lazily via
+    LLM_CODER_URL) and ``gemini`` to GEMINI (GEMINI_API_KEY). Every other
+    provider, including an undeclared one, is refused.
+
+    Raises:
+        QuorumUnconfiguredProviderError: the provider has no configured route.
+    """
+    if provider == "local":
+        return ModelProvider.OPENAI_COMPATIBLE
+    if provider == "gemini":
+        return ModelProvider.GEMINI
+    raise QuorumUnconfiguredProviderError(
+        f"backend {backend_id!r} declares provider {provider!r}, which the quorum "
+        "has no configured route to; refusing rather than mapping it to another "
+        "provider."
+    )
+
+
+def _build_default_models_from_bifrost(
+    contract_path: Path | None = None,
+) -> list["ModelConfig"]:
+    """Build DEFAULT_MODELS from the canonical bifrost delegation contract.
+
+    A backend becomes a quorum model only when the contract declares it for
+    ordinary routing (not ``explicit_pin_only``), it carries a scoring
+    capability, and :func:`_provider_for_backend` accepts its provider. Backends
+    for any other provider are not quorum surfaces and are left out.
 
     Raises when the contract cannot provide a routing surface. Silent hardcoded
     model fallback is forbidden.
     """
-    if not _BIFROST_YAML_PATH.exists():
+    path = contract_path if contract_path is not None else _BIFROST_YAML_PATH
+    if not path.exists():
         raise RuntimeError(
-            f"Missing bifrost delegation contract: {_BIFROST_YAML_PATH}. "
+            f"Missing bifrost delegation contract: {path}. "
             "AIQuorum requires contract-declared model routing; hardcoded model "
             "fallbacks are forbidden."
         )
 
-    raw = yaml.safe_load(_BIFROST_YAML_PATH.read_text(encoding="utf-8")) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     backends = raw.get("backends", [])
     if not isinstance(backends, list):
         raise RuntimeError(
-            f"Invalid bifrost delegation contract: {_BIFROST_YAML_PATH}. "
-            "'backends' must be a list."
+            f"Invalid bifrost delegation contract: {path}. 'backends' must be a list."
         )
 
     models: list[ModelConfig] = []
     for b in backends:
-        tier = b.get("tier", "")
+        if b.get("explicit_pin_only", False):
+            continue
+        if not _QUORUM_SCORING_CAPABILITIES.intersection(b.get("capabilities", [])):
+            continue
         backend_id = str(b["backend_id"])
+        try:
+            provider = _provider_for_backend(backend_id, provider=b.get("provider"))
+        except QuorumUnconfiguredProviderError:
+            continue
         weight = float(b.get("weight", 1.0)) if "weight" in b else 1.0
         timeout = float(b.get("timeout_ms", 10000)) / 1000.0
-
-        if tier == "local":
-            provider = ModelProvider.OPENAI_COMPATIBLE
-            endpoint = None  # resolved lazily via LLM_CODER_URL
-        elif "gemini" in backend_id.lower():
-            provider = ModelProvider.GEMINI
-            endpoint = None  # set by ModelConfig.__post_init__
-        else:
-            provider = ModelProvider.OPENAI
-            endpoint = None
-
         models.append(
             ModelConfig(
                 name=backend_id,
                 provider=provider,
                 weight=weight,
-                endpoint=endpoint,
+                endpoint=None,  # local: resolved lazily; gemini: set by __post_init__
                 timeout=timeout,
             )
         )
@@ -102,7 +135,7 @@ def _build_default_models_from_bifrost() -> list["ModelConfig"]:
         return models
 
     raise RuntimeError(
-        f"No backends declared in bifrost delegation contract: {_BIFROST_YAML_PATH}. "
+        f"No quorum-capable backends declared in bifrost delegation contract: {path}. "
         "AIQuorum cannot build DEFAULT_MODELS."
     )
 
@@ -558,7 +591,9 @@ Provide your evaluation:"""
         elif model.provider == ModelProvider.OPENAI:
             return await self._score_with_openai(model, scoring_prompt)
         else:
-            raise ValueError(f"Unsupported model provider: {model.provider}")
+            raise QuorumUnconfiguredProviderError(
+                f"Unsupported model provider: {model.provider}"
+            )
 
     async def _score_with_openai_compatible(
         self, model: ModelConfig, scoring_prompt: str
@@ -698,11 +733,14 @@ Provide your evaluation:"""
         Returns:
             Tuple of (model, score_dict)
         """
-        # Use base_url if provided, otherwise default OpenAI endpoint
-        base_url = (
-            model.resolve_endpoint() if model.endpoint else "https://api.openai.com/v1"
-        )
-        url = f"{base_url}/chat/completions"
+        # An OPENAI model is only reachable through an explicitly configured
+        # base_url; there is no default api.openai.com route (no org key).
+        if not model.endpoint:
+            raise QuorumUnconfiguredProviderError(
+                f"model {model.name!r} has provider OPENAI and no base_url; "
+                "refusing to default to api.openai.com."
+            )
+        url = f"{model.resolve_endpoint()}/chat/completions"
 
         payload = {
             "model": model.name,

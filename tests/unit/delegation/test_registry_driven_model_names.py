@@ -15,22 +15,16 @@ TDD: tests written to FAIL on the old hardcoded values, pass after the fix.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import yaml
+
+from omniclaude.delegation.runner import canonical_bifrost_contract_path
 
 # ---------------------------------------------------------------------------
 # Helpers: load bifrost_delegation.yaml
 # ---------------------------------------------------------------------------
 
-_BIFROST_YAML_PATH = (
-    Path(__file__).parent.parent.parent.parent
-    / "src"
-    / "omniclaude"
-    / "delegation"
-    / "bifrost_delegation.yaml"
-)
+_BIFROST_YAML_PATH = canonical_bifrost_contract_path()
 
 
 def _load_bifrost() -> dict:
