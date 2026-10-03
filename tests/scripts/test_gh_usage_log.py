@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import socket
 import stat
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -232,6 +233,146 @@ def test_record_lane_falls_back_to_session_then_parent(env: dict[str, str]) -> N
     )
     assert second["lane_source"] == "parent"
     assert str(second["lane"]).startswith("parent:")
+
+
+@pytest.mark.unit
+def test_record_parent_host_set(env: dict[str, str]) -> None:
+    _gh(
+        env,
+        "pr",
+        "list",
+        extra={
+            "ONEX_LANE": "l",
+            "ONEX_PARENT_LANE": "orchestrator-x",
+            "ONEX_LANE_HOST": "h202",
+        },
+    )
+    (rec,) = _log_lines(env)
+    assert rec["parent"] == "orchestrator-x"
+    assert rec["host"] == "h202"
+
+
+@pytest.mark.unit
+def test_record_parent_host_unset_uses_short_hostname(env: dict[str, str]) -> None:
+    _gh(env, "pr", "list", extra={"ONEX_LANE": "l"})
+    (rec,) = _log_lines(env)
+    assert rec["parent"] == ""
+    # bash sets HOSTNAME from gethostname(); the shim cuts the domain, no fork.
+    assert rec["host"] == socket.gethostname().split(".")[0]
+    assert "." not in str(rec["host"])
+
+
+@pytest.mark.unit
+def test_record_parent_host_in_routed_line(env: dict[str, str]) -> None:
+    _gh(
+        env,
+        "pr",
+        "list",
+        extra={
+            "ONEX_LANE": "l",
+            "ONEX_PARENT_LANE": "p ghp_abc",
+            "ONEX_LANE_HOST": "h1",
+            "ONEX_GH_ROUTER": "/nonexistent",
+            "ONEX_GH_READ_ROUTING": "1",
+        },
+    )
+    (rec,) = _log_lines(env)
+    assert "parent" in rec
+    assert rec["host"] == "h1"
+    assert rec["parent"] == "REDACTED"
+    assert rec["identity"] == "operator-fallback"
+
+
+def _script_lane(
+    env: dict[str, str], tmp_path: Path, argv: list[str]
+) -> dict[str, object]:
+    """Run the shim from a parent whose command line is ``argv``."""
+    runner = tmp_path / "runner_bin"
+    runner.mkdir(exist_ok=True)
+    e = dict(env)
+    e.pop("CLAUDE_CODE_SESSION_ID", None)
+    # exec the shim under a parent process whose args are argv: the parent
+    # is a child shell started with those args, calling gh as a non-exec child.
+    subprocess.run(
+        argv,
+        cwd=env["REPO"],
+        env=e,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    return _log_lines(env)[-1]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("interp", "script_name"),
+    [("bash", "poll_prs.sh"), ("sh", "tick.sh"), ("python3", "sweep.py")],
+)
+def test_record_script_lane_names_the_script(
+    env: dict[str, str], tmp_path: Path, interp: str, script_name: str
+) -> None:
+    script = tmp_path / script_name
+    body = (
+        'import subprocess; subprocess.run(["gh","pr","list"])\n'
+        if script_name.endswith(".py")
+        else "gh pr list\nexit 0\n"
+    )
+    script.write_text(body)
+    rec = _script_lane(
+        env, tmp_path, [interp, "-u" if interp == "python3" else "-e", str(script)]
+    )
+    assert rec["lane"] == f"script:{script_name}"
+    assert rec["lane_source"] == "script"
+
+
+@pytest.mark.unit
+def test_record_script_lane_not_taken_without_script_word(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    rec = _script_lane(
+        env,
+        tmp_path,
+        ["bash", "-c", "gh pr list; true"],
+    )
+    assert rec["lane_source"] == "parent"
+    assert str(rec["lane"]).startswith("parent:")
+
+
+@pytest.mark.unit
+def test_record_script_lane_not_taken_for_a_later_py_argument(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """``python -c <code> x.py``: only the first non-option word can be the script, so a later
+    .py word is an argument (the same shape as ``python -m pytest tests/x.py``)."""
+    rec = _script_lane(
+        env,
+        tmp_path,
+        [
+            "python3",
+            "-c",
+            "import subprocess; subprocess.run(['gh','pr','list'])",
+            "arg.py",
+        ],
+    )
+    assert rec["lane_source"] == "parent"
+    assert str(rec["lane"]).startswith("parent:")
+
+
+@pytest.mark.unit
+def test_record_script_lane_loses_to_session(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    script = tmp_path / "x.sh"
+    script.write_text("gh pr list\nexit 0\n")
+    e = dict(env)
+    e["CLAUDE_CODE_SESSION_ID"] = "sess-9"
+    subprocess.run(
+        ["bash", "-e", str(script)], cwd=env["REPO"], env=e, check=False, timeout=30
+    )
+    rec = _log_lines(env)[-1]
+    assert rec["lane_source"] == "session"
 
 
 @pytest.mark.unit
