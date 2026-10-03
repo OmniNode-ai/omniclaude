@@ -248,3 +248,191 @@ def test_receiptless_item_missing_a_disclosed_skip_condition_still_fails(
     assert not (
         tmp_path / "state" / "evidence" / "OMN-9999" / "dod_report.json"
     ).exists()
+
+
+# OMN-17427: an item's verdict is its NEWEST receipt by the supersede chain, not
+# the sum of every receipt on disk. The two items below are the real
+# OMN-17427 items whose chains broke the DoD Evidence Check on every omniclaude
+# PR citing the ticket: a base PASS, then ``test_passes.supersede.3249.yaml``
+# (FAIL, minted by a runner with no GH_TOKEN, so the check never ran), then
+# ``test_passes.supersede.3249.0002.yaml`` (PASS, the check run for real).
+# Both supersede records declare ``supersedes:`` the BASE file, never each
+# other, so the order has to come from the filename suffix, which is what
+# omnibase_core validator_receipt_supersession.resolve_supersession sorts on
+# (``_sequence_key``, validator_receipt_supersession.py:186-202, applied at
+# :404-408; the last record wins, :414-424 and :307).
+
+_REAL_ITEMS = {
+    "dod-market3198-local-chain-f2408969": {
+        "base_commit": "f2408969e8f1e3e49c40e439e0176f9f0008e543",
+        "passed_line": "73 passed, 1 skipped in 4.07s",
+    },
+    "dod-market3199-pin-consumer-8360c1ad": {
+        "base_commit": "8360c1ad88b5998ea7c09150b81fee04a8ca8ab6",
+        "passed_line": "7 passed in 0.48s",
+    },
+}
+_FAIL_COMMIT = "917c980d422febb6558475acb3cc9100777244ca"
+_GH_TOKEN_FAIL = (
+    "gh: To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN "
+    "environment variable."
+)
+
+
+def _supersede_record(
+    item_id: str,
+    *,
+    status: str,
+    commit_sha: str,
+    created_at: str,
+    stdout: str,
+    exit_code: int,
+) -> str:
+    base = f"drift/dod_receipts/OMN-9999/{item_id}/test_passes.yaml"
+    # Same layout the OCC writers emit: top-level keys, then an indented
+    # ``replacement:`` block whose own ``status`` is the record's verdict.
+    return "\n".join(
+        [
+            "---",
+            "schema_version: 1.0.0",
+            "ticket_id: OMN-9999",
+            f"evidence_item_id: {item_id}",
+            "check_type: test_passes",
+            f"supersedes: {base}",
+            f"created_at: '{created_at}'",
+            "replacement:",
+            "  schema_version: 1.0.0",
+            "  ticket_id: OMN-9999",
+            f"  evidence_item_id: {item_id}",
+            "  check_type: test_passes",
+            f"  status: {status}",
+            f"  commit_sha: {commit_sha}",
+            f"  exit_code: {exit_code}",
+            "  pr_number: 3249",
+            "  probe_stdout: |-",
+            f"    {stdout}",
+            "tombstone: false",
+            "",
+        ]
+    )
+
+
+def _write_real_chain(occ_root: Path, item_id: str, *, order: tuple[str, str]) -> None:
+    """Lay down base PASS + the real 3249 / 3249.0002 records for one item.
+
+    ``order`` is the verdicts of ``.3249`` then ``.3249.0002``.
+    """
+    facts = _REAL_ITEMS[item_id]
+    _write_occ_evidence(occ_root, receipt_id=item_id)
+    receipt_dir = occ_root / "drift" / "dod_receipts" / "OMN-9999" / item_id
+    (receipt_dir / "command.yaml").rename(receipt_dir / "test_passes.yaml")
+    records = {
+        "FAIL": {
+            "status": "FAIL",
+            "commit_sha": _FAIL_COMMIT,
+            "created_at": "2026-10-02T16:50:02Z",
+            "stdout": _GH_TOKEN_FAIL,
+            "exit_code": 4,
+        },
+        "PASS": {
+            "status": "PASS",
+            "commit_sha": facts["base_commit"],
+            "created_at": "2026-10-02T20:45:00Z",
+            "stdout": facts["passed_line"],
+            "exit_code": 0,
+        },
+    }
+    first, second = order
+    (receipt_dir / "test_passes.supersede.3249.yaml").write_text(
+        _supersede_record(item_id, **records[first])
+    )
+    (receipt_dir / "test_passes.supersede.3249.0002.yaml").write_text(
+        _supersede_record(item_id, **records[second])
+    )
+
+
+@pytest.mark.parametrize("item_id", sorted(_REAL_ITEMS))
+def test_newest_supersede_pass_clears_an_earlier_superseded_fail(
+    tmp_path: Path, item_id: str
+) -> None:
+    occ_root = tmp_path / "onex_change_control"
+    _write_real_chain(occ_root, item_id, order=("FAIL", "PASS"))
+
+    result = _run_materializer(tmp_path, occ_root)
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "state" / "evidence" / "OMN-9999" / "dod_report.json").exists()
+
+
+@pytest.mark.parametrize("item_id", sorted(_REAL_ITEMS))
+def test_newest_supersede_fail_stands_over_an_earlier_pass(
+    tmp_path: Path, item_id: str
+) -> None:
+    occ_root = tmp_path / "onex_change_control"
+    _write_real_chain(occ_root, item_id, order=("PASS", "FAIL"))
+
+    result = _run_materializer(tmp_path, occ_root)
+
+    assert result.returncode == 1, (result.stdout, result.stderr)
+    assert "not PASS" in result.stderr
+    assert "test_passes.supersede.3249.0002.yaml" in result.stderr
+    assert not (
+        tmp_path / "state" / "evidence" / "OMN-9999" / "dod_report.json"
+    ).exists()
+
+
+def test_supersede_order_is_the_suffix_not_the_directory_listing(
+    tmp_path: Path,
+) -> None:
+    # OCC orders suffixes as dotted-numeric tuples: ``3249.0002`` follows
+    # ``3249``, and ``10`` follows ``9`` (numeric, not lexical). The listing
+    # order of the files on disk carries no meaning.
+    item_id = "dod-market3198-local-chain-f2408969"
+    occ_root = tmp_path / "onex_change_control"
+    _write_real_chain(occ_root, item_id, order=("FAIL", "PASS"))
+    receipt_dir = occ_root / "drift" / "dod_receipts" / "OMN-9999" / item_id
+    facts = _REAL_ITEMS[item_id]
+    for suffix, status, commit in (
+        ("9", "PASS", facts["base_commit"]),
+        ("10", "FAIL", _FAIL_COMMIT),
+    ):
+        (receipt_dir / f"test_passes.supersede.{suffix}.yaml").write_text(
+            _supersede_record(
+                item_id,
+                status=status,
+                commit_sha=commit,
+                created_at="2026-10-02T21:00:00Z",
+                stdout="x",
+                exit_code=0 if status == "PASS" else 1,
+            )
+        )
+
+    result = _run_materializer(tmp_path, occ_root)
+
+    # Sequence order: 9 < 10 < 3249 < 3249.0002 -> the 3249.0002 PASS wins.
+    assert result.returncode == 0, result.stderr
+
+
+def test_unsuperseded_fail_still_fails_beside_a_passing_sibling_key(
+    tmp_path: Path,
+) -> None:
+    # No supersede chain: today's rule holds (every receipt file must be PASS).
+    occ_root = tmp_path / "onex_change_control"
+    _write_occ_evidence(occ_root)
+    receipt_dir = occ_root / "drift" / "dod_receipts" / "OMN-9999" / "dod-ci-proof"
+    (receipt_dir / "test_passes.yaml").write_text(
+        "\n".join(
+            [
+                "---",
+                "ticket_id: OMN-9999",
+                "evidence_item_id: dod-ci-proof",
+                "status: FAIL",
+                "",
+            ]
+        )
+    )
+
+    result = _run_materializer(tmp_path, occ_root)
+
+    assert result.returncode == 1
+    assert "test_passes.yaml" in result.stderr
