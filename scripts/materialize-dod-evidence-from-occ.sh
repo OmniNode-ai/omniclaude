@@ -165,8 +165,74 @@ def receipt_has_pass(text: str) -> bool:
     return bool(has_top_level_pass or has_supersession_pass)
 
 
+# A receipt key is (item directory, check_type): ``<check_type>.yaml`` is its
+# base file and ``<check_type>.supersede.<suffix>.yaml`` are its append-only
+# correction records. The key's verdict is its NEWEST record, ordered the way
+# omnibase_core resolve_supersession orders it (validator_receipt_supersession.py
+# at omnibase_core c1ffbe2a8):
+# the suffix is a dotted-numeric sequence compared as a tuple (_sequence_key,
+# :186-202, sorted at :404-408), the highest wins (:414-424, :307), and the base
+# file is not read once a chain exists (:303-305). Records declare
+# ``supersedes:`` the BASE file, not each other, so that pointer carries no order.
+# A record whose suffix is not dotted-numeric never enters the order (:199-202);
+# it stays under the pointer rule below. No PR context is available here, so only
+# the untargeted tier applies (:425-426). OCC's same-observation guard on a PASS
+# over a FAIL (_guarded_winner, :277-339) is not repeated: OCC's receipt gate owns it.
+SUPERSEDE_NAME_RE = re.compile(r"^(?P<check>.+?)\.supersede\.(?P<suffix>[^/]+)\.yaml$")
+
+
+def sequence_key(suffix: str) -> tuple[int, ...] | None:
+    parts = suffix.split(".")
+    if not all(part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)
+
+
+def replacement_is_pass(text: str) -> bool:
+    """True when the record's ``replacement:`` block carries ``status: PASS``."""
+    in_block = False
+    child_indent: str | None = None
+    for line in text.splitlines():
+        if not in_block:
+            in_block = line.rstrip() == "replacement:"
+            continue
+        if not line.strip():
+            continue
+        if not line.startswith(" "):
+            return False
+        if child_indent is None:
+            child_indent = line[: len(line) - len(line.lstrip(" "))]
+        match = re.match(
+            rf"{child_indent}[\"']?status[\"']?:\s*[\"']?([A-Za-z]+)[\"']?\s*$", line
+        )
+        if match:
+            return match.group(1) == "PASS"
+    return False
+
+
+chains: dict[tuple[Path, str], list[tuple[tuple[int, ...], Path]]] = {}
+for path in receipt_paths:
+    named = SUPERSEDE_NAME_RE.match(path.name)
+    if named is None:
+        continue
+    sequence = sequence_key(named.group("suffix"))
+    if sequence is not None:
+        chains.setdefault((path.parent, named.group("check")), []).append(
+            (sequence, path)
+        )
+
+chain_winners: set[Path] = set()
+chain_superseded: set[Path] = set()
+for (item_dir, check_type), records in chains.items():
+    records.sort(key=lambda record: record[0])
+    chain_winners.add(records[-1][1])
+    chain_superseded.update(path for _seq, path in records[:-1])
+    chain_superseded.add(item_dir / f"{check_type}.yaml")
+
 superseded_paths: set[str] = set()
 for path in receipt_paths:
+    if path in chain_winners or path in chain_superseded:
+        continue
     text = path.read_text()
     if not receipt_has_pass(text):
         continue
@@ -176,11 +242,14 @@ for path in receipt_paths:
 
 failed_paths: list[str] = []
 for path in receipt_paths:
+    if path in chain_superseded:
+        continue
     text = path.read_text()
     receipt_relpath = path.relative_to(occ_root).as_posix()
     if receipt_relpath in superseded_paths:
         continue
-    if not receipt_has_pass(text):
+    passed = replacement_is_pass(text) if path in chain_winners else receipt_has_pass(text)
+    if not passed:
         failed_paths.append(str(path))
 
 if failed_paths:
