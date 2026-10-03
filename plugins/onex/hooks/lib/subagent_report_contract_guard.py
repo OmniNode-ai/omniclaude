@@ -40,15 +40,18 @@ Contract, as implemented
 ------------------------
 PASS requires one of:
   - a schema-bound return (the whole message parses as a JSON object or
-    array), or
+    array, including a final ``StructuredOutput`` tool input), or
+  - a single-line ``machine_value_return`` of ticket/SHA tokens with
+    optional state words and ISO timestamps, or
   - >= 2 distinct evidence classes cited, or
   - >= 1 evidence class AND a report of at least
     ``MIN_REPORT_CHARS`` characters.
 
 Evidence classes are the concrete citations the report contract asks
 for: ticket ids, PR/issue numbers or GitHub URLs, file paths, command or
-fenced-output blocks, explicit verdict tokens, and commit SHAs. A
-bare-completion phrase ("Done.", "Task complete.", ...) is RED
+fenced-output blocks (including exit-status citations), explicit verdict
+tokens, commit SHAs, ``observation_time`` readings, and markdown ``table``
+rows. A bare-completion phrase ("Done.", "Task complete.", ...) is RED
 unconditionally — no length or evidence can rescue it, because that
 exact shape is the clobber.
 
@@ -140,13 +143,24 @@ _HOOK_ECHO_MARKERS = (
 )
 
 # A tool's own one-line result, returned verbatim: ``REFUSED <exit> ...`` /
-# ``RETRY <exit> ...`` or ``OK <ROW-TYPE> <iso timestamp> ...``. This is the
+# ``RETRY <exit> ...``, ``OK <ROW-TYPE> <iso timestamp> ...``, or
+# ``CITE-AS: <ROW-TYPE> <iso timestamp> ...``. This is the
 # return the ledger-write / ledger-msg skills mandate for their forked
 # subagent. It is a verdict and command output at once, so it counts as both
 # classes; without it the guard blocked every refusal line that carried no
 # path or ticket, and the forced re-emit replaced the machine-readable line
 # the caller parses with prose (OMN-18946, 40 of 57 refusal lines on h202).
-_RESULT_LINE = r"(?:^(?:REFUSED|RETRY) \d+ \S)|(?:^OK [A-Z][A-Z-]+ \d{4}-\d{2}-\d{2}T)"
+_RESULT_LINE = (
+    r"(?:^(?:REFUSED|RETRY) \d+ \S)"
+    r"|(?:^(?:OK|CITE-AS:) [A-Z][A-Z-]+ \d{4}-\d{2}-\d{2}T)"
+)
+
+_MACHINE_ID = re.compile(r"(?:OMN-\d+|(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{7,40})")
+_MACHINE_TOKEN = re.compile(
+    _MACHINE_ID.pattern + r"|(?:OPEN|MERGED|CLOSED|DRAFT|APPROVED)"
+    r"|(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?"
+    r"(?:Z|[+-]\d{2}:\d{2})?)"
+)
 
 # Evidence classes the report contract asks for. Order is stable so the
 # reason string is deterministic.
@@ -167,7 +181,11 @@ _EVIDENCE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     (
         "command_or_output",
-        re.compile(r"(?:```)|(?:^\s*\$\s+\S)|(?:^\s*>\s+\S)|" + _RESULT_LINE, re.M),
+        re.compile(
+            r"(?:```)|(?:^\s*\$\s+\S)|(?:^\s*>\s+\S)|"
+            r"(?i:\bexit(?:ed|s)?(?:\s+(?:code|status))?\s+\d+\b)|" + _RESULT_LINE,
+            re.M,
+        ),
     ),
     (
         "verdict",
@@ -180,6 +198,14 @@ _EVIDENCE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # 7-40 hex chars with at least one digit -- keeps ordinary words
     # ("deadbeef" aside) from masquerading as a commit SHA.
     ("commit_sha", re.compile(r"\b(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b")),
+    (
+        "observation_time",
+        re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b|\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}"),
+    ),
+    (
+        "table",
+        re.compile(r"^[ \t]*\|.+\|[ \t]*\r?\n[ \t]*\|.+\|[ \t]*\r?$", re.M),
+    ),
 )
 
 
@@ -236,6 +262,19 @@ def _evidence_classes(message: str) -> tuple[str, ...]:
     )
 
 
+def _is_machine_value_return(normalized: str) -> bool:
+    """Recognize a whole, bounded line of machine values with a ticket or SHA."""
+
+    if len(normalized) > 400 or "\n" in normalized or "\r" in normalized:
+        return False
+    tokens = normalized.split()
+    return (
+        bool(tokens)
+        and all(_MACHINE_TOKEN.fullmatch(token) for token in tokens)
+        and any(_MACHINE_ID.fullmatch(token) for token in tokens)
+    )
+
+
 def _looks_like_hook_echo(message: str) -> bool:
     lowered = message.lower()
     return any(marker in lowered for marker in _HOOK_ECHO_MARKERS)
@@ -278,6 +317,14 @@ def classify_final_report(message: str) -> ModelReportContractResult:
         )
 
     classes = _evidence_classes(message)
+    if _is_machine_value_return(normalized):
+        return ModelReportContractResult(
+            verdict=EnumReportContractVerdict.PASSED,
+            reason="machine_value_return",
+            evidence_classes=classes,
+            message_chars=len(normalized),
+            blocking=False,
+        )
     if len(classes) >= 2 or (classes and len(normalized) >= MIN_REPORT_CHARS):
         return ModelReportContractResult(
             verdict=EnumReportContractVerdict.PASSED,

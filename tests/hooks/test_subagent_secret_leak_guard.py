@@ -74,6 +74,63 @@ class TestScanStopEventCatchesRealLeakShapes:
         assert result.verdict is EnumSecretGuardVerdict.BLOCK
         assert result.redacted_count >= 1
 
+    @pytest.mark.parametrize("direct_field", [False, True])
+    def test_structured_output_secret_is_blocked(self, tmp_path, direct_field) -> None:
+        entries = [
+            {
+                "type": "user",
+                "message": {"role": "user", "content": "Return the report."},
+            },
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": "Now compute date drift and the new snapshot.",
+                },
+            },
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_x",
+                            "name": "StructuredOutput",
+                            "input": {
+                                "detail": f"Verified working: {_SYNTHETIC_GOOGLE_KEY}"
+                            },
+                        }
+                    ],
+                },
+            },
+            {
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_x",
+                            "content": "OK",
+                        }
+                    ],
+                },
+            },
+        ]
+        path = tmp_path / "agent.jsonl"
+        path.write_text(
+            "\n".join(json.dumps(entry) for entry in entries), encoding="utf-8"
+        )
+        event = {"agent_transcript_path": str(path)}
+        if direct_field:
+            event["last_assistant_message"] = "Structured output provided successfully"
+        result = scan_stop_event(event)
+        assert result.verdict is EnumSecretGuardVerdict.BLOCK
+        assert result.reason == "secret_pattern_matched"
+        assert result.redacted_count >= 1
+        assert _SYNTHETIC_GOOGLE_KEY not in json.dumps(_hook_output(result))
+
     def test_clean_report_is_allowed(self) -> None:
         """A report that describes the finding without quoting the value passes."""
         event = {
@@ -97,6 +154,46 @@ class TestScanStopEventCatchesRealLeakShapes:
         result = scan_stop_event({})
         assert result.verdict is EnumSecretGuardVerdict.ALLOW
         assert result.reason == "no_message_extracted"
+
+
+class TestLedgerClaimFinalMessage:
+    """Ledger acknowledgements allow masked claims and block raw secrets."""
+
+    def test_masked_claim_is_allowed(self) -> None:
+        event = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "OK CLAIM 2026-10-02T09:40:10Z lane=drainer-restart-0c2f "
+                        "ticket=OMN-20356 claim-token=***REDACTED*** line=26301"
+                    ),
+                }
+            ]
+        }
+        result = scan_stop_event(event)
+        assert result.verdict is EnumSecretGuardVerdict.ALLOW
+        assert result.redacted_count == 0
+        assert _hook_output(result)["hookSpecificOutput"]["decision"] == "allow"
+
+    def test_unmasked_claim_is_blocked(self) -> None:
+        event = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "OK CLAIM 2026-10-02T09:40:10Z lane=drainer-restart-0c2f "
+                        "ticket=OMN-20356 claim-token=LCT1-4137128-4064 line=26301"
+                    ),
+                }
+            ]
+        }
+        result = scan_stop_event(event)
+        assert result.verdict is EnumSecretGuardVerdict.BLOCK
+        assert result.redacted_count >= 1
+        output = _hook_output(result)
+        assert output["hookSpecificOutput"]["decision"] == "block"
+        assert "LCT1-4137128-4064" not in json.dumps(output)
 
 
 class TestFailSafePosture:
