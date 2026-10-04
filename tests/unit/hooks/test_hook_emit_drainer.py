@@ -696,7 +696,7 @@ def test_drainer_run_skips_backoff_after_dead_letter_and_reports_refused_classes
         journal.append(jdir, event_type=event_type, payload={}, correlation_id=None)
     emitter = RefusingEmitter("X")
     monkeypatch.setattr(emitter, "close", lambda: None, raising=False)
-    monkeypatch.setattr(drainer, "_Emitter", lambda: emitter)
+    monkeypatch.setattr(drainer, "_Emitter", lambda **_kwargs: emitter)
     monkeypatch.setattr(drainer, "apply_declared_lane", lambda: None)
     monkeypatch.setattr(drainer, "migrate_legacy_journal", lambda _: (0, 0))
     monkeypatch.setattr(drainer, "publishable_event_types", lambda: ("X", "ok"))
@@ -1025,7 +1025,7 @@ def _reload_harness(
     journal.append(jdir, event_type="X", payload={}, correlation_id=None)
     emitter = FakeEmitter(fail_after=0)  # the record stays queued: nothing to lose
     monkeypatch.setattr(emitter, "close", lambda: None, raising=False)
-    monkeypatch.setattr(drainer, "_Emitter", lambda: emitter)
+    monkeypatch.setattr(drainer, "_Emitter", lambda **_kwargs: emitter)
     monkeypatch.setattr(drainer, "apply_declared_lane", lambda: None)
     monkeypatch.setattr(drainer, "migrate_legacy_journal", lambda _: (0, 0))
     monkeypatch.setattr(drainer, "publishable_event_types", lambda: ("X",))

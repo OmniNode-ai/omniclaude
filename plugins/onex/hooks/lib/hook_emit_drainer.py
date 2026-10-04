@@ -377,10 +377,16 @@ class _Emitter:
     ``--help`` or a misconfigured start pay the 30s cost for nothing.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        on_unpublishable: Callable[[journal.JournalRecord, str], object] | None = None,
+    ) -> None:
         self._handler: Any | None = None
         self._request_cls: Any | None = None
         self._bus: hook_emit_bus.PersistentBus | None = None
+        # OMN-20535: told about each record acked as unpublishable, so the
+        # loss is written down with its row id rather than only logged.
+        self._on_unpublishable = on_unpublishable
 
     def _load(self) -> bool:
         if self._handler is not None:
@@ -484,6 +490,8 @@ class _Emitter:
                 record.event_type,
                 exc,
             )
+            if self._on_unpublishable is not None:
+                self._on_unpublishable(record, f"unpublishable request: {exc}")
             return True
         try:
             result = self._handler.handle(request)
@@ -640,6 +648,13 @@ def migrate_legacy_journal(journal_dir: Path) -> tuple[int, int]:
             quarantine.mkdir(parents=True, exist_ok=True)
             entry.path.replace(target)
             quarantined += 1
+            journal.record_loss(
+                journal_dir,
+                disposition="dead-lettered",
+                record=entry.record,
+                journal_file=target.name,
+                detail=f"unclassified legacy topic {legacy_topic}",
+            )
             logger.error(
                 "quarantined unclassified legacy journal record %s (%s)",
                 entry.record.event_id,
@@ -764,6 +779,13 @@ def quarantine_record(
         # losing it.
         logger.error("cannot quarantine journal record %s: %s", entry.path, exc)
         return None
+    journal.record_loss(
+        journal_dir,
+        disposition="dead-lettered",
+        record=entry.record,
+        journal_file=target.name,
+        detail=f"{reason_kind}: {failures} consecutive publish failures at the head",
+    )
     logger.warning(
         "dead-lettered journal record %s (%s) after %d consecutive failures; "
         "it is MOVED, not deleted -- provision the grant and move it back to "
@@ -969,7 +991,17 @@ def run(
 
     sources = watched_sources()
     started_with = fingerprint(sources)
-    emitter = _Emitter()
+
+    def _record_unpublishable(record: journal.JournalRecord, why: str) -> None:
+        journal.record_loss(
+            journal_dir,
+            disposition="dropped-unpublishable",
+            record=record,
+            journal_file="",
+            detail=why,
+        )
+
+    emitter = _Emitter(on_unpublishable=_record_unpublishable)
     migrated, quarantined = migrate_legacy_journal(journal_dir)
     if migrated or quarantined:
         logger.info(

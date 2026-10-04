@@ -64,6 +64,7 @@ import errno
 import fcntl
 import json
 import os
+import socket
 import time
 import uuid
 from dataclasses import dataclass
@@ -72,6 +73,8 @@ from pathlib import Path
 
 __all__ = [
     "DEFAULT_LOCK_WAIT_S",
+    "LOSS_LOG_ENV",
+    "LOSS_LOG_FILENAME",
     "AppendOutcome",
     "JournalEntry",
     "JournalLockTimeout",
@@ -84,7 +87,19 @@ __all__ = [
     "default_lock_path",
     "enforce_bound",
     "list_pending",
+    "loss_log_path",
+    "record_loss",
 ]
+
+# OMN-20535 AC2: every journal record the drainer does not publish -- evicted over
+# the bound, acked as unpublishable, or moved to the dead-letter -- is one line of
+# this file beside the journal directory, carrying the work-ledger ``row_id`` when
+# the record is a ``work.ledger.*`` event. The work-ledger parity check reads it to
+# classify a row missing from the database as lost in the journal rather than
+# unexplained. ``ONEX_HOOK_EMIT_LOSS_LOG`` overrides the path.
+LOSS_LOG_FILENAME = "hook_emit_journal_losses.jsonl"
+LOSS_LOG_ENV = "ONEX_HOOK_EMIT_LOSS_LOG"
+_LEDGER_EVENT_PREFIX = "work.ledger."
 
 # Bound chosen so a fully-stalled drainer holds roughly a day of the observed
 # peak rate (2,407 events/hr) without unbounded disk growth. On overflow the
@@ -279,6 +294,70 @@ def append(
     return AppendOutcome(path=target)
 
 
+def loss_log_path(journal_dir: Path | str) -> Path:
+    """Where the loss lines go: the override, else beside the journal directory."""
+    override = os.environ.get(LOSS_LOG_ENV)
+    if override:
+        return Path(override)
+    return Path(journal_dir).parent / LOSS_LOG_FILENAME
+
+
+def record_loss(
+    journal_dir: Path | str,
+    *,
+    disposition: str,
+    record: JournalRecord | None,
+    journal_file: str,
+    detail: str = "",
+) -> bool:
+    """Append one loss line. Returns False when it could not be written; never raises.
+
+    ``record`` is None when the evicted file could not be read; the line still
+    names the file, so the loss is counted even when its row id is unknown.
+    """
+    row_id: object = None
+    if record is not None and record.event_type.startswith(_LEDGER_EVENT_PREFIX):
+        candidate = record.payload.get("row_id")
+        row_id = candidate if isinstance(candidate, str) and candidate else None
+    line = {
+        "ts": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "host": socket.gethostname().split(".")[0],
+        "disposition": disposition,
+        "journal_file": journal_file,
+        "event_id": None if record is None else record.event_id,
+        "event_type": None if record is None else record.event_type,
+        "correlation_id": None if record is None else record.correlation_id,
+        "row_id": row_id,
+        "detail": detail,
+    }
+    path = loss_log_path(journal_dir)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(line, sort_keys=True) + "\n")
+    except OSError:
+        return False
+    return True
+
+
+def _record_eviction(journal_dir: Path, name: str) -> None:
+    try:
+        record: JournalRecord | None = JournalRecord.from_json(
+            (journal_dir / name).read_text()
+        )
+        detail = "evicted oldest-first over the journal bound"
+    except (OSError, ValueError, KeyError) as exc:
+        record = None
+        detail = f"evicted over the journal bound; record unreadable: {exc}"
+    record_loss(
+        journal_dir,
+        disposition="dropped-over-bound",
+        record=record,
+        journal_file=name,
+        detail=detail,
+    )
+
+
 def _sorted_record_names(journal_dir: Path) -> list[str]:
     return sorted(
         e.name
@@ -309,6 +388,9 @@ def enforce_bound(
 ) -> int:
     """Drop the oldest records beyond ``max_records``. Returns the drop count.
 
+    Each dropped record is first written to the loss log (:func:`record_loss`),
+    so a dropped work-ledger row is traceable by its row id (OMN-20535).
+
     Called by the drainer once per cycle, never on the hook path. Serialized
     under an exclusive lock whose wait is bounded by ``lock_wait_s``; a lock
     that stays busy raises :class:`JournalLockTimeout` rather than waiting.
@@ -331,6 +413,7 @@ def enforce_bound(
         names = _sorted_record_names(journal_dir)
         excess = len(names) - max_records
         for name in names[: max(excess, 0)]:
+            _record_eviction(journal_dir, name)
             try:
                 (journal_dir / name).unlink()
                 dropped += 1
