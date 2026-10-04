@@ -22,6 +22,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -469,6 +470,221 @@ def test_engine_follows_main_on_a_main_only_clone(reg: Registry) -> None:
     assert res.result == ccs.ADVANCED
     assert res.upstream == "origin/main"
     assert _head(clone) == target
+
+
+# --- the remote default branch (RULING 2026-10-04T10:11:35Z) --------------- #
+def _parked_on_main(
+    reg: Registry, name: str = "svc", *, local_dev: bool = True, set_head: bool = True
+) -> Path:
+    """A clone parked on ``main`` whose remote default branch is ``dev``.
+
+    The remote carries both branches; ``dev`` is then advanced on the remote so
+    there is something to fast-forward. ``set_head=False`` leaves the clone
+    with no ``refs/remotes/origin/HEAD`` symref.
+    """
+    clone = reg.make(name, branch="main")
+    seed = reg.seeds / "Acme" / name
+    _git("checkout", "--quiet", "-b", "dev", cwd=seed)
+    _git("push", "--quiet", "origin", "dev", cwd=seed)
+    _git("fetch", "--quiet", "origin", cwd=clone)
+    if local_dev:
+        _git("branch", "--track", "dev", "origin/dev", cwd=clone)
+    if set_head:
+        _git("remote", "set-head", "origin", "dev", cwd=clone)
+    else:
+        _git("remote", "set-head", "origin", "-d", cwd=clone)
+    reg.advance(name, branch="dev")
+    return clone
+
+
+def _head_branch(clone: Path) -> str:
+    return _git("symbolic-ref", "--short", "HEAD", cwd=clone)
+
+
+def _local_refs(clone: Path) -> str:
+    return _git("for-each-ref", "refs/heads", cwd=clone)
+
+
+def test_engine_returns_a_clean_clone_on_main_to_the_remote_default(
+    reg: Registry,
+) -> None:
+    clone = _parked_on_main(reg)
+    main_sha = _head(clone)
+    res = ccs.sync_clone(clone)
+    target = _git("rev-parse", "origin/dev", cwd=clone)
+    assert res.result == ccs.ADVANCED, res
+    assert (res.branch, res.switched_from) == ("dev", "main")
+    assert res.upstream == "origin/dev"
+    assert (res.before, res.after, res.target) == (main_sha, target, target)
+    assert _head_branch(clone) == "dev"
+    assert _head(clone) == target
+
+
+def test_engine_creates_the_default_branch_when_no_local_copy_exists(
+    reg: Registry,
+) -> None:
+    clone = _parked_on_main(reg, local_dev=False)
+    assert "dev" not in _local_refs(clone)
+    res = ccs.sync_clone(clone)
+    target = _git("rev-parse", "origin/dev", cwd=clone)
+    assert res.result == ccs.ADVANCED, res
+    assert res.switched_from == "main"
+    assert _head_branch(clone) == "dev"
+    assert _head(clone) == target
+    assert _git("config", "branch.dev.remote", cwd=clone) == "origin"
+    assert _git("config", "branch.dev.merge", cwd=clone) == "refs/heads/dev"
+
+
+def test_engine_refuses_the_switch_when_local_default_carries_commits(
+    reg: Registry,
+) -> None:
+    clone = _parked_on_main(reg)
+    _git("switch", "--quiet", "dev", cwd=clone)
+    (clone / "b.txt").write_text("unpushed\n")
+    _git("commit", "--quiet", "-am", "unpushed", cwd=clone)
+    _git("switch", "--quiet", "main", cwd=clone)
+    refs_before = _local_refs(clone)
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.REFUSED, res
+    reason = res.reason or ""
+    assert "main" in reason and "dev" in reason
+    assert "1 commit(s) origin/dev does not" in reason
+    assert res.switched_from is None
+    assert _head_branch(clone) == "main"
+    assert _local_refs(clone) == refs_before
+
+
+def test_engine_refuses_the_switch_over_tracked_changes(reg: Registry) -> None:
+    clone = _parked_on_main(reg)
+    (clone / "a.txt").write_text("dirt\n")
+    refs_before = _local_refs(clone)
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.REFUSED, res
+    assert "main" in (res.reason or "") and "dev" in (res.reason or "")
+    assert _head_branch(clone) == "main"
+    assert (clone / "a.txt").read_text() == "dirt\n"
+    assert _local_refs(clone) == refs_before
+
+
+def test_engine_never_switches_a_shared_commit_lock_tree(reg: Registry) -> None:
+    clone = _parked_on_main(reg)
+    lock = clone / ccs.SHARED_TREE_COMMIT_LOCK
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.touch()
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.REFUSED, res
+    assert "commit_lock" in (res.reason or "")
+    assert _head_branch(clone) == "main"
+
+
+def test_engine_refuses_the_switch_with_an_index_lock(reg: Registry) -> None:
+    clone = _parked_on_main(reg)
+    (clone / ".git" / "index.lock").touch()
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.REFUSED, res
+    assert "index.lock" in (res.reason or "")
+    assert _head_branch(clone) == "main"
+
+
+def test_engine_refuses_when_git_refuses_the_switch_over_an_untracked_file(
+    reg: Registry,
+) -> None:
+    clone = _parked_on_main(reg)
+    reg.advance("svc", path="new.txt", text="remote\n", branch="dev")
+    (clone / "new.txt").write_text("local untracked\n")
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.REFUSED, res
+    assert "new.txt" in (res.reason or "")
+    assert _head_branch(clone) == "main"
+    assert (clone / "new.txt").read_text() == "local untracked\n"
+
+
+def _install_switch_guard(
+    tmp: Path, monkeypatch: pytest.MonkeyPatch, *, half_apply: bool = False
+) -> None:
+    """A stand-in for the canonical-clone ``reference-transaction`` guard.
+
+    The real guard denies a ``HEAD`` symref move (a branch switch) unless the
+    sanctioned ``ONEX_CANONICAL_CONVERGE=1`` door is open. Git before 2.45 does
+    not run ``reference-transaction`` for a symref move at all, so a fixture
+    hook cannot refuse anything on such a host. This ``git`` shim on ``PATH``
+    refuses at the same seam instead -- ``git switch`` -- for every caller, the
+    engine and the test alike, which makes the plain ``git switch`` in the tests
+    a positive control.
+
+    ``half_apply`` reproduces OMN-18358: the guard checks the target tree out,
+    then refuses even through the door, leaving HEAD on the old branch.
+    """
+    real = shutil.which("git")
+    assert real
+    shim_dir = tmp / "switch-guard-bin"
+    shim_dir.mkdir()
+    shim = shim_dir / "git"
+    lines = [
+        "#!/bin/sh",
+        'sub=$1; [ "$1" = -C ] && sub=$3',
+        'if [ "$sub" = switch ]; then',
+    ]
+    if half_apply:
+        lines += [
+            '  last=; for a in "$@"; do last=$a; done',
+            f'  "{real}" -C "$2" checkout --quiet "$last" -- . 2>/dev/null',
+            '  echo "DENIED HEAD move" >&2; exit 1',
+        ]
+    else:
+        lines += [
+            '  [ "$ONEX_CANONICAL_CONVERGE" = 1 ] || { echo "DENIED HEAD move" >&2; exit 1; }'
+        ]
+    lines += ["fi", f'exec "{real}" "$@"', ""]
+    shim.write_text("\n".join(lines))
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{os.environ['PATH']}")
+
+
+def test_engine_opens_the_converge_door_for_the_switch_alone(
+    reg: Registry, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clone = _parked_on_main(reg)
+    _install_switch_guard(tmp_path, monkeypatch)
+    # Positive control: the guard really does refuse a plain switch.
+    with pytest.raises(subprocess.CalledProcessError) as denied:
+        _git("switch", "--quiet", "dev", cwd=clone)
+    assert "DENIED HEAD move" in denied.value.stderr
+    assert _head_branch(clone) == "main"
+
+    res = ccs.sync_clone(clone)
+    target = _git("rev-parse", "origin/dev", cwd=clone)
+    assert res.result == ccs.ADVANCED, res
+    assert res.switched_from == "main"
+    assert _head_branch(clone) == "dev"
+    assert _head(clone) == target
+    # The door was open for that one call only.
+    assert "ONEX_CANONICAL_CONVERGE" not in os.environ
+    with pytest.raises(subprocess.CalledProcessError):
+        _git("switch", "--quiet", "main", cwd=clone)
+
+
+def test_engine_reports_a_guard_refusal_that_left_the_tree_half_applied(
+    reg: Registry, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clone = _parked_on_main(reg)
+    _install_switch_guard(tmp_path, monkeypatch, half_apply=True)
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.FAILED, res
+    assert res.switched_from is None
+    assert "half-applied" in (res.reason or "")
+    assert _head_branch(clone) == "main"
+
+
+def test_engine_keeps_its_old_behaviour_without_a_remote_head_symref(
+    reg: Registry,
+) -> None:
+    clone = _parked_on_main(reg, set_head=False)
+    assert not _git("for-each-ref", "refs/remotes/origin/HEAD", cwd=clone)
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.UP_TO_DATE, res
+    assert res.switched_from is None
+    assert _head_branch(clone) == "main"
 
 
 def test_engine_carries_unrelated_dirt_in_a_shared_commit_lock_tree(
