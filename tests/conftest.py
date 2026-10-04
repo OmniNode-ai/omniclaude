@@ -1174,4 +1174,4 @@ def _no_real_operator_alarm(
         monkeypatch.delenv(name)
     monkeypatch.setenv("OMNICLAUDE_EMIT_SOCKET", str(scratch / "emit.sock"))
     monkeypatch.setenv("ONEX_LEDGER_PATH", str(scratch / "no-ledger.md"))
-    monkeypatch.setenv("ONEX_LEDGER_LOCK_SCRIPT", str(scratch / "no-ledger-lock.py"))
+    monkeypatch.setenv("ONEX_LEDGER_APPEND_TOOL", str(scratch / "no-ledger-append.py"))

@@ -465,8 +465,8 @@ def test_installer_renders_a_complete_plist(tmp_path: Path) -> None:
             str(tmp_path / "state"),
             "--ledger",
             str(ledger),
-            "--ledger-lock",
-            str(tmp_path / "lock.py"),
+            "--internal-home",
+            str(tmp_path / "omnibase_internal"),
         ],
         capture_output=True,
         text=True,
@@ -481,6 +481,10 @@ def test_installer_renders_a_complete_plist(tmp_path: Path) -> None:
     )
     assert lint.returncode == 0, lint.stdout + lint.stderr
     assert "--loop" in run.stdout and "<key>KeepAlive</key>" in run.stdout
+    # Cutover plan C1: the ALERT row is appended by onex-ledger under uv, not the lock script.
+    assert "<key>OMNIBASE_INTERNAL_HOME</key>" in run.stdout
+    assert f"<string>{tmp_path / 'omnibase_internal'}</string>" in run.stdout
+    assert "ONEX_LEDGER_LOCK_SCRIPT" not in run.stdout
 
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="renders the cron line on Linux")
