@@ -68,7 +68,7 @@ def run_script(
         **os.environ,
         "TMPDIR": str(world["scratch"]),
         "ONEX_LEDGER_PATH": str(ledger),
-        "ONEX_LEDGER_LOCK_SCRIPT": str(world["lock"]),
+        "ONEX_LEDGER_APPEND_TOOL": str(world["lock"]),
     }
     env.pop("OMNI_HOME", None)
     return subprocess.run(

@@ -10,15 +10,17 @@
 # switch in a working tree never changes what a running canary executes.
 #
 # Usage:
-#   bash scripts/install-hook-process-canary.sh --state-dir DIR [--ledger FILE] [--ledger-lock SCRIPT]
+#   bash scripts/install-hook-process-canary.sh --state-dir DIR [--ledger FILE] [--internal-home DIR]
 #   bash scripts/install-hook-process-canary.sh --state-dir DIR --status
 #   bash scripts/install-hook-process-canary.sh --state-dir DIR --uninstall
 #
 # --state-dir is required, no default: it holds the heartbeat, ALERT.json, the log
-# and the copied scripts (under DIR/repo-copy). --ledger and --ledger-lock name the
-# rolling ledger the ALERT row is appended to and the locked-append script that writes it (a host without one, such as a lab
-# host, omits both and relies on the operator notifier alone; the canary then
-# reports that channel as not delivered on every alarm rather than pretending).
+# and the copied scripts (under DIR/repo-copy). --ledger names the rolling ledger the
+# ALERT row is appended to, and --internal-home the omnibase_internal project whose
+# packaged onex-ledger appends it, run by uv (resolved here, at install time, because
+# launchd and cron have a restricted PATH). A host without a ledger, such as a lab host,
+# omits both and relies on the operator notifier alone; the canary then reports that
+# channel as not delivered on every alarm rather than pretending.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,13 +29,13 @@ LABEL="ai.omninode.hook-process-canary"
 ACTION=install
 STATE_DIR=""
 LEDGER=""
-LEDGER_LOCK=""
+INTERNAL_HOME=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --state-dir) STATE_DIR="${2:?--state-dir needs a value}"; shift 2 ;;
     --ledger) LEDGER="${2:?--ledger needs a value}"; shift 2 ;;
-    --ledger-lock) LEDGER_LOCK="${2:?--ledger-lock needs a value}"; shift 2 ;;
+    --internal-home) INTERNAL_HOME="${2:?--internal-home needs a value}"; shift 2 ;;
     --status) ACTION=status; shift ;;
     --uninstall) ACTION=uninstall; shift ;;
     --dry-run) ACTION=dry-run; shift ;;
@@ -62,6 +64,13 @@ resolve_python() {
   echo /usr/bin/python3
 }
 
+resolve_uv() {
+  local found
+  found="$(command -v uv || true)"
+  [[ -n "${found}" && -x "${found}" ]] || { echo "install-hook-process-canary: no uv on PATH (onex-ledger runs under uv)" >&2; exit 1; }
+  dirname "${found}"
+}
+
 copy_scripts() {
   mkdir -p "${COPY_ROOT}/scripts" "${COPY_ROOT}/plugins/onex/hooks/scripts" "${STATE_DIR}"
   for f in hook_process_canary.py hook_canary_notify.sh hook_canary_ledger_append.sh; do
@@ -74,18 +83,20 @@ copy_scripts() {
 }
 
 render_plist() {
-  local python="$1" lock="${LEDGER_LOCK:-${ONEX_LEDGER_LOCK_SCRIPT:-}}" ledger="${LEDGER:-${ONEX_LEDGER_PATH:-}}"
-  [[ -n "${lock}" ]] || { echo "install-hook-process-canary: set ONEX_LEDGER_LOCK_SCRIPT or --ledger-lock" >&2; exit 2; }
+  local python="$1" internal="${INTERNAL_HOME:-${OMNIBASE_INTERNAL_HOME:-}}" ledger="${LEDGER:-${ONEX_LEDGER_PATH:-}}" uv_dir
+  [[ -n "${internal}" ]] || { echo "install-hook-process-canary: set OMNIBASE_INTERNAL_HOME or --internal-home" >&2; exit 2; }
   [[ -n "${ledger}" ]] || { echo "install-hook-process-canary: set ONEX_LEDGER_PATH or --ledger" >&2; exit 2; }
+  uv_dir="$(resolve_uv)"
   sed -e "s|__PYTHON__|${python}|g" -e "s|__ROOT__|${COPY_ROOT}|g" -e "s|__STATE_DIR__|${STATE_DIR}|g" \
-      -e "s|__LEDGER_LOCK__|${lock}|g" -e "s|__LEDGER__|${ledger}|g" -e "s|__HOME__|${HOME}|g" \
+      -e "s|__INTERNAL_HOME__|${internal}|g" -e "s|__LEDGER__|${ledger}|g" -e "s|__HOME__|${HOME}|g" \
+      -e "s|__UV_DIR__|${uv_dir}|g" \
       "${REPO_ROOT}/scripts/launchd/${LABEL}.plist"
 }
 
 cron_line() {
   local python="$1"
   local env_prefix="ONEX_STATE_DIR=${STATE_DIR}"
-  [[ -n "${LEDGER}" ]] && env_prefix="${env_prefix} ONEX_LEDGER_PATH=${LEDGER} ONEX_LEDGER_LOCK_SCRIPT=${LEDGER_LOCK:?--ledger-lock is required with --ledger}"
+  [[ -n "${LEDGER}" ]] && env_prefix="${env_prefix} ONEX_LEDGER_PATH=${LEDGER} OMNIBASE_INTERNAL_HOME=${INTERNAL_HOME:?--internal-home is required with --ledger} PATH=$(resolve_uv):/usr/bin:/bin"
   echo "* * * * * ${env_prefix} timeout 50 ${python} ${COPY_ROOT}/scripts/hook_process_canary.py --once --state-dir ${STATE_DIR} >> ${STATE_DIR}/canary.log 2>&1 ${CRON_TAG}"
 }
 
