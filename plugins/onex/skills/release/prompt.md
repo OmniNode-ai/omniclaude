@@ -940,26 +940,34 @@ fi
 ```bash
 cd "${WORKTREE_PATH}"
 GITHUB_REPO="${GITHUB_ORG}/${repo}"
+# PR and CI state come from the PR watcher's state file, never from GitHub: the gh shim refuses
+# gh pr view and gh pr checks from lanes. PR_STATE_LOCAL is the omni plugin's
+# skills/merge-drain/scripts/pr_state_local.py; there is no default path.
+PR_STATE_LOCAL="${PR_STATE_LOCAL:?set PR_STATE_LOCAL to the omni plugin skills/merge-drain/scripts/pr_state_local.py}"
 
-# Idempotency: check if PR is already merged
-PR_STATE=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPO}" --json state --jq '.state')
+# Idempotency: the declared exact-head check, the one PR read the shim allows right before a mutation
+PR_STATE=$(ONEX_GH_EXACT_HEAD="${GITHUB_REPO}#${PR_NUMBER}" gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPO}" --json state | jq -r '.state')
 
 if [ "$PR_STATE" = "MERGED" ]; then
   echo "  PR already merged, skipping"
 else
-  # CI gate: one read, never a watch loop. Green proceeds to the merge below. Pending
-  # hands the PR to the landing lane (/omni:pr-handoff), which merges it on its own exact-head read:
-  # stop here and re-run this sub-step once the PR is MERGED (the idempotency check above skips it).
+  # CI gate: one read of the PR watcher's verdict at the PR's head, never a watch loop and never a
+  # GitHub read. GREEN proceeds to the merge below. PENDING, a verdict the watcher has not read, or a
+  # state file too stale to answer (exit 3) hands the PR to the landing lane (/omni:pr-handoff),
+  # which merges it on its own exact-head read: stop here and re-run this sub-step once the PR is
+  # MERGED (the idempotency check above skips it). RED fails.
   # Cross-reference: merge-sweep SKILL.md for merge readiness predicate
   CI_RC=0
-  gh pr checks "${PR_NUMBER}" --repo "${GITHUB_REPO}" --required >/dev/null || CI_RC=$?
-  if [ "$CI_RC" -eq 8 ]; then
-    echo "  CI pending on PR #${PR_NUMBER}: hand it to the landing lane, re-run after it merges"
-    exit 1  # FAIL with CI_PENDING
-  elif [ "$CI_RC" -ne 0 ]; then
-    echo "  ERROR: required checks failed on PR #${PR_NUMBER}"
-    exit 1  # FAIL with CI_FAILED
-  fi
+  CI_LINE=$(python3 "${PR_STATE_LOCAL}" --pr "${GITHUB_REPO}#${PR_NUMBER}") || CI_RC=$?
+  case "${CI_LINE}" in
+    *" ci=GREEN "*) ;;
+    *" ci=RED "*)
+      echo "  ERROR: required checks failed on PR #${PR_NUMBER}: ${CI_LINE}"
+      exit 1 ;;  # FAIL with CI_FAILED
+    *)
+      echo "  CI not green on PR #${PR_NUMBER} (rc=${CI_RC}: ${CI_LINE}): hand it to the landing lane, re-run after it merges"
+      exit 1 ;;  # FAIL with CI_PENDING
+  esac
 
   # Detect merge queue and enqueue via _lib/pr-safety/helpers.md.
   # Repos with merge queues require enqueue_to_merge_queue() — `gh pr merge --auto`
@@ -986,13 +994,13 @@ else
 
     echo "  Enqueued PR #${PR_NUMBER} into merge queue"
 
-    # Poll merge queue until PR is merged or fails (timeout: 30 min)
+    # Poll the PR watcher's state (a local file read, never GitHub) until the PR is merged (timeout: 30 min)
     MERGE_TIMEOUT=1800
     ELAPSED=0
     POLL_INTERVAL=30
     while [ "$ELAPSED" -lt "$MERGE_TIMEOUT" ]; do
-      CURRENT_STATE=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPO}" --json state --jq '.state')
-      if [ "$CURRENT_STATE" = "MERGED" ]; then
+      CURRENT_LINE=$(python3 "${PR_STATE_LOCAL}" --pr "${GITHUB_REPO}#${PR_NUMBER}" 2>/dev/null || true)
+      if [[ "${CURRENT_LINE}" == *" state=MERGED "* ]]; then
         echo "  PR merged via merge queue"
         break
       fi
@@ -1023,7 +1031,7 @@ re-run after it merges.
 (detected via `has_merge_queue()` from `_lib/pr-safety/helpers.md`), the release
 skill enqueues the PR via `enqueue_to_merge_queue()` instead of `gh pr merge --auto`
 (which only enables auto-merge but does NOT enqueue into merge queues). It then polls
-the PR state every 30 seconds until the queue completes the merge (timeout: 30 minutes).
+the PR watcher's state file every 30 seconds until the queue completes the merge (timeout: 30 minutes).
 If enqueue fails due to unresolved review conversations, it exits with an error
 directing the user to resolve threads. Repos without merge queues use
 the original direct `--squash --delete-branch` path.
@@ -1047,19 +1055,22 @@ that may not have merged yet.
 
 1. Determine the PR(s) for the current repo (`${repo}`) in this release run
    (from `state.pr_number`, or the repo-local PR list in the changelog).
-2. For each repo-local PR, verify `state == MERGED` via `gh pr view`:
+2. For each repo-local PR, verify `state == MERGED` with the declared exact-head check (the one
+   PR read the gh shim allows; `--jq` is not part of it, so `jq` reads the output):
    ```bash
-   PR_STATE=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_ORG}/${repo}" --json state --jq '.state')
+   PR_STATE=$(ONEX_GH_EXACT_HEAD="${GITHUB_ORG}/${repo}#${PR_NUMBER}" gh pr view "${PR_NUMBER}" --repo "${GITHUB_ORG}/${repo}" --json state | jq -r '.state')
    if [ "$PR_STATE" != "MERGED" ]; then
      echo "  ERROR: PR #${PR_NUMBER} in ${repo} is not merged (state=${PR_STATE}). Cannot tag."
      exit 1
    fi
    ```
-3. For each merged PR, verify the merge commit is an ancestor of this repo's current HEAD:
+3. For each merged PR, verify its squash commit is in this repo's current HEAD ancestry, read from
+   git (the shim does not allow `mergeCommit`, and the clone already holds the answer): the squash
+   commit's subject ends with `(#<n>)`.
    ```bash
-   MERGE_SHA=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_ORG}/${repo}" --json mergeCommit --jq '.mergeCommit.oid')
-   if ! git -C "${REPO_PATH}" merge-base --is-ancestor "${MERGE_SHA}" HEAD; then
-     echo "  ERROR: Merge commit ${MERGE_SHA} for PR #${PR_NUMBER} in ${repo} is not in HEAD ancestry. Cannot tag."
+   MERGE_SHA=$(git -C "${REPO_PATH}" log -1 --format=%H --grep="(#${PR_NUMBER})\$" HEAD)
+   if [ -z "${MERGE_SHA}" ]; then
+     echo "  ERROR: no commit for PR #${PR_NUMBER} in ${repo}'s HEAD ancestry. Cannot tag."
      exit 1
    fi
    ```
