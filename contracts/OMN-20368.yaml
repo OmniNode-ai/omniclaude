@@ -1,0 +1,28 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-20368
+title: "/onex:dod_verify names the execution audience its node requires"
+summary: >
+  OMN-20368 makes the /onex:dod_verify skill command carry the required
+  --execution-audience flag, introduced by PR 2542. The in-repo contract exists
+  because validate-pr-contracts reads contracts/ in this repository.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "The skill documents the execution audience flag"
+    command: "uv run pytest tests/skills/test_dod_verify_names_execution_audience.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-audience-tests-pass
+    description: >
+      The execution audience test suite passes against the skill files.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/skills/test_dod_verify_names_execution_audience.py -q"
