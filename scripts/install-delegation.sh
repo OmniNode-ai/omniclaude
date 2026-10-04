@@ -379,11 +379,14 @@ for container in (legacy, existing_overlay):
             continue
         backend_id = backend.get("backend_id")
         existing_endpoint = str(backend.get("endpoint_url") or "").strip()
-        if backend_id and existing_endpoint:
-            backends_by_id[str(backend_id)] = {
-                "backend_id": str(backend_id),
-                "endpoint_url": existing_endpoint,
-            }
+        if backend_id:
+            # Endpoint overlays also carry model bindings and backend-specific
+            # settings. Reinstallation must not discard those saved fields.
+            preserved = dict(backend)
+            preserved["backend_id"] = str(backend_id)
+            if existing_endpoint:
+                preserved["endpoint_url"] = existing_endpoint
+            backends_by_id[str(backend_id)] = preserved
 
 if endpoint_url:
     for backend in source.get("backends") or []:
@@ -391,10 +394,10 @@ if endpoint_url:
             continue
         backend_id = backend.get("backend_id")
         if backend_id and backend.get("tier") == "local":
-            backends_by_id[str(backend_id)] = {
-                "backend_id": str(backend_id),
-                "endpoint_url": endpoint_url,
-            }
+            preserved = backends_by_id.setdefault(
+                str(backend_id), {"backend_id": str(backend_id)}
+            )
+            preserved["endpoint_url"] = endpoint_url
 
 overlay = {"backends": list(backends_by_id.values())}
 overlay_path.parent.mkdir(parents=True, exist_ok=True)
