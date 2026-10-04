@@ -120,8 +120,10 @@ refactor, and needs operator sign-off.
      (the tool's `--base` defaults to dev); for a genuine promotion pass
      `--promotion`.
    - **Never arm blind.** Failure mode: arming auto-merge before a confirmed green
-     `gh pr checks` watch merges red or strands the PR unobserved (Operating Rule 3).
-     Alternative: run `gh pr checks <num> --watch` to terminal green, paste that
+     CI verdict merges red or strands the PR unobserved (Operating Rule 3).
+     Alternative: hand the PR to the landing lane (`/omni:pr-handoff`), which arms on
+     its own exact-head read, or read the PR watcher's verdict once
+     (`pr_state_local.py --pr <repo>#<n>`, never `gh pr checks --watch`), paste that
      output as evidence, then arm via the `enqueue_to_merge_queue()` /
      `arm_auto_merge()` helpers in `@_lib/pr-safety/helpers.md` (which select the
      correct queue method); re-run the scaffold tool with `--ci-watch-confirmed`.

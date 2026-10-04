@@ -947,10 +947,19 @@ PR_STATE=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPO}" --json state --jq '
 if [ "$PR_STATE" = "MERGED" ]; then
   echo "  PR already merged, skipping"
 else
-  # Wait for CI to pass before merging
+  # CI gate: one read, never a watch loop. Green proceeds to the merge below. Pending
+  # hands the PR to the landing lane (/omni:pr-handoff), which merges it on its own exact-head read:
+  # stop here and re-run this sub-step once the PR is MERGED (the idempotency check above skips it).
   # Cross-reference: merge-sweep SKILL.md for merge readiness predicate
-  echo "  Waiting for CI checks to pass..."
-  gh pr checks "${PR_NUMBER}" --repo "${GITHUB_REPO}" --watch --fail-fast
+  CI_RC=0
+  gh pr checks "${PR_NUMBER}" --repo "${GITHUB_REPO}" --required >/dev/null || CI_RC=$?
+  if [ "$CI_RC" -eq 8 ]; then
+    echo "  CI pending on PR #${PR_NUMBER}: hand it to the landing lane, re-run after it merges"
+    exit 1  # FAIL with CI_PENDING
+  elif [ "$CI_RC" -ne 0 ]; then
+    echo "  ERROR: required checks failed on PR #${PR_NUMBER}"
+    exit 1  # FAIL with CI_FAILED
+  fi
 
   # Detect merge queue and enqueue via _lib/pr-safety/helpers.md.
   # Repos with merge queues require enqueue_to_merge_queue() — `gh pr merge --auto`
@@ -1005,9 +1014,10 @@ else
 fi
 ```
 
-**IMPORTANT**: The merge step waits for CI. This is intentional -- we cannot tag a
-release commit that hasn't passed CI. The `--watch` flag on `gh pr checks` blocks
-until checks complete.
+**IMPORTANT**: The merge step requires green CI. This is intentional -- we cannot tag a
+release commit that hasn't passed CI. It reads CI once and never blocks on a watch loop
+a PR whose checks are still pending goes to the landing lane and the step is
+re-run after it merges.
 
 **Merge queue support**: When a repo has a merge queue enabled
 (detected via `has_merge_queue()` from `_lib/pr-safety/helpers.md`), the release
