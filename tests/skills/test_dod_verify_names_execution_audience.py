@@ -5,8 +5,8 @@
 ``node_dod_verify`` refuses with ``EXECUTION_AUDIENCE_REQUIRED`` unless the caller passes
 ``--execution-audience hosted|local_done_gate`` (omnimarket#3042). The skill shim listed
 only ``--contract-path`` and ``--dry-run``, so every lane that followed the skill's own
-command line was refused, and at least five lanes recorded the refusal as friction between
-2026-09-29 and 2026-10-02.
+command line was refused, and four FRICTION rows (2026-09-29T09:55:52Z, 2026-10-02T09:22:36Z,
+2026-10-02T11:36:33Z, 2026-10-02T15:28:09Z) record it.
 """
 
 from __future__ import annotations
