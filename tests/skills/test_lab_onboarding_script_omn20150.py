@@ -541,6 +541,14 @@ def _constant(name: str) -> int:
 
 BOOT_FREE_MEM_GB = _constant("BOOT_FREE_MEM_GB")
 BOOT_FREE_DISK_GB = _constant("BOOT_FREE_DISK_GB")
+M2_DISK_GB_DOCKER_PRESENT = _constant("M2_DISK_GB_DOCKER_PRESENT")
+
+# The figures OMN-20150 AC9 states for the moment the stack boots. Written out
+# rather than read from the script, because the whole point of AC2 is that the
+# criterion and the constant are one number: reading both from the same place
+# would pass however far apart they drift.
+AC9_BOOT_MEM_GB = 4
+AC9_BOOT_DISK_GB = 15
 
 
 def test_ample_resources_let_the_stack_boot() -> None:
@@ -584,6 +592,24 @@ def test_the_failure_message_is_built_only_from_the_failing_clause() -> None:
     assert "boot_resources_ok" in phase_4
     assert "$BOOT_SHORT" in phase_4
     assert "needs $BOOT_FREE_DISK_GB" not in phase_4
+
+
+def test_the_boot_floors_are_the_figures_ac9_states() -> None:
+    """AC2 (OMN-20394): the enforced boot floor and the figure the criterion
+    states are the same number. AC9 said 30 GB until 2026-10-05, which was the
+    Mode 2 PREFLIGHT floor written into a clause about boot time -- the script
+    enforced 15 and the criterion could not be walked as written."""
+    assert BOOT_FREE_MEM_GB == AC9_BOOT_MEM_GB
+    assert BOOT_FREE_DISK_GB == AC9_BOOT_DISK_GB
+
+
+def test_no_boot_floor_exceeds_what_preflight_already_admitted() -> None:
+    """AC2 (OMN-20394): why 15 is the side that moved, not 30. Preflight admits
+    Mode 2 at 20 GB once Docker Desktop is installed, so a boot floor above
+    that admits a Mac and then refuses it in phase 4 -- the admit-then-refuse
+    shape this ticket exists to remove. Any future raise has to move the
+    preflight floor with it."""
+    assert BOOT_FREE_DISK_GB <= M2_DISK_GB_DOCKER_PRESENT
 
 
 def test_a_delegation_that_fell_through_to_another_route_does_not_pass_phase_4() -> (
