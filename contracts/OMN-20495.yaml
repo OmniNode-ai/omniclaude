@@ -1,0 +1,29 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-20495
+title: "Lanes stop fetching from GitHub: lane git-fetch guard and canonical_clone_sync refresh"
+summary: >
+  OMN-20495 adds the lane git-fetch arm to the shared-tree git guard and the
+  canonical_clone_sync.py refresh subcommand, introduced by PR 2533, and moves the onex skill
+  callers to the refresh command. The in-repo contract exists because validate-pr-contracts
+  reads contracts/ in this repository and the PR edits a skill file.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Lane git-fetch guard and refresh subcommand tests pass"
+    command: "uv run pytest tests/hooks/test_git_fetch_guard.py tests/hooks/test_canonical_clone_sync_refresh.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-git-fetch-guard-and-refresh-tests-pass
+    description: >
+      The lane git-fetch guard suite and the canonical_clone_sync refresh suite pass.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_git_fetch_guard.py tests/hooks/test_canonical_clone_sync_refresh.py -q"
