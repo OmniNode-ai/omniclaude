@@ -48,7 +48,7 @@ Import `@_lib/pr-safety/helpers.md` before calling any mutation.
 cd $ONEX_WORKTREES_ROOT/{any_ticket}/{repo}
 git checkout epic/{epic_id}/integration
 # The sync follows dev only; refresh the integration branch through its entrypoint
-python3 "$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" refresh {repo} --branch epic/{epic_id}/integration --wait
+python3 "$OMNIBASE_PATH/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" refresh {repo} --branch epic/{epic_id}/integration --wait
 git merge --ff-only origin/epic/{epic_id}/integration
 uv run pytest tests/ -m "not slow" --tb=short -q 2>&1 | tee $ONEX_STATE_DIR/epics/{epic_id}/integration_test_results.txt
 ```

@@ -64,7 +64,7 @@ sync's own entrypoint, which takes the sync's lock and returns once `origin/dev`
 past the remote head:
 
 ```bash
-python3 "$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" refresh OmniNode-ai/omnibase_infra --wait
+python3 "$OMNIBASE_PATH/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" refresh OmniNode-ai/omnibase_infra --wait
 ```
 
 If the refresh exits non-zero, **abort the sweep immediately** with an error message
