@@ -55,13 +55,16 @@ omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnimemory, omninod
 
 Run when mode is `drift` or `full`.
 
-### Preamble: Pull canonical clones
+### Preamble: Make sure the canonical clones are current
 
-Before scanning, refresh the canonical clones to ensure findings reflect the latest `dev`:
+A worktree shares its canonical clone's refs, and the canonical-clone sync (merge-triggered
+plus every 3 minutes) keeps `origin/dev` current, so a lane never runs `git fetch` itself
+(the lane git-fetch guard refuses it). Refresh through the
+sync's own entrypoint, which takes the sync's lock and returns once `origin/dev` is at or
+past the remote head:
 
 ```bash
-cd "$ONEX_WORKTREES_ROOT/<ticket>/omnibase_infra"
-git fetch origin dev --prune
+python3 "$OMNIBASE_PATH/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" refresh OmniNode-ai/omnibase_infra --wait
 ```
 
 If the refresh exits non-zero, **abort the sweep immediately** with an error message

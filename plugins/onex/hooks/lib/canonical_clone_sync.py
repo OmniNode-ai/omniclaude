@@ -13,6 +13,15 @@ Two callers, one engine:
   ``ai.omninode.canonical-clone-sync`` runs it over every clone on a short
   interval, which catches the merges this Mac did not make: auto-merge
   completions and other people's merges.
+* ``refresh`` -- the one sanctioned lane-side fetch (OMN-20495). A worktree
+  shares its canonical clone's refs, so lanes read ``origin/<branch>`` as the
+  sync left it, and the PreToolUse lane git-fetch guard refuses their own
+  ``git fetch``/``pull``/``ls-remote``. A lane that truly needs a fresher view
+  runs ``refresh <owner/repo|name> [--branch B] [--tags] --wait``: it reads the
+  remote head with ``ls-remote``, fetches under the same per-clone lock the
+  sync takes (so the two never race, and a refresh queued behind a sync that
+  already fetched the head fetches nothing), and exits 0 only once each ref is
+  at or past that head. It never moves a checked-out branch.
 
 Why this exists
 ---------------
@@ -852,6 +861,216 @@ def run_sync(
     return results
 
 
+# --------------------------------------------------------------------------- #
+# Refresh: the one sanctioned lane-side fetch (OMN-20495)
+# --------------------------------------------------------------------------- #
+REFRESHED = "REFRESHED"
+STARTED = "STARTED"
+REFRESH_WAIT_SECONDS = 120.0
+
+
+@dataclass
+class RefreshResult:
+    clone: str
+    result: str
+    repo: str | None = None
+    remote: str | None = None
+    branch: str | None = None
+    before: str | None = None
+    after: str | None = None
+    remote_head: str | None = None
+    reason: str | None = None
+
+
+def _common_dir(clone: Path) -> Path | None:
+    """The git directory every worktree of ``clone`` shares refs through."""
+    out = run_git(clone, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(out.out) if out.code == 0 and out.out else None
+
+
+def _default_branch(clone: Path, common: Path, remote: str) -> str:
+    """The branch the canonical clone follows: its checked-out tracking branch.
+
+    Read through the common dir, so a worktree (or a bare repository's
+    worktree) resolves the branch of the clone it belongs to, not its own
+    detached or lane-branch HEAD. A clone on anything else falls back to
+    ``dev`` when the remote has it, else ``main`` (pull-all.sh's rule).
+    """
+    head = run_git(common, "symbolic-ref", "--quiet", "--short", "HEAD").out
+    if head in TRACKING_BRANCHES:
+        return head
+    has_dev = run_git(
+        clone, "rev-parse", "--verify", "--quiet", f"refs/remotes/{remote}/dev"
+    )
+    return "dev" if has_dev.code == 0 else "main"
+
+
+def _at_or_past(clone: Path, remote_head: str, local: str) -> bool:
+    if not local:
+        return False
+    if local == remote_head:
+        return True
+    return run_git(clone, "merge-base", "--is-ancestor", remote_head, local).code == 0
+
+
+def refresh_clone(
+    clone: Path,
+    branches: Sequence[str] | None,
+    *,
+    wait_seconds: float = REFRESH_WAIT_SECONDS,
+    tags: bool = False,
+) -> list[RefreshResult]:
+    """Fetch ``branches`` of ``clone``'s remote into its shared tracking refs.
+
+    ``clone`` may be a canonical clone or any worktree of one: the refs live in
+    the common git dir, so the refresh is seen by every worktree of the clone.
+    It takes the same per-clone lock the sync takes, so a refresh and a sync
+    never race for a tracking ref, and a refresh that waited behind a sync
+    which already fetched the head fetches nothing (single flight). It never
+    moves a checked-out branch: that is the sync's job, with its refusals.
+
+    The remote head is read first with ``ls-remote`` (git transport, no API
+    quota). A ref counts as fresh when it is at that head or past it (a merge
+    landed between the read and the fetch). ``tags`` also fetches the remote's
+    tags (a release reads ``git describe --tags``), which the sync never does.
+    """
+    results: list[RefreshResult] = []
+    common = _common_dir(clone)
+    if common is None:
+        return [
+            RefreshResult(
+                clone=str(clone), result=FAILED, reason="not a git repository"
+            )
+        ]
+    branch_now = run_git(clone, "symbolic-ref", "--quiet", "--short", "HEAD").out
+    remote = ""
+    if branch_now:
+        remote = run_git(clone, "config", "--get", f"branch.{branch_now}.remote").out
+    if not remote or remote == ".":
+        remote = "origin"
+    url = run_git(clone, "remote", "get-url", remote).out
+    repo = repo_slug_of_url(url) if url else None
+    wanted = list(dict.fromkeys(branches or [_default_branch(clone, common, remote)]))
+
+    deadline = time.monotonic() + max(wait_seconds, 1.0)
+    for branch in wanted:
+        res = RefreshResult(
+            clone=str(clone), result=FAILED, repo=repo, remote=remote, branch=branch
+        )
+        results.append(res)
+        tracking = f"refs/remotes/{remote}/{branch}"
+        listed = run_git(
+            clone,
+            "ls-remote",
+            "--quiet",
+            remote,
+            f"refs/heads/{branch}",
+            timeout=FETCH_TIMEOUT_SECONDS,
+        )
+        if listed.code != 0:
+            res.reason = f"ls-remote {remote} failed: {_tail(listed.err)}"
+            continue
+        remote_head = listed.out.split("\t", 1)[0].strip() if listed.out else ""
+        if not remote_head:
+            res.reason = f"{remote} has no branch {branch!r}"
+            continue
+        res.remote_head = remote_head
+
+        lock_wait = max(deadline - time.monotonic(), 1.0)
+        with file_lock(common / CLONE_LOCK_NAME, lock_wait) as locked:
+            if not locked:
+                res.reason = (
+                    f"another canonical-clone sync held {common / CLONE_LOCK_NAME} "
+                    f"for {lock_wait:.0f}s"
+                )
+                continue
+            before = run_git(clone, "rev-parse", "--verify", "--quiet", tracking).out
+            res.before = before or None
+            if _at_or_past(clone, remote_head, before) and not tags:
+                res.after = before
+                res.result = UP_TO_DATE
+                continue
+            fetch = GitResult(1, "", "not attempted")
+            for attempt in range(2):
+                fetch = run_git(
+                    clone,
+                    "fetch",
+                    "--quiet",
+                    "--tags" if tags else "--no-tags",
+                    remote,
+                    f"+refs/heads/{branch}:{tracking}",
+                    timeout=FETCH_TIMEOUT_SECONDS,
+                )
+                if fetch.code == 0 or "cannot lock ref" not in fetch.err or attempt:
+                    break
+                time.sleep(2)
+            after = run_git(clone, "rev-parse", "--verify", "--quiet", tracking).out
+            res.after = after or None
+            if fetch.code != 0:
+                res.reason = f"fetch {remote} {branch} failed: {_tail(fetch.err)}"
+                continue
+            if not _at_or_past(clone, remote_head, after):
+                res.reason = (
+                    f"{tracking} is {after[:12] or 'missing'} after the fetch, not at "
+                    f"or past the remote head {remote_head[:12]} (rewritten history?)"
+                )
+                continue
+            res.result = UP_TO_DATE if (tags and before == after) else REFRESHED
+    return results
+
+
+def _clones_for(env: Mapping[str, str], repo: str) -> list[Path]:
+    """Canonical clones whose slug is ``repo``, or whose name is (``omniclaude``)."""
+    wanted = repo.casefold().removesuffix(".git")
+    clones = discover_clones(registry_roots(env))
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        slugs = list(pool.map(clone_slug, clones))
+    out: list[Path] = []
+    for clone, slug in zip(clones, slugs, strict=True):
+        slug_cf = (slug or "").casefold()
+        if slug_cf and (slug_cf == wanted or slug_cf.split("/", 1)[-1] == wanted):
+            out.append(clone)
+    return out
+
+
+def run_refresh(
+    env: Mapping[str, str],
+    repo: str | None,
+    branches: Sequence[str] | None,
+    *,
+    cwd: Path,
+    wait_seconds: float = REFRESH_WAIT_SECONDS,
+    tags: bool = False,
+) -> list[RefreshResult]:
+    """Refresh every canonical clone of ``repo`` (the cwd's repository when None)."""
+    if repo:
+        clones = _clones_for(env, repo)
+        if not clones:
+            results = [
+                RefreshResult(
+                    clone="-",
+                    result=NO_CLONE,
+                    repo=repo,
+                    reason="no canonical clone of this repository under any registry root",
+                )
+            ]
+        else:
+            results = []
+            for clone in clones:
+                results.extend(
+                    refresh_clone(clone, branches, wait_seconds=wait_seconds, tags=tags)
+                )
+    else:
+        results = refresh_clone(cwd, branches, wait_seconds=wait_seconds, tags=tags)
+
+    path = log_path(env)
+    ts = utc_now()
+    lane = env.get("ONEX_LANE") or env.get("ONEX_LANE_ID") or ""
+    for res in results:
+        append_log(path, {"ts": ts, "trigger": "refresh", "lane": lane, **asdict(res)})
+    return results
+
+
 def resolve_repo_from_cwd(cwd: str | None) -> str | None:
     """The repository a ``gh`` call with no repo flag acts on: the cwd's origin."""
     if not cwd or not Path(cwd).is_dir():
@@ -911,9 +1130,15 @@ def hook_main(stdin: IO[str], env: Mapping[str, str]) -> int:
     )
     if env.get("ONEX_CLONE_SYNC_HOOK_DRY_RUN") == "1":
         return 0
+    spawn_detached(command, env)
+    return 0
+
+
+def spawn_detached(command: Sequence[str], env: Mapping[str, str]) -> str | None:
+    """Start ``command`` in its own session, detached; the error text, or None."""
     try:
-        subprocess.Popen(  # noqa: S603 -- argv is built above, no shell
-            command,
+        subprocess.Popen(  # noqa: S603 -- argv is built by the caller, no shell
+            list(command),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -921,9 +1146,9 @@ def hook_main(stdin: IO[str], env: Mapping[str, str]) -> int:
             close_fds=True,
             env=dict(env),
         )
-    except OSError:
-        pass
-    return 0
+    except OSError as exc:
+        return str(exc)
+    return None
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -944,10 +1169,72 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     sync.add_argument("--verb", default=None)
     sync.add_argument("--delay", type=float, default=0.0)
+    refresh = sub.add_parser(
+        "refresh",
+        help=(
+            "fetch a repository's tracking refs into its canonical clones now "
+            "(the lane-side fetch the PreToolUse git-fetch guard points at)"
+        ),
+    )
+    refresh.add_argument(
+        "repo",
+        nargs="?",
+        default=None,
+        help="owner/name or name; default the repository of the working directory",
+    )
+    refresh.add_argument(
+        "--branch",
+        action="append",
+        default=None,
+        help="remote branch to refresh; repeatable; default the clone's tracking branch",
+    )
+    refresh.add_argument(
+        "--wait",
+        action="store_true",
+        help="block until every ref is at or past the remote head (else start it detached)",
+    )
+    refresh.add_argument(
+        "--tags", action="store_true", help="also fetch the remote's tags"
+    )
+    refresh.add_argument("--timeout", type=float, default=REFRESH_WAIT_SECONDS)
     args = parser.parse_args(argv)
 
     if args.mode == "hook":
         return hook_main(sys.stdin, os.environ)
+
+    if args.mode == "refresh":
+        if not args.wait:
+            command = [sys.executable, os.path.abspath(__file__), "refresh", "--wait"]
+            if args.repo:
+                command.append(args.repo)
+            for branch in args.branch or []:
+                command += ["--branch", branch]
+            if args.tags:
+                command.append("--tags")
+            command += ["--timeout", str(args.timeout)]
+            error = spawn_detached(command, os.environ)
+            if error is not None:
+                print(f"FAILED     refresh could not start: {error}")
+                return 1
+            print(f"STARTED    refresh {args.repo or '(cwd)'}; pass --wait to block")
+            return 0
+        refreshed = run_refresh(
+            os.environ,
+            args.repo,
+            args.branch,
+            cwd=Path.cwd(),
+            wait_seconds=args.timeout,
+            tags=args.tags,
+        )
+        for ref_res in refreshed:
+            sha = f"{(ref_res.before or '')[:12]}->{(ref_res.after or '')[:12]}"
+            ref = f"{ref_res.remote}/{ref_res.branch}" if ref_res.branch else "-"
+            print(
+                f"{ref_res.result:10} {ref_res.clone} {ref} {sha} "
+                f"{ref_res.reason or ''}".rstrip()
+            )
+        ok = (REFRESHED, UP_TO_DATE)
+        return 0 if refreshed and all(r.result in ok for r in refreshed) else 1
 
     if not os.environ.get("OMNI_HOME"):
         print(

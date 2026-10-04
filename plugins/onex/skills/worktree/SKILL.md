@@ -193,7 +193,8 @@ git -C "${worktree_path}" branch --show-current
 integration_branch=$(git -C "${worktree_path}" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
 integration_branch="${integration_branch:-dev}"
 
-git -C "${worktree_path}" fetch origin "${integration_branch}" --quiet 2>/dev/null
+# No fetch: the worktree shares its canonical clone's refs, which the canonical-clone
+# sync keeps current; a fetch from a lane is refused by the git-fetch guard.
 git -C "${worktree_path}" log --oneline "origin/${integration_branch}..HEAD" 2>/dev/null | wc -l
 git -C "${worktree_path}" status --porcelain
 git -C "${worktree_path}" log -1 --format=%aI 2>/dev/null

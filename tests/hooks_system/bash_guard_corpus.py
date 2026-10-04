@@ -19,6 +19,14 @@ It is recorded, never hand-edited::
     uv run python -m tests.hooks_system.bash_guard_corpus \\
         --plugin-root /tmp/base/plugins/onex > tests/hooks_system/fixtures/bash_guard_golden.json
 
+A guard whose decisions change on purpose after that base (OMN-20495 gave the
+shared-tree guard its lane git-fetch arm) has only its own column re-recorded,
+from the tree that changes it, and merged back; every other guard's column is
+left exactly as recorded::
+
+    uv run python -m tests.hooks_system.bash_guard_corpus \\
+        --plugin-root plugins/onex --merge-guard pre_tool_use_shared_tree_git_guard.sh
+
 Each case gets a fresh state directory, because the pr-ownership guard records a
 claim when it allows a first-writer mutation, and a claim left by one case would
 change the next case's decision.
@@ -260,7 +268,12 @@ def load_commands() -> list[str]:
     return list(json.loads(CORPUS.read_text(encoding="utf-8"))["commands"])
 
 
-def record(plugin_root: Path, python: str, workers: int = 8) -> dict[str, Any]:
+def record(
+    plugin_root: Path,
+    python: str,
+    workers: int = 8,
+    guards: Sequence[str] = GUARD_SCRIPTS,
+) -> dict[str, Any]:
     """Every guard's decision on every case, keyed ``kind\\tcommand``."""
     commands = load_commands()
     out: dict[str, Any] = {}
@@ -274,7 +287,7 @@ def record(plugin_root: Path, python: str, workers: int = 8) -> dict[str, Any]:
                 script: decision(
                     ws, *run_script(ws, plugin_root, script, command, kind, python)
                 )
-                for script in GUARD_SCRIPTS
+                for script in guards
             }
             return f"{kind}\t{template}", per_guard
 
@@ -301,7 +314,27 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tests.hooks_system.bash_guard_corpus")
     parser.add_argument("--plugin-root", type=Path, required=True)
     parser.add_argument("--python", default=sys.executable)
+    parser.add_argument(
+        "--merge-guard",
+        default=None,
+        help="record only this guard and merge it into the golden file in place",
+    )
     args = parser.parse_args(argv)
+    if args.merge_guard:
+        if args.merge_guard not in GUARD_SCRIPTS:
+            parser.error(f"{args.merge_guard} is not in GUARD_SCRIPTS")
+        doc = json.loads(GOLDEN.read_text(encoding="utf-8"))
+        fresh = record(
+            args.plugin_root.resolve(), args.python, guards=(args.merge_guard,)
+        )
+        for key in set(doc["cases"]) | set(fresh["cases"]):
+            per_guard = doc["cases"].setdefault(key, {})
+            per_guard.pop(args.merge_guard, None)
+            per_guard.update(fresh["cases"].get(key, {}))
+        GOLDEN.write_text(
+            json.dumps(doc, indent=1, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        return 0
     doc = record(args.plugin_root.resolve(), args.python)
     json.dump(doc, sys.stdout, indent=1, sort_keys=True)
     sys.stdout.write("\n")
