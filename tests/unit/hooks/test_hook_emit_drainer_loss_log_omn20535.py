@@ -182,3 +182,37 @@ def test_drainer_dead_letter_row_id_log_path_override(
     assert journal.loss_log_path(jdir) == target
     monkeypatch.delenv(journal.LOSS_LOG_ENV)
     assert journal.loss_log_path(jdir) == jdir.parent / journal.LOSS_LOG_FILENAME
+
+
+def test_drainer_dead_letter_row_id_survives_a_null_payload(jdir: Path) -> None:
+    """A record read back from disk is not validated; a null payload must not crash."""
+    record = journal.JournalRecord.from_json(
+        json.dumps(
+            {
+                "event_id": "e1",
+                "event_type": "work.ledger.status",
+                "payload": None,
+                "correlation_id": None,
+                "queued_at": "2026-10-04T00:00:00+00:00",
+            }
+        )
+    )
+    assert journal.record_loss(
+        jdir, disposition="dropped-unpublishable", record=record, journal_file="f.json"
+    )
+    assert [x["row_id"] for x in _losses(jdir)] == [None]
+
+
+def test_drainer_dead_letter_row_id_unwritable_log_is_reported_not_silent(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv(
+        journal.LOSS_LOG_ENV, str(jdir)
+    )  # a directory cannot be appended to
+    _ledger(jdir, ROW_A)
+    _ledger(jdir, ROW_B)
+
+    assert journal.enforce_bound(jdir, 1) == 1, "the bound still holds"
+    err = capsys.readouterr().err
+    assert "not written" in err
+    assert ROW_A in err, "the row the loss line could not record is named on stderr"

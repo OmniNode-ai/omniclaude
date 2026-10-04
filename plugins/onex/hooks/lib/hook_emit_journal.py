@@ -65,6 +65,7 @@ import fcntl
 import json
 import os
 import socket
+import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -316,7 +317,14 @@ def record_loss(
     names the file, so the loss is counted even when its row id is unknown.
     """
     row_id: object = None
-    if record is not None and record.event_type.startswith(_LEDGER_EVENT_PREFIX):
+    # A record read back from disk is not validated: its payload may be null and its
+    # type may not be a string. Neither may crash the drainer that is recording it.
+    if (
+        record is not None
+        and isinstance(record.event_type, str)
+        and record.event_type.startswith(_LEDGER_EVENT_PREFIX)
+        and isinstance(record.payload, dict)
+    ):
         candidate = record.payload.get("row_id")
         row_id = candidate if isinstance(candidate, str) and candidate else None
     line = {
@@ -335,7 +343,13 @@ def record_loss(
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(line, sort_keys=True) + "\n")
-    except OSError:
+    except (OSError, TypeError, ValueError) as exc:
+        # The loss itself still happens (the bound must hold); say so where the
+        # drainer's log will carry it, never silently.
+        sys.stderr.write(
+            f"hook_emit_journal: loss line for {journal_file or line['event_id']} "
+            f"({disposition}, row_id={row_id}) not written to {path}: {exc}\n"
+        )
         return False
     return True
 
