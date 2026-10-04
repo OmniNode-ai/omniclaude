@@ -7,12 +7,15 @@ summary: >
   tracking branch that is not the remote default branch is switched to the default branch
   (through the sanctioned canonical-converge door) and fast-forwarded, and every clone it
   cannot move is refused with a logged reason. Operator ruling 2026-10-04T10:11:35Z item 6.
+  A follow-up change refreshes the remote default (git remote set-head --auto) before the
+  engine acts on it, so a stale refs/remotes/<remote>/HEAD never moves a clone and a failed
+  refresh never switches one.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 evidence_requirements:
   - kind: tests
-    description: "canonical_clone_sync engine suite passes, including the eleven return-to-default tests"
+    description: "canonical_clone_sync engine suite passes, including the eleven return-to-default tests and the five default-refresh tests"
     command: "uv run pytest tests/hooks/test_canonical_clone_sync.py -q"
 emergency_bypass:
   enabled: false
@@ -21,8 +24,9 @@ emergency_bypass:
 dod_evidence:
   - id: dod-clone-sync-return-to-default-tests-pass
     description: >
-      The canonical_clone_sync engine suite passes, and its eleven return-to-default tests
-      fail on the engine before this change.
+      The canonical_clone_sync engine suite passes, its eleven return-to-default tests
+      fail on the engine before the first change, and its default-refresh tests fail on
+      the engine before the follow-up change.
     source: manual
     status: verified
     checks:

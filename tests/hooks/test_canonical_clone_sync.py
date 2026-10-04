@@ -473,10 +473,23 @@ def test_engine_follows_main_on_a_main_only_clone(reg: Registry) -> None:
 
 
 # --- the remote default branch (RULING 2026-10-04T10:11:35Z) --------------- #
+def _set_origin_head(
+    reg: Registry, name: str, branch: str, owner: str = "Acme"
+) -> None:
+    """Point the bare origin's HEAD (its real default branch) at ``branch``."""
+    remote = reg.remotes / owner / f"{name}.git"
+    _git("symbolic-ref", "HEAD", f"refs/heads/{branch}", cwd=remote)
+
+
 def _parked_on_main(
-    reg: Registry, name: str = "svc", *, local_dev: bool = True, set_head: bool = True
+    reg: Registry,
+    name: str = "svc",
+    *,
+    local_dev: bool = True,
+    set_head: bool = True,
+    origin_head: str = "dev",
 ) -> Path:
-    """A clone parked on ``main`` whose remote default branch is ``dev``.
+    """A clone parked on ``main`` whose remote default branch is ``origin_head``.
 
     The remote carries both branches; ``dev`` is then advanced on the remote so
     there is something to fast-forward. ``set_head=False`` leaves the clone
@@ -486,6 +499,7 @@ def _parked_on_main(
     seed = reg.seeds / "Acme" / name
     _git("checkout", "--quiet", "-b", "dev", cwd=seed)
     _git("push", "--quiet", "origin", "dev", cwd=seed)
+    _set_origin_head(reg, name, origin_head)
     _git("fetch", "--quiet", "origin", cwd=clone)
     if local_dev:
         _git("branch", "--track", "dev", "origin/dev", cwd=clone)
@@ -696,7 +710,9 @@ def test_engine_reports_a_guard_refusal_that_left_the_tree_half_applied(
 def test_engine_keeps_its_old_behaviour_without_a_remote_head_symref(
     reg: Registry,
 ) -> None:
-    clone = _parked_on_main(reg, set_head=False)
+    # The origin's own default really is main, so a refreshed symref names the
+    # checked-out branch and there is nothing to switch to.
+    clone = _parked_on_main(reg, set_head=False, origin_head="main")
     assert not _git("for-each-ref", "refs/remotes/origin/HEAD", cwd=clone)
     res = ccs.sync_clone(clone)
     assert res.result == ccs.UP_TO_DATE, res
@@ -883,3 +899,112 @@ def test_hook_advances_the_clone_through_the_detached_child(reg: Registry) -> No
     assert _head(clone) == target
     rows = [r for r in reg.log() if r.get("clone") == str(clone)]
     assert rows and rows[0]["result"] == ccs.ADVANCED and rows[0]["trigger"] == "hook"
+
+
+# --- the default is refreshed from the remote before it is acted on ------- #
+def _origin_head_ref(clone: Path) -> str:
+    return _git("symbolic-ref", "--short", "refs/remotes/origin/HEAD", cwd=clone)
+
+
+def test_engine_refreshes_a_stale_symref_and_stays_on_dev(reg: Registry) -> None:
+    clone = reg.make("svc", branch="dev")
+    _git("push", "--quiet", "origin", "dev:main", cwd=reg.seeds / "Acme" / "svc")
+    _git("fetch", "--quiet", "origin", cwd=clone)
+    _git("remote", "set-head", "origin", "main", cwd=clone)
+    assert _origin_head_ref(clone) == "origin/main"
+    reg.advance("svc", branch="dev")
+    res = ccs.sync_clone(clone)
+    target = _git("rev-parse", "origin/dev", cwd=clone)
+    assert res.result == ccs.ADVANCED, res
+    assert res.switched_from is None
+    assert _head_branch(clone) == "dev"
+    assert _head(clone) == target
+    assert _origin_head_ref(clone) == "origin/dev"
+
+
+def test_engine_reaches_the_default_from_a_stale_symref(reg: Registry) -> None:
+    clone = _parked_on_main(reg)
+    _git("remote", "set-head", "origin", "main", cwd=clone)
+    assert _origin_head_ref(clone) == "origin/main"
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.ADVANCED, res
+    assert res.switched_from == "main"
+    assert _head_branch(clone) == "dev"
+    assert _origin_head_ref(clone) == "origin/dev"
+
+
+def test_engine_never_switches_when_the_refresh_cannot_reach_the_remote(
+    reg: Registry,
+) -> None:
+    clone = reg.make("svc", branch="dev")
+    _git("push", "--quiet", "origin", "dev:main", cwd=reg.seeds / "Acme" / "svc")
+    _git("fetch", "--quiet", "origin", cwd=clone)
+    _git("remote", "set-head", "origin", "main", cwd=clone)
+    _git("remote", "set-url", "origin", str(reg.tmp / "no-such-remote.git"), cwd=clone)
+    before = _head(clone)
+    res = ccs.sync_clone(clone)
+    assert res.result in (ccs.FAILED, ccs.REFUSED), res
+    assert res.switched_from is None
+    assert "set-head" in (res.reason or ""), res
+    assert _head_branch(clone) == "dev"
+    assert _head(clone) == before
+
+
+def test_engine_still_returns_to_main_when_main_is_the_origin_default(
+    reg: Registry,
+) -> None:
+    clone = reg.make("svc", branch="main")
+    _git("checkout", "--quiet", "-b", "dev", cwd=clone)
+    _git("push", "--quiet", "-u", "origin", "dev", cwd=clone)
+    assert _origin_head_ref(clone) == "origin/main"
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.ADVANCED, res
+    assert res.switched_from == "dev"
+    assert _head_branch(clone) == "main"
+    assert _origin_head_ref(clone) == "origin/main"
+
+
+def test_engine_corrects_a_stale_dev_symref_when_main_is_the_origin_default(
+    reg: Registry,
+) -> None:
+    clone = reg.make("svc", branch="main")
+    _git("checkout", "--quiet", "-b", "dev", cwd=clone)
+    _git("push", "--quiet", "-u", "origin", "dev", cwd=clone)
+    _git("remote", "set-head", "origin", "dev", cwd=clone)
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.ADVANCED, res
+    assert res.switched_from == "dev"
+    assert _head_branch(clone) == "main"
+    assert _origin_head_ref(clone) == "origin/main"
+
+
+def test_engine_opens_the_converge_door_for_set_head(
+    reg: Registry, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A guard that refuses a plain ``remote set-head`` still lets the engine through."""
+    clone = reg.make("svc", branch="dev")
+    _git("push", "--quiet", "origin", "dev:main", cwd=reg.seeds / "Acme" / "svc")
+    _git("fetch", "--quiet", "origin", cwd=clone)
+    _git("remote", "set-head", "origin", "main", cwd=clone)
+    real = shutil.which("git")
+    assert real
+    shim_dir = tmp_path / "set-head-guard-bin"
+    shim_dir.mkdir()
+    shim = shim_dir / "git"
+    shim.write_text(
+        "#!/bin/sh\n"
+        'sub=$1; [ "$1" = -C ] && sub=$3\n'
+        'if [ "$sub" = remote ]; then\n'
+        '  [ "$ONEX_CANONICAL_CONVERGE" = 1 ] || { echo "DENIED HEAD move" >&2; exit 1; }\n'
+        "fi\n"
+        f'exec "{real}" "$@"\n'
+    )
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{os.environ['PATH']}")
+    with pytest.raises(subprocess.CalledProcessError) as denied:
+        _git("remote", "set-head", "origin", "--auto", cwd=clone)
+    assert "DENIED HEAD move" in denied.value.stderr
+    res = ccs.sync_clone(clone)
+    assert res.result in (ccs.UP_TO_DATE, ccs.ADVANCED), res
+    assert _origin_head_ref(clone) == "origin/dev"
+    assert "ONEX_CANONICAL_CONVERGE" not in os.environ
