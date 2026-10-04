@@ -146,9 +146,10 @@ pr_workflow:
 
     branch_sync:
       description: "Current branch pushed to remote and up-to-date"
+      # No `git fetch` (OMN-20495): a push updates origin/<branch>, and the
+      # canonical-clone sync keeps the base current.
       validation_commands:
-        - "git fetch origin"
-        - "git status"
+        - "git status -sb"
       critical: true
 
     github_cli_auth:

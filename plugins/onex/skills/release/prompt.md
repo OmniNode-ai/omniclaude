@@ -133,8 +133,10 @@ For each repo in the selected set (all repos or the positional `repos` list):
 # Find the canonical clone path
 REPO_PATH="${ONEX_REGISTRY_ROOT}/${repo}"
 
-# Pull latest main
-git -C "${REPO_PATH}" pull --ff-only
+# Not a pull (the lane git-fetch guard refuses one): fetch with tags under the canonical-clone sync's lock,
+# then let the sync fast-forward the checked-out branch, or refuse.
+python3 "$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" refresh "${repo}" --wait --tags \
+  && python3 "$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" sync --repo "OmniNode-ai/${repo}"
 
 # Find last tag — primary: git describe (handles merges well), fallback: sort by semver
 LAST_TAG=$(git -C "${REPO_PATH}" describe --tags --abbrev=0 --match "v*" 2>/dev/null || \
@@ -461,8 +463,10 @@ if [ -d "$WORKTREE_PATH" ]; then
     exit 1
   fi
 else
-  # Pull latest main first
-  git -C "$REPO_PATH" pull --ff-only
+  # Not a pull (the lane git-fetch guard refuses one): fetch with tags under the canonical-clone sync's lock,
+  # then let the sync fast-forward the checked-out branch, or refuse.
+  python3 "$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" refresh "${repo}" --wait --tags \
+    && python3 "$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" sync --repo "OmniNode-ai/${repo}"
 
   # Create worktree
   mkdir -p "$(dirname "$WORKTREE_PATH")"
@@ -881,7 +885,9 @@ cd "${WORKTREE_PATH}"
 BRANCH="release/${run_id}/${repo}"
 
 # Idempotency: check if remote branch exists and matches
-REMOTE_SHA=$(git ls-remote origin "${BRANCH}" | cut -f1)
+# No ls-remote from the worktree (the lane git-fetch guard refuses it): refresh the shared ref, then read it.
+python3 "$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" refresh "${repo}" --branch "${BRANCH}" --wait >/dev/null 2>&1 || true
+REMOTE_SHA=$(git rev-parse --verify --quiet "refs/remotes/origin/${BRANCH}" || true)
 LOCAL_SHA=$(git rev-parse HEAD)
 
 if [ "$REMOTE_SHA" = "$LOCAL_SHA" ]; then
@@ -1089,8 +1095,10 @@ if [ -n "$EXISTING_TAG" ]; then
     exit 1
   fi
 else
-  # Pull latest main (includes the merged PR)
-  git -C "${REPO_PATH}" pull --ff-only
+  # Not a pull (the lane git-fetch guard refuses one): fetch with tags under the canonical-clone sync's lock,
+  # then let the sync fast-forward the checked-out branch, or refuse.
+  python3 "$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" refresh "${repo}" --wait --tags \
+    && python3 "$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" sync --repo "OmniNode-ai/${repo}"
 
   # Create and push tag
   git -C "${REPO_PATH}" tag "${TAG_NAME}"

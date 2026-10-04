@@ -15,8 +15,9 @@ Example: `epic/<epic_id>/integration`
 ## `create_integration_branch(epic_id, repo)` — Procedure
 
 ```bash
-# Pull latest dev
-git -C $ONEX_WORKTREES_ROOT/{ticket}/{repo} pull origin dev --ff-only
+# Latest dev: origin/dev is shared with the canonical clone and kept current by the
+# canonical-clone sync; a pull or fetch from a lane is refused by the git-fetch guard
+git -C $ONEX_WORKTREES_ROOT/{ticket}/{repo} merge --ff-only origin/dev
 
 # Create integration branch from dev
 git -C $ONEX_WORKTREES_ROOT/{ticket}/{repo} checkout -b epic/{epic_id}/integration
@@ -46,7 +47,9 @@ Import `@_lib/pr-safety/helpers.md` before calling any mutation.
 ```bash
 cd $ONEX_WORKTREES_ROOT/{any_ticket}/{repo}
 git checkout epic/{epic_id}/integration
-git pull origin epic/{epic_id}/integration
+# The sync follows dev only; refresh the integration branch through its entrypoint
+python3 "$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/canonical_clone_sync.py" refresh {repo} --branch epic/{epic_id}/integration --wait
+git merge --ff-only origin/epic/{epic_id}/integration
 uv run pytest tests/ -m "not slow" --tb=short -q 2>&1 | tee $ONEX_STATE_DIR/epics/{epic_id}/integration_test_results.txt
 ```
 

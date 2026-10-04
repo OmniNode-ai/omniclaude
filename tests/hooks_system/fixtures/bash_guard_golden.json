@@ -2061,9 +2061,33 @@
   "worktree\tgit commit -m 'fix: git worktree add /tmp/x was misread'": {},
   "worktree\tgit commit -m 'git worktree add /x'": {},
   "worktree\tgit diff origin/main": {},
-  "worktree\tgit fetch --all --prune": {},
-  "worktree\tgit fetch origin": {},
-  "worktree\tgit fetch origin && git reset --hard origin/main": {},
+  "worktree\tgit fetch --all --prune": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-20495): `git fetch` against GitHub from a lane. Remote `origin` is OmniNode-ai/omniclaude. origin refs here are shared with the canonical clone and kept current by canonical-clone-sync (merge-triggered + 3-min); use origin/<branch> as is, or run `python3 {CLONE}/plugins/onex/hooks/lib/canonical_clone_sync.py refresh OmniNode-ai/omniclaude --wait`. git push and non-GitHub remotes are not gated. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tgit fetch origin": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-20495): `git fetch` against GitHub from a lane. Remote `origin` is OmniNode-ai/omniclaude. origin refs here are shared with the canonical clone and kept current by canonical-clone-sync (merge-triggered + 3-min); use origin/<branch> as is, or run `python3 {CLONE}/plugins/onex/hooks/lib/canonical_clone_sync.py refresh OmniNode-ai/omniclaude --wait`. git push and non-GitHub remotes are not gated. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tgit fetch origin && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-20495): `git fetch` against GitHub from a lane. Remote `origin` is OmniNode-ai/omniclaude. origin refs here are shared with the canonical clone and kept current by canonical-clone-sync (merge-triggered + 3-min); use origin/<branch> as is, or run `python3 {CLONE}/plugins/onex/hooks/lib/canonical_clone_sync.py refresh OmniNode-ai/omniclaude --wait`. git push and non-GitHub remotes are not gated. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit log --oneline -1 | grep -c 'secret-branch-push'; echo 'the `git worktree add` note'; git stash list; gh api repos/o/r/pulls/1 --jq .title; printf '%s\\n' --body": {},
   "worktree\tgit log --oneline -3": {},
   "worktree\tgit log --oneline -5": {},
@@ -2080,7 +2104,15 @@
   "worktree\tgit merge origin/main": {},
   "worktree\tgit merge origin/main origin/dev": {},
   "worktree\tgit merge some-local-branch": {},
-  "worktree\tgit pull --ff-only origin main": {},
+  "worktree\tgit pull --ff-only origin main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-20495): `git pull` against GitHub from a lane. Remote `origin` is OmniNode-ai/omniclaude. origin refs here are shared with the canonical clone and kept current by canonical-clone-sync (merge-triggered + 3-min); use origin/<branch> as is, or run `python3 {CLONE}/plugins/onex/hooks/lib/canonical_clone_sync.py refresh OmniNode-ai/omniclaude --wait --branch main`. git push and non-GitHub remotes are not gated. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit push": {},
   "worktree\tgit push --force": {},
   "worktree\tgit push --force origin +dev": {

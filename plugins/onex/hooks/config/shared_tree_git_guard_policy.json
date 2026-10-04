@@ -188,7 +188,18 @@
         "override are each refused, because whether the command destroys work cannot",
         "then be known. An operand the shell computes is judged by the worst thing it",
         "could name (OMN-17427): the whole tree, and a source that saves nothing, so a",
-        "clean tree passes and a tree holding uncommitted work is refused."
+        "clean tree passes and a tree holding uncommitted work is refused.",
+        "",
+        "fetch_* -- the lane git-fetch arm (OMN-20495). A worktree shares its",
+        "canonical clone's refs and the canonical-clone sync (OMN-19607) keeps",
+        "them current, so a lane's own fetch is redundant GitHub traffic that races",
+        "the sync. fetch_subcommands read a remote (`remote` only as `remote",
+        "update`); a URL whose host is in fetch_github_hosts is GitHub; any",
+        "fetch_lane_envs set, or a cwd/cd/-C path containing one of",
+        "fetch_lane_path_markers or under a worktree_root_envs root, is a lane;",
+        "fetch_allow_env markers in the HOOK environment (the PR watcher, the sync",
+        "itself) are never refused. The refusal names canonical_clone_sync.py",
+        "refresh <owner/repo> --wait."
     ],
     "ticket": "OMN-18798",
     "rule": "Operating Rule 19",
@@ -314,5 +325,28 @@
         "ONEX_WORKTREES_ROOT",
         "OMNI_WORKTREES_DIR"
     ],
-    "restore_safe_alternatives": "(1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit"
+    "restore_safe_alternatives": "(1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit",
+    "fetch_ticket": "OMN-20495",
+    "fetch_subcommands": [
+        "fetch",
+        "pull",
+        "ls-remote",
+        "remote"
+    ],
+    "fetch_github_hosts": [
+        "github.com",
+        "ssh.github.com"
+    ],
+    "fetch_lane_envs": [
+        "ONEX_LANE",
+        "ONEX_LANE_ID"
+    ],
+    "fetch_lane_path_markers": [
+        "/omni_worktrees/",
+        "/lab-run/runs/"
+    ],
+    "fetch_allow_env": {
+        "ONEX_PR_WATCHER": "1",
+        "ONEX_CANONICAL_CLONE_SYNC": "1"
+    }
 }

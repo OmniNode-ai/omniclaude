@@ -97,6 +97,15 @@ Fail-closed boundary, stated deliberately
   substitution. An apostrophe in a here-document body or a comment is text,
   and a newline ends a command.
 
+The lane git-fetch arm (OMN-20495)
+-----------------------------------
+A third arm, scoped to lanes rather than to a tree: ``git fetch``, ``git
+pull``, ``git ls-remote`` and ``git remote update`` reading a GitHub remote are
+refused in a lane context, because a worktree shares its canonical clone's
+refs and the canonical-clone sync keeps them current. The refusal names
+``canonical_clone_sync.py refresh``. The full contract is at
+``_lane_fetch_refusal``.
+
 The dirty-path restore arm (OMN-18874), and why its scope is wider
 --------------------------------------------------------------------
 Everything above is about the ONE tree many lanes share. This arm is about a
@@ -178,6 +187,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Final
@@ -303,6 +313,13 @@ class Policy:
     restore_safe_alternatives: str
     git_probe_timeout_seconds: float
     worktree_root_envs: tuple[str, ...]
+    # The lane git-fetch arm (OMN-20495). See _lane_fetch_refusal.
+    fetch_ticket: str = ""
+    fetch_subcommands: frozenset[str] = frozenset()
+    fetch_github_hosts: frozenset[str] = frozenset()
+    fetch_lane_envs: tuple[str, ...] = ()
+    fetch_lane_path_markers: tuple[str, ...] = ()
+    fetch_allow_env: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -312,6 +329,9 @@ class Decision:
     #: Diagnostic-only notes that were not decisive. Never printed as a
     #: refusal reason.
     notes: tuple[str, ...] = field(default_factory=tuple)
+    #: Set by the lane git-fetch arm (OMN-20495) for its refusal log line.
+    fetch_verb: str = ""
+    fetch_repo: str = ""
 
 
 def _require_str(raw: Any, key: str) -> str:
@@ -390,7 +410,26 @@ def load_policy(path: Path | None = None) -> Policy:
         restore_safe_alternatives=_require_str(raw, "restore_safe_alternatives"),
         git_probe_timeout_seconds=_positive_number(raw, "git_probe_timeout_seconds"),
         worktree_root_envs=tuple(_str_list(raw, "worktree_root_envs")),
+        fetch_ticket=_require_str(raw, "fetch_ticket"),
+        fetch_subcommands=frozenset(_str_list(raw, "fetch_subcommands")),
+        fetch_github_hosts=frozenset(
+            h.lower() for h in _str_list(raw, "fetch_github_hosts")
+        ),
+        fetch_lane_envs=tuple(_str_list(raw, "fetch_lane_envs")),
+        fetch_lane_path_markers=tuple(_str_list(raw, "fetch_lane_path_markers")),
+        fetch_allow_env=_str_pairs(raw, "fetch_allow_env"),
     )
+
+
+def _str_pairs(raw: Any, key: str) -> tuple[tuple[str, str], ...]:
+    value = raw.get(key)
+    if (
+        not isinstance(value, dict)
+        or not value
+        or not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items())
+    ):
+        raise PolicyError(f"policy field {key!r} must map names to strings")
+    return tuple(sorted(value.items()))
 
 
 def _segments(command: str) -> list[list[str]] | None:
@@ -1849,6 +1888,422 @@ def _track_assignments(segment: list[str], scope: Scope) -> None:
             scope.maps[0][name] = None
 
 
+# ---------------------------------------------------------------------------
+# The lane git-fetch arm (OMN-20495)
+# ---------------------------------------------------------------------------
+# A git worktree's `.git` is a file pointing at its canonical clone, so the
+# worktree shares every ref of that clone, refs/remotes/origin/* included. The
+# canonical-clone sync (OMN-19607: launchd ai.omninode.canonical-clone-sync
+# every 180 s, plus the PostToolUse merge trigger) fetches every canonical
+# clone, so a worktree already sees the new origin/<branch> without fetching.
+# A lane's own fetch is redundant GitHub traffic that races the sync for the
+# same tracking ref. Operator request 2026-10-04 ~01:35Z; RULING
+# 2026-10-04T01:33:03Z lane=orchestrator (OMN-19470).
+#
+# Refused: `git fetch`, `git pull`, `git ls-remote` and `git remote update`
+# reading a GitHub remote, in a lane context -- a lane variable set in the
+# hook environment (ONEX_LANE, which remote lanes carry), or the payload cwd,
+# a `cd` target or the `-C` target under a lane workdir (an `omni_worktrees`
+# or `lab-run/runs` path segment, or a declared worktrees root). With no
+# remote named, the branch's remote (else origin) is read; `--all` and a bare
+# `remote update` read every remote. The refusal names the sanctioned refresh,
+# canonical_clone_sync.py refresh, which fetches under the sync's own lock.
+#
+# Not refused: push; a non-GitHub remote (a lab mirror, a local path); any of
+# these outside a lane; and a process whose HOOK environment carries an
+# allow marker (the PR watcher, the sync). An assignment typed in front of the
+# command is not the hook environment. Nothing is rewritten: it refuses, or
+# says nothing. Inside a lane, a remote that cannot be resolved (a computed
+# word, an unknown name) is refused, never assumed safe; outside one nothing
+# is read at all.
+
+#: The refresh a refusal points at, beside this module in every install.
+CLONE_SYNC_ENGINE: Final[Path] = (
+    Path(__file__).resolve().parent / "canonical_clone_sync.py"
+)
+FETCH_LOG_NAME: Final[str] = "git-fetch-guard.log"
+
+_FETCH_VALUE_FLAGS: Final[dict[str, frozenset[str]]] = {
+    "fetch": frozenset(
+        {
+            "--depth",
+            "--deepen",
+            "--shallow-since",
+            "--shallow-exclude",
+            "--refmap",
+            "-o",
+            "--server-option",
+            "--upload-pack",
+            "--negotiation-tip",
+            "-j",
+            "--jobs",
+            "--recurse-submodules-default",
+            "--filter",
+            "--submodule-prefix",
+        }
+    ),
+    "pull": frozenset(
+        {
+            "--depth",
+            "--deepen",
+            "--shallow-since",
+            "--shallow-exclude",
+            "-o",
+            "--server-option",
+            "--upload-pack",
+            "--negotiation-tip",
+            "-j",
+            "--jobs",
+            "-s",
+            "--strategy",
+            "-X",
+            "--strategy-option",
+            "--cleanup",
+        }
+    ),
+    "ls-remote": frozenset({"--upload-pack", "-o", "--server-option", "--sort"}),
+    "remote": frozenset(),
+}
+_SCP_LIKE: Final[re.Pattern[str]] = re.compile(r"^(?:[^@/\s]+@)?([^:/\s]+):(?!//)")
+_URL_HOST: Final[re.Pattern[str]] = re.compile(
+    r"^[a-z][a-z0-9+.-]*://(?:[^@/\s]+@)?([^:/\s]+)", re.I
+)
+_CONFIG_SECTION: Final[re.Pattern[str]] = re.compile(
+    r'^\[\s*([A-Za-z0-9.-]+)(?:\s+"((?:[^"\\]|\\.)*)")?\s*\]\s*$'
+)
+_GITHUB_SLUG: Final[re.Pattern[str]] = re.compile(
+    r"github\.com[:/]+([^/\s:]+)/([^/\s]+?)(?:\.git)?/*$", re.I
+)
+
+
+def _drop_timeout(tokens: list[str]) -> list[str]:
+    """``timeout [opts] DURATION cmd...`` as ``cmd...``; anything else unchanged."""
+    words = _strip_wrappers(tokens)
+    if not words or os.path.basename(words[0]) != "timeout":
+        return tokens
+    rest = words[1:]
+    while rest and rest[0].startswith("-"):
+        rest = rest[1:]
+    return rest[1:]
+
+
+def _git_common_dir(start: Path) -> tuple[Path, Path | None] | None:
+    """(common dir, this worktree's own git dir) of the repo holding ``start``."""
+    current = start
+    for _ in range(64):
+        marker = current / ".git"
+        if marker.is_dir():
+            return marker, marker
+        if marker.is_file():
+            text = marker.read_text(encoding="utf-8", errors="replace").strip()
+            if not text.startswith("gitdir:"):
+                return None
+            gitdir = Path(text[len("gitdir:") :].strip())
+            if not gitdir.is_absolute():
+                gitdir = (current / gitdir).resolve()
+            commondir = gitdir / "commondir"
+            if commondir.is_file():
+                rel = Path(commondir.read_text(encoding="utf-8").strip())
+                return (rel if rel.is_absolute() else (gitdir / rel).resolve()), gitdir
+            return gitdir, gitdir
+        if (current / "HEAD").is_file() and (current / "objects").is_dir():
+            return current, None  # a bare repository
+        if current.parent == current:
+            return None
+        current = current.parent
+    return None
+
+
+@dataclass
+class _RemoteConfig:
+    sections: dict[tuple[str, str], dict[str, list[str]]]
+    head_branch: str | None
+    where: Path
+
+    def remotes(self) -> list[str]:
+        return [sub for (sec, sub) in self.sections if sec == "remote" and sub]
+
+    def url(self, name: str) -> str | None:
+        values = self.sections.get(("remote", name), {}).get("url")
+        return values[-1] if values else None
+
+    def group(self, name: str) -> list[str] | None:
+        values = self.sections.get(("remotes", ""), {}).get(name.lower())
+        return [n for v in values for n in v.split()] if values else None
+
+    def default_remote(self) -> str:
+        if self.head_branch:
+            values = self.sections.get(("branch", self.head_branch), {}).get("remote")
+            if values and values[-1] and values[-1] != ".":
+                return values[-1]
+        return "origin"
+
+
+def _read_remote_config(directory: Path) -> _RemoteConfig | None:
+    """The remotes of the repository holding ``directory``, read from disk."""
+    found = _git_common_dir(directory)
+    if found is None:
+        return None
+    common, own = found
+    sections: dict[tuple[str, str], dict[str, list[str]]] = {}
+    current: dict[str, list[str]] | None = None
+    text = (common / "config").read_text(encoding="utf-8", errors="replace")
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line[0] in "#;":
+            continue
+        match = _CONFIG_SECTION.match(line)
+        if match:
+            current = sections.setdefault(
+                (match.group(1).lower(), match.group(2) or ""), {}
+            )
+            continue
+        if current is None or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] == '"':
+            value = value[1:-1]
+        current.setdefault(name.strip().lower(), []).append(value)
+    head_branch = None
+    try:
+        head = ((own or common) / "HEAD").read_text(encoding="utf-8").strip()
+    except OSError:
+        head = ""
+    if head.startswith("ref: refs/heads/"):
+        head_branch = head[len("ref: refs/heads/") :]
+    return _RemoteConfig(sections=sections, head_branch=head_branch, where=common)
+
+
+def _remote_host(url: str) -> str | None:
+    match = _URL_HOST.match(url)
+    if match:
+        return match.group(1).lower()
+    if "://" in url or url.startswith(("/", ".", "~")):
+        return None
+    match = _SCP_LIKE.match(url)
+    return match.group(1).lower() if match else None
+
+
+def _names_a_location(word: str) -> bool:
+    return (
+        "://" in word
+        or word.startswith(("/", ".", "~"))
+        or _SCP_LIKE.match(word) is not None
+    )
+
+
+def _fetch_operands(subcommand: str, args: list[str]) -> tuple[list[str], bool]:
+    """(remote words named, reads every remote) for one fetch-family call."""
+    value_flags = _FETCH_VALUE_FLAGS.get(subcommand.split(maxsplit=1)[0], frozenset())
+    positionals: list[str] = []
+    every = multiple = skip = after_dashdash = False
+    for arg in args:
+        if skip:
+            skip = False
+            continue
+        if not after_dashdash and arg == "--":
+            after_dashdash = True
+            continue
+        if not after_dashdash and arg.startswith("-") and arg != "-":
+            name = arg.split("=", 1)[0]
+            if name == "--all":
+                every = True
+            elif name == "--multiple":
+                multiple = True
+            elif name in value_flags and "=" not in arg:
+                skip = True
+            continue
+        positionals.append(arg)
+    if subcommand == "remote update":
+        return positionals, not positionals
+    if every:
+        return [], True
+    if multiple:
+        return positionals, False
+    return positionals[:1], False
+
+
+def _is_lane_path(path: Path, policy: Policy, worktree_roots: tuple[Path, ...]) -> bool:
+    texts = {str(path)}
+    try:
+        texts.add(str(path.resolve()))
+    except OSError:
+        pass
+    for text in texts:
+        probe = text.rstrip("/") + "/"
+        if any(marker in probe for marker in policy.fetch_lane_path_markers):
+            return True
+        if any(
+            probe.startswith(str(root).rstrip("/") + "/") for root in worktree_roots
+        ):
+            return True
+    return False
+
+
+def _lane_name(policy: Policy, environ: Mapping[str, str]) -> str:
+    for name in policy.fetch_lane_envs:
+        if environ.get(name):
+            return environ[name]
+    return ""
+
+
+def _fetch_refusal_text(
+    policy: Policy, verb: str, repo: str, detail: str, branch: str | None
+) -> str:
+    refresh = f"python3 {CLONE_SYNC_ENGINE} refresh {repo or '<owner>/<repo>'} --wait"
+    if branch:
+        refresh += f" --branch {branch}"
+    return (
+        f"BLOCKED ({policy.fetch_ticket}): `git {verb}` against GitHub from a lane. "
+        f"{detail}origin refs here are shared with the canonical clone and kept "
+        "current by canonical-clone-sync (merge-triggered + 3-min); use "
+        f"origin/<branch> as is, or run `{refresh}`. git push and non-GitHub "
+        f"remotes are not gated. To disable this guard: onex hooks disable "
+        f"{GATE_BIT_NAME}"
+    )
+
+
+def _branch_hint(subcommand: str, args: list[str], named: int) -> str | None:
+    if subcommand not in ("fetch", "pull") or not named:
+        return None
+    positionals = [a for a in args if not a.startswith("-")]
+    for spec in positionals[named:]:
+        src = spec.lstrip("+").split(":", 1)[0].removeprefix("refs/heads/")
+        if src and not src.startswith("refs/"):
+            return src
+    return None
+
+
+def _lane_fetch_refusal(
+    invocation: _GitInvocation,
+    policy: Policy,
+    payload_cwd: Path,
+    effective_cwd: Path,
+    cwd_known: bool,
+    scope: Scope,
+    worktree_roots: tuple[Path, ...],
+    environ: Mapping[str, str],
+) -> Decision | None:
+    """The OMN-20495 refusal for one fetch-family call, or None to let it run."""
+    subcommand = invocation.subcommand
+    args = list(invocation.args)
+    if subcommand == "remote":
+        named = [a for a in args if not a.startswith("-")]
+        if not named or named[0] != "update":
+            return None
+        subcommand = "remote update"
+        args = args[args.index("update") + 1 :]
+    if any(environ.get(k) == v for k, v in policy.fetch_allow_env):
+        return None
+    target: Path | None = effective_cwd if cwd_known else None
+    if invocation.target_arg is not None:
+        expanded = _expand_path(invocation.target_arg, scope)
+        if expanded is None:
+            target = None
+        elif Path(expanded).is_absolute():
+            target = Path(expanded)
+        elif target is not None:
+            target = target / expanded
+    lane = (
+        bool(_lane_name(policy, environ))
+        or _is_lane_path(payload_cwd, policy, worktree_roots)
+        or (cwd_known and _is_lane_path(effective_cwd, policy, worktree_roots))
+        or (target is not None and _is_lane_path(target, policy, worktree_roots))
+    )
+    if not lane:
+        return None
+
+    def refuse(detail: str, repo: str = "", branch: str | None = None) -> Decision:
+        return Decision(
+            blocked=True,
+            reason=_fetch_refusal_text(policy, subcommand, repo, detail, branch),
+            fetch_verb=subcommand,
+            fetch_repo=repo,
+        )
+
+    if target is None:
+        return refuse(
+            "Its directory (a `cd` or `-C` word) could not be resolved, so the "
+            "remote it reads is unknown. "
+        )
+    words: list[str] = []
+    for arg in args:
+        expanded = _expand_path(arg, scope)
+        if expanded is None:
+            return refuse(
+                f"Its argument `{arg}` could not be expanded, so whether it names "
+                "GitHub is unknown. "
+            )
+        words.append(expanded)
+    names, every = _fetch_operands(subcommand, words)
+    needs_config = every or not names or not all(_names_a_location(n) for n in names)
+    config = _read_remote_config(target) if needs_config else None
+    if needs_config and config is None:
+        return None  # not a repository: git fails a remote name here itself
+    urls: list[tuple[str, str]] = []
+    if every and config is not None:
+        urls = [(n, config.url(n) or "") for n in config.remotes()]
+    else:
+        wanted = names or ([config.default_remote()] if config is not None else [])
+        for name in wanted:
+            if _names_a_location(name):
+                urls.append((name, name))
+                continue
+            assert config is not None
+            url = config.url(name)
+            if url is not None:
+                urls.append((name, url))
+                continue
+            group = config.group(name)
+            if group is not None:
+                urls.extend((g, config.url(g) or "") for g in group)
+                continue
+            return refuse(
+                f"Remote `{name}` is not configured in {config.where}, so whether "
+                "it is GitHub is unknown. "
+            )
+    for name, url in urls:
+        host = _remote_host(url)
+        if host is not None and host in policy.fetch_github_hosts:
+            match = _GITHUB_SLUG.search(url.strip())
+            repo = f"{match.group(1)}/{match.group(2)}" if match else ""
+            return refuse(
+                f"Remote `{name}` is {repo or url}. ",
+                repo,
+                _branch_hint(subcommand, words, len(names)),
+            )
+    return None
+
+
+def _log_fetch_refusal(
+    decision: Decision, policy: Policy, cwd: Path, environ: Mapping[str, str]
+) -> None:
+    """One TSV line per lane-fetch refusal, like the gh shim's call log: never argv."""
+    state = environ.get("ONEX_STATE_DIR")
+    if not state or not decision.fetch_verb:
+        return
+    lane, source = _lane_name(policy, environ), "env"
+    if not lane:
+        parts = cwd.parts
+        if "omni_worktrees" in parts:
+            idx = parts.index("omni_worktrees")
+            lane, source = "/".join(parts[idx + 1 : idx + 3]), "worktree"
+        else:
+            lane, source = environ.get("CLAUDE_CODE_SESSION_ID") or "unknown", "session"
+    host = environ.get("ONEX_LANE_HOST") or os.uname().nodename.split(".")[0]
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    fields = [stamp, lane, source, f"git {decision.fetch_verb}"]
+    fields += [decision.fetch_repo or "-", host, "refused"]
+    try:
+        path = Path(state) / "logs" / FETCH_LOG_NAME
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write("\t".join(fields) + "\n")
+    except OSError:
+        pass
+
+
 def evaluate_bash_command(
     command: str,
     policy: Policy,
@@ -1921,6 +2376,20 @@ def evaluate_bash_command(
                 effective_cwd = moved_to
             continue
         invocation = _parse_git(segment)
+        fetch_call = invocation or _parse_git(_drop_timeout(segment))
+        if fetch_call is not None and fetch_call.subcommand in policy.fetch_subcommands:
+            fetched = _lane_fetch_refusal(
+                fetch_call,
+                policy,
+                cwd,
+                effective_cwd,
+                cwd_known,
+                scope,
+                worktree_roots,
+                os.environ,
+            )
+            if fetched is not None:
+                return fetched
         if invocation is None:
             continue
         if invocation.subcommand not in policy.refused_subcommands:
@@ -2062,6 +2531,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if decision.blocked:
+        _log_fetch_refusal(decision, policy, cwd, os.environ)
         return _block(decision.reason)
 
     if decision.notes:

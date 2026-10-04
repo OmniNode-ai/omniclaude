@@ -52,6 +52,21 @@
 # contract-declared vocabulary in a policy JSON, a standard-library-only
 # Python decision core, a thin fail-closed shell wrapper.
 #
+# The lane git-fetch arm (OMN-20495)
+# -----------------------------------
+# The same core also refuses `git fetch`, `git pull`, `git ls-remote` and
+# `git remote update` against a GitHub remote in a lane context (ONEX_LANE
+# set, or a cwd, `cd` or `-C` path under omni_worktrees, lab-run/runs or a
+# declared worktrees root): a worktree shares its canonical clone's refs and
+# the canonical-clone sync keeps them current. The refusal is one line naming
+# `canonical_clone_sync.py refresh <owner/repo> --wait`; each one is also
+# logged to $ONEX_STATE_DIR/logs/git-fetch-guard.log with the lane name. Push,
+# non-GitHub remotes, non-lane calls, and ONEX_PR_WATCHER=1 or
+# ONEX_CANONICAL_CLONE_SYNC=1 in the hook environment pass. Nothing is
+# rewritten. Residual: a lane whose worktree path reaches the command only
+# through an exported variable, with no ONEX_LANE, is not seen by the
+# pre-filter below.
+#
 # What this refuses, and what it deliberately does not
 # ------------------------------------------------------
 # Scope is narrow on purpose: the guard fires ONLY when the effective git
@@ -210,9 +225,18 @@ if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'git'; then
     _hook_status "PASS" "no git vocabulary" "0" 2>/dev/null || true
     exit 0
 fi
+# OMN-20495: the lane git-fetch arm. Fetch vocabulary alone reaches the core
+# only with a lane marker in the environment or the payload (the command and
+# the cwd), so an orchestrator's or operator's fetch starts no interpreter.
+# Bash regex matching: this branch adds no process to any call.
+_stg_fetch_vocab='fetch|pull|ls-remote|remote'
+_stg_lane_marker='omni_worktrees|lab-run|ONEX_WORKTREES_ROOT'
 if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'reset|checkout|switch|clean|rebase|branch|merge|push|restore'; then
-    _hook_status "PASS" "no refused git verb" "0" 2>/dev/null || true
-    exit 0
+    if ! [[ "$TOOL_INFO" =~ $_stg_fetch_vocab ]] \
+        || { [[ -z "${ONEX_LANE:-}${ONEX_LANE_ID:-}" ]] && ! [[ "$TOOL_INFO" =~ $_stg_lane_marker ]]; }; then
+        _hook_status "PASS" "no refused git verb" "0" 2>/dev/null || true
+        exit 0
+    fi
 fi
 
 if ! TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null); then
