@@ -23,6 +23,12 @@
 # cannot merge unless an explicit approval receipt (# skip-token-allowed: <id>) is present
 # AND that receipt passes registry validation.
 #
+# OMN-20073 (OCC retirement, epic OMN-20068): this reusable no longer runs the change-control
+# preflight and the token scan no longer waits on it. The scan reads the PR body, title, commits
+# and diff from the GitHub API and the allowlist from the pinned trusted ref, so it needs nothing
+# from the preflight. A caller that drops the change-control required context keeps the scan.
+# Callers pin this file by sha, so each one adopts the change by its own bump.
+#
 # CLAUDE.md Rule #10: Never bypass local gates.
 # Plan: omni_home/docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4
 
@@ -35,18 +41,8 @@ on:
   merge_group:
 
 jobs:
-  occ-preflight:
-    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@52851458622f368c3b596c82bf810bc6acce1d5e
-    permissions:
-      contents: read
-      pull-requests: read
-    with:
-      contracts-dir: contracts
-      receipts-dir: drift/dod_receipts
-
+  # advisory-ok: OMN-20073 enforced in every caller as the required context `<caller job id> / scan / reject-skip-gate-token` (omniclaude: `call-reject-skip-token / scan / reject-skip-gate-token`); this gate sees only job ids and names in this file and cannot see a caller prefix, and the preflight job that used to cover the file by name is what this change removes
   scan-skip-tokens:
-    needs: occ-preflight
     name: scan / reject-skip-gate-token
     # OMN-18205: the untrusted test is the FORK test, and only the fork test.
     # It used to also send every same-repo pull request whose base is `dev`
