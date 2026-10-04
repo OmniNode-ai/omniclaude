@@ -1,0 +1,29 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-19811
+title: "Ticket used as the live dod_verify probe in PR 2542"
+summary: >
+  OMN-19811 is already Done and is only referenced by PR 2542 as the ticket the
+  live dod_verify command was run against. Nothing in this repository changes for
+  it. The in-repo contract exists because validate-pr-contracts reads contracts/
+  in this repository.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "The skill documents the execution audience flag used by the probe"
+    command: "uv run pytest tests/skills/test_dod_verify_names_execution_audience.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-probe-tests-pass
+    description: >
+      The execution audience test suite passes against the skill files.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/skills/test_dod_verify_names_execution_audience.py -q"

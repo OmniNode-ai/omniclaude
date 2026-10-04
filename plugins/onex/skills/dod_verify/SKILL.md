@@ -25,6 +25,9 @@ args:
   - name: --dry-run
     description: boolean flag
     required: false
+  - name: --execution-audience
+    description: "hosted or local_done_gate. Required: without it node_dod_verify refuses with EXECUTION_AUDIENCE_REQUIRED before reading the contract."
+    required: true
 skill_kind: dispatch
 ---
 

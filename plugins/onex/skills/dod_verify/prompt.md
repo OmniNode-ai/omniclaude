@@ -5,14 +5,21 @@ JSON to stdout — the full handler result, never truncated. RuntimeLocal logs a
 intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-uv run onex skill dod_verify "<ticket_id>" [--contract-path <v>] [--dry-run]
+uv run onex skill dod_verify "<ticket_id>" --execution-audience <hosted|local_done_gate> [--contract-path <v>] [--dry-run]
 ```
 
 | Argument | Type |
 |----------|------|
 | `<ticket_id>` | positional, required |
+| `--execution-audience` | `hosted` or `local_done_gate`, required |
 | `--contract-path` | string |
 | `--dry-run` | boolean, flag |
+
+`--execution-audience` names the boundary that is running the verifier. Omit it and the node
+refuses with `EXECUTION_AUDIENCE_REQUIRED` before it loads the contract or runs any evidence, so
+the result says nothing about the ticket. Use `hosted` for a scheduled or CI run: it skips a
+`dod_evidence` item declared `execution_scope: local_done_gate` as `NOT_EVALUATED`. Use
+`local_done_gate` when this session is the local Done gate and may execute those items itself.
 
 The command resolves the skill→node mapping, builds the payload, dispatches the
 node in receipt mode, and extracts the result internally. Do NOT construct a
