@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from omniclaude.hooks.handlers.handler_delegation_prompt_builder import (
     ModelDelegationContext,
@@ -100,6 +101,30 @@ class TestBuildDelegationPrompt:
         prompt = build_delegation_prompt(_make_context(ticket_title=""))
         assert "**Title**" not in prompt
 
+    def test_empty_description_keeps_ticket_and_execution_context(self) -> None:
+        prompt = build_delegation_prompt(_make_context(ticket_description=""))
+
+        assert "## Ticket: OMN-7300" in prompt
+        assert "## Working Branch" in prompt
+        assert "## Test Command" in prompt
+        assert "## Instructions" in prompt
+
+    def test_oversized_description_is_preserved_without_injection_truncation(
+        self,
+    ) -> None:
+        # Pattern injection limits belong to context injection, not this builder.
+        # This description exceeds even its maximum 10,000-token budget at the
+        # delegation estimator's four-characters-per-token approximation.
+        description = "Implement the delegation task.\n" * 2000 + "END OF TASK"
+        context = _make_context(ticket_description=description)
+
+        prompt = build_delegation_prompt(context)
+
+        assert description in prompt
+        assert prompt.index("END OF TASK") < prompt.index("## Working Branch")
+        assert estimate_delegation_tokens(context) == len(prompt) // 4
+        assert estimate_delegation_tokens(context) > 10000
+
 
 @pytest.mark.unit
 class TestEstimateDelegationTokens:
@@ -133,3 +158,27 @@ class TestModelDelegationContext:
             branch="branch",
         )
         assert "pytest" in ctx.test_command
+
+    @pytest.mark.parametrize("field", ["ticket_id", "ticket_description"])
+    def test_ticket_fields_are_required(self, field: str) -> None:
+        values = _make_context().model_dump()
+        del values[field]
+
+        with pytest.raises(ValidationError) as exc_info:
+            ModelDelegationContext.model_validate(values)
+
+        assert [(error["loc"], error["type"]) for error in exc_info.value.errors()] == [
+            ((field,), "missing")
+        ]
+
+    @pytest.mark.parametrize("field", ["lane", "task_class"])
+    def test_unsupported_dispatch_fields_are_rejected(self, field: str) -> None:
+        values = _make_context().model_dump()
+        values[field] = "unregistered"
+
+        with pytest.raises(ValidationError) as exc_info:
+            ModelDelegationContext.model_validate(values)
+
+        assert [(error["loc"], error["type"]) for error in exc_info.value.errors()] == [
+            ((field,), "extra_forbidden")
+        ]
