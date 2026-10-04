@@ -591,11 +591,28 @@ def test_engine_refuses_when_git_refuses_the_switch_over_an_untracked_file(
 ) -> None:
     clone = _parked_on_main(reg)
     reg.advance("svc", path="new.txt", text="remote\n", branch="dev")
+    _git("fetch", "--quiet", "origin", cwd=clone)
+    _git("branch", "--force", "dev", "origin/dev", cwd=clone)
     (clone / "new.txt").write_text("local untracked\n")
     res = ccs.sync_clone(clone)
     assert res.result == ccs.REFUSED, res
     assert "new.txt" in (res.reason or "")
+    assert res.switched_from is None
     assert _head_branch(clone) == "main"
+    assert (clone / "new.txt").read_text() == "local untracked\n"
+
+
+def test_engine_reports_a_fast_forward_git_refuses_after_the_switch(
+    reg: Registry,
+) -> None:
+    clone = _parked_on_main(reg)
+    reg.advance("svc", path="new.txt", text="remote\n", branch="dev")
+    (clone / "new.txt").write_text("local untracked\n")
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.REFUSED, res
+    assert "new.txt" in (res.reason or "")
+    assert (res.branch, res.switched_from) == ("dev", "main")
+    assert _head_branch(clone) == "dev"
     assert (clone / "new.txt").read_text() == "local untracked\n"
 
 
@@ -667,7 +684,7 @@ def test_engine_opens_the_converge_door_for_the_switch_alone(
 def test_engine_reports_a_guard_refusal_that_left_the_tree_half_applied(
     reg: Registry, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    clone = _parked_on_main(reg)
+    clone = _parked_on_main(reg, local_dev=False)
     _install_switch_guard(tmp_path, monkeypatch, half_apply=True)
     res = ccs.sync_clone(clone)
     assert res.result == ccs.FAILED, res

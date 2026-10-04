@@ -37,10 +37,12 @@ What a clone must be before it moves
 ------------------------------------
 A canonical clone is a mirror (CLAUDE.md, "What This Workspace Is"). It is
 advanced ONLY by ``git merge --ff-only`` onto the fetched upstream of the
-branch it already has checked out, and only when that branch is a tracking
-branch (``main``, ``dev``, ``master``). Everything else is REFUSED, logged with
-the reason, and left exactly as found -- no reset, no checkout, no stash, no
-clean, no force:
+branch it has checked out, and only when that branch is a tracking branch
+(``main``, ``dev``, ``master``). The one move it makes besides that is the
+return to the remote default branch described under "Which branch a clone
+follows" (RULING 2026-10-04T10:11:35Z). Everything else is REFUSED, logged
+with the reason, and left exactly as found -- no reset, no stash, no clean, no
+force, and no checkout beyond that one switch:
 
 * bare (``core.bare=true``): fetch succeeds and checkout never lands (OMN-17291)
 * detached HEAD, or checked out on a lane branch
@@ -57,13 +59,31 @@ clean, no force:
 
 Which branch a clone follows
 ----------------------------
-The one it has checked out. ``pull-all.sh`` leaves every clone whose origin has
-a ``dev`` branch on ``dev`` and the rest on ``main`` (OMN-16502), and the
-OMN-17190 reconciler reconciles ``dev``. On the release-synced repositories PRs
-land on ``dev`` and ``main`` only moves at a release, so ``dev`` is where merged
-code appears first and is the right branch to query. This engine never switches
-branches: moving HEAD between branches is the one thing the canonical-clone ref
-guard refuses, and pull-all is the sanctioned door for it.
+The remote's default branch. RULING 2026-10-04T10:11:35Z (item 6): canonical
+clones track their dev branch, never a stale or restored state. ``pull-all.sh``
+leaves every clone whose origin has a ``dev`` branch on ``dev`` and the rest on
+``main`` (OMN-16502), and the OMN-17190 reconciler reconciles ``dev``. On the
+release-synced repositories PRs land on ``dev`` and ``main`` only moves at a
+release, so ``dev`` is where merged code appears first and is the right branch
+to query.
+
+A clean clone checked out on a tracking branch that is NOT the remote default
+(``refs/remotes/<remote>/HEAD``, the derivation ``converge-canonical-clone.sh``
+uses) is returned to the default branch when that branch is itself a tracking
+branch, and fast-forwarded: ``git switch`` (or ``switch --track -c`` when no
+local copy exists), then ``merge --ff-only``. Before that, the clone must be
+clean in the same sense as above -- nothing in progress, no ``index.lock``, no
+staged or unstaged tracked change, not a shared ``commit_lock`` tree -- and the
+local default branch must be absent or an ancestor of the fetched remote one.
+Anything else is REFUSED with a reason naming the current branch, the default
+branch and why, and nothing moves. The canonical-clone ref guard refuses a HEAD
+symref move, so the switch call alone runs with ``ONEX_CANONICAL_CONVERGE=1``,
+the door ``pull-all.sh`` already uses; the move is read back, and a guard
+refusal that leaves the target tree checked out under the old HEAD (OMN-18358)
+is a FAILED result, never a quiet one. A switched clone is logged ADVANCED with
+``branch`` the default and ``switched_from`` the branch it left. With no
+``refs/remotes/<remote>/HEAD`` the engine follows the checked-out branch as
+before. ``refresh`` never moves a checked-out branch.
 
 Verification
 ------------
@@ -114,6 +134,10 @@ CLONE_LOCK_WAIT_SECONDS = 120
 COMMIT_LOCK_WAIT_SECONDS = 60
 ARMED_DELAY_SECONDS = 30
 MAX_WORKERS = 8
+
+# The one sanctioned door through the canonical-clone ref guard for a HEAD
+# symref move (pull-all.sh uses the same one). Set for the switch call alone.
+CONVERGE_ENV = {"ONEX_CANONICAL_CONVERGE": "1"}
 
 # Result vocabulary. Every clone gets exactly one of these per run.
 ADVANCED = "ADVANCED"
@@ -434,15 +458,22 @@ class GitResult:
 
 
 def run_git(
-    clone: Path, *args: str, timeout: float = GIT_TIMEOUT_SECONDS, strip: bool = True
+    clone: Path,
+    *args: str,
+    timeout: float = GIT_TIMEOUT_SECONDS,
+    strip: bool = True,
+    extra_env: Mapping[str, str] | None = None,
 ) -> GitResult:
+    env = git_env()
+    if extra_env:
+        env.update(extra_env)
     try:
         proc = subprocess.run(
             ["git", "-C", str(clone), *args],
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=git_env(),
+            env=env,
             check=False,
             stdin=subprocess.DEVNULL,
         )
@@ -587,6 +618,7 @@ class CloneResult:
     target: str | None = None
     reason: str | None = None
     carried_dirty_paths: int = 0
+    switched_from: str | None = None
 
 
 def _dirty_entries(clone: Path) -> tuple[list[str], list[str]] | None:
@@ -613,6 +645,151 @@ def _dirty_entries(clone: Path) -> tuple[list[str], list[str]] | None:
         if y not in " ?":
             unstaged.append(path)
     return staged, unstaged
+
+
+def _fetch_branch(clone: Path, remote: str, branch: str) -> GitResult:
+    """Fetch one branch into its remote-tracking ref, retrying a ref-lock race once.
+
+    One retry: a concurrent fetch by another process (the reconcile tick, a
+    lane, pull-all) holding the same tracking ref fails this one with "cannot
+    lock ref", which is a race and not a fault. Observed on 2026-09-25
+    (omnibase_infra, the 15:29Z timer run, host load 60).
+    """
+    fetch = GitResult(1, "", "not attempted")
+    for attempt in range(2):
+        fetch = run_git(
+            clone,
+            "fetch",
+            "--quiet",
+            remote,
+            f"+refs/heads/{branch}:refs/remotes/{remote}/{branch}",
+            timeout=FETCH_TIMEOUT_SECONDS,
+        )
+        if fetch.code == 0 or "cannot lock ref" not in fetch.err or attempt:
+            break
+        time.sleep(2)
+    return fetch
+
+
+def _remote_default_branch(clone: Path, remote: str) -> str | None:
+    """The remote's default branch from ``refs/remotes/<remote>/HEAD``, or None.
+
+    The same derivation ``converge-canonical-clone.sh`` uses (OMN-16497). No
+    symref, no answer: the engine then keeps following the checked-out branch.
+    """
+    ref = run_git(
+        clone, "symbolic-ref", "--quiet", "--short", f"refs/remotes/{remote}/HEAD"
+    ).out
+    prefix = f"{remote}/"
+    if not ref.startswith(prefix) or len(ref) == len(prefix):
+        return None
+    return ref[len(prefix) :]
+
+
+def _return_to_default(
+    clone: Path,
+    result: CloneResult,
+    git_dir: Path,
+    remote: str,
+    branch: str,
+    default: str,
+) -> CloneResult:
+    """Switch a clean clone from ``branch`` to the remote default and fast-forward it.
+
+    RULING 2026-10-04T10:11:35Z: a canonical clone tracks its remote default
+    branch, never a stale or restored state. The switch is only attempted when
+    every precondition holds (nothing in progress, no tracked change, no
+    unpushed commits on the local default), because the canonical-clone ref
+    guard can refuse the HEAD move AFTER git has checked the target tree out
+    (OMN-18358); the move is read back either way. Switch and ``--ff-only`` only:
+    no reset, no stash, no clean.
+    """
+    tracking_ref = f"refs/remotes/{remote}/{default}"
+    upstream = f"{remote}/{default}"
+    where = f"on {branch}, remote default is {default}"
+
+    def refuse(reason: str) -> CloneResult:
+        result.result = REFUSED
+        result.reason = f"{where}: {reason}"
+        return result
+
+    def fail(reason: str) -> CloneResult:
+        result.result = FAILED
+        result.reason = f"{where}: {reason}"
+        return result
+
+    fetch = _fetch_branch(clone, remote, default)
+    if fetch.code != 0:
+        return fail(f"fetch {remote} {default} failed: {_tail(fetch.err)}")
+    target = run_git(clone, "rev-parse", "--verify", "--quiet", tracking_ref).out
+    if not target:
+        return fail(f"{tracking_ref} does not resolve after the fetch")
+    result.target = target
+
+    for marker in _IN_PROGRESS_MARKERS:
+        if (git_dir / marker).exists():
+            return refuse(f"{marker} present: an operation is in progress in the clone")
+    if (git_dir / "index.lock").exists():
+        return refuse("index.lock present: another git process is writing the clone")
+    if (clone / SHARED_TREE_COMMIT_LOCK).exists():
+        return refuse(
+            "a shared tree that uses the commit_lock protocol is never switched"
+        )
+    dirty = _dirty_entries(clone)
+    if dirty is None:
+        return fail("git status failed; the clone's cleanliness is unknown")
+    changed = [*dirty[0], *dirty[1]]
+    if changed:
+        return refuse(
+            f"{len(changed)} path(s) with tracked changes, "
+            f"e.g. {', '.join(changed[:3])}"
+        )
+
+    local = run_git(clone, "rev-parse", "--verify", "--quiet", f"refs/heads/{default}")
+    if local.out:
+        if run_git(clone, "merge-base", "--is-ancestor", local.out, target).code != 0:
+            count = run_git(clone, "rev-list", "--count", f"{target}..{local.out}")
+            return refuse(
+                f"local {default} carries {count.out or 'some'} commit(s) "
+                f"{upstream} does not"
+            )
+        switch_args = ["switch", "--quiet", default]
+    else:
+        switch_args = ["switch", "--quiet", "--track", "-c", default, upstream]
+
+    switch = run_git(clone, *switch_args, extra_env=CONVERGE_ENV)
+    now = run_git(clone, "symbolic-ref", "--quiet", "--short", "HEAD").out
+    if switch.code != 0:
+        message = _tail(switch.err or switch.out)
+        if now != branch:
+            return fail(f"git switch failed and HEAD is on {now!r}: {message}")
+        left = _dirty_entries(clone)
+        if left is None or any(left):
+            return fail(
+                f"the switch was refused after the {default} tree was checked "
+                f"out, so the tree is half-applied and HEAD is still {branch} "
+                f"(OMN-18358): {message}"
+            )
+        return refuse(f"git refused the switch: {message}")
+    result.branch = default
+    result.upstream = upstream
+    result.switched_from = branch
+
+    merge = run_git(clone, "merge", "--ff-only", "--quiet", target)
+    after = run_git(clone, "rev-parse", "--verify", "--quiet", "HEAD").out
+    result.after = after or None
+    now = run_git(clone, "symbolic-ref", "--quiet", "--short", "HEAD").out
+    if merge.code != 0:
+        return refuse(
+            f"HEAD is on {default} now, git refused its fast-forward: "
+            f"{_tail(merge.err or merge.out)}"
+        )
+    if now != default or after != target:
+        return fail(
+            f"read back HEAD on {now!r} at {after}; expected {default!r} at {target}"
+        )
+    result.result = ADVANCED
+    return result
 
 
 def sync_clone(clone: Path) -> CloneResult:
@@ -669,23 +846,22 @@ def sync_clone(clone: Path) -> CloneResult:
         before = run_git(clone, "rev-parse", "--verify", "--quiet", "HEAD").out
         result.before = before or None
 
-        # One retry: a concurrent fetch by another process (the reconcile tick,
-        # a lane, pull-all) holding the same tracking ref fails this one with
-        # "cannot lock ref", which is a race and not a fault. Observed on
-        # 2026-09-25 (omnibase_infra, the 15:29Z timer run, host load 60).
-        fetch = GitResult(1, "", "not attempted")
-        for attempt in range(2):
-            fetch = run_git(
+        default = _remote_default_branch(clone, remote)
+        if (
+            default
+            and default != branch
+            and default in TRACKING_BRANCHES
+            and run_git(
                 clone,
-                "fetch",
+                "rev-parse",
+                "--verify",
                 "--quiet",
-                remote,
-                f"+refs/heads/{upstream_branch}:{tracking_ref}",
-                timeout=FETCH_TIMEOUT_SECONDS,
-            )
-            if fetch.code == 0 or "cannot lock ref" not in fetch.err or attempt:
-                break
-            time.sleep(2)
+                f"refs/remotes/{remote}/{default}",
+            ).out
+        ):
+            return _return_to_default(clone, result, git_dir, remote, branch, default)
+
+        fetch = _fetch_branch(clone, remote, upstream_branch)
         if fetch.code != 0:
             return fail(f"fetch {remote} {upstream_branch} failed: {_tail(fetch.err)}")
 
