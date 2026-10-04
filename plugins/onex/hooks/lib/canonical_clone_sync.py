@@ -81,9 +81,14 @@ symref move, so the switch call alone runs with ``ONEX_CANONICAL_CONVERGE=1``,
 the door ``pull-all.sh`` already uses; the move is read back, and a guard
 refusal that leaves the target tree checked out under the old HEAD (OMN-18358)
 is a FAILED result, never a quiet one. A switched clone is logged ADVANCED with
-``branch`` the default and ``switched_from`` the branch it left. With no
-``refs/remotes/<remote>/HEAD`` the engine follows the checked-out branch as
-before. ``refresh`` never moves a checked-out branch.
+``branch`` the default and ``switched_from`` the branch it left. The default is
+refreshed from the remote before it is acted on: ``git remote set-head <remote>
+--auto`` (git transport, no GitHub API) runs on every sync, one ``ls-remote``-sized
+round trip beside the fetch, and the symref is re-read afterwards, so a stale
+symref never moves a clone. The refresh runs with
+``ONEX_CANONICAL_CONVERGE=1`` too, since it moves a symref. A refresh that fails
+never switches: the engine follows the checked-out branch and puts the failure
+in the result's reason. ``refresh`` never moves a checked-out branch.
 
 Verification
 ------------
@@ -686,6 +691,25 @@ def _remote_default_branch(clone: Path, remote: str) -> str | None:
     return ref[len(prefix) :]
 
 
+def _refresh_remote_head(clone: Path, remote: str) -> GitResult:
+    """Re-read the remote's default branch into ``refs/remotes/<remote>/HEAD``.
+
+    ``git remote set-head <remote> --auto`` asks the remote over the git
+    transport (the one ``git fetch`` uses, no GitHub API). It moves a symref,
+    which the canonical-clone ref guard treats like a HEAD move, so it runs
+    through the same ``ONEX_CANONICAL_CONVERGE`` door as the switch.
+    """
+    return run_git(
+        clone,
+        "remote",
+        "set-head",
+        remote,
+        "--auto",
+        timeout=FETCH_TIMEOUT_SECONDS,
+        extra_env=CONVERGE_ENV,
+    )
+
+
 def _return_to_default(
     clone: Path,
     result: CloneResult,
@@ -846,7 +870,22 @@ def sync_clone(clone: Path) -> CloneResult:
         before = run_git(clone, "rev-parse", "--verify", "--quiet", "HEAD").out
         result.before = before or None
 
-        default = _remote_default_branch(clone, remote)
+        default: str | None = None
+        refresh_failure: str | None = None
+        # The symref is a local copy nothing else keeps current, and one
+        # naming the checked-out branch can be just as stale as one naming
+        # another (a clone parked on main whose origin moved to dev), so it
+        # is re-read from the remote before the engine acts on it. A
+        # refresh that fails leaves the clone on its own branch.
+        refreshed = _refresh_remote_head(clone, remote)
+        if refreshed.code == 0:
+            default = _remote_default_branch(clone, remote)
+        else:
+            default = None
+            refresh_failure = (
+                f"remote set-head {remote} --auto failed, so the clone "
+                f"follows {branch}: {_tail(refreshed.err or refreshed.out)}"
+            )
         if (
             default
             and default != branch
@@ -863,12 +902,16 @@ def sync_clone(clone: Path) -> CloneResult:
 
         fetch = _fetch_branch(clone, remote, upstream_branch)
         if fetch.code != 0:
-            return fail(f"fetch {remote} {upstream_branch} failed: {_tail(fetch.err)}")
+            return fail(
+                f"fetch {remote} {upstream_branch} failed: {_tail(fetch.err)}"
+                + (f"; {refresh_failure}" if refresh_failure else "")
+            )
 
         target = run_git(clone, "rev-parse", "--verify", "--quiet", tracking_ref).out
         if not target:
             return fail(f"{tracking_ref} does not resolve after the fetch")
         result.target = target
+        result.reason = refresh_failure
 
         if before == target:
             result.after = before
