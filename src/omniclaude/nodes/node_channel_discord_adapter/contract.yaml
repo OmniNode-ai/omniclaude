@@ -19,6 +19,10 @@ node_version:
   minor: 1
   patch: 0
 
+# Runtime profile. Declared explicitly (OMN-20560): an absent value already
+# meant main ownership in auto-wiring, so this changes no runtime behaviour.
+runtime_profiles: [main]
+
 node_type: EFFECT_GENERIC
 
 description: >
