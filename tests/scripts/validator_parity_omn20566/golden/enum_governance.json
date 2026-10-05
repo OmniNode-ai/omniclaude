@@ -1,0 +1,53 @@
+{
+  "clean": {
+    "exit": 0,
+    "findings": []
+  },
+  "duplicate_values_across_files": {
+    "exit": 0,
+    "findings": []
+  },
+  "lib_directory_is_scanned": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/omniclaude/lib/enums.py",
+        3
+      ]
+    ]
+  },
+  "literal_alias_with_status_vocabulary": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/omniclaude/a/types.py",
+        3
+      ]
+    ]
+  },
+  "literal_alias_with_two_values_is_fine": {
+    "exit": 0,
+    "findings": []
+  },
+  "member_casing": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/omniclaude/a/enums.py",
+        3
+      ]
+    ]
+  },
+  "member_casing_suppressed": {
+    "exit": 0,
+    "findings": []
+  },
+  "outside_scan_root": {
+    "exit": 0,
+    "findings": []
+  },
+  "syntax_error": {
+    "exit": 0,
+    "findings": []
+  }
+}

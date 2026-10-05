@@ -1,0 +1,97 @@
+{
+  "adapter_file_is_allowed": {
+    "exit": 0,
+    "findings": []
+  },
+  "aliased_module_connect": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/omniclaude/a.py",
+        3
+      ]
+    ]
+  },
+  "clean": {
+    "exit": 0,
+    "findings": []
+  },
+  "di_ok_on_closing_line_of_multiline_call": {
+    "exit": 0,
+    "findings": []
+  },
+  "di_ok_preceding_line": {
+    "exit": 0,
+    "findings": []
+  },
+  "di_ok_same_line": {
+    "exit": 0,
+    "findings": []
+  },
+  "di_ok_two_lines_away_does_not_suppress": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/omniclaude/a.py",
+        4
+      ]
+    ]
+  },
+  "from_import_connect": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/omniclaude/a.py",
+        3
+      ]
+    ]
+  },
+  "from_import_connect_alias": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/omniclaude/a.py",
+        3
+      ]
+    ]
+  },
+  "module_connect": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/omniclaude/a.py",
+        3
+      ]
+    ]
+  },
+  "other_module_connect_is_fine": {
+    "exit": 0,
+    "findings": []
+  },
+  "outside_checked_dirs": {
+    "exit": 0,
+    "findings": []
+  },
+  "plugins_dir_is_checked": {
+    "exit": 1,
+    "findings": [
+      [
+        "plugins/onex/hooks/a.py",
+        2
+      ]
+    ]
+  },
+  "syntax_error": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/omniclaude/bad.py",
+        null
+      ]
+    ]
+  },
+  "tests_dir_is_excluded": {
+    "exit": 0,
+    "findings": []
+  }
+}

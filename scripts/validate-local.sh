@@ -41,11 +41,11 @@ fi
 
 # Architecture
 run_check "exports validation" uv run python scripts/validation/validate_exports.py
-run_check "enum governance" uv run python scripts/validation/validate_enum_governance.py
-run_check "no hardcoded IPs" uv run python scripts/validation/validate_no_hardcoded_ip.py
+run_check "enum governance" uv run pre-commit run check-enum-governance --all-files --hook-stage pre-push
+run_check "no hardcoded IPs" uv run pre-commit run check-no-hardcoded-ip --all-files
 run_check "no DB in orchestrator" uv run python scripts/validation/validate_no_db_in_orchestrator.py
 run_check "no git outside effects" uv run python scripts/validation/validate_no_git_outside_effects.py
-run_check "no direct Kafka producer" uv run python scripts/validation/validate_no_direct_kafka_producer.py
+run_check "no direct Kafka producer" uv run pre-commit run check-no-direct-kafka-producer --all-files
 run_check "topic naming" uv run python scripts/validation/validate_topic_naming.py
 run_check "no hardcoded Kafka broker" uv run python scripts/validation/validate_no_hardcoded_kafka_broker.py
 

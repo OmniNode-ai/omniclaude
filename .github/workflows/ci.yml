@@ -590,9 +590,12 @@ jobs:
             sleep $((attempt * 10))
           done
 
+      # OMN-20566: core's enum-governance checker through the same pre-commit hook id the
+      # pre-push hook uses (scan root src/omniclaude/ is the hook's args:), at the omnibase_core
+      # tag .pre-commit-config.yaml pins, the version uv.lock resolves.
       - name: Validate enum governance
         working-directory: ${{ github.workspace }}
-        run: uv run python scripts/validation/validate_enum_governance.py
+        run: uv run --frozen --with 'pre-commit==4.6.2' pre-commit run check-enum-governance --all-files --hook-stage pre-push --show-diff-on-failure
 
   exports-validation:
     needs: occ-preflight
@@ -1038,8 +1041,12 @@ jobs:
     if: always()
     name: "Arch: No raw sqlite3.connect in handler/skill code (OMN-10725)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    # OMN-20566: the rule is the omnibase_core check node, run through the same pre-commit
+    # hook id the local hook uses. pre-commit builds that hook's environment from the
+    # omnibase_core tag .pre-commit-config.yaml pins (the version uv.lock resolves), so the
+    # first run installs omnibase-core; the budget covers that install.
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1051,15 +1058,21 @@ jobs:
 
       - name: Check no raw sqlite3.connect in handler/skill code
         working-directory: ${{ github.workspace }}
-        run: python3 scripts/validation/validate_no_raw_sqlite3.py
+        run: |
+          python3 -m pip install --quiet 'pre-commit==4.6.2'
+          pre-commit run check-no-raw-sqlite3 --all-files --show-diff-on-failure
 
   arch-no-env-fallbacks:
     needs: occ-preflight
     if: always()
     name: "Arch: No localhost/default env fallbacks (OMN-10658)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    # OMN-20566: the rule is the omnibase_core check node, run through the same pre-commit
+    # hook id the local hook uses. pre-commit builds that hook's environment from the
+    # omnibase_core tag .pre-commit-config.yaml pins (the version uv.lock resolves), so the
+    # first run installs omnibase-core; the budget covers that install.
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1071,7 +1084,9 @@ jobs:
 
       - name: Check no localhost/default env fallbacks in src/ and scripts/
         working-directory: ${{ github.workspace }}
-        run: python3 scripts/validate_no_env_fallbacks.py
+        run: |
+          python3 -m pip install --quiet 'pre-commit==4.6.2'
+          pre-commit run check-no-env-fallbacks --all-files --show-diff-on-failure
 
   arch-cost-ledger-isolation:
     needs: occ-preflight
@@ -1295,8 +1310,12 @@ jobs:
     if: always()
     name: "Arch: No direct Kafka producer outside publisher (check 10)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    # OMN-20566: the rule is the omnibase_core check node, run through the same pre-commit
+    # hook id the local hook uses. pre-commit builds that hook's environment from the
+    # omnibase_core tag .pre-commit-config.yaml pins (the version uv.lock resolves), so the
+    # first run installs omnibase-core; the budget covers that install.
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1308,7 +1327,9 @@ jobs:
 
       - name: Check no direct Kafka producer usage
         working-directory: ${{ github.workspace }}
-        run: python3 scripts/validation/validate_no_direct_kafka_producer.py
+        run: |
+          python3 -m pip install --quiet 'pre-commit==4.6.2'
+          pre-commit run check-no-direct-kafka-producer --all-files --show-diff-on-failure
 
   arch-no-utcnow:
     needs: occ-preflight
@@ -1316,8 +1337,12 @@ jobs:
     name: "Arch: No datetime.utcnow() (check 11)"
     # Static validation: run hosted so checkout/dependency setup cannot time out
     # behind the self-hosted fleet and falsely cancel the Quality Gate.
+    # OMN-20566: the rule is the omnibase_core check node, run through the same pre-commit
+    # hook id the local hook uses. pre-commit builds that hook's environment from the
+    # omnibase_core tag .pre-commit-config.yaml pins (the version uv.lock resolves), so the
+    # first run installs omnibase-core; the budget covers that install.
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1327,20 +1352,21 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # This is a stdlib-only AST scan (imports: ast, sys, pathlib) — it does not
-      # need the project venv. The former `uv sync --frozen --group dev` step could
-      # exceed even a 10-minute job timeout under self-hosted fleet saturation,
-      # cancelling a check that runs in <1s. Running it with the setup-python
-      # interpreter removes the dependency install entirely (also reduces fleet load).
       - name: Check no datetime.utcnow() usage
         working-directory: ${{ github.workspace }}
-        run: python3 scripts/validation/validate_no_utcnow.py
+        run: |
+          python3 -m pip install --quiet 'pre-commit==4.6.2'
+          pre-commit run check-no-utcnow --all-files --show-diff-on-failure
 
   arch-no-hardcoded-ip:
     name: "Arch: No hardcoded internal IPs (check 12)"
     # Static validation: run hosted so runner saturation cannot cancel Quality Gate.
+    # OMN-20566: the rule is the omnibase_core check node, run through the same pre-commit
+    # hook id the local hook uses. pre-commit builds that hook's environment from the
+    # omnibase_core tag .pre-commit-config.yaml pins (the version uv.lock resolves), so the
+    # first run installs omnibase-core; the budget covers that install.
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -1350,13 +1376,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # This is a stdlib-only regex scan (imports: re, sys, pathlib) — it does not
-      # need the project venv. The former `uv sync --frozen --group dev` step stalled
-      # on wheel downloads past the 5-minute job timeout (omniclaude#2450, both
-      # attempts of run 36827581117), cancelling a check that runs in <1s.
       - name: Check no hardcoded internal IPs
         working-directory: ${{ github.workspace }}
-        run: python3 scripts/validation/validate_no_hardcoded_ip.py
+        run: |
+          python3 -m pip install --quiet 'pre-commit==4.6.2'
+          pre-commit run check-no-hardcoded-ip --all-files --show-diff-on-failure
 
   # ============================================================================
   # F5 ARCHITECTURAL CHECKS (OMN-2595: Consumer Group Rules)

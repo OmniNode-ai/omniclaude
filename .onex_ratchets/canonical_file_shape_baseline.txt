@@ -643,7 +643,6 @@ scripts/validate-env.sh
 scripts/validate-kafka-setup.sh
 scripts/validate-local.sh
 scripts/validate_frontmatter.py
-scripts/validate_no_env_fallbacks.py
 scripts/validate_onex.py
 scripts/validate_pattern_extraction.py
 scripts/validate_pattern_integration.py
@@ -660,7 +659,6 @@ scripts/validation/validate_cost_ledger_isolation.py
 scripts/validation/validate_cost_ledger_structure.py
 scripts/validation/validate_deterministic_skill_routing.py
 scripts/validation/validate_distribution_classification.py
-scripts/validation/validate_enum_governance.py
 scripts/validation/validate_exports.py
 scripts/validation/validate_full_market_skill_inventory.py
 scripts/validation/validate_golden_chain_integrity.py
@@ -674,17 +672,13 @@ scripts/validation/validate_no_compact_cmd_topic.py
 scripts/validation/validate_no_db_in_orchestrator.py
 scripts/validation/validate_no_direct_adapter_in_business_logic.py
 scripts/validation/validate_no_direct_bus_instantiation.py
-scripts/validation/validate_no_direct_kafka_producer.py
 scripts/validation/validate_no_duplicate_models.py
 scripts/validation/validate_no_git_outside_effects.py
 scripts/validation/validate_no_hardcoded_fallbacks.py
-scripts/validation/validate_no_hardcoded_ip.py
 scripts/validation/validate_no_hardcoded_kafka_broker.py
 scripts/validation/validate_no_internal_ips.py
 scripts/validation/validate_no_linear_outside_effects.py
-scripts/validation/validate_no_raw_sqlite3.py
 scripts/validation/validate_no_repo_adapter_in_orchestrator.py
-scripts/validation/validate_no_utcnow.py
 scripts/validation/validate_plugin_version_bump.py
 scripts/validation/validate_pr_deploy_required.py
 scripts/validation/validate_precommit_fail_loud.py

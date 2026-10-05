@@ -1,0 +1,81 @@
+{
+  "bare_attribute_without_call": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        3
+      ]
+    ]
+  },
+  "clean": {
+    "exit": 0,
+    "findings": []
+  },
+  "datetime_datetime_utcnow": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        3
+      ]
+    ]
+  },
+  "datetime_utcnow": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        3
+      ]
+    ]
+  },
+  "dt_alias_utcnow": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        3
+      ]
+    ]
+  },
+  "nested_and_mixed": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/other.py",
+        2
+      ],
+      [
+        "src/pkg/sub/deep/dirty.py",
+        5
+      ]
+    ]
+  },
+  "no_python_at_all": {
+    "exit": 0,
+    "findings": []
+  },
+  "other_receiver_utcnow": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ]
+    ]
+  },
+  "out_of_scope_tests_dir": {
+    "exit": 0,
+    "findings": []
+  },
+  "syntax_error": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/bad.py",
+        null
+      ]
+    ]
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "bootstrap_servers_literal": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ]
+    ]
+  },
+  "clean": {
+    "exit": 0,
+    "findings": []
+  },
+  "default_private_ip": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        2
+      ]
+    ]
+  },
+  "docstring_lines_are_skipped": {
+    "exit": 0,
+    "findings": []
+  },
+  "embedded_triple_quotes_do_not_start_docstring": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/module.py",
+        2
+      ]
+    ]
+  },
+  "embedded_triple_quotes_on_fallback_line_still_scan": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/module.py",
+        1
+      ]
+    ]
+  },
+  "environ_get_localhost": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        2
+      ]
+    ]
+  },
+  "environ_get_private_ip": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        2
+      ]
+    ]
+  },
+  "executable_after_docstring_close": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ]
+    ]
+  },
+  "exempt_markers": {
+    "exit": 0,
+    "findings": []
+  },
+  "getenv_localhost": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        2
+      ]
+    ]
+  },
+  "multiple_findings_and_files": {
+    "exit": 1,
+    "findings": [
+      [
+        "scripts/r.sh",
+        1
+      ],
+      [
+        "src/pkg/a.py",
+        2
+      ],
+      [
+        "src/pkg/a.py",
+        4
+      ],
+      [
+        "src/pkg/b.py",
+        1
+      ]
+    ]
+  },
+  "outside_scan_roots": {
+    "exit": 0,
+    "findings": []
+  },
+  "pure_comment_lines_are_skipped": {
+    "exit": 0,
+    "findings": []
+  },
+  "pydantic_default_loopback": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        2
+      ]
+    ]
+  },
+  "shell_default_expansion": {
+    "exit": 1,
+    "findings": [
+      [
+        "scripts/run.sh",
+        1
+      ],
+      [
+        "scripts/run2.bash",
+        1
+      ],
+      [
+        "scripts/run2.bash",
+        2
+      ]
+    ]
+  },
+  "skip_dirs_are_ignored": {
+    "exit": 0,
+    "findings": []
+  },
+  "str_param_default": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ]
+    ]
+  },
+  "unrelated_suffixes_are_ignored": {
+    "exit": 0,
+    "findings": []
+  }
+}
