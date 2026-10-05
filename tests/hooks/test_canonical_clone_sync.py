@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Tests for the merge-driven canonical-clone sync (OMN-19607).
 
-Three parts, named so the ticket's falsifiers can select them:
+Named groups so the tickets' falsifiers can select them:
 
 * ``matcher`` -- which tool calls are merges, and of which repository.
 * ``engine`` -- the fetch and fast-forward of one clone, and every refusal.
@@ -10,6 +10,8 @@ Three parts, named so the ticket's falsifiers can select them:
 * ``hook`` -- the PostToolUse script: exit 0, silent, fast, on every path, and
   a real merge payload advances a real (hermetic) clone through the detached
   child.
+* ``lan_source`` / ``identity`` -- lab-state-sync step 4: identity independent
+  of the fetch URL, LAN remote-tracking refs, and receipt-able sync output.
 
 Everything runs against hermetic repositories under ``tmp_path``. The "remote"
 is a local bare repository whose path contains ``github.com/<owner>/<name>.git``
@@ -195,6 +197,271 @@ def reg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Registry:
 
 def _head(clone: Path) -> str:
     return _git("rev-parse", "HEAD", cwd=clone)
+
+
+# --------------------------------------------------------------------------- #
+# lab-state-sync step 4: identity and LAN source (implementation pending)
+# --------------------------------------------------------------------------- #
+def _lan_source_clones(reg: Registry) -> tuple[Path, Path]:
+    """GitHub bare -> Mac source -> lab; only the lab is in the registry."""
+    source_root = reg.tmp / "mac"
+    source_root.mkdir()
+    source = reg.make(
+        "omnimarket", branch="main", owner="OmniNode-ai", root=source_root
+    )
+    lab = reg.home / "omnimarket"
+    _git("clone", "--quiet", "-b", "main", str(source), str(lab), cwd=reg.tmp)
+    _git("config", "onex.repo", "OmniNode-ai/omnimarket", cwd=lab)
+    _git("config", "onex.fetchSourcePrefix", "refs/remotes/origin/", cwd=lab)
+    assert _git("remote", cwd=lab) == "origin"
+    assert _git("remote", "get-url", "origin", cwd=lab) == str(source)
+    assert "github.com" not in str(source)
+    assert _git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=lab) == "origin/main"
+    return source, lab
+
+
+def test_identity_config_overrides_a_plain_path_and_absent_config_stays_unknown(
+    reg: Registry,
+) -> None:
+    clone = reg.make("omnimarket", branch="main", owner="OmniNode-ai")
+    remote = reg.remotes / "OmniNode-ai" / "omnimarket.git"
+    plain_remote = reg.tmp / "plain-remote.git"
+    remote.rename(plain_remote)
+    _git("remote", "set-url", "origin", str(plain_remote), cwd=clone)
+    # Backwards-compatible control: a plain path alone carries no identity.
+    assert ccs.clone_slug(clone) is None
+    _git("config", "onex.repo", "OmniNode-ai/omnimarket", cwd=clone)
+    assert ccs.clone_slug(clone) == "OmniNode-ai/omnimarket"
+
+
+def test_identity_config_takes_precedence_over_a_github_url(reg: Registry) -> None:
+    clone = reg.make("transport-name", branch="main", owner="Acme")
+    _git("config", "onex.repo", "OmniNode-ai/omnimarket", cwd=clone)
+    assert ccs.clone_slug(clone) == "OmniNode-ai/omnimarket"
+
+
+def test_identity_sync_result_uses_config_with_a_plain_fetch_url(reg: Registry) -> None:
+    _, lab = _lan_source_clones(reg)
+    res = ccs.sync_clone(lab)
+    assert res.result == ccs.UP_TO_DATE, res
+    assert res.repo == "OmniNode-ai/omnimarket"
+
+
+def test_identity_run_sync_finds_and_advances_a_clone_with_a_plain_fetch_url(
+    reg: Registry,
+) -> None:
+    source, lab = _lan_source_clones(reg)
+    before = _head(lab)
+    target = reg.advance("omnimarket", branch="main", owner="OmniNode-ai")
+    assert ccs.sync_clone(source).result == ccs.ADVANCED
+
+    results = ccs.run_sync(reg.env(), ["OmniNode-ai/omnimarket"], "manual")
+
+    assert [(r.clone, r.repo, r.result) for r in results] == [
+        (str(lab), "OmniNode-ai/omnimarket", ccs.ADVANCED)
+    ]
+    (res,) = results
+    assert (res.before, res.after, res.target) == (before, target, target)
+    assert _head(lab) == target
+    assert not any(row["result"] == ccs.NO_CLONE for row in reg.log())
+
+
+def test_lan_source_fetch_branch_uses_source_tracking_ref_not_source_head(
+    reg: Registry,
+) -> None:
+    source, lab = _lan_source_clones(reg)
+    before = _head(lab)
+    target = reg.advance("omnimarket", branch="main", owner="OmniNode-ai")
+    # A fetch advances the source's origin/main without moving its local main.
+    # Those distinct SHAs discriminate the two possible fetch refspecs.
+    _git("fetch", "--quiet", "origin", cwd=source)
+    assert _head(source) == before
+    assert _git("rev-parse", "origin/main", cwd=source) == target
+
+    fetch = ccs._fetch_branch(lab, "origin", "main")
+
+    assert fetch.code == 0, fetch
+    assert _git("rev-parse", "origin/main", cwd=lab) == target
+    assert _head(lab) == before
+
+
+def test_lan_source_g1_advances_without_access_to_github(reg: Registry) -> None:
+    source, lab = _lan_source_clones(reg)
+    before = _head(lab)
+    target = reg.advance("omnimarket", branch="main", owner="OmniNode-ai")
+    source_res = ccs.sync_clone(source)
+    assert source_res.result == ccs.ADVANCED, source_res
+    assert _git("rev-parse", "origin/main", cwd=source) == target
+    github = reg.remotes / "OmniNode-ai" / "omnimarket.git"
+    github.rename(reg.tmp / "github-unavailable.git")
+    assert not github.exists()
+    assert _git("remote", "get-url", "origin", cwd=source) == str(github)
+
+    res = ccs.sync_clone(lab)
+
+    assert res.result == ccs.ADVANCED, res
+    assert (res.before, res.after, res.target) == (before, target, target)
+    assert _head(lab) == target
+    assert res.branch == "main"
+    assert _git("remote", cwd=lab) == "origin"
+    assert _git("remote", "get-url", "origin", cwd=lab) == str(source)
+    assert res.repo == "OmniNode-ai/omnimarket"
+
+
+def test_lan_source_e1_stays_at_old_sha_until_source_advances(reg: Registry) -> None:
+    source, lab = _lan_source_clones(reg)
+    before = _head(lab)
+    target = reg.advance("omnimarket", branch="main", owner="OmniNode-ai")
+    assert target != before
+    assert _git("rev-parse", "origin/main", cwd=source) == before
+
+    res = ccs.sync_clone(lab)
+
+    assert res.result == ccs.UP_TO_DATE, res
+    assert (res.before, res.after, res.target) == (before, before, before)
+    assert _head(lab) == before
+    assert _head(lab) != target
+    assert _git("rev-parse", "origin/main", cwd=source) == before
+    assert res.repo == "OmniNode-ai/omnimarket"
+
+
+def test_lan_source_e3_unreachable_source_fails_without_github_fallback(
+    reg: Registry,
+) -> None:
+    source, lab = _lan_source_clones(reg)
+    before = _head(lab)
+    target = reg.advance("omnimarket", branch="main", owner="OmniNode-ai")
+    github = reg.remotes / "OmniNode-ai" / "omnimarket.git"
+    assert github.is_dir()
+    assert _git("rev-parse", "refs/heads/main", cwd=github) == target
+    # The available GitHub remote is not configured on the lab at all.
+    assert _git("remote", cwd=lab) == "origin"
+    assert _git("remote", "get-url", "origin", cwd=lab) == str(source)
+    source.rename(reg.tmp / "mac-unavailable")
+    assert not source.exists()
+
+    res = ccs.sync_clone(lab)
+
+    assert res.result == ccs.FAILED, res
+    assert "fetch origin main failed" in (res.reason or "")
+    assert res.before == before
+    assert _head(lab) == before
+    assert _git("rev-parse", "origin/main", cwd=lab) == before
+    assert _git("remote", cwd=lab) == "origin"
+    assert _git("remote", "get-url", "origin", cwd=lab) == str(source)
+    assert github.is_dir()
+    assert res.repo == "OmniNode-ai/omnimarket"
+
+
+def test_lan_source_e2_dirty_lab_behind_target_is_refused_without_changes(
+    reg: Registry,
+) -> None:
+    source, lab = _lan_source_clones(reg)
+    before = _head(lab)
+    target = reg.advance("omnimarket", branch="main", owner="OmniNode-ai")
+    _git("fetch", "--quiet", "origin", cwd=source)
+    assert _git("rev-parse", "origin/main", cwd=source) == target
+    dirty = lab / "b.txt"
+    dirty.write_text("uncommitted lab work\n")
+    status_before = _git("status", "--porcelain", cwd=lab)
+
+    res = ccs.sync_clone(lab)
+
+    assert res.result == ccs.REFUSED, res
+    assert "uncommitted" in (res.reason or "")
+    assert res.before == before
+    assert res.target == target
+    assert _head(lab) == before
+    assert dirty.read_text() == "uncommitted lab work\n"
+    assert _git("status", "--porcelain", cwd=lab) == status_before
+    assert res.repo == "OmniNode-ai/omnimarket"
+
+
+def test_lan_source_e2_dirty_lab_already_at_target_is_up_to_date(reg: Registry) -> None:
+    _, lab = _lan_source_clones(reg)
+    before = _head(lab)
+    dirty = lab / "b.txt"
+    dirty.write_text("uncommitted lab work\n")
+    status_before = _git("status", "--porcelain", cwd=lab)
+
+    res = ccs.sync_clone(lab)
+
+    assert res.result == ccs.UP_TO_DATE, res
+    assert (res.before, res.after, res.target) == (before, before, before)
+    assert _head(lab) == before
+    assert dirty.read_text() == "uncommitted lab work\n"
+    assert _git("status", "--porcelain", cwd=lab) == status_before
+    assert res.repo == "OmniNode-ai/omnimarket"
+
+
+@pytest.mark.parametrize(
+    ("advance", "missing_remote_head"),
+    [(False, False), (True, False), (True, True)],
+    ids=["up_to_date", "advanced", "advanced_with_reason"],
+)
+def test_lan_source_sync_cli_prints_full_shas_and_keeps_branch_column(
+    reg: Registry,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    advance: bool,
+    missing_remote_head: bool,
+) -> None:
+    # Use the existing GitHub-shaped local URL to isolate CLI formatting from
+    # the independent identity-discovery and LAN-fetch contract failures.
+    clone = reg.make("omnimarket", branch="main", owner="OmniNode-ai")
+    before = _head(clone)
+    after = (
+        reg.advance("omnimarket", branch="main", owner="OmniNode-ai")
+        if advance
+        else before
+    )
+    if missing_remote_head:
+        github = reg.remotes / "OmniNode-ai" / "omnimarket.git"
+        _git("symbolic-ref", "HEAD", "refs/heads/absent", cwd=github)
+    for key, value in reg.env().items():
+        monkeypatch.setenv(key, value)
+
+    assert ccs.main(["sync", "--repo", "OmniNode-ai/omnimarket"]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    (line,) = captured.out.splitlines()
+    result = ccs.ADVANCED if advance else ccs.UP_TO_DATE
+    assert line.split()[:3] == [result, str(clone), "main"]
+    (record,) = [row for row in reg.log() if row.get("clone") == str(clone)]
+    reason = record["reason"] or ""
+    if missing_remote_head:
+        assert "remote set-head origin --auto failed" in reason
+        assert line.split(maxsplit=4)[4] == reason
+    assert line == f"{result:10} {clone} main {before}->{after} {reason}".rstrip()
+
+
+@pytest.mark.parametrize(
+    "result", [ccs.ADVANCED, ccs.UP_TO_DATE, ccs.REFUSED, ccs.FAILED]
+)
+def test_lan_source_json_log_has_receipt_ref_and_path_for_every_clone_result(
+    reg: Registry, result: str
+) -> None:
+    # All four clone outcomes must carry receipt coordinates. Keep discovery
+    # independent of onex.repo so a missing identity cannot mask missing keys.
+    clone = reg.make("omnimarket", branch="main", owner="OmniNode-ai")
+    if result in (ccs.ADVANCED, ccs.REFUSED):
+        reg.advance("omnimarket", branch="main", owner="OmniNode-ai")
+    if result == ccs.REFUSED:
+        (clone / "b.txt").write_text("uncommitted\n")
+    if result == ccs.FAILED:
+        github = reg.remotes / "OmniNode-ai" / "omnimarket.git"
+        github.rename(reg.tmp / "github-unavailable.git")
+
+    (res,) = ccs.run_sync(reg.env(), None, "manual")
+
+    assert res.result == result, res
+    rows = [row for row in reg.log() if row.get("result") == result]
+    assert len(rows) == 1
+    (record,) = rows
+    assert {"ref", "path"} <= record.keys(), record
+    assert record["ref"] == "main"
+    assert record["path"] == str(clone)
 
 
 # --------------------------------------------------------------------------- #
