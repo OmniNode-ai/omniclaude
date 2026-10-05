@@ -152,6 +152,13 @@ repos:
         exclude: (^|/)tests/
       - id: check-no-env-fallbacks
         files: ^(src|scripts)/.*\.(py|sh|bash)$
+      # Core's enum-governance checker, the engine the old wrapper script called. It takes
+      # no filenames; the wrapper's default scan root becomes the hook's argument, and the
+      # pre-push stage and always_run of the hook it replaces are kept.
+      - id: check-enum-governance
+        args: [src/omniclaude/]
+        stages: [pre-push]
+        always_run: true
 
   # Fast Python formatting and linting (staged files only)
   # Order: format -> fix -> check (matches CI behavior)

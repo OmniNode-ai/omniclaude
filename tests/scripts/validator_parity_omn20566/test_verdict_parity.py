@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Mapping
+import tempfile
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import NamedTuple
 
@@ -26,6 +27,7 @@ from tests.scripts.validator_parity_omn20566.corpus import CORPUS
 from tests.scripts.validator_parity_omn20566.harness import (
     REPO_ROOT,
     Verdict,
+    hook_args,
     hook_scope,
     load_golden,
     materialise,
@@ -38,6 +40,7 @@ pytestmark = pytest.mark.unit
 class Rule(NamedTuple):
     hook_id: str
     node_module: str
+    passes_filenames: bool = True
 
 
 RULES: dict[str, Rule] = {
@@ -61,7 +64,26 @@ RULES: dict[str, Rule] = {
         "check-no-env-fallbacks",
         "omnibase_core.nodes.node_no_env_fallbacks_check_compute.runtime_no_env_fallbacks_check",
     ),
+    # Core's pre-node handler, wired now; the node conversion follows behind the same hook id.
+    "enum_governance": Rule(
+        "check-enum-governance",
+        "omnibase_core.validation.checker_enum_governance",
+        passes_filenames=False,
+    ),
 }
+
+
+@pytest.fixture
+def tmp_path() -> Iterator[Path]:
+    """A throwaway repository root whose path contains no test-looking segment.
+
+    pytest's own ``tmp_path`` is named after the test (``test_node_matches_golden_...``),
+    and the enum-governance engine skips any path that looks like a test file, which would
+    turn every enum case into a vacuous pass.
+    """
+    with tempfile.TemporaryDirectory(prefix="parity-") as root:
+        yield Path(root).resolve()
+
 
 _ALL_CASES = [
     pytest.param(rule, name, id=f"{rule}-{name}")
@@ -72,6 +94,8 @@ _ALL_CASES = [
 
 def _node_verdict(tmp_path: Path, rule: Rule, files: Mapping[str, str]) -> Verdict:
     """The node as the hook runs it: the files pre-commit selects, handed over by name."""
+    if not rule.passes_filenames:
+        return run_node(tmp_path, rule.node_module, hook_args(rule.hook_id))
     scoped = hook_scope(rule.hook_id, files)
     if not scoped:
         # pre-commit does not invoke a hook that matches no file.
@@ -93,7 +117,10 @@ def test_node_matches_golden(rule_name: str, case_name: str, tmp_path: Path) -> 
 def test_every_rule_has_a_corpus_and_a_wired_hook() -> None:
     assert set(RULES) == set(CORPUS)
     for rule in RULES.values():
-        hook_scope(rule.hook_id, ())
+        if rule.passes_filenames:
+            hook_scope(rule.hook_id, ())
+        else:
+            assert hook_args(rule.hook_id)
 
 
 def test_golden_covers_every_case() -> None:
@@ -141,9 +168,30 @@ def _tracked_files() -> list[str]:
 def test_real_tree_is_clean(rule_name: str) -> None:
     """The node over this repository's own tracked files, the CI whole-tree run."""
     rule = RULES[rule_name]
-    scoped = hook_scope(rule.hook_id, _tracked_files())
-    assert scoped, f"{rule.hook_id} scope matched no tracked file"
+    if rule.passes_filenames:
+        scoped = hook_scope(rule.hook_id, _tracked_files())
+        assert scoped, f"{rule.hook_id} scope matched no tracked file"
+    else:
+        scoped = hook_args(rule.hook_id)
 
     verdict = run_node(REPO_ROOT, rule.node_module, scoped)
 
     assert verdict == Verdict(0, ()), f"{rule.hook_id} flags the tree: {verdict}"
+
+
+# --- transitional: removed in the commit that deletes the script ---------------------------
+
+_ENUM_SCRIPT = "scripts/validation/validate_enum_governance.py"
+
+
+@pytest.mark.parametrize("case_name", sorted(CORPUS["enum_governance"]))
+def test_enum_script_matches_node(case_name: str, tmp_path: Path) -> None:
+    from tests.scripts.validator_parity_omn20566.harness import run_script
+
+    files = dict(CORPUS["enum_governance"][case_name])
+    materialise(tmp_path, files)
+
+    node = _node_verdict(tmp_path, RULES["enum_governance"], files)
+    script = run_script(tmp_path, _ENUM_SCRIPT, (), ["--quiet"])
+
+    assert script == node

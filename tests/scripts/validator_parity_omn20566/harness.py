@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 from collections.abc import Iterable, Mapping
@@ -31,7 +32,7 @@ GOLDEN_DIR = Path(__file__).resolve().parent / "golden"
 
 # ``path:line`` at the start of a (stripped) output line, or ``path: SyntaxError``.
 _FINDING_LINE = re.compile(
-    r"^(?P<path>[\w./@+-]+\.(?:py|sh|bash|ya?ml|json|md)):(?:(?P<line>\d+)\b|\s)"
+    r"^(?:\[[A-Z]+\]\s+)?(?P<path>[\w./@+-]+\.(?:py|sh|bash|ya?ml|json|md)):(?:(?P<line>\d+)\b|\s)"
 )
 
 
@@ -71,9 +72,11 @@ def _sort_key(item: tuple[str, int | None]) -> tuple[str, int]:
 def parse_findings(output: str, root: Path) -> tuple[tuple[str, int | None], ...]:
     """Pull ``(repo-relative path, line)`` pairs out of a validator's printed output."""
     found: set[tuple[str, int | None]] = set()
-    root_prefix = str(root.resolve()) + "/"
+    prefixes = {str(root) + "/", str(root.resolve()) + "/"}
     for raw_line in output.splitlines():
-        text = raw_line.strip().replace(root_prefix, "")
+        text = raw_line.strip()
+        for prefix in sorted(prefixes, key=len, reverse=True):
+            text = text.replace(prefix, "")
         match = _FINDING_LINE.match(text)
         if match is None:
             continue
@@ -117,6 +120,47 @@ def hook_scope(hook_id: str, rels: Iterable[str]) -> list[str]:
     )
 
 
+def run_script(
+    root: Path,
+    script: str,
+    helpers: Iterable[str],
+    args: list[str],
+) -> Verdict:
+    """Run an OLD validation script copied to the same relative location in ``root``.
+
+    The scripts find the repository root by walking up from ``__file__``, so the
+    copy must sit at the same depth as the original, and the tree needs the
+    ``pyproject.toml`` marker the walk stops at.
+    """
+    (root / "pyproject.toml").touch()
+    for rel in (script, *helpers):
+        destination = root / rel
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / rel, destination)
+    proc = subprocess.run(
+        [sys.executable, script, *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return Verdict(proc.returncode, parse_findings(proc.stdout + proc.stderr, root))
+
+
+def hook_args(hook_id: str) -> list[str]:
+    """The ``args:`` the repository's config gives a core hook that takes no filenames."""
+    config = yaml.safe_load((REPO_ROOT / ".pre-commit-config.yaml").read_text())
+    hooks = [
+        hook
+        for repo in config["repos"]
+        if repo.get("repo") == CORE_REPO
+        for hook in repo["hooks"]
+        if hook["id"] == hook_id
+    ]
+    assert len(hooks) == 1, f"{hook_id} must be wired exactly once from {CORE_REPO}"
+    return [str(arg) for arg in hooks[0].get("args", [])]
+
+
 def run_node(root: Path, module: str, args: list[str]) -> Verdict:
     """Run the core check node's runtime module, the hook's own entry point."""
     proc = subprocess.run(
@@ -132,3 +176,11 @@ def run_node(root: Path, module: str, args: list[str]) -> Verdict:
 def load_golden(rule: str) -> dict[str, Verdict]:
     raw = json.loads((GOLDEN_DIR / f"{rule}.json").read_text(encoding="utf-8"))
     return {name: verdict_from_json(entry) for name, entry in raw.items()}
+
+
+def dump_golden(rule: str, verdicts: Mapping[str, Verdict]) -> None:
+    GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {name: verdict.to_json() for name, verdict in sorted(verdicts.items())}
+    (GOLDEN_DIR / f"{rule}.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )

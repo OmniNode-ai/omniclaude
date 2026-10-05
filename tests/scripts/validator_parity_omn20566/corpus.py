@@ -40,6 +40,7 @@ FIXTURE_TOKENS: dict[str, str] = {
     "MARKTOK_FALLBACK_OK": "# fallback" + "-ok",
     "MARKTOK_CLOUD_BUS_OK": "# cloud-bus" + "-ok",
     "MARKTOK_IP_OK": "# onex" + "-allow-internal-ip",
+    "MARKTOK_ENUM_OK": "# enum" + "-ok: fixture",
 }
 
 _CLEAN_PY = "def now() -> int:\n    return 1\n"
@@ -342,10 +343,86 @@ ENV_FALLBACKS: dict[str, Case] = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# enum_governance (the wrapper scans src/omniclaude/, a hook that takes no filenames)
+# ---------------------------------------------------------------------------
+ENUM_GOVERNANCE: dict[str, Case] = {
+    "clean": {
+        "src/omniclaude/a/enums.py": (
+            "from enum import Enum\n\n"
+            "class EnumState(str, Enum):\n"
+            '    ACTIVE = "active"\n'
+            '    IN_PROGRESS = "in_progress"\n'
+        ),
+    },
+    "member_casing": {
+        "src/omniclaude/a/enums.py": (
+            "from enum import Enum\n\n"
+            "class EnumBad(str, Enum):\n"
+            '    active = "active"\n'
+            '    inProgress = "in_progress"\n'
+        ),
+    },
+    "literal_alias_with_status_vocabulary": {
+        "src/omniclaude/a/types.py": (
+            "from typing import Literal\n\n"
+            'Status = Literal["pending", "running", "done", "failed"]\n'
+        ),
+    },
+    "literal_alias_with_two_values_is_fine": {
+        "src/omniclaude/a/types.py": (
+            'from typing import Literal\n\nMode = Literal["a", "b"]\n'
+        ),
+    },
+    "duplicate_values_across_files": {
+        "src/omniclaude/a/one.py": (
+            "from enum import Enum\n\n"
+            "class EnumStatusA(str, Enum):\n"
+            '    X_ONE = "shared_one"\n'
+            '    X_TWO = "shared_two"\n'
+            '    X_THREE = "shared_three"\n'
+        ),
+        "src/omniclaude/b/two.py": (
+            "from enum import Enum\n\n"
+            "class EnumStatusB(str, Enum):\n"
+            '    Y_ONE = "shared_one"\n'
+            '    Y_TWO = "shared_two"\n'
+            '    Y_THREE = "shared_three"\n'
+        ),
+    },
+    "lib_directory_is_scanned": {
+        "src/omniclaude/lib/enums.py": (
+            "from enum import Enum\n\n"
+            "class EnumBad(str, Enum):\n"
+            '    active = "active"\n'
+        ),
+    },
+    "member_casing_suppressed": {
+        "src/omniclaude/a/enums.py": (
+            "from enum import Enum\n\n"
+            "class EnumBad(str, Enum):  MARKTOK_ENUM_OK\n"
+            '    active = "active"\n'
+        ),
+    },
+    "syntax_error": {
+        "src/omniclaude/a/bad.py": "class (:\n",
+        "src/omniclaude/a/good.py": "X = 1\n",
+    },
+    "outside_scan_root": {
+        "scripts/enums.py": (
+            "from enum import Enum\n\n"
+            "class EnumBad(str, Enum):\n"
+            '    active = "active"\n'
+        ),
+        "src/omniclaude/a/ok.py": "X = 1\n",
+    },
+}
+
 CORPUS: dict[str, dict[str, Case]] = {
     "no_utcnow": UTCNOW,
     "no_hardcoded_ip": HARDCODED_IP,
     "no_direct_kafka_producer": DIRECT_KAFKA_PRODUCER,
     "no_raw_sqlite3": RAW_SQLITE3,
     "no_env_fallbacks": ENV_FALLBACKS,
+    "enum_governance": ENUM_GOVERNANCE,
 }
