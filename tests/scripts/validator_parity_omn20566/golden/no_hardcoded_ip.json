@@ -1,0 +1,97 @@
+{
+  "clean": {
+    "exit": 0,
+    "findings": []
+  },
+  "marker_on_other_line_does_not_suppress": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        2
+      ]
+    ]
+  },
+  "multiple_per_file": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ],
+      [
+        "src/pkg/a.py",
+        3
+      ],
+      [
+        "src/pkg/b.yaml",
+        2
+      ]
+    ]
+  },
+  "private_10_yaml": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.yaml",
+        1
+      ]
+    ]
+  },
+  "private_172_range_edges": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ],
+      [
+        "src/pkg/a.py",
+        2
+      ]
+    ]
+  },
+  "private_192_py": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ]
+    ]
+  },
+  "public_and_loopback_are_fine": {
+    "exit": 0,
+    "findings": []
+  },
+  "python_file_outside_scan_dirs": {
+    "exit": 0,
+    "findings": []
+  },
+  "suppressed_by_marker": {
+    "exit": 0,
+    "findings": []
+  },
+  "tests_and_scripts_dirs": {
+    "exit": 1,
+    "findings": [
+      [
+        "scripts/run.py",
+        1
+      ],
+      [
+        "tests/test_a.py",
+        1
+      ]
+    ]
+  },
+  "yml_suffix": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.yml",
+        1
+      ]
+    ]
+  }
+}

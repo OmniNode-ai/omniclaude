@@ -1,0 +1,98 @@
+{
+  "aiokafka_import": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ],
+      [
+        "src/pkg/a.py",
+        4
+      ]
+    ]
+  },
+  "allowed_by_filename": {
+    "exit": 0,
+    "findings": []
+  },
+  "allowed_by_parent_directory": {
+    "exit": 0,
+    "findings": []
+  },
+  "allowed_name_is_substring_match": {
+    "exit": 0,
+    "findings": []
+  },
+  "bare_name_usage": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ]
+    ]
+  },
+  "clean": {
+    "exit": 0,
+    "findings": []
+  },
+  "confluent_kafka_import": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ]
+    ]
+  },
+  "grandparent_directory_does_not_allow": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/publisher/inner/helper.py",
+        1
+      ]
+    ]
+  },
+  "import_statement": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ],
+      [
+        "src/pkg/a.py",
+        2
+      ]
+    ]
+  },
+  "kafka_attribute_access": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        4
+      ]
+    ]
+  },
+  "mixed_allowed_and_not": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/nodes/node_x.py",
+        1
+      ]
+    ]
+  },
+  "syntax_error": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/bad.py",
+        null
+      ]
+    ]
+  }
+}

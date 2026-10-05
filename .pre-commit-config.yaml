@@ -127,6 +127,31 @@ repos:
         args: [--repo, omniclaude, --repo-root, .]
         exclude: ^(tests/|archived/|archive/).*\.py$
 
+  # Canonical core check nodes (OMN-20566, validator-conversion plan Phase 5 batch B0).
+  # omniclaude hosts no gate logic (INV-019): each rule below is a COMPUTE node in
+  # omnibase_core (contract + definition-B handler -> OMN-2362 ModelValidationReport) that
+  # replaced an omniclaude script, with a verdict-parity test written first
+  # (tests/scripts/validator_parity_omn20566/). rev is the commit of the omnibase-core
+  # version uv.lock resolves, so pre-commit runs the validator the runtime
+  # imports. The scope the old script carried inside its own code now lives in each
+  # hook's files:/exclude:, which the parity test reads from here. No allowlist, no
+  # suppression marker and no baseline was added; the inline markers the old scripts
+  # honoured are the nodes' markers too, with the same spelling.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: v0.47.34
+    hooks:
+      - id: check-no-utcnow
+        files: ^src/.*\.py$
+      - id: check-no-hardcoded-ip
+        files: ^(src|tests|scripts)/.*\.(py|ya?ml)$
+      - id: check-no-direct-kafka-producer
+        files: ^src/.*\.py$
+      - id: check-no-raw-sqlite3
+        files: ^(src/omniclaude|plugins/onex)/.*\.py$
+        exclude: (^|/)tests/
+      - id: check-no-env-fallbacks
+        files: ^(src|scripts)/.*\.(py|sh|bash)$
+
   # Fast Python formatting and linting (staged files only)
   # Order: format -> fix -> check (matches CI behavior)
   # Note: To run on entire codebase, use: uv run ruff check src/ tests/
