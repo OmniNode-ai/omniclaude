@@ -119,6 +119,8 @@ class Registry:
                 "OMNI_HOME": str(self.home),
                 "ONEX_STATE_DIR": str(self.state),
                 "ONEX_REGISTRY_ROOTS": "",
+                # The invoking host's own knowledge base must never join a fixture run (OMN-20637).
+                "KNOWLEDGE_BASE_INTERNAL_PATH": "",
                 # Force full mode so the hook's behaviour does not depend on
                 # the invoking process's cwd or an inherited OMNICLAUDE_MODE
                 # (mode.sh auto-detects from $PWD and falls back to "lite"
@@ -792,6 +794,23 @@ def test_engine_covers_every_registry_root_and_the_roots_file(reg: Registry) -> 
         (str(b), ccs.ADVANCED),
         (str(c), ccs.ADVANCED),
     }
+
+
+def test_engine_covers_the_knowledge_base_clone_outside_omni_home(
+    reg: Registry,
+) -> None:
+    """OMN-20637: on a lab host the knowledge base lives outside OMNI_HOME, and the clone-refresh
+    consumer answered no_clone to every knowledge-base-internal merge until it was a root."""
+    data = reg.tmp / "data"
+    data.mkdir()
+    kb = reg.make("knowledge-base-internal", root=data)
+    reg.advance("knowledge-base-internal")
+    env = reg.env(KNOWLEDGE_BASE_INTERNAL_PATH=str(kb))
+    assert kb in ccs.discover_clones(ccs.registry_roots(env))
+    results = ccs.run_sync(env, None, "timer")
+    assert (str(kb), ccs.ADVANCED) in {(r.clone, r.result) for r in results}
+    # Without the variable the same clone is not found: the root comes from it, not from discovery.
+    assert kb not in ccs.discover_clones(ccs.registry_roots(reg.env()))
 
 
 def test_engine_skips_linked_worktrees(reg: Registry) -> None:
