@@ -23,6 +23,13 @@ Two callers, one engine:
   already fetched the head fetches nothing), and exits 0 only once each ref is
   at or past that head. It never moves a checked-out branch.
 
+Lab clones can fetch from a LAN source whose remote-tracking refs are kept
+current by this engine. ``onex.repo`` supplies the repository's ``owner/name``
+identity before the remote URL is considered, so a lab clone's identity no
+longer depends on its fetch URL. ``onex.fetchSourcePrefix`` selects the source
+refs (for example, ``refs/remotes/origin/``), defaulting to ``refs/heads/``.
+The engine fetches only the configured remote and never adds a GitHub fallback.
+
 Why this exists
 ---------------
 The operator ruled on 2026-09-25 that lanes query the canonical clones instead
@@ -566,7 +573,10 @@ def discover_clones(roots: Iterable[Path]) -> list[Path]:
 
 
 def clone_slug(clone: Path) -> str | None:
-    """``owner/name`` of the remote the checked-out branch tracks (else origin)."""
+    """``onex.repo``, else the tracked remote's ``owner/name`` (else origin)."""
+    configured = run_git(clone, "config", "--get", "onex.repo").out
+    if configured:
+        return configured
     branch = run_git(clone, "symbolic-ref", "--quiet", "--short", "HEAD").out
     remote = ""
     if branch:
@@ -660,6 +670,9 @@ def _fetch_branch(clone: Path, remote: str, branch: str) -> GitResult:
     lock ref", which is a race and not a fault. Observed on 2026-09-25
     (omnibase_infra, the 15:29Z timer run, host load 60).
     """
+    prefix = (
+        run_git(clone, "config", "--get", "onex.fetchSourcePrefix").out or "refs/heads/"
+    )
     fetch = GitResult(1, "", "not attempted")
     for attempt in range(2):
         fetch = run_git(
@@ -667,7 +680,7 @@ def _fetch_branch(clone: Path, remote: str, branch: str) -> GitResult:
             "fetch",
             "--quiet",
             remote,
-            f"+refs/heads/{branch}:refs/remotes/{remote}/{branch}",
+            f"+{prefix}{branch}:refs/remotes/{remote}/{branch}",
             timeout=FETCH_TIMEOUT_SECONDS,
         )
         if fetch.code == 0 or "cannot lock ref" not in fetch.err or attempt:
@@ -818,7 +831,7 @@ def _return_to_default(
 
 def sync_clone(clone: Path) -> CloneResult:
     """Fetch the checked-out tracking branch and fast-forward it, or refuse."""
-    result = CloneResult(clone=str(clone), result=FAILED)
+    result = CloneResult(clone=str(clone), result=FAILED, repo=clone_slug(clone))
 
     def refuse(reason: str) -> CloneResult:
         result.result = REFUSED
@@ -852,9 +865,6 @@ def sync_clone(clone: Path) -> CloneResult:
     upstream_branch = merge_ref[len("refs/heads/") :]
     tracking_ref = f"refs/remotes/{remote}/{upstream_branch}"
     result.upstream = f"{remote}/{upstream_branch}"
-    url = run_git(clone, "remote", "get-url", remote).out
-    result.repo = repo_slug_of_url(url) if url else None
-
     git_dir_out = run_git(clone, "rev-parse", "--absolute-git-dir")
     if git_dir_out.code != 0 or not git_dir_out.out:
         return fail(f"cannot resolve the git dir: {_tail(git_dir_out.err)}")
@@ -1044,7 +1054,13 @@ def run_sync(
     path = log_path(env)
     ts = utc_now()
     for res in results:
-        record: dict[str, object] = {"ts": ts, "trigger": trigger, **asdict(res)}
+        record: dict[str, object] = {
+            "ts": ts,
+            "trigger": trigger,
+            **asdict(res),
+            "ref": res.branch,
+            "path": res.clone,
+        }
         if verb:
             record["verb"] = verb
         append_log(path, record)
@@ -1059,6 +1075,8 @@ def run_sync(
                     "verb": verb,
                     "repo": repo,
                     "result": NO_CLONE,
+                    "ref": None,
+                    "path": None,
                     "reason": "no canonical clone of this repository under any registry root",
                 },
             )
@@ -1069,6 +1087,8 @@ def run_sync(
             "trigger": trigger,
             "verb": verb,
             "result": "RUN_COMPLETE",
+            "ref": None,
+            "path": None,
             "clones": len(results),
             "counts": {
                 name: sum(1 for r in results if r.result == name)
@@ -1286,7 +1306,17 @@ def run_refresh(
     ts = utc_now()
     lane = env.get("ONEX_LANE") or env.get("ONEX_LANE_ID") or ""
     for res in results:
-        append_log(path, {"ts": ts, "trigger": "refresh", "lane": lane, **asdict(res)})
+        append_log(
+            path,
+            {
+                "ts": ts,
+                "trigger": "refresh",
+                "lane": lane,
+                **asdict(res),
+                "ref": res.branch,
+                "path": res.clone,
+            },
+        )
     return results
 
 
@@ -1446,7 +1476,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             tags=args.tags,
         )
         for ref_res in refreshed:
-            sha = f"{(ref_res.before or '')[:12]}->{(ref_res.after or '')[:12]}"
+            sha = f"{ref_res.before or ''}->{ref_res.after or ''}"
             ref = f"{ref_res.remote}/{ref_res.branch}" if ref_res.branch else "-"
             print(
                 f"{ref_res.result:10} {ref_res.clone} {ref} {sha} "
@@ -1465,7 +1495,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         time.sleep(args.delay)
     results = run_sync(os.environ, args.repo, args.trigger, args.verb)
     for res in results:
-        sha = f"{(res.before or '')[:12]}->{(res.after or '')[:12]}"
+        sha = f"{res.before or ''}->{res.after or ''}"
         print(
             f"{res.result:10} {res.clone} {res.branch or '-'} {sha} {res.reason or ''}".rstrip()
         )
