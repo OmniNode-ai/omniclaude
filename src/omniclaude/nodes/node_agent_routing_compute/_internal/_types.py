@@ -16,7 +16,7 @@ from typing import TypedDict
 
 __all__ = [
     "AgentData",
-    "AgentRegistry",
+    "TypedDictAgentRegistry",
     "HistoricalRecord",
     "RoutingContext",
 ]
@@ -73,7 +73,7 @@ class HistoricalRecord(TypedDict, total=False):
     overall: float
 
 
-class AgentRegistry(TypedDict):
+class TypedDictAgentRegistry(TypedDict):
     """Registry structure expected by ``TriggerMatcher``.
 
     Keys:

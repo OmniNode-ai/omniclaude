@@ -55,13 +55,13 @@ def _get_intelligence_client_class() -> type[IntelligenceClientProtocol] | None:
 
 
 # Stub implementation for when Intelligence client is not available
-class IntelligenceClientStub:
+class StubIntelligenceClient:
     """Stub implementation when real Intelligence client is unavailable."""
 
     def __init__(self, archon_url: str | None = None, timeout: float = 5.0) -> None:
         self.archon_url = archon_url
         self.timeout = timeout
-        logger.debug("Using IntelligenceClientStub - RAG intelligence unavailable")
+        logger.debug("Using StubIntelligenceClient - RAG intelligence unavailable")
 
     async def gather_domain_standards(
         self, agent_type: str, task_context: dict[str, Any]
@@ -94,7 +94,7 @@ class CorrectionGenerator:
                 archon_url=intelligence_url, timeout=timeout
             )
         else:
-            self.intelligence_client = IntelligenceClientStub(
+            self.intelligence_client = StubIntelligenceClient(
                 archon_url=intelligence_url, timeout=timeout
             )
         self._cache: dict[str, dict[str, Any]] = {}  # Cache RAG results during session

@@ -55,7 +55,7 @@ class ValkeyClientProtocol(Protocol):
         ...
 
 
-class InMemoryValkeyClient:
+class FakeValkeyClient:
     """In-memory Valkey client for STANDALONE mode and testing.
 
     Provides the same interface as a real Valkey client but stores
@@ -109,7 +109,7 @@ class WatchRegistry:
     All operations are idempotent.
 
     Args:
-        client: Valkey client instance (or InMemoryValkeyClient for testing).
+        client: Valkey client instance (or FakeValkeyClient for testing).
         ttl_seconds: TTL for watch registry keys. Defaults to 7200 (2 hours).
     """
 

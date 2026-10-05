@@ -21,7 +21,7 @@ from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply i
 logger = logging.getLogger(__name__)
 
 
-class SlackWebClient(Protocol):
+class ProtocolSlackWebClient(Protocol):
     """Protocol for Slack Web API client (slack_sdk.AsyncWebClient)."""
 
     async def chat_postMessage(  # noqa: N802
@@ -36,7 +36,7 @@ class SlackWebClient(Protocol):
 async def send_slack_reply(
     reply: ModelChannelReply,
     *,
-    client: SlackWebClient,
+    client: ProtocolSlackWebClient,
 ) -> None:
     """Send a reply to a Slack channel.
 
