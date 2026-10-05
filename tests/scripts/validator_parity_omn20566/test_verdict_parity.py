@@ -6,8 +6,9 @@ Each node is run as the hook runs it (the module, the files pre-commit's ``files
 ``exclude:`` select, handed over by name) over a fixture corpus, and its verdict must equal
 the golden file. The goldens were captured from the deleted scripts
 (``scripts/validation/validate_no_utcnow.py``, ``validate_no_hardcoded_ip.py``,
-``validate_no_direct_kafka_producer.py``, ``validate_no_raw_sqlite3.py`` and
-``scripts/validate_no_env_fallbacks.py``) in the commits before they were removed, where the
+``validate_no_direct_kafka_producer.py``, ``validate_no_raw_sqlite3.py``,
+``validate_enum_governance.py`` and ``scripts/validate_no_env_fallbacks.py``) in the
+commits before they were removed, where the
 same corpus was also run through script and node side by side and compared. A change that
 loses a finding the scripts reported fails here.
 """
@@ -177,21 +178,3 @@ def test_real_tree_is_clean(rule_name: str) -> None:
     verdict = run_node(REPO_ROOT, rule.node_module, scoped)
 
     assert verdict == Verdict(0, ()), f"{rule.hook_id} flags the tree: {verdict}"
-
-
-# --- transitional: removed in the commit that deletes the script ---------------------------
-
-_ENUM_SCRIPT = "scripts/validation/validate_enum_governance.py"
-
-
-@pytest.mark.parametrize("case_name", sorted(CORPUS["enum_governance"]))
-def test_enum_script_matches_node(case_name: str, tmp_path: Path) -> None:
-    from tests.scripts.validator_parity_omn20566.harness import run_script
-
-    files = dict(CORPUS["enum_governance"][case_name])
-    materialise(tmp_path, files)
-
-    node = _node_verdict(tmp_path, RULES["enum_governance"], files)
-    script = run_script(tmp_path, _ENUM_SCRIPT, (), ["--quiet"])
-
-    assert script == node

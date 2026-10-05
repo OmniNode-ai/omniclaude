@@ -953,14 +953,6 @@ repos:
         always_run: true
         stages: [pre-push]
 
-      - id: validate-enum-governance
-        name: ONEX Enum Governance Validation
-        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_enum_governance.py --quiet
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
       - id: validate-exports
         name: Validate __all__ exports
         entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_exports.py

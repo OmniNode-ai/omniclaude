@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import subprocess
 import sys
 from collections.abc import Iterable, Mapping
@@ -120,33 +119,6 @@ def hook_scope(hook_id: str, rels: Iterable[str]) -> list[str]:
     )
 
 
-def run_script(
-    root: Path,
-    script: str,
-    helpers: Iterable[str],
-    args: list[str],
-) -> Verdict:
-    """Run an OLD validation script copied to the same relative location in ``root``.
-
-    The scripts find the repository root by walking up from ``__file__``, so the
-    copy must sit at the same depth as the original, and the tree needs the
-    ``pyproject.toml`` marker the walk stops at.
-    """
-    (root / "pyproject.toml").touch()
-    for rel in (script, *helpers):
-        destination = root / rel
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(REPO_ROOT / rel, destination)
-    proc = subprocess.run(
-        [sys.executable, script, *args],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return Verdict(proc.returncode, parse_findings(proc.stdout + proc.stderr, root))
-
-
 def hook_args(hook_id: str) -> list[str]:
     """The ``args:`` the repository's config gives a core hook that takes no filenames."""
     config = yaml.safe_load((REPO_ROOT / ".pre-commit-config.yaml").read_text())
@@ -176,11 +148,3 @@ def run_node(root: Path, module: str, args: list[str]) -> Verdict:
 def load_golden(rule: str) -> dict[str, Verdict]:
     raw = json.loads((GOLDEN_DIR / f"{rule}.json").read_text(encoding="utf-8"))
     return {name: verdict_from_json(entry) for name, entry in raw.items()}
-
-
-def dump_golden(rule: str, verdicts: Mapping[str, Verdict]) -> None:
-    GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
-    payload = {name: verdict.to_json() for name, verdict in sorted(verdicts.items())}
-    (GOLDEN_DIR / f"{rule}.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )

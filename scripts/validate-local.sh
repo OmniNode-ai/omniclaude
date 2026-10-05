@@ -41,7 +41,7 @@ fi
 
 # Architecture
 run_check "exports validation" uv run python scripts/validation/validate_exports.py
-run_check "enum governance" uv run python scripts/validation/validate_enum_governance.py
+run_check "enum governance" uv run pre-commit run check-enum-governance --all-files --hook-stage pre-push
 run_check "no hardcoded IPs" uv run pre-commit run check-no-hardcoded-ip --all-files
 run_check "no DB in orchestrator" uv run python scripts/validation/validate_no_db_in_orchestrator.py
 run_check "no git outside effects" uv run python scripts/validation/validate_no_git_outside_effects.py

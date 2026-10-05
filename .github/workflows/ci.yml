@@ -590,9 +590,12 @@ jobs:
             sleep $((attempt * 10))
           done
 
+      # OMN-20566: core's enum-governance checker through the same pre-commit hook id the
+      # pre-push hook uses (scan root src/omniclaude/ is the hook's args:), at the omnibase_core
+      # tag .pre-commit-config.yaml pins, the version uv.lock resolves.
       - name: Validate enum governance
         working-directory: ${{ github.workspace }}
-        run: uv run python scripts/validation/validate_enum_governance.py
+        run: uv run --frozen --with 'pre-commit==4.6.2' pre-commit run check-enum-governance --all-files --hook-stage pre-push --show-diff-on-failure
 
   exports-validation:
     needs: occ-preflight

@@ -659,7 +659,6 @@ scripts/validation/validate_cost_ledger_isolation.py
 scripts/validation/validate_cost_ledger_structure.py
 scripts/validation/validate_deterministic_skill_routing.py
 scripts/validation/validate_distribution_classification.py
-scripts/validation/validate_enum_governance.py
 scripts/validation/validate_exports.py
 scripts/validation/validate_full_market_skill_inventory.py
 scripts/validation/validate_golden_chain_integrity.py
