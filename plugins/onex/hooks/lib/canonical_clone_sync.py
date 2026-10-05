@@ -506,7 +506,7 @@ def repo_slug_of_url(url: str) -> str | None:
 # Discovery
 # --------------------------------------------------------------------------- #
 def registry_roots(env: Mapping[str, str]) -> list[Path]:
-    """``$OMNI_HOME``, each ``ONEX_REGISTRY_ROOTS`` entry, ``$KNOWLEDGE_BASE_INTERNAL_PATH``, and the roots file.
+    """``$OMNI_HOME``, each ``ONEX_REGISTRY_ROOTS`` entry, and the roots file.
 
     The roots file (``$OMNI_HOME/scripts/git-hooks/registry-roots``, written by
     omnibase_infra ``install-canonical-clone-git-hooks.sh``, OMN-19388) is read
@@ -518,9 +518,6 @@ def registry_roots(env: Mapping[str, str]) -> list[Path]:
     if registry_home:
         candidates.append(registry_home)
     candidates.extend(env.get("ONEX_REGISTRY_ROOTS", "").split(":"))
-    # The knowledge-base-internal clone, which a lab host keeps outside its registry
-    # root (OMN-20637): a root that is itself a clone is discovered as one.
-    candidates.append(env.get("KNOWLEDGE_BASE_INTERNAL_PATH", ""))
     if registry_home:
         roots_file = Path(registry_home) / REGISTRY_ROOTS_FILE
         with contextlib.suppress(OSError):
