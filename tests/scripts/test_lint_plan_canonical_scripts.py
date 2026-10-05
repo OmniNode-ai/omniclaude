@@ -122,7 +122,12 @@ def test_mention_of_existing_script_not_flagged(tmp_path: pathlib.Path) -> None:
     assert code == 0, stderr
 
 
-def test_grandfathered_plan_is_exempt(tmp_path: pathlib.Path) -> None:
+def test_a_former_allowlist_file_exempts_nothing(tmp_path: pathlib.Path) -> None:
+    """OMN-20560: the allowlist burned down to zero and was deleted.
+
+    A plan named in a file at the old allowlist path is checked like any other,
+    so recreating that file can never reopen the exemption.
+    """
     path = _write_plan(
         tmp_path,
         "plans",
@@ -135,7 +140,13 @@ def test_grandfathered_plan_is_exempt(tmp_path: pathlib.Path) -> None:
         "allowed:\n  - docs/plans/legacy.md\n"
     )
     code, stderr = _run(tmp_path, [str(path)])
-    assert code == 0, stderr
+    assert code == 1
+    assert "scripts/old.py" in stderr
+
+
+def test_gate_has_no_allowlist_loader() -> None:
+    assert not hasattr(gate, "_load_allowlist")
+    assert not hasattr(gate, "ALLOWLIST_PATH")
 
 
 def test_full_tree_scan_flags_bad_plan(tmp_path: pathlib.Path) -> None:

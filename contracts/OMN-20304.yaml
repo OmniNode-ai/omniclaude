@@ -1,0 +1,25 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-20304
+title: "Ratchet baseline burn-down (parent of OMN-20560)"
+summary: >
+  Parent ticket for the ratchet baseline burn-down. The omniclaude slice is
+  OMN-20560, which removes or shrinks allowlists without adding exceptions.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Ratchet burn-down characterization tests pass"
+    command: "uv run pytest tests/unit/ratchet_burndown/test_omn20560_characterization.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omniclaude-slice-tests
+    description: "The omniclaude slice characterization tests pass"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/ratchet_burndown/test_omn20560_characterization.py -q"

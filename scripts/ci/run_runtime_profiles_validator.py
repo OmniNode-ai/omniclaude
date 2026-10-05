@@ -1,18 +1,16 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Run the runtime_profiles contract validator with the omniclaude allowlist.
+"""Run the runtime_profiles contract validator over omniclaude with no allowlist.
 
 Mirrors the required CI gate `.github/workflows/ci.yml (runtime-profiles)`
-exactly: it constructs `ValidatorRuntimeProfiles` with the repo-local
-`scripts/validation/runtime_profiles_allowlist.yaml` and validates `src/`.
+exactly, so the local pre-commit hook and CI run the SAME invocation.
 
-This script exists so the local pre-commit hook and CI run the SAME invocation.
-The validator's module `__main__` entry point resolves its allowlist from the
-omnibase_core *package* directory, which does not contain the omniclaude repo's
-frozen-violator allowlist — so invoking the bare module locally flags every
-pre-existing allowlisted contract while CI passes. Pointing the hook at this
-script removes that local/CI drift (OMN-13288, mirrors OMN-13297 for
-omniintelligence/omnimemory and OMN-12955 for omnimarket).
+The repo's frozen-violator allowlist (OMN-13288) burned down to zero and was
+deleted (OMN-20560): every command-consuming contract under `src/` declares
+`runtime_profiles`. The validator is constructed with an explicit empty
+allowlist, which also turns off its walk-up discovery of a repo-root allowlist
+file, so neither the omnibase_core package default nor a recreated file can
+exempt a node here.
 """
 
 from __future__ import annotations
@@ -23,12 +21,11 @@ from omnibase_core.validation.validator_runtime_profiles import (
     ValidatorRuntimeProfiles,
 )
 
-ALLOWLIST_PATH = Path("scripts/validation/runtime_profiles_allowlist.yaml")
 SRC_ROOT = Path("src")
 
 
 def main() -> int:
-    result = ValidatorRuntimeProfiles(allowlist_path=ALLOWLIST_PATH).validate(SRC_ROOT)
+    result = ValidatorRuntimeProfiles(allowlist=set()).validate(SRC_ROOT)
     for issue in result.issues:
         print(
             f"[{issue.severity.value}] {issue.file_path}:{issue.line_number}: {issue.message}"

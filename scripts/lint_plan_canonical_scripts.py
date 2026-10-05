@@ -25,15 +25,15 @@ script satisfies the deny-new policy (dispatches to a node, or is a reviewed
 CI/deploy/bootstrap glue exception with a ticket). Its presence clears the plan;
 the code-time guard (OMN-14475) still enforces the actual mechanism.
 
-## Ratchet semantics
+## No exemptions
 
-Existing plan/tracking docs that predate this gate are grandfathered via a
-baseline allowlist (``.onex_ratchets/plan_canonical_scripts_allowlist.yaml``).
-Burn-down only: a NEW or MODIFIED plan must comply; the allowlist must never grow.
+Every plan under ``docs/plans/`` or ``docs/tracking/`` must comply. The
+grandfather allowlist this gate started with burned down to zero entries and was
+deleted (OMN-20560); there is no allowlist, baseline or suppression.
 
 ## Exit codes
 
-- 0 — every non-allowlisted plan either proposes no new script or declares its
+- 0 — every plan either proposes no new script or declares its
   canonical form
 - 1 — one or more plans propose a new script with no ``canonical-form:``
   declaration; or a file is unreadable (fail-closed)
@@ -57,7 +57,6 @@ import sys
 from pathlib import Path
 
 PLAN_ROOTS: tuple[Path, ...] = (Path("docs/plans"), Path("docs/tracking"))
-ALLOWLIST_PATH = Path(".onex_ratchets/plan_canonical_scripts_allowlist.yaml")
 
 # A create-intent verb on the same line as a scripts/**.{py,sh,bash} path.
 # Case-insensitive. The verb must precede the path so a mere mention of an
@@ -73,33 +72,6 @@ _DECLARATION_RE = re.compile(
     r"canonical-form:\s*(node-backed|justified-shim|convert|exception)\b",
     re.IGNORECASE,
 )
-
-
-def _load_allowlist(root: Path) -> set[str]:
-    """Read the grandfather allowlist (flat ``- path`` list, no YAML dep).
-
-    An unreadable allowlist is treated as empty so the gate fails closed on any
-    otherwise-violating plan (never silently exempts everything).
-    """
-    path = root / ALLOWLIST_PATH
-    if not path.exists():
-        return set()
-    allowed: set[str] = set()
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
-        return set()
-    for raw in lines:
-        stripped = raw.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped in ("allowed:", "allowed: []"):
-            continue
-        if stripped.startswith("- "):
-            entry = stripped[2:].strip().strip("\"'")
-            if entry:
-                allowed.add(entry)
-    return allowed
 
 
 def _scan_file(path: Path) -> tuple[list[str], str | None]:
@@ -156,13 +128,6 @@ def _is_plan_markdown(path: Path, repo_root: Path) -> bool:
     return rel.parts[:2] in {("docs", "plans"), ("docs", "tracking")}
 
 
-def _rel_to_repo(path: Path, repo_root: Path) -> str:
-    try:
-        return path.resolve().relative_to(repo_root.resolve()).as_posix()
-    except ValueError:
-        return path.as_posix()
-
-
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="lint_plan_canonical_scripts.py",
@@ -175,7 +140,7 @@ def main(argv: list[str]) -> int:
         "--repo-root",
         type=Path,
         default=Path.cwd(),
-        help="Repository root used to resolve plan paths and the allowlist.",
+        help="Repository root used to resolve plan paths.",
     )
     parser.add_argument(
         "paths",
@@ -191,15 +156,10 @@ def main(argv: list[str]) -> int:
         roots = tuple(repo_root / r for r in PLAN_ROOTS)
         targets = _iter_plan_markdown(roots)
 
-    allowlist = _load_allowlist(repo_root)
-
     total_violations = 0
     violating_files: list[Path] = []
     for path in sorted(set(targets)):
         if not path.exists():
-            continue
-        rel = _rel_to_repo(path, repo_root)
-        if rel in allowlist:
             continue
         violations, read_error = _scan_file(path)
         if read_error is not None:
@@ -233,9 +193,6 @@ def main(argv: list[str]) -> int:
         "The code-time deny-new guard (OMN-14475) still enforces the mechanism:\n"
         "a new scripts/** file passes CI only if baselined or in the\n"
         "CODEOWNERS-approved exceptions registry.\n"
-        "\n"
-        "If a plan genuinely predates this gate, grandfather it by adding its\n"
-        f"repo-relative path to {ALLOWLIST_PATH} (burn-down only — never grow it).\n"
         "\n"
         "See OMN-14476 / OMN-14475.\n"
     )

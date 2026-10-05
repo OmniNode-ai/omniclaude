@@ -254,7 +254,9 @@ def _get_llm_routing_prompt_version() -> str:
 
 
 if TYPE_CHECKING:
-    from omniclaude.nodes.node_agent_routing_compute._internal import AgentRegistry
+    from omniclaude.nodes.node_agent_routing_compute._internal import (
+        TypedDictAgentRegistry,
+    )
 
 # Canonical routing path values for metrics (from OMN-1893)
 VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
@@ -1289,7 +1291,7 @@ def _get_cached_stats() -> Any:
     return _cached_stats
 
 
-def _build_agent_definitions(registry: "AgentRegistry") -> tuple[Any, ...]:
+def _build_agent_definitions(registry: "TypedDictAgentRegistry") -> tuple[Any, ...]:
     """Convert AgentRouter registry to ModelAgentDefinition tuple.
 
     Lazily loads ModelAgentDefinition from ONEX nodes cache.

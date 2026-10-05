@@ -28,7 +28,7 @@ import re
 from difflib import SequenceMatcher
 
 from omniclaude.nodes.node_agent_routing_compute._internal._types import (
-    AgentRegistry,
+    TypedDictAgentRegistry,
 )
 
 __all__ = ["TriggerMatcher"]
@@ -205,7 +205,7 @@ class TriggerMatcher:
     # These tokens are domain-significant (e.g., cloud services, protocols).
     _TECHNICAL_TOKENS = frozenset({"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"})
 
-    def __init__(self, agent_registry: AgentRegistry):
+    def __init__(self, agent_registry: TypedDictAgentRegistry):
         """Initialize matcher with agent registry.
 
         Args:
@@ -219,7 +219,7 @@ class TriggerMatcher:
         self.registry = agent_registry
         self.trigger_index = self._build_trigger_index()
 
-    def _validate_registry(self, registry: AgentRegistry) -> None:
+    def _validate_registry(self, registry: TypedDictAgentRegistry) -> None:
         """Validate registry structure before use.
 
         Args:

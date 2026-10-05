@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from omniclaude.nodes.node_github_pr_watcher_effect.handlers.watch_registry import (
-    InMemoryValkeyClient,
+    FakeValkeyClient,
     WatchRegistry,
 )
 
@@ -15,7 +15,7 @@ from omniclaude.nodes.node_github_pr_watcher_effect.handlers.watch_registry impo
 @pytest.fixture
 def registry() -> WatchRegistry:
     """Create a WatchRegistry with in-memory Valkey client."""
-    client = InMemoryValkeyClient()
+    client = FakeValkeyClient()
     return WatchRegistry(client, ttl_seconds=7200)
 
 
@@ -146,7 +146,7 @@ class TestInMemoryValkeyClient:
     @pytest.mark.asyncio
     async def test_sadd_and_smembers(self) -> None:
         """Test SADD and SMEMBERS operations."""
-        client = InMemoryValkeyClient()
+        client = FakeValkeyClient()
         added = await client.sadd("key1", "a", "b", "c")
         assert added == 3
         members = await client.smembers("key1")
@@ -155,7 +155,7 @@ class TestInMemoryValkeyClient:
     @pytest.mark.asyncio
     async def test_sadd_duplicate(self) -> None:
         """Test that SADD returns 0 for duplicate members."""
-        client = InMemoryValkeyClient()
+        client = FakeValkeyClient()
         await client.sadd("key1", "a")
         added = await client.sadd("key1", "a")
         assert added == 0
@@ -163,7 +163,7 @@ class TestInMemoryValkeyClient:
     @pytest.mark.asyncio
     async def test_srem(self) -> None:
         """Test SREM operation."""
-        client = InMemoryValkeyClient()
+        client = FakeValkeyClient()
         await client.sadd("key1", "a", "b")
         removed = await client.srem("key1", "a")
         assert removed == 1
@@ -173,7 +173,7 @@ class TestInMemoryValkeyClient:
     @pytest.mark.asyncio
     async def test_delete(self) -> None:
         """Test DELETE operation."""
-        client = InMemoryValkeyClient()
+        client = FakeValkeyClient()
         await client.sadd("key1", "a")
         deleted = await client.delete("key1")
         assert deleted == 1

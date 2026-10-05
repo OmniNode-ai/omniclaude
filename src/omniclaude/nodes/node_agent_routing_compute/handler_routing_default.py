@@ -30,7 +30,7 @@ from omniclaude.nodes.node_agent_routing_compute._internal import (
 )
 from omniclaude.nodes.node_agent_routing_compute._internal._types import (
     AgentData,
-    AgentRegistry,
+    TypedDictAgentRegistry,
 )
 from omniclaude.nodes.node_agent_routing_compute.models import (
     ModelConfidenceBreakdown,
@@ -228,7 +228,7 @@ class HandlerRoutingDefault:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_registry_dict(request: ModelRoutingRequest) -> AgentRegistry:
+    def _build_registry_dict(request: ModelRoutingRequest) -> TypedDictAgentRegistry:
         """Convert typed ModelAgentDefinition tuple to dict format.
 
         Delegates to the module-level ``build_registry_dict`` function, which
@@ -239,7 +239,7 @@ class HandlerRoutingDefault:
         return build_registry_dict(request)
 
 
-def build_registry_dict(request: ModelRoutingRequest) -> AgentRegistry:
+def build_registry_dict(request: ModelRoutingRequest) -> TypedDictAgentRegistry:
     """Convert typed ModelAgentDefinition tuple to dict format for TriggerMatcher.
 
     TriggerMatcher expects::

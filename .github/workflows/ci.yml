@@ -4432,6 +4432,15 @@ jobs:
           git -C "$OMNI_HOME/onex_change_control" checkout --quiet FETCH_HEAD
           core_version="$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("omnibase-core"))')"
           git clone --quiet --depth 1 --branch "v${core_version}" https://github.com/OmniNode-ai/omnibase_core.git "$OMNI_HOME/omnibase_core"
+          # omnimarket node tree at the uv.lock pin, so the skill backing-node
+          # hook resolves every backing node in this whole-tree run with no
+          # allowlist entry (OMN-20560), as the Skill Backing Node workflow does.
+          om_rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$om_rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
+          git init --quiet "$OMNI_HOME/omnimarket"
+          git -C "$OMNI_HOME/omnimarket" sparse-checkout set src/omnimarket/nodes
+          git -C "$OMNI_HOME/omnimarket" fetch --quiet --depth 1 --filter=blob:none https://github.com/OmniNode-ai/omnimarket.git "$om_rev"
+          git -C "$OMNI_HOME/omnimarket" checkout --quiet FETCH_HEAD
       - name: Pin the whole-tree backstop's own shape (OMN-19612)
         run: uv run pytest -o addopts="" tests/ci/test_precommit_suite_job_omn19612.py -v -p no:cacheprovider
       # The advisory-job-gate hook reads branch protection's

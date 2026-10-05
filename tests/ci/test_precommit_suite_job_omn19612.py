@@ -153,3 +153,16 @@ def test_workflow_has_no_pull_request_path_filter() -> None:
 
 def test_ci_workflow_uses_only_contexts_available_at_each_key() -> None:
     assert check_workflow(CI_WORKFLOW) == []
+
+
+def test_whole_tree_job_provides_omnimarket_nodes_at_the_lock_pin() -> None:
+    """OMN-20560: the skill backing-node hook resolves omnimarket nodes here.
+
+    verified_dispatch and shim_audit left the backing-node allowlist because
+    their nodes live in omnimarket. The whole-tree run must therefore hand the
+    hook the omnimarket node tree at the uv.lock pin through OMNI_HOME.
+    """
+    runs = "\n".join(str(step.get("run", "")) for step in _job()["steps"])
+    assert "omnimarket\\.git\\?rev=" in runs
+    assert "sparse-checkout set src/omnimarket/nodes" in runs
+    assert '"$OMNI_HOME/omnimarket"' in runs
