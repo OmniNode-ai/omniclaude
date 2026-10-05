@@ -25,6 +25,24 @@
     "exit": 0,
     "findings": []
   },
+  "embedded_triple_quotes_do_not_start_docstring": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/module.py",
+        2
+      ]
+    ]
+  },
+  "embedded_triple_quotes_on_fallback_line_still_scan": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/module.py",
+        1
+      ]
+    ]
+  },
   "environ_get_localhost": {
     "exit": 1,
     "findings": [

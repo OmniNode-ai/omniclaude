@@ -309,6 +309,14 @@ ENV_FALLBACKS: dict[str, Case] = {
     "executable_after_docstring_close": {
         "src/pkg/a.py": '"""doc""" ; x = os.getenv("H", "localhost")\n',
     },
+    "embedded_triple_quotes_do_not_start_docstring": {
+        "src/pkg/module.py": (
+            'marker = """not a docstring opener"""\nurl = os.getenv("X", "localhost")\n'
+        ),
+    },
+    "embedded_triple_quotes_on_fallback_line_still_scan": {
+        "src/pkg/module.py": 'url = os.getenv("X", "localhost") + """suffix"""\n',
+    },
     "skip_dirs_are_ignored": {
         "src/pkg/tests/test_a.py": 'x = os.getenv("H", "localhost")\n',
         "src/pkg/test/test_a.py": 'x = os.getenv("H", "localhost")\n',
