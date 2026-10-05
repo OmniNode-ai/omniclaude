@@ -129,14 +129,15 @@ repos:
 
   # Canonical core check nodes (OMN-20566, validator-conversion plan Phase 5 batch B0).
   # omniclaude hosts no gate logic (INV-019): each rule below is a COMPUTE node in
-  # omnibase_core (contract + definition-B handler -> OMN-2362 ModelValidationReport) that
-  # replaced an omniclaude script, with a verdict-parity test written first
-  # (tests/scripts/validator_parity_omn20566/). rev is the commit of the omnibase-core
-  # version uv.lock resolves, so pre-commit runs the validator the runtime
-  # imports. The scope the old script carried inside its own code now lives in each
-  # hook's files:/exclude:, which the parity test reads from here. No allowlist, no
-  # suppression marker and no baseline was added; the inline markers the old scripts
-  # honoured are the nodes' markers too, with the same spelling.
+  # omnibase_core (contract + definition-B handler -> OMN-2362 ModelValidationReport)
+  # that replaced an omniclaude script, after a verdict-parity test written first
+  # (tests/scripts/validator_parity_omn20566/). rev is the omnibase-core version
+  # uv.lock resolves, so pre-commit runs the validator the runtime imports. The scope
+  # each old script carried inside its own code now lives in the hook's files: and
+  # exclude:, which the parity test reads from here. No allowlist, suppression marker
+  # or baseline was added; the inline markers the old scripts honoured are the nodes'
+  # markers too, with the same spelling. CI runs these same hook ids with
+  # `pre-commit run <id> --all-files` (ci.yml, the arch-* jobs).
   - repo: https://github.com/OmniNode-ai/omnibase_core
     rev: v0.47.34
     hooks:
@@ -595,16 +596,6 @@ repos:
         files: ^(src|plugins|scripts)/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
-      # OMN-10658 / OMN-10734: block localhost/default fallbacks in src/ and scripts/
-      # Enforces fail-fast env var access: os.environ["VAR"] not os.getenv("VAR", "localhost...")
-      - id: no-env-fallbacks
-        name: No localhost/default env fallbacks (OMN-10658)
-        entry: python3 scripts/validate_no_env_fallbacks.py
-        language: system
-        pass_filenames: true
-        files: ^(src|scripts)/.*\.(py|sh|bash)$|^\.pre-commit-config\.yaml$
-        stages: [pre-commit]
-
       # OMN-10723: block silent inprocess fallback patterns in skill code.
       # Skills must dispatch through the event bus, not bypass it.
       - id: no-inprocess-fallback-in-skills
@@ -620,17 +611,6 @@ repos:
       - id: no-direct-bus-instantiation
         name: No direct EventBus instantiation (must use DI/select_event_bus)
         entry: python3 scripts/validation/validate_no_direct_bus_instantiation.py
-        language: system
-        pass_filenames: true
-        types_or: [python, yaml]
-        files: ^(src|plugins|scripts)/.*\.py$|^\.pre-commit-config\.yaml$
-        stages: [pre-commit]
-
-      # OMN-10725: block raw sqlite3.connect() outside adapter definitions —
-      # DB access must go through injected adapter, not direct connection.
-      - id: no-raw-sqlite3-in-handlers
-        name: No raw sqlite3.connect in handler/skill code (must use adapter)
-        entry: python3 scripts/validation/validate_no_raw_sqlite3.py
         language: system
         pass_filenames: true
         types_or: [python, yaml]
@@ -859,39 +839,6 @@ repos:
         pass_filenames: true
         types_or: [python, yaml]
         files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
-        stages: [pre-commit]
-
-      - id: arch-no-direct-kafka-producer
-        name: "Arch: No direct Kafka producer outside publisher (check 10)"
-        entry: python3 scripts/validation/validate_no_direct_kafka_producer.py
-        language: system
-        pass_filenames: true
-        types_or: [python, yaml]
-        files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
-        stages: [pre-commit]
-
-      - id: arch-no-utcnow
-        name: "Arch: No datetime.utcnow() usage (check 11)"
-        entry: python3 scripts/validation/validate_no_utcnow.py
-        language: system
-        pass_filenames: true
-        types_or: [python, yaml]
-        files: ^src/.*\.py$|^\.pre-commit-config\.yaml$
-        stages: [pre-commit]
-
-      - id: arch-no-hardcoded-ip
-        name: "Arch: No hardcoded internal IPs (check 12)"
-        # CI (ci.yml arch-no-hardcoded-ip) invokes this via `uv run python`
-        # (unlike the other arch-* checks above, which CI runs bare). Mirror
-        # that exact invocation via the worktree-safe uv wrapper rather than
-        # dropping to bare python3, to stay byte-for-byte DRY with the live
-        # CI entrypoint. (Follow-up: CI could drop its own uv sync/uv run to
-        # bare python3 like the other arch-* jobs since this script is also
-        # stdlib-only -- out of scope for this canary; track separately.)
-        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_no_hardcoded_ip.py
-        language: system
-        pass_filenames: true
-        files: ^(src|tests|scripts)/.*\.(py|ya?ml)$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
       - id: check-env-var-registry

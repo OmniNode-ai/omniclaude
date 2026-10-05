@@ -20,9 +20,6 @@ sys.path.insert(0, str(VALIDATION_DIR))
 from _path_scope import selected_python_files  # noqa: E402
 from validate_kafka_env_fallbacks import main as kafka_main  # noqa: E402
 from validate_no_internal_ips import main as internal_ip_main  # noqa: E402
-from validate_no_utcnow import main as utcnow_main  # noqa: E402
-
-from scripts.validate_no_env_fallbacks import main as env_main  # noqa: E402
 
 
 def test_selected_python_files_uses_only_supplied_files(tmp_path: Path) -> None:
@@ -34,26 +31,6 @@ def test_selected_python_files_uses_only_supplied_files(tmp_path: Path) -> None:
     assert selected_python_files(
         [str(clean)], roots=[tmp_path], rule_file=VALIDATION_DIR / "rule.py"
     ) == [clean]
-
-
-def test_validator_catches_only_the_supplied_violation(tmp_path: Path) -> None:
-    clean = tmp_path / "clean.py"
-    dirty = tmp_path / "dirty.py"
-    clean.write_text("value = 1\n", encoding="utf-8")
-    dirty.write_text("value = datetime.utcnow()\n", encoding="utf-8")
-
-    assert utcnow_main([str(clean)]) == 0
-    assert utcnow_main([str(dirty)]) == 1
-
-
-def test_env_validator_catches_only_the_supplied_violation(tmp_path: Path) -> None:
-    clean = tmp_path / "clean.py"
-    dirty = tmp_path / "dirty.py"
-    clean.write_text("value = 1\n", encoding="utf-8")
-    dirty.write_text('value = os.getenv("HOST", "localhost:8080")\n', encoding="utf-8")
-
-    assert env_main([str(clean)]) == 0
-    assert env_main([str(dirty)]) == 1
 
 
 def test_internal_ip_validator_catches_staged_and_full_violation(

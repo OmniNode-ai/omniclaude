@@ -2,21 +2,19 @@
 # SPDX-License-Identifier: MIT
 """Verdict harness for the OMN-20566 validator conversion (plan Phase 5, template step 5).
 
-A verdict is the pair ``(exit code, set of (path, line))``. The harness runs a
-validator in a throwaway repository that holds only the fixture files, with the
-exact command the repository's gate used (the old script) or now uses (the core
-check node's runtime module), and parses the findings out of the printed output.
+A verdict is the pair ``(exit code, set of (path, line))``. The harness runs a core
+check node's runtime module, the hook's own entry point, in a throwaway repository that
+holds only the fixture files, and parses the findings out of the printed output.
 
-Nothing here is a validator. It never decides what a finding is: it only
-compares what two implementations printed, and compares the node's verdict with
-a golden file captured from the old script before the script was deleted.
+Nothing here is a validator. It never decides what a finding is: it compares the node's
+printed verdict with a golden file captured from the old script before the script was
+deleted (in the commits before this one, the same harness ran the script beside the node).
 """
 
 from __future__ import annotations
 
 import json
 import re
-import shutil
 import subprocess
 import sys
 from collections.abc import Iterable, Mapping
@@ -119,34 +117,6 @@ def hook_scope(hook_id: str, rels: Iterable[str]) -> list[str]:
     )
 
 
-def run_script(
-    root: Path,
-    script: str,
-    helpers: Iterable[str],
-    args: list[str],
-) -> Verdict:
-    """Run an OLD validation script copied to the same relative location in ``root``.
-
-    The scripts find the repository root by walking up from ``__file__``, so the
-    copy must sit at the same depth as the original, and the tree needs the
-    ``pyproject.toml`` marker the walk stops at (without it a script such as the
-    sqlite3 gate would walk up to the filesystem root).
-    """
-    (root / "pyproject.toml").touch()
-    for rel in (script, *helpers):
-        destination = root / rel
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(REPO_ROOT / rel, destination)
-    proc = subprocess.run(
-        [sys.executable, script, *args],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return Verdict(proc.returncode, parse_findings(proc.stdout + proc.stderr, root))
-
-
 def run_node(root: Path, module: str, args: list[str]) -> Verdict:
     """Run the core check node's runtime module, the hook's own entry point."""
     proc = subprocess.run(
@@ -162,11 +132,3 @@ def run_node(root: Path, module: str, args: list[str]) -> Verdict:
 def load_golden(rule: str) -> dict[str, Verdict]:
     raw = json.loads((GOLDEN_DIR / f"{rule}.json").read_text(encoding="utf-8"))
     return {name: verdict_from_json(entry) for name, entry in raw.items()}
-
-
-def dump_golden(rule: str, verdicts: Mapping[str, Verdict]) -> None:
-    GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
-    payload = {name: verdict.to_json() for name, verdict in sorted(verdicts.items())}
-    (GOLDEN_DIR / f"{rule}.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
