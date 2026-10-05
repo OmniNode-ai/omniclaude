@@ -109,6 +109,29 @@ provider is the whole point of the setup.
 
 ---
 
+## Opening the dashboard
+
+The local dashboard is a separate command, not part of the setup run:
+
+```bash
+onex dashboard
+```
+
+It binds `127.0.0.1` only, mints a fresh token each time it starts, and **prints its
+URL as its first line of output**. There is no fixed address and no fixed port — open
+the URL it prints. Overview and Runs are pages on that server.
+
+The URL is printed before the server is listening, so if the page does not load
+immediately, give it a moment and reload. It is ready once it answers; the local
+checks poll `/projections` until it returns 200.
+
+Leave the command running while you use the page. Stopping it stops the dashboard.
+
+Runs and Overview only have something to show once you have run delegations on this
+machine, so do the setup first.
+
+---
+
 ## Running it again
 
 Re-running is safe and expected. Completed phases are verified and skipped, and a failed
