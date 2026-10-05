@@ -6,9 +6,8 @@ name: Plan Verified State Gate
 # OMN-13336 (retro R1): block plan_to_tickets plans that assert state without a
 # verified baseline. Every plan under docs/plans/ or docs/tracking/ must carry a
 # '## Current Verified State' section with a 'verified: <date> via <command>'
-# line dated within the freshness window. Plans that predate the gate are
-# grandfathered via .onex_ratchets/plan_verified_state_allowlist.yaml
-# (burn-down only). Parent: OMN-13325. Audit:
+# line dated within the freshness window. No exemptions: the grandfather
+# allowlist burned down to zero and was deleted (OMN-20560). Parent: OMN-13325. Audit:
 # docs/audits/2026-06-19-ratchet-enforcement-audit.md.
 
 on:
@@ -17,7 +16,7 @@ on:
     paths:
       - 'docs/plans/**/*.md'
       - 'docs/tracking/**/*.md'
-      - '.onex_ratchets/plan_verified_state_allowlist.yaml'
+      - 'tests/scripts/test_lint_plan_verified_state.py'
       - 'scripts/lint_plan_verified_state.py'
       - '.github/workflows/plan-verified-state-gate.yml'
 
@@ -26,7 +25,7 @@ on:
     paths:
       - 'docs/plans/**/*.md'
       - 'docs/tracking/**/*.md'
-      - '.onex_ratchets/plan_verified_state_allowlist.yaml'
+      - 'tests/scripts/test_lint_plan_verified_state.py'
       - 'scripts/lint_plan_verified_state.py'
       - '.github/workflows/plan-verified-state-gate.yml'
 

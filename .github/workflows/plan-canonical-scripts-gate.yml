@@ -8,8 +8,8 @@ name: Plan Canonical Scripts Gate
 # catching non-canonical script proposals at planning time. Every plan under
 # docs/plans/ or docs/tracking/ that proposes creating a scripts/**.{py,sh,bash}
 # file must either design it as a CONTRACT+NODE+HANDLER or carry a
-# 'canonical-form:' declaration. Plans that predate the gate are grandfathered
-# via .onex_ratchets/plan_canonical_scripts_allowlist.yaml (burn-down only).
+# 'canonical-form:' declaration. No exemptions: the grandfather allowlist
+# burned down to zero and was deleted (OMN-20560).
 # Epic: OMN-13674.
 
 on:
@@ -18,7 +18,7 @@ on:
     paths:
       - 'docs/plans/**/*.md'
       - 'docs/tracking/**/*.md'
-      - '.onex_ratchets/plan_canonical_scripts_allowlist.yaml'
+      - 'tests/scripts/test_lint_plan_canonical_scripts.py'
       - 'scripts/lint_plan_canonical_scripts.py'
       - '.github/workflows/plan-canonical-scripts-gate.yml'
 
@@ -27,7 +27,7 @@ on:
     paths:
       - 'docs/plans/**/*.md'
       - 'docs/tracking/**/*.md'
-      - '.onex_ratchets/plan_canonical_scripts_allowlist.yaml'
+      - 'tests/scripts/test_lint_plan_canonical_scripts.py'
       - 'scripts/lint_plan_canonical_scripts.py'
       - '.github/workflows/plan-canonical-scripts-gate.yml'
 

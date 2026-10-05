@@ -241,12 +241,17 @@ def test_non_markdown_argument_ignored(tmp_path: pathlib.Path) -> None:
     assert code == 0, stderr
 
 
-def test_allowlisted_plan_skipped(tmp_path: pathlib.Path) -> None:
+def test_a_former_allowlist_file_exempts_nothing(tmp_path: pathlib.Path) -> None:
+    """OMN-20560: the allowlist burned down to zero and was deleted.
+
+    A plan named in a file at the old allowlist path is checked like any other,
+    so recreating that file can never reopen the exemption.
+    """
     path = _write_plan(
         tmp_path,
         "plans",
         "legacy-plan.md",
-        "# Legacy\n\nNo verified-state section, but grandfathered.\n",
+        "# Legacy\n\nNo verified-state section.\n",
     )
     ratchet_dir = tmp_path / ".onex_ratchets"
     ratchet_dir.mkdir(parents=True, exist_ok=True)
@@ -254,32 +259,13 @@ def test_allowlisted_plan_skipped(tmp_path: pathlib.Path) -> None:
         "allowed:\n  - docs/plans/legacy-plan.md\n"
     )
     code, stderr = _run(tmp_path, [str(path)])
-    assert code == 0, stderr
-
-
-def test_non_allowlisted_plan_still_blocks_with_allowlist_present(
-    tmp_path: pathlib.Path,
-) -> None:
-    _write_plan(
-        tmp_path,
-        "plans",
-        "legacy-plan.md",
-        "# Legacy\n\nGrandfathered.\n",
-    )
-    bad = _write_plan(
-        tmp_path,
-        "plans",
-        "2026-06-19-new.md",
-        "# New\n\nNo section.\n",
-    )
-    ratchet_dir = tmp_path / ".onex_ratchets"
-    ratchet_dir.mkdir(parents=True, exist_ok=True)
-    (ratchet_dir / "plan_verified_state_allowlist.yaml").write_text(
-        "allowed:\n  - docs/plans/legacy-plan.md\n"
-    )
-    code, stderr = _run(tmp_path, [str(bad)])
     assert code == 1
-    assert "2026-06-19-new.md" in stderr
+    assert "legacy-plan.md" in stderr
+
+
+def test_gate_has_no_allowlist_loader() -> None:
+    assert not hasattr(gate, "_load_allowlist")
+    assert not hasattr(gate, "ALLOWLIST_PATH")
 
 
 def test_ci_mode_scans_full_tree(tmp_path: pathlib.Path) -> None:
