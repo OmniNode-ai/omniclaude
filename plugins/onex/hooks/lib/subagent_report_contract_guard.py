@@ -150,9 +150,15 @@ _HOOK_ECHO_MARKERS = (
 # classes; without it the guard blocked every refusal line that carried no
 # path or ticket, and the forced re-emit replaced the machine-readable line
 # the caller parses with prose (OMN-18946, 40 of 57 refusal lines on h202).
+#
+# Two more shapes of the same family (OMN-20398): ledger-msg's inbox read ends
+# on ``inbox <lane>: <n> open item(s)`` and carries no CITE-AS line, so an
+# empty-inbox return was refused as ``no_evidence_citations``; and a forked
+# executor that relays the line may indent it, which ``^`` alone did not allow.
 _RESULT_LINE = (
-    r"(?:^(?:REFUSED|RETRY) \d+ \S)"
-    r"|(?:^(?:OK|CITE-AS:) [A-Z][A-Z-]+ \d{4}-\d{2}-\d{2}T)"
+    r"(?:^[ \t]*(?:REFUSED|RETRY) \d+ \S)"
+    r"|(?:^[ \t]*(?:OK|CITE-AS:) [A-Z][A-Z-]+ \d{4}-\d{2}-\d{2}T\d{2}:\d{2})"
+    r"|(?:^[ \t]*inbox \S+: \d+ open item\(s\)[ \t]*$)"
 )
 
 _MACHINE_ID = re.compile(r"(?:OMN-\d+|(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{7,40})")
