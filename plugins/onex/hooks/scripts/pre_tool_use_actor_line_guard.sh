@@ -75,11 +75,13 @@ PYTHON_BIN="${PYTHON_CMD:-python3}"
 # read the lane from it; the decision core gets the same bytes on its stdin.
 _OMNICLAUDE_HOOK_PAYLOAD="$(cat)"
 set +e
-"$PYTHON_BIN" "$LIB_PY" < <(printf '%s\n' "$_OMNICLAUDE_HOOK_PAYLOAD")
+REFUSAL_OUTPUT=$("$PYTHON_BIN" "$LIB_PY" < <(printf '%s\n' "$_OMNICLAUDE_HOOK_PAYLOAD") 2>&1)
 rc=$?
 set -e
+[[ -z "$REFUSAL_OUTPUT" ]] || printf '%s\n' "$REFUSAL_OUTPUT" >&2
 if [[ "$rc" -eq 2 ]]; then
-    hook_record_refusal "Linear comment refused without an actor line" "an agent-posted Linear comment was refused by the actor-line guard" 2>/dev/null || true
+    REFUSAL_DETAIL=$(printf '%s' "$REFUSAL_OUTPUT" | hook_refusal_detail)
+    hook_record_refusal "Linear comment refused without an actor line" "$REFUSAL_DETAIL" 2>/dev/null || true
     exit 2
 fi
 exit 0

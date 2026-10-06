@@ -60,15 +60,17 @@ PYTHON_BIN="${PYTHON_CMD:-}"
 [[ -n "$PYTHON_BIN" ]] || _done_flip_refuse "guard_error: no Python interpreter resolved for the guard"
 
 set +e
-"$PYTHON_BIN" "$LIB_PY" < <(printf '%s\n' "$_OMNICLAUDE_HOOK_PAYLOAD")
+REFUSAL_OUTPUT=$("$PYTHON_BIN" "$LIB_PY" < <(printf '%s\n' "$_OMNICLAUDE_HOOK_PAYLOAD") 2>&1)
 rc=$?
 set -e
+[[ -z "$REFUSAL_OUTPUT" ]] || printf '%s\n' "$REFUSAL_OUTPUT" >&2
 if [[ "$rc" -eq 0 ]]; then
     exit 0
 fi
 if [[ "$rc" -eq 2 ]]; then
     # OMN-18946: see hook_record_refusal in error-guard.sh.
-    hook_record_refusal "done flip refused without a bound dod receipt" "a Done transition or acceptance-box tick was refused by the bound-receipt guard" 2>/dev/null || true
+    REFUSAL_DETAIL=$(printf '%s' "$REFUSAL_OUTPUT" | hook_refusal_detail)
+    hook_record_refusal "done flip refused without a bound dod receipt" "$REFUSAL_DETAIL" 2>/dev/null || true
     exit 2
 fi
 # Any other exit is the guard failing to decide. That refuses (OMN-20368).
