@@ -37,35 +37,48 @@ never printed, logged, or passed as a command-line argument.
 
 ## Run it
 
+Fetch the script, check it is the one this page was written against, then run it:
+
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/OmniNode-ai/omniclaude/dev/plugins/onex/skills/_bin/lab-onboarding.sh)
+curl -fsSL -o lab-onboarding.sh \
+  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/9026723d3996be1414d104897be42d71b7491d06/plugins/onex/skills/_bin/lab-onboarding.sh
+echo "61f658d93349c5342fcaf76f20aa0862eb4f308c70da1c98b4e1415e742d87f4  lab-onboarding.sh" | shasum -a 256 -c -
+bash lab-onboarding.sh
 ```
 
-Inside Claude Code you can instead run `/onex:lab_onboarding`. Both do the same thing.
+Three lines rather than one, for two reasons. The URL names a **commit**, not a branch, so the
+bytes it serves cannot change after this page was written. And `shasum -c` refuses to continue
+if they did change anyway — it prints `lab-onboarding.sh: OK` when the download matches, and
+`FAILED` otherwise, which stops you before `bash` ever sees the file. Do not skip that line.
+
+Inside Claude Code you can instead run `/onex:lab_onboarding`, which does the same thing from
+the plugin's own copy and needs no download.
 
 To see what the run would do to this machine without touching it:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/OmniNode-ai/omniclaude/dev/plugins/onex/skills/_bin/lab-onboarding.sh) --preflight-only
+bash lab-onboarding.sh --preflight-only
 ```
 
 ### Reading the script before you run it
 
-Be aware of what that one-liner is: it executes a script fetched over the network, from a
-branch, with no checksum and no signature. `dev` moves, so the script you read today is not
-necessarily the one that runs tomorrow. If you would rather look before you run — sensible on
-any machine you care about, and required if your employer's policy says so — fetch it, read
-it, then run it:
+You now have the script on disk, so read it before running it — sensible on any machine you
+care about, and required if your employer's policy says so:
 
 ```bash
-curl -fsSL -o lab-onboarding.sh https://raw.githubusercontent.com/OmniNode-ai/omniclaude/dev/plugins/onex/skills/_bin/lab-onboarding.sh
 less lab-onboarding.sh
-bash lab-onboarding.sh
 ```
 
-To pin a fixed version rather than following `dev`, replace `dev` in either URL with a commit
-SHA. GitHub shows the SHA on the file's page, under History. The script then cannot change
-between reading it and running it.
+Because the URL above is pinned to a commit and the checksum is verified, what you read is
+exactly what runs.
+
+### Following `dev` instead
+
+If you specifically want the newest version rather than the pinned one, replace the commit SHA
+in the URL with `dev`. Understand what you are choosing: `dev` is a moving branch, there is no
+checksum to verify against, and the script that runs tomorrow is not necessarily the one you
+read today. The pinned form above is the recommended one, and it is what the onboarding walks
+are graded against.
 
 ### What it asks you
 
@@ -159,7 +172,7 @@ is moved to a different version.
 To force every phase to run again:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/OmniNode-ai/omniclaude/dev/plugins/onex/skills/_bin/lab-onboarding.sh) --restart
+bash lab-onboarding.sh --restart
 ```
 
 ---
