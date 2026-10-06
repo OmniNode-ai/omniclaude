@@ -46,8 +46,26 @@ Inside Claude Code you can instead run `/onex:lab_onboarding`. Both do the same 
 To see what the run would do to this machine without touching it:
 
 ```bash
-bash <(curl -fsSL ...) --preflight-only
+bash <(curl -fsSL https://raw.githubusercontent.com/OmniNode-ai/omniclaude/dev/plugins/onex/skills/_bin/lab-onboarding.sh) --preflight-only
 ```
+
+### Reading the script before you run it
+
+Be aware of what that one-liner is: it executes a script fetched over the network, from a
+branch, with no checksum and no signature. `dev` moves, so the script you read today is not
+necessarily the one that runs tomorrow. If you would rather look before you run — sensible on
+any machine you care about, and required if your employer's policy says so — fetch it, read
+it, then run it:
+
+```bash
+curl -fsSL -o lab-onboarding.sh https://raw.githubusercontent.com/OmniNode-ai/omniclaude/dev/plugins/onex/skills/_bin/lab-onboarding.sh
+less lab-onboarding.sh
+bash lab-onboarding.sh
+```
+
+To pin a fixed version rather than following `dev`, replace `dev` in either URL with a commit
+SHA. GitHub shows the SHA on the file's page, under History. The script then cannot change
+between reading it and running it.
 
 ### What it asks you
 
@@ -141,7 +159,7 @@ is moved to a different version.
 To force every phase to run again:
 
 ```bash
-bash <(curl -fsSL ...) --restart
+bash <(curl -fsSL https://raw.githubusercontent.com/OmniNode-ai/omniclaude/dev/plugins/onex/skills/_bin/lab-onboarding.sh) --restart
 ```
 
 ---
