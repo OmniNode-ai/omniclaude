@@ -80,8 +80,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def _cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
-    pricing = PRICING_USD_PER_1M.get(model, PRICING_USD_PER_1M[BASELINE_MODEL])
+def _cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    """Price a call, or return None when the model has no price (OMN-20387).
+
+    An unknown model is unpriced; it is never priced at another model's rate.
+    """
+    pricing = PRICING_USD_PER_1M.get(model)
+    if pricing is None:
+        return None
     return (
         input_tokens * pricing["input"] + output_tokens * pricing["output"]
     ) / 1_000_000
@@ -164,6 +170,10 @@ def record_tool_call(hook_event: dict[str, Any]) -> dict[str, Any] | None:
 
     actual_cost = _cost_usd(actual_model, input_tokens, output_tokens)
     baseline_cost = _cost_usd(BASELINE_MODEL, input_tokens, output_tokens)
+    if actual_cost is None or baseline_cost is None:
+        # Unpriced model: write no cost record rather than a saving computed
+        # against a rate that belongs to another model (OMN-20387).
+        return delegation_result if is_delegated else None
     savings = max(0.0, baseline_cost - actual_cost)
     savings_method = _savings_method(actual_model) if is_delegated else "baseline_self"
 
