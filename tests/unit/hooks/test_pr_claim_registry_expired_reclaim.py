@@ -109,7 +109,10 @@ def test_expired_malformed_claim_is_reaped(tmp_path: Path) -> None:
     assert json.loads(claim_file.read_text())["claimed_by_run"] == RUN_B
 
 
-def test_expired_cli_claim_exits_zero(tmp_path: Path) -> None:
+def test_expired_cli_claim_exits_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ONEX_LANE_ID", LANE_B)
     state_dir = tmp_path / "state"
     claims_dir = state_dir / "pr-queue" / "claims"
     claim_file = _write_claim(claims_dir, run_id=RUN_A, lane_id=LANE_A, expired=True)
