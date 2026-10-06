@@ -20,6 +20,6 @@ concurrency:
 
 jobs:
   hardcoded-model-config:
-    uses: OmniNode-ai/omniclaude/.github/workflows/hardcoded-model-config-reusable.yml@1ad181a3142367d7f4a04dd4d534dd27e4d40033
+    uses: OmniNode-ai/omniclaude/.github/workflows/hardcoded-model-config-reusable.yml@3b8addff365b1a53e04106284b9275b6d5fad3c6
     with:
       core_ref: f50d00fc7918d0b12ccd0d3497160325e32e7ac5  # pragma: allowlist secret

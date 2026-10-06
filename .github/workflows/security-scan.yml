@@ -19,7 +19,7 @@ permissions:
 jobs:
   occ-preflight:
     # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@52851458622f368c3b596c82bf810bc6acce1d5e
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6
     permissions:
       contents: read
       pull-requests: read
@@ -316,7 +316,7 @@ jobs:
           echo "::add-matcher::checkov-problem-matcher-softfail.json"
 
       - name: Run Checkov (IaC scanner)
-        uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e  # v12.3121.0 (pinned 2026-03-04)
+        uses: bridgecrewio/checkov-action@cc0e17d456ef1713bbfd963ebac19dc776775cb2  # v12.3121.0 (pinned 2026-03-04)
         with:
           directory: .
           framework: dockerfile,github_actions
