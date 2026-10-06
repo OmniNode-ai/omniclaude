@@ -132,3 +132,20 @@ def test_unknown_first_git_c_is_not_hidden_by_second(tmp_path: Path) -> None:
         registry,
     )
     assert decision.blocked
+
+
+@pytest.mark.parametrize("quoted", [False, True])
+def test_shared_cd_preserves_shell_word_splitting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, quoted: bool
+) -> None:
+    registry = tmp_path / "registry"
+    clone = tmp_path / "clone with spaces"
+    for directory in (registry, clone):
+        (directory / ".git").mkdir(parents=True)
+    monkeypatch.setenv("RESOLVER_TREE", str(clone))
+    operand = '"$RESOLVER_TREE"' if quoted else "$RESOLVER_TREE"
+    decision = shared.evaluate_bash_command(
+        f"cd {operand}; git reset --hard", shared.load_policy(), registry, registry
+    )
+    # Unquoted cd fails with multiple operands, leaving the shell in registry.
+    assert decision.blocked is not quoted, decision.reason

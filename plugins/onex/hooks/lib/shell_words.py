@@ -716,6 +716,15 @@ def resolve_path(
     word: Word, scope: Mapping[str, str | None], cwd: str | Path | None
 ) -> str:
     raw = expand_word(word, scope)
+    if word.splits:
+        if scope.get("IFS", " \t\n") not in (None, " \t\n"):
+            raise UnresolvableWord(
+                "an unquoted path with a custom IFS cannot be resolved; quote the path"
+            )
+        if len(raw.split()) != 1:
+            raise UnresolvableWord(
+                "the unquoted path expands to multiple shell words; quote the path"
+            )
     if not Path(raw).is_absolute():
         if cwd is None:
             raise UnresolvableWord(
