@@ -222,9 +222,9 @@ class _ShellWord(str):
     word: Word
 
     def __new__(cls, word: Word) -> _ShellWord:
-        token = super().__new__(cls, word.text)
-        token.word = word
-        return token
+        lexeme = super().__new__(cls, word.text)
+        lexeme.word = word
+        return lexeme
 
 
 def _word(token: str) -> Word:
