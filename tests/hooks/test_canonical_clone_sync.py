@@ -1275,3 +1275,28 @@ def test_engine_opens_the_converge_door_for_set_head(
     assert res.result in (ccs.UP_TO_DATE, ccs.ADVANCED), res
     assert _origin_head_ref(clone) == "origin/dev"
     assert "ONEX_CANONICAL_CONVERGE" not in os.environ
+
+
+def test_lan_source_refresh_reads_the_source_tracking_ref_not_its_local_branch(
+    reg: Registry,
+) -> None:
+    source, lab = _lan_source_clones(reg)
+    target = reg.advance("omnimarket", branch="main", owner="OmniNode-ai")
+    # The source's tracking ref moves; its checked-out local main stays behind.
+    _git("fetch", "--quiet", "origin", cwd=source)
+    assert _git("rev-parse", "refs/remotes/origin/main", cwd=source) == target
+    assert _git("rev-parse", "refs/heads/main", cwd=source) != target
+
+    results = ccs.refresh_clone(lab, ["main"])
+
+    assert [r.result for r in results] == [ccs.REFRESHED], results
+    assert _git("rev-parse", "refs/remotes/origin/main", cwd=lab) == target
+
+
+def test_lan_source_sync_does_not_ask_the_source_checkout_for_the_default_branch(
+    reg: Registry,
+) -> None:
+    _, lab = _lan_source_clones(reg)
+    _git("remote", "set-head", "origin", "main", cwd=lab)
+    assert ccs._refresh_remote_head(lab, "origin").code == 0
+    assert ccs._remote_default_branch(lab, "origin") == "main"
