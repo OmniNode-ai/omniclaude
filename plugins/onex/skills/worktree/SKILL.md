@@ -495,7 +495,7 @@ disagreement — the classifier wins.
 **Scheduled form.** The daily backstop runner is the committed named workflow
 `.claude/workflows/morning-worktree-prune.js` in the workspace registry root; its format
 contract is `omnibase_internal/docs/workflows/morning-worktree-prune/README.md`
-under `$OMNIBASE_INTERNAL_HOME` (default: `$OMNI_HOME/../omnibase_internal`). The scheduled 04:20 tick invokes
+under `$OMNIBASE_INTERNAL_HOME` (default: the `omnibase_internal` sibling of the registry root). The scheduled 04:20 tick invokes
 `omnibase_internal.worktrees.prune.unattended` from the installed omnibase_internal package,
 scanning both registry worktree roots; the JavaScript brief remains for interactive dry runs.
 
