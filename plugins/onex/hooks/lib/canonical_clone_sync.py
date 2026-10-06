@@ -508,8 +508,8 @@ def repo_slug_of_url(url: str) -> str | None:
 def registry_roots(env: Mapping[str, str]) -> list[Path]:
     """``$OMNI_HOME``, each ``ONEX_REGISTRY_ROOTS`` entry, and the roots file.
 
-    The roots file (``$OMNI_HOME/scripts/git-hooks/registry-roots``, written by
-    omnibase_infra ``install-canonical-clone-git-hooks.sh``, OMN-19388) is read
+    The roots file (``$OMNI_HOME/../omnibase_internal/scripts/git-hooks/registry-roots``,
+    written by omnibase_internal's ``install-canonical-clone-git-hooks.sh``, OMN-19739) is read
     so a launchd run, whose environment carries only ``OMNI_HOME``, covers the
     same roots an interactive shell does.
     """
@@ -519,7 +519,13 @@ def registry_roots(env: Mapping[str, str]) -> list[Path]:
         candidates.append(registry_home)
     candidates.extend(env.get("ONEX_REGISTRY_ROOTS", "").split(":"))
     if registry_home:
-        roots_file = Path(registry_home) / REGISTRY_ROOTS_FILE
+        owner_home = env.get("OMNIBASE_INTERNAL_HOME")
+        owner = (
+            Path(owner_home)
+            if owner_home
+            else Path(registry_home).parent / "omnibase_internal"
+        )
+        roots_file = owner / REGISTRY_ROOTS_FILE
         with contextlib.suppress(OSError):
             for line in roots_file.read_text().splitlines():
                 key, _, value = line.strip().partition("=")

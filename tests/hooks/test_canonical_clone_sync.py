@@ -781,7 +781,13 @@ def test_engine_covers_every_registry_root_and_the_roots_file(reg: Registry) -> 
     a = reg.make("svc")
     b = reg.make("svc2", root=second)
     c = reg.make("svc3", root=third)
-    roots_file = reg.home / "scripts" / "git-hooks" / "registry-roots"
+    roots_file = (
+        reg.home.parent
+        / "omnibase_internal"
+        / "scripts"
+        / "git-hooks"
+        / "registry-roots"
+    )
     roots_file.parent.mkdir(parents=True)
     roots_file.write_text(f"# header\nroot={reg.home}\nroot={third}\n")
     for name in ("svc", "svc2", "svc3"):
@@ -1023,3 +1029,29 @@ def test_engine_covers_a_clone_kept_outside_the_registry_root(reg: Registry) -> 
     assert (str(outside), ccs.ADVANCED) in {(r.clone, r.result) for r in results}
     # Without the entry the same clone is not found.
     assert outside not in ccs.discover_clones(ccs.registry_roots(reg.env()))
+
+
+def test_registry_roots_reads_only_the_new_owner_file(reg: Registry) -> None:
+    new_root = reg.tmp / "new-root"
+    old_root = reg.tmp / "old-root"
+    new_root.mkdir()
+    old_root.mkdir()
+    new_file = reg.home.parent / "omnibase_internal/scripts/git-hooks/registry-roots"
+    new_file.parent.mkdir(parents=True)
+    new_file.write_text(f"root={new_root}\n")
+    old_file = reg.home / "scripts/git-hooks/registry-roots"
+    old_file.parent.mkdir(parents=True)
+    old_file.write_text(f"root={old_root}\n")
+    roots = ccs.registry_roots(reg.env())
+    assert new_root in roots
+    assert old_root not in roots
+
+
+def test_registry_roots_honors_explicit_owner_home(reg: Registry) -> None:
+    owner = reg.tmp / "owner"
+    extra = reg.tmp / "extra-root"
+    extra.mkdir()
+    roots_file = owner / "scripts/git-hooks/registry-roots"
+    roots_file.parent.mkdir(parents=True)
+    roots_file.write_text(f"root={extra}\n")
+    assert extra in ccs.registry_roots(reg.env(OMNIBASE_INTERNAL_HOME=str(owner)))
