@@ -886,3 +886,17 @@ def test_every_guard_log_line_is_dated(registry: Registry) -> None:
     stamp = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z ")
     assert all(stamp.match(ln) for ln in lines), lines
     assert any("DENY Bash 'git commit'" in ln for ln in lines)
+
+
+@pytest.mark.unit
+def test_multiline_guard_log_message_dates_every_line(registry: Registry) -> None:
+    """Codex review: a logged raw command can span lines; each is dated."""
+    bash(
+        registry,
+        "echo ready\ngit commit --no-verify -m x",
+        registry.clone("omnimarket"),
+    )
+    lines = [ln for ln in registry.log.splitlines() if ln.strip()]
+    stamp = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z ")
+    assert lines
+    assert all(stamp.match(ln) for ln in lines), lines

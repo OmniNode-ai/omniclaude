@@ -242,8 +242,8 @@ def _log(msg: str) -> None:
             # OMN-18982: every line is dated, or a morning sweep cannot say
             # which day's refusals it is reading.
             stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-            body = msg.rstrip("\n")
-            fh.write(f"{stamp} {body}\n")
+            for line in msg.rstrip("\n").split("\n"):
+                fh.write(f"{stamp} {line}\n")
 
 
 def _deny(reason: str) -> NoReturn:
