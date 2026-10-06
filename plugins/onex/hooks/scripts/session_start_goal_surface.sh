@@ -83,7 +83,7 @@ _WORKFLOW_NAME="morning-ground-state"
 
 # The six dropped-work headline keys the morning workflow writes into the goal
 # file's header (OMN-18954, sixth key added by OMN-18948). Spelled here and in
-# the registry clone's .claude/workflows/morning-ground-state.js, as
+# omnibase_internal/src/omnibase_internal/handlers/morning_ground_state/morning-ground-state.js, as
 # DROPPED_HEADLINE_KEYS;
 # each side pins its own copy, because neither repo's CI checks out the other.
 #

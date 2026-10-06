@@ -192,6 +192,17 @@ def test_policy_loads_and_declares_expected_vocabulary(policy: Policy) -> None:
     assert policy.unconditional_subcommands <= policy.refused_subcommands
 
 
+def test_refusal_routes_commits_to_packaged_lock(
+    registry: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        "git reset --hard", policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked
+    assert "onex-commit-lock" in decision.reason
+    assert "scripts/commit_lock.py" not in decision.reason
+
+
 def test_missing_policy_file_raises(tmp_path: Path) -> None:
     with pytest.raises(PolicyError):
         load_policy(tmp_path / "does-not-exist.json")
