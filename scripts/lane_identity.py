@@ -375,7 +375,7 @@ def own_hooks_dir(repo: Path) -> Path:
     RESOLVED FROM THE COMMON DIRECTORY, NOT FROM `git rev-parse --git-path hooks`
     (OMN-18273). That form honours `core.hooksPath`, and this workspace points
     EVERY canonical clone at one shared guard directory
-    (`scripts/git-hooks/canonical-clone`). So the refusal below fired on every
+    (`omnibase_internal/scripts/git-hooks/canonical-clone`). So the refusal below fired on every
     clone in the registry and the installer could not install anywhere at all:
     `install-hook --repo <any canonical clone>` exited 2 with "refusing to
     install into .../canonical-clone". That is why OMN-18260 through OMN-18263
@@ -416,7 +416,7 @@ def hooks_reachable(repo: Path, hook_name: str) -> tuple[bool, str]:
     a clone whose `core.hooksPath` is overridden is dead bytes unless the
     override directory carries an entry of the SAME NAME that chains back.
 
-    This workspace's override is `scripts/git-hooks/canonical-clone`, whose
+    This workspace's override is `omnibase_internal/scripts/git-hooks/canonical-clone`, whose
     per-hook-type symlinks resolve to `canonical_clone_guard.sh`, and that guard
     ends by exec-ing `<git-common-dir>/hooks/<hook_name>`. Its symlink set was
     `pre-commit commit-msg pre-push pre-merge-commit` -- `prepare-commit-msg` was

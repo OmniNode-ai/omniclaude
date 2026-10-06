@@ -6,7 +6,7 @@
 
   Runs canonical-clone-sync-tick.sh every 180 seconds. That fetches the
   checked-out tracking branch of every canonical clone under OMNI_HOME and each
-  registry root (read from OMNI_HOME/scripts/git-hooks/registry-roots, so this
+  registry root (read from OMNI_HOME/../omnibase_internal/scripts/git-hooks/registry-roots, so this
   environment needs only OMNI_HOME), and fast-forwards the clean ones. A dirty,
   diverged, detached, bare or lane-branch clone is logged as a refusal and left
   untouched. The PostToolUse hook post_tool_use_merge_clone_sync.sh covers the
