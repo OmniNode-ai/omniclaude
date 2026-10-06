@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -871,3 +872,17 @@ def test_gh_deny_message_names_the_worktree_remedy(registry: Registry) -> None:
     assert verdict.denied
     assert "gh pr checkout" in verdict.reason
     assert "worktree" in verdict.reason
+
+
+@pytest.mark.unit
+def test_every_guard_log_line_is_dated(registry: Registry) -> None:
+    """OMN-18982 / RC-14: the log was 0 of 10935 lines dated, so the morning
+    sweep could not attribute a day's refusals. Every line opens with a UTC
+    ISO-8601 timestamp."""
+    bash(registry, "git commit -m x", registry.clone("omnimarket"))
+    bash(registry, "cd -", registry.clone("omnimarket"))
+    lines = [ln for ln in registry.log.splitlines() if ln.strip()]
+    assert lines
+    stamp = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z ")
+    assert all(stamp.match(ln) for ln in lines), lines
+    assert any("DENY Bash 'git commit'" in ln for ln in lines)
