@@ -159,3 +159,18 @@ def test_public_repo_hygiene_hook_runs_on_every_commit_with_the_staged_diff() ->
     assert hook["always_run"] is True
     assert "files" not in hook
     assert hook["pass_filenames"] is False
+
+
+def test_private_denylist_uses_the_registry_vocabulary_directory() -> None:
+    fetch = _step(
+        REUSABLE, "public-repo-hygiene", "Fetch the private denylist vocabulary"
+    )
+    assert (
+        fetch["with"]["sparse-checkout"].strip()
+        == "vocabularies/public_repo_hygiene_vocabulary.yaml"
+    )
+    run = _step(REUSABLE, "public-repo-hygiene", "Run the public-repo hygiene gate")
+    assert (
+        run["env"]["VOCAB_PATH"]
+        == ".public-repo-hygiene-vocabulary/vocabularies/public_repo_hygiene_vocabulary.yaml"
+    )
