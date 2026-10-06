@@ -26,6 +26,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -553,6 +554,36 @@ class TestToolResultLinePasses:
         assert result.evidence_classes == expected
 
     @pytest.mark.parametrize(
+        "line",
+        [
+            # ledger-msg's inbox read ends on this line and carries no CITE-AS.
+            "inbox t20-item5-9143: 0 open item(s)",
+            "MSG 41233: MSG | lane=orchestrator | to=t20-item5-9143 | id=m1\n"
+            "inbox t20-item5-9143: 1 open item(s)",
+            # a forked executor's relay may indent the script's own line.
+            "  RETRY 75 bus: no receipt arrived, the outcome is unknown",
+            "\t  OK MSG 2026-10-01T20:37:44Z lane=m3-order-r3 line=23537",
+        ],
+    )
+    def test_further_result_line_shapes_pass(self, line: str) -> None:
+        result = classify_final_report(line)
+        assert result.verdict is EnumReportContractVerdict.PASSED, result.reason
+        assert "command_or_output" in result.evidence_classes
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "inbox",
+            "inbox: all quiet",
+            "the inbox t20: 0 open item(s) was empty",
+            "inbox t20: 0 open item(s)ubmitted. Done.",
+            "  OK MSG 2026-10-01TDone.",
+        ],
+    )
+    def test_inbox_lookalike_stays_red(self, text: str) -> None:
+        assert classify_final_report(text).verdict is EnumReportContractVerdict.RED
+
+    @pytest.mark.parametrize(
         "text", ["REFUSED", "Refused.", "OK", "it was refused, retry 75 later"]
     )
     def test_verdict_word_without_result_line_stays_red(self, text: str) -> None:
@@ -729,3 +760,53 @@ class TestCliEndToEnd:
         )
         assert proc.returncode == 0
         assert proc.stdout == ""
+
+
+class TestRefusalRowNamesTheRealReason:
+    """OMN-20398: the refusal row's detail was the constant "matched the
+    bare-Done clobber signature" for every RED reason, so a result line refused
+    as ``no_evidence_citations`` was filed as a bare-Done clobber and the
+    fingerprint read as a false red on a result line with no way to tell which."""
+
+    def test_detail_carries_the_classifier_reason(self, tmp_path) -> None:
+        recorder_dir = tmp_path / "lib"
+        recorder_dir.mkdir()
+        argv_file = tmp_path / "argv.json"
+        (recorder_dir / "hook_refusal_recorder.py").write_text(
+            "import json, sys\n"
+            f"open({str(argv_file)!r}, 'w').write(json.dumps(sys.argv[1:]))\n",
+            encoding="utf-8",
+        )
+        env = {
+            **os.environ,
+            "ONEX_STATE_DIR": str(tmp_path / "state"),
+            "CLAUDE_PROJECT_DIR": str(_LIB_DIR.parents[3]),
+            "PLUGIN_PYTHON_BIN": sys.executable,
+            "HOOKS_LIB": str(recorder_dir),
+        }
+        proc = subprocess.run(
+            [
+                "bash",
+                str(
+                    _LIB_DIR.parent
+                    / "scripts"
+                    / "subagent_stop_report_contract_guard.sh"
+                ),
+            ],
+            input=json.dumps(
+                {"last_assistant_message": "I looked around and it seems fine."}
+            ),
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 2, proc.stderr
+        for _ in range(50):
+            if argv_file.exists() and argv_file.read_text():
+                break
+            time.sleep(0.1)
+        argv = json.loads(argv_file.read_text(encoding="utf-8"))
+        detail = argv[argv.index("--detail") + 1]
+        assert "no_evidence_citations" in detail
+        assert "bare-Done clobber signature" not in detail
