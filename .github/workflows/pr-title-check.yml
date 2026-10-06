@@ -29,6 +29,6 @@ jobs:
     needs: occ-preflight
     if: always()
     # self-gating-ok: cross-repo reusable workflow; PR Title Check is not a required status check on main (tracked in OMN-9039)
-    uses: OmniNode-ai/onex_change_control/.github/workflows/pr-title-check-reusable.yml@f81a37f80de412743ade0891b3293f359b970f50
+    uses: OmniNode-ai/onex_change_control/.github/workflows/pr-title-check-reusable.yml@babdd13ce68f07df20f989f52ff1c4514d03d896
     permissions:
       pull-requests: read
