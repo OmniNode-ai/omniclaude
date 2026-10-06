@@ -51,7 +51,7 @@ force, and no checkout beyond that one switch:
   ``index.lock``
 * the local branch carries commits the upstream does not (ahead or diverged)
 * tracked changes. The one exception is a shared tree that uses the
-  ``scripts/commit_lock.py`` protocol (the registry root's own clone, rule 19): there the
+  ``onex-commit-lock`` protocol (the registry root's own clone, rule 19): there the
   fast-forward runs under that same commit lock, staged changes still refuse,
   and unstaged changes refuse only when the fast-forward would touch the same
   path. Rule 19 names ``git merge --ff-only origin/main`` as the sanctioned sync

@@ -36,7 +36,7 @@
 #     remote, for 2h22m -- and twice dropped a peer lane's unpushed commit
 #     from local main.
 #   * STRANDING, quieter and destroying nothing. A feature branch checked
-#     out in the shared clone makes commit_lock.py refuse EVERY other lane's
+#     out in the shared clone makes onex-commit-lock refuse EVERY other lane's
 #     ledger commit, exit 78, STRANDED CLONE, for as long as it stays
 #     checked out. Three rows appended at 01:24Z reached a committed copy at
 #     11:17Z. The only signal is an exit code on somebody else's terminal.

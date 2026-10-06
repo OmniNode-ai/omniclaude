@@ -31,7 +31,7 @@
         "     the registry repo pull requests 407 and 408).",
         "",
         "  2. STRANDING, which destroys nothing and is quieter. A feature branch",
-        "     checked out in the shared clone makes commit_lock.py refuse EVERY",
+        "     checked out in the shared clone makes onex-commit-lock refuse EVERY",
         "     other lane's ledger commit with exit 78, STRANDED CLONE, for as long",
         "     as it stays checked out. Measured by lane",
         "     dev-lane-broker-recreate-on-warm-deploy-diag-0125: three rows",
@@ -111,7 +111,7 @@
         "  reasoning that `git branch <name>` moves no working tree. That is",
         "  true and it is not the hazard: a branch created in the shared clone",
         "  exists in order to be checked out, and the moment it is,",
-        "  commit_lock.py refuses EVERY other lane's ledger commit with exit 78,",
+        "  onex-commit-lock refuses EVERY other lane's ledger commit with exit 78,",
         "  STRANDED CLONE. Refusing only the checkout leaves the first half of a",
         "  two-step hazard admitted and points nobody at the remedy. The refusal",
         "  names the worktree form, which creates the branch and the place to",
@@ -298,7 +298,7 @@
         "docs/tracking/ROLLING_WORK_LEDGER.md",
         "docs/tracking/archive"
     ],
-    "safe_alternatives": "do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through scripts/commit_lock.py; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work",
+    "safe_alternatives": "do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work",
     "registry_root_envs": [
         "OMNI_HOME",
         "ONEX_REGISTRY_ROOT"
