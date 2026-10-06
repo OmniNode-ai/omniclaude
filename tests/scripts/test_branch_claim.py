@@ -50,6 +50,7 @@ from pathlib import Path
 import pytest
 
 from scripts import branch_claim as bc
+from scripts import claim_index as ci
 from scripts import lane_identity as li
 
 NOW = datetime(2026, 9, 13, 12, 0, 0, tzinfo=UTC)
@@ -185,6 +186,27 @@ def test_unclaimed_is_clean(claim_index) -> None:
     text = _ledger(
         f"{_stamp(2)} | CLAIM | lane=beta | tickets=OMN-1111 | an unrelated ticket",
     )
+    verdict = bc.resolve(
+        claim_index,
+        branch="lane/omn-9999-thing",
+        commits=[_stamped("alpha")],
+        ledger_text=text,
+        ledger_name=LEDGER_NAME,
+        now=NOW,
+    )
+    assert verdict.outcome == "unclaimed"
+    assert verdict.findings == []
+
+
+def test_claim_index_terminal_releases_closed_claim(claim_index) -> None:
+    """OMN-20584: a finished lane must not block the next lane's push."""
+    text = _ledger(
+        f"{_stamp(4)} | CLAIM | lane=beta | ticket=OMN-9999 | taking it",
+        f"{_stamp(3)} | TERMINAL | lane=beta | ticket=OMN-9999 | "
+        f"closes-CLAIM={_stamp(4)} | outcome=done",
+    )
+    index = claim_index.build_index(text, LEDGER_NAME, now=NOW)
+    assert claim_index.holder(index, "OMN-9999") is None
     verdict = bc.resolve(
         claim_index,
         branch="lane/omn-9999-thing",
@@ -696,3 +718,151 @@ def test_the_backfill_resolves_a_holder_from_a_rolled_claim(tmp_path: Path) -> N
     ledger = _rolled_store(tmp_path, lane="delta")
     holders = li.claim_holders(ledger, LEDGER_NAME, bc.load_claim_index())
     assert holders.get("OMN-9999") == "delta"
+
+
+# OMN-20526 claim-index regressions ported from omnibase_internal a0646d9.
+def test_a_holders_terminal_releases_the_ticket() -> None:
+    """OMN-20526. A lane that closed with a TERMINAL no longer holds its ticket.
+    Read as activity, it kept the ticket `held` for the whole staleness window,
+    so a lab-fill tick skipped candidates whose lanes had all closed."""
+    text = (
+        f"{_stamp(0)} | CLAIM | lane=lane-a | ticket=OMN-1 | mine\n"
+        f"{_stamp(-1)} | TERMINAL | lane=lane-a | ticket=OMN-1 | closes-CLAIM={_stamp(0)} | outcome=done\n"
+    )
+    index = ci.build_index(text, LEDGER_NAME, now=(NOW + timedelta(hours=2)))
+    assert ci.holder(index, "OMN-1") is None
+
+
+def test_a_terminal_releases_when_it_names_no_or_another_claim_stamp() -> None:
+    """The lane name is the identity. A TERMINAL from the holder releases even
+    when its closes-CLAIM stamp is missing or does not match the live claim,
+    because a lane that wrote a TERMINAL is finished with the ticket either way."""
+    for cell in ("", f"closes-CLAIM={_stamp(-0.5)} | "):
+        text = (
+            f"{_stamp(0)} | CLAIM | lane=lane-a | ticket=OMN-1 | mine\n"
+            f"{_stamp(-1)} | TERMINAL | lane=lane-a | ticket=OMN-1 | {cell}outcome=done\n"
+        )
+        assert (
+            ci.holder(
+                ci.build_index(text, LEDGER_NAME, now=(NOW + timedelta(hours=2))),
+                "OMN-1",
+            )
+            is None
+        ), cell
+
+
+def test_a_terminal_from_another_lane_does_not_release_the_holder() -> None:
+    """Same rule as RELEASE: otherwise any lane takes a ticket in two rows."""
+    text = (
+        f"{_stamp(0)} | CLAIM | lane=lane-a | ticket=OMN-1 | mine\n"
+        f"{_stamp(-1)} | TERMINAL | lane=lane-b | ticket=OMN-1 | closes-CLAIM={_stamp(0)} | outcome=done\n"
+    )
+    held = ci.holder(
+        ci.build_index(text, LEDGER_NAME, now=(NOW + timedelta(hours=2))), "OMN-1"
+    )
+    assert held is not None and held.lane == "lane-a" and held.state == "held"
+
+
+def test_a_terminal_with_disjoint_tickets_does_not_release() -> None:
+    text = (
+        f"{_stamp(0)} | CLAIM | lane=lane-a | ticket=OMN-1 | mine\n"
+        f"{_stamp(-1)} | TERMINAL | lane=lane-a | ticket=OMN-2 | closes-CLAIM={_stamp(0)} | outcome=done\n"
+    )
+    held = ci.holder(
+        ci.build_index(text, LEDGER_NAME, now=(NOW + timedelta(hours=2))), "OMN-1"
+    )
+    assert held is not None and held.lane == "lane-a"
+
+
+def test_a_terminal_naming_several_tickets_releases_each_the_lane_holds() -> None:
+    text = (
+        f"{_stamp(0)} | CLAIM | lane=lane-a | ticket=OMN-1 | mine\n"
+        f"{_stamp(-0.1)} | CLAIM | lane=lane-b | ticket=OMN-2 | theirs\n"
+        f"{_stamp(-1)} | TERMINAL | lane=lane-a | tickets=OMN-1,OMN-2 | outcome=done\n"
+    )
+    index = ci.build_index(text, LEDGER_NAME, now=(NOW + timedelta(hours=2)))
+    assert ci.holder(index, "OMN-1") is None
+    held = ci.holder(index, "OMN-2")
+    assert held is not None and held.lane == "lane-b"
+
+
+def test_a_claim_by_another_lane_after_the_terminal_takes_the_ticket_with_the_next_fence() -> (
+    None
+):
+    text = (
+        f"{_stamp(0)} | CLAIM | lane=lane-a | ticket=OMN-1 | mine\n"
+        f"{_stamp(-1)} | TERMINAL | lane=lane-a | ticket=OMN-1 | closes-CLAIM={_stamp(0)} | outcome=done\n"
+        f"{_stamp(-2)} | CLAIM | lane=lane-b | ticket=OMN-1 | now mine\n"
+    )
+    held = ci.holder(
+        ci.build_index(text, LEDGER_NAME, now=(NOW + timedelta(hours=3))), "OMN-1"
+    )
+    assert held is not None and held.lane == "lane-b" and held.state == "held"
+    assert held.fence == 2, (
+        "the fence is monotonic across a release, per the design of record"
+    )
+
+
+def test_the_fence_survives_a_release_row_too() -> None:
+    text = (
+        f"{_stamp(0)} | CLAIM | lane=lane-a | ticket=OMN-1 | mine\n"
+        f"{_stamp(-1)} | RELEASE | lane=lane-a | ticket=OMN-1 | done\n"
+        f"{_stamp(-2)} | CLAIM | lane=lane-b | ticket=OMN-1 | now mine\n"
+    )
+    held = ci.holder(
+        ci.build_index(text, LEDGER_NAME, now=(NOW + timedelta(hours=3))), "OMN-1"
+    )
+    assert held is not None and held.fence == 2
+
+
+def test_a_terminal_after_a_stale_takeover_releases_the_new_holder_only() -> None:
+    """A TERMINAL written by the displaced lane after a takeover must not
+    release the lane that took the ticket over."""
+    text = (
+        f"{_stamp(0)} | CLAIM | lane=lane-a | ticket=OMN-1 | mine\n"
+        f"{_stamp(-14)} | RECLAIM | lane=lane-b | ticket=OMN-1 | stale={LEDGER_NAME}:1\n"
+        f"{_stamp(-15)} | TERMINAL | lane=lane-a | ticket=OMN-1 | closes-CLAIM={_stamp(0)} | "
+        "outcome=failed\n"
+    )
+    held = ci.holder(
+        ci.build_index(text, LEDGER_NAME, now=(NOW + timedelta(hours=16))), "OMN-1"
+    )
+    assert held is not None and held.lane == "lane-b"
+
+
+@pytest.mark.parametrize("row_class", ["TERMINAL", "RELEASE"])
+def test_the_terminal_release_fence_survives_a_source_boundary(row_class: str) -> None:
+    sources = [
+        ci.Source(
+            "archive/previous.md",
+            f"{_stamp(0)} | CLAIM | lane=lane-a | ticket=OMN-1\n"
+            f"{_stamp(-1)} | {row_class} | lane=lane-a | ticket=OMN-1\n",
+        ),
+        ci.Source(LEDGER_NAME, f"{_stamp(-2)} | CLAIM | lane=lane-b | ticket=OMN-1\n"),
+    ]
+    held = ci.holder(
+        ci.build_index_from_sources(sources, now=(NOW + timedelta(hours=3))), "OMN-1"
+    )
+    assert held is not None and held.lane == "lane-b" and held.fence == 2
+
+
+def test_a_pre_terminal_release_cache_is_rebuilt_on_an_unchanged_ledger(
+    tmp_path: Path,
+) -> None:
+    text = (
+        f"{_stamp(0)} | CLAIM | lane=lane-a | ticket=OMN-1\n"
+        f"{_stamp(-1)} | TERMINAL | lane=lane-a | ticket=OMN-1 | outcome=done\n"
+    )
+    ledger, cache = tmp_path / "ledger.md", tmp_path / "index.json"
+    ledger.write_text(text, encoding="utf-8")
+    old = ci.build_index(text, str(ledger), now=(NOW + timedelta(hours=2)))
+    old["version"] = 1
+    old["tickets"] = ci.build_index(
+        text.splitlines()[0] + "\n", str(ledger), now=(NOW + timedelta(hours=2))
+    )["tickets"]
+    ci.save_index(old, cache)
+    rebuilt = ci.resolve_index(
+        ledger, cache, str(ledger), now=(NOW + timedelta(hours=2))
+    )
+    assert ci.holder(rebuilt, "OMN-1") is None
+    assert rebuilt["version"] == ci.INDEX_VERSION and rebuilt["version"] != 1
