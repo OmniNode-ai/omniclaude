@@ -662,6 +662,17 @@ def _dirty_entries(clone: Path) -> tuple[list[str], list[str]] | None:
     return staged, unstaged
 
 
+DEFAULT_FETCH_SOURCE_PREFIX = "refs/heads/"
+
+
+def _fetch_source_prefix(clone: Path) -> str:
+    """The ref namespace branches are read from at the fetch source."""
+    return (
+        run_git(clone, "config", "--get", "onex.fetchSourcePrefix").out
+        or DEFAULT_FETCH_SOURCE_PREFIX
+    )
+
+
 def _fetch_branch(clone: Path, remote: str, branch: str) -> GitResult:
     """Fetch one branch into its remote-tracking ref, retrying a ref-lock race once.
 
@@ -670,9 +681,7 @@ def _fetch_branch(clone: Path, remote: str, branch: str) -> GitResult:
     lock ref", which is a race and not a fault. Observed on 2026-09-25
     (omnibase_infra, the 15:29Z timer run, host load 60).
     """
-    prefix = (
-        run_git(clone, "config", "--get", "onex.fetchSourcePrefix").out or "refs/heads/"
-    )
+    prefix = _fetch_source_prefix(clone)
     fetch = GitResult(1, "", "not attempted")
     for attempt in range(2):
         fetch = run_git(
@@ -712,6 +721,10 @@ def _refresh_remote_head(clone: Path, remote: str) -> GitResult:
     which the canonical-clone ref guard treats like a HEAD move, so it runs
     through the same ``ONEX_CANONICAL_CONVERGE`` door as the switch.
     """
+    if _fetch_source_prefix(clone) != DEFAULT_FETCH_SOURCE_PREFIX:
+        # A lab clone's source is another clone, whose checked-out HEAD says
+        # nothing about the default branch; keep the symref already recorded.
+        return GitResult(0, "", "")
     return run_git(
         clone,
         "remote",
@@ -1188,6 +1201,7 @@ def refresh_clone(
     if not remote or remote == ".":
         remote = "origin"
     url = run_git(clone, "remote", "get-url", remote).out
+    source_prefix = _fetch_source_prefix(clone)
     repo = repo_slug_of_url(url) if url else None
     wanted = list(dict.fromkeys(branches or [_default_branch(clone, common, remote)]))
 
@@ -1203,7 +1217,7 @@ def refresh_clone(
             "ls-remote",
             "--quiet",
             remote,
-            f"refs/heads/{branch}",
+            f"{source_prefix}{branch}",
             timeout=FETCH_TIMEOUT_SECONDS,
         )
         if listed.code != 0:
@@ -1237,7 +1251,7 @@ def refresh_clone(
                     "--quiet",
                     "--tags" if tags else "--no-tags",
                     remote,
-                    f"+refs/heads/{branch}:{tracking}",
+                    f"+{source_prefix}{branch}:{tracking}",
                     timeout=FETCH_TIMEOUT_SECONDS,
                 )
                 if fetch.code == 0 or "cannot lock ref" not in fetch.err or attempt:
