@@ -2352,7 +2352,7 @@ def render_report(
         "",
         "No `.git` link remains under these directories, so `git worktree remove`",
         "can never succeed — see `partial_mutation_debris` in",
-        "`docs/workflows/morning-worktree-prune/README.md`. Never deleted here;",
+        "`omnibase_internal/docs/workflows/morning-worktree-prune/README.md`. Never deleted here;",
         f"only the auto-removable subset ({auto_removable_debris}) is a candidate for",
         "the conservative `git worktree prune` + proven-reachable-content removal",
         "path, and only on an `--execute` run.",
