@@ -1,0 +1,25 @@
+schema_version: "1.0.0"
+ticket_id: OMN-19742
+title: "Read packaged workflow briefs and rules from the content repository"
+summary: >
+  Public lane-dispatch reads committed workflow briefs and rules from the
+  content repository while the registry claim root stays separate. The
+  committed-file reader searches nested package directories.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Committed-file reader tests pass"
+    command: "uv run pytest tests/scripts/test_read_committed_file.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-read-committed-file-tests
+    description: "Committed-file reader resolves nested package directories with exactly-one-match and duplicate refusal"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/scripts/test_read_committed_file.py -q"
