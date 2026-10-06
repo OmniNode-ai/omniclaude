@@ -97,6 +97,16 @@ find out something failed.
 | 5 | Claude Code | The onex plugin from your omniclaude clone. |
 | 6 | Verify | One line per check for the modes you chose. |
 
+**No GitHub account is needed.** The repositories the run clones are public, cloned
+over HTTPS, and nothing in the run asks you to log in to GitHub.
+
+Phase 5 is the one place that notices. Besides the onex plugin, which comes from your
+own clone and always installs, it offers two internal plugins from a private
+repository. Reading that needs a GitHub login with access and a loaded SSH key, so
+without them the run checks, says so, and skips them — which is why the phase is
+called "omni where you have access". **A skipped internal-plugins step is the correct
+outcome, not a failure.** Everything the setup is for works without them.
+
 Phase 3 is the one that matters: it ends by running a real delegation and reading back the
 receipt. If phase 3 passes, the machine works.
 
