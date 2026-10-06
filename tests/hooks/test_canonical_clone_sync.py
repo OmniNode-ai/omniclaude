@@ -1008,3 +1008,18 @@ def test_engine_opens_the_converge_door_for_set_head(
     assert res.result in (ccs.UP_TO_DATE, ccs.ADVANCED), res
     assert _origin_head_ref(clone) == "origin/dev"
     assert "ONEX_CANONICAL_CONVERGE" not in os.environ
+
+
+def test_engine_covers_a_clone_kept_outside_the_registry_root(reg: Registry) -> None:
+    """OMN-20637: a lab host keeps one clone outside OMNI_HOME. Naming it in ONEX_REGISTRY_ROOTS
+    makes it a root that is itself a clone, which discovery already treats as one."""
+    data = reg.tmp / "data"
+    data.mkdir()
+    outside = reg.make("outside-clone", root=data)
+    reg.advance("outside-clone")
+    env = reg.env(ONEX_REGISTRY_ROOTS=str(outside))
+    assert outside in ccs.discover_clones(ccs.registry_roots(env))
+    results = ccs.run_sync(env, None, "timer")
+    assert (str(outside), ccs.ADVANCED) in {(r.clone, r.result) for r in results}
+    # Without the entry the same clone is not found.
+    assert outside not in ccs.discover_clones(ccs.registry_roots(reg.env()))
