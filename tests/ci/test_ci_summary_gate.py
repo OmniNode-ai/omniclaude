@@ -1582,12 +1582,12 @@ class TestSweepFoldsIntoTheCombinedVerdict:
 class TestSweepExclusions:
     """AC-2 / AC-3 — the registry is closed-ended, and its one entry is real."""
 
-    def test_the_registry_holds_exactly_the_eight_measured_names(self) -> None:
+    def test_the_registry_holds_exactly_the_nine_measured_names(self) -> None:
         """Under the strict bar, every by-design non-green name needs an entry.
 
         That is the point of the ruling: the tolerance is written down with a
         reason, an owner and a date, instead of hiding inside a conclusion set
-        nobody reads. These eight are every name the measurement found
+        nobody reads. These nine are every name the measurement found
         non-green on any head.
         """
         assert set(EXTERNAL_SWEEP_EXCLUSIONS) == {
@@ -1598,6 +1598,7 @@ class TestSweepExclusions:
             "occ-companion-effect-manual-replay",
             "call",
             "imperative-contract-guard",
+            "verify / dod-verify",
             ci_summary_gate._MARKER_AUDIT_CONTEXT,
         }
 
@@ -1605,7 +1606,7 @@ class TestSweepExclusions:
         for name, entry in EXTERNAL_SWEEP_EXCLUSIONS.items():
             assert entry.reason.strip(), name
             assert entry.ticket.startswith("OMN-"), name
-            assert entry.added == "2026-09-21", name
+            assert entry.added in {"2026-09-21", "2026-10-06"}, name
             assert entry.expires == "2026-12-20", name
 
     def test_no_entry_overlaps_either_registered_set(self) -> None:
