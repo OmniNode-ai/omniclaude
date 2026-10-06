@@ -34,7 +34,7 @@ permissions:
 jobs:
   occ-preflight:
     # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@52851458622f368c3b596c82bf810bc6acce1d5e
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6
     permissions:
       contents: read
       pull-requests: read
@@ -67,4 +67,4 @@ jobs:
     if: always()
     # self-gating-ok: intentional cross-repo caller — omniclaude does not host
     # receipt-gate.yml itself; the reusable workflow lives in omnibase_core.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@fad21c40911b356c30f3e38c9075332f11524617 # OMN-20375: immutable SHA pin, the squash commit of omnibase_core#1853 on that repo's dev branch. It advances the inner validator ref past ModelDodReceipt.artifact_sha256, so receipts carrying artifact_sha256 no longer fail with extra_forbidden; it descends from the OCC writer app exemption (omnibase_core#1820) and the tree_sha validator ref (omnibase_core#1814, OMN-20132). A 40-hex pin is the intended long-term form. NO PUBLISHED RELEASE CONTAINS THIS: re-point at the first release that carries omnibase_core#1853
+    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6 # OMN-20375: immutable SHA pin, the squash commit of omnibase_core#1853 on that repo's dev branch. It advances the inner validator ref past ModelDodReceipt.artifact_sha256, so receipts carrying artifact_sha256 no longer fail with extra_forbidden; it descends from the OCC writer app exemption (omnibase_core#1820) and the tree_sha validator ref (omnibase_core#1814, OMN-20132). A 40-hex pin is the intended long-term form. NO PUBLISHED RELEASE CONTAINS THIS: re-point at the first release that carries omnibase_core#1853

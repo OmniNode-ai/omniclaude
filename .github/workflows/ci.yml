@@ -116,7 +116,7 @@ jobs:
       contents: read
       pull-requests: read
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@52851458622f368c3b596c82bf810bc6acce1d5e
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6
     with:
       contracts-dir: contracts
       receipts-dir: drift/dod_receipts
@@ -4157,7 +4157,7 @@ jobs:
       }}
     if: needs.occ-preflight.result == 'success'
     steps:
-      - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@47342e562a516b0278e22a974f35cbf2a64b33eb
+      - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@f81a37f80de412743ade0891b3293f359b970f50
         with:
           checks: "boundary-parity"
           warn-only: "false"
