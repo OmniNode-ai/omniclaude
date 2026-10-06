@@ -23,7 +23,7 @@ measured in the shared clone and neither had a mechanical defence:
    lane's uncommitted edit.
 
 2. **Stranding**, which destroys nothing and is quieter. A feature branch
-   checked out in the shared clone makes ``commit_lock.py`` refuse EVERY
+   checked out in the shared clone makes ``onex-commit-lock`` refuse EVERY
    other lane's ledger commit -- exit 78, ``STRANDED CLONE`` -- for as long
    as it stays checked out. Three rows appended at 01:24Z reached a
    committed copy only at 11:17Z; the refusals at 02:37Z named the branch.
@@ -858,7 +858,7 @@ def _refusal_detail(
             return (
                 "`git switch` moves the whole shared tree to another "
                 "branch. Every other lane keeps working in the tree it "
-                "moved, and while the clone is off `main` commit_lock.py "
+                "moved, and while the clone is off `main` onex-commit-lock "
                 "refuses every peer lane's ledger commit with exit 78, "
                 "STRANDED CLONE"
             )
@@ -878,7 +878,7 @@ def _refusal_detail(
                 "`git checkout -b` creates a feature branch in the clone "
                 "every lane shares. Nothing is destroyed and that is what "
                 "makes it dangerous: while the branch is checked out, "
-                "commit_lock.py refuses EVERY other lane's ledger commit "
+                "onex-commit-lock refuses EVERY other lane's ledger commit "
                 "with exit 78, STRANDED CLONE, and the only signal is an "
                 "exit code on somebody else's terminal. Measured once "
                 "already -- three rows appended at 01:24Z reached a "
@@ -889,7 +889,7 @@ def _refusal_detail(
             return (
                 f"the path operand resolves to {protected[0]}, the "
                 "append-only coordination surface every lane appends to "
-                "through commit_lock.py. A path-scoped restore is the "
+                "through onex-commit-lock. A path-scoped restore is the "
                 "Operating Rule 17 recipe and is allowed on every other "
                 "path, but on THIS one it returns the file to HEAD -- not "
                 "to what was in the working tree -- so every row appended "
@@ -922,7 +922,7 @@ def _refusal_detail(
         return (
             "`git checkout <ref>` moves the whole shared tree to another "
             "commit, reverting peer lanes' uncommitted edits and stranding "
-            "the clone off `main`, where commit_lock.py refuses every "
+            "the clone off `main`, where onex-commit-lock refuses every "
             "peer's ledger commit. Operands with no `--` separator are "
             "refused even when a path is meant, because git itself cannot "
             "tell a ref from a path there and neither can this guard -- use "
@@ -987,7 +987,7 @@ def _refusal_detail(
             "refuses costs the tree's UNCOMMITTED state; this one rewrites "
             "history that is already safe, and after a ledger roll the "
             "remote copy is the only surviving one. Nothing here needs it: "
-            "append rows through commit_lock.py, sync with "
+            "append rows through onex-commit-lock, sync with "
             "`git merge --ff-only origin/main`, push to a FRESH branch, "
             "open a pull request and land it by squash"
         )
@@ -1005,7 +1005,7 @@ def _refusal_detail(
                     "every lane shares. It moves nothing by itself, which is "
                     "why it reads as harmless -- but a branch created here "
                     "exists to be checked out, and the moment it is, "
-                    "commit_lock.py refuses EVERY other lane's ledger commit "
+                    "onex-commit-lock refuses EVERY other lane's ledger commit "
                     "with exit 78, STRANDED CLONE, and the only signal is an "
                     "exit code on somebody else's terminal. Create the branch "
                     "with the worktree that will hold it instead: git -C "

@@ -36,8 +36,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _HELPER = _REPO_ROOT / "plugins" / "onex" / "scripts" / "read_committed_file.py"
 _LANE_DISPATCH = _REPO_ROOT / "plugins" / "onex" / "skills" / "lane_dispatch"
 
-RULES = ".claude/workflows/_shared/lane-rules-block.md"
-BRIEFS = ".claude/workflows"
+RULES = "lane_rules/lane-rules-block.md"
+BRIEFS = "src/omnibase_internal/handlers"
 COMMITTED_RULES = b"## Standing rules\n\n- committed rule one\n"
 DIRTY_RULES = COMMITTED_RULES + b"- a peer session's uncommitted edit\n"
 
@@ -71,7 +71,8 @@ def workspace(tmp_path: Path) -> Path:
     git("config", "user.name", "fixture")
     (repo / RULES).parent.mkdir(parents=True)
     (repo / RULES).write_bytes(COMMITTED_RULES)
-    (repo / BRIEFS / "hourly-tick.js").write_text("// committed brief\n")
+    (repo / BRIEFS / "hourly_tick").mkdir(parents=True)
+    (repo / BRIEFS / "hourly_tick/hourly-tick.js").write_text("// committed brief\n")
     (repo / "empty.md").write_bytes(b"")
     git("add", "-A")
     git("commit", "-q", "-m", "seed")
@@ -179,6 +180,7 @@ def test_a_repository_that_is_not_one_refuses(tmp_path: Path) -> None:
 def test_lane_dispatch_reads_rules_and_brief_through_the_helper(name: str) -> None:
     text = (_LANE_DISPATCH / name).read_text(encoding="utf-8")
     assert "scripts/read_committed_file.py" in text
+    assert "--repo <content_root>" in text
     assert "--path <rules_block_path>" in text
     assert "--dir <brief_directory> --stem <brief>" in text
 
@@ -186,3 +188,27 @@ def test_lane_dispatch_reads_rules_and_brief_through_the_helper(name: str) -> No
 def test_lane_dispatch_no_longer_reads_the_rules_block_from_disk() -> None:
     prompt = (_LANE_DISPATCH / "prompt.md").read_text(encoding="utf-8")
     assert "Read `rules_block_path` in full" not in prompt
+
+
+def test_duplicate_nested_brief_stems_are_refused(
+    tmp_path: Path, workspace: Path
+) -> None:
+    duplicate = workspace / BRIEFS / "other/hourly-tick.js"
+    duplicate.parent.mkdir()
+    duplicate.write_text("// duplicate committed brief\n")
+    subprocess.run(
+        ["git", "-C", str(workspace), "add", "-A"],
+        env={**scrub_git_location_env(os.environ), **_isolated(tmp_path)},
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(workspace), "commit", "-q", "-m", "duplicate"],
+        env={**scrub_git_location_env(os.environ), **_isolated(tmp_path)},
+        check=True,
+    )
+    proc = _run(
+        tmp_path, "--repo", str(workspace), "--dir", BRIEFS, "--stem", "hourly-tick"
+    )
+    assert proc.returncode == 2
+    assert not proc.stdout
+    assert b"2 committed entries" in proc.stderr
