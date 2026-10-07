@@ -41,8 +41,8 @@ Fetch the script, check it is the one this page was written against, then run it
 
 ```bash
 curl -fsSL -o lab-onboarding.sh \
-  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/9026723d3996be1414d104897be42d71b7491d06/plugins/onex/skills/_bin/lab-onboarding.sh
-echo "61f658d93349c5342fcaf76f20aa0862eb4f308c70da1c98b4e1415e742d87f4  lab-onboarding.sh" | shasum -a 256 -c -
+  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/296be3faf32a3443adc7dbb818233bcd323c415c/plugins/onex/skills/_bin/lab-onboarding.sh
+echo "8a059b095aabec81ec800902806c04aa7f9fe82b53ac8b4364911d1f01798c25  lab-onboarding.sh" | shasum -a 256 -c -
 bash lab-onboarding.sh
 ```
 
