@@ -26,6 +26,8 @@
 # Contract
 # --------
 #   Reads:   $KNOWLEDGE_BASE_INTERNAL_PATH/beta/GOAL.md
+#            $ONEX_STATE_DIR/morning-workflows/lab-fill-latest.json
+#              (or $OMNI_HOME/.onex_state/morning-workflows/ when unset)
 #            $OMNI_HOME/.onex_state/morning-workflows/notifications/
 #              morning-ground-state.failure.json  (only when the goal is STALE)
 #            $OMNI_HOME/.onex_state/morning-workflows/deferred/
@@ -175,6 +177,35 @@ _json_field() {
         | sed -E 's/^[^:]*:[[:space:]]*//; s/^"//; s/",?[[:space:]]*$//; s/,[[:space:]]*$//' \
         | sed -E 's/\\u00b7/·/g; s/\\"/"/g; s/\\\\/\\/g'
 }
+
+# OMN-17427: the launchd fill publishes its validated measured observation.
+# Show it even when GOAL.md is missing, so an absent goal cannot hide idle lab
+# capacity. Keep the hook read-only and interpreter-free. Forty minutes is two
+# fill intervals; an older observation cannot establish that the lab is idle now.
+_LAB_STATE_ROOT="${ONEX_STATE_DIR:-${OMNI_HOME:+$OMNI_HOME/.onex_state}}"
+_LAB_FILE="${_LAB_STATE_ROOT}/morning-workflows/lab-fill-latest.json"
+_LAB_UNKNOWN="lab load=UNKNOWN running-lanes=UNKNOWN free-slots=UNKNOWN approved-work=UNKNOWN"
+if [[ -n "$_LAB_STATE_ROOT" && -r "$_LAB_FILE" ]]; then
+    _LAB_LINE="$(_json_field session_line "$_LAB_FILE")"
+    _LAB_OBSERVED="$(_json_field observed_at "$_LAB_FILE")"
+    _LAB_VERSION="$(_json_field version "$_LAB_FILE")"
+    _LAB_WORKFLOW="$(_json_field workflow "$_LAB_FILE")"
+    _LAB_EPOCH="$(date -u -d "$_LAB_OBSERVED" +%s 2>/dev/null)" \
+        || _LAB_EPOCH="$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$_LAB_OBSERVED" +%s 2>/dev/null)" \
+        || _LAB_EPOCH=""
+    if [[ "$_LAB_VERSION" == 1 && "$_LAB_WORKFLOW" == lab-fill && "$_LAB_LINE" == lab\ * && "$_LAB_OBSERVED" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$ && "$_LAB_EPOCH" =~ ^[0-9]+$ ]]; then
+        _LAB_AGE=$(( $(date +%s) - _LAB_EPOCH ))
+        if (( _LAB_AGE < 0 || _LAB_AGE > 2400 )); then
+            say "${_LAB_LINE% IDLE} STALE observed=${_LAB_OBSERVED}"
+        else
+            say "$_LAB_LINE"
+        fi
+    else
+        say "$_LAB_UNKNOWN result=INVALID"
+    fi
+else
+    say "$_LAB_UNKNOWN result=MISSING"
+fi
 
 _TODAY="$(date +%F)"
 

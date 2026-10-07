@@ -78,6 +78,7 @@ def _run(
     # $OMNI_HOME. Popped unconditionally so no case inherits the developer's
     # real state directory; `omni_root=` opts a case back in, hermetically.
     env.pop("OMNI_HOME", None)
+    env.pop("ONEX_STATE_DIR", None)
     if omni_root is not None:
         env["OMNI_HOME"] = omni_root
     # Pin mode so the lite-mode early exit cannot swallow the output depending on
@@ -739,4 +740,71 @@ def test_the_hook_declares_exactly_these_keys() -> None:
     assert declared == _DROPPED_KEYS, (
         "the hook greps keys the morning workflow may no longer write; "
         f"script declares {declared}, this test expects {_DROPPED_KEYS}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("free", "depth", "expected"), [(3, 2, "IDLE"), (0, 2, ""), (3, 0, "")]
+)
+def test_lab_load_line_surfaces_headroom_and_approved_work(
+    tmp_path: Path, free: int, depth: int, expected: str
+) -> None:
+    import json
+
+    root = tmp_path / "omni"
+    state = root / ".onex_state/morning-workflows"
+    state.mkdir(parents=True)
+    line = f"lab h202:load=0.1/running=2/free={free} running-lanes=2 free-slots={free} approved-work={depth} {expected}".strip()
+    (state / "lab-fill-latest.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "workflow": "lab-fill",
+                "observed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "session_line": line,
+            },
+            indent=2,
+        )
+    )
+    result = _run(None, omni_root=str(root))
+    assert result.returncode == 0
+    assert f"[session-goal] {line}" in result.stdout
+    lab_lines = [
+        x for x in result.stdout.splitlines() if x.startswith("[session-goal] lab ")
+    ]
+    assert len(lab_lines) == 1
+
+
+def test_lab_load_line_marks_old_observation_stale(tmp_path: Path) -> None:
+    import json
+
+    root = tmp_path / "omni"
+    state = root / ".onex_state/morning-workflows"
+    state.mkdir(parents=True)
+    (state / "lab-fill-latest.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "workflow": "lab-fill",
+                "observed_at": "2026-01-01T00:00:00Z",
+                "session_line": "lab h202:load=0.1/running=2/free=3 running-lanes=2 free-slots=3 approved-work=2 IDLE",
+            },
+            indent=2,
+        )
+    )
+    result = _run(None, omni_root=str(root))
+    line = next(
+        x for x in result.stdout.splitlines() if x.startswith("[session-goal] lab ")
+    )
+    assert "STALE" in line
+    assert "IDLE" not in line
+
+
+def test_lab_load_line_names_missing_capacity_instead_of_claiming_idle(
+    tmp_path: Path,
+) -> None:
+    result = _run(None, omni_root=str(tmp_path))
+    assert (
+        "[session-goal] lab load=UNKNOWN running-lanes=UNKNOWN free-slots=UNKNOWN approved-work=UNKNOWN"
+        in result.stdout
     )
