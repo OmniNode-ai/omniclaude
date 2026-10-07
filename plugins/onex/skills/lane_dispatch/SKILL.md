@@ -59,8 +59,8 @@ stop, not a dispatch with the rules omitted.
 at a commit with the shared helper, never opened from disk:
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <root> --path <rules_block_path>
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <root> --dir <brief_directory> --stem <brief>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <content_root> --path <rules_block_path>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <content_root> --dir <brief_directory> --stem <brief>
 ```
 
 A clone that several sessions share carries their uncommitted edits in its
@@ -89,11 +89,20 @@ there is no default. Report its standard error and stop.
 
 | Field | What it holds |
 | -- | -- |
+| `content_repo_env` | optional environment variable naming the content repository |
+| `content_repo_path` | optional content repository path relative to the workspace root |
 | `brief_directory` | where named briefs are resolved from |
 | `rules_block_path` | the standing rules every dispatch injects |
 | `claim_command` | how a claim row is appended, under its lock |
 | `claim_surface` | what a later row cites to resolve the authorization |
 | `model_choices` | the models a lane may be given, and what each is for |
+
+Resolve `content_root` from the overlay's `content_repo_env` when set, otherwise
+from `content_repo_path` relative to `workspace_root_env`. If neither content
+field is present, the workspace root is the content repository. A configured
+content repository that cannot be resolved is a hard stop. Both paths above
+are relative to that repository; brief stems resolve recursively and must
+match exactly one committed file. Claims still use the workspace root.
 
 ## Preflight, by intent
 

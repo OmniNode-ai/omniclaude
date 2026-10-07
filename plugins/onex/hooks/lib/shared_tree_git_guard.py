@@ -23,7 +23,7 @@ measured in the shared clone and neither had a mechanical defence:
    lane's uncommitted edit.
 
 2. **Stranding**, which destroys nothing and is quieter. A feature branch
-   checked out in the shared clone makes ``commit_lock.py`` refuse EVERY
+   checked out in the shared clone makes ``onex-commit-lock`` refuse EVERY
    other lane's ledger commit -- exit 78, ``STRANDED CLONE`` -- for as long
    as it stays checked out. Three rows appended at 01:24Z reached a
    committed copy only at 11:17Z; the refusals at 02:37Z named the branch.
@@ -152,12 +152,12 @@ determined.
 
 An operand the shell computes (a variable, ``~``, a substitution, brace
 expansion) is not refused for being computed (OMN-17427). A variable the
-environment or an earlier assignment in the command resolves is read. One
-that cannot be resolved is judged by the worst thing it could name: a path
-operand becomes the whole tree, a source operand credits nothing as already
-saved. The restore is then refused exactly when some path of the tree holds
-work that exists nowhere else, so a clean tree passes and a tree holding
-uncommitted work does not. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
+environment or an earlier assignment in the command resolves is read. A path
+operand that cannot be resolved is refused as indeterminate (OMN-19380),
+even over a clean tree: pass literal paths, or commit first and restore by
+path per Operating Rule 17. An unresolved source operand credits nothing as
+already saved; the declared reachable refs still determine whether its
+literal paths hold uncommitted work. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
 refused on the same ground, since it may be a branch switch or a path
 restore; the refusal names ``git switch`` as the unambiguous verb. A
 conflicted path is judged too: ``--ours``/``--theirs``/``-m`` rewrite its
@@ -858,7 +858,7 @@ def _refusal_detail(
             return (
                 "`git switch` moves the whole shared tree to another "
                 "branch. Every other lane keeps working in the tree it "
-                "moved, and while the clone is off `main` commit_lock.py "
+                "moved, and while the clone is off `main` onex-commit-lock "
                 "refuses every peer lane's ledger commit with exit 78, "
                 "STRANDED CLONE"
             )
@@ -878,7 +878,7 @@ def _refusal_detail(
                 "`git checkout -b` creates a feature branch in the clone "
                 "every lane shares. Nothing is destroyed and that is what "
                 "makes it dangerous: while the branch is checked out, "
-                "commit_lock.py refuses EVERY other lane's ledger commit "
+                "onex-commit-lock refuses EVERY other lane's ledger commit "
                 "with exit 78, STRANDED CLONE, and the only signal is an "
                 "exit code on somebody else's terminal. Measured once "
                 "already -- three rows appended at 01:24Z reached a "
@@ -889,7 +889,7 @@ def _refusal_detail(
             return (
                 f"the path operand resolves to {protected[0]}, the "
                 "append-only coordination surface every lane appends to "
-                "through commit_lock.py. A path-scoped restore is the "
+                "through onex-commit-lock. A path-scoped restore is the "
                 "Operating Rule 17 recipe and is allowed on every other "
                 "path, but on THIS one it returns the file to HEAD -- not "
                 "to what was in the working tree -- so every row appended "
@@ -922,7 +922,7 @@ def _refusal_detail(
         return (
             "`git checkout <ref>` moves the whole shared tree to another "
             "commit, reverting peer lanes' uncommitted edits and stranding "
-            "the clone off `main`, where commit_lock.py refuses every "
+            "the clone off `main`, where onex-commit-lock refuses every "
             "peer's ledger commit. Operands with no `--` separator are "
             "refused even when a path is meant, because git itself cannot "
             "tell a ref from a path there and neither can this guard -- use "
@@ -987,7 +987,7 @@ def _refusal_detail(
             "refuses costs the tree's UNCOMMITTED state; this one rewrites "
             "history that is already safe, and after a ledger roll the "
             "remote copy is the only surviving one. Nothing here needs it: "
-            "append rows through commit_lock.py, sync with "
+            "append rows through onex-commit-lock, sync with "
             "`git merge --ff-only origin/main`, push to a FRESH branch, "
             "open a pull request and land it by squash"
         )
@@ -1005,7 +1005,7 @@ def _refusal_detail(
                     "every lane shares. It moves nothing by itself, which is "
                     "why it reads as harmless -- but a branch created here "
                     "exists to be checked out, and the moment it is, "
-                    "commit_lock.py refuses EVERY other lane's ledger commit "
+                    "onex-commit-lock refuses EVERY other lane's ledger commit "
                     "with exit 78, STRANDED CLONE, and the only signal is an "
                     "exit code on somebody else's terminal. Create the branch "
                     "with the worktree that will hold it instead: git -C "
@@ -1415,11 +1415,6 @@ def _parse_restore(
     return _restore_shape(args)
 
 
-#: The pathspec that names every path of the repository, whatever directory
-#: git runs in. It stands in for an operand the shell computes.
-_WHOLE_TREE: Final[str] = ":/"
-
-
 def _is_shell_computed(operand: str) -> bool:
     """Does the shell compute this operand, so the command text cannot name it?
 
@@ -1441,7 +1436,7 @@ def _read_operand(operand: str, scope: Scope) -> str:
 
     OMN-17427. An operand naming a variable the environment or an earlier
     assignment in this command resolves to one word is that word. Anything
-    else is returned unchanged and is left to ``_widen_computed_operands``.
+    else is returned unchanged and is left to ``_check_computed_operands``.
     """
     if "$" not in operand and not operand.startswith("~"):
         return operand
@@ -1451,36 +1446,21 @@ def _read_operand(operand: str, scope: Scope) -> str:
     return value
 
 
-def _widen_computed_operands(shape: _RestoreShape) -> _RestoreShape:
-    """Judge an operand the shell computes by the worst thing it could name.
+def _check_computed_operands(shape: _RestoreShape) -> _RestoreShape:
+    """Refuse unresolved restore paths; an unknown source credits no saved work.
 
-    OMN-17427. This was ``_require_literal``, which refused every restore with
-    an operand the shell computes (``git checkout "$SHA" -- <path>``,
-    ``git restore "$F"``), so a lane whose worktree held nothing to lose was
-    refused all the same, on the grounds that "what it names cannot be read".
-    What matters is what could be lost, not what is named:
-
-    * a path the shell computes may name any path of the repository, so the
-      named paths become the whole tree, and the restore is refused exactly
-      when SOME path of the tree holds work that exists nowhere else;
-    * a source the shell computes carries unknown content, so it can credit
-      no path as already saved, and only the declared reachable refs can.
-
-    A clean tree therefore passes, and a tree holding uncommitted work is
-    refused, as before.
+    OMN-19380. Resolvable paths have already passed through ``_read_operand``
+    and the shared expansion helper. Probing the whole tree for an unresolved
+    path cannot establish which paths the shell will hand to git.
     """
-    paths = shape.paths
-    if any(_is_shell_computed(path) for path in paths):
-        paths = (_WHOLE_TREE,)
+    for path in shape.paths:
+        if _is_shell_computed(path):
+            raise _Indeterminate(
+                f"the restore path {path!r} cannot be resolved by the shared "
+                "shell expansion helper"
+            )
     source_unknown = shape.source is not None and _is_shell_computed(shape.source)
-    return _RestoreShape(
-        source=shape.source,
-        paths=paths,
-        writes_index=shape.writes_index,
-        writes_worktree=shape.writes_worktree,
-        overlay=shape.overlay,
-        source_unknown=source_unknown,
-    )
+    return replace(shape, source_unknown=source_unknown)
 
 
 def _parse_porcelain(raw: bytes) -> list[tuple[str, str]]:
@@ -1690,7 +1670,9 @@ def _render_restore_indeterminate(
     return (
         f"BLOCKED: `git {invocation.subcommand}` is a path-scoped restore, and "
         "whether it would discard uncommitted work could not be determined: "
-        f"{why} ({policy.restore_ticket}, {policy.restore_rule}). An "
+        f"{why} ({policy.restore_ticket}, {policy.restore_rule}). "
+        "Remedy: pass literal paths, or commit first and restore by path per "
+        "Operating Rule 17. An "
         "unverifiable restore is refused, never assumed safe, because the "
         "loss it risks is silent and unrecoverable. Instead: "
         f"{policy.restore_safe_alternatives}. Or name each path literally, "
@@ -1773,7 +1755,7 @@ def _restore_refusal(
                 "an earlier cd, or its -C operand, could not be resolved, so "
                 "neither can the tree it writes"
             )
-        shape = _widen_computed_operands(shape)
+        shape = _check_computed_operands(shape)
         lost = _paths_losing_work(shape, target_dir, git_root, policy)
     except _Indeterminate as exc:
         return _render_restore_indeterminate(policy, invocation, str(exc))
@@ -1838,7 +1820,8 @@ def _peel_grouping(segment: list[str]) -> tuple[list[str], int, int]:
     opened = 0
     while tokens:
         head = tokens[0]
-        if head == "{":
+        if head in {"{", "do"}:
+            # OMN-19380: a loop body begins with do before its first command.
             tokens = tokens[1:]
         elif head.startswith("(") and not head.startswith("$("):
             opened += 1

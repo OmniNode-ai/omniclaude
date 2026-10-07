@@ -2,6 +2,8 @@
 
 A setup guide for using the ONEX plugin with your own projects without running the full OmniNode platform.
 
+> Starting from a Mac with nothing installed? Use [ONBOARDING.md](ONBOARDING.md) instead. This page assumes Claude Code, Python, uv, git and gh are already present.
+
 ---
 
 ## Prerequisites

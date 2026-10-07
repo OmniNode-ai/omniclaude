@@ -225,6 +225,7 @@ def _is_own_claim(
     claim_data: dict,  # type: ignore[type-arg]
     run_id: str,
     lane_id: str | None,
+    session_id: str | None = None,
 ) -> bool:
     """Return True when a live claim belongs to this caller (idempotent re-claim).
 
@@ -234,6 +235,9 @@ def _is_own_claim(
     must match too (OMN-19695).
     """
     if claim_data.get("claimed_by_run") != run_id:
+        return False
+    held_session = claim_data.get("claimed_by_session")
+    if held_session and session_id is not None and held_session != session_id:
         return False
     held_lane = claim_data.get("lane_id")
     return not held_lane or not lane_id or held_lane == lane_id
@@ -362,6 +366,7 @@ class ClaimRegistry:
         action: str,
         dry_run: bool = False,
         lane_id: str | None = None,
+        session_id: str | None = None,
     ) -> bool:
         """Attempt to acquire a claim on the given PR.
 
@@ -378,6 +383,8 @@ class ClaimRegistry:
                 without it is treated as INDETERMINATE by that guard — it proves
                 someone holds the target but not which lane, so it cannot
                 authorize a mutation.
+            session_id: Full claiming session identity, when available. It
+                disambiguates lanes whose fallback session prefixes collide.
 
         Returns:
             True if claim was acquired (or dry_run), False if claimed by another active run.
@@ -413,6 +420,7 @@ class ClaimRegistry:
             "last_heartbeat_at": now,
             "action": action,
             "lane_id": lane_id,
+            "claimed_by_session": session_id,
         }
 
         saw_create_collision = False
@@ -435,7 +443,7 @@ class ClaimRegistry:
             if existing is not None:
                 if is_active(existing):
                     existing_run = existing.get("claimed_by_run", "unknown")
-                    if _is_own_claim(existing, run_id, lane_id):
+                    if _is_own_claim(existing, run_id, lane_id, session_id):
                         # We already own this claim — re-acquire (idempotent).
                         return True
                     collision = " concurrently" if saw_create_collision else ""
@@ -460,7 +468,7 @@ class ClaimRegistry:
                 reaped, raced_live_claim = self._reap_inactive_claim(claim_file, pr_key)
                 if raced_live_claim is not None:
                     raced_run = raced_live_claim.get("claimed_by_run", "unknown")
-                    if _is_own_claim(raced_live_claim, run_id, lane_id):
+                    if _is_own_claim(raced_live_claim, run_id, lane_id, session_id):
                         return True
                     print(
                         f"[claim-registry] PR {pr_key} is actively claimed "

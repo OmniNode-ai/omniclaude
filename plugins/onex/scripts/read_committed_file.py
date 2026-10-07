@@ -13,7 +13,7 @@ skill's first dry run: 13,383 bytes in the working tree against 10,256 at HEAD.
 Two ways to name the file:
 
 - ``--path P``: a repository-relative path, read with ``git show <ref>:P``.
-- ``--dir D --stem S``: the one committed entry directly under ``D`` whose name,
+- ``--dir D --stem S``: the one committed entry recursively under ``D`` whose name,
   without its extension, is ``S``. A brief is named by stem; resolving it from
   the committed tree means an untracked file of the same name is never found.
 
@@ -75,7 +75,9 @@ def resolve_commit(repo: Path, ref: str) -> str:
 
 def resolve_stem(repo: Path, commit: str, directory: str, stem: str) -> str:
     """The single committed entry under ``directory`` whose stem is ``stem``."""
-    proc = _git(repo, "ls-tree", "--name-only", commit, f"{directory.rstrip('/')}/")
+    proc = _git(
+        repo, "ls-tree", "-r", "--name-only", commit, f"{directory.rstrip('/')}/"
+    )
     if proc.returncode != 0:
         raise NotCommitted(proc.stderr.decode(errors="replace").strip())
     names = [n for n in proc.stdout.decode().splitlines() if n]

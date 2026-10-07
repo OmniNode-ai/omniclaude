@@ -11,6 +11,17 @@ description: >
   deterministic lineage metadata. This contract adds a lineage-carrying capture
   alongside the four legacy topics and supersedes nothing.
 
+# OMN-20664: these fields are present strings whose empty value is valid.
+# Missing fields and non-string values remain capture contract refusals.
+input_empty_strings:
+  SubagentStop: [agent_type]
+  UserPromptExpansion: [command_args]
+refusal_observability:
+  metric: contract_refused_total
+  surface: hook_emit_health JSON
+  persistence: hook_capture_contract_refusals.json beside the journal directory
+  scope: cumulative per host state directory, incremented before logging a refusal
+
 topics:
   metadata:
     name: "onex.evt.omniclaude.hook-event.v1"  # onex-topic-sot
