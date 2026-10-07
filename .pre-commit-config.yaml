@@ -657,6 +657,14 @@ repos:
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
         stages: [pre-commit]
 
+      - id: refusal-surface
+        name: Refusal Surface (OMN-18983)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: ruff-check
         name: ruff check (staged files)
         entry: bash scripts/uv-run-worktree-safe.sh ruff check

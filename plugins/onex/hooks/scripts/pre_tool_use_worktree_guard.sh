@@ -73,7 +73,11 @@ HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOK_SCRIPT_DIR="${HOOK_SCRIPT_DIR:-$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)}"
 
 cd "$HOME" 2>/dev/null || cd /tmp || true
-source "${HOOK_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
+if ! source "${HOOK_SCRIPT_DIR}/onex-paths.sh"; then
+    printf '%s\n' '{"decision":"block","reason":"OMN-18983: refusal log path is unresolved; set an absolute OMNI_HOME or ONEX_STATE_DIR"}'
+    trap - EXIT
+    exit 2
+fi
 LOG_FILE="${ONEX_HOOK_LOG}"
 
 # Detect project root
@@ -154,7 +158,6 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Checking Bash command for worktree-add 
 #                         invalid overrides refuse rather than use a sibling.
 # ---------------------------------------------------------------------------
 _block() {
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: $1: $2" >> "$LOG_FILE"
     _hook_status "BLOCKED" "$1" "0"
     hook_record_refusal "$1" "$2" 2>/dev/null || true
     jq -n --arg reason "$2" '{"decision": "block", "reason": $reason}'

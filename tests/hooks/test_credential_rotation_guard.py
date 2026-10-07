@@ -620,7 +620,7 @@ def test_disabled_hook_allows_and_logs(tmp_path: Path, ledger: Path) -> None:
 
 
 def test_hook_script_logs_a_refusal(tmp_path: Path, ledger: Path) -> None:
-    log = tmp_path / "hooks.log"
+    log = ledger / ".onex_state/hooks/logs/hooks.log"
     _run_hook(
         {
             "tool_name": "Bash",
@@ -634,7 +634,23 @@ def test_hook_script_logs_a_refusal(tmp_path: Path, ledger: Path) -> None:
             "ONEX_HOOK_LOG": str(log),
         },
     )
-    assert "BLOCKED" in log.read_text(encoding="utf-8")
+    assert "class=refusal" in _read_refusal_log(log)
+
+
+def _read_refusal_log(log: Path) -> str:
+    """Wait for the existing asynchronous recorder on the declared surface."""
+    import time
+
+    deadline = time.monotonic() + 5
+    text = ""
+    while time.monotonic() < deadline:
+        text = log.read_text(encoding="utf-8") if log.exists() else ""
+        if "class=refusal" in text:
+            break
+        time.sleep(0.02)
+    assert "guard=pre_tool_use_credential_rotation_guard.sh |" in text
+    assert "lane_source=" in text
+    return text
 
 
 # --------------------------------------------------------------------------
@@ -1065,7 +1081,7 @@ def test_hook_script_allows_a_document_heredoc_and_logs_the_skip(
 def test_hook_script_still_blocks_a_rotation_beside_a_heredoc(
     tmp_path: Path, ledger: Path
 ) -> None:
-    log = tmp_path / "hooks.log"
+    log = ledger / ".onex_state/hooks/logs/hooks.log"
     result = _run_hook(
         {
             "tool_name": "Bash",
@@ -1083,7 +1099,7 @@ def test_hook_script_still_blocks_a_rotation_beside_a_heredoc(
         },
     )
     assert result.returncode == 2, result.stdout + result.stderr
-    assert "BLOCKED" in log.read_text(encoding="utf-8")
+    assert "class=refusal" in _read_refusal_log(log)
 
 
 # --------------------------------------------------------------------------

@@ -209,7 +209,9 @@ def test_recorder_cli_failed_append_is_loud_and_retryable(tmp_path: Path) -> Non
     assert failed.returncode != 0
     assert "ledger writer exited 42: fixture writer failure" in failed.stderr
     assert "dedupe state unchanged" in failed.stderr
-    assert not (registry / ".onex_state").exists()
+    assert not (registry / ".onex_state/hook_refusals").exists()
+    log = registry / ".onex_state/hooks/logs/hooks.log"
+    assert "| FRICTION | lane=lane |" in log.read_text()
     assert not (tmp_path / "home/.onex_state").exists()
 
     fail.unlink()
@@ -220,5 +222,6 @@ def test_recorder_cli_failed_append_is_loud_and_retryable(tmp_path: Path) -> Non
     states = list((registry / ".onex_state/hook_refusals").glob("*.json"))
     assert len(states) == 1
     assert json.loads(states[0].read_text())["suppressed"] == 0
+    assert log.read_text().count("refusal_count=1 |") == 2
     assert ledger.read_text() == "fixture\n"
     assert not (tmp_path / "home/.onex_state").exists()

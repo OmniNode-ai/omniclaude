@@ -31,6 +31,31 @@ env:
   ONEX_STATE_DIR: /tmp/onex-state
 
 jobs:
+  refusal-surface:
+    name: Refusal Surface (OMN-18983)
+    # Independent, fail-closed member of the required CI Summary umbrella.
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+      - name: Install focused-test dependencies
+        run: uv sync --frozen --group dev --python "3.12"
+      - name: Verify registered guard refusal surface
+        run: uv run pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
+
   # =============================================================================
   # Per-run runner routing (OMN-18031)
   # =============================================================================
