@@ -224,17 +224,65 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`cd $NOPE` cannot be resolved: `$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
   },
-  "canonical\tcd \"$OMN19229_R\" && git reset --hard origin/main": {},
-  "canonical\tcd \"$OMN19229_UNSET\" && git reset --hard origin/main": {},
-  "canonical\tcd \"$OMN19229_WT\" && git reset --hard origin/dev": {},
-  "canonical\tcd \"$WT\" && git reset --hard origin/dev": {},
-  "canonical\tcd \"$WT\" && git reset --hard origin/main": {},
-  "canonical\tcd \"${OMN19229_WT}\" && git rebase origin/dev": {},
+  "canonical\tcd \"$OMN19229_R\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tcd \"$OMN19229_UNSET\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tcd \"$OMN19229_WT\" && git reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tcd \"$WT\" && git reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tcd \"$WT\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tcd \"${OMN19229_WT}\" && git rebase origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git rebase` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tcd && git reset --hard origin/main": {},
   "canonical\tcd /tmp\ngh pr edit 42 --repo": {},
   "canonical\tcd /tmp\ngit -C {REG} reset --hard": {},
@@ -252,17 +300,33 @@
   "canonical\tcd {REG}\ngit reset --hard origin/main": {},
   "canonical\tcd {REG} && cd \"$OLDPWD\" && cd {REG} && git reset --hard origin/main": {},
   "canonical\tcd {REG} && cd {WT} && git rebase origin/dev": {},
-  "canonical\tcd {REG} && git -C \"$PWD\" reset --hard origin/main": {},
+  "canonical\tcd {REG} && git -C \"$PWD\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tcd {REG} && git checkout -b lane/x": {},
   "canonical\tcd {REG} && git clean -fd": {},
   "canonical\tcd {REG} && git rebase origin/main": {},
   "canonical\tcd {REG} && git reset --hard origin/main": {},
-  "canonical\tcd {REG}/sub* && git reset --hard origin/main": {},
+  "canonical\tcd {REG}/sub* && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tcd {SP} && gh pr edit 5 --body-file \"$PWD/new.md\"": {
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $PWD/new.md cannot be resolved: `$PWD` is set by the shell as the command runs, not by this environment. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (5). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$PWD` is set by the shell as the command runs, not by this environment. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (5). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -495,7 +559,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $OMN19229_B cannot be resolved: `$OMN19229_B` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$OMN19229_B` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -576,7 +640,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $S/b.md cannot be resolved: `$S` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$S` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -612,7 +676,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $OMN19229_B cannot be resolved: `$OMN19229_B` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$OMN19229_B` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -699,9 +763,33 @@
     "rc": 2
    }
   },
-  "canonical\tgit -C \"$OMN19229_R\" reset --hard origin/main": {},
-  "canonical\tgit -C \"$OMN19229_UNSET\" reset --hard origin/main": {},
-  "canonical\tgit -C \"$OMN19229_WT\" reset --hard origin/dev": {},
+  "canonical\tgit -C \"$OMN19229_R\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tgit -C \"$OMN19229_UNSET\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tgit -C \"$OMN19229_WT\" reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tgit -C ${WSENV}/second-clone worktree add omni_worktrees/OMN-19236/second-clone -b feat/omn-19236 origin/dev": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
@@ -1543,17 +1631,65 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`cd $NOPE` cannot be resolved: `$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
   },
-  "worktree\tcd \"$OMN19229_R\" && git reset --hard origin/main": {},
-  "worktree\tcd \"$OMN19229_UNSET\" && git reset --hard origin/main": {},
-  "worktree\tcd \"$OMN19229_WT\" && git reset --hard origin/dev": {},
-  "worktree\tcd \"$WT\" && git reset --hard origin/dev": {},
-  "worktree\tcd \"$WT\" && git reset --hard origin/main": {},
-  "worktree\tcd \"${OMN19229_WT}\" && git rebase origin/dev": {},
+  "worktree\tcd \"$OMN19229_R\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tcd \"$OMN19229_UNSET\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tcd \"$OMN19229_WT\" && git reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tcd \"$WT\" && git reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tcd \"$WT\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tcd \"${OMN19229_WT}\" && git rebase origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git rebase` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tcd && git reset --hard origin/main": {},
   "worktree\tcd /tmp\ngh pr edit 42 --repo": {},
   "worktree\tcd /tmp\ngit -C {REG} reset --hard": {},
@@ -1571,17 +1707,33 @@
   "worktree\tcd {REG}\ngit reset --hard origin/main": {},
   "worktree\tcd {REG} && cd \"$OLDPWD\" && cd {REG} && git reset --hard origin/main": {},
   "worktree\tcd {REG} && cd {WT} && git rebase origin/dev": {},
-  "worktree\tcd {REG} && git -C \"$PWD\" reset --hard origin/main": {},
+  "worktree\tcd {REG} && git -C \"$PWD\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tcd {REG} && git checkout -b lane/x": {},
   "worktree\tcd {REG} && git clean -fd": {},
   "worktree\tcd {REG} && git rebase origin/main": {},
   "worktree\tcd {REG} && git reset --hard origin/main": {},
-  "worktree\tcd {REG}/sub* && git reset --hard origin/main": {},
+  "worktree\tcd {REG}/sub* && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tcd {SP} && gh pr edit 5 --body-file \"$PWD/new.md\"": {
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $PWD/new.md cannot be resolved: `$PWD` is set by the shell as the command runs, not by this environment. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (5). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$PWD` is set by the shell as the command runs, not by this environment. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (5). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1814,7 +1966,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $OMN19229_B cannot be resolved: `$OMN19229_B` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$OMN19229_B` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1895,7 +2047,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $S/b.md cannot be resolved: `$S` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$S` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1931,7 +2083,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $OMN19229_B cannot be resolved: `$OMN19229_B` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$OMN19229_B` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -2010,9 +2162,33 @@
     "rc": 2
    }
   },
-  "worktree\tgit -C \"$OMN19229_R\" reset --hard origin/main": {},
-  "worktree\tgit -C \"$OMN19229_UNSET\" reset --hard origin/main": {},
-  "worktree\tgit -C \"$OMN19229_WT\" reset --hard origin/dev": {},
+  "worktree\tgit -C \"$OMN19229_R\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tgit -C \"$OMN19229_UNSET\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tgit -C \"$OMN19229_WT\" reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit -C ${WSENV}/second-clone worktree add omni_worktrees/OMN-19236/second-clone -b feat/omn-19236 origin/dev": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
