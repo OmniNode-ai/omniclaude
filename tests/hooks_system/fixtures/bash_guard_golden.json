@@ -1677,7 +1677,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (api-pr-close) on OmniNode-ai/omniclaude#2019 (via gh api): no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (api-pr-close) on OmniNode-ai/omniclaude#2019 (via gh api): no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1725,7 +1725,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1734,7 +1734,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1743,7 +1743,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1752,7 +1752,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1761,7 +1761,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1927,7 +1927,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-reopen) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-reopen) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
