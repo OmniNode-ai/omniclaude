@@ -31,6 +31,9 @@ would be the second silent gate, since nobody reads a surface that floods.
 One row per ``(guard, reason, lane)`` per hour, and the row states how many
 further refusals of that exact key were suppressed behind it — so the count
 is reported rather than lost, and a looping refusal is visibly a loop.
+OMN-20343 adds one exception: secret-guard retries are keyed by session,
+and the fourth and subsequent refusal is emitted immediately with its safe
+pattern diagnosis. The fourth row carries the two initially suppressed retries.
 
 WHY THE COUNT IS ON THE *NEXT* ROW. The first refusal of a key is written
 immediately, with ``suppressed=0``: a refusal must not wait an hour to be
@@ -85,6 +88,9 @@ from typing import TextIO
 #: ticket names, and it is also the cadence the morning sweep reads at, so a
 #: finer window would add rows no reader distinguishes.
 DEFAULT_WINDOW_SECONDS = 3600
+# OMN-20343: SubagentStop retries are actionable immediately after the third
+# refusal. This exception applies only to the secret guard, keyed by session.
+SECRET_REPEAT_THRESHOLD = 3
 
 #: Ledger row class. `FRICTION` is the existing class the morning friction
 #: sweep already selects on; a new class would need a new reader, which is
@@ -218,8 +224,12 @@ def _read_state(path: Path) -> tuple[float | None, int]:
     )
 
 
-def _write_state(path: Path, *, last_emitted: float, suppressed: int) -> None:
-    payload = json.dumps({"last_emitted": last_emitted, "suppressed": suppressed})
+def _write_state(
+    path: Path, *, last_emitted: float, suppressed: int, attempts: int = 0
+) -> None:
+    payload = json.dumps(
+        {"last_emitted": last_emitted, "suppressed": suppressed, "attempts": attempts}
+    )
     tmp = path.with_suffix(".tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -237,8 +247,12 @@ def should_emit(
     now: float,
     window_seconds: int,
     directory: Path,
+    surface_after: int | None = None,
 ) -> tuple[bool, int]:
     """Decide, and record the decision. Returns ``(emit, suppressed_count)``.
+
+    ``surface_after`` limits initial suppression for the secret guard; once
+    a session exceeds it every attempt emits, even across hourly windows.
 
     ``suppressed_count`` is the number of refusals of this key that were
     swallowed since the last emitted row, and is meaningful only when
@@ -246,10 +260,26 @@ def should_emit(
     """
     path = directory / f"{key}.json"
     last_emitted, suppressed = _read_state(path)
-    if last_emitted is not None and now - last_emitted < window_seconds:
-        _write_state(path, last_emitted=last_emitted, suppressed=suppressed + 1)
+    attempts = 0
+    if surface_after is not None:
+        try:
+            attempts = max(0, int(json.loads(path.read_text()).get("attempts", 0)))
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+        attempts += 1
+    if (
+        last_emitted is not None
+        and now - last_emitted < window_seconds
+        and (surface_after is None or attempts <= surface_after)
+    ):
+        _write_state(
+            path,
+            last_emitted=last_emitted,
+            suppressed=suppressed + 1,
+            attempts=attempts,
+        )
         return False, 0
-    _write_state(path, last_emitted=now, suppressed=0)
+    _write_state(path, last_emitted=now, suppressed=0, attempts=attempts)
     return True, suppressed
 
 
@@ -395,12 +425,48 @@ def _resolve_registry_root() -> Path | None:
     return Path(value) if value else None
 
 
+def extract_detail(raw: str) -> str:
+    """Read a guard's verdict, retaining the diagnostic ahead of boilerplate.
+
+    Only safe rule IDs and line numbers are constructed by the secret guard.
+    Other guards can cite user text, so apply both shared redactors BEFORE
+    truncation. No raw payload, command or final message is a fallback.
+    """
+    from secret_redactor import redact_secrets
+
+    try:
+        verdict = json.loads(raw)
+        envelope = verdict.get("hookSpecificOutput")
+        context = None
+        if isinstance(envelope, dict) and envelope.get("hookEventName"):
+            context = envelope.get("additionalContext") or envelope.get(
+                "permissionDecisionReason"
+            )
+        detail = context or verdict.get("reason") or "verdict_has_no_diagnostic"
+        if not isinstance(detail, str):
+            detail = "verdict_has_no_diagnostic"
+    except (ValueError, AttributeError, TypeError):
+        detail = "verdict_json_invalid"
+    # Bound-receipt refusals explain the bar at length before stating which
+    # receipt failed. Keep that evidence before the ledger's 240-char limit.
+    if "What is missing: " in detail:
+        rule = re.search(r"\b(no_bound_dod_receipt|ac_tick_without_receipt)\b", detail)
+        ticket = re.search(r"\bOMN-\d+\b", detail)
+        missing = detail.split("What is missing: ", 1)[1].split("Ticked boxes", 1)[0]
+        detail = (
+            f"rule={rule.group() if rule else 'bound_receipt'} "
+            f"ticket={ticket.group() if ticket else 'unresolved'} "
+            f"citation=contracts/{ticket.group() if ticket else 'unresolved'}.yaml {missing}"
+        )
+    return redact(redact_secrets(detail))[:MAX_DETAIL_CHARS]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--guard", required=True, help="the refusing guard's id")
+    parser.add_argument("--extract-detail", action="store_true")
+    parser.add_argument("--guard", help="the refusing guard's id")
     parser.add_argument(
         "--reason",
-        required=True,
         help="a short stable token for the refusal class, not a sentence",
     )
     parser.add_argument("--detail", default="", help="the refusal's first line")
@@ -422,6 +488,11 @@ def main(argv: list[str] | None = None) -> int:
         help="print the row instead of appending it; for tests and inspection",
     )
     args = parser.parse_args(argv)
+    if args.extract_detail:
+        print(extract_detail(sys.stdin.read()))
+        return 0
+    if not args.guard or not args.reason:
+        parser.error("--guard and --reason are required for recording")
 
     guard = redact(args.guard)[:64] or "unknown-guard"
     reason = normalise_reason(redact(args.reason))
@@ -437,12 +508,25 @@ def main(argv: list[str] | None = None) -> int:
         ledger=args.ledger,
     )
     key = dedupe_key(guard, reason, lane)
+    repeated_secret = guard == "subagent_stop_secret_leak_guard.sh"
+    if repeated_secret:
+        # Lane attribution is a separate concern. A retry budget must not be
+        # shared by unrelated sessions, even when both have an unresolved lane.
+        session = args.session_id or (payload or {}).get("session_id")
+        session = (
+            session
+            or args.transcript_path
+            or (payload or {}).get("agent_transcript_path")
+        )
+        if session:
+            key = dedupe_key(guard, reason, f"{lane}:{session}")
 
     emit, suppressed = should_emit(
         key,
         now=time.time(),
         window_seconds=args.window_seconds,
         directory=state_dir(),
+        surface_after=SECRET_REPEAT_THRESHOLD if repeated_secret else None,
     )
     if not emit:
         return 0
