@@ -2,10 +2,12 @@ schema_version: "1.0.0"
 ticket_id: OMN-20685
 title: "Route Git admission through the existing Git effect node"
 summary: >
-  The shared-tree, dirty-restore and lane-fetch admission checks become the
-  admission_check operation of node_git_effect, dispatched through the
-  contract-declared in-memory runtime on the hook host. The hook scripts keep
-  only the transport adapter.
+  Step 2 of 2: the shared-tree, dirty-restore and lane-fetch admission checks,
+  relocated into node_git_effect by omniclaude#2595, become the admission_check
+  operation of the node, bound in its contract and dispatched through the
+  contract-declared in-memory runtime on the hook host. The binding flips the
+  node to canonical handler shape with an adequacy receipt and a hand-flip
+  proof whose base_ref is the #2595 merge commit.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -19,7 +21,7 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-git-admission-parity
-    description: "Canonical admission handler returns the pre-conversion guard's verdict for every corpus command"
+    description: "Typed admission handler and runtime-routed hook entry point return the pre-relocation guard's recorded verdict for every corpus case"
     source: manual
     checks:
       - check_type: command
