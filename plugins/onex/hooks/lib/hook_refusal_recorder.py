@@ -446,6 +446,18 @@ def _resolve_registry_root() -> Path | None:
     return Path(value) if value and Path(value).is_absolute() else None
 
 
+def _commit_emitted(path: Path, now: float, count_attempt: bool) -> None:
+    """Record an emitted row; the secret guard's attempt count carries on."""
+    attempts = 0
+    if count_attempt:
+        try:
+            attempts = max(0, int(json.loads(path.read_text()).get("attempts", 0)))
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+        attempts += 1
+    _write_state(path, last_emitted=now, suppressed=0, attempts=attempts)
+
+
 def extract_detail(raw: str) -> str:
     """Read a guard's verdict, retaining the diagnostic ahead of boilerplate.
 
@@ -542,40 +554,28 @@ def main(argv: list[str] | None = None) -> int:
         if session:
             key = dedupe_key(guard, reason, f"{lane}:{session}")
 
-    if args.print_row:
-        print(
-            build_row(
-                guard=guard,
-                reason=reason,
-                lane=lane,
-                lane_source=lane_source,
-                detail=detail,
-                key=key,
-                suppressed=0,
-                timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    registry_root = None
+    project = None
+    if not args.print_row:
+        registry_root = _resolve_registry_root()
+        if registry_root is None:
+            print(
+                "hook refusal recorder: OMNI_HOME must name an absolute registry root; "
+                "dedupe state unchanged",
+                file=sys.stderr,
             )
+            return 1
+        project = Path(
+            os.environ.get("OMNIBASE_INTERNAL_HOME")
+            or registry_root.parent / "omnibase_internal"
         )
-        return 0
-
-    registry_root = _resolve_registry_root()
-    if registry_root is None:
-        print(
-            "hook refusal recorder: OMNI_HOME must name an absolute registry root; "
-            "dedupe state unchanged",
-            file=sys.stderr,
-        )
-        return 1
-    project = Path(
-        os.environ.get("OMNIBASE_INTERNAL_HOME")
-        or registry_root.parent / "omnibase_internal"
-    )
-    if not project.is_absolute():
-        print(
-            "hook refusal recorder: OMNIBASE_INTERNAL_HOME must be absolute; "
-            "dedupe state unchanged",
-            file=sys.stderr,
-        )
-        return 1
+        if not project.is_absolute():
+            print(
+                "hook refusal recorder: OMNIBASE_INTERNAL_HOME must be absolute; "
+                "dedupe state unchanged",
+                file=sys.stderr,
+            )
+            return 1
 
     directory = state_dir()
     now = time.time()
@@ -599,6 +599,15 @@ def main(argv: list[str] | None = None) -> int:
         suppressed=suppressed,
         timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
+    if args.print_row:
+        print(row)
+        if repeated_secret:
+            # Inspecting the secret guard exercises its retry budget, which
+            # only advances when an emitted row is committed.
+            _commit_emitted(directory / f"{key}.json", now, True)
+        return 0
+    if registry_root is None or project is None:
+        return 1
     ledger = (
         Path(args.ledger)
         if args.ledger
@@ -610,17 +619,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    state_path = directory / f"{key}.json"
-    attempts = 0
-    if repeated_secret:
-        try:
-            attempts = max(
-                0, int(json.loads(state_path.read_text()).get("attempts", 0))
-            )
-        except (OSError, ValueError, TypeError, AttributeError):
-            pass
-        attempts += 1
-    _write_state(state_path, last_emitted=now, suppressed=0, attempts=attempts)
+    _commit_emitted(directory / f"{key}.json", now, repeated_secret)
     return 0
 
 

@@ -98,7 +98,11 @@ def test_recorder_failed_append_can_retry_immediately(
     }
     assert recorder.main(ARGS) == 0
     assert len(rows) == 2
-    assert json.loads(state.read_text()) == {"last_emitted": NOW, "suppressed": 1}
+    assert json.loads(state.read_text()) == {
+        "last_emitted": NOW,
+        "suppressed": 1,
+        "attempts": 0,
+    }
 
 
 def test_recorder_unset_state_dir_resolves_registry(
