@@ -31,6 +31,9 @@ would be the second silent gate, since nobody reads a surface that floods.
 One row per ``(guard, reason, lane)`` per hour, and the row states how many
 further refusals of that exact key were suppressed behind it — so the count
 is reported rather than lost, and a looping refusal is visibly a loop.
+OMN-20343 adds one exception: secret-guard retries are keyed by session,
+and the fourth and subsequent refusal is emitted immediately with its safe
+pattern diagnosis. The fourth row carries the two initially suppressed retries.
 
 WHY THE COUNT IS ON THE *NEXT* ROW. The first refusal of a key is written
 immediately, with ``suppressed=0``: a refusal must not wait an hour to be
@@ -38,11 +41,11 @@ recorded. Refusals inside the window increment a counter, and the next row
 after the window carries it. A reader therefore sees the event at once, and
 learns its volume as soon as the window turns.
 
-NEVER RAISES, NEVER BLOCKS. This runs behind a hook that is refusing a tool
-call. Every failure — an unreadable state directory, a missing ledger, a lock
-timeout, a ledger that refuses the row — is swallowed and reported only in
-this module's own exit code, which the calling hook ignores. A recorder that
-could break a guard would be worse than the gap it fills.
+FAILURES ARE LOUD. This runs behind a hook that is refusing a tool call.
+An unresolved registry or failed append exits non-zero with a redacted reason
+on stderr, without advancing the emission state. The calling hook already
+refused the tool; the recorder reports its own failure without changing that
+guard's verdict. A retry remains eligible until the row has landed.
 
 ISOLATION. Called from ``hook_record_refusal`` in ``error-guard.sh``, which
 backgrounds and disowns it exactly as ``emit_to_journal`` does, so the
@@ -85,6 +88,9 @@ from typing import TextIO
 #: ticket names, and it is also the cadence the morning sweep reads at, so a
 #: finer window would add rows no reader distinguishes.
 DEFAULT_WINDOW_SECONDS = 3600
+# OMN-20343: SubagentStop retries are actionable immediately after the third
+# refusal. This exception applies only to the secret guard, keyed by session.
+SECRET_REPEAT_THRESHOLD = 3
 
 #: Ledger row class. `FRICTION` is the existing class the morning friction
 #: sweep already selects on; a new class would need a new reader, which is
@@ -186,7 +192,10 @@ def state_dir() -> Path:
     base = os.environ.get("ONEX_STATE_DIR")
     if base:
         return Path(base) / "hook_refusals"
-    return Path.home() / ".onex_state" / "hook_refusals"
+    registry_root = _resolve_registry_root()
+    if registry_root is None:
+        raise RuntimeError("OMNI_HOME must name an absolute registry root")
+    return registry_root / ".onex_state" / "hook_refusals"
 
 
 def _read_state(path: Path) -> tuple[float | None, int]:
@@ -218,8 +227,12 @@ def _read_state(path: Path) -> tuple[float | None, int]:
     )
 
 
-def _write_state(path: Path, *, last_emitted: float, suppressed: int) -> None:
-    payload = json.dumps({"last_emitted": last_emitted, "suppressed": suppressed})
+def _write_state(
+    path: Path, *, last_emitted: float, suppressed: int, attempts: int = 0
+) -> None:
+    payload = json.dumps(
+        {"last_emitted": last_emitted, "suppressed": suppressed, "attempts": attempts}
+    )
     tmp = path.with_suffix(".tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -237,19 +250,39 @@ def should_emit(
     now: float,
     window_seconds: int,
     directory: Path,
+    surface_after: int | None = None,
 ) -> tuple[bool, int]:
-    """Decide, and record the decision. Returns ``(emit, suppressed_count)``.
+    """Decide whether a row is due. Returns ``(emit, suppressed_count)``.
+
+    ``surface_after`` limits initial suppression for the secret guard; once
+    a session exceeds it every attempt emits, even across hourly windows.
 
     ``suppressed_count`` is the number of refusals of this key that were
     swallowed since the last emitted row, and is meaningful only when
-    ``emit`` is true.
+    ``emit`` is true. Only suppression of an already recorded refusal changes
+    state here; the caller commits a new emission after its append succeeds.
     """
     path = directory / f"{key}.json"
     last_emitted, suppressed = _read_state(path)
-    if last_emitted is not None and now - last_emitted < window_seconds:
-        _write_state(path, last_emitted=last_emitted, suppressed=suppressed + 1)
+    attempts = 0
+    if surface_after is not None:
+        try:
+            attempts = max(0, int(json.loads(path.read_text()).get("attempts", 0)))
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+        attempts += 1
+    if (
+        last_emitted is not None
+        and now - last_emitted < window_seconds
+        and (surface_after is None or attempts <= surface_after)
+    ):
+        _write_state(
+            path,
+            last_emitted=last_emitted,
+            suppressed=suppressed + 1,
+            attempts=attempts,
+        )
         return False, 0
-    _write_state(path, last_emitted=now, suppressed=0)
     return True, suppressed
 
 
@@ -353,11 +386,18 @@ def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
     the locked writer is the only sanctioned path and it also carries the
     dedupe-on-retry behaviour this caller would otherwise need itself.
     """
-    if (
-        not project.is_absolute()
-        or not (project / "pyproject.toml").is_file()
-        or not ledger.is_file()
-    ):
+    if not project.is_absolute() or not (project / "pyproject.toml").is_file():
+        print(
+            "hook refusal recorder: ledger writer project is unavailable: "
+            + redact(str(project)),
+            file=sys.stderr,
+        )
+        return False
+    if not ledger.is_file():
+        print(
+            "hook refusal recorder: ledger is unavailable: " + redact(str(ledger)),
+            file=sys.stderr,
+        )
         return False
     try:
         completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
@@ -379,9 +419,20 @@ def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
             timeout=180,
             check=False,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(
+            "hook refusal recorder: ledger writer failed: " + redact(str(exc)),
+            file=sys.stderr,
+        )
         return False
-    return completed.returncode == 0
+    if completed.returncode != 0:
+        print(
+            f"hook refusal recorder: ledger writer exited {completed.returncode}: "
+            + redact(completed.stderr or "no stderr reason")[:MAX_DETAIL_CHARS],
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def _resolve_registry_root() -> Path | None:
@@ -392,15 +443,63 @@ def _resolve_registry_root() -> Path | None:
     tree.
     """
     value = os.environ.get("OMNI_HOME")
-    return Path(value) if value else None
+    return Path(value) if value and Path(value).is_absolute() else None
+
+
+def _commit_emitted(path: Path, now: float, count_attempt: bool) -> None:
+    """Record an emitted row; the secret guard's attempt count carries on."""
+    attempts = 0
+    if count_attempt:
+        try:
+            attempts = max(0, int(json.loads(path.read_text()).get("attempts", 0)))
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+        attempts += 1
+    _write_state(path, last_emitted=now, suppressed=0, attempts=attempts)
+
+
+def extract_detail(raw: str) -> str:
+    """Read a guard's verdict, retaining the diagnostic ahead of boilerplate.
+
+    Only safe rule IDs and line numbers are constructed by the secret guard.
+    Other guards can cite user text, so apply both shared redactors BEFORE
+    truncation. No raw payload, command or final message is a fallback.
+    """
+    from secret_redactor import redact_secrets
+
+    try:
+        verdict = json.loads(raw)
+        envelope = verdict.get("hookSpecificOutput")
+        context = None
+        if isinstance(envelope, dict) and envelope.get("hookEventName"):
+            context = envelope.get("additionalContext") or envelope.get(
+                "permissionDecisionReason"
+            )
+        detail = context or verdict.get("reason") or "verdict_has_no_diagnostic"
+        if not isinstance(detail, str):
+            detail = "verdict_has_no_diagnostic"
+    except (ValueError, AttributeError, TypeError):
+        detail = "verdict_json_invalid"
+    # Bound-receipt refusals explain the bar at length before stating which
+    # receipt failed. Keep that evidence before the ledger's 240-char limit.
+    if "What is missing: " in detail:
+        rule = re.search(r"\b(no_bound_dod_receipt|ac_tick_without_receipt)\b", detail)
+        ticket = re.search(r"\bOMN-\d+\b", detail)
+        missing = detail.split("What is missing: ", 1)[1].split("Ticked boxes", 1)[0]
+        detail = (
+            f"rule={rule.group() if rule else 'bound_receipt'} "
+            f"ticket={ticket.group() if ticket else 'unresolved'} "
+            f"citation=contracts/{ticket.group() if ticket else 'unresolved'}.yaml {missing}"
+        )
+    return redact(redact_secrets(detail))[:MAX_DETAIL_CHARS]
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--guard", required=True, help="the refusing guard's id")
+    parser.add_argument("--extract-detail", action="store_true")
+    parser.add_argument("--guard", help="the refusing guard's id")
     parser.add_argument(
         "--reason",
-        required=True,
         help="a short stable token for the refusal class, not a sentence",
     )
     parser.add_argument("--detail", default="", help="the refusal's first line")
@@ -422,6 +521,11 @@ def main(argv: list[str] | None = None) -> int:
         help="print the row instead of appending it; for tests and inspection",
     )
     args = parser.parse_args(argv)
+    if args.extract_detail:
+        print(extract_detail(sys.stdin.read()))
+        return 0
+    if not args.guard or not args.reason:
+        parser.error("--guard and --reason are required for recording")
 
     guard = redact(args.guard)[:64] or "unknown-guard"
     reason = normalise_reason(redact(args.reason))
@@ -437,12 +541,50 @@ def main(argv: list[str] | None = None) -> int:
         ledger=args.ledger,
     )
     key = dedupe_key(guard, reason, lane)
+    repeated_secret = guard == "subagent_stop_secret_leak_guard.sh"
+    if repeated_secret:
+        # Lane attribution is a separate concern. A retry budget must not be
+        # shared by unrelated sessions, even when both have an unresolved lane.
+        session = args.session_id or (payload or {}).get("session_id")
+        session = (
+            session
+            or args.transcript_path
+            or (payload or {}).get("agent_transcript_path")
+        )
+        if session:
+            key = dedupe_key(guard, reason, f"{lane}:{session}")
 
+    registry_root = None
+    project = None
+    if not args.print_row:
+        registry_root = _resolve_registry_root()
+        if registry_root is None:
+            print(
+                "hook refusal recorder: OMNI_HOME must name an absolute registry root; "
+                "dedupe state unchanged",
+                file=sys.stderr,
+            )
+            return 1
+        project = Path(
+            os.environ.get("OMNIBASE_INTERNAL_HOME")
+            or registry_root.parent / "omnibase_internal"
+        )
+        if not project.is_absolute():
+            print(
+                "hook refusal recorder: OMNIBASE_INTERNAL_HOME must be absolute; "
+                "dedupe state unchanged",
+                file=sys.stderr,
+            )
+            return 1
+
+    directory = state_dir()
+    now = time.time()
     emit, suppressed = should_emit(
         key,
-        now=time.time(),
+        now=now,
         window_seconds=args.window_seconds,
-        directory=state_dir(),
+        directory=directory,
+        surface_after=SECRET_REPEAT_THRESHOLD if repeated_secret else None,
     )
     if not emit:
         return 0
@@ -459,32 +601,31 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.print_row:
         print(row)
+        if repeated_secret:
+            # Inspecting the secret guard exercises its retry budget, which
+            # only advances when an emitted row is committed.
+            _commit_emitted(directory / f"{key}.json", now, True)
         return 0
-
-    registry_root = _resolve_registry_root()
-    if registry_root is None:
-        return 0
+    if registry_root is None or project is None:
+        return 1
     ledger = (
         Path(args.ledger)
         if args.ledger
         else registry_root / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
     )
-    project = Path(
-        os.environ.get("OMNIBASE_INTERNAL_HOME")
-        or registry_root.parent / "omnibase_internal"
-    )
-    if not project.is_absolute():
-        return 0
-    # The return value is deliberately discarded. A failed append is a
-    # dropped row, which is bad; a non-zero exit from a process the refusing
-    # hook backgrounded would be worse than bad in a different way, because
-    # the hook's own log would then carry a failure that is not the guard's.
-    append_row(row, ledger=ledger, project=project, timeout=args.timeout)
+    if not append_row(row, ledger=ledger, project=project, timeout=args.timeout):
+        print(
+            "hook refusal recorder: ledger append failed; dedupe state unchanged",
+            file=sys.stderr,
+        )
+        return 1
+    _commit_emitted(directory / f"{key}.json", now, repeated_secret)
     return 0
 
 
 if __name__ == "__main__":  # pragma: no cover - process entry
     try:
         sys.exit(main())
-    except Exception:  # noqa: BLE001 - a recorder must never break a guard
-        sys.exit(0)
+    except Exception as exc:  # noqa: BLE001 - report failure at the process boundary
+        print("hook refusal recorder: " + redact(str(exc)), file=sys.stderr)
+        sys.exit(1)

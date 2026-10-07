@@ -101,3 +101,11 @@ hook_record_refusal() {
     disown 2>/dev/null || true
     return 0
 }
+
+# Decode ONLY the decision envelope, never the hook input. Keeps the missing
+# evidence before the truncation limit and redacts before returning to shell.
+hook_refusal_detail() {
+    local py="${PYTHON_CMD:-python3}"
+    "$py" "${HOOKS_LIB:-$_ONEX_HOOK_REFUSAL_LIB}/hook_refusal_recorder.py" --extract-detail \
+        || printf 'rule=diagnostic_unavailable exit=%s\n' "$?"
+}

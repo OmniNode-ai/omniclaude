@@ -20,8 +20,10 @@ exists. This gate asks. It runs as a pre-commit hook and in the unit suite
 behind the required `Tests Gate`, so a deletion like #2214's is refused at
 the commit that makes it rather than found by reading a journal later.
 
-Deliberately stdlib-only: a gate that needs a dependency installed to run is
-a gate that does not run on the machine where it matters most.
+The shell scan is stdlib-only. Hook wire ownership (OMN-17047) also resolves
+the installed omnimarket contracts with PyYAML, both runtime dependencies.
+It proves registered source reachability; live process health is a separate
+probe. Missing consumer packages or source symbols are failures, not skips.
 
 Exit status: 0 clean, 1 findings (each printed as path:line: word).
 """
@@ -29,10 +31,16 @@ Exit status: 0 clean, 1 findings (each printed as path:line: word).
 from __future__ import annotations
 
 import argparse
+import ast
+import importlib.metadata
+import importlib.util
+import json
 import re
+import shlex
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _PLUGIN_DIR = _REPO_ROOT / "plugins" / "onex"
@@ -512,6 +520,266 @@ def uv_mediated_onex_invocations(scripts_dir: Path) -> list[tuple[Path, int, str
     return findings
 
 
+def _source_path(root: Path, relative: str) -> Path:
+    """Resolve a repo-relative source in either a checkout or an installed wheel."""
+    path = root / relative
+    if not path.exists() and relative.startswith("src/"):
+        path = root / relative.removeprefix("src/")
+    if not path.resolve().is_relative_to(root.resolve()):
+        raise ValueError(f"source escapes declared root: {relative}")
+    return path
+
+
+def _python_symbol(path: Path, name: str) -> tuple[ast.Module, ast.AST]:
+    """Resolve a definition in executable Python, excluding comments/docstrings."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in tree.body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name == name:
+                return tree, node
+    raise ValueError(f"{path}: missing symbol {name}")
+
+
+def _check_wire_producer(
+    repo_root: Path, producer: dict[str, Any], registrations: dict[str, Any]
+) -> None:
+    if producer["repo"] != "omniclaude":
+        raise ValueError("hook producer must belong to omniclaude")
+    script = _source_path(repo_root, producer["file"])
+    expected = "${CLAUDE_PLUGIN_ROOT}/" + producer["file"].removeprefix("plugins/onex/")
+    commands = [
+        hook["command"]
+        for group in registrations["hooks"].get(producer["hook_event"], [])
+        for hook in group["hooks"]
+    ]
+    if not any(shlex.split(command)[0] == expected for command in commands):
+        raise ValueError(
+            f"producer {producer['file']} is not registered for {producer['hook_event']}"
+        )
+    emitter = producer["emitter"]
+    emitter_path = _source_path(repo_root, emitter["file"])
+    tree, function = _python_symbol(emitter_path, emitter["function"])
+    if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        raise ValueError(f"emitter {emitter['function']} is not a function")
+    main = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "main"
+    )
+    if not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == emitter["function"]
+        for node in ast.walk(main)
+    ):
+        raise ValueError(f"emitter main does not call {emitter['function']}")
+    # Resolve the journal script operand at the bounded call, not in a comment
+    # describing a retired dispatch. Quoted jq programs are data to shlex.
+    code = "\n".join(
+        line
+        for line in script.read_text().splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    logical_lines = code.replace("\\\n", " ").splitlines()
+    assignments: dict[str, str] = {}
+    calls: list[list[str]] = []
+    for line in logical_lines:
+        try:
+            words = shlex.split(line, comments=True)
+        except ValueError:
+            continue  # a multiline data literal, not the bounded call
+        if len(words) == 1 and "=" in words[0]:
+            key, value = words[0].split("=", 1)
+            assignments[key] = value
+        if words and words[0] == "onex_emit_bounded":
+            calls.append(words)
+    journal_operand = "${HOOKS_LIB}/" + emitter_path.name
+    variables = {
+        "$" + key for key, value in assignments.items() if value == journal_operand
+    }
+    event_type = producer["event_type"]
+    if not any(
+        len(words) > 6
+        and words[1] == event_type
+        and words[3] in variables
+        and words[4:6] == ["--event-type", event_type]
+        for words in calls
+    ):
+        raise ValueError(f"producer does not invoke declared emitter for {event_type}")
+
+
+def _check_node_registration(node: str, registrations: set[tuple[str, str]]) -> None:
+    module = "omnimarket.nodes." + node
+    if (node, module) not in registrations:
+        raise ValueError(f"unregistered onex.nodes symbol {node} ({module})")
+
+
+def _check_wire_consumer(
+    root: Path,
+    consumer: dict[str, Any],
+    topic: str,
+    node_registrations: set[tuple[str, str]],
+) -> None:
+    import yaml
+
+    if consumer["repo"] != "omnimarket":
+        raise ValueError(f"unsupported consumer repo {consumer['repo']}")
+    _check_node_registration(Path(consumer["contract"]).parent.name, node_registrations)
+    contract = yaml.safe_load(_source_path(root, consumer["contract"]).read_text())
+    if topic not in contract["event_bus"]["subscribe_topics"]:
+        raise ValueError(
+            f"consumer {consumer['contract']} does not subscribe to {topic}"
+        )
+    module = consumer["file"].removeprefix("src/").removesuffix(".py").replace("/", ".")
+    handler = contract["handler"]
+    if (handler["module"], handler["class"]) != (module, consumer["class"]):
+        raise ValueError(f"consumer handler binding differs from {consumer['class']}")
+    model_module = (
+        consumer["model_file"]
+        .removeprefix("src/")
+        .removesuffix(".py")
+        .replace("/", ".")
+    )
+    model_binding = handler.get("input_model")
+    if model_binding is None:
+        model_binding = (
+            contract["input_model"]["module"] + "." + contract["input_model"]["name"]
+        )
+    if model_binding != model_module + "." + consumer["model"]:
+        raise ValueError(f"consumer model binding differs from {consumer['model']}")
+    tree, cls = _python_symbol(_source_path(root, consumer["file"]), consumer["class"])
+    if not isinstance(cls, ast.ClassDef) or not any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "handle"
+        for node in cls.body
+    ):
+        raise ValueError(f"consumer {consumer['class']} has no handle method")
+    _, model = _python_symbol(
+        _source_path(root, consumer["model_file"]), consumer["model"]
+    )
+    if not isinstance(model, ast.ClassDef):
+        raise ValueError(f"consumer model {consumer['model']} is not a class")
+    if model_module != module and not any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == model_module
+        and any(
+            alias.name == consumer["model"]
+            and alias.asname in (None, consumer["model"])
+            for alias in node.names
+        )
+        for node in tree.body
+    ):
+        raise ValueError(
+            f"consumer does not import {consumer['model']} from {model_module}"
+        )
+    if not any(
+        isinstance(node, ast.Name) and node.id == consumer["model"]
+        for node in ast.walk(cls)
+    ):
+        raise ValueError(f"consumer handler does not use {consumer['model']}")
+
+
+def wire_contract_findings(
+    repo_root: Path, market_root: Path | None = None, wire_dir: Path | None = None
+) -> list[str]:
+    """Check the four hook routes against registration, source and runtime contracts.
+
+    This is source reachability, not a certificate of running process health.
+    Default consumer resolution uses the installed dependency, so CI/pre-commit
+    need no sibling clone. An explicit root checks a lab source snapshot instead.
+    Missing packages/files/symbols fail closed; a topic alone is never proof.
+    """
+    import yaml
+
+    try:
+        node_registrations = {
+            (entry.name, entry.module)
+            for entry in importlib.metadata.entry_points(group="onex.nodes")
+        }
+        _check_node_registration("node_event_emit_effect", node_registrations)
+        if market_root is None:
+            spec = importlib.util.find_spec("omnimarket")
+            if spec is None or spec.origin is None:
+                raise ValueError(
+                    "omnimarket is not installed; cannot resolve consumers"
+                )
+            market_root = Path(spec.origin).parents[1]
+        registrations = json.loads(
+            (repo_root / "plugins/onex/hooks/hooks.json").read_text()
+        )
+        registry = yaml.safe_load(
+            _source_path(
+                market_root,
+                "src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml",
+            ).read_text()
+        )
+        subscriptions: dict[str, set[str]] = {}
+        nodes_root = _source_path(market_root, "src/omnimarket/nodes")
+        for contract_path in sorted(nodes_root.glob("*/contract.yaml")):
+            contract = yaml.safe_load(contract_path.read_text())
+            for topic in contract.get("event_bus", {}).get("subscribe_topics", []):
+                if isinstance(topic, str):
+                    reference = (
+                        "src/omnimarket/nodes/"
+                        + contract_path.relative_to(nodes_root).as_posix()
+                    )
+                    subscriptions.setdefault(topic, set()).add(reference)
+    except (
+        OSError,
+        ValueError,
+        ImportError,
+        TypeError,
+        AttributeError,
+        yaml.YAMLError,
+    ) as exc:
+        return [f"hook wire ownership: {exc}"]
+    directory = wire_dir or repo_root / "src/omniclaude/hooks/contracts/wire"
+    findings: list[str] = []
+    for event in (
+        "session_started",
+        "session_ended",
+        "prompt_submitted",
+        "tool_executed",
+    ):
+        path = directory / f"{event}_v1.yaml"
+        try:
+            data = yaml.safe_load(path.read_text())
+            _check_wire_producer(repo_root, data["producer"], registrations)
+            fan_out = registry["events"][data["producer"]["event_type"]]["fan_out"]
+            if data["topic"] not in [rule["topic"] for rule in fan_out]:
+                raise ValueError(
+                    "producer event registry does not publish declared topic"
+                )
+            if "consumer" in data or not data.get("consumers"):
+                raise ValueError(
+                    "declare current runtime consumers, not the retired singular consumer"
+                )
+            for consumer in data["consumers"]:
+                _check_wire_consumer(
+                    market_root, consumer, data["topic"], node_registrations
+                )
+            declared = [consumer["contract"] for consumer in data["consumers"]]
+            if len(set(declared)) != len(declared) or set(
+                declared
+            ) != subscriptions.get(data["topic"], set()):
+                raise ValueError(
+                    "consumer list differs from current runtime subscriptions"
+                )
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            StopIteration,
+            SyntaxError,
+            IndexError,
+            AttributeError,
+            yaml.YAMLError,
+        ) as exc:
+            findings.append(f"{path.name}: {exc}")
+    return findings
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -531,14 +799,30 @@ def main(argv: list[str] | None = None) -> int:
             "regression it was written for, rather than only a synthetic one."
         ),
     )
+    parser.add_argument(
+        "--market-root",
+        type=Path,
+        help="omnimarket checkout or wheel root for wire ownership checks",
+    )
+    parser.add_argument(
+        "--wire-dir",
+        type=Path,
+        help="hook wire contracts to check against the current source",
+    )
     args = parser.parse_args(argv)
 
     defined = _defined_function_names(args.plugin_dir) if args.plugin_dir else None
     findings = undefined_shell_callees(args.scripts_dir, defined=defined)
     uv_findings = uv_mediated_onex_invocations(args.scripts_dir)
+    repo_root = args.plugin_dir.parent.parent if args.plugin_dir else _REPO_ROOT
+    wire_findings = wire_contract_findings(repo_root, args.market_root, args.wire_dir)
+    for finding in wire_findings:
+        print(f"hook wire ownership FAILED: {finding}", file=sys.stderr)
 
-    if not findings and not uv_findings:
-        print("hook-callee gate PASSED (no undefined callees, no uv-mediated onex)")
+    if not findings and not uv_findings and not wire_findings:
+        print(
+            "hook-callee gate PASSED (shell callees and four hook wire routes resolve)"
+        )
         return 0
 
     if uv_findings:

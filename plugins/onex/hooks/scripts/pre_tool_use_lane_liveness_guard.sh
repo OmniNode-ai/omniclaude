@@ -79,13 +79,15 @@ PYTHON_BIN="${PYTHON_CMD:-python3}"
 # read the lane from it; the decision core gets the same bytes on its stdin.
 _OMNICLAUDE_HOOK_PAYLOAD="$(cat)"
 set +e
-"$PYTHON_BIN" "$LIB_PY" < <(printf '%s\n' "$_OMNICLAUDE_HOOK_PAYLOAD")
+REFUSAL_OUTPUT=$("$PYTHON_BIN" "$LIB_PY" < <(printf '%s\n' "$_OMNICLAUDE_HOOK_PAYLOAD") 2>&1)
 rc=$?
 set -e
+[[ -z "$REFUSAL_OUTPUT" ]] || printf '%s\n' "$REFUSAL_OUTPUT" >&2
 if [[ "$rc" -eq 2 ]]; then
     # OMN-18946: the verdict is the Python guard's; the row is recorded here
     # because this is where the refusal becomes the hook's exit code.
-    hook_record_refusal "lane liveness guard refused the send" "a bare harness ref, or a death claim lane_liveness.py did not corroborate" 2>/dev/null || true
+    REFUSAL_DETAIL=$(printf '%s' "$REFUSAL_OUTPUT" | hook_refusal_detail)
+    hook_record_refusal "lane liveness guard refused the send" "$REFUSAL_DETAIL" 2>/dev/null || true
     exit 2
 fi
 exit 0

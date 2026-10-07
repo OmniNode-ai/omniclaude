@@ -754,7 +754,15 @@
   "canonical\tgit checkout -B lane/some-branch": {},
   "canonical\tgit checkout -b lane/ledger-rows-1435-fix": {},
   "canonical\tgit checkout -b lane/some-branch": {},
-  "canonical\tgit checkout HEAD -- $TARGET": {},
+  "canonical\tgit checkout HEAD -- $TARGET": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git checkout` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path '$TARGET' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tgit checkout HEAD -- ./docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout HEAD -- ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout HEAD -- docs/a.md docs/b.md": {},
@@ -762,7 +770,15 @@
   "canonical\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md.bak": {},
   "canonical\tgit checkout HEAD -- docs/tracking/archive/2026-09-18.md": {},
-  "canonical\tgit checkout HEAD -- src/{guard,other}.py": {},
+  "canonical\tgit checkout HEAD -- src/{guard,other}.py": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git checkout` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path 'src/{guard,other}.py' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tgit checkout docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout main": {},
   "canonical\tgit checkout origin/main": {},
@@ -960,7 +976,15 @@
   "canonical\tgit reset --soft HEAD~1": {},
   "canonical\tgit reset 637e93c5a8": {},
   "canonical\tgit reset origin/main": {},
-  "canonical\tgit restore $F": {},
+  "canonical\tgit restore $F": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git restore` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path '$F' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tgit restore --source=$SHA -- src/guard.py": {},
   "canonical\tgit rev-parse HEAD": {},
   "canonical\tgit show HEAD:docs/a.md": {},
@@ -1677,7 +1701,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (api-pr-close) on OmniNode-ai/omniclaude#2019 (via gh api): no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (api-pr-close) on OmniNode-ai/omniclaude#2019 (via gh api): no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1725,7 +1749,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1734,7 +1758,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1743,7 +1767,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1752,7 +1776,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1761,7 +1785,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1927,7 +1951,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-reopen) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "REFUSED (pr-reopen) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -2025,7 +2049,15 @@
   "worktree\tgit checkout -B lane/some-branch": {},
   "worktree\tgit checkout -b lane/ledger-rows-1435-fix": {},
   "worktree\tgit checkout -b lane/some-branch": {},
-  "worktree\tgit checkout HEAD -- $TARGET": {},
+  "worktree\tgit checkout HEAD -- $TARGET": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git checkout` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path '$TARGET' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit checkout HEAD -- ./docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout HEAD -- ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout HEAD -- docs/a.md docs/b.md": {},
@@ -2033,7 +2065,15 @@
   "worktree\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md.bak": {},
   "worktree\tgit checkout HEAD -- docs/tracking/archive/2026-09-18.md": {},
-  "worktree\tgit checkout HEAD -- src/{guard,other}.py": {},
+  "worktree\tgit checkout HEAD -- src/{guard,other}.py": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git checkout` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path 'src/{guard,other}.py' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit checkout docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout main": {},
   "worktree\tgit checkout origin/main": {},
@@ -2255,7 +2295,15 @@
   "worktree\tgit reset --soft HEAD~1": {},
   "worktree\tgit reset 637e93c5a8": {},
   "worktree\tgit reset origin/main": {},
-  "worktree\tgit restore $F": {},
+  "worktree\tgit restore $F": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git restore` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path '$F' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit restore --source=$SHA -- src/guard.py": {},
   "worktree\tgit rev-parse HEAD": {},
   "worktree\tgit show HEAD:docs/a.md": {},
