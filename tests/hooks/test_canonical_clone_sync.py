@@ -719,6 +719,48 @@ def test_engine_refuses_a_bare_clone(reg: Registry) -> None:
     assert "core.bare" in (res.reason or "")
 
 
+def test_engine_refuses_a_clone_whose_remote_is_not_github(reg: Registry) -> None:
+    """OMN-17427: a clone of a non-GitHub remote is not a registry clone.
+
+    A personal project cloned under $OMNI_HOME from a third-party git host
+    whose token expired turned every timer run FAILED and the launchd job
+    red (exit 1), which hid any real failure behind a permanent one. The
+    engine names it and leaves it alone, without trying the remote.
+    """
+    clone = reg.make("site")
+    _git(
+        "remote",
+        "set-url",
+        "origin",
+        "https://git.example.invalid/x/site.git",
+        cwd=clone,
+    )
+    before = _head(clone)
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.REFUSED
+    assert "not a GitHub repository" in (res.reason or "")
+    assert res.repo is None
+    assert _head(clone) == before
+
+
+def test_engine_syncs_a_non_github_remote_that_declares_onex_repo(
+    reg: Registry,
+) -> None:
+    """OMN-20637: a declared registry identity permits a working LAN source."""
+    source, lab = _lan_source_clones(reg)
+    target = reg.advance("omnimarket", branch="main", owner="OmniNode-ai")
+    assert ccs.sync_clone(source).result == ccs.ADVANCED
+
+    res = ccs.sync_clone(lab)
+
+    assert not (
+        res.result == ccs.REFUSED and "not a GitHub repository" in (res.reason or "")
+    ), res
+    assert res.repo == _git("config", "--get", "onex.repo", cwd=lab)
+    assert res.result == ccs.ADVANCED, res
+    assert _head(lab) == target
+
+
 def test_engine_refuses_a_clone_mid_merge(reg: Registry) -> None:
     clone = reg.make("svc")
     before = _head(clone)
@@ -1207,7 +1249,10 @@ def test_engine_never_switches_when_the_refresh_cannot_reach_the_remote(
     _git("push", "--quiet", "origin", "dev:main", cwd=reg.seeds / "Acme" / "svc")
     _git("fetch", "--quiet", "origin", cwd=clone)
     _git("remote", "set-head", "origin", "main", cwd=clone)
-    _git("remote", "set-url", "origin", str(reg.tmp / "no-such-remote.git"), cwd=clone)
+    # GitHub-shaped like every fixture remote, so it reaches the refresh: a
+    # remote that is not a GitHub repository is refused before it (OMN-17427).
+    missing = reg.tmp / "github.com" / "Acme" / "no-such-remote.git"
+    _git("remote", "set-url", "origin", str(missing), cwd=clone)
     before = _head(clone)
     res = ccs.sync_clone(clone)
     assert res.result in (ccs.FAILED, ccs.REFUSED), res

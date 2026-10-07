@@ -878,6 +878,20 @@ def sync_clone(clone: Path) -> CloneResult:
     upstream_branch = merge_ref[len("refs/heads/") :]
     tracking_ref = f"refs/remotes/{remote}/{upstream_branch}"
     result.upstream = f"{remote}/{upstream_branch}"
+    url = run_git(clone, "remote", "get-url", remote).out
+    if url and result.repo is None:
+        # OMN-17427: a clone whose upstream is not a GitHub repository is not a
+        # registry clone (a personal project parked under $OMNI_HOME, say).
+        # Fetching it only turned an expired third-party token into a FAILED
+        # result on every timer run, and a launchd job that is always red hides
+        # the real failures. Named and left alone; the remote is never tried.
+        # A clone that declares onex.repo (a lab clone, OMN-20637) is a registry
+        # clone whatever its fetch URL.
+        return refuse(
+            f"remote {remote!r} is not a GitHub repository, so this is not a "
+            "registry clone; nothing fetched"
+        )
+
     git_dir_out = run_git(clone, "rev-parse", "--absolute-git-dir")
     if git_dir_out.code != 0 or not git_dir_out.out:
         return fail(f"cannot resolve the git dir: {_tail(git_dir_out.err)}")

@@ -291,6 +291,72 @@ def test_input_the_contract_refuses_is_dropped_without_quoting_it(
     assert "FAKE" not in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    ("hook", "field"),
+    [("SubagentStop", "agent_type"), ("UserPromptExpansion", "command_args")],
+)
+def test_hook_capture_accepts_blank_agent_type_and_command_args(
+    hook: str, field: str, jdir: Path
+) -> None:
+    stdin = _stdin(hook)
+    stdin[field] = ""
+    assert capture_mod.capture(stdin, journal_dir=jdir) == 1
+    (payload,) = _events(jdir)
+    event = ModelClaudeHookEvent.model_validate(payload)
+    if hook == "SubagentStop":
+        assert event.payload.agent_type == ""
+    else:
+        ref = next(ref for ref in payload["content_refs"] if ref["field"] == field)
+        assert ref["length"] == 0
+    assert (
+        json.loads(health.probe(journal_dir=jdir).to_json())["contract_refused_total"]
+        == 0
+    )
+
+
+@pytest.mark.parametrize(
+    ("hook", "field"),
+    [("SubagentStop", "agent_type"), ("UserPromptExpansion", "command_args")],
+)
+@pytest.mark.parametrize("invalid", [None, 7, {}, []])
+def test_hook_capture_contract_refusal_is_counted_and_surfaced(
+    hook: str, field: str, invalid: object, jdir: Path
+) -> None:
+    stdin = _stdin(hook)
+    stdin[field] = invalid
+    for expected in (1, 2):
+        assert capture_mod.capture(stdin, journal_dir=jdir) == 0
+        assert _events(jdir) == []
+        metric = json.loads(health.probe(journal_dir=jdir).to_json())
+        assert metric["contract_refused_total"] == expected
+    del stdin[field]
+    assert capture_mod.capture(stdin, journal_dir=jdir) == 0
+    assert (
+        json.loads(health.probe(journal_dir=jdir).to_json())["contract_refused_total"]
+        == 3
+    )
+
+
+def test_blank_subagent_type_uses_recorded_sidecar_lineage(jdir: Path) -> None:
+    stdin = _stdin("SubagentStop")
+    stdin["agent_type"] = ""
+    transcript = jdir.parent / "subagents" / f"agent-{stdin['agent_id']}.jsonl"
+    transcript.parent.mkdir()
+    transcript.with_suffix(".meta.json").write_text(
+        json.dumps(_sidecar("general-purpose", 1, tool_use_id="toolu-parent")),
+        encoding="utf-8",
+    )
+    stdin["transcript_path"] = str(transcript)
+    assert capture_mod.capture(stdin, journal_dir=jdir) == 1
+    (payload,) = _events(jdir)
+    assert payload["lineage"]["agent_type"] == "general-purpose"
+    assert payload["payload"]["agent_type"] == ""
+    stdin["agent_type"] = "conflicting-type"
+    assert capture_mod.capture(stdin, journal_dir=jdir) == 0
+    assert len(_events(jdir)) == 1
+    assert health.probe(journal_dir=jdir).contract_refused_total == 1
+
+
 # ---------------------------------------------------------------------------
 # lineage: the three scenarios the contract fixed, replayed with real sidecars
 # ---------------------------------------------------------------------------
