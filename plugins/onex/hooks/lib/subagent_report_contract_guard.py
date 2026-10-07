@@ -162,7 +162,7 @@ _RESULT_LINE = (
 )
 
 _MACHINE_ID = re.compile(r"(?:OMN-\d+|(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{7,40})")
-_MACHINE_TOKEN = re.compile(
+_MACHINE_ATOM = re.compile(
     _MACHINE_ID.pattern + r"|(?:OPEN|MERGED|CLOSED|DRAFT|APPROVED)"
     r"|(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?"
     r"(?:Z|[+-]\d{2}:\d{2})?)"
@@ -276,7 +276,7 @@ def _is_machine_value_return(normalized: str) -> bool:
     tokens = normalized.split()
     return (
         bool(tokens)
-        and all(_MACHINE_TOKEN.fullmatch(token) for token in tokens)
+        and all(_MACHINE_ATOM.fullmatch(token) for token in tokens)
         and any(_MACHINE_ID.fullmatch(token) for token in tokens)
     )
 
