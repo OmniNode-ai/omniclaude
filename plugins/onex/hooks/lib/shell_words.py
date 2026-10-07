@@ -1295,7 +1295,10 @@ class CommandResolver:
                 raise _Unknown("`echo` with escapes or options differs between shells")
             return " ".join(values) + newline
         if program == "printf":
-            if not args or args[0].text.startswith("-"):
+            options_done = bool(args) and args[0].text == "--"
+            if options_done:
+                args = args[1:]
+            if not args or (not options_done and args[0].text.startswith("-")):
                 raise _Unknown("`printf` with options is not modelled")
             return _printf(self.expand(args[0]), [self.expand(a) for a in args[1:]])
         raise _Unknown(
