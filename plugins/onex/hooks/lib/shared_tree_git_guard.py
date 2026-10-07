@@ -152,12 +152,12 @@ determined.
 
 An operand the shell computes (a variable, ``~``, a substitution, brace
 expansion) is not refused for being computed (OMN-17427). A variable the
-environment or an earlier assignment in the command resolves is read. One
-that cannot be resolved is judged by the worst thing it could name: a path
-operand becomes the whole tree, a source operand credits nothing as already
-saved. The restore is then refused exactly when some path of the tree holds
-work that exists nowhere else, so a clean tree passes and a tree holding
-uncommitted work does not. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
+environment or an earlier assignment in the command resolves is read. A path
+operand that cannot be resolved is refused as indeterminate (OMN-19380),
+even over a clean tree: pass literal paths, or commit first and restore by
+path per Operating Rule 17. An unresolved source operand credits nothing as
+already saved; the declared reachable refs still determine whether its
+literal paths hold uncommitted work. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
 refused on the same ground, since it may be a branch switch or a path
 restore; the refusal names ``git switch`` as the unambiguous verb. A
 conflicted path is judged too: ``--ours``/``--theirs``/``-m`` rewrite its
@@ -1415,11 +1415,6 @@ def _parse_restore(
     return _restore_shape(args)
 
 
-#: The pathspec that names every path of the repository, whatever directory
-#: git runs in. It stands in for an operand the shell computes.
-_WHOLE_TREE: Final[str] = ":/"
-
-
 def _is_shell_computed(operand: str) -> bool:
     """Does the shell compute this operand, so the command text cannot name it?
 
@@ -1441,7 +1436,7 @@ def _read_operand(operand: str, scope: Scope) -> str:
 
     OMN-17427. An operand naming a variable the environment or an earlier
     assignment in this command resolves to one word is that word. Anything
-    else is returned unchanged and is left to ``_widen_computed_operands``.
+    else is returned unchanged and is left to ``_check_computed_operands``.
     """
     if "$" not in operand and not operand.startswith("~"):
         return operand
@@ -1451,36 +1446,21 @@ def _read_operand(operand: str, scope: Scope) -> str:
     return value
 
 
-def _widen_computed_operands(shape: _RestoreShape) -> _RestoreShape:
-    """Judge an operand the shell computes by the worst thing it could name.
+def _check_computed_operands(shape: _RestoreShape) -> _RestoreShape:
+    """Refuse unresolved restore paths; an unknown source credits no saved work.
 
-    OMN-17427. This was ``_require_literal``, which refused every restore with
-    an operand the shell computes (``git checkout "$SHA" -- <path>``,
-    ``git restore "$F"``), so a lane whose worktree held nothing to lose was
-    refused all the same, on the grounds that "what it names cannot be read".
-    What matters is what could be lost, not what is named:
-
-    * a path the shell computes may name any path of the repository, so the
-      named paths become the whole tree, and the restore is refused exactly
-      when SOME path of the tree holds work that exists nowhere else;
-    * a source the shell computes carries unknown content, so it can credit
-      no path as already saved, and only the declared reachable refs can.
-
-    A clean tree therefore passes, and a tree holding uncommitted work is
-    refused, as before.
+    OMN-19380. Resolvable paths have already passed through ``_read_operand``
+    and the shared expansion helper. Probing the whole tree for an unresolved
+    path cannot establish which paths the shell will hand to git.
     """
-    paths = shape.paths
-    if any(_is_shell_computed(path) for path in paths):
-        paths = (_WHOLE_TREE,)
+    for path in shape.paths:
+        if _is_shell_computed(path):
+            raise _Indeterminate(
+                f"the restore path {path!r} cannot be resolved by the shared "
+                "shell expansion helper"
+            )
     source_unknown = shape.source is not None and _is_shell_computed(shape.source)
-    return _RestoreShape(
-        source=shape.source,
-        paths=paths,
-        writes_index=shape.writes_index,
-        writes_worktree=shape.writes_worktree,
-        overlay=shape.overlay,
-        source_unknown=source_unknown,
-    )
+    return replace(shape, source_unknown=source_unknown)
 
 
 def _parse_porcelain(raw: bytes) -> list[tuple[str, str]]:
@@ -1690,7 +1670,9 @@ def _render_restore_indeterminate(
     return (
         f"BLOCKED: `git {invocation.subcommand}` is a path-scoped restore, and "
         "whether it would discard uncommitted work could not be determined: "
-        f"{why} ({policy.restore_ticket}, {policy.restore_rule}). An "
+        f"{why} ({policy.restore_ticket}, {policy.restore_rule}). "
+        "Remedy: pass literal paths, or commit first and restore by path per "
+        "Operating Rule 17. An "
         "unverifiable restore is refused, never assumed safe, because the "
         "loss it risks is silent and unrecoverable. Instead: "
         f"{policy.restore_safe_alternatives}. Or name each path literally, "
@@ -1773,7 +1755,7 @@ def _restore_refusal(
                 "an earlier cd, or its -C operand, could not be resolved, so "
                 "neither can the tree it writes"
             )
-        shape = _widen_computed_operands(shape)
+        shape = _check_computed_operands(shape)
         lost = _paths_losing_work(shape, target_dir, git_root, policy)
     except _Indeterminate as exc:
         return _render_restore_indeterminate(policy, invocation, str(exc))
@@ -1838,7 +1820,8 @@ def _peel_grouping(segment: list[str]) -> tuple[list[str], int, int]:
     opened = 0
     while tokens:
         head = tokens[0]
-        if head == "{":
+        if head in {"{", "do"}:
+            # OMN-19380: a loop body begins with do before its first command.
             tokens = tokens[1:]
         elif head.startswith("(") and not head.startswith("$("):
             opened += 1
