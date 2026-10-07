@@ -52,11 +52,12 @@ the journal stood at its 50,000-record bound for 22 hours.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 # A drainer that has not completed a cycle in this long, while records are
@@ -71,6 +72,7 @@ DEFAULT_MAX_SILENCE_SECONDS = 900.0
 DEFAULT_MAX_BACKLOG = 2_000
 
 STATUS_FILENAME = "hook_emit_drainer_status.json"
+CONTRACT_REFUSALS_FILENAME = "hook_capture_contract_refusals.json"
 
 
 class EnumHookEmitHealth:
@@ -126,6 +128,7 @@ class ModelHookEmitHealth:
     drainer_silent_seconds: float | None
     last_publish_age_seconds: float | None
     detail: str
+    contract_refused_total: int = 0
 
     def to_json(self) -> str:
         return json.dumps(
@@ -136,6 +139,7 @@ class ModelHookEmitHealth:
                 "drainer_silent_seconds": self.drainer_silent_seconds,
                 "last_publish_age_seconds": self.last_publish_age_seconds,
                 "detail": self.detail,
+                "contract_refused_total": self.contract_refused_total,
             },
             sort_keys=True,
         )
@@ -145,6 +149,41 @@ def default_state_dir() -> Path:
     """``ONEX_STATE_DIR``, or the documented default beside ``$HOME``."""
     raw = os.environ.get("ONEX_STATE_DIR")
     return Path(raw) if raw else Path.home() / ".onex_state"
+
+
+def contract_refused_total(journal_dir: Path) -> int:
+    """Read the host's durable refusal count; a corrupt counter is an error."""
+    path = journal_dir.parent / CONTRACT_REFUSALS_FILENAME
+    try:
+        body = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return 0
+    total = body["contract_refused_total"]
+    if type(total) is not int or total < 0:
+        raise ValueError("capture contract refusal count must be a nonnegative integer")
+    return total
+
+
+def record_contract_refusal(journal_dir: Path) -> None:
+    """Count one dropped input without storing any hook content (OMN-20664).
+
+    Hook producers run in separate processes. Lock the read/increment/rename
+    together so concurrent refusals cannot overwrite each other's increments.
+    Health readers see either complete version through the atomic rename.
+    """
+    path = journal_dir.parent / CONTRACT_REFUSALS_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_suffix(".lock").open("a", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        total = contract_refused_total(journal_dir) + 1
+        tmp = path.with_suffix(f".tmp.{os.getpid()}")
+        try:
+            tmp.write_text(
+                json.dumps({"contract_refused_total": total}), encoding="utf-8"
+            )
+            tmp.replace(path)
+        finally:
+            tmp.unlink(missing_ok=True)
 
 
 def default_journal_dir() -> Path:
@@ -319,16 +358,17 @@ def probe(
     max_backlog: int = DEFAULT_MAX_BACKLOG,
     max_silence_seconds: float = DEFAULT_MAX_SILENCE_SECONDS,
 ) -> ModelHookEmitHealth:
-    """Read the two live facts and evaluate them."""
+    """Evaluate delivery and surface capture's cumulative contract refusals."""
     jdir = journal_dir if journal_dir is not None else default_journal_dir()
     spath = status_path if status_path is not None else default_status_path()
-    return evaluate(
+    result = evaluate(
         depth=journal_depth(jdir),
         status=read_status(spath),
         now=time.time() if now is None else now,
         max_backlog=max_backlog,
         max_silence_seconds=max_silence_seconds,
     )
+    return replace(result, contract_refused_total=contract_refused_total(jdir))
 
 
 def main(argv: list[str] | None = None) -> int:
