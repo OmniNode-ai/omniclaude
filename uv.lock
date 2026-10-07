@@ -13,7 +13,7 @@ overrides = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=7ce728c23cec3c2415dbc86b441b2d2140a2e218" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=c0077c06e242fc860928537ea522a99c29e4867b" },
     { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb" },
 ]
 
@@ -1747,7 +1747,7 @@ wheels = [
 [[package]]
 name = "omnimarket"
 version = "0.4.302"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=7ce728c23cec3c2415dbc86b441b2d2140a2e218#7ce728c23cec3c2415dbc86b441b2d2140a2e218" }
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=c0077c06e242fc860928537ea522a99c29e4867b#c0077c06e242fc860928537ea522a99c29e4867b" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1877,7 +1877,7 @@ requires-dist = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=7ce728c23cec3c2415dbc86b441b2d2140a2e218" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=c0077c06e242fc860928537ea522a99c29e4867b" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=43be97b1f47435dfbbd835ff8f5b4484c4dee282" },
     { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=43be97b1f47435dfbbd835ff8f5b4484c4dee282" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
