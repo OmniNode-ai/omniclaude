@@ -192,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
             "claim <owner/repo>#<number> --action close\n"
             "Use a lowercase owner/repo claim key. Stop if a peer owns the target;\n"
             "claim using the same lane/run/session as the close.\n"
-            "Close template: docs/guides/pr-close-preconditions.md"
+            "Close template: plugins/onex/docs/pr-close-preconditions.md"
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)

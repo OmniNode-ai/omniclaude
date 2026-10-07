@@ -92,7 +92,7 @@ Also check: if the package at the target version is already in the repo's lock f
 ### Step 4: Close superseded PRs (unless --dry-run) <!-- ai-slop-ok: skill-step-heading -->
 
 For each superseded PR, follow the
-[PR close preconditions and claim-before-close template](../../../../docs/guides/pr-close-preconditions.md)
+[PR close preconditions and claim-before-close template](../../docs/pr-close-preconditions.md)
 before the first close attempt. A peer claim stops this close. The claim and
 close use the same executing lane, run and session; the registry CLI resolves
 them, so this skill supplies no `--lane` override. The dry-run path executes

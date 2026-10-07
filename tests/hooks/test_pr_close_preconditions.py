@@ -15,7 +15,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 ROOT = Path(__file__).resolve().parents[2]
-GUIDE = ROOT / "docs/guides/pr-close-preconditions.md"
+GUIDE = ROOT / "plugins/onex/docs/pr-close-preconditions.md"
 CLI = ROOT / "scripts/pr_claim_registry_cli.py"
 GUARD = ROOT / "plugins/onex/hooks/lib/pr_ownership_guard.py"
 HOOK = ROOT / "plugins/onex/hooks/scripts/pre_tool_use_bash_guards.sh"
@@ -94,7 +94,7 @@ def test_unclaimed_close_refuses_once_with_missing_claim_then_exact_remedy(calle
 
 def test_committed_close_template_claims_before_first_guarded_attempt(caller):
     skill = ROOT / "plugins/onex/skills/dep_cascade_dedup/SKILL.md"
-    assert "docs/guides/pr-close-preconditions.md" in skill.read_text()
+    assert "../../docs/pr-close-preconditions.md" in skill.read_text()
     template = GUIDE.read_text().split("```bash\n", 1)[1].split("```", 1)[0]
     before_close, close = template.split("gh pr close", 1)
     assert " list" in before_close
@@ -197,7 +197,7 @@ def test_help_exposes_claim_before_close(reader, caller):
     assert result.returncode == 0, result.stderr
     assert "claim <owner/repo>#<number> --action close" in result.stdout
     assert "before gh pr close" in result.stdout
-    assert "docs/guides/pr-close-preconditions.md" in result.stdout
+    assert "plugins/onex/docs/pr-close-preconditions.md" in result.stdout
 
 
 def test_message_contract_is_pinned_in_precommit_and_live_ci():

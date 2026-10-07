@@ -906,7 +906,7 @@ def main(argv: list[str] | None = None) -> int:
             f"  python3 {shlex.quote(_cli_path())} claim <owner/repo>#<number> --action close\n"
             "Use a lowercase owner/repo claim key. Stop if a peer owns the target;\n"
             "claim using the same lane/run/session as the close.\n"
-            "Close template: docs/guides/pr-close-preconditions.md"
+            "Close template: plugins/onex/docs/pr-close-preconditions.md"
         ),
     )
     parser.add_argument(
