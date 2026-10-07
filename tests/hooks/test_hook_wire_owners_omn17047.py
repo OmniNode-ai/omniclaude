@@ -4,12 +4,14 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import importlib.util
 import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -72,6 +74,29 @@ def test_live_source_routes_resolve() -> None:
     assert wire_contract_findings(REPO_ROOT) == []
 
 
+@pytest.mark.parametrize(
+    "node",
+    [
+        "node_event_emit_effect",
+        "node_projection_session_replay",
+        "node_session_phase_reducer",
+    ],
+)
+def test_unregistered_runtime_node_is_refused(
+    node: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entries = importlib.metadata.entry_points(group="onex.nodes")
+    monkeypatch.setattr(
+        importlib.metadata,
+        "entry_points",
+        lambda **kwargs: [entry for entry in entries if entry.name != node],
+    )
+    findings = wire_contract_findings(REPO_ROOT)
+    assert any(f"unregistered onex.nodes symbol {node}" in f for f in findings), (
+        findings
+    )
+
+
 @pytest.mark.parametrize("event", HOOK_EVENTS)
 def test_required_consumer_routes_are_declared(event: str) -> None:
     data = yaml.safe_load((WIRE_DIR / f"{event}_v1.yaml").read_text())
@@ -87,12 +112,14 @@ def test_required_consumer_routes_are_declared(event: str) -> None:
 
 
 @pytest.mark.parametrize("side", ["producer", "consumer_class", "consumer_model"])
+@pytest.mark.parametrize("event", HOOK_EVENTS)
 def test_nonexistent_symbol_fails_even_when_topic_exists(
     side: str,
+    event: str,
     wire_copy: Path,
     market_copy: Path,
 ) -> None:
-    path = wire_copy / "session_started_v1.yaml"
+    path = wire_copy / f"{event}_v1.yaml"
     data = yaml.safe_load(path.read_text())
     topic = data["topic"]
     if side == "producer":
@@ -169,10 +196,17 @@ def test_commented_out_consumer_model_is_not_a_live_import(
     assert any("does not import" in finding for finding in findings), findings
 
 
-def test_existing_gate_cli_rejects_missing_producer_symbol(wire_copy: Path) -> None:
-    path = wire_copy / "session_started_v1.yaml"
+@pytest.mark.parametrize("side", ["producer", "consumer"])
+@pytest.mark.parametrize("event", HOOK_EVENTS)
+def test_existing_gate_cli_rejects_missing_symbol(
+    side: str, event: str, wire_copy: Path
+) -> None:
+    path = wire_copy / f"{event}_v1.yaml"
     data = yaml.safe_load(path.read_text())
-    data["producer"]["emitter"]["function"] = "missing_wire_producer_omn17047"
+    if side == "producer":
+        data["producer"]["emitter"]["function"] = "missing_wire_producer_omn17047"
+    else:
+        data["consumers"][0]["class"] = "MissingWireConsumerOMN17047"
     path.write_text(yaml.safe_dump(data))
     result = subprocess.run(
         [
@@ -186,7 +220,12 @@ def test_existing_gate_cli_rejects_missing_producer_symbol(wire_copy: Path) -> N
         check=False,
     )
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "missing symbol missing_wire_producer_omn17047" in result.stderr
+    symbol = (
+        "missing_wire_producer_omn17047"
+        if side == "producer"
+        else "MissingWireConsumerOMN17047"
+    )
+    assert symbol in result.stderr
 
 
 @pytest.mark.parametrize("mutation", ["file", "comment_only", "method"])
@@ -211,3 +250,167 @@ def test_malformed_contract_is_a_finding(wire_copy: Path) -> None:
     (wire_copy / "session_started_v1.yaml").write_text("producer: [unterminated")
     findings = wire_contract_findings(REPO_ROOT, wire_dir=wire_copy)
     assert any("session_started_v1.yaml" in finding for finding in findings)
+
+
+@pytest.mark.asyncio
+async def test_journal_emitter_replay_and_phase_runtime_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run the real lab dispatch seams in process with isolated storage.
+
+    In-process is intentional: ownership must be verifiable in CI without
+    writing synthetic sessions to the shared broker or production tables.
+    Only the publish adapter and database are replaced; journal append/drain,
+    topic fan-out, handler/model imports and phase dispatch are real.
+    """
+    import importlib
+
+    import hook_emit_append
+    import hook_emit_drainer
+    from omnibase_core.enums import EnumNodeKind
+    from omnibase_infra.runtime.auto_wiring.handler_wiring import (
+        _make_dispatch_callback,
+    )
+    from omnibase_infra.runtime.state_io.state_store_adapter import (
+        CONTEXTVAR_STATE_IO_ROWS,
+    )
+    from omnimarket.nodes.node_session_phase_reducer.state_codec import (
+        StateIoCodec,
+        reset_default_proxy,
+    )
+    from omnimarket.projection.protocol_database import InmemoryDatabaseAdapter
+
+    class Publisher:
+        def __init__(self) -> None:
+            self.messages: list[tuple[str, dict[str, Any]]] = []
+
+        def publish(self, topic: str, payload: Any, **kwargs: Any) -> None:
+            assert isinstance(payload, dict)
+            self.messages.append((topic, payload))
+
+    class SnapshotPublisher:
+        def __init__(self) -> None:
+            self.messages: list[Any] = []
+
+        def publish(self, message: Any) -> bool:
+            self.messages.append(message)
+            return True
+
+    publisher = Publisher()
+    snapshots = SnapshotPublisher()
+    monkeypatch.setattr(
+        hook_emit_drainer._Emitter,
+        "_build_persistent_adapter",
+        lambda self, handler_cls: publisher,
+    )
+    monkeypatch.setenv("ONEX_EMIT_EFFECT_SPOOL_DIR", str(tmp_path / "spool"))
+    journal_dir = tmp_path / "journal"
+    session_id = "omn17047-inprocess-proof"
+    events = ["session_started", "prompt_submitted", "tool_executed", "session_ended"]
+    # Match the registered scripts' payloads before registry redaction. Content
+    # previews belong on the separate capture topic, not lifecycle telemetry.
+    payloads = [
+        {"working_directory": "omniclaude", "hook_source": "startup"},
+        {
+            "working_directory": "omniclaude",
+            "prompt_length": 10,
+            "hook_source": "user_prompt_submit",
+        },
+        {
+            "working_directory": "omniclaude",
+            "tool_name": "Read",
+            "duration_ms": 1,
+            "interrupted": False,
+            "hook_source": "post_tool_use",
+        },
+        {"reason": "other"},
+    ]
+    contracts = [
+        yaml.safe_load((WIRE_DIR / f"{event}_v1.yaml").read_text()) for event in events
+    ]
+    for contract, payload in zip(contracts, payloads, strict=True):
+        hook_emit_append.append_event(
+            event_type=contract["producer"]["event_type"],
+            payload={"session_id": session_id, **payload},
+            correlation_id=session_id,
+            cwd=str(REPO_ROOT),
+            actor="codex",
+            host_turn_id=None,
+            agent_id=None,
+            transcript_path=None,
+            session_id=session_id,
+            journal_dir=str(journal_dir),
+        )
+    emitter = hook_emit_drainer._Emitter()
+    try:
+        assert hook_emit_drainer.drain_once(journal_dir, emitter) == (4, 0, 0)
+    finally:
+        emitter.close()
+
+    def handler_for(consumer: dict[str, str], **kwargs: Any) -> Any:
+        module = (
+            consumer["file"].removeprefix("src/").removesuffix(".py").replace("/", ".")
+        )
+        return getattr(importlib.import_module(module), consumer["class"])(**kwargs)
+
+    db = InmemoryDatabaseAdapter()
+    phase_row: str | None = None
+    for contract in contracts:
+        messages = [
+            payload
+            for topic, payload in publisher.messages
+            if topic == contract["topic"]
+        ]
+        assert len(messages) == 1, (contract["topic"], publisher.messages)
+        payload = messages[0]
+        replay = next(
+            c
+            for c in contract["consumers"]
+            if "node_projection_session_replay" in c["contract"]
+        )
+        result = handler_for(replay, publisher=snapshots).handle(
+            {**payload, "_db": db, "_topic": contract["topic"]}
+        )
+        assert result["rows_upserted"] == 1
+        assert result["snapshot_published"] is True
+        phase = next(
+            (
+                c
+                for c in contract["consumers"]
+                if "node_session_phase_reducer" in c["contract"]
+            ),
+            None,
+        )
+        if phase is not None:
+            wire_session_id = payload["session_id"]
+            reset_default_proxy()
+            token = CONTEXTVAR_STATE_IO_ROWS.set({wire_session_id: (phase_row, 0)})
+            try:
+                callback = _make_dispatch_callback(
+                    handler_for(phase), None, EnumNodeKind.REDUCER, None
+                )
+                dispatch = await callback(
+                    {
+                        "payload": payload,
+                        "__bindings": {},
+                        "__debug_trace": {"topic": contract["topic"]},
+                    }
+                )
+                assert dispatch is not None
+                phase_row = StateIoCodec().flush(wire_session_id)
+                assert phase_row is not None
+            finally:
+                CONTEXTVAR_STATE_IO_ROWS.reset(token)
+                reset_default_proxy()
+    rows = sorted(
+        db.query("session_replay_snapshots"), key=lambda row: int(str(row["sequence"]))
+    )
+    assert [row["event_type"] for row in rows] == [
+        "session_start",
+        "user_input",
+        "tool_call",
+        "session_end",
+    ]
+    assert phase_row is not None
+    assert StateIoCodec().decode(phase_row).current_phase == "ended"
+    assert len(snapshots.messages) == 4

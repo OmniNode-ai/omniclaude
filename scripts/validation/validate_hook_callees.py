@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import importlib.metadata
 import importlib.util
 import json
 import re
@@ -607,11 +608,23 @@ def _check_wire_producer(
         raise ValueError(f"producer does not invoke declared emitter for {event_type}")
 
 
-def _check_wire_consumer(root: Path, consumer: dict[str, Any], topic: str) -> None:
+def _check_node_registration(node: str, registrations: set[tuple[str, str]]) -> None:
+    module = "omnimarket.nodes." + node
+    if (node, module) not in registrations:
+        raise ValueError(f"unregistered onex.nodes symbol {node} ({module})")
+
+
+def _check_wire_consumer(
+    root: Path,
+    consumer: dict[str, Any],
+    topic: str,
+    node_registrations: set[tuple[str, str]],
+) -> None:
     import yaml
 
     if consumer["repo"] != "omnimarket":
         raise ValueError(f"unsupported consumer repo {consumer['repo']}")
+    _check_node_registration(Path(consumer["contract"]).parent.name, node_registrations)
     contract = yaml.safe_load(_source_path(root, consumer["contract"]).read_text())
     if topic not in contract["event_bus"]["subscribe_topics"]:
         raise ValueError(
@@ -679,6 +692,11 @@ def wire_contract_findings(
     import yaml
 
     try:
+        node_registrations = {
+            (entry.name, entry.module)
+            for entry in importlib.metadata.entry_points(group="onex.nodes")
+        }
+        _check_node_registration("node_event_emit_effect", node_registrations)
         if market_root is None:
             spec = importlib.util.find_spec("omnimarket")
             if spec is None or spec.origin is None:
@@ -737,7 +755,9 @@ def wire_contract_findings(
                     "declare current runtime consumers, not the retired singular consumer"
                 )
             for consumer in data["consumers"]:
-                _check_wire_consumer(market_root, consumer, data["topic"])
+                _check_wire_consumer(
+                    market_root, consumer, data["topic"], node_registrations
+                )
             declared = [consumer["contract"] for consumer in data["consumers"]]
             if len(set(declared)) != len(declared) or set(
                 declared
