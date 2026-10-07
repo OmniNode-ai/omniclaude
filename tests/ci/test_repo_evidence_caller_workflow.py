@@ -7,10 +7,18 @@ from __future__ import annotations
 
 import re
 import shlex
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
+
+from scripts.ci.ci_summary_gate import (
+    CONDITIONAL_SWEEP_EXCLUSIONS,
+    EXTERNAL_SWEEP_EXCLUSIONS,
+    evaluate_external_sweep,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -68,6 +76,10 @@ def test_caller_compares_with_occ_for_the_s5_shadow_count() -> None:
     assert job["with"].get("compare-with-occ") == "true", (
         'the S5 shadow count requires compare-with-occ: "true" (a quoted string input)'
     )
+    assert job["with"].get("shadow") == "true", (
+        'the S5 shadow count requires shadow: "true" (a quoted string input), so '
+        "no repo-evidence job concludes anything but success"
+    )
     version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
     assert version >= _DIFFERENCE_CLASSIFIER_FLOOR, (
         "verifier-version must ship node_dod_verify occ-difference "
@@ -119,3 +131,88 @@ def test_every_repo_contract_binds_every_criterion() -> None:
         assert criteria <= bound, (
             f"{path.name}: acceptance criteria missing binds_ac: {sorted(criteria - bound)}"
         )
+
+
+_SWEEP_NOW = datetime(2026, 10, 7, 15, 0, tzinfo=UTC)
+_REPO_EVIDENCE_CONTEXTS = ("repo-evidence / verify", "repo-evidence / dod-verify")
+
+
+def _row(name: str, conclusion: str, row_id: int) -> dict[str, Any]:
+    return {
+        "id": row_id,
+        "name": name,
+        "status": "completed",
+        "conclusion": conclusion,
+        "started_at": "2026-10-07T14:00:00Z",
+        "completed_at": "2026-10-07T14:05:00Z",
+    }
+
+
+def _sweep(rows: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
+    # exclusions={} so the registry cannot be what keeps the sweep green.
+    failures, _in_flight, swept, _excluded = evaluate_external_sweep(
+        rows, exclusions={}, conditional_exclusions={}, now=_SWEEP_NOW
+    )
+    return failures, swept
+
+
+def test_external_sweep_stays_green_with_the_shadow_caller_present() -> None:
+    """Shadow mode: both repo-evidence check-runs conclude success, whatever the verdict."""
+    rows = [
+        _row(name, "success", 100 + i) for i, name in enumerate(_REPO_EVIDENCE_CONTEXTS)
+    ]
+    failures, swept = _sweep(rows)
+    assert failures == []
+    # The sweep looked at both, so the green is not a case of never seeing them.
+    assert set(_REPO_EVIDENCE_CONTEXTS) <= set(swept)
+
+
+def test_external_sweep_still_refuses_a_non_success_repo_evidence_row() -> None:
+    """The sweep is unchanged: a skipped verify or a refused dod-verify is still red.
+
+    These are the rows the caller produced before shadow mode, and the reason it
+    needed the reusable's shadow input rather than a sweep exclusion.
+    """
+    rows = [
+        _row("repo-evidence / verify", "skipped", 100),
+        _row("repo-evidence / dod-verify", "failure", 101),
+    ]
+    failures, _swept = _sweep(rows)
+    assert len(failures) == 2
+    joined = "\n".join(failures)
+    for name in _REPO_EVIDENCE_CONTEXTS:
+        assert name in joined
+
+
+def test_external_sweep_planted_disagreement_row_is_green_and_its_verdict_stays_in_the_row() -> (
+    None
+):
+    """A planted OCC disagreement: the job passes, its verdict rides in the row's own output.
+
+    The reusable's Summarise step writes the `Shadow verdict:` line (tested in
+    omnibase_core#1901, test_a_planted_disagreement_is_recorded_and_the_job_still_passes);
+    here the sweep is shown not to turn that recorded disagreement into a red.
+    """
+    verdict = (
+        "Shadow verdict: head=" + "c" * 40 + " new_path=verified refused_step=none "
+        "occ_difference=unclassified_difference/none"
+    )
+    disagreeing = _row("repo-evidence / dod-verify", "success", 101)
+    disagreeing["output"] = {
+        "title": "repo-evidence shadow verdict",
+        "summary": verdict,
+    }
+    rows = [_row("repo-evidence / verify", "success", 100), disagreeing]
+    failures, swept = _sweep(rows)
+    assert failures == []
+    assert "repo-evidence / dod-verify" in swept
+    assert (
+        "occ_difference=unclassified_difference/none"
+        in disagreeing["output"]["summary"]
+    )
+
+
+def test_external_sweep_needs_no_exclusion_for_the_repo_evidence_contexts() -> None:
+    for name in _REPO_EVIDENCE_CONTEXTS:
+        assert name not in EXTERNAL_SWEEP_EXCLUSIONS, f"{name}: widening the sweep"
+        assert name not in CONDITIONAL_SWEEP_EXCLUSIONS, f"{name}: widening the sweep"
