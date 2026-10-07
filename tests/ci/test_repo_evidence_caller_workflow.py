@@ -91,17 +91,21 @@ def test_every_repo_contract_binds_every_criterion() -> None:
     assert CALLER_PATH.is_file(), "repo-owned evidence requires the caller workflow"
     contracts = sorted((REPO_ROOT / "contracts").glob("OMN-*.yaml"))
     assert contracts, "expected at least one repo-owned contracts/OMN-*.yaml"
+    assert (REPO_ROOT / "contracts" / "OMN-20073.yaml") in contracts
     for path in contracts:
         contract = yaml.safe_load(path.read_text(encoding="utf-8"))
+        items = [
+            item for item in contract.get("dod_evidence", []) if "binds_ac" in item
+        ]
+        if not items:
+            continue
         criteria = {
             ac["id"]
             for requirement in contract.get("requirements", [])
             for ac in requirement.get("acceptance", [])
         }
         bound: set[str] = set()
-        for item in contract.get("dod_evidence", []):
-            if "binds_ac" not in item:
-                continue
+        for item in items:
             label = f"{path.name}:{item['id']}"
             bound.update(item["binds_ac"])
             assert "ac_bindings" not in item, f"{label}: use binds_ac, not ac_bindings"
@@ -131,6 +135,44 @@ def test_every_repo_contract_binds_every_criterion() -> None:
         assert criteria <= bound, (
             f"{path.name}: acceptance criteria missing binds_ac: {sorted(criteria - bound)}"
         )
+
+
+def test_contract_binds_check_applies_to_a_contract_that_declares_binds_ac(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
+    contracts_dir = tmp_path / "contracts"
+    contracts_dir.mkdir()
+    test_file = tmp_path / "tests" / "test_evidence.py"
+    test_file.parent.mkdir()
+    test_file.write_text("", encoding="utf-8")
+    binds_ac = ["AC1"]
+    item = {
+        "id": "dod-example",
+        "binds_ac": binds_ac,
+        "checks": [
+            {
+                "check_type": "test_passes",
+                "check_value": "uv run pytest tests/test_evidence.py -q",
+            }
+        ],
+    }
+    contract = {
+        "requirements": [{"acceptance": [{"id": "AC1"}, {"id": "AC2"}]}],
+        "dod_evidence": [item],
+    }
+    contract_path = contracts_dir / "OMN-20073.yaml"
+    contract_path.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    with pytest.raises(AssertionError, match="acceptance criteria missing binds_ac"):
+        test_every_repo_contract_binds_every_criterion()
+
+    binds_ac.append("AC2")
+    contract_path.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    test_every_repo_contract_binds_every_criterion()
+
+    test_file.unlink()
+    with pytest.raises(AssertionError, match="existing relative path inside the repo"):
+        test_every_repo_contract_binds_every_criterion()
 
 
 _SWEEP_NOW = datetime(2026, 10, 7, 15, 0, tzinfo=UTC)
