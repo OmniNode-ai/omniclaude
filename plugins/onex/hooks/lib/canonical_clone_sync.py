@@ -23,7 +23,8 @@ Two callers, one engine:
   lock the sync takes (so the two never race), and a refresh waiting behind a
   live holder accepts the head that holder's fetch landed without fetching
   again. It exits 0 only once each ref is at or past that head, and it never
-  moves a checked-out branch. See "The clone lock" below.
+  moves a checked-out branch. It also finds the sanctioned sibling
+  ``omnibase_internal`` clone. See "The clone lock" below.
 
 The clone lock
 --------------
@@ -1477,10 +1478,37 @@ def refresh_clone(
     return results
 
 
+def sibling_clones(env: Mapping[str, str]) -> list[Path]:
+    """``omnibase_internal``, which lives beside the registry, not in it.
+
+    ``$OMNIBASE_INTERNAL_HOME``, default ``$OMNI_HOME/../omnibase_internal``:
+    the location omnibase_internal's ``install-canonical-clone-git-hooks.sh``
+    requires to be a canonical clone, so a linked worktree there is not one.
+    """
+    override = env.get("OMNIBASE_INTERNAL_HOME", "")
+    registry_home = env.get("OMNI_HOME", "")
+    if override and Path(override).is_absolute():
+        clone = Path(override)
+    elif registry_home:
+        clone = Path(registry_home).parent / "omnibase_internal"
+    else:
+        return []
+    return [clone] if (clone / ".git").is_dir() else []
+
+
 def _clones_for(env: Mapping[str, str], repo: str) -> list[Path]:
     """Canonical clones whose slug is ``repo``, or whose name is (``omniclaude``)."""
     wanted = repo.casefold().removesuffix(".git")
     clones = discover_clones(registry_roots(env))
+    # OMN-17427: lanes on h201 and h101 got NO_CLONE for omnibase_internal on
+    # 2026-10-07 because the sibling is no registry root's child. Only the
+    # refresh looks there; the sync's clone set is unchanged.
+    seen = {clone.resolve() for clone in clones}
+    for clone in sibling_clones(env):
+        resolved = clone.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            clones.append(clone)
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         slugs = list(pool.map(clone_slug, clones))
     out: list[Path] = []

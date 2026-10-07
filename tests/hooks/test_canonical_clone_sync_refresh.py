@@ -38,6 +38,7 @@ def reg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Registry:
     registry = Registry(tmp_path)
     for key in _GIT_LOCATION_ENV:
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.delenv("OMNIBASE_INTERNAL_HOME", raising=False)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     return registry
 
@@ -475,3 +476,45 @@ def test_refresh_cli_without_wait_starts_a_detached_refresh(reg: Registry) -> No
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("STARTED"), proc.stdout
     del clone
+
+
+def test_run_refresh_finds_the_sibling_omnibase_internal_clone(reg: Registry) -> None:
+    clone = reg.make("omnibase_internal", root=reg.home.parent)
+    target = reg.advance("omnibase_internal")
+    results = ccs.run_refresh(reg.env(), "Acme/omnibase_internal", None, cwd=reg.tmp)
+    assert [(Path(r.clone), r.result) for r in results] == [(clone, ccs.REFRESHED)]
+    assert _origin(clone) == target
+
+
+def test_run_refresh_honours_omnibase_internal_home(reg: Registry) -> None:
+    root = reg.tmp / "elsewhere"
+    root.mkdir()
+    clone = reg.make("omnibase_internal", root=root)
+    target = reg.advance("omnibase_internal")
+    results = ccs.run_refresh(
+        reg.env(OMNIBASE_INTERNAL_HOME=str(clone)),
+        "Acme/omnibase_internal",
+        None,
+        cwd=reg.tmp,
+    )
+    assert [(Path(r.clone), r.result) for r in results] == [(clone, ccs.REFRESHED)]
+    assert _origin(clone) == target
+
+
+def test_a_sibling_worktree_is_not_a_canonical_clone(reg: Registry) -> None:
+    root = reg.tmp / "elsewhere"
+    root.mkdir()
+    clone = reg.make("omnibase_internal", root=root)
+    sibling = reg.home.parent / "omnibase_internal"
+    _git("worktree", "add", "--quiet", "--detach", str(sibling), "HEAD", cwd=clone)
+    assert (sibling / ".git").is_file()
+    results = ccs.run_refresh(reg.env(), "Acme/omnibase_internal", None, cwd=reg.tmp)
+    assert [r.result for r in results] == [ccs.NO_CLONE]
+
+
+def test_run_sync_does_not_pick_up_the_sibling(reg: Registry) -> None:
+    sibling = reg.make("omnibase_internal", root=reg.home.parent)
+    clone = reg.make("svc")
+    results = ccs.run_sync(reg.env(), None, "manual", None)
+    assert all(Path(r.clone) != sibling for r in results)
+    assert {Path(r.clone) for r in results} == {clone}
