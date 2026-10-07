@@ -39,7 +39,8 @@
 # to "false".
 #
 # The reusable is pinned by full SHA. It must be a commit that carries the
-# shadow input (omnibase_core#1901); omniclaude does not host receipt-gate.yml.
+# shadow input; this is the squash commit of omnibase_core#1901 on dev.
+# omniclaude does not host receipt-gate.yml.
 
 name: Repo Evidence Gate
 
@@ -58,7 +59,7 @@ permissions:
 
 jobs:
   repo-evidence:
-    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@6d791925396535b44a5e72de2c3d4718a9ca72ed # OMN-20073: the head of omnibase_core#1901 (the shadow input), over omnibase_core#1886. Re-pin to the squash commit of omnibase_core#1901 on that repo's dev branch before this pull request lands.
+    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@033db282217c224f8063b94966a7f3fdd26b7894 # OMN-20073: the squash commit of omnibase_core#1901 on dev (receipt-gate shadow input)
     with:
       evidence-source: caller
       verifier-version: 0.4.294
