@@ -204,12 +204,32 @@ from shell_words import (  # noqa: E402
     ShellSyntaxError,
     UnresolvableWord,
     Word,
+    WordPart,
+    apply_assignments,
+    directory_target,
     expand_word,
+    git_directory,
     shadow,
     shadowed_names,
     tokenize,
     unquoted,
 )
+
+
+class _ShellWord(str):
+    """String-compatible policy token retaining the tokenizer's quoting."""
+
+    word: Word
+
+    def __new__(cls, word: Word) -> _ShellWord:
+        lexeme = super().__new__(cls, word.text)
+        lexeme.word = word
+        return lexeme
+
+
+def _word(token: str) -> Word:
+    return token.word if isinstance(token, _ShellWord) else unquoted(token)
+
 
 #: What a path token may expand from: the hook's environment, with every
 #: name the command itself sets marked unresolvable.
@@ -463,7 +483,7 @@ def _segments(command: str) -> list[list[str]] | None:
             else:
                 current.append(tok.text)
         elif isinstance(tok, Word):
-            current.append(tok.text)
+            current.append(_ShellWord(tok))
         # A HereDoc is data handed to a program, never a command line.
     if current:
         segments.append(current)
@@ -492,6 +512,7 @@ class _GitInvocation:
     #: global flags before the subcommand, `-C` excluded; values of the
     #: separated two-token forms are folded in as `<flag>=<value>`.
     global_flags: tuple[str, ...] = ()
+    directories: tuple[Word, ...] = ()
 
 
 def _parse_git(tokens: list[str]) -> _GitInvocation | None:
@@ -501,6 +522,7 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
         return None
     args = stripped[1:]
     target_arg: str | None = None
+    directories: list[Word] = []
     global_flags: list[str] = []
     idx = 0
     while idx < len(args):
@@ -508,7 +530,16 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
         if tok == "-C":
             if idx + 1 < len(args):
                 target_arg = args[idx + 1]
+                directories.append(_word(target_arg))
             idx += 2
+            continue
+        if tok.startswith("-C") and len(tok) > 2:
+            original = _word(tok)
+            head = original.parts[0]
+            operand = Word((WordPart(head.text[2:], head.quote),) + original.parts[1:])
+            target_arg = _ShellWord(operand)
+            directories.append(operand)
+            idx += 1
             continue
         if tok in _GIT_VALUE_FLAGS:
             value = args[idx + 1] if idx + 1 < len(args) else ""
@@ -534,6 +565,7 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
         subcommand=args[idx],
         args=tuple(args[idx + 1 :]),
         global_flags=tuple(global_flags),
+        directories=tuple(directories),
     )
 
 
@@ -547,7 +579,7 @@ def _expand_path(token: str, scope: Scope) -> str | None:
     refusal that held before still holds.
     """
     try:
-        return expand_word(unquoted(token), scope)
+        return expand_word(_word(token), scope)
     except UnresolvableWord:
         if "$" in token or "`" in token:
             return None
@@ -558,8 +590,20 @@ def _expand_path(token: str, scope: Scope) -> str | None:
 def _resolve_target_dir(
     invocation: _GitInvocation, cwd: Path, scope: Scope | None = None
 ) -> Path:
+    if invocation.directories:
+        try:
+            resolved = git_directory(
+                list(invocation.directories),
+                scope if scope is not None else os.environ,
+                cwd,
+            )
+            return Path(resolved) if resolved is not None else cwd
+        except UnresolvableWord:
+            return cwd / (invocation.target_arg or "")
     if invocation.target_arg:
-        expanded = _expand_path(invocation.target_arg, scope or os.environ)
+        expanded = _expand_path(
+            invocation.target_arg, scope if scope is not None else os.environ
+        )
         raw = expanded or invocation.target_arg
         candidate = Path(raw)
         return candidate if candidate.is_absolute() else (cwd / candidate)
@@ -703,32 +747,10 @@ def _resolve_cd_target(
     force at that point, so a chain composes.
     """
     stripped = _strip_wrappers(tokens)
-    if not stripped:
+    try:
+        return Path(directory_target([_word(t) for t in stripped], scope, current))
+    except UnresolvableWord:
         return None
-    if os.path.basename(stripped[0]) not in policy.directory_changing_programs:
-        return None
-    operands = [tok for tok in stripped[1:] if not tok.startswith("-")]
-    if not operands:
-        home = os.environ.get("HOME")
-        return Path(home) if home else None
-    if len(operands) > 1:
-        return None
-    target = operands[0]
-    if target == "-":
-        # `cd -` returns to the PREVIOUS directory, which this guard does
-        # not track. Unresolvable rather than guessed.
-        return None
-    expanded = _expand_path(target, scope)
-    if expanded is None:
-        # An unexpanded variable this guard cannot answer. Returning None
-        # leaves the effective directory where it was, which is exactly the
-        # behaviour before this change: nothing in the shared tree stops
-        # being refused, and nothing outside it starts being refused.
-        return None
-    candidate = Path(expanded)
-    if not candidate.is_absolute():
-        candidate = current / candidate
-    return Path(os.path.normpath(str(candidate)))
 
 
 def _push_destination_refs(invocation: _GitInvocation) -> list[str]:
@@ -1423,6 +1445,8 @@ def _is_shell_computed(operand: str) -> bool:
     Globs are left alone -- git's own pathspec globbing matches a superset of
     what the shell expands.
     """
+    if isinstance(operand, _ShellWord) and operand.word.is_plain:
+        return False
     return (
         "$" in operand
         or "`" in operand
@@ -1441,9 +1465,9 @@ def _read_operand(operand: str, scope: Scope) -> str:
     if "$" not in operand and not operand.startswith("~"):
         return operand
     value = _expand_path(operand, scope)
-    if value is None or len(value.split()) != 1:
+    if value is None or (_word(operand).splits and len(value.split()) != 1):
         return operand
-    return value
+    return _ShellWord(Word((WordPart(value, "literal"),)))
 
 
 def _check_computed_operands(shape: _RestoreShape) -> _RestoreShape:
@@ -1785,12 +1809,13 @@ def _is_directory_change(tokens: list[str], policy: Policy) -> bool:
 
 
 def _target_is_absolute(invocation: _GitInvocation, scope: Scope) -> bool:
-    """Is the `-C` target an absolute path once the shell has expanded it?"""
-    arg = invocation.target_arg
-    if arg is None:
-        return False
-    expanded = _expand_path(arg, scope)
-    return expanded is not None and Path(expanded).is_absolute()
+    if invocation.directories:
+        try:
+            return git_directory(list(invocation.directories), scope, None) is not None
+        except UnresolvableWord:
+            return False
+    raw = _expand_path(invocation.target_arg, scope) if invocation.target_arg else None
+    return raw is not None and Path(raw).is_absolute()
 
 
 def _plainly_names_refused_verb(command: str, policy: Policy) -> bool:
@@ -1856,19 +1881,8 @@ def _track_assignments(segment: list[str], scope: Scope) -> None:
     command word (``WT=x <command>``) assigns only for that one command and
     is not tracked.
     """
-    if not isinstance(scope, ChainMap):
-        return
-    tokens = segment[1:] if segment[:1] == ["export"] else segment
-    if not tokens or not all(_ASSIGNMENT.match(t) for t in tokens):
-        return
-    for token in tokens:
-        name, _, value = token.partition("=")
-        if name not in scope.maps[0]:
-            continue
-        try:
-            scope.maps[0][name] = expand_word(unquoted(value), scope)
-        except UnresolvableWord:
-            scope.maps[0][name] = None
+    if isinstance(scope, ChainMap):
+        apply_assignments([_word(t) for t in segment], scope, scope.maps[0])
 
 
 # ---------------------------------------------------------------------------
@@ -2180,7 +2194,13 @@ def _lane_fetch_refusal(
     if any(environ.get(k) == v for k, v in policy.fetch_allow_env):
         return None
     target: Path | None = effective_cwd if cwd_known else None
-    if invocation.target_arg is not None:
+    if invocation.directories:
+        try:
+            resolved = git_directory(list(invocation.directories), scope, target)
+            target = Path(resolved) if resolved is not None else None
+        except UnresolvableWord:
+            target = None
+    elif invocation.target_arg is not None:
         expanded = _expand_path(invocation.target_arg, scope)
         if expanded is None:
             target = None
@@ -2377,12 +2397,54 @@ def evaluate_bash_command(
             continue
         if invocation.subcommand not in policy.refused_subcommands:
             continue
-        if invocation.target_arg is None:
+        if invocation.directories:
+            try:
+                target_known = (
+                    git_directory(
+                        list(invocation.directories),
+                        scope,
+                        effective_cwd if cwd_known else None,
+                    )
+                    is not None
+                )
+            except UnresolvableWord:
+                target_known = False
+        elif invocation.target_arg is None:
             target_known = cwd_known
         else:
             target_known = _target_is_absolute(invocation, scope) or (
                 cwd_known and _expand_path(invocation.target_arg, scope) is not None
             )
+        if not target_known:
+            # Unknown location cannot justify a mutation that could hit the registry.
+            restore = _restore_refusal(
+                invocation,
+                policy,
+                effective_cwd,
+                False,
+                registry_root,
+                worktree_roots,
+                scope,
+                env_relocated=exported_relocation or _assigns_git_location(segment),
+            )
+            if restore is not None:
+                return Decision(blocked=True, reason=restore)
+            detail = _refusal_detail(
+                invocation,
+                policy,
+                None,
+                target_dir=effective_cwd,
+                git_root=registry_root or effective_cwd,
+            )
+            if detail is not None:
+                return Decision(
+                    blocked=True,
+                    reason=(
+                        f"BLOCKED: `git {invocation.subcommand}` directory cannot be resolved; "
+                        "the guard cannot determine whether it mutates the shared registry clone. "
+                        "Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+                    ),
+                )
         try:
             target_dir = _resolve_target_dir(invocation, effective_cwd, scope)
         except OSError as exc:

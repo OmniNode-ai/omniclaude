@@ -50,7 +50,7 @@ import json
 import os
 import re
 import sys
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -60,14 +60,21 @@ if str(_HOOKS_LIB) not in sys.path:
 
 from shell_words import (  # noqa: E402
     HereDoc,
+    Scope,
     ShellSyntaxError,
     UnresolvableWord,
     Word,
     WordPart,
+    apply_assignments,
+    directory_target,
     expand_word,
+    git_directory,
+    resolve_path,
     shadowed_names,
     tokenize,
 )
+
+_Scope = Scope
 
 DISABLE_HINT = "To disable this guard: onex hooks disable WORKTREE_GUARD"
 
@@ -114,7 +121,6 @@ _SHELL_VALUE_OPTIONS = frozenset({"-o", "+o", "-O", "+O", "--rcfile", "--init-fi
 _TEXT_ONLY = frozenset(
     {"echo", "printf", "grep", "egrep", "rg", "man", "which", "type"}
 )
-_DECLARERS = frozenset({"export", "declare", "typeset", "local", "readonly"})
 _MAX_NESTING = 3
 
 _WORKTREE_ADD_TEXT = re.compile(r"worktree\W+add\b")
@@ -190,36 +196,13 @@ class _State:
     stack: list[tuple[Path | None, str]] = field(default_factory=list)
 
 
-class _Scope(Mapping[str, str | None]):
-    """The hook's environment, overlaid with this command's own assignments."""
-
-    def __init__(self, env: Mapping[str, str], local: Mapping[str, str | None]):
-        self._env = env
-        self._local = local
-
-    def __getitem__(self, key: str) -> str | None:
-        if key in self._local:
-            return self._local[key]
-        return self._env[key]
-
-    def __iter__(self) -> Iterator[str]:
-        yield from self._local
-        yield from (k for k in self._env if k not in self._local)
-
-    def __len__(self) -> int:
-        return len(set(self._env) | set(self._local))
-
-
 def _join(base: Path | None, raw: str, what: str, unknown: str) -> Path:
-    candidate = Path(raw)
-    if candidate.is_absolute():
-        return Path(os.path.normpath(candidate))
-    if base is None:
+    try:
+        return Path(resolve_path(Word((WordPart(raw, "literal"),)), {}, base))
+    except UnresolvableWord as exc:
         raise Refusal(
-            f"the {what} `{raw}` is relative, and the directory it resolves "
-            f"against cannot be determined ({unknown})"
-        )
-    return Path(os.path.normpath(base / candidate))
+            f"the {what} `{raw}` is relative, and the directory it resolves against cannot be determined ({unknown})"
+        ) from exc
 
 
 def _literal(text: str) -> Word:
@@ -290,47 +273,19 @@ def _unwrap(words: list[Word]) -> _Unwrapped:
 def _apply_assignments(
     words: list[Word], state: _State, env: Mapping[str, str]
 ) -> bool:
-    """Record ``NAME=value`` words; True when ``words`` was only assignments."""
-    body = words
-    if body and body[0].text in _DECLARERS:
-        body = [w for w in body[1:] if not w.text.startswith("-")]
-    pairs = [w.assignment() for w in body]
-    if not body or any(pair is None for pair in pairs):
-        return False
-    scope = _Scope(env, state.variables)
-    resolved: dict[str, str | None] = {}
-    for pair in pairs:
-        assert pair is not None
-        name, value = pair
-        try:
-            resolved[name] = expand_word(value, scope)
-        except UnresolvableWord:
-            resolved[name] = None
-    state.variables.update(resolved)
-    return True
+    return apply_assignments(words, _Scope(env, state.variables), state.variables)
 
 
 def _apply_cd(words: list[Word], state: _State, env: Mapping[str, str]) -> bool:
-    """Move ``state.cwd`` for a ``cd``/``pushd``/``popd``; True when it was one."""
     if not words or words[0].text not in ("cd", "pushd", "popd"):
         return False
-    verb = words[0].text
-    operands = [w for w in words[1:] if not w.text.startswith("-") or w.text == "-"]
-    if verb == "popd" or (operands and operands[0].text == "-") or len(operands) > 1:
-        state.cwd = None
-        state.unknown = f"`{' '.join(w.text for w in words)}` is not tracked"
-        return True
-    if not operands:
-        home = env.get("HOME")
-        state.cwd = Path(home) if home else None
-        state.unknown = "`cd` with HOME unset"
-        return True
     try:
-        target = expand_word(operands[0], _Scope(env, state.variables))
-        state.cwd = _join(state.cwd, target, "`cd` target", state.unknown)
-    except (UnresolvableWord, Refusal) as exc:
+        state.cwd = Path(
+            directory_target(words, _Scope(env, state.variables), state.cwd)
+        )
+    except UnresolvableWord as exc:
         state.cwd = None
-        state.unknown = f"`{verb} {operands[0].text}` cannot be resolved: {exc}"
+        state.unknown = str(exc)
     return True
 
 
@@ -366,21 +321,26 @@ def _git_worktree_add(
         if text == "-C" and idx + 1 < len(args):
             operand = args[idx + 1]
             try:
-                directory = _join(
-                    directory,
-                    expand_word(operand, scope),
-                    "`git -C` directory",
-                    unknown,
-                )
+                resolved = git_directory([operand], scope, directory)
+                directory = Path(resolved) if resolved is not None else None
             except UnresolvableWord as exc:
                 directory = None
                 unknown = (
                     f"the `git -C` directory `{operand.text}` cannot be resolved: {exc}"
                 )
-            except Refusal as exc:
-                directory = None
-                unknown = str(exc)
             idx += 2
+            continue
+        if text.startswith("-C") and len(text) > 2:
+            operand = Word(
+                (WordPart(args[idx].parts[0].text[2:], args[idx].parts[0].quote),)
+                + args[idx].parts[1:]
+            )
+            try:
+                resolved = git_directory([operand], scope, directory)
+                directory = Path(resolved) if resolved is not None else None
+            except UnresolvableWord as exc:
+                directory, unknown = None, str(exc)
+            idx += 1
             continue
         if text in _GIT_VALUE_OPTIONS:
             idx += 2

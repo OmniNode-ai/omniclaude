@@ -436,16 +436,10 @@ def test_cd_prefix_into_the_registry_is_refused_from_a_worktree_cwd(
     assert decision.blocked, command
 
 
-def test_unresolvable_cd_target_leaves_the_effective_directory_unchanged(
+def test_unresolvable_cd_target_refuses_a_shared_tree_mutation(
     registry: Path, code_clone: Path, policy: Policy
 ) -> None:
-    """An unexpanded variable is not a licence, and not a new refusal.
-
-    shlex does not expand a variable, so the target cannot be resolved. The
-    effective directory then stays where it was, which is exactly the
-    behaviour before this change: no protection is lost in the shared tree,
-    and nothing that passed elsewhere starts failing.
-    """
+    """An unknown directory could be the registry, wherever the shell starts."""
     blocked = evaluate_bash_command(
         'cd "$WT" && git reset --hard origin/main',
         policy,
@@ -460,7 +454,7 @@ def test_unresolvable_cd_target_leaves_the_effective_directory_unchanged(
         cwd=code_clone,
         registry_root=registry,
     )
-    assert not allowed.blocked, allowed.reason
+    assert allowed.blocked, allowed.reason
 
 
 #: OMN-19229 AC4. `cd "$WT"` and `git -C "$WT"` are expanded from the hook's

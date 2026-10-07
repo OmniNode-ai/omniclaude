@@ -7,6 +7,13 @@ Used by the worktree guard, the shared-tree git guard (``cd`` and ``git -C``
 targets) and the PR-body stamp guard (body-file paths), so the class of
 "a guard judged the raw text of a variable" is retired in one place.
 
+The same module now owns command scope, cd/git -C composition and the
+cat/printf/tee/cp/sed file projection, migrated from the PR-body guard.
+Unresolvable protected operands produce an explicit unknown result and the
+admission guard refuses with a preparation or absolute-path remedy. Nothing
+is executed to resolve a command. Subshell state is restored on exit, while
+its projected file writes remain visible to the parent shell.
+
 Why this exists
 ---------------
 A PreToolUse guard is handed the raw text of a Bash command and has to judge
@@ -47,8 +54,16 @@ from __future__ import annotations
 import os
 import re
 from collections import ChainMap
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 QuoteKind = Literal["none", "double", "literal"]
@@ -670,3 +685,828 @@ def expand_word(word: Word, env: Mapping[str, str | None]) -> str:
                 )
         out.append(expanded_text)
     return "".join(out)
+
+
+# Static command scope and same-command file projection (OMN-17427).
+_WRAPPERS = frozenset({"env", "sudo", "command", "nohup", "time", "timeout", "xargs"})
+
+
+class _Untokenisable(ShellSyntaxError):
+    """A command whose words cannot be read."""
+
+
+class Scope(Mapping[str, str | None]):
+    """Environment overlaid by the command's own assignments."""
+
+    def __init__(self, env: Mapping[str, str], local: Mapping[str, str | None]):
+        self._env, self._local = env, local
+
+    def __getitem__(self, key: str) -> str | None:
+        return self._local[key] if key in self._local else self._env[key]
+
+    def __iter__(self) -> Iterator[str]:
+        yield from self._local
+        yield from (k for k in self._env if k not in self._local)
+
+    def __len__(self) -> int:
+        return len(set(self._env) | set(self._local))
+
+
+def resolve_path(
+    word: Word, scope: Mapping[str, str | None], cwd: str | Path | None
+) -> str:
+    raw = expand_word(word, scope)
+    if word.splits:
+        if scope.get("IFS", " \t\n") not in (None, " \t\n"):
+            raise UnresolvableWord(
+                "an unquoted path with a custom IFS cannot be resolved; quote the path"
+            )
+        if len(raw.split()) != 1:
+            raise UnresolvableWord(
+                "the unquoted path expands to multiple shell words; quote the path"
+            )
+    if not Path(raw).is_absolute():
+        if cwd is None:
+            raise UnresolvableWord(
+                f"the relative path {raw} follows a directory change the guard cannot resolve; pass an absolute path"
+            )
+        raw = os.path.join(cwd, raw)
+    return os.path.normpath(raw)
+
+
+def apply_assignments(
+    words: list[Word],
+    scope: Mapping[str, str | None],
+    local: MutableMapping[str, str | None],
+    expand: Callable[[Word], str] | None = None,
+) -> bool:
+    body = words
+    if body and body[0].text in {"export", "declare", "typeset", "local", "readonly"}:
+        body = [w for w in body[1:] if not w.text.startswith("-")]
+    pairs = [w.assignment() for w in body]
+    if not body or any(pair is None for pair in pairs):
+        return False
+    for pair in pairs:
+        assert pair is not None
+        name, value = pair
+        try:
+            local[name] = expand(value) if expand else expand_word(value, scope)
+        except (UnresolvableWord, _Unknown):
+            local[name] = None
+    return True
+
+
+def directory_target(
+    words: list[Word], scope: Mapping[str, str | None], cwd: str | Path | None
+) -> str:
+    program, args = _program_of(words)
+    if program != "cd":
+        raise UnresolvableWord(f"`{program}` directory stack is not tracked")
+    options_done = False
+    while args and args[0].text in {"--", "-L", "-P", "-e"}:
+        option = args[0].text
+        args = args[1:]
+        if option == "--":
+            options_done = True
+            break
+    if not args:
+        home = scope.get("HOME")
+        if not home:
+            raise UnresolvableWord("`cd` with HOME unset")
+        return os.path.normpath(home)
+    if len(args) != 1 or args[0].text == "-":
+        raise UnresolvableWord(
+            "the cd directory stack or multiple operands cannot be resolved"
+        )
+    if args[0].text.startswith("-") and not options_done:
+        raise UnresolvableWord("the cd option cannot be resolved")
+    return resolve_path(args[0], scope, cwd)
+
+
+def git_directory(
+    operands: list[Word], scope: Mapping[str, str | None], cwd: str | Path | None
+) -> str | None:
+    directory = str(cwd) if cwd is not None else None
+    for operand in operands:
+        # Git treats an empty -C as a no-op, unlike an empty path operand.
+        if not operand.text:
+            continue
+        directory = resolve_path(operand, scope, directory)
+    return directory
+
+
+class _Unknown(Exception):
+    """The text a construct produces cannot be determined before it runs."""
+
+
+#: Programs that run code which can write any file, whatever their arguments
+#: say. One of these earlier in the command makes every body file unknown.
+_INTERPRETERS = re.compile(
+    r"^(?:python[0-9.]*|pypy[0-9.]*|node|nodejs|deno|bun|ruby|perl|php|"
+    r"bash|sh|zsh|dash|ksh|fish|uv|uvx|npx|npm|pnpm|yarn|make|osascript|"
+    r"eval|source|\.|exec)$"
+)
+
+#: Programs that write no file other than through a redirection, which the
+#: model handles itself. Naming a body file as an argument of one of these is a
+#: read. Every other program that names the file may have rewritten it.
+_NO_FILE_WRITES = frozenset(
+    {
+        "cat", "grep", "egrep", "fgrep", "rg", "head", "tail", "wc", "diff",
+        "cmp", "ls", "stat", "file", "test", "[", "[[", "echo", "printf",
+        "true", "false", ":", "sleep", "date", "pwd", "cd", "which", "type",
+        "jq", "sort", "uniq", "cut", "tr", "basename", "dirname", "realpath",
+        "readlink", "git", "gh", "export", "unset", "local", "declare",
+        "shasum", "md5", "sha256sum", "nl", "column", "fold", "mkdir",
+        "wait", "exit", "return", "read", "for", "case", "esac", "done",
+        "fi", "}", "tee", "cp",
+    }
+)  # fmt: skip
+
+#: Words that open a compound command. The program is the word after them.
+_KEYWORDS = frozenset({"if", "then", "else", "elif", "do", "while", "until", "!", "{"})
+
+_DEV_FILES = frozenset({"/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty"})
+
+#: Redirections that write standard output, with and without appending.
+_WRITE_OPS = frozenset({">", ">|", ">>", "&>", "&>>", ">&"})
+
+
+@dataclass
+class _Cmd:
+    words: list[Word]
+    heredocs: list[HereDoc]
+    redirects: list[Redirect]
+    piped_from: _Cmd | None
+    in_subshell: bool
+    context: tuple[int, ...] = ()
+
+
+@dataclass
+class _File:
+    text: str | None
+    reason: str | None
+    written_at: int
+
+
+@dataclass
+class _Taint:
+    at: int
+    who: str
+    #: Text of the command, searched for the body file's path; ``None`` when
+    #: the writer can reach any file.
+    mentions: str | None
+
+
+def _commands(command: str) -> list[_Cmd]:
+    try:
+        tokens = tokenize(command, keep_redirects=True)
+    except ShellSyntaxError as exc:
+        raise _Untokenisable(str(exc)) from exc
+    out: list[_Cmd] = []
+    depth = 0
+    serial = 0
+    context: list[int] = []
+    current = _Cmd([], [], [], None, False)
+    piped: _Cmd | None = None
+
+    def close(next_piped: bool) -> None:
+        nonlocal current, piped
+        if current.words or current.heredocs or current.redirects:
+            out.append(current)
+            piped = current if next_piped else None
+        else:
+            piped = None
+        current = _Cmd([], [], [], piped, depth > 0, tuple(context))
+
+    for token in tokens:
+        if isinstance(token, Operator):
+            if token.text == "(":
+                close(False)
+                depth += 1
+                serial += 1
+                context.append(serial)
+                current.context = tuple(context)
+                current.in_subshell = True
+            elif token.text == ")":
+                close(False)
+                depth = max(0, depth - 1)
+                if context:
+                    context.pop()
+                current.context = tuple(context)
+                current.in_subshell = depth > 0
+            else:
+                close(token.text in ("|", "|&"))
+        elif isinstance(token, HereDoc):
+            current.heredocs.append(token)
+        elif isinstance(token, Redirect):
+            current.redirects.append(token)
+        else:
+            current.words.append(token)
+    close(False)
+    return out
+
+
+def _program_of(words: list[Word]) -> tuple[str, list[Word]]:
+    """Return the program basename and the words after it."""
+    index = 0
+    while index < len(words):
+        text = words[index].text
+        if words[index].assignment() is not None or text in _KEYWORDS:
+            index += 1
+            continue
+        basename = os.path.basename(text)
+        if basename in _WRAPPERS:
+            index += 1
+            while index < len(words) and (
+                words[index].text.startswith("-")
+                or words[index].assignment() is not None
+            ):
+                if words[index].text in {"-u", "-C", "-S"} and index + 1 < len(words):
+                    index += 1
+                index += 1
+            continue
+        return basename, words[index + 1 :]
+    return "", []
+
+
+def _split_inline(word: Word) -> Word | None:
+    """The value of ``--flag=value``, keeping the quoting of every part."""
+    for index, part in enumerate(word.parts):
+        if part.quote == "none" and "=" in part.text:
+            _, _, rest = part.text.partition("=")
+            head = (WordPart(rest, "none"),) if rest else ()
+            return Word(head + word.parts[index + 1 :])
+        if part.quote != "none":
+            return None
+    return None
+
+
+#: Characters that make a ``sed`` pattern anything other than the literal text
+#: it spells, in basic or extended syntax alike. A pattern free of all of them
+#: matches exactly its own characters, so the substitution is the same
+#: ``str.replace`` in every ``sed`` dialect.
+_SED_PATTERN_SPECIAL = frozenset("\\.[]*^$+?(){}|")
+
+#: Characters that make a ``sed`` replacement anything other than literal text.
+_SED_REPLACEMENT_SPECIAL = frozenset("\\&\n")
+
+#: A ``sed`` script that only prints lines: an optional line range, then ``p``.
+_SED_PRINT_ONLY = re.compile(r"(?:(?:\d+|\$)(?:,(?:\d+|\$))?)?p")
+
+
+@dataclass(frozen=True)
+class _SedPlan:
+    """One ``sed`` command read as a filter over its files, or standard input."""
+
+    in_place: bool
+    suffix: str
+    #: ``-n``: nothing is printed except by a ``p`` command.
+    quiet: bool
+    #: ``(pattern, replacement, every)`` in the order ``sed`` applies them to
+    #: each line.
+    edits: tuple[tuple[str, str, bool], ...]
+    files: tuple[Word, ...]
+
+
+def _sed_substitution(script: str) -> tuple[str, str, bool] | None:
+    """``(pattern, replacement, every)`` for ``s<d>literal<d>literal<d>[g]``."""
+    if len(script) < 5 or script[0] != "s":
+        return None
+    delimiter = script[1]
+    if delimiter.isalnum() or delimiter.isspace() or delimiter == "\\":
+        return None
+    parts = script[2:].split(delimiter)
+    if len(parts) != 3 or parts[2] not in ("", "g"):
+        return None
+    pattern, replacement, flags = parts
+    if not pattern or _SED_PATTERN_SPECIAL & set(pattern):
+        return None
+    if _SED_REPLACEMENT_SPECIAL & set(replacement):
+        return None
+    return pattern, replacement, flags == "g"
+
+
+def _parse_sed(args: list[Word]) -> _SedPlan | None:
+    """Read a ``sed`` command, or None when what it does cannot be computed.
+
+    OMN-17427. ``sed`` was treated as a program that may rewrite any file it
+    names, so a body file it merely printed or filtered made every later edit
+    from that file "unknown", and a literal substitution the guard could just
+    apply was refused too. What is modelled is what any ``sed`` reads the same
+    way:
+
+    * a script that only prints (``-n`` with an optional line range and ``p``),
+      and a substitution whose pattern and replacement are literal text,
+      neither of which can write a file, run a command or read another one;
+    * ``-i`` in the two spellings that mean one thing to both the BSD and the
+      GNU ``sed``: an attached suffix (``-i.bak``), and the BSD idiom ``-i ''``
+      whose empty suffix is a separate word. A bare ``-i`` followed by a script
+      is a suffix to BSD ``sed`` and an in-place edit to GNU ``sed``, so it is
+      not read.
+
+    Anything else -- a regular expression, a ``w`` or ``e`` command, a script
+    file, several commands in one script, a long option -- is not modelled and
+    leaves the file unknown, as before.
+    """
+    in_place = False
+    suffix = ""
+    quiet = False
+    scripts: list[str] = []
+    files: list[Word] = []
+    index = 0
+    options_done = False
+    while index < len(args):
+        word = args[index]
+        text = word.text
+        index += 1
+        if options_done or not text.startswith("-") or text == "-":
+            if not word.is_plain and not files and not scripts:
+                return None  # a script the shell computes
+            if not scripts and not files:
+                scripts.append(text)
+            else:
+                files.append(word)
+            continue
+        if text == "--":
+            options_done = True
+            continue
+        if text.startswith("--"):
+            return None
+        cluster = text[1:]
+        for pos, letter in enumerate(cluster):
+            if letter in "nEr":
+                quiet = quiet or letter == "n"
+            elif letter == "e":
+                rest = cluster[pos + 1 :]
+                if rest:
+                    scripts.append(rest)
+                elif index < len(args) and args[index].is_plain:
+                    scripts.append(args[index].text)
+                    index += 1
+                else:
+                    return None
+                break
+            elif letter == "i":
+                in_place = True
+                rest = cluster[pos + 1 :]
+                if rest:
+                    suffix = rest
+                elif index < len(args) and args[index].text == "":
+                    index += 1
+                else:
+                    return None
+                break
+            else:
+                return None
+    if not scripts or (quiet and in_place):
+        return None
+    edits: list[tuple[str, str, bool]] = []
+    for script in scripts:
+        substitution = _sed_substitution(script)
+        if substitution is not None:
+            edits.append(substitution)
+        elif not (quiet and _SED_PRINT_ONLY.fullmatch(script)):
+            return None
+    return _SedPlan(in_place, suffix, quiet, tuple(edits), tuple(files))
+
+
+def _sed_transform(text: str, edits: tuple[tuple[str, str, bool], ...]) -> str:
+    """``text`` after ``sed`` applies each literal substitution to each line."""
+    lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        body = line.rstrip("\n")
+        ending = line[len(body) :]
+        for pattern, replacement, every in edits:
+            body = body.replace(pattern, replacement, -1 if every else 1)
+        lines.append(body + ending)
+    return "".join(lines)
+
+
+class CommandResolver:
+    """The files a command writes, followed in order, and how to read them."""
+
+    def __init__(
+        self,
+        scope: ChainMap[str, str | None],
+        cwd: str | None,
+    ) -> None:
+        self.scope = scope
+        self.cwd = cwd
+        self.files: dict[str, _File] = {}
+        self.taints: list[_Taint] = []
+        self.at = 0
+        self._context: tuple[int, ...] = ()
+        self._stack: list[tuple[str | None, dict[str, str | None]]] = []
+
+    def enter(self, cmd: _Cmd) -> None:
+        """Restore shell state at a subshell boundary; files remain shared."""
+        common = 0
+        for before, after in zip(self._context, cmd.context, strict=False):
+            if before != after:
+                break
+            common += 1
+        for _ in self._context[common:]:
+            self.cwd, variables = self._stack.pop()
+            self.scope.maps[0].clear()
+            self.scope.maps[0].update(variables)
+        for _ in cmd.context[common:]:
+            self._stack.append((self.cwd, dict(self.scope.maps[0])))
+        self._context = cmd.context
+
+    # -- words ---------------------------------------------------------------
+
+    def expand(self, word: Word) -> str:
+        """The value the shell gives ``word``; command substitutions whose
+        output the model can compute are substituted. Raises ``_Unknown``."""
+        out: list[str] = []
+        for index, part in enumerate(word.parts):
+            if part.quote == "literal":
+                out.append(part.text)
+                continue
+            out.append(self._expand_text(part.text, part.quote, index == 0))
+        return "".join(out)
+
+    def _expand_text(self, text: str, quote: QuoteKind, first: bool) -> str:
+        out: list[str] = []
+        plain_start = 0
+        i = 0
+        n = len(text)
+
+        def flush(end: int) -> None:
+            chunk = text[plain_start:end]
+            if not chunk:
+                return
+            at_start = first and plain_start == 0
+            parts: tuple[WordPart, ...] = (WordPart(chunk, quote),)
+            if not at_start:
+                parts = (WordPart("", "literal"),) + parts
+            try:
+                out.append(expand_word(Word(parts), self.scope))
+            except UnresolvableWord as exc:
+                raise _Unknown(str(exc)) from exc
+
+        while i < n:
+            ch = text[i]
+            if ch == "\\":
+                i += 2
+                continue
+            if text.startswith("$((", i):
+                raise _Unknown("arithmetic expansion is not evaluated by the guard")
+            if text.startswith("$(", i) or ch == "`":
+                if quote == "none":
+                    raise _Unknown(
+                        "an unquoted command substitution is split into words by "
+                        "the shell"
+                    )
+                flush(i)
+                try:
+                    if ch == "`":
+                        end = _scan_backtick(text, i)
+                        inner = text[i + 1 : end - 1]
+                    else:
+                        end = _scan_balanced(text, i + 1, "(", ")")
+                        inner = text[i + 2 : end - 1]
+                except ShellSyntaxError as exc:
+                    raise _Unknown(str(exc)) from exc
+                out.append(self._substitute(inner))
+                i = end
+                plain_start = i
+                continue
+            i += 1
+        flush(n)
+        return "".join(out)
+
+    def _substitute(self, inner: str) -> str:
+        try:
+            commands = _commands(inner)
+        except _Untokenisable as exc:
+            raise _Unknown(f"a command substitution cannot be read ({exc})") from exc
+        if len(commands) != 1:
+            raise _Unknown(
+                "a command substitution runs more than one command, and the guard "
+                "computes the output of one"
+            )
+        # The shell strips trailing newlines here; they are kept, because they
+        # cannot change which lines a body carries.
+        return self.stdout(commands[0])
+
+    def path(self, word: Word) -> str:
+        try:
+            return resolve_path(word, self.scope, self.cwd)
+        except UnresolvableWord as exc:
+            raise _Unknown(str(exc)) from exc
+
+    # -- files ---------------------------------------------------------------
+
+    def read(self, word: Word, what: str = "the replacement body file") -> str:
+        path = self.path(word)
+        entry = self.files.get(path)
+        since = entry.written_at if entry is not None else -1
+        for taint in self.taints:
+            if taint.at <= since:
+                continue
+            if (
+                taint.mentions is None
+                or path in taint.mentions
+                or (os.path.basename(path) in taint.mentions)
+            ):
+                raise _Unknown(
+                    f"{what} {word.text} may be rewritten earlier in this same "
+                    f"command by {taint.who}, whose effect the guard cannot "
+                    "compute before the command runs"
+                )
+        if entry is not None:
+            if entry.text is None:
+                raise _Unknown(
+                    f"{what} {word.text} is written earlier in this same command "
+                    f"by {entry.reason}, whose output the guard cannot compute "
+                    "before the command runs"
+                )
+            return entry.text
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise _Unknown(f"{what} {word.text} could not be read: {exc}") from exc
+
+    def write(self, path: str, text: str | None, reason: str | None) -> None:
+        if path in _DEV_FILES:
+            return
+        self.files[path] = _File(text, reason, self.at)
+
+    # -- output of one command ------------------------------------------------
+
+    def stdin(self, cmd: _Cmd) -> str:
+        for redirect in reversed(cmd.redirects):
+            if redirect.op == "<<<" and redirect.target is not None:
+                return self.expand(redirect.target) + "\n"
+            if redirect.op == "<" and redirect.fd in (None, "0") and redirect.target:
+                return self.read(redirect.target, "the file on standard input")
+        if cmd.heredocs:
+            doc = cmd.heredocs[-1]
+            if not doc.expands:
+                return doc.body
+            try:
+                return self._expand_text(doc.body, "double", False)
+            except _Unknown as exc:
+                raise _Unknown(
+                    f"the here-document {doc.delimiter} expands text the guard "
+                    f"cannot resolve ({exc}); quote its delimiter, as <<'"
+                    f"{doc.delimiter}', or write the body with the editor tool"
+                ) from exc
+        if cmd.piped_from is not None:
+            return self.stdout(cmd.piped_from)
+        raise _Unknown(
+            "the replacement body is read from standard input, and nothing in "
+            "this command that the guard can read supplies it"
+        )
+
+    def stdout(self, cmd: _Cmd) -> str:
+        program, args = _program_of(cmd.words)
+        if program == "cat":
+            if any(a.text.startswith("-") and a.text != "-" for a in args):
+                raise _Unknown("`cat` with options is not modelled")
+            if not args or [a.text for a in args] == ["-"]:
+                return self.stdin(cmd)
+            return "".join(
+                self.stdin(cmd) if a.text == "-" else self.read(a, "the file")
+                for a in args
+            )
+        if program == "tee":
+            return self.stdin(cmd)
+        if program == "sed":
+            plan = _parse_sed(args)
+            if plan is not None and not plan.in_place and not plan.quiet:
+                text = (
+                    "".join(self.read(f, "the file") for f in plan.files)
+                    if plan.files
+                    else self.stdin(cmd)
+                )
+                return _sed_transform(text, plan.edits)
+        if program == "echo":
+            newline = "\n"
+            if args and args[0].text == "-n":
+                newline = ""
+                args = args[1:]
+            values = [self.expand(a) for a in args]
+            if any("\\" in v for v in values) or (
+                args and args[0].text.startswith("-")
+            ):
+                raise _Unknown("`echo` with escapes or options differs between shells")
+            return " ".join(values) + newline
+        if program == "printf":
+            if not args or args[0].text.startswith("-"):
+                raise _Unknown("`printf` with options is not modelled")
+            return _printf(self.expand(args[0]), [self.expand(a) for a in args[1:]])
+        raise _Unknown(
+            f"the output of `{program or 'a compound command'}` cannot be "
+            "computed without running it"
+        )
+
+    # -- effects of one command -----------------------------------------------
+
+    def apply(self, cmd: _Cmd) -> None:
+        """Record what ``cmd`` does to files and to the working directory."""
+        self.enter(cmd)
+        self.at += 1
+        program, args = _program_of(cmd.words)
+        who = f"`{program}`" if program else "a compound command"
+
+        if apply_assignments(cmd.words, self.scope, self.scope.maps[0], self.expand):
+            return
+        if program in ("cd", "pushd", "popd"):
+            try:
+                self.cwd = directory_target(cmd.words, self.scope, self.cwd)
+            except UnresolvableWord:
+                self.cwd = None
+
+        for redirect in cmd.redirects:
+            if redirect.op not in _WRITE_OPS or redirect.target is None:
+                continue
+            if redirect.op == ">&" and (
+                redirect.target.text.isdigit() or redirect.target.text == "-"
+            ):
+                continue
+            try:
+                path = self.path(redirect.target)
+            except _Unknown as exc:
+                self.taints.append(
+                    _Taint(
+                        self.at,
+                        f"{who} writing to {redirect.target.text} ({exc})",
+                        None,
+                    )
+                )
+                continue
+            if path in _DEV_FILES:
+                continue
+            if redirect.fd not in (None, "1") or redirect.op in ("&>", "&>>", ">&"):
+                self.write(path, None, f"{who} (its error stream)")
+                continue
+            appending = redirect.op == ">>"
+            try:
+                text = self.stdout(cmd)
+                if appending:
+                    base = self._current(path)
+                    text = base + text
+            except _Unknown as exc:
+                self.write(path, None, f"{who} ({exc})")
+                continue
+            self.write(path, text, None)
+
+        if program == "tee":
+            appending = bool(args) and args[0].text == "-a"
+            targets = args[1:] if appending else args
+            piped: str | None
+            try:
+                piped = self.stdin(cmd)
+            except _Unknown:
+                piped = None
+            for target in targets:
+                try:
+                    path = self.path(target)
+                except _Unknown as exc:
+                    self.taints.append(_Taint(self.at, f"`tee` ({exc})", None))
+                    continue
+                if piped is not None and appending:
+                    try:
+                        self.write(path, self._current(path) + piped, None)
+                    except _Unknown:
+                        self.write(path, None, "`tee -a`")
+                else:
+                    self.write(path, piped, None if piped is not None else "`tee`")
+            return
+
+        if (
+            program == "cp"
+            and len(args) == 2
+            and not any(a.text.startswith("-") for a in args)
+        ):
+            try:
+                dest = self.path(args[1])
+            except _Unknown as exc:
+                self.taints.append(_Taint(self.at, f"`cp` ({exc})", None))
+                return
+            try:
+                self.write(dest, self.read(args[0], "the copied file"), None)
+            except _Unknown:
+                self.write(dest, None, "`cp`")
+            return
+
+        if not program:
+            return
+        if program == "sed":
+            plan = _parse_sed(args)
+            if plan is not None:
+                if plan.in_place:
+                    self._apply_sed_in_place(cmd, plan, who)
+                # A filter writes only through a redirection, handled above.
+                return
+        runs_a_script = "/" in next(
+            (w.text for w in cmd.words if w.assignment() is None), ""
+        )
+        if _INTERPRETERS.match(program) or runs_a_script:
+            self.taints.append(_Taint(self.at, who, None))
+            return
+        if program not in _NO_FILE_WRITES:
+            self.taints.append(_Taint(self.at, who, self._mention_text(cmd)))
+
+    def _apply_sed_in_place(self, cmd: _Cmd, plan: _SedPlan, who: str) -> None:
+        """Record the text ``sed -i`` leaves in each file it names.
+
+        A file whose text or path the guard cannot read is left unknown, which
+        is what an unmodelled ``sed`` did to every file it mentioned.
+        """
+        if not plan.files:
+            return  # `sed -i` with no file reads no input and edits nothing
+        try:
+            results = []
+            for word in plan.files:
+                path = self.path(word)
+                before = self.read(word, "the file")
+                results.append((path, before, _sed_transform(before, plan.edits)))
+        except _Unknown:
+            self.taints.append(_Taint(self.at, who, self._mention_text(cmd)))
+            return
+        for path, before, after in results:
+            if plan.suffix:
+                self.write(path + plan.suffix, before, None)
+            self.write(path, after, None)
+
+    def _mention_text(self, cmd: _Cmd) -> str:
+        """Every word of ``cmd``, as written and as expanded, and its
+        here-document bodies: where a program would name the file it writes."""
+        parts: list[str] = []
+        for word in cmd.words:
+            parts.append(word.text)
+            try:
+                parts.append(self.expand(word))
+            except _Unknown:
+                pass
+        parts += [doc.body for doc in cmd.heredocs]
+        return "\n".join(parts)
+
+    def _current(self, path: str) -> str:
+        entry = self.files.get(path)
+        if entry is not None:
+            if entry.text is None:
+                raise _Unknown(entry.reason or "unknown")
+            return entry.text
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return ""
+        except (OSError, UnicodeDecodeError) as exc:
+            raise _Unknown(str(exc)) from exc
+
+
+_PRINTF_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", '"': '"', "'": "'",
+                   "a": "\a", "b": "\b", "f": "\f", "v": "\v"}  # fmt: skip
+
+
+def _printf_escapes(text: str) -> str:
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        if text[i] == "\\" and i + 1 < len(text):
+            nxt = text[i + 1]
+            if nxt not in _PRINTF_ESCAPES:
+                raise _Unknown(f"printf escape \\{nxt} is not modelled")
+            out.append(_PRINTF_ESCAPES[nxt])
+            i += 2
+            continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
+
+
+def _printf(fmt: str, args: list[str]) -> str:
+    """``printf`` for the ``%s``, ``%b`` and ``%%`` directives, which is what a
+    body is assembled with. Any other directive is unknown, not guessed."""
+    out: list[str] = []
+    remaining = list(args)
+    while True:
+        consumed = False
+        i = 0
+        while i < len(fmt):
+            ch = fmt[i]
+            if ch == "\\":
+                out.append(_printf_escapes(fmt[i : i + 2]))
+                i += 2
+                continue
+            if ch == "%":
+                directive = fmt[i + 1 : i + 2]
+                if directive == "%":
+                    out.append("%")
+                elif directive in ("s", "b"):
+                    value = remaining.pop(0) if remaining else ""
+                    consumed = True
+                    out.append(_printf_escapes(value) if directive == "b" else value)
+                else:
+                    raise _Unknown(f"printf directive %{directive} is not modelled")
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        if not remaining or not consumed:
+            return "".join(out)
