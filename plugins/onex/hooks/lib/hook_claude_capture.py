@@ -534,6 +534,7 @@ def capture(
             host=socket.gethostname(),
         )
     except (contract.InvalidHookInputError, contract.UnknownHookEventError) as exc:
+        health.record_contract_refusal(target)
         # The error names a field, never its value: hook stdin is content.
         _log(f"skipped {hook_name}: the contract refused the input: {exc}")
         return 0

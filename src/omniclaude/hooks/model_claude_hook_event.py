@@ -705,10 +705,17 @@ def _required(stdin: Mapping[str, object], field: str, hook_name: str) -> object
     return stdin[field]
 
 
-def _string(stdin: Mapping[str, object], field: str, hook_name: str) -> str:
+def _string(
+    stdin: Mapping[str, object],
+    field: str,
+    hook_name: str,
+    *,
+    allow_empty: bool = False,
+) -> str:
     value = _required(stdin, field, hook_name)
-    if not isinstance(value, str) or not value:
-        raise InvalidHookInputError(f"{hook_name}.{field} must be a non-blank string")
+    if not isinstance(value, str) or (not value and not allow_empty):
+        expected = "a string" if allow_empty else "a non-blank string"
+        raise InvalidHookInputError(f"{hook_name}.{field} must be {expected}")
     return value
 
 
@@ -983,7 +990,7 @@ def _payload_from_stdin(
             command_name=_string(stdin, "command_name", name),
             command_source=_optional_string(stdin, "command_source"),
             command_args_ref=capture.required(
-                "command_args", _string(stdin, "command_args", name)
+                "command_args", _string(stdin, "command_args", name, allow_empty=True)
             ),
             prompt_ref=capture.required("prompt", _string(stdin, "prompt", name)),
         )
@@ -1044,7 +1051,7 @@ def _payload_from_stdin(
             hook_event_name=name,
             stop_hook_active=_bool(stdin, "stop_hook_active", name),
             agent_id=_string(stdin, "agent_id", name),
-            agent_type=_string(stdin, "agent_type", name),
+            agent_type=_string(stdin, "agent_type", name, allow_empty=True),
             agent_transcript_ref=capture.required(
                 "agent_transcript_path",
                 _string(stdin, "agent_transcript_path", name),
@@ -1306,7 +1313,9 @@ def map_hook_stdin(
 
     session_id = _string(stdin, "session_id", raw_name)
     agent_id = _optional_string(stdin, "agent_id")
-    agent_type = _optional_string(stdin, "agent_type")
+    # An empty harness type carries no lineage information. Use the recorded
+    # sidecar when present, while preserving the empty string in the payload.
+    agent_type = _optional_string(stdin, "agent_type") or None
     prompt_id = _optional_string(stdin, "prompt_id")
     tool_use_id = _optional_string(stdin, "tool_use_id")
     effective_turn_id = _optional_string(stdin, "turn_id") or turn_id
