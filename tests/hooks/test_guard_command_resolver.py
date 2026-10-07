@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -149,3 +150,64 @@ def test_shared_cd_preserves_shell_word_splitting(
     )
     # Unquoted cd fails with multiple operands, leaving the shell in registry.
     assert decision.blocked is not quoted, decision.reason
+
+
+@pytest.mark.parametrize("format_string", ["%s", "%b", "-%s"])
+@pytest.mark.parametrize("retains_stamp", [False, True])
+def test_body_printf_option_terminator_is_resolved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    format_string: str,
+    retains_stamp: bool,
+) -> None:
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    stamp = "Evidence-" + "Source: OCC#9999"
+    replacement = (
+        f"It's a readable body with an unmatched \" quote.\n{stamp}\n"
+        if retains_stamp
+        else "It's a body without the line.\n"
+    )
+    command = (
+        f"B=body.md; cd -- '{destination}'; "
+        f'printf -- \'{format_string}\' "$RESOLVER_TEXT" > "$B"; '
+        'gh pr edit 1 --body-file "$B"'
+    )
+    monkeypatch.setenv("RESOLVER_TEXT", replacement)
+    # Check the shell builtin's output without executing the edit or file write.
+    actual = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'printf -- "$1" "$2"',
+            "printf-fixture",
+            format_string,
+            replacement,
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
+    (edit,) = body.parse_pr_body_edits(command, body.load_policy(), cwd=str(tmp_path))
+    assert edit.new_body == actual, edit.unreadable_reason
+    findings = body.check_bash_command(
+        command, body.load_policy(), lambda _: f"{stamp}\n", cwd=str(tmp_path)
+    )
+    assert [finding.kind for finding in findings] == (
+        [] if retains_stamp else ["dropped_stamp"]
+    )
+    assert not (destination / "body.md").exists(), (
+        "projection must never run the writer"
+    )
+
+
+def test_body_printf_variable_option_still_requires_workaround(tmp_path: Path) -> None:
+    (edit,) = body.parse_pr_body_edits(
+        "printf -v TEXT '%s' unreadable; printf '%s' \"$TEXT\" > body.md; "
+        "gh pr edit 1 --body-file body.md",
+        body.load_policy(),
+        cwd=str(tmp_path),
+    )
+    assert edit.new_body is None
+    assert edit.unreadable_reason is not None
+    assert "its own Bash call" in edit.unreadable_reason
