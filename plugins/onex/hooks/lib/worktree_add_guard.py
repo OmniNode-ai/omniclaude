@@ -54,11 +54,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
+
 _HOOKS_LIB = Path(__file__).parent
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
-from shell_words import (  # noqa: E402
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # noqa: E402
     HereDoc,
     Scope,
     ShellSyntaxError,
@@ -198,7 +200,9 @@ class _State:
 
 def _join(base: Path | None, raw: str, what: str, unknown: str) -> Path:
     try:
-        return Path(resolve_path(Word((WordPart(raw, "literal"),)), {}, base))
+        return Path(
+            resolve_path(Word((WordPart(raw, EnumQuoteKind.LITERAL),)), {}, base)
+        )
     except UnresolvableWord as exc:
         raise Refusal(
             f"the {what} `{raw}` is relative, and the directory it resolves against cannot be determined ({unknown})"
@@ -206,7 +210,7 @@ def _join(base: Path | None, raw: str, what: str, unknown: str) -> Path:
 
 
 def _literal(text: str) -> Word:
-    return Word((WordPart(text, "literal"),))
+    return Word((WordPart(text, EnumQuoteKind.LITERAL),))
 
 
 @dataclass

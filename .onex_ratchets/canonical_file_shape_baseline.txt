@@ -185,8 +185,6 @@ plugins/onex/hooks/lib/session_marker.py
 plugins/onex/hooks/lib/session_outcome.py
 plugins/onex/hooks/lib/session_resume_client.py
 plugins/onex/hooks/lib/shadow_validation.py
-plugins/onex/hooks/lib/shared_tree_git_guard.py
-plugins/onex/hooks/lib/shell_words.py
 plugins/onex/hooks/lib/skill_output_suppressor.py
 plugins/onex/hooks/lib/skill_suggestion_injector.py
 plugins/onex/hooks/lib/skill_usage_logger.py
