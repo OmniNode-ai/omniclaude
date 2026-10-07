@@ -35,6 +35,7 @@ Stdlib only, like every module on the hook fast path.
 from __future__ import annotations
 
 import contextlib
+import importlib
 import io
 import os
 import runpy
@@ -106,7 +107,9 @@ def _in_lib(module: object) -> bool:
 
 def run_core(request: Request) -> tuple[int, str]:
     """Run one decision core in this process; return (exit status, output)."""
-    script = request.argv[1]
+    is_module = request.argv[1] == "-m"
+    script = request.argv[2] if is_module else request.argv[1]
+    args_start = 3 if is_module else 2
     out = io.StringIO()
     err = io.StringIO()
     saved_env = dict(os.environ)
@@ -120,17 +123,21 @@ def run_core(request: Request) -> tuple[int, str]:
         os.environ.clear()
         os.environ.update(request.env)
         os.chdir(request.cwd)
-        sys.argv = [script, *request.argv[2:]]
+        sys.argv = [script, *request.argv[args_start:]]
         sys.path[0:0] = [str(Path(script).resolve().parent)]
         sys.stdin = io.StringIO(request.stdin or "")
         sys.stdout = out
         sys.stderr = err
-        if not Path(script).is_file():
+        if not is_module and not Path(script).is_file():
             print(f"{request.argv[0]}: can't open file {script!r}", file=err)
             rc = 2
         else:
             try:
-                runpy.run_path(script, run_name="__main__")
+                if is_module:
+                    module = importlib.import_module(script)
+                    rc = _exit_status(module.main(list(request.argv[args_start:])), err)
+                else:
+                    runpy.run_path(script, run_name="__main__")
             except SystemExit as exc:
                 rc = _exit_status(exc.code, err)
             except BaseException:  # noqa: BLE001 -- what the interpreter would do

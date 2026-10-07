@@ -52,12 +52,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOKS_DIR = REPO_ROOT / "plugins" / "onex" / "hooks"
 LIB_DIR = HOOKS_DIR / "lib"
 HOOK_SCRIPT = HOOKS_DIR / "scripts" / "pre_tool_use_shared_tree_git_guard.sh"
-POLICY_PATH = HOOKS_DIR / "config" / "shared_tree_git_guard_policy.json"
+POLICY_PATH = (
+    REPO_ROOT / "src/omniclaude/nodes/node_git_effect/git_admission_policy.json"
+)
 NAMESAKE_SCRIPT = "pre_tool_use_scope_gate.sh"
 
 sys.path.insert(0, str(LIB_DIR))
 
-from shared_tree_git_guard import (  # noqa: E402
+from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (  # noqa: E402
     GATE_BIT_NAME,
     TICKET,
     Policy,
@@ -90,6 +92,12 @@ def _init(repo: Path) -> None:
     _git("-C", str(repo), "config", "user.email", "t@example.com")
     _git("-C", str(repo), "config", "user.name", "t")
     _git("-C", str(repo), "commit", "-q", "--allow-empty", "-m", "init")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_ambient_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in load_policy(POLICY_PATH).fetch_lane_envs:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture

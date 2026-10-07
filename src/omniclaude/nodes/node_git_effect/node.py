@@ -8,6 +8,7 @@ that inherits from NodeEffect. All effect logic is driven by the contract.yaml.
 Capability: git.operations
 
 The node exposes git operations:
+- admission_check: Check host-local shared-tree, dirty-restore and lane-fetch policy
 - branch_create: Create a new git branch
 - commit: Stage and commit changes
 - push: Push branch to remote

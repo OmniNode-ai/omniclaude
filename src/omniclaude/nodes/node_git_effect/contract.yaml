@@ -51,6 +51,9 @@ output_model:
 
 # Capabilities
 capabilities:
+  - name: git.operations.admission_check
+    description: Shared-tree, dirty-restore and lane-fetch admission
+
   - name: git.operations
     description: All git and GitHub CLI operations
     version: 1.1.0
@@ -90,6 +93,15 @@ capabilities:
 
 # IO operations
 io_operations:
+  - operation: admission_check
+    description: Check a hook payload against host-local Git admission policy
+    protocol_method: admission_check
+    input_fields:
+      - admission: ModelGitAdmissionRequest
+    output_fields:
+      - admission: ModelGitAdmissionResult
+    idempotent: true
+
   - operation: branch_create
     description: Create a new git branch
     protocol_method: branch_create
@@ -242,6 +254,15 @@ dependencies:
 # Handler routing
 handler_routing:
   routing_strategy: backend_match
+  handlers:
+    - operation: admission_check
+      event_model:
+        module: omniclaude.nodes.node_git_effect.models
+        name: ModelGitRequest
+      handler:
+        module: omniclaude.nodes.node_git_effect.handlers.handler_git_admission
+        name: HandlerGitAdmissionTransport
+      output_events: [ModelGitResult]
   default_backend: subprocess
   backends:
     - backend: subprocess
@@ -269,6 +290,8 @@ error_handling:
 
 # Metadata
 metadata:
+  transport_type: inmemory
+  transport_reason: Admission reads the hook host filesystem and Git index.
   author: OmniNode Team
   license: MIT
   ticket: OMN-2817
@@ -281,3 +304,9 @@ metadata:
     - merge-queue
     - tag
     - label
+
+# Host-local admission is an operation of the existing Git effect node (OMN-20685).
+terminal_event: onex.evt.omniclaude.git-admission-evaluated.v1
+event_bus:
+  subscribe_topics: [onex.cmd.omniclaude.git-admission-check.v1]
+  publish_topics: [onex.evt.omniclaude.git-admission-evaluated.v1]

@@ -2244,6 +2244,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # The admission parity test reads the immutable pre-conversion Git object.
+          fetch-depth: 0
 
       - name: Export service ports
         working-directory: ${{ github.workspace }}
@@ -2449,6 +2452,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # The admission parity test reads the immutable pre-conversion Git object.
+          fetch-depth: 0
 
       - name: Export service ports
         working-directory: ${{ github.workspace }}

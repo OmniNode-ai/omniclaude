@@ -58,7 +58,7 @@ _HOOKS_LIB = Path(__file__).parent
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
-from shell_words import (  # noqa: E402
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # noqa: E402
     HereDoc,
     ShellSyntaxError,
     UnresolvableWord,

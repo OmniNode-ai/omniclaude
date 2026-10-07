@@ -42,9 +42,12 @@ HOOK = (
 
 sys.path.insert(0, str(LIB_DIR))
 
-import shell_words  # noqa: E402
 import worktree_add_guard  # noqa: E402
 from worktree_add_guard import evaluate  # noqa: E402
+
+from omniclaude.nodes.node_git_effect.handlers import (
+    handler_shell_words as shell_words,  # noqa: E402
+)
 
 
 @pytest.fixture
@@ -380,7 +383,10 @@ class TestExpansion:
     def test_expand_helper_shared(self) -> None:
         """OMN-19229 AC4: every guard that judges a path uses ONE helper."""
         import pr_body_stamp_guard
-        import shared_tree_git_guard
+
+        from omniclaude.nodes.node_git_effect.handlers import (
+            handler_git_admission as shared_tree_git_guard,
+        )
 
         assert worktree_add_guard.tokenize is shell_words.tokenize
         for guard in (worktree_add_guard, shared_tree_git_guard, pr_body_stamp_guard):

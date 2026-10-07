@@ -14,13 +14,11 @@ arm lives in ``shared_tree_git_guard.py`` (no new hook file: the operator's
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 from omnibase_core.validators.no_unguarded_git_subprocess import (
@@ -32,22 +30,14 @@ HOOKS_DIR = REPO_ROOT / "plugins" / "onex" / "hooks"
 LIB_DIR = HOOKS_DIR / "lib"
 HOOK_SCRIPT = HOOKS_DIR / "scripts" / "pre_tool_use_shared_tree_git_guard.sh"
 ENTRYPOINT = HOOKS_DIR / "scripts" / "pre_tool_use_bash_guards.sh"
-POLICY_PATH = HOOKS_DIR / "config" / "shared_tree_git_guard_policy.json"
+POLICY_PATH = (
+    REPO_ROOT / "src/omniclaude/nodes/node_git_effect/git_admission_policy.json"
+)
 ENGINE = LIB_DIR / "canonical_clone_sync.py"
 
 
-def _load_guard() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
-        "shared_tree_git_guard", LIB_DIR / "shared_tree_git_guard.py"
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["shared_tree_git_guard"] = module
-    spec.loader.exec_module(module)
-    return module
+from omniclaude.nodes.node_git_effect.handlers import handler_git_admission as guard
 
-
-guard = _load_guard()
 GATE_BIT_NAME = guard.GATE_BIT_NAME
 Policy = guard.Policy
 
@@ -75,7 +65,11 @@ def evaluate_bash_command(
     old = {k: os.environ.get(k) for k in env}
     os.environ.update(env)
     try:
-        return guard.evaluate_bash_command(command, policy, cwd, None, ())
+        from dataclasses import replace
+
+        return guard.evaluate_bash_command(
+            command, replace(policy, clone_sync_engine=str(ENGINE)), cwd, None, ()
+        )
     finally:
         for key, value in old.items():
             if value is None:
