@@ -844,7 +844,10 @@ expected_hooks:
       Prints one line saying whether the canonical clones and locally-installed
       venvs are in sync, with the verdict's age, labelling anything older than
       30 minutes or of unknown age as unproven. Print-only: pure bash, no
-      network, no writes, reads exactly one file.
+      network, no writes, reads workspace-reconcile.status and, when present,
+      host-drift.status (OMN-17427). Prints the host-drift verdict with its age;
+      older than 35 minutes or unknown age is an ALERT because the drift check
+      itself has stopped reporting. Both verdicts respect quiet/tick intent.
     enforcement: false
     lite_mode_exit: true
     mask:

@@ -592,6 +592,191 @@ def test_session_line_never_mutates_anything(ws: _Workspace) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Host-drift surface (OMN-17427)
+# --------------------------------------------------------------------------- #
+_HOST_OK = (
+    "host-drift: OK 4/4 hosts reporting, 2 open drift within bound "
+    "as of 2026-10-07T05:30:00Z"
+)
+_HOST_ALERT = (
+    "host-drift: ALERT 3 — h202 heartbeat stale 52m; "
+    "h201 unit:onex-internal-clone-sync drift past bound 1h05m "
+    "(service Result=exit-code) as of 2026-10-07T05:30:00Z"
+)
+
+
+def _write_host_status(ws: _Workspace, line: str, age_minutes: int = 2) -> Path:
+    status = ws.state / "hooks" / "host-drift.status"
+    # Only the first line belongs in the transcript; support no final newline.
+    status.write_text(f"{line}\nsecond line must not be printed", encoding="utf-8")
+    old = time.time() - 60 * age_minutes
+    os.utime(status, (old, old))
+    return status
+
+
+def test_host_drift_absent_is_silent(ws: _Workspace) -> None:
+    ws.status_file.write_text("clones/venv: in sync as of now\n", encoding="utf-8")
+
+    result = ws.run_session_line(OMNICLAUDE_SESSION_INTENT="normal")
+
+    assert result.returncode == 0, result.stderr
+    assert "[workspace-sync] clones/venv: in sync" in result.stdout
+    assert "[host-drift]" not in result.stdout
+
+
+@pytest.mark.parametrize("line", [_HOST_OK, _HOST_ALERT], ids=["ok", "alert"])
+@pytest.mark.parametrize(
+    "workspace_age", [2, 40], ids=["workspace-fresh", "workspace-stale"]
+)
+def test_host_drift_fresh_is_printed_after_workspace_verdict(
+    ws: _Workspace, line: str, workspace_age: int
+) -> None:
+    ws.status_file.write_text("clones/venv: in sync as of now\n", encoding="utf-8")
+    old = time.time() - 60 * workspace_age
+    os.utime(ws.status_file, (old, old))
+    _write_host_status(ws, line)
+
+    result = ws.run_session_line(OMNICLAUDE_SESSION_INTENT="normal")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines()[-1] == f"[host-drift] {line} (checked 2m ago)"
+    assert "second line" not in result.stdout
+    assert result.stdout.index("[workspace-sync]") < result.stdout.index("[host-drift]")
+
+
+@pytest.mark.parametrize("age_minutes", [35, 36, 40])
+def test_host_drift_staleness_bound(ws: _Workspace, age_minutes: int) -> None:
+    ws.status_file.write_text("clones/venv: in sync as of now\n", encoding="utf-8")
+    _write_host_status(ws, _HOST_OK, age_minutes)
+
+    result = ws.run_session_line(OMNICLAUDE_SESSION_INTENT="normal")
+
+    assert result.returncode == 0, result.stderr
+    if age_minutes <= 35:
+        assert result.stdout.splitlines()[-1] == (
+            f"[host-drift] {_HOST_OK} (checked {age_minutes}m ago)"
+        )
+    else:
+        assert result.stdout.splitlines()[-2:] == [
+            f"[host-drift] {_HOST_OK}",
+            f"[host-drift]   (host-drift verdict is {age_minutes}m old — "
+            "the drift check itself has stopped reporting; treat it as an ALERT)",
+        ]
+
+
+def test_host_drift_prints_when_workspace_status_is_absent(ws: _Workspace) -> None:
+    _write_host_status(ws, _HOST_ALERT)
+
+    result = ws.run_session_line(OMNICLAUDE_SESSION_INTENT="normal")
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        "[workspace-sync] UNKNOWN: no reconcile tick has run yet on this host."
+        in result.stdout
+    )
+    assert "reconcile-workspace-venvs.sh --check" in result.stdout
+    assert (
+        result.stdout.splitlines()[-1] == f"[host-drift] {_HOST_ALERT} (checked 2m ago)"
+    )
+
+
+@pytest.mark.parametrize("intent", ["quiet", "tick"])
+def test_host_drift_respects_silent_intent(
+    ws: _Workspace, tmp_path: Path, intent: str
+) -> None:
+    import shutil
+
+    # The planted healthy tree controls the independent load-path alarm.
+    clone, _ = _plant_hook_tree(tmp_path, "omniclaude")
+    shutil.copytree(
+        _REPO_ROOT / "plugins" / "onex" / "lib", clone / "plugins" / "onex" / "lib"
+    )
+    _write_host_status(ws, _HOST_ALERT, 40)
+    result = subprocess.run(
+        [
+            "bash",
+            str(clone / "plugins" / "onex" / "hooks" / "scripts" / _SESSION_LINE.name),
+        ],
+        input=_STDIN,
+        capture_output=True,
+        text=True,
+        env=ws.env(OMNICLAUDE_SESSION_INTENT=intent),
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize("unknown_status", ["workspace-reconcile", "host-drift"])
+def test_host_drift_survives_unknown_age(
+    ws: _Workspace, tmp_path: Path, unknown_status: str
+) -> None:
+    import shlex
+    import shutil
+
+    ws.status_file.write_text("clones/venv: in sync as of now\n", encoding="utf-8")
+    _write_host_status(ws, _HOST_OK)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    # Fail only the chosen mtime probe; the current clock still works.
+    for command in ("date", "stat"):
+        real = shutil.which(command)
+        assert real is not None
+        wrapper = bin_dir / command
+        wrapper.write_text(
+            "#!/bin/bash\n"
+            f'case "$*" in *{unknown_status}.status*) exit 1 ;; esac\n'
+            f'exec {shlex.quote(real)} "$@"\n',
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+
+    result = ws.run_session_line(
+        OMNICLAUDE_SESSION_INTENT="normal", PATH=f"{bin_dir}:{os.environ['PATH']}"
+    )
+
+    assert result.returncode == 0, result.stderr
+    if unknown_status == "workspace-reconcile":
+        assert (
+            "[workspace-sync]   (verdict age UNKNOWN — treat it as unproven)"
+            in result.stdout
+        )
+        assert (
+            result.stdout.splitlines()[-1]
+            == f"[host-drift] {_HOST_OK} (checked 2m ago)"
+        )
+    else:
+        assert result.stdout.splitlines()[-2:] == [
+            f"[host-drift] {_HOST_OK}",
+            "[host-drift]   (host-drift verdict age UNKNOWN — "
+            "the drift check itself has stopped reporting; treat it as an ALERT)",
+        ]
+
+
+def test_host_drift_respects_lite_mode(ws: _Workspace) -> None:
+    _write_host_status(ws, _HOST_ALERT)
+
+    result = ws.run_session_line(OMNICLAUDE_MODE="lite")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+
+
+def test_host_drift_first_line_without_final_newline(ws: _Workspace) -> None:
+    status = _write_host_status(ws, _HOST_ALERT)
+    status.write_text(_HOST_ALERT, encoding="utf-8")
+
+    result = ws.run_session_line(OMNICLAUDE_SESSION_INTENT="normal")
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        result.stdout.splitlines()[-1] == f"[host-drift] {_HOST_ALERT} (checked 0m ago)"
+    )
+
+
+# --------------------------------------------------------------------------- #
 # The load path this hook executes from (OMN-16497)
 # --------------------------------------------------------------------------- #
 #
