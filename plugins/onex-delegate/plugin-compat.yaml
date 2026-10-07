@@ -48,7 +48,7 @@ max_runtime_version: "1.0.0"
 # block with an awk state machine, not a YAML parser.
 onex_cli:
   package: "omnibase-infra"
-  min_version: "0.38.4"
+  min_version: "0.38.67"
   console_script_package: "omnibase-core"
   console_script_min_version: "0.46.8"
   # The package that ships the BACKING NODE (OMN-16191). `package` and
@@ -82,8 +82,8 @@ onex_cli:
   # Do NOT document `uv run onex delegate` — `uv run` resolves the venv of
   # whatever project the CURRENT directory belongs to, so it only works inside
   # a repo that happens to co-install omnibase-infra (see cwd_independent below).
-  install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket>=0.4.205' 'omnibase-core>=0.46.8'"
-  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket>=0.4.205'"
+  install_hint: "uv tool install --with 'omnibase-infra>=0.38.67' --with 'omnimarket>=0.4.205' 'omnibase-core>=0.46.8'"
+  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.67' 'omnimarket>=0.4.205'"
   cwd_independent: true
   # GAP CLOSED 2026-08-16 (OMN-16041); RE-QUALIFIED 2026-08-18 (OMN-16191).
   # Literally true again as of OMN-19367: every package in the recipe is a

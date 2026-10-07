@@ -146,13 +146,14 @@ class _Workspace:
         self.reconciler = self.infra_scripts / "reconcile-host.sh"
         self.reconcile_log = root / "reconcile.log"
         self.set_reconciler_exit(0)
-        # OMN-20670: the canonical reconciler is the ``onex-host-reconcile``
-        # console script that omnibase_internal ships into the dispatch venv.
+        # OMN-20670 / OMN-17427: the canonical reconciler is the
+        # ``onex-host-reconcile`` console script of the omnibase_internal
+        # project, installed into that clone's own ``.venv`` (by its
+        # ``onex-internal-clone-sync`` timer) -- never into the dispatch venv.
         # It is NOT installed by default here, so every pre-existing test keeps
         # exercising the legacy script path; the tests below install it.
-        self.canonical = (
-            self.root / ".onex-dispatch-venv" / "bin" / "onex-host-reconcile"
-        )
+        self.internal = root / "omnibase_internal"
+        self.canonical = self.internal / ".venv" / "bin" / "onex-host-reconcile"
         self.canonical_log = root / "canonical.log"
 
     def set_reconciler_exit(self, code: int) -> None:
@@ -554,17 +555,120 @@ def test_no_reconciler_at_all_names_the_canonical_command(ws: _Workspace) -> Non
     assert "onex-host-reconcile" in status
 
 
-def test_the_dispatch_venv_override_locates_the_canonical_command(
+def test_the_declared_internal_home_locates_the_canonical_command(
     ws: _Workspace, tmp_path: Path
 ) -> None:
+    """OMNIBASE_INTERNAL_HOME is the one declaration, and it wins."""
     ws.remove_reconciler()
-    venv = tmp_path / "other-venv"
-    ws.canonical = venv / "bin" / "onex-host-reconcile"
+    declared = tmp_path / "elsewhere" / "omnibase_internal"
+    ws.canonical = declared / ".venv" / "bin" / "onex-host-reconcile"
     ws.install_canonical(0)
 
-    ws.run_tick(ONEX_DISPATCH_VENV=str(venv))
+    ws.run_tick(OMNIBASE_INTERNAL_HOME=str(declared))
 
     assert ws.canonical_calls()
+
+
+def test_a_declared_internal_home_is_not_searched_past(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    """A declaration that holds no command is an ABSENT reconciler, not a guess.
+
+    The sibling clone holds the command here, and the declaration points
+    somewhere else: falling through to the sibling would run a clone the
+    operator did not name.
+    """
+    ws.remove_reconciler()
+    ws.install_canonical(0)
+    empty = tmp_path / "declared-but-empty"
+    empty.mkdir()
+
+    ws.run_tick(OMNIBASE_INTERNAL_HOME=str(empty))
+
+    assert not ws.canonical_calls()
+    status = ws.status_file.read_text(encoding="utf-8")
+    assert "DRIFT: no workspace reconciler" in status
+    assert str(empty / ".venv" / "bin" / "onex-host-reconcile") in status
+
+
+def test_the_dispatch_venv_is_not_where_the_command_is_looked_for(
+    ws: _Workspace,
+) -> None:
+    """The 2026-10-07 defect: the tick looked in a venv that never held it."""
+    ws.remove_reconciler()
+    in_dispatch_venv = ws.root / ".onex-dispatch-venv" / "bin" / "onex-host-reconcile"
+    in_dispatch_venv.parent.mkdir(parents=True)
+    in_dispatch_venv.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    in_dispatch_venv.chmod(0o755)
+
+    ws.run_tick()
+
+    status = ws.status_file.read_text(encoding="utf-8")
+    assert "DRIFT: no workspace reconciler" in status
+    assert ".onex-dispatch-venv" not in status
+
+
+def test_a_stale_sibling_beside_a_symlinked_omni_home_is_passed_over(
+    tmp_path: Path,
+) -> None:
+    """h201's shape: OMNI_HOME is a symlink, and a stale clone sits beside the link.
+
+    the registry root under the home directory is a symlink into a data volume;
+    the ``omnibase_internal`` beside the link is an old copy with no command, and
+    the one beside the link's target is the clone the timer keeps current. The first directory is the wrong answer; the
+    first directory that holds the command is the right one.
+    """
+    real = tmp_path / "data"
+    ws = _Workspace(real)
+    ws.remove_reconciler()
+    ws.install_canonical(0)
+    link_dir = tmp_path / "home"
+    link_dir.mkdir()
+    link = link_dir / ws.root.name
+    link.symlink_to(ws.root)
+    stale = link_dir / "omnibase_internal"
+    stale.mkdir()
+
+    ws.run_tick(OMNI_HOME=str(link))
+
+    assert ws.canonical_calls(), "the clone beside the resolved target was not used"
+    assert "in sync" in ws.status_file.read_text(encoding="utf-8")
+
+
+def test_the_sibling_as_written_wins_when_it_holds_the_command(
+    tmp_path: Path,
+) -> None:
+    real = tmp_path / "data"
+    ws = _Workspace(real)
+    ws.remove_reconciler()
+    link_dir = tmp_path / "home"
+    link_dir.mkdir()
+    link = link_dir / ws.root.name
+    link.symlink_to(ws.root)
+    written = link_dir / "omnibase_internal" / ".venv" / "bin" / "onex-host-reconcile"
+    written.parent.mkdir(parents=True)
+    log = tmp_path / "written.log"
+    written.write_text(f'#!/usr/bin/env bash\necho ran >> "{log}"\n', encoding="utf-8")
+    written.chmod(0o755)
+    ws.install_canonical(0)
+
+    ws.run_tick(OMNI_HOME=str(link))
+
+    assert log.exists(), "the sibling as written was passed over"
+    assert not ws.canonical_calls()
+
+
+def test_a_non_executable_command_is_not_run(ws: _Workspace) -> None:
+    ws.remove_reconciler()
+    ws.install_canonical(0)
+    ws.canonical.chmod(0o644)
+
+    ws.run_tick()
+
+    assert not ws.canonical_calls()
+    assert "DRIFT: no workspace reconciler" in ws.status_file.read_text(
+        encoding="utf-8"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -704,6 +808,191 @@ def test_session_line_never_mutates_anything(ws: _Workspace) -> None:
 
     assert len(ws.reconcile_calls()) == before
     assert _git("rev-parse", "HEAD", cwd=ws.clone) == head_before
+
+
+# --------------------------------------------------------------------------- #
+# Host-drift surface (OMN-17427)
+# --------------------------------------------------------------------------- #
+_HOST_OK = (
+    "host-drift: OK 4/4 hosts reporting, 2 open drift within bound "
+    "as of 2026-10-07T05:30:00Z"
+)
+_HOST_ALERT = (
+    "host-drift: ALERT 3 — h202 heartbeat stale 52m; "
+    "h201 unit:onex-internal-clone-sync drift past bound 1h05m "
+    "(service Result=exit-code) as of 2026-10-07T05:30:00Z"
+)
+
+
+def _write_host_status(ws: _Workspace, line: str, age_minutes: int = 2) -> Path:
+    status = ws.state / "hooks" / "host-drift.status"
+    # Only the first line belongs in the transcript; support no final newline.
+    status.write_text(f"{line}\nsecond line must not be printed", encoding="utf-8")
+    old = time.time() - 60 * age_minutes
+    os.utime(status, (old, old))
+    return status
+
+
+def test_host_drift_absent_is_silent(ws: _Workspace) -> None:
+    ws.status_file.write_text("clones/venv: in sync as of now\n", encoding="utf-8")
+
+    result = ws.run_session_line(OMNICLAUDE_SESSION_INTENT="normal")
+
+    assert result.returncode == 0, result.stderr
+    assert "[workspace-sync] clones/venv: in sync" in result.stdout
+    assert "[host-drift]" not in result.stdout
+
+
+@pytest.mark.parametrize("line", [_HOST_OK, _HOST_ALERT], ids=["ok", "alert"])
+@pytest.mark.parametrize(
+    "workspace_age", [2, 40], ids=["workspace-fresh", "workspace-stale"]
+)
+def test_host_drift_fresh_is_printed_after_workspace_verdict(
+    ws: _Workspace, line: str, workspace_age: int
+) -> None:
+    ws.status_file.write_text("clones/venv: in sync as of now\n", encoding="utf-8")
+    old = time.time() - 60 * workspace_age
+    os.utime(ws.status_file, (old, old))
+    _write_host_status(ws, line)
+
+    result = ws.run_session_line(OMNICLAUDE_SESSION_INTENT="normal")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines()[-1] == f"[host-drift] {line} (checked 2m ago)"
+    assert "second line" not in result.stdout
+    assert result.stdout.index("[workspace-sync]") < result.stdout.index("[host-drift]")
+
+
+@pytest.mark.parametrize("age_minutes", [35, 36, 40])
+def test_host_drift_staleness_bound(ws: _Workspace, age_minutes: int) -> None:
+    ws.status_file.write_text("clones/venv: in sync as of now\n", encoding="utf-8")
+    _write_host_status(ws, _HOST_OK, age_minutes)
+
+    result = ws.run_session_line(OMNICLAUDE_SESSION_INTENT="normal")
+
+    assert result.returncode == 0, result.stderr
+    if age_minutes <= 35:
+        assert result.stdout.splitlines()[-1] == (
+            f"[host-drift] {_HOST_OK} (checked {age_minutes}m ago)"
+        )
+    else:
+        assert result.stdout.splitlines()[-2:] == [
+            f"[host-drift] {_HOST_OK}",
+            f"[host-drift]   (host-drift verdict is {age_minutes}m old — "
+            "the drift check itself has stopped reporting; treat it as an ALERT)",
+        ]
+
+
+def test_host_drift_prints_when_workspace_status_is_absent(ws: _Workspace) -> None:
+    _write_host_status(ws, _HOST_ALERT)
+
+    result = ws.run_session_line(OMNICLAUDE_SESSION_INTENT="normal")
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        "[workspace-sync] UNKNOWN: no reconcile tick has run yet on this host."
+        in result.stdout
+    )
+    assert "reconcile-workspace-venvs.sh --check" in result.stdout
+    assert (
+        result.stdout.splitlines()[-1] == f"[host-drift] {_HOST_ALERT} (checked 2m ago)"
+    )
+
+
+@pytest.mark.parametrize("intent", ["quiet", "tick"])
+def test_host_drift_respects_silent_intent(
+    ws: _Workspace, tmp_path: Path, intent: str
+) -> None:
+    import shutil
+
+    # The planted healthy tree controls the independent load-path alarm.
+    clone, _ = _plant_hook_tree(tmp_path, "omniclaude")
+    shutil.copytree(
+        _REPO_ROOT / "plugins" / "onex" / "lib", clone / "plugins" / "onex" / "lib"
+    )
+    _write_host_status(ws, _HOST_ALERT, 40)
+    result = subprocess.run(
+        [
+            "bash",
+            str(clone / "plugins" / "onex" / "hooks" / "scripts" / _SESSION_LINE.name),
+        ],
+        input=_STDIN,
+        capture_output=True,
+        text=True,
+        env=ws.env(OMNICLAUDE_SESSION_INTENT=intent),
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize("unknown_status", ["workspace-reconcile", "host-drift"])
+def test_host_drift_survives_unknown_age(
+    ws: _Workspace, tmp_path: Path, unknown_status: str
+) -> None:
+    import shlex
+    import shutil
+
+    ws.status_file.write_text("clones/venv: in sync as of now\n", encoding="utf-8")
+    _write_host_status(ws, _HOST_OK)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    # Fail only the chosen mtime probe; the current clock still works.
+    for command in ("date", "stat"):
+        real = shutil.which(command)
+        assert real is not None
+        wrapper = bin_dir / command
+        wrapper.write_text(
+            "#!/bin/bash\n"
+            f'case "$*" in *{unknown_status}.status*) exit 1 ;; esac\n'
+            f'exec {shlex.quote(real)} "$@"\n',
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+
+    result = ws.run_session_line(
+        OMNICLAUDE_SESSION_INTENT="normal", PATH=f"{bin_dir}:{os.environ['PATH']}"
+    )
+
+    assert result.returncode == 0, result.stderr
+    if unknown_status == "workspace-reconcile":
+        assert (
+            "[workspace-sync]   (verdict age UNKNOWN — treat it as unproven)"
+            in result.stdout
+        )
+        assert (
+            result.stdout.splitlines()[-1]
+            == f"[host-drift] {_HOST_OK} (checked 2m ago)"
+        )
+    else:
+        assert result.stdout.splitlines()[-2:] == [
+            f"[host-drift] {_HOST_OK}",
+            "[host-drift]   (host-drift verdict age UNKNOWN — "
+            "the drift check itself has stopped reporting; treat it as an ALERT)",
+        ]
+
+
+def test_host_drift_respects_lite_mode(ws: _Workspace) -> None:
+    _write_host_status(ws, _HOST_ALERT)
+
+    result = ws.run_session_line(OMNICLAUDE_MODE="lite")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+
+
+def test_host_drift_first_line_without_final_newline(ws: _Workspace) -> None:
+    status = _write_host_status(ws, _HOST_ALERT)
+    status.write_text(_HOST_ALERT, encoding="utf-8")
+
+    result = ws.run_session_line(OMNICLAUDE_SESSION_INTENT="normal")
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        result.stdout.splitlines()[-1] == f"[host-drift] {_HOST_ALERT} (checked 0m ago)"
+    )
 
 
 # --------------------------------------------------------------------------- #

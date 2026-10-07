@@ -94,7 +94,7 @@ __all__ = [
     "window_sources",
 ]
 
-INDEX_VERSION = 1
+INDEX_VERSION = 2  # Rebuild caches made before TERMINAL released claims (OMN-20526).
 
 # HOW LONG A CLAIM STAYS LIVE WITHOUT ACTIVITY, and where the number comes from.
 #
@@ -128,7 +128,9 @@ _BRANCH_TICKET_RE = re.compile(r"(?i)\bomn-(\d+)\b")
 
 # Rows that MOVE the claim. Every other classed row by the holder is activity,
 # which renews -- see the renewal note below.
-_TRANSITIONS = frozenset({"CLAIM", "RELEASE", "HANDOVER", "RENEW", "RECLAIM"})
+_TRANSITIONS = frozenset(
+    {"CLAIM", "RELEASE", "TERMINAL", "HANDOVER", "RENEW", "RECLAIM"}
+)
 
 
 # WHERE THE ROLLED ROWS GO, and why the resolution has to follow them.
@@ -421,8 +423,9 @@ def build_index_from_sources(
     if not sources:
         raise ValueError("build_index_from_sources needs at least one source")
     tickets: dict[str, dict[str, Any]] = {}
+    released_fences: dict[str, int] = {}
     for source in sources:
-        _replay(source, tickets, now)
+        _replay(source, tickets, now, released_fences)
 
     for record in tickets.values():
         record["state"] = "stale" if _is_stale(record, now) else "held"
@@ -450,7 +453,17 @@ def _digest(text: str) -> str:
     return hashlib.sha256("\n".join(text.splitlines()).encode("utf-8")).hexdigest()
 
 
-def _replay(source: Source, tickets: dict[str, dict[str, Any]], now: datetime) -> None:
+def _replay(
+    source: Source,
+    tickets: dict[str, dict[str, Any]],
+    now: datetime,
+    released_fences: dict[str, int],
+) -> None:
+    """Replay a source, retaining released fencing tokens across source boundaries.
+
+    Deleting a holder must not reset its fence: the next claimant takes the next
+    token, even when the release and the claim are in different ledger rolls.
+    """
     lines = source.text.splitlines()
 
     for number, line in enumerate(lines, start=1):
@@ -481,7 +494,10 @@ def _replay(source: Source, tickets: dict[str, dict[str, Any]], now: datetime) -
                     continue
                 tickets[ticket] = {
                     "lane": lane,
-                    "fence": (current["fence"] if current else 0) + 1,
+                    "fence": (
+                        current["fence"] if current else released_fences.get(ticket, 0)
+                    )
+                    + 1,
                     "claim_line": number,
                     "claimed_at": stamp,
                     "last_activity_at": stamp,
@@ -492,11 +508,15 @@ def _replay(source: Source, tickets: dict[str, dict[str, Any]], now: datetime) -
             if current is None:
                 continue
 
-            if row_class == "RELEASE":
+            if row_class in {"RELEASE", "TERMINAL"}:
                 # Only the holder releases. Otherwise release is a way for any
                 # lane to take a ticket in two rows, which is the collision this
                 # exists to make visible rather than to enable.
+                # TERMINAL closes the holder's declared tickets (OMN-20526).
+                # Lane identity and intersecting tickets decide the release;
+                # closes-CLAIM is diagnostic, not a second lane identity.
                 if current["lane"] == lane:
+                    released_fences[ticket] = current["fence"]
                     del tickets[ticket]
                 continue
 

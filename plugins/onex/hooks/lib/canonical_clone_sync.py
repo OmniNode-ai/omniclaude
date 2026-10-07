@@ -18,10 +18,36 @@ Two callers, one engine:
   sync left it, and the PreToolUse lane git-fetch guard refuses their own
   ``git fetch``/``pull``/``ls-remote``. A lane that truly needs a fresher view
   runs ``refresh <owner/repo|name> [--branch B] [--tags] --wait``: it reads the
-  remote head with ``ls-remote``, fetches under the same per-clone lock the
-  sync takes (so the two never race, and a refresh queued behind a sync that
-  already fetched the head fetches nothing), and exits 0 only once each ref is
-  at or past that head. It never moves a checked-out branch.
+  remote head with ``ls-remote``; a tracking ref already at or past it is
+  accepted with no lock and no write. Otherwise it fetches under the per-clone
+  lock the sync takes (so the two never race), and a refresh waiting behind a
+  live holder accepts the head that holder's fetch landed without fetching
+  again. It exits 0 only once each ref is at or past that head, and it never
+  moves a checked-out branch. It also finds the sanctioned sibling
+  ``omnibase_internal`` clone. See "The clone lock" below.
+
+The clone lock
+--------------
+``<git common dir>/refs/onex-canonical-clone-sync.lock``, an ``fcntl.flock``
+whose file carries the holder's pid, role, host and start time while it is
+held. It lives under ``refs/`` because that is a directory the Codex lane
+sandbox grants (with ``objects``, ``logs/refs`` and ``worktrees``), and git
+skips ``*.lock`` entries when it reads loose refs. The legacy lock beside the
+git dir is taken too whenever it can be opened, for engine copies that predate
+this one. A refresh waits for a live holder up to a hard bound (600s, or
+``--timeout``) and fails loud past it, naming the holder and the time it
+actually waited; a lock it cannot open is reported as that, never as "held".
+OMN-17427, 2026-10-07: 17 of 22 lab-fill lanes stopped on "another
+canonical-clone sync held ... for 120s" when no sync held anything: the lock
+was the legacy file, which the sandbox made read-only, and the message
+printed the wait budget, not a wait.
+
+Lab clones can fetch from a LAN source whose remote-tracking refs are kept
+current by this engine. ``onex.repo`` supplies the repository's ``owner/name``
+identity before the remote URL is considered, so a lab clone's identity no
+longer depends on its fetch URL. ``onex.fetchSourcePrefix`` selects the source
+refs (for example, ``refs/remotes/origin/``), defaulting to ``refs/heads/``.
+The engine fetches only the configured remote and never adds a GitHub fallback.
 
 Why this exists
 ---------------
@@ -111,15 +137,17 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import fcntl
 import json
 import os
 import re
 import shlex
+import socket
 import subprocess
 import sys
 import time
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -130,12 +158,14 @@ MCP_MERGE_TOOL = "mcp__github__merge_pull_request"
 
 LOG_NAME = "canonical-clone-sync.jsonl"
 CLONE_LOCK_NAME = "onex-canonical-clone-sync.lock"
+CLONE_LOCK_REF_PATH = Path("refs") / CLONE_LOCK_NAME
 REGISTRY_ROOTS_FILE = Path("scripts") / "git-hooks" / "registry-roots"
 SHARED_TREE_COMMIT_LOCK = Path(".onex_state") / "commit.lock"
 
 FETCH_TIMEOUT_SECONDS = 120
 GIT_TIMEOUT_SECONDS = 60
 CLONE_LOCK_WAIT_SECONDS = 120
+LOCK_POLL_SECONDS = 0.25
 COMMIT_LOCK_WAIT_SECONDS = 60
 ARMED_DELAY_SECONDS = 30
 MAX_WORKERS = 8
@@ -566,7 +596,10 @@ def discover_clones(roots: Iterable[Path]) -> list[Path]:
 
 
 def clone_slug(clone: Path) -> str | None:
-    """``owner/name`` of the remote the checked-out branch tracks (else origin)."""
+    """``onex.repo``, else the tracked remote's ``owner/name`` (else origin)."""
+    configured = run_git(clone, "config", "--get", "onex.repo").out
+    if configured:
+        return configured
     branch = run_git(clone, "symbolic-ref", "--quiet", "--short", "HEAD").out
     remote = ""
     if branch:
@@ -578,6 +611,138 @@ def clone_slug(clone: Path) -> str | None:
 # --------------------------------------------------------------------------- #
 # Locks
 # --------------------------------------------------------------------------- #
+@dataclass
+class LockOutcome:
+    """What ``clone_lock`` got: the lock, the holder's work, or neither (why)."""
+
+    acquired: bool = False
+    abandoned: bool = False
+    error: str | None = None
+    waited: float = 0.0
+    holder: str | None = None
+    path: str = ""
+
+
+def describe_holder(path: Path) -> str:
+    """Identify a holder when possible, including whether its pid is live."""
+    unknown = (
+        "a process that left no holder record "
+        "(an engine copy older than the refs/ lock)"
+    )
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return unknown
+    if not isinstance(record, dict):
+        return unknown
+    pid = record.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return unknown
+    try:
+        os.kill(pid, 0)
+        live = "running"
+    except ProcessLookupError:
+        live = "not running"
+    except PermissionError:
+        live = "running"
+    return (
+        f"pid {pid} ({record.get('role', 'unknown')} on "
+        f"{record.get('host', 'unknown')}, {live}, since "
+        f"{record.get('since', 'unknown')})"
+    )
+
+
+@contextlib.contextmanager
+def clone_lock(
+    git_dir: Path,
+    wait_seconds: float,
+    role: str,
+    satisfied: Callable[[], bool] | None = None,
+) -> Iterator[LockOutcome]:
+    """The per-clone lock (module docstring, "The clone lock").
+
+    ``satisfied`` is polled while another process holds the lock; once it
+    returns True the wait ends with ``abandoned`` and nothing held.
+    """
+    path = git_dir / CLONE_LOCK_REF_PATH
+    outcome = LockOutcome(path=str(path))
+    started = time.monotonic()
+    deadline = started + wait_seconds
+    opened: list[int] = []
+    held: list[int] = []
+    wrote_record = False
+    try:
+        # refs/ is writable in lane sandboxes, and git ignores *.lock entries.
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            primary = os.open(path, os.O_RDWR | os.O_CREAT, 0o664)
+            opened.append(primary)
+        except OSError as exc:
+            outcome.error = f"cannot open the clone lock {path}: {exc}"
+            outcome.waited = time.monotonic() - started
+            yield outcome
+            return
+
+        legacy = git_dir / CLONE_LOCK_NAME
+        try:
+            opened.append(os.open(legacy, os.O_RDWR | os.O_CREAT, 0o664))
+        except OSError as exc:
+            # Old engines still use this lock; sandboxes may only grant refs/.
+            if exc.errno not in (errno.EROFS, errno.EACCES, errno.EPERM):
+                outcome.error = f"cannot open the clone lock {legacy}: {exc}"
+                outcome.waited = time.monotonic() - started
+                yield outcome
+                return
+
+        for fd in opened:
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    held.append(fd)
+                    break
+                except OSError:
+                    outcome.holder = describe_holder(path)
+                    if satisfied is not None and satisfied():
+                        outcome.abandoned = True
+                        break
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    time.sleep(min(LOCK_POLL_SECONDS, remaining))
+            if outcome.abandoned or fd not in held:
+                break
+
+        if len(held) == len(opened):
+            # Clear before unlocking so a departing holder cannot erase its
+            # successor's record. A stale record alone never owns the flock.
+            wrote_record = True
+            os.ftruncate(primary, 0)
+            os.write(
+                primary,
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "role": role,
+                        "since": utc_now(),
+                        "host": socket.gethostname(),
+                    }
+                ).encode(),
+            )
+            outcome.acquired = True
+        outcome.waited = time.monotonic() - started
+        yield outcome
+    finally:
+        if wrote_record:
+            with contextlib.suppress(OSError):
+                os.ftruncate(primary, 0)
+        for fd in reversed(held):
+            with contextlib.suppress(OSError):
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        for fd in reversed(opened):
+            with contextlib.suppress(OSError):
+                os.close(fd)
+
+
 @contextlib.contextmanager
 def file_lock(path: Path, wait_seconds: float) -> Iterator[bool]:
     """Exclusive ``fcntl.flock`` (macOS has no flock(1)); yields False on timeout."""
@@ -652,6 +817,17 @@ def _dirty_entries(clone: Path) -> tuple[list[str], list[str]] | None:
     return staged, unstaged
 
 
+DEFAULT_FETCH_SOURCE_PREFIX = "refs/heads/"
+
+
+def _fetch_source_prefix(clone: Path) -> str:
+    """The ref namespace branches are read from at the fetch source."""
+    return (
+        run_git(clone, "config", "--get", "onex.fetchSourcePrefix").out
+        or DEFAULT_FETCH_SOURCE_PREFIX
+    )
+
+
 def _fetch_branch(clone: Path, remote: str, branch: str) -> GitResult:
     """Fetch one branch into its remote-tracking ref, retrying a ref-lock race once.
 
@@ -660,6 +836,7 @@ def _fetch_branch(clone: Path, remote: str, branch: str) -> GitResult:
     lock ref", which is a race and not a fault. Observed on 2026-09-25
     (omnibase_infra, the 15:29Z timer run, host load 60).
     """
+    prefix = _fetch_source_prefix(clone)
     fetch = GitResult(1, "", "not attempted")
     for attempt in range(2):
         fetch = run_git(
@@ -667,7 +844,7 @@ def _fetch_branch(clone: Path, remote: str, branch: str) -> GitResult:
             "fetch",
             "--quiet",
             remote,
-            f"+refs/heads/{branch}:refs/remotes/{remote}/{branch}",
+            f"+{prefix}{branch}:refs/remotes/{remote}/{branch}",
             timeout=FETCH_TIMEOUT_SECONDS,
         )
         if fetch.code == 0 or "cannot lock ref" not in fetch.err or attempt:
@@ -699,6 +876,10 @@ def _refresh_remote_head(clone: Path, remote: str) -> GitResult:
     which the canonical-clone ref guard treats like a HEAD move, so it runs
     through the same ``ONEX_CANONICAL_CONVERGE`` door as the switch.
     """
+    if _fetch_source_prefix(clone) != DEFAULT_FETCH_SOURCE_PREFIX:
+        # A lab clone's source is another clone, whose checked-out HEAD says
+        # nothing about the default branch; keep the symref already recorded.
+        return GitResult(0, "", "")
     return run_git(
         clone,
         "remote",
@@ -818,7 +999,7 @@ def _return_to_default(
 
 def sync_clone(clone: Path) -> CloneResult:
     """Fetch the checked-out tracking branch and fast-forward it, or refuse."""
-    result = CloneResult(clone=str(clone), result=FAILED)
+    result = CloneResult(clone=str(clone), result=FAILED, repo=clone_slug(clone))
 
     def refuse(reason: str) -> CloneResult:
         result.result = REFUSED
@@ -853,13 +1034,14 @@ def sync_clone(clone: Path) -> CloneResult:
     tracking_ref = f"refs/remotes/{remote}/{upstream_branch}"
     result.upstream = f"{remote}/{upstream_branch}"
     url = run_git(clone, "remote", "get-url", remote).out
-    result.repo = repo_slug_of_url(url) if url else None
     if url and result.repo is None:
         # OMN-17427: a clone whose upstream is not a GitHub repository is not a
         # registry clone (a personal project parked under $OMNI_HOME, say).
         # Fetching it only turned an expired third-party token into a FAILED
         # result on every timer run, and a launchd job that is always red hides
         # the real failures. Named and left alone; the remote is never tried.
+        # A clone that declares onex.repo (a lab clone, OMN-20637) is a registry
+        # clone whatever its fetch URL.
         return refuse(
             f"remote {remote!r} is not a GitHub repository, so this is not a "
             "registry clone; nothing fetched"
@@ -870,11 +1052,13 @@ def sync_clone(clone: Path) -> CloneResult:
         return fail(f"cannot resolve the git dir: {_tail(git_dir_out.err)}")
     git_dir = Path(git_dir_out.out)
 
-    with file_lock(git_dir / CLONE_LOCK_NAME, CLONE_LOCK_WAIT_SECONDS) as locked:
-        if not locked:
+    with clone_lock(git_dir, CLONE_LOCK_WAIT_SECONDS, "sync") as lock:
+        if lock.error:
+            return refuse(lock.error)
+        if not lock.acquired:
             return refuse(
-                f"another canonical-clone sync held {git_dir / CLONE_LOCK_NAME} "
-                f"for {CLONE_LOCK_WAIT_SECONDS}s"
+                f"the clone lock {lock.path} was held by {lock.holder} "
+                f"for {lock.waited:.0f}s"
             )
 
         before = run_git(clone, "rev-parse", "--verify", "--quiet", "HEAD").out
@@ -1054,7 +1238,13 @@ def run_sync(
     path = log_path(env)
     ts = utc_now()
     for res in results:
-        record: dict[str, object] = {"ts": ts, "trigger": trigger, **asdict(res)}
+        record: dict[str, object] = {
+            "ts": ts,
+            "trigger": trigger,
+            **asdict(res),
+            "ref": res.branch,
+            "path": res.clone,
+        }
         if verb:
             record["verb"] = verb
         append_log(path, record)
@@ -1069,6 +1259,8 @@ def run_sync(
                     "verb": verb,
                     "repo": repo,
                     "result": NO_CLONE,
+                    "ref": None,
+                    "path": None,
                     "reason": "no canonical clone of this repository under any registry root",
                 },
             )
@@ -1079,6 +1271,8 @@ def run_sync(
             "trigger": trigger,
             "verb": verb,
             "result": "RUN_COMPLETE",
+            "ref": None,
+            "path": None,
             "clones": len(results),
             "counts": {
                 name: sum(1 for r in results if r.result == name)
@@ -1095,7 +1289,7 @@ def run_sync(
 # --------------------------------------------------------------------------- #
 REFRESHED = "REFRESHED"
 STARTED = "STARTED"
-REFRESH_WAIT_SECONDS = 120.0
+REFRESH_WAIT_SECONDS = 600.0
 
 
 @dataclass
@@ -1153,10 +1347,13 @@ def refresh_clone(
 
     ``clone`` may be a canonical clone or any worktree of one: the refs live in
     the common git dir, so the refresh is seen by every worktree of the clone.
-    It takes the same per-clone lock the sync takes, so a refresh and a sync
-    never race for a tracking ref, and a refresh that waited behind a sync
-    which already fetched the head fetches nothing (single flight). It never
-    moves a checked-out branch: that is the sync's job, with its refusals.
+    A ref already at the remote head is accepted from an unlocked read (ref
+    reads are atomic), so a current clone needs no write access at all.
+    Otherwise it takes the clone lock (see the module docstring). While a live
+    holder has it, the waiter re-reads the ref each poll and accepts the head
+    the holder's fetch landed, without waiting for the release or fetching
+    again; past ``wait_seconds`` it fails, naming the holder. It never moves a
+    checked-out branch: that is the sync's job, with its refusals.
 
     The remote head is read first with ``ls-remote`` (git transport, no API
     quota). A ref counts as fresh when it is at that head or past it (a merge
@@ -1178,6 +1375,7 @@ def refresh_clone(
     if not remote or remote == ".":
         remote = "origin"
     url = run_git(clone, "remote", "get-url", remote).out
+    source_prefix = _fetch_source_prefix(clone)
     repo = repo_slug_of_url(url) if url else None
     wanted = list(dict.fromkeys(branches or [_default_branch(clone, common, remote)]))
 
@@ -1193,7 +1391,7 @@ def refresh_clone(
             "ls-remote",
             "--quiet",
             remote,
-            f"refs/heads/{branch}",
+            f"{source_prefix}{branch}",
             timeout=FETCH_TIMEOUT_SECONDS,
         )
         if listed.code != 0:
@@ -1205,19 +1403,47 @@ def refresh_clone(
             continue
         res.remote_head = remote_head
 
+        # Ref reads are atomic, so an already-current clone needs no write access.
+        before = run_git(clone, "rev-parse", "--verify", "--quiet", tracking).out
+        res.before = before or None
+        if not tags and _at_or_past(clone, remote_head, before):
+            res.after = before
+            res.result = UP_TO_DATE
+            continue
+
+        def satisfied() -> bool:
+            return not tags and _at_or_past(
+                clone,
+                remote_head,
+                run_git(clone, "rev-parse", "--verify", "--quiet", tracking).out,
+            )
+
         lock_wait = max(deadline - time.monotonic(), 1.0)
-        with file_lock(common / CLONE_LOCK_NAME, lock_wait) as locked:
-            if not locked:
+        with clone_lock(common, lock_wait, "refresh", satisfied) as lock:
+            if lock.error:
+                res.reason = lock.error
+                continue
+            if lock.abandoned:
+                res.after = run_git(
+                    clone, "rev-parse", "--verify", "--quiet", tracking
+                ).out
+                res.result = REFRESHED
                 res.reason = (
-                    f"another canonical-clone sync held {common / CLONE_LOCK_NAME} "
-                    f"for {lock_wait:.0f}s"
+                    f"fetched by the lock holder ({lock.holder}) after this "
+                    "refresh asked; no second fetch"
                 )
                 continue
-            before = run_git(clone, "rev-parse", "--verify", "--quiet", tracking).out
-            res.before = before or None
-            if _at_or_past(clone, remote_head, before) and not tags:
-                res.after = before
-                res.result = UP_TO_DATE
+            if not lock.acquired:
+                res.reason = (
+                    f"the clone lock {lock.path} was held by {lock.holder} "
+                    f"for {lock.waited:.0f}s, past the {lock_wait:.0f}s bound; "
+                    "nothing fetched"
+                )
+                continue
+            current = run_git(clone, "rev-parse", "--verify", "--quiet", tracking).out
+            if not tags and _at_or_past(clone, remote_head, current):
+                res.after = current
+                res.result = REFRESHED if current != before else UP_TO_DATE
                 continue
             fetch = GitResult(1, "", "not attempted")
             for attempt in range(2):
@@ -1225,9 +1451,13 @@ def refresh_clone(
                     clone,
                     "fetch",
                     "--quiet",
+                    # The sandbox grants refs/ and objects/, not FETCH_HEAD or
+                    # maintenance files in the common git directory.
+                    "--no-write-fetch-head",
+                    "--no-auto-maintenance",
                     "--tags" if tags else "--no-tags",
                     remote,
-                    f"+refs/heads/{branch}:{tracking}",
+                    f"+{source_prefix}{branch}:{tracking}",
                     timeout=FETCH_TIMEOUT_SECONDS,
                 )
                 if fetch.code == 0 or "cannot lock ref" not in fetch.err or attempt:
@@ -1248,10 +1478,37 @@ def refresh_clone(
     return results
 
 
+def sibling_clones(env: Mapping[str, str]) -> list[Path]:
+    """``omnibase_internal``, which lives beside the registry, not in it.
+
+    ``$OMNIBASE_INTERNAL_HOME``, default ``$OMNI_HOME/../omnibase_internal``:
+    the location omnibase_internal's ``install-canonical-clone-git-hooks.sh``
+    requires to be a canonical clone, so a linked worktree there is not one.
+    """
+    override = env.get("OMNIBASE_INTERNAL_HOME", "")
+    registry_home = env.get("OMNI_HOME", "")
+    if override and Path(override).is_absolute():
+        clone = Path(override)
+    elif registry_home:
+        clone = Path(registry_home).parent / "omnibase_internal"
+    else:
+        return []
+    return [clone] if (clone / ".git").is_dir() else []
+
+
 def _clones_for(env: Mapping[str, str], repo: str) -> list[Path]:
     """Canonical clones whose slug is ``repo``, or whose name is (``omniclaude``)."""
     wanted = repo.casefold().removesuffix(".git")
     clones = discover_clones(registry_roots(env))
+    # OMN-17427: lanes on h201 and h101 got NO_CLONE for omnibase_internal on
+    # 2026-10-07 because the sibling is no registry root's child. Only the
+    # refresh looks there; the sync's clone set is unchanged.
+    seen = {clone.resolve() for clone in clones}
+    for clone in sibling_clones(env):
+        resolved = clone.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            clones.append(clone)
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         slugs = list(pool.map(clone_slug, clones))
     out: list[Path] = []
@@ -1296,7 +1553,17 @@ def run_refresh(
     ts = utc_now()
     lane = env.get("ONEX_LANE") or env.get("ONEX_LANE_ID") or ""
     for res in results:
-        append_log(path, {"ts": ts, "trigger": "refresh", "lane": lane, **asdict(res)})
+        append_log(
+            path,
+            {
+                "ts": ts,
+                "trigger": "refresh",
+                "lane": lane,
+                **asdict(res),
+                "ref": res.branch,
+                "path": res.clone,
+            },
+        )
     return results
 
 
@@ -1456,7 +1723,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             tags=args.tags,
         )
         for ref_res in refreshed:
-            sha = f"{(ref_res.before or '')[:12]}->{(ref_res.after or '')[:12]}"
+            sha = f"{ref_res.before or ''}->{ref_res.after or ''}"
             ref = f"{ref_res.remote}/{ref_res.branch}" if ref_res.branch else "-"
             print(
                 f"{ref_res.result:10} {ref_res.clone} {ref} {sha} "
@@ -1475,7 +1742,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         time.sleep(args.delay)
     results = run_sync(os.environ, args.repo, args.trigger, args.verb)
     for res in results:
-        sha = f"{(res.before or '')[:12]}->{(res.after or '')[:12]}"
+        sha = f"{res.before or ''}->{res.after or ''}"
         print(
             f"{res.result:10} {res.clone} {res.branch or '-'} {sha} {res.reason or ''}".rstrip()
         )

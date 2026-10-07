@@ -8,7 +8,7 @@ canonical clone's refs and the canonical-clone sync keeps them current, so a
 lane's own ``git fetch``/``pull``/``ls-remote``/``remote update`` against
 GitHub is refused and pointed at ``canonical_clone_sync.py refresh``. Push,
 non-GitHub remotes, calls outside a lane and the allowed processes pass. The
-arm lives in ``shared_tree_git_guard.py`` (no new hook file: the operator's
+arm lives in ``handler_git_admission.py`` (no new hook file: the operator's
 2026-10-01 ruling and the canonical-file-shape ratchet).
 """
 
@@ -18,12 +18,15 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from omnibase_core.validators.no_unguarded_git_subprocess import (
     scrub_git_location_env,
 )
+
+from omniclaude.nodes.node_git_effect.handlers import handler_git_admission as guard
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOKS_DIR = REPO_ROOT / "plugins" / "onex" / "hooks"
@@ -35,8 +38,6 @@ POLICY_PATH = (
 )
 ENGINE = LIB_DIR / "canonical_clone_sync.py"
 
-
-from omniclaude.nodes.node_git_effect.handlers import handler_git_admission as guard
 
 GATE_BIT_NAME = guard.GATE_BIT_NAME
 Policy = guard.Policy
@@ -65,8 +66,6 @@ def evaluate_bash_command(
     old = {k: os.environ.get(k) for k in env}
     os.environ.update(env)
     try:
-        from dataclasses import replace
-
         return guard.evaluate_bash_command(
             command, replace(policy, clone_sync_engine=str(ENGINE)), cwd, None, ()
         )
