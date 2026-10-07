@@ -179,8 +179,11 @@ def test_different_live_claim_is_refused_and_untouched(tmp_path: Path) -> None:
 
 
 def test_different_cli_refusal_names_live_holder(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
+    monkeypatch.setenv("ONEX_LANE_ID", LANE_B)
     claims_dir = tmp_path / "state" / "pr-queue" / "claims"
     _write_claim(claims_dir, run_id=RUN_A, lane_id=LANE_A, expired=False)
     cli = _load_cli()
@@ -198,6 +201,7 @@ def test_different_cli_inactive_failure_is_not_described_as_active(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    monkeypatch.setenv("ONEX_LANE_ID", LANE_B)
     claims_dir = tmp_path / "state" / "pr-queue" / "claims"
     _write_claim(claims_dir, run_id=RUN_A, lane_id=LANE_A, expired=True)
     monkeypatch.setattr(
