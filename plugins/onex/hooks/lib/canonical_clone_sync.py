@@ -35,8 +35,8 @@ Why this exists
 The operator ruled on 2026-09-25 that lanes query the canonical clones instead
 of spending GitHub API reads, which only works while the clones are current.
 The only automatic sync on the Mac at the time was the OMN-17190 PostToolUse
-tick, which delegates to ``reconcile-host.sh``. That run couples the clone pull
-to the venv reconcile: on 2026-09-25 one run sat inside the venv step from
+tick, which delegates to ``onex-host-reconcile`` (formerly ``reconcile-host.sh``).
+That run couples the clone pull to the venv reconcile: on 2026-09-25 one run sat inside the venv step from
 13:25Z, every tick after it declined, and no clone moved for over an hour. This
 engine is git only, so nothing it waits on can hold a clone back.
 

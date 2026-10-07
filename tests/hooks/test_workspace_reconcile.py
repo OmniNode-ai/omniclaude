@@ -7,7 +7,8 @@ tracking ``dev`` without anyone typing a command, and make the answer visible at
 session start instead of at the first failed dispatch.
 
 * ``workspace_reconcile_tick.sh`` — PostToolUse, throttled. Delegates to
-  ``omnibase_infra/scripts/reconcile-host.sh`` (OMN-17311) and writes a receipt
+  ``onex-host-reconcile`` (OMN-17311, OMN-20670; the legacy ``reconcile-host.sh``
+  is a fallback) and writes a receipt
   line plus a one-line verdict. It performs no repair of its own: it used to
   fetch and ``git pull --ff-only`` each clone and report ``status=PULLED`` on
   the pull's EXIT CODE, which is the OMN-17307 defect -- a clone with
@@ -145,6 +146,14 @@ class _Workspace:
         self.reconciler = self.infra_scripts / "reconcile-host.sh"
         self.reconcile_log = root / "reconcile.log"
         self.set_reconciler_exit(0)
+        # OMN-20670: the canonical reconciler is the ``onex-host-reconcile``
+        # console script that omnibase_internal ships into the dispatch venv.
+        # It is NOT installed by default here, so every pre-existing test keeps
+        # exercising the legacy script path; the tests below install it.
+        self.canonical = (
+            self.root / ".onex-dispatch-venv" / "bin" / "onex-host-reconcile"
+        )
+        self.canonical_log = root / "canonical.log"
 
     def set_reconciler_exit(self, code: int) -> None:
         """Recording stub for ``reconcile-host.sh``.
@@ -162,6 +171,26 @@ class _Workspace:
 
     def remove_reconciler(self) -> None:
         self.reconciler.unlink()
+
+    def install_canonical(self, code: int = 0) -> None:
+        """Recording stub for ``onex-host-reconcile`` (same exit-code table)."""
+        self.canonical.parent.mkdir(parents=True, exist_ok=True)
+        self.canonical.write_text(
+            "#!/usr/bin/env bash\n"
+            f'printf "%s\\n" "$*" >> "{self.canonical_log}"\n'
+            f"exit {code}\n",
+            encoding="utf-8",
+        )
+        self.canonical.chmod(0o755)
+
+    def canonical_calls(self) -> list[str]:
+        if not self.canonical_log.exists():
+            return []
+        return [
+            line
+            for line in self.canonical_log.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
 
     @property
     def status_file(self) -> Path:
@@ -450,6 +479,92 @@ def test_bootstrap_advances_omnibase_infra_only_while_the_reconciler_is_absent(
 def test_bootstrap_does_not_run_once_the_reconciler_exists(ws: _Workspace) -> None:
     ws.run_tick()
     assert "bootstrap=" not in ws.receipts.read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# The canonical command replaces the shell script (OMN-20670)
+# --------------------------------------------------------------------------- #
+def test_the_tick_runs_the_canonical_command_when_it_is_installed(
+    ws: _Workspace,
+) -> None:
+    """``onex-host-reconcile`` is the one reconciler; the script is retired.
+
+    omnibase_infra deletes ``scripts/reconcile-host.sh`` once the command ships,
+    so with the script gone the tick must still reconcile -- not report
+    ``DRIFT: no workspace reconciler`` (the 2026-10-07 incident).
+    """
+    ws.remove_reconciler()
+    ws.install_canonical(0)
+
+    ws.run_tick()
+
+    calls = ws.canonical_calls()
+    assert calls, "the tick did not run the canonical command"
+    assert f"--omni-home {ws.root}" in calls[0]
+    receipts = ws.receipts.read_text(encoding="utf-8")
+    assert "reconciler_exit=0" in receipts
+    assert "bootstrap=" not in receipts, (
+        "the command is not delivered by the infra clone"
+    )
+    assert "in sync" in ws.status_file.read_text(encoding="utf-8")
+
+
+def test_the_canonical_command_wins_over_the_legacy_script(ws: _Workspace) -> None:
+    ws.install_canonical(0)
+
+    ws.run_tick()
+
+    assert ws.canonical_calls(), "the canonical command was not run"
+    assert not ws.reconcile_calls(), (
+        "the legacy script ran beside the canonical command"
+    )
+
+
+def test_the_legacy_script_still_runs_until_the_command_is_installed(
+    ws: _Workspace,
+) -> None:
+    """Merge order must not matter: no host loses its reconciler in between."""
+    ws.run_tick()
+
+    assert ws.reconcile_calls(), "no reconciler ran although the legacy script exists"
+    assert not ws.canonical_calls()
+    assert "in sync" in ws.status_file.read_text(encoding="utf-8")
+
+
+def test_a_failing_canonical_reconcile_surfaces_as_drift(ws: _Workspace) -> None:
+    ws.remove_reconciler()
+    ws.install_canonical(2)
+
+    result = ws.run_tick()
+
+    assert result.returncode == 0
+    status = ws.status_file.read_text(encoding="utf-8")
+    assert "DRIFT" in status
+    assert "in sync" not in status
+    assert "reconciler_exit=2" in ws.receipts.read_text(encoding="utf-8")
+
+
+def test_no_reconciler_at_all_names_the_canonical_command(ws: _Workspace) -> None:
+    ws.remove_reconciler()
+
+    ws.run_tick()
+
+    status = ws.status_file.read_text(encoding="utf-8")
+    assert "DRIFT" in status
+    assert "onex-host-reconcile" in status
+
+
+def test_the_dispatch_venv_override_locates_the_canonical_command(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    ws.remove_reconciler()
+    venv = tmp_path / "other-venv"
+    ws.canonical = venv / "bin" / "onex-host-reconcile"
+    ws.install_canonical(0)
+
+    ws.run_tick(ONEX_DISPATCH_VENV=str(venv))
+
+    assert ws.canonical_calls()
 
 
 # --------------------------------------------------------------------------- #
