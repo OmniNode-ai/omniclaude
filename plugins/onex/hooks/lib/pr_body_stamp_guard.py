@@ -128,6 +128,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
+
 _HOOKS_LIB = Path(__file__).parent
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
@@ -135,7 +137,6 @@ if str(_HOOKS_LIB) not in sys.path:
 from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # noqa: E402
     HereDoc,
     Operator,
-    QuoteKind,
     Redirect,
     ShellSyntaxError,
     UnresolvableWord,
@@ -589,11 +590,11 @@ def _program_of(words: list[Word]) -> tuple[str, list[Word]]:
 def _split_inline(word: Word) -> Word | None:
     """The value of ``--flag=value``, keeping the quoting of every part."""
     for index, part in enumerate(word.parts):
-        if part.quote == "none" and "=" in part.text:
+        if part.quote == EnumQuoteKind.NONE and "=" in part.text:
             _, _, rest = part.text.partition("=")
-            head = (WordPart(rest, "none"),) if rest else ()
+            head = (WordPart(rest, EnumQuoteKind.NONE),) if rest else ()
             return Word(head + word.parts[index + 1 :])
-        if part.quote != "none":
+        if part.quote != EnumQuoteKind.NONE:
             return None
     return None
 
@@ -762,13 +763,13 @@ class _Model:
         output the model can compute are substituted. Raises ``_Unknown``."""
         out: list[str] = []
         for index, part in enumerate(word.parts):
-            if part.quote == "literal":
+            if part.quote == EnumQuoteKind.LITERAL:
                 out.append(part.text)
                 continue
             out.append(self._expand_text(part.text, part.quote, index == 0))
         return "".join(out)
 
-    def _expand_text(self, text: str, quote: QuoteKind, first: bool) -> str:
+    def _expand_text(self, text: str, quote: EnumQuoteKind, first: bool) -> str:
         out: list[str] = []
         plain_start = 0
         i = 0
@@ -781,7 +782,7 @@ class _Model:
             at_start = first and plain_start == 0
             parts: tuple[WordPart, ...] = (WordPart(chunk, quote),)
             if not at_start:
-                parts = (WordPart("", "literal"),) + parts
+                parts = (WordPart("", EnumQuoteKind.LITERAL),) + parts
             try:
                 out.append(expand_word(Word(parts), self.scope))
             except UnresolvableWord as exc:
@@ -795,7 +796,7 @@ class _Model:
             if text.startswith("$((", i):
                 raise _Unknown("arithmetic expansion is not evaluated by the guard")
             if text.startswith("$(", i) or ch == "`":
-                if quote == "none":
+                if quote == EnumQuoteKind.NONE:
                     raise _Unknown(
                         "an unquoted command substitution is split into words by "
                         "the shell"
@@ -900,7 +901,7 @@ class _Model:
             if not doc.expands:
                 return doc.body
             try:
-                return self._expand_text(doc.body, "double", False)
+                return self._expand_text(doc.body, EnumQuoteKind.DOUBLE, False)
             except _Unknown as exc:
                 raise _Unknown(
                     f"the here-document {doc.delimiter} expands text the guard "

@@ -1,0 +1,32 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20685
+title: "Route Git admission through the existing Git effect node"
+summary: >
+  The shared-tree, dirty-restore and lane-fetch admission checks become the
+  admission_check operation of node_git_effect, dispatched through the
+  contract-declared in-memory runtime on the hook host. The hook scripts keep
+  only the transport adapter.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Git admission parity and runtime tests pass"
+    command: "uv run pytest tests/hooks/test_git_admission_parity.py tests/hooks/test_git_admission_runtime.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-git-admission-parity
+    description: "Canonical admission handler returns the pre-conversion guard's verdict for every corpus command"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_git_admission_parity.py -q"
+  - id: dod-git-admission-runtime
+    description: "Admission check runs through the contract-routed runtime and the hook refuses a failed dispatch"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_git_admission_runtime.py -q"

@@ -49,9 +49,8 @@ import re
 from collections import ChainMap
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
 
-QuoteKind = Literal["none", "double", "literal"]
+from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
 
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -82,7 +81,7 @@ class WordPart:
     text: str
     # "none": unquoted; "double": inside double quotes; "literal": single
     # quotes or a backslash escape, where nothing is expanded.
-    quote: QuoteKind
+    quote: EnumQuoteKind
 
 
 @dataclass(frozen=True)
@@ -98,7 +97,7 @@ class Word:
     def splits(self) -> bool:
         """True when an unquoted expansion makes the shell word-split this word."""
         return any(
-            part.quote == "none" and ("$" in part.text or "`" in part.text)
+            part.quote == EnumQuoteKind.NONE and ("$" in part.text or "`" in part.text)
             for part in self.parts
         )
 
@@ -106,11 +105,11 @@ class Word:
     def is_plain(self) -> bool:
         """True when the word needs no expansion at all."""
         for part in self.parts:
-            if part.quote == "literal":
+            if part.quote == EnumQuoteKind.LITERAL:
                 continue
             if "$" in part.text or "`" in part.text:
                 return False
-            if part.quote == "none" and (
+            if part.quote == EnumQuoteKind.NONE and (
                 part.text.startswith("~")
                 or _UNQUOTED_GLOB.search(part.text)
                 or _UNQUOTED_BRACE.search(part.text)
@@ -120,7 +119,7 @@ class Word:
 
     def assignment(self) -> tuple[str, Word] | None:
         """``(NAME, value)`` when this word is a ``NAME=value`` assignment."""
-        if not self.parts or self.parts[0].quote != "none":
+        if not self.parts or self.parts[0].quote != EnumQuoteKind.NONE:
             return None
         head = self.parts[0].text
         match = _ASSIGNMENT.match(head)
@@ -128,7 +127,9 @@ class Word:
             return None
         name = head[: match.end() - 1]
         rest = head[match.end() :]
-        value_parts = ((WordPart(rest, "none"),) if rest else ()) + self.parts[1:]
+        value_parts = (
+            (WordPart(rest, EnumQuoteKind.NONE),) if rest else ()
+        ) + self.parts[1:]
         return name, Word(value_parts)
 
 
@@ -153,7 +154,14 @@ class HereDoc:
 
     def as_word(self) -> Word:
         """The body as a word, quoted the way the shell reads it."""
-        return Word((WordPart(self.body, "double" if self.expands else "literal"),))
+        return Word(
+            (
+                WordPart(
+                    self.body,
+                    EnumQuoteKind.DOUBLE if self.expands else EnumQuoteKind.LITERAL,
+                ),
+            )
+        )
 
 
 class Redirect:
@@ -184,7 +192,7 @@ class _Builder:
         self.parts: list[WordPart] = []
         self.started = False
 
-    def add(self, text: str, quote: QuoteKind) -> None:
+    def add(self, text: str, quote: EnumQuoteKind) -> None:
         self.started = True
         if not text:
             return
@@ -406,7 +414,9 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
             drop_next.target = word
         if isinstance(drop_next, HereDoc):
             drop_next.delimiter = word.text
-            drop_next.expands = all(part.quote == "none" for part in word.parts)
+            drop_next.expands = all(
+                part.quote == EnumQuoteKind.NONE for part in word.parts
+            )
             pending_heredocs.append(drop_next)
         if drop_next is not False:
             drop_next = False
@@ -424,7 +434,7 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
                 i += 2
                 continue
             if i + 1 < n:
-                builder.add(command[i + 1], "literal")
+                builder.add(command[i + 1], EnumQuoteKind.LITERAL)
             i += 2
             continue
         if ch == "#" and not builder.started:
@@ -440,7 +450,8 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
             # An all-digit word glued to the operator is its file descriptor.
             fd: str | None = None
             if builder.started and all(
-                part.quote == "none" and part.text.isdigit() for part in builder.parts
+                part.quote == EnumQuoteKind.NONE and part.text.isdigit()
+                for part in builder.parts
             ):
                 taken = builder.take()
                 fd = taken.text if taken is not None else None
@@ -481,24 +492,24 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
             end = command.find("'", i + 1)
             if end < 0:
                 raise ShellSyntaxError("unterminated single quote")
-            builder.add(command[i + 1 : end], "literal")
+            builder.add(command[i + 1 : end], EnumQuoteKind.LITERAL)
             i = end + 1
             continue
         if ch == '"':
             text, i = _scan_double(command, i + 1)
-            builder.add(text, "double")
+            builder.add(text, EnumQuoteKind.DOUBLE)
             continue
         if ch == "$":
             end = _scan_dollar(command, i)
-            builder.add(command[i:end], "none")
+            builder.add(command[i:end], EnumQuoteKind.NONE)
             i = end
             continue
         if ch == "`":
             end = _scan_backtick(command, i)
-            builder.add(command[i:end], "none")
+            builder.add(command[i:end], EnumQuoteKind.NONE)
             i = end
             continue
-        builder.add(ch, "none")
+        builder.add(ch, EnumQuoteKind.NONE)
         i += 1
     finish_word()
     return tokens
@@ -591,7 +602,7 @@ def unquoted(token: str) -> Word:
     hand a token here to judge it the way the shell reads an unquoted word:
     ``~`` and parameters expand, and a glob is refused.
     """
-    return Word((WordPart(token, "none"),))
+    return Word((WordPart(token, EnumQuoteKind.NONE),))
 
 
 def shadowed_names(commands: Iterable[Sequence[str]]) -> set[str]:
@@ -637,11 +648,11 @@ def expand_word(word: Word, env: Mapping[str, str | None]) -> str:
     """
     out: list[str] = []
     for index, part in enumerate(word.parts):
-        if part.quote == "literal":
+        if part.quote == EnumQuoteKind.LITERAL:
             out.append(part.text)
             continue
         text = part.text
-        if part.quote == "none":
+        if part.quote == EnumQuoteKind.NONE:
             if index == 0 and text.startswith("~"):
                 head, sep, tail = text.partition("/")
                 if head == "~":
@@ -655,7 +666,7 @@ def expand_word(word: Word, env: Mapping[str, str | None]) -> str:
                         raise UnresolvableWord(f"`{head}` names no known user")
                 text = expanded + sep + tail
         expanded_text = _expand_parameters(text, env)
-        if part.quote == "none":
+        if part.quote == EnumQuoteKind.NONE:
             # Judged on the text as written, with its parameters taken out:
             # a pattern the shell would match against the filesystem.
             written = _PARAMETER.sub("", text)

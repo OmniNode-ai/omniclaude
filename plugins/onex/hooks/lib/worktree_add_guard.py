@@ -54,6 +54,8 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
+
 _HOOKS_LIB = Path(__file__).parent
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
@@ -223,7 +225,7 @@ def _join(base: Path | None, raw: str, what: str, unknown: str) -> Path:
 
 
 def _literal(text: str) -> Word:
-    return Word((WordPart(text, "literal"),))
+    return Word((WordPart(text, EnumQuoteKind.LITERAL),))
 
 
 @dataclass

@@ -29,6 +29,10 @@ node_version:
   minor: 1
   patch: 0
 
+# Runtime profile. A command-consuming contract declares its owning runtime
+# profile explicitly (OMN-20560); main is what every omniclaude contract names.
+runtime_profiles: [main]
+
 # Node type
 node_type: EFFECT_GENERIC
 
