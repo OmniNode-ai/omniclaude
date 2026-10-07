@@ -27,7 +27,7 @@ Exported Components:
 """
 
 import importlib
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .handlers import HandlerGitSubprocess
@@ -58,7 +58,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> object:
     if name in _EXPORTS:
         submodule = _EXPORTS[name]
         module = importlib.import_module(f"{__name__}.{submodule}")
