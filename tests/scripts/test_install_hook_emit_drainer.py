@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import plistlib
 import shutil
 import stat
 import subprocess
@@ -206,6 +207,33 @@ def test_dry_run_does_not_build_or_mutate_launch_agent(tmp_path: Path) -> None:
     assert not (Path(env["CLAUDE_PLUGIN_DATA"]) / "builder-ran").exists()
     assert not (home / "Library" / "LaunchAgents").exists()
     assert not Path(env["FAKE_LAUNCHCTL_LOG"]).exists()
+
+
+def test_dry_run_renders_log_paths_under_home(tmp_path: Path) -> None:
+    installer, env, builder, home = _prepare_installer(tmp_path)
+    _write_builder(builder)
+
+    result = _run(installer, env, "--dry-run")
+
+    assert result.returncode == 0, result.stderr
+    log_path = (
+        home / ".omninode" / "hook-emit-drainer" / "logs" / "hook-emit-drainer.log"
+    )
+    assert result.stdout.count(f"<string>{log_path}</string>") == 2
+    rendered = plistlib.loads(result.stdout[result.stdout.index("<?xml") :].encode())
+    for key in ("StandardOutPath", "StandardErrorPath"):
+        assert not rendered[key].startswith(env["OMNI_HOME"])
+
+
+def test_install_creates_home_log_dir_not_omni_home_log_dir(tmp_path: Path) -> None:
+    installer, env, builder, home = _prepare_installer(tmp_path)
+    _write_builder(builder)
+
+    result = _run(installer, env)
+
+    assert result.returncode == 0, result.stderr
+    assert (home / ".omninode" / "hook-emit-drainer" / "logs").is_dir()
+    assert not (Path(env["OMNI_HOME"]) / ".onex_state" / "hooks" / "logs").exists()
 
 
 def test_builder_failed_sync_preserves_previous_usable_venv(tmp_path: Path) -> None:
