@@ -822,7 +822,18 @@ def _broker_answers_behind_the_head(
     """
     if len(pending) < 2:
         return None
-    candidate = pending[1]
+    # The probe asks about a DIFFERENT event class when the batch holds one
+    # (OMN-17427). A record of the head's own class fails for the head's own
+    # reason, so publishing it measures the class, not the broker: a burst of
+    # one refused class read as "broker unreachable" for six and a half hours
+    # on 2026-10-06/07 and held 24,530 authorized records behind it. When the
+    # whole batch is the head's class, the record directly behind is still the
+    # probe, which keeps a dead broker a stall rather than a dead-letter run.
+    head_type = pending[0].record.event_type
+    candidate = next(
+        (entry for entry in pending[1:] if entry.record.event_type != head_type),
+        pending[1],
+    )
     if emitter.publish(candidate.record):
         return candidate
     return None

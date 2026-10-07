@@ -94,6 +94,18 @@ LANES_SUBDIR = ("hooks", "lanes")
 # be cleared at all.
 RESOLUTIONS_FILENAME = "resolutions.jsonl"
 
+# Per-session index of lane ids [OMN-17427]. ``close_lane`` runs on every
+# ``SubagentStop`` and only ever needs the closing session's own records, but it
+# read the whole registry to find them: 59,609 files on the operator Mac by
+# 2026-10-07, 16 s idle and up to the 120 s hook timeout under load, once per
+# workflow agent. ``open_lane`` appends each lane id to its session's index,
+# and the close reads only the records that index names. Records written before
+# the index existed are indexed once, by the first close that finds no
+# ``_SESSION_INDEX_BUILT`` marker. The index lives in a subdirectory, so
+# ``load_records``'s ``*.json`` glob never sees it.
+_SESSION_INDEX_SUBDIR = "sessions"
+_SESSION_INDEX_BUILT = ".built"
+
 # The harness spells a named teammate's agent id as ``a`` + the lane name
 # + ``-`` + 16 hex (``aomn18685-sibling-guard-build-1425-a4c6d53620bcd3eb``),
 # and an anonymous subagent's as ``a`` + hex with no name in it at all.
@@ -378,6 +390,76 @@ def _write_record(record: ModelLaneRecord) -> Path | None:
     return path
 
 
+def _session_index_path(directory: Path, session_id: str) -> Path:
+    digest = hashlib.sha256(session_id.encode(errors="replace")).hexdigest()[:24]
+    return directory / _SESSION_INDEX_SUBDIR / f"{digest}.ids"
+
+
+def _index_lane(directory: Path, session_id: str, lane_id: str) -> None:
+    """Append *lane_id* to its session's index. Never raises."""
+
+    path = _session_index_path(directory, session_id)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(lane_id + "\n")
+    except OSError:
+        return
+
+
+def _ensure_session_index(directory: Path) -> None:
+    """Index every OPEN record once, for records written before the index.
+
+    Only OPEN records are indexed: a close only ever selects among OPEN
+    records, so a CLOSED one in the index would be read and discarded. A
+    duplicate line from two hooks building at once is harmless, because the
+    reader de-duplicates.
+    """
+
+    marker = directory / _SESSION_INDEX_SUBDIR / _SESSION_INDEX_BUILT
+    if marker.exists():
+        return
+    for record in load_records():
+        if record.status is EnumLaneStatus.OPEN:
+            _index_lane(directory, record.session_id, record.lane_id)
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except OSError:
+        return
+
+
+def _session_records(session_id: str) -> tuple[ModelLaneRecord, ...]:
+    """Read the records the session's index names, and no others."""
+
+    directory = lanes_dir()
+    if directory is None:
+        return ()
+    _ensure_session_index(directory)
+    try:
+        lines = _session_index_path(directory, session_id).read_text(encoding="utf-8")
+    except OSError:
+        return ()
+    records: list[ModelLaneRecord] = []
+    seen: set[str] = set()
+    for lane_id in lines.split():
+        if lane_id in seen:
+            continue
+        seen.add(lane_id)
+        try:
+            payload = json.loads(
+                (directory / f"{lane_id}.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        record = ModelLaneRecord.from_json(payload)
+        if record is not None and record.session_id == session_id:
+            records.append(record)
+    return tuple(records)
+
+
 def load_records() -> tuple[ModelLaneRecord, ...]:
     """Read every lane record. Unreadable/foreign files are skipped."""
 
@@ -544,8 +626,10 @@ def open_lane(event: dict[str, Any]) -> ModelLaneRecord | None:
         tickets=_tickets(tool_input),
         prompt_digest=_prompt_digest(tool_input),
     )
-    if _write_record(record) is None:
+    path = _write_record(record)
+    if path is None:
         return None
+    _index_lane(path.parent, session_id, record.lane_id)
     return record
 
 
@@ -612,7 +696,7 @@ def close_lane(
     """
 
     closed_at = _now().isoformat()
-    target = _select_close_target(load_records(), session_id, lane_name)
+    target = _select_close_target(_session_records(session_id), session_id, lane_name)
     if target is None:
         lane_id = f"unattributed-{_lane_id(session_id, lane_name, closed_at)[5:]}"
         target = ModelLaneRecord(

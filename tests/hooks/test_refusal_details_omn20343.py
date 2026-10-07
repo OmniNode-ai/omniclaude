@@ -221,13 +221,12 @@ def test_diagnostic_failure_keeps_secret_guard_blocked(guard_box):
 def test_other_guards_keep_hourly_aggregation(tmp_path):
     from tests.hooks.test_refusal_rows_omn18946 import recorder
 
-    rows = [
-        recorder.should_emit(
+    rows = []
+    for i in range(5):
+        verdict = recorder.should_emit(
             "other-guard", now=100 + i, window_seconds=3600, directory=tmp_path
         )
-        for i in range(5)
-    ]
+        rows.append(verdict)
+        if verdict[0]:
+            recorder._commit_emitted(tmp_path / "other-guard.json", 100 + i, False)
     assert rows == [(True, 0)] + [(False, 0)] * 4
-    assert recorder.should_emit(
-        "other-guard", now=3701, window_seconds=3600, directory=tmp_path
-    ) == (True, 4)

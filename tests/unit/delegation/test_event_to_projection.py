@@ -34,6 +34,8 @@ from omnimarket.projection import SqliteDatabaseAdapter
 from omniclaude.delegation.bus_bootstrap import bootstrap_delegation_bus
 from omniclaude.delegation.emitter import emit_task_delegated
 
+_TENANT_ID = "omninode"
+
 
 def _drive_pipeline(
     adapter: SqliteDatabaseAdapter,
@@ -58,6 +60,7 @@ def _drive_pipeline(
         bus = await bootstrap_delegation_bus(db_adapter=adapter)
         try:
             await emit_task_delegated(
+                tenant_id=_TENANT_ID,
                 bus=bus,
                 correlation_id=correlation_id,
                 session_id=session_id,
@@ -187,6 +190,7 @@ class TestEventToProjectionFlow:
             try:
                 for n in range(2):
                     await emit_task_delegated(
+                        tenant_id=_TENANT_ID,
                         bus=bus,
                         correlation_id=f"multi-{n}",
                         session_id="session-multi",
@@ -310,6 +314,7 @@ class TestEventToProjectionFlow:
             bus = await bootstrap_delegation_bus(db_adapter=None)
             try:
                 await emit_task_delegated(
+                    tenant_id=_TENANT_ID,
                     bus=bus,
                     correlation_id="no-adapter-001",
                     session_id="session-no-adapter",

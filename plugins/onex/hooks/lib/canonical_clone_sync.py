@@ -28,8 +28,8 @@ Why this exists
 The operator ruled on 2026-09-25 that lanes query the canonical clones instead
 of spending GitHub API reads, which only works while the clones are current.
 The only automatic sync on the Mac at the time was the OMN-17190 PostToolUse
-tick, which delegates to ``reconcile-host.sh``. That run couples the clone pull
-to the venv reconcile: on 2026-09-25 one run sat inside the venv step from
+tick, which delegates to ``onex-host-reconcile`` (formerly ``reconcile-host.sh``).
+That run couples the clone pull to the venv reconcile: on 2026-09-25 one run sat inside the venv step from
 13:25Z, every tick after it declined, and no clone moved for over an hour. This
 engine is git only, so nothing it waits on can hold a clone back.
 
@@ -854,6 +854,16 @@ def sync_clone(clone: Path) -> CloneResult:
     result.upstream = f"{remote}/{upstream_branch}"
     url = run_git(clone, "remote", "get-url", remote).out
     result.repo = repo_slug_of_url(url) if url else None
+    if url and result.repo is None:
+        # OMN-17427: a clone whose upstream is not a GitHub repository is not a
+        # registry clone (a personal project parked under $OMNI_HOME, say).
+        # Fetching it only turned an expired third-party token into a FAILED
+        # result on every timer run, and a launchd job that is always red hides
+        # the real failures. Named and left alone; the remote is never tried.
+        return refuse(
+            f"remote {remote!r} is not a GitHub repository, so this is not a "
+            "registry clone; nothing fetched"
+        )
 
     git_dir_out = run_git(clone, "rev-parse", "--absolute-git-dir")
     if git_dir_out.code != 0 or not git_dir_out.out:

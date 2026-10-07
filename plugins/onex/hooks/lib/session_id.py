@@ -32,17 +32,22 @@ _LOOKUP_ORDER: tuple[str, ...] = (
 
 
 @overload
-def resolve_session_id() -> str: ...
+def resolve_session_id(*, env: dict[str, str] | None = None) -> str: ...
 @overload
-def resolve_session_id(*, default: str) -> str: ...
+def resolve_session_id(*, default: str, env: dict[str, str] | None = None) -> str: ...
 @overload
-def resolve_session_id(*, default: None) -> str | None: ...
+def resolve_session_id(
+    *, default: None, env: dict[str, str] | None = None
+) -> str | None: ...
 
 
-def resolve_session_id(*, default: str | None = "unknown") -> str | None:
+def resolve_session_id(
+    *, default: str | None = "unknown", env: dict[str, str] | None = None
+) -> str | None:
     """Return the canonical Claude Code session ID, or `default` if none is set."""
+    environment = os.environ if env is None else env
     for name in _LOOKUP_ORDER:
-        value = os.environ.get(name, "")
+        value = environment.get(name, "").strip()
         if value:
             return value
     return default

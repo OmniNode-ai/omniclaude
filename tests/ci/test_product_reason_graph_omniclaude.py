@@ -423,6 +423,31 @@ def test_shadow_workflow_reason_graph_needs_only_shadow_subchecks() -> None:
 
 
 @pytest.mark.unit
+def test_shadow_tests_job_is_sharded_under_its_timeout() -> None:
+    # OMN-17427: single-job pytest measured 18m49s against a 20m ceiling;
+    # shard the suite instead of raising the timeout.
+    jobs = _load_yaml(_SHADOW_WF)["jobs"]
+    job = jobs["tests-shadow"]
+    strategy = job.get("strategy", {})
+    assert strategy.get("fail-fast") is False
+    split = strategy["matrix"]["split"]
+    assert isinstance(split, list)
+    assert len(split) >= 2
+    assert all(type(group) is int for group in split)
+    assert len(set(split)) == len(split)
+
+    run = next(
+        step["run"] for step in job["steps"] if "uv run pytest" in step.get("run", "")
+    )
+    assert f"--splits {len(split)}" in run
+    assert "--group ${{ matrix.split }}" in run
+    assert '-m "unit and not integration"' in run
+    assert "tests/" in run
+    assert job["timeout-minutes"] == 20
+    assert job["name"].startswith("tests+coverage (shadow)")
+
+
+@pytest.mark.unit
 def test_shadow_workflow_never_triggers_occ_request() -> None:
     text = _SHADOW_WF.read_text(encoding="utf-8")
     # No EXECUTABLE reference to the OCC request minter (comments may name it for
