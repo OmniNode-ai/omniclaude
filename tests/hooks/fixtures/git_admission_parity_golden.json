@@ -113,7 +113,7 @@
     "registry:19": {
       "blocked": false,
       "notes": [
-        "`git reset` targets /tmp, which is not the shared registry clone"
+        "`git reset` targets <TMP>/registry:19/sibling, which is not the shared registry clone"
       ],
       "reason": ""
     },
