@@ -91,7 +91,11 @@ def test_recorder_failed_append_can_retry_immediately(
     assert recorder.main(ARGS) == 0
     assert len(rows) == 2
     assert all("suppressed_since_last_row=7" in row for row in rows)
-    assert json.loads(state.read_text()) == {"last_emitted": NOW, "suppressed": 0}
+    assert json.loads(state.read_text()) == {
+        "last_emitted": NOW,
+        "suppressed": 0,
+        "attempts": 0,
+    }
     assert recorder.main(ARGS) == 0
     assert len(rows) == 2
     assert json.loads(state.read_text()) == {"last_emitted": NOW, "suppressed": 1}

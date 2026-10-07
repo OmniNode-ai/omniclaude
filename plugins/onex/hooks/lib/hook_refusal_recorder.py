@@ -614,7 +614,9 @@ def main(argv: list[str] | None = None) -> int:
     attempts = 0
     if repeated_secret:
         try:
-            attempts = max(0, int(json.loads(state_path.read_text()).get("attempts", 0)))
+            attempts = max(
+                0, int(json.loads(state_path.read_text()).get("attempts", 0))
+            )
         except (OSError, ValueError, TypeError, AttributeError):
             pass
         attempts += 1
