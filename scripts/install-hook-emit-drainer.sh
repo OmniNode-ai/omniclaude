@@ -342,7 +342,9 @@ if [[ "${1:-}" == "--dry-run" ]]; then
 fi
 
 mkdir -p "${LAUNCH_AGENTS}"
-mkdir -p "${OMNI_HOME_RESOLVED}/.onex_state/hooks/logs"
+# launchd's xpcproxy cannot create logs on the external OMNI_HOME volume
+# (sandbox deny, EX_CONFIG 78), so keep its log directory under HOME.
+mkdir -p "${HOME}/.omninode/hook-emit-drainer/logs"
 
 had_previous_plist=0
 if [[ -e "${DST_PLIST}" ]]; then
@@ -426,7 +428,7 @@ echo "Loaded ${LABEL}."
 echo
 echo "Verify:"
 echo "  bash omniclaude/scripts/install-hook-emit-drainer.sh --status"
-echo "  tail -f ${OMNI_HOME_RESOLVED}/.onex_state/hooks/logs/hook-emit-drainer.log"
+echo "  tail -f ${HOME}/.omninode/hook-emit-drainer/logs/hook-emit-drainer.log"
 echo
 echo "Expect at most ONE hook_emit_drainer.py process:"
 echo "  pgrep -fl hook_emit_drainer.py"

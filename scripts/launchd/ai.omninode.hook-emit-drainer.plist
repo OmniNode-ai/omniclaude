@@ -91,9 +91,11 @@
   <key>WorkingDirectory</key>
   <string>__OMNI_HOME__</string>
 
+  <!-- launchd cannot create logs on the external OMNI_HOME volume:
+       xpcproxy sandbox deny causes EX_CONFIG 78. Keep logs under HOME. -->
   <key>StandardOutPath</key>
-  <string>__OMNI_HOME__/.onex_state/hooks/logs/hook-emit-drainer.log</string>
+  <string>__HOME__/.omninode/hook-emit-drainer/logs/hook-emit-drainer.log</string>
   <key>StandardErrorPath</key>
-  <string>__OMNI_HOME__/.onex_state/hooks/logs/hook-emit-drainer.log</string>
+  <string>__HOME__/.omninode/hook-emit-drainer/logs/hook-emit-drainer.log</string>
 </dict>
 </plist>
