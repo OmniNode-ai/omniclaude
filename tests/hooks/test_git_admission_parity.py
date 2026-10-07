@@ -55,7 +55,7 @@ REGISTRY_COMMANDS = [
     "git reset 'unterminated",
     "printf 'unterminated",
     "git -C . reset --hard",
-    "cd /tmp && git reset --hard",
+    "cd ../sibling && git reset --hard",
 ]
 RESTORE_COMMANDS = [
     "git restore file.txt",
@@ -131,6 +131,13 @@ def observe_cases(
                     registry_root = case_dir / "registry"
                     (registry_root / ".git").mkdir(parents=True)
                     (registry_root / ".git" / "HEAD").write_text(
+                        "ref: refs/heads/main\n"
+                    )
+                    # A second repository beside the registry, so a command that
+                    # leaves the registry reaches a git root inside tmp_path on
+                    # every host (a stray /tmp/.git must not change a verdict).
+                    (case_dir / "sibling" / ".git").mkdir(parents=True)
+                    (case_dir / "sibling" / ".git" / "HEAD").write_text(
                         "ref: refs/heads/main\n"
                     )
                     case_patch.setenv("OMNI_HOME", str(registry_root))
