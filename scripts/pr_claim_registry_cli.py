@@ -27,11 +27,10 @@ import argparse
 import os
 import sys
 from collections.abc import Callable
-from datetime import UTC, datetime
 from types import ModuleType
 
 
-def _resolve_session_id_fn() -> object:
+def _resolve_session_id_fn() -> Callable[..., str | None]:
     """Import the canonical session-id resolver (repo-root path may be needed)."""
     try:
         from plugins.onex.hooks.lib.session_id import resolve_session_id
@@ -82,27 +81,35 @@ def _cmd_claim(
     is_active: Callable[[dict[str, object]], bool],
     args: argparse.Namespace,
 ) -> int:
-    lane_id = args.lane or guard.resolve_lane_id()  # type: ignore[attr-defined]
+    lane_id = guard.resolve_lane_id()  # type: ignore[attr-defined]
     if not lane_id:
         print(
-            "Error: no lane identity could be resolved and --lane was not given.\n"
+            "Error: no lane identity could be resolved by the ownership guard.\n"
             "A claim without a lane cannot authorize a mutation — the ownership "
             "guard treats it as INDETERMINATE. Export ONEX_LANE_ID (or ONEX_LANE)=<your-lane-handle> "
-            "(the handle you registered in the rolling work ledger) or pass --lane.",
+            "(the handle you registered in the rolling work ledger) in the harness "
+            "environment before claiming. --lane alone cannot establish hook identity.",
             file=sys.stderr,
         )
         return 1
 
+    if args.lane and args.lane != lane_id:
+        print(
+            f"Notice: --lane '{args.lane}' resolves to '{lane_id}' in this session; "
+            "recording the guard-resolved lane. Use that resolved id for release.",
+            file=sys.stderr,
+        )
+
     resolve_session_id = _resolve_session_id_fn()
-    run_id = args.run_id or resolve_session_id(  # type: ignore[operator]
-        default=datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    )
+    session_id = resolve_session_id(default=None)
+    run_id = args.run_id or guard.resolve_run_id() or lane_id  # type: ignore[attr-defined]
 
     acquired = registry.acquire(  # type: ignore[attr-defined]
         pr_key=args.pr_key,
         run_id=run_id,
         action=args.action,
         lane_id=lane_id,
+        session_id=session_id,
     )
     if not acquired:
         existing = registry.get_claim(args.pr_key)  # type: ignore[attr-defined]
@@ -192,10 +199,12 @@ def main(argv: list[str] | None = None) -> int:
     claim_parser.add_argument(
         "--lane",
         default=None,
-        help="Lane handle (default: resolved from the environment)",
+        help="Requested lane handle (rewritten to the guard-resolved identity with a notice)",
     )
     claim_parser.add_argument(
-        "--run-id", default=None, help="Run id (default: session id)"
+        "--run-id",
+        default=None,
+        help="Run id (default: ONEX_RUN_ID, then full session id, then resolved lane)",
     )
 
     release_parser = sub.add_parser("release", help="Release a claim held by a run")
