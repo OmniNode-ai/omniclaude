@@ -146,13 +146,14 @@ class _Workspace:
         self.reconciler = self.infra_scripts / "reconcile-host.sh"
         self.reconcile_log = root / "reconcile.log"
         self.set_reconciler_exit(0)
-        # OMN-20670: the canonical reconciler is the ``onex-host-reconcile``
-        # console script that omnibase_internal ships into the dispatch venv.
+        # OMN-20670 / OMN-17427: the canonical reconciler is the
+        # ``onex-host-reconcile`` console script of the omnibase_internal
+        # project, installed into that clone's own ``.venv`` (by its
+        # ``onex-internal-clone-sync`` timer) -- never into the dispatch venv.
         # It is NOT installed by default here, so every pre-existing test keeps
         # exercising the legacy script path; the tests below install it.
-        self.canonical = (
-            self.root / ".onex-dispatch-venv" / "bin" / "onex-host-reconcile"
-        )
+        self.internal = root / "omnibase_internal"
+        self.canonical = self.internal / ".venv" / "bin" / "onex-host-reconcile"
         self.canonical_log = root / "canonical.log"
 
     def set_reconciler_exit(self, code: int) -> None:
@@ -554,17 +555,120 @@ def test_no_reconciler_at_all_names_the_canonical_command(ws: _Workspace) -> Non
     assert "onex-host-reconcile" in status
 
 
-def test_the_dispatch_venv_override_locates_the_canonical_command(
+def test_the_declared_internal_home_locates_the_canonical_command(
     ws: _Workspace, tmp_path: Path
 ) -> None:
+    """OMNIBASE_INTERNAL_HOME is the one declaration, and it wins."""
     ws.remove_reconciler()
-    venv = tmp_path / "other-venv"
-    ws.canonical = venv / "bin" / "onex-host-reconcile"
+    declared = tmp_path / "elsewhere" / "omnibase_internal"
+    ws.canonical = declared / ".venv" / "bin" / "onex-host-reconcile"
     ws.install_canonical(0)
 
-    ws.run_tick(ONEX_DISPATCH_VENV=str(venv))
+    ws.run_tick(OMNIBASE_INTERNAL_HOME=str(declared))
 
     assert ws.canonical_calls()
+
+
+def test_a_declared_internal_home_is_not_searched_past(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    """A declaration that holds no command is an ABSENT reconciler, not a guess.
+
+    The sibling clone holds the command here, and the declaration points
+    somewhere else: falling through to the sibling would run a clone the
+    operator did not name.
+    """
+    ws.remove_reconciler()
+    ws.install_canonical(0)
+    empty = tmp_path / "declared-but-empty"
+    empty.mkdir()
+
+    ws.run_tick(OMNIBASE_INTERNAL_HOME=str(empty))
+
+    assert not ws.canonical_calls()
+    status = ws.status_file.read_text(encoding="utf-8")
+    assert "DRIFT: no workspace reconciler" in status
+    assert str(empty / ".venv" / "bin" / "onex-host-reconcile") in status
+
+
+def test_the_dispatch_venv_is_not_where_the_command_is_looked_for(
+    ws: _Workspace,
+) -> None:
+    """The 2026-10-07 defect: the tick looked in a venv that never held it."""
+    ws.remove_reconciler()
+    in_dispatch_venv = ws.root / ".onex-dispatch-venv" / "bin" / "onex-host-reconcile"
+    in_dispatch_venv.parent.mkdir(parents=True)
+    in_dispatch_venv.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    in_dispatch_venv.chmod(0o755)
+
+    ws.run_tick()
+
+    status = ws.status_file.read_text(encoding="utf-8")
+    assert "DRIFT: no workspace reconciler" in status
+    assert ".onex-dispatch-venv" not in status
+
+
+def test_a_stale_sibling_beside_a_symlinked_omni_home_is_passed_over(
+    tmp_path: Path,
+) -> None:
+    """h201's shape: OMNI_HOME is a symlink, and a stale clone sits beside the link.
+
+    the registry root under the home directory is a symlink into a data volume;
+    the ``omnibase_internal`` beside the link is an old copy with no command, and
+    the one beside the link's target is the clone the timer keeps current. The first directory is the wrong answer; the
+    first directory that holds the command is the right one.
+    """
+    real = tmp_path / "data"
+    ws = _Workspace(real)
+    ws.remove_reconciler()
+    ws.install_canonical(0)
+    link_dir = tmp_path / "home"
+    link_dir.mkdir()
+    link = link_dir / ws.root.name
+    link.symlink_to(ws.root)
+    stale = link_dir / "omnibase_internal"
+    stale.mkdir()
+
+    ws.run_tick(OMNI_HOME=str(link))
+
+    assert ws.canonical_calls(), "the clone beside the resolved target was not used"
+    assert "in sync" in ws.status_file.read_text(encoding="utf-8")
+
+
+def test_the_sibling_as_written_wins_when_it_holds_the_command(
+    tmp_path: Path,
+) -> None:
+    real = tmp_path / "data"
+    ws = _Workspace(real)
+    ws.remove_reconciler()
+    link_dir = tmp_path / "home"
+    link_dir.mkdir()
+    link = link_dir / ws.root.name
+    link.symlink_to(ws.root)
+    written = link_dir / "omnibase_internal" / ".venv" / "bin" / "onex-host-reconcile"
+    written.parent.mkdir(parents=True)
+    log = tmp_path / "written.log"
+    written.write_text(f'#!/usr/bin/env bash\necho ran >> "{log}"\n', encoding="utf-8")
+    written.chmod(0o755)
+    ws.install_canonical(0)
+
+    ws.run_tick(OMNI_HOME=str(link))
+
+    assert log.exists(), "the sibling as written was passed over"
+    assert not ws.canonical_calls()
+
+
+def test_a_non_executable_command_is_not_run(ws: _Workspace) -> None:
+    ws.remove_reconciler()
+    ws.install_canonical(0)
+    ws.canonical.chmod(0o644)
+
+    ws.run_tick()
+
+    assert not ws.canonical_calls()
+    assert "DRIFT: no workspace reconciler" in ws.status_file.read_text(
+        encoding="utf-8"
+    )
 
 
 # --------------------------------------------------------------------------- #
