@@ -1,0 +1,200 @@
+{
+  "cases": {
+    "fetch:0": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED (OMN-20495): `git fetch` against GitHub from a lane. Remote `origin` is OmniNode-ai/omniclaude. origin refs here are shared with the canonical clone and kept current by canonical-clone-sync (merge-triggered + 3-min); use origin/<branch> as is, or run `python3 <ENGINE> refresh OmniNode-ai/omniclaude --wait`. git push and non-GitHub remotes are not gated. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "fetch:1": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED (OMN-20495): `git pull` against GitHub from a lane. Remote `origin` is OmniNode-ai/omniclaude. origin refs here are shared with the canonical clone and kept current by canonical-clone-sync (merge-triggered + 3-min); use origin/<branch> as is, or run `python3 <ENGINE> refresh OmniNode-ai/omniclaude --wait --branch main`. git push and non-GitHub remotes are not gated. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "fetch:2": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED (OMN-20495): `git ls-remote` against GitHub from a lane. Remote `origin` is OmniNode-ai/omniclaude. origin refs here are shared with the canonical clone and kept current by canonical-clone-sync (merge-triggered + 3-min); use origin/<branch> as is, or run `python3 <ENGINE> refresh OmniNode-ai/omniclaude --wait`. git push and non-GitHub remotes are not gated. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "fetch:3": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED (OMN-20495): `git remote update` against GitHub from a lane. Remote `origin` is OmniNode-ai/omniclaude. origin refs here are shared with the canonical clone and kept current by canonical-clone-sync (merge-triggered + 3-min); use origin/<branch> as is, or run `python3 <ENGINE> refresh OmniNode-ai/omniclaude --wait`. git push and non-GitHub remotes are not gated. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "fetch:4": {
+      "blocked": false,
+      "notes": [
+        "`git push` targets <TMP>/fetch:4/repo, which is not the shared registry clone"
+      ],
+      "reason": ""
+    },
+    "payload:0": {
+      "exit": 2,
+      "stdout": {
+        "decision": "block",
+        "reason": "BLOCKED: the PreToolUse payload for this Bash call is not readable JSON, so it cannot be checked for a shared-tree git mutation (Expecting value: line 1 column 1 (char 0))."
+      }
+    },
+    "payload:1": {
+      "exit": 2,
+      "stdout": {
+        "decision": "block",
+        "reason": "BLOCKED: the PreToolUse payload for this Bash call is not a JSON object, so it cannot be checked for a shared-tree git mutation."
+      }
+    },
+    "payload:2": {
+      "exit": 0,
+      "stdout": null
+    },
+    "payload:3": {
+      "exit": 0,
+      "stdout": null
+    },
+    "payload:4": {
+      "exit": 0,
+      "stdout": null
+    },
+    "registry:0": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git reset` in <TMP>/registry:0/registry, the shared registry clone (OMN-18798, Operating Rule 19). Many concurrent lanes work in this ONE tree, so a command that moves it takes their work with it: `git reset` rewrites the index, and a mixed or hard reset rewrites the working tree with it -- returning a peer lane's staged file to untracked and dropping unpushed commits from the local branch. Twenty resets to origin/main in this clone on 2026-09-18 re-orphaned a 1,258-row ledger-roll archive and twice took a peer's work. Use a sanctioned alternative instead -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. Reads are never gated, and neither is `git fetch`, `git merge --ff-only` or `git pull --ff-only`. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:1": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git clean` in <TMP>/registry:1/registry, the shared registry clone (OMN-18798, Operating Rule 19). Many concurrent lanes work in this ONE tree, so a command that moves it takes their work with it: `git clean` deletes untracked files outright, and in this tree the untracked files at any moment include another lane's in-flight work and a freshly rolled ledger archive that no commit yet holds. Use a sanctioned alternative instead -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. Reads are never gated, and neither is `git fetch`, `git merge --ff-only` or `git pull --ff-only`. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:10": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git push` in <TMP>/registry:10/registry, the shared registry clone (OMN-18798, Operating Rule 19). Many concurrent lanes work in this ONE tree, so a command that moves it takes their work with it: a FORCE push from this clone can destroy published append-only coordination rows on the remote. Every other verb this guard refuses costs the tree's UNCOMMITTED state; this one rewrites history that is already safe, and after a ledger roll the remote copy is the only surviving one. Nothing here needs it: append rows through onex-commit-lock, sync with `git merge --ff-only origin/main`, push to a FRESH branch, open a pull request and land it by squash. Use a sanctioned alternative instead -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. Reads are never gated, and neither is `git fetch`, `git merge --ff-only` or `git pull --ff-only`. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:11": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git checkout` in <TMP>/registry:11/registry, the shared registry clone (OMN-18798, Operating Rule 19). Many concurrent lanes work in this ONE tree, so a command that moves it takes their work with it: the path operand resolves to docs/tracking/ROLLING_WORK_LEDGER.md, the append-only coordination surface every lane appends to through onex-commit-lock. A path-scoped restore is the Operating Rule 17 recipe and is allowed on every other path, but on THIS one it returns the file to HEAD -- not to what was in the working tree -- so every row appended since the last commit is discarded with no diff, no conflict and no failure. Rows were lost exactly this way in the 14:46-14:55Z window on 2026-09-19. Re-append the row through ledger_lock.py instead, or read the old version without writing the tree: git show <ref>:<path>. Use a sanctioned alternative instead -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. Reads are never gated, and neither is `git fetch`, `git merge --ff-only` or `git pull --ff-only`. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:12": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git branch` in <TMP>/registry:12/registry, the shared registry clone (OMN-18798, Operating Rule 19). Many concurrent lanes work in this ONE tree, so a command that moves it takes their work with it: this deletes or renames 'main', the branch the shared clone is checked out on and every other lane is committing to. Use a sanctioned alternative instead -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. Reads are never gated, and neither is `git fetch`, `git merge --ff-only` or `git pull --ff-only`. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:13": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git branch` in <TMP>/registry:13/registry, the shared registry clone (OMN-18798, Operating Rule 19). Many concurrent lanes work in this ONE tree, so a command that moves it takes their work with it: `git branch feature` CREATES a branch in the clone every lane shares. It moves nothing by itself, which is why it reads as harmless -- but a branch created here exists to be checked out, and the moment it is, onex-commit-lock refuses EVERY other lane's ledger commit with exit 78, STRANDED CLONE, and the only signal is an exit code on somebody else's terminal. Create the branch with the worktree that will hold it instead: git -C $OMNI_HOME/<repo> worktree add $OMNI_HOME/omni_worktrees/<ticket>/<repo> -b <branch>. Use a sanctioned alternative instead -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. Reads are never gated, and neither is `git fetch`, `git merge --ff-only` or `git pull --ff-only`. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:14": {
+      "blocked": false,
+      "notes": [],
+      "reason": ""
+    },
+    "registry:15": {
+      "blocked": false,
+      "notes": [],
+      "reason": ""
+    },
+    "registry:16": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:17": {
+      "blocked": false,
+      "notes": [
+        "untokenisable command naming no refused git verb"
+      ],
+      "reason": ""
+    },
+    "registry:18": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git reset` in <TMP>/registry:18/registry, the shared registry clone (OMN-18798, Operating Rule 19). Many concurrent lanes work in this ONE tree, so a command that moves it takes their work with it: `git reset` rewrites the index, and a mixed or hard reset rewrites the working tree with it -- returning a peer lane's staged file to untracked and dropping unpushed commits from the local branch. Twenty resets to origin/main in this clone on 2026-09-18 re-orphaned a 1,258-row ledger-roll archive and twice took a peer's work. Use a sanctioned alternative instead -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. Reads are never gated, and neither is `git fetch`, `git merge --ff-only` or `git pull --ff-only`. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:19": {
+      "blocked": false,
+      "notes": [
+        "`git reset` targets <TMP>/registry:19/sibling, which is not the shared registry clone"
+      ],
+      "reason": ""
+    },
+    "registry:2": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git checkout` in <TMP>/registry:2/registry, the shared registry clone (OMN-18798, Operating Rule 19). Many concurrent lanes work in this ONE tree, so a command that moves it takes their work with it: `git checkout -b` creates a feature branch in the clone every lane shares. Nothing is destroyed and that is what makes it dangerous: while the branch is checked out, onex-commit-lock refuses EVERY other lane's ledger commit with exit 78, STRANDED CLONE, and the only signal is an exit code on somebody else's terminal. Measured once already -- three rows appended at 01:24Z reached a committed copy at 11:17Z. Use a sanctioned alternative instead -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. Reads are never gated, and neither is `git fetch`, `git merge --ff-only` or `git pull --ff-only`. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:3": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git switch` in <TMP>/registry:3/registry, the shared registry clone (OMN-18798, Operating Rule 19). Many concurrent lanes work in this ONE tree, so a command that moves it takes their work with it: `git switch` moves the whole shared tree to another branch. Every other lane keeps working in the tree it moved, and while the clone is off `main` onex-commit-lock refuses every peer lane's ledger commit with exit 78, STRANDED CLONE. Use a sanctioned alternative instead -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. Reads are never gated, and neither is `git fetch`, `git merge --ff-only` or `git pull --ff-only`. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:4": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git rebase` in <TMP>/registry:4/registry, the shared registry clone (OMN-18798, Operating Rule 19). Many concurrent lanes work in this ONE tree, so a command that moves it takes their work with it: `git rebase` rewrites history and checks each replayed commit out over the shared tree, so a peer lane reading or writing a file during the replay sees a version nobody asked for -- measured on 2026-09-18, when a rebase checked the pre-roll ledger out over the tree mid-roll. Use a sanctioned alternative instead -- do the work in a worktree under $OMNI_HOME/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C $OMNI_HOME merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-$OMNI_HOME/../omnibase_internal}\" onex-commit-lock --repo \"$OMNI_HOME\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. Reads are never gated, and neither is `git fetch`, `git merge --ff-only` or `git pull --ff-only`. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "registry:5": {
+      "blocked": false,
+      "notes": [],
+      "reason": ""
+    },
+    "registry:6": {
+      "blocked": false,
+      "notes": [],
+      "reason": ""
+    },
+    "registry:7": {
+      "blocked": false,
+      "notes": [],
+      "reason": ""
+    },
+    "registry:8": {
+      "blocked": false,
+      "notes": [],
+      "reason": ""
+    },
+    "registry:9": {
+      "blocked": false,
+      "notes": [],
+      "reason": ""
+    },
+    "restore:clean:0": {
+      "blocked": false,
+      "notes": [
+        "`git restore` targets <TMP>/restore:clean:0/fleet/repo, which is not the shared registry clone"
+      ],
+      "reason": ""
+    },
+    "restore:clean:1": {
+      "blocked": false,
+      "notes": [
+        "`git checkout` targets <TMP>/restore:clean:1/fleet/repo, which is not the shared registry clone"
+      ],
+      "reason": ""
+    },
+    "restore:clean:2": {
+      "blocked": false,
+      "notes": [
+        "`git restore` targets <TMP>/restore:clean:2/fleet/repo, which is not the shared registry clone"
+      ],
+      "reason": ""
+    },
+    "restore:dirty:0": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git restore` in <TMP>/restore:dirty:0/fleet/repo would discard uncommitted work (OMN-18874, Operating Rule 17). These paths hold content that exists nowhere else -- not in the restore's source and not in HEAD, @{upstream}, origin/dev, origin/main: file.txt (unstaged edit). A path-scoped restore returns the file to the reference, not to what is in your working tree; it prints nothing, exits 0, and a working tree that was never committed has no reflog to recover it from. Four lanes lost work exactly this way (OMN-18566, OMN-18863, OMN-18992, OMN-19237). Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. A restore over a clean path is never refused. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "restore:dirty:1": {
+      "blocked": true,
+      "notes": [],
+      "reason": "BLOCKED: `git checkout` in <TMP>/restore:dirty:1/fleet/repo would discard uncommitted work (OMN-18874, Operating Rule 17). These paths hold content that exists nowhere else -- not in the restore's source and not in HEAD, @{upstream}, origin/dev, origin/main: file.txt (unstaged edit). A path-scoped restore returns the file to the reference, not to what is in your working tree; it prints nothing, exits 0, and a working tree that was never committed has no reflog to recover it from. Four lanes lost work exactly this way (OMN-18566, OMN-18863, OMN-18992, OMN-19237). Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. A restore over a clean path is never refused. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "restore:dirty:2": {
+      "blocked": false,
+      "notes": [
+        "`git restore` targets <TMP>/restore:dirty:2/fleet/repo, which is not the shared registry clone"
+      ],
+      "reason": ""
+    }
+  },
+  "recorded_from": "plugins/onex/hooks/lib/shared_tree_git_guard.py, shell_words.py and config/shared_tree_git_guard_policy.json at c13a44482 (pre-relocation)"
+}

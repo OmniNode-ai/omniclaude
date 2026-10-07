@@ -12,8 +12,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "plugins/onex/hooks/lib"))
 import pr_body_stamp_guard as body
-import shared_tree_git_guard as shared
 import worktree_add_guard as worktree
+
+from omniclaude.nodes.node_git_effect.handlers import handler_git_admission as shared
 
 pytestmark = pytest.mark.unit
 

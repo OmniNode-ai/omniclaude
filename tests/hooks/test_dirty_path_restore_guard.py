@@ -56,12 +56,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOKS_DIR = REPO_ROOT / "plugins" / "onex" / "hooks"
 LIB_DIR = HOOKS_DIR / "lib"
 HOOK_SCRIPT = HOOKS_DIR / "scripts" / "pre_tool_use_shared_tree_git_guard.sh"
-POLICY_PATH = HOOKS_DIR / "config" / "shared_tree_git_guard_policy.json"
+POLICY_PATH = (
+    REPO_ROOT / "src/omniclaude/nodes/node_git_effect/git_admission_policy.json"
+)
 
 sys.path.insert(0, str(LIB_DIR))
 
-import shared_tree_git_guard  # noqa: E402
-from shared_tree_git_guard import (  # noqa: E402
+from omniclaude.nodes.node_git_effect.handlers import (
+    handler_git_admission as shared_tree_git_guard,  # noqa: E402
+)
+from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (  # noqa: E402
     Decision,
     Policy,
     evaluate_bash_command,

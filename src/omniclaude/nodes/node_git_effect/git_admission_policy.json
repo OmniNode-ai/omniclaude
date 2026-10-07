@@ -4,7 +4,7 @@
         "when the command's effective git root is the REGISTRY CLONE at $OMNI_HOME",
         "itself, and the sanctioned alternatives it points a caller at.",
         "",
-        "Read by plugins/onex/hooks/lib/shared_tree_git_guard.py, which is invoked",
+        "Read by src/omniclaude/nodes/node_git_effect/handlers/handler_git_admission.py, which is invoked",
         "by the pre_tool_use_shared_tree_git_guard.sh PreToolUse hook. The",
         "vocabulary lives here, not in the checker, matching the OMN-17334",
         "git-stash policy this file is patterned on: adding a shape is a config",

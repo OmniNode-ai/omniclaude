@@ -132,7 +132,7 @@ _HOOKS_LIB = Path(__file__).parent
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
-from shell_words import (  # noqa: E402
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # noqa: E402
     CommandResolver,
     Word,
     WordPart,
@@ -419,7 +419,7 @@ def stamp_lines(body: str, policy: Policy) -> list[str]:
 # Command parsing (OMN-19542)
 # ---------------------------------------------------------------------------
 #
-# The command is split by the shared shell tokenizer (``shell_words``), which
+# The command is split by the shared shell tokenizer (``handler_shell_words``), which
 # knows what ``shlex`` does not: a here-document body is data, not shell. That
 # alone retires the class that produced 15 of this guard's 22 logged refusals
 # (the rolling work ledger, row 3319): an apostrophe in a quoted here-document body made

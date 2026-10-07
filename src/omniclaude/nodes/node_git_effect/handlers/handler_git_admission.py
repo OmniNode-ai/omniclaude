@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 r"""Fail-closed shared-tree git admission gate for the shared registry clone (OMN-18798).
 
@@ -42,7 +42,7 @@ root -- ``git rev-parse --show-toplevel`` semantics applied to the ``-C
 <path>`` argument, or to the command's own ``cwd`` when no ``-C`` is given
 -- IS the registry clone at ``$OMNI_HOME`` itself, AND its subcommand
 matches a
-refused shape declared in ``shared_tree_git_guard_policy.json``:
+refused shape declared in ``git_admission_policy.json``:
 
 * ``reset``, ``switch``, ``clean``, ``rebase`` -- in every form;
 * ``checkout`` -- except the Operating Rule 17 path-scoped restore recipe
@@ -188,18 +188,15 @@ import re
 import subprocess
 import sys
 import time
+from collections import ChainMap
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Final
+from typing import Final
 
-_HOOKS_LIB = Path(__file__).parent
-if str(_HOOKS_LIB) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_LIB))
+from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
 
-from collections import ChainMap  # noqa: E402
-from collections.abc import Mapping  # noqa: E402
-
-from shell_words import (  # noqa: E402
+from .handler_shell_words import (
     Operator,
     ShellSyntaxError,
     UnresolvableWord,
@@ -250,9 +247,7 @@ __all__ = [
 ]
 
 DEFAULT_POLICY_PATH: Final[Path] = (
-    Path(__file__).resolve().parent.parent
-    / "config"
-    / "shared_tree_git_guard_policy.json"
+    Path(__file__).resolve().parent.parent / "git_admission_policy.json"
 )
 
 #: The mask bit this guard is gated by, named in every refusal so a lane
@@ -334,6 +329,7 @@ class Policy:
     git_probe_timeout_seconds: float
     worktree_root_envs: tuple[str, ...]
     # The lane git-fetch arm (OMN-20495). See _lane_fetch_refusal.
+    clone_sync_engine: str = "canonical_clone_sync.py"
     fetch_ticket: str = ""
     fetch_subcommands: frozenset[str] = frozenset()
     fetch_github_hosts: frozenset[str] = frozenset()
@@ -354,14 +350,14 @@ class Decision:
     fetch_repo: str = ""
 
 
-def _require_str(raw: Any, key: str) -> str:
+def _require_str(raw: Mapping[str, object], key: str) -> str:
     value = raw.get(key)
     if not isinstance(value, str) or not value:
         raise PolicyError(f"policy field {key!r} must be a non-empty string")
     return value
 
 
-def _str_list(raw: Any, key: str) -> list[str]:
+def _str_list(raw: Mapping[str, object], key: str) -> list[str]:
     value = raw.get(key)
     if (
         not isinstance(value, list)
@@ -372,7 +368,7 @@ def _str_list(raw: Any, key: str) -> list[str]:
     return value
 
 
-def _positive_number(raw: Any, key: str) -> float:
+def _positive_number(raw: Mapping[str, object], key: str) -> float:
     value = raw.get(key)
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         raise PolicyError(f"policy field {key!r} must be a positive number")
@@ -441,7 +437,7 @@ def load_policy(path: Path | None = None) -> Policy:
     )
 
 
-def _str_pairs(raw: Any, key: str) -> tuple[tuple[str, str], ...]:
+def _str_pairs(raw: Mapping[str, object], key: str) -> tuple[tuple[str, str], ...]:
     value = raw.get(key)
     if (
         not isinstance(value, dict)
@@ -1308,7 +1304,7 @@ def _is_revision(token: str, cwd: Path, policy: Policy) -> bool:
 
 
 def _checkout_shape(
-    args: list[str], policy: Policy, is_revision: Any
+    args: list[str], policy: Policy, is_revision: Callable[[str], bool]
 ) -> _RestoreShape | None:
     """The restore a `git checkout` performs, or None when it is not one."""
     if "--" in args:
@@ -1421,7 +1417,7 @@ def _restore_shape(args: list[str]) -> _RestoreShape | None:
 
 
 def _parse_restore(
-    invocation: _GitInvocation, policy: Policy, is_revision: Any
+    invocation: _GitInvocation, policy: Policy, is_revision: Callable[[str], bool]
 ) -> _RestoreShape | None:
     args = list(invocation.args)
     if any(
@@ -1467,7 +1463,7 @@ def _read_operand(operand: str, scope: Scope) -> str:
     value = _expand_path(operand, scope)
     if value is None or (_word(operand).splits and len(value.split()) != 1):
         return operand
-    return _ShellWord(Word((WordPart(value, "literal"),)))
+    return _ShellWord(Word((WordPart(value, EnumQuoteKind.LITERAL),)))
 
 
 def _check_computed_operands(shape: _RestoreShape) -> _RestoreShape:
@@ -1914,10 +1910,8 @@ def _track_assignments(segment: list[str], scope: Scope) -> None:
 # word, an unknown name) is refused, never assumed safe; outside one nothing
 # is read at all.
 
-#: The refresh a refusal points at, beside this module in every install.
-CLONE_SYNC_ENGINE: Final[Path] = (
-    Path(__file__).resolve().parent / "canonical_clone_sync.py"
-)
+#: The default refresh engine a refusal points at.
+CLONE_SYNC_ENGINE: Final[Path] = Path("canonical_clone_sync.py")
 FETCH_LOG_NAME: Final[str] = "git-fetch-guard.log"
 
 _FETCH_VALUE_FLAGS: Final[dict[str, frozenset[str]]] = {
@@ -2148,7 +2142,9 @@ def _lane_name(policy: Policy, environ: Mapping[str, str]) -> str:
 def _fetch_refusal_text(
     policy: Policy, verb: str, repo: str, detail: str, branch: str | None
 ) -> str:
-    refresh = f"python3 {CLONE_SYNC_ENGINE} refresh {repo or '<owner>/<repo>'} --wait"
+    refresh = (
+        f"python3 {policy.clone_sync_engine} refresh {repo or '<owner>/<repo>'} --wait"
+    )
     if branch:
         refresh += f" --branch {branch}"
     return (
@@ -2509,7 +2505,7 @@ def evaluate_bash_command(
 
 
 def _block(reason: str) -> int:
-    print(json.dumps({"decision": "block", "reason": reason}))
+    sys.stdout.write(json.dumps({"decision": "block", "reason": reason}) + "\n")
     return 2
 
 
@@ -2521,6 +2517,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="override the policy JSON path (defaults to the co-located config)",
     )
+    parser.add_argument("--clone-sync-engine", default="canonical_clone_sync.py")
     args = parser.parse_args(argv)
 
     try:
@@ -2559,6 +2556,13 @@ def main(argv: list[str] | None = None) -> int:
             f"could not be loaded, so this command cannot be checked ({exc})."
         )
 
+    policy = replace(
+        policy,
+        clone_sync_engine=str(Path(args.clone_sync_engine).resolve())
+        if "/" in args.clone_sync_engine
+        else args.clone_sync_engine,
+    )
+
     cwd_raw = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
     cwd = Path(cwd_raw)
     registry_root = resolve_registry_root(policy)
@@ -2580,9 +2584,11 @@ def main(argv: list[str] | None = None) -> int:
         return _block(decision.reason)
 
     if decision.notes:
-        print(json.dumps({"decision": "allow", "notes": list(decision.notes)}))
+        sys.stdout.write(
+            json.dumps({"decision": "allow", "notes": list(decision.notes)}) + "\n"
+        )
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

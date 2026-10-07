@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 r"""Shell word splitting and path expansion shared by PreToolUse guards (OMN-19229).
 
@@ -57,21 +57,28 @@ from collections import ChainMap
 from collections.abc import (
     Callable,
     Iterable,
-    Iterator,
     Mapping,
     MutableMapping,
     Sequence,
 )
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
-QuoteKind = Literal["none", "double", "literal"]
+from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_heredoc import HereDoc
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_redirect import Redirect
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_word import (
+    _ASSIGNMENT,
+    _UNQUOTED_BRACE,
+    _UNQUOTED_GLOB,
+    Operator,
+    ShellSyntaxError,
+    UnresolvableWord,
+    Word,
+    WordPart,
+)
 
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-_UNQUOTED_GLOB = re.compile(r"[*?\[]")
-_UNQUOTED_BRACE = re.compile(r"\{[^{}]*(?:,|\.\.)[^{}]*\}")
 _PARAMETER = re.compile(r"\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)")
 
 # Variables the shell itself changes while a command runs, so the value a
@@ -84,113 +91,6 @@ _SETTERS = frozenset({"read", "unset", "mapfile", "readarray"})
 SEPARATORS = frozenset({";", ";;", "&", "&&", "|", "||", "|&", "\n", "(", ")"})
 
 
-class ShellSyntaxError(ValueError):
-    """The command cannot be split into words (an unbalanced quote, most likely)."""
-
-
-class UnresolvableWord(ValueError):
-    """A word whose value the shell would compute and this module will not."""
-
-
-@dataclass(frozen=True)
-class WordPart:
-    text: str
-    # "none": unquoted; "double": inside double quotes; "literal": single
-    # quotes or a backslash escape, where nothing is expanded.
-    quote: QuoteKind
-
-
-@dataclass(frozen=True)
-class Word:
-    parts: tuple[WordPart, ...]
-
-    @property
-    def text(self) -> str:
-        """The word with quotes removed and nothing expanded."""
-        return "".join(part.text for part in self.parts)
-
-    @property
-    def splits(self) -> bool:
-        """True when an unquoted expansion makes the shell word-split this word."""
-        return any(
-            part.quote == "none" and ("$" in part.text or "`" in part.text)
-            for part in self.parts
-        )
-
-    @property
-    def is_plain(self) -> bool:
-        """True when the word needs no expansion at all."""
-        for part in self.parts:
-            if part.quote == "literal":
-                continue
-            if "$" in part.text or "`" in part.text:
-                return False
-            if part.quote == "none" and (
-                part.text.startswith("~")
-                or _UNQUOTED_GLOB.search(part.text)
-                or _UNQUOTED_BRACE.search(part.text)
-            ):
-                return False
-        return True
-
-    def assignment(self) -> tuple[str, Word] | None:
-        """``(NAME, value)`` when this word is a ``NAME=value`` assignment."""
-        if not self.parts or self.parts[0].quote != "none":
-            return None
-        head = self.parts[0].text
-        match = _ASSIGNMENT.match(head)
-        if match is None:
-            return None
-        name = head[: match.end() - 1]
-        rest = head[match.end() :]
-        value_parts = ((WordPart(rest, "none"),) if rest else ()) + self.parts[1:]
-        return name, Word(value_parts)
-
-
-@dataclass(frozen=True)
-class Operator:
-    text: str
-
-
-class HereDoc:
-    """A here-document, placed where its ``<<`` operator was.
-
-    The body is filled in when the tokenizer reaches it, on the lines after the
-    command. ``expands`` is False when any part of the delimiter was quoted,
-    in which case the shell expands nothing inside the body.
-    """
-
-    def __init__(self, strip_tabs: bool) -> None:
-        self.strip_tabs = strip_tabs
-        self.delimiter = ""
-        self.expands = True
-        self.body = ""
-
-    def as_word(self) -> Word:
-        """The body as a word, quoted the way the shell reads it."""
-        return Word((WordPart(self.body, "double" if self.expands else "literal"),))
-
-
-class Redirect:
-    """A redirection, emitted only by ``tokenize(..., keep_redirects=True)``.
-
-    ``op`` is the operator without its descriptor digits (``>``, ``>>``,
-    ``<``, ``<<<``, ``&>``, ``>|``, ``>&``); ``fd`` is the digits glued before
-    it (``"2"`` in ``2>err.log``) or ``None``; ``target`` is the word after it,
-    or ``None`` when the operator takes none (``>&-``). A here-document is a
-    :class:`HereDoc`, never a ``Redirect``.
-
-    Most guards want redirections dropped, which is the default. A guard that
-    has to know which file a command writes (OMN-19542: a body file written by
-    an earlier segment of the same command) asks for them.
-    """
-
-    def __init__(self, op: str, fd: str | None) -> None:
-        self.op = op
-        self.fd = fd
-        self.target: Word | None = None
-
-
 Token = Word | Operator | HereDoc | Redirect
 
 
@@ -199,7 +99,7 @@ class _Builder:
         self.parts: list[WordPart] = []
         self.started = False
 
-    def add(self, text: str, quote: QuoteKind) -> None:
+    def add(self, text: str, quote: EnumQuoteKind) -> None:
         self.started = True
         if not text:
             return
@@ -421,7 +321,9 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
             drop_next.target = word
         if isinstance(drop_next, HereDoc):
             drop_next.delimiter = word.text
-            drop_next.expands = all(part.quote == "none" for part in word.parts)
+            drop_next.expands = all(
+                part.quote == EnumQuoteKind.NONE for part in word.parts
+            )
             pending_heredocs.append(drop_next)
         if drop_next is not False:
             drop_next = False
@@ -439,7 +341,7 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
                 i += 2
                 continue
             if i + 1 < n:
-                builder.add(command[i + 1], "literal")
+                builder.add(command[i + 1], EnumQuoteKind.LITERAL)
             i += 2
             continue
         if ch == "#" and not builder.started:
@@ -455,7 +357,8 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
             # An all-digit word glued to the operator is its file descriptor.
             fd: str | None = None
             if builder.started and all(
-                part.quote == "none" and part.text.isdigit() for part in builder.parts
+                part.quote == EnumQuoteKind.NONE and part.text.isdigit()
+                for part in builder.parts
             ):
                 taken = builder.take()
                 fd = taken.text if taken is not None else None
@@ -496,24 +399,24 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
             end = command.find("'", i + 1)
             if end < 0:
                 raise ShellSyntaxError("unterminated single quote")
-            builder.add(command[i + 1 : end], "literal")
+            builder.add(command[i + 1 : end], EnumQuoteKind.LITERAL)
             i = end + 1
             continue
         if ch == '"':
             text, i = _scan_double(command, i + 1)
-            builder.add(text, "double")
+            builder.add(text, EnumQuoteKind.DOUBLE)
             continue
         if ch == "$":
             end = _scan_dollar(command, i)
-            builder.add(command[i:end], "none")
+            builder.add(command[i:end], EnumQuoteKind.NONE)
             i = end
             continue
         if ch == "`":
             end = _scan_backtick(command, i)
-            builder.add(command[i:end], "none")
+            builder.add(command[i:end], EnumQuoteKind.NONE)
             i = end
             continue
-        builder.add(ch, "none")
+        builder.add(ch, EnumQuoteKind.NONE)
         i += 1
     finish_word()
     return tokens
@@ -606,7 +509,7 @@ def unquoted(token: str) -> Word:
     hand a token here to judge it the way the shell reads an unquoted word:
     ``~`` and parameters expand, and a glob is refused.
     """
-    return Word((WordPart(token, "none"),))
+    return Word((WordPart(token, EnumQuoteKind.NONE),))
 
 
 def shadowed_names(commands: Iterable[Sequence[str]]) -> set[str]:
@@ -652,11 +555,11 @@ def expand_word(word: Word, env: Mapping[str, str | None]) -> str:
     """
     out: list[str] = []
     for index, part in enumerate(word.parts):
-        if part.quote == "literal":
+        if part.quote == EnumQuoteKind.LITERAL:
             out.append(part.text)
             continue
         text = part.text
-        if part.quote == "none":
+        if part.quote == EnumQuoteKind.NONE:
             if index == 0 and text.startswith("~"):
                 head, sep, tail = text.partition("/")
                 if head == "~":
@@ -670,7 +573,7 @@ def expand_word(word: Word, env: Mapping[str, str | None]) -> str:
                         raise UnresolvableWord(f"`{head}` names no known user")
                 text = expanded + sep + tail
         expanded_text = _expand_parameters(text, env)
-        if part.quote == "none":
+        if part.quote == EnumQuoteKind.NONE:
             # Judged on the text as written, with its parameters taken out:
             # a pattern the shell would match against the filesystem.
             written = _PARAMETER.sub("", text)
@@ -693,23 +596,6 @@ _WRAPPERS = frozenset({"env", "sudo", "command", "nohup", "time", "timeout", "xa
 
 class _Untokenisable(ShellSyntaxError):
     """A command whose words cannot be read."""
-
-
-class Scope(Mapping[str, str | None]):
-    """Environment overlaid by the command's own assignments."""
-
-    def __init__(self, env: Mapping[str, str], local: Mapping[str, str | None]):
-        self._env, self._local = env, local
-
-    def __getitem__(self, key: str) -> str | None:
-        return self._local[key] if key in self._local else self._env[key]
-
-    def __iter__(self) -> Iterator[str]:
-        yield from self._local
-        yield from (k for k in self._env if k not in self._local)
-
-    def __len__(self) -> int:
-        return len(set(self._env) | set(self._local))
 
 
 def resolve_path(
@@ -933,11 +819,11 @@ def _program_of(words: list[Word]) -> tuple[str, list[Word]]:
 def _split_inline(word: Word) -> Word | None:
     """The value of ``--flag=value``, keeping the quoting of every part."""
     for index, part in enumerate(word.parts):
-        if part.quote == "none" and "=" in part.text:
+        if part.quote == EnumQuoteKind.NONE and "=" in part.text:
             _, _, rest = part.text.partition("=")
-            head = (WordPart(rest, "none"),) if rest else ()
+            head = (WordPart(rest, EnumQuoteKind.NONE),) if rest else ()
             return Word(head + word.parts[index + 1 :])
-        if part.quote != "none":
+        if part.quote != EnumQuoteKind.NONE:
             return None
     return None
 
@@ -1121,13 +1007,13 @@ class CommandResolver:
         output the model can compute are substituted. Raises ``_Unknown``."""
         out: list[str] = []
         for index, part in enumerate(word.parts):
-            if part.quote == "literal":
+            if part.quote == EnumQuoteKind.LITERAL:
                 out.append(part.text)
                 continue
             out.append(self._expand_text(part.text, part.quote, index == 0))
         return "".join(out)
 
-    def _expand_text(self, text: str, quote: QuoteKind, first: bool) -> str:
+    def _expand_text(self, text: str, quote: EnumQuoteKind, first: bool) -> str:
         out: list[str] = []
         plain_start = 0
         i = 0
@@ -1140,7 +1026,7 @@ class CommandResolver:
             at_start = first and plain_start == 0
             parts: tuple[WordPart, ...] = (WordPart(chunk, quote),)
             if not at_start:
-                parts = (WordPart("", "literal"),) + parts
+                parts = (WordPart("", EnumQuoteKind.LITERAL),) + parts
             try:
                 out.append(expand_word(Word(parts), self.scope))
             except UnresolvableWord as exc:
@@ -1154,7 +1040,7 @@ class CommandResolver:
             if text.startswith("$((", i):
                 raise _Unknown("arithmetic expansion is not evaluated by the guard")
             if text.startswith("$(", i) or ch == "`":
-                if quote == "none":
+                if quote == EnumQuoteKind.NONE:
                     raise _Unknown(
                         "an unquoted command substitution is split into words by "
                         "the shell"
@@ -1247,7 +1133,7 @@ class CommandResolver:
             if not doc.expands:
                 return doc.body
             try:
-                return self._expand_text(doc.body, "double", False)
+                return self._expand_text(doc.body, EnumQuoteKind.DOUBLE, False)
             except _Unknown as exc:
                 raise _Unknown(
                     f"the here-document {doc.delimiter} expands text the guard "
