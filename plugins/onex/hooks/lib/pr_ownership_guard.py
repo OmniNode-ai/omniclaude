@@ -773,12 +773,13 @@ def decide(
         verb=verb,
         target_key=target,
         message=(
-            f"REFUSED ({verb}) on {mutation.detail}: no lane holds a claim on "
-            f"'{target}', so this close cannot be attributed to any lane. An "
+            f"Missing PR claim: '{target}' has no active ownership claim. "
+            f"REFUSED ({verb}) on {mutation.detail}.\n"
+            f"    {_claim_command(target, lane_id, run_id)}\n"
+            "Run the command above only if this work is yours, before closing. An "
             "unclaimed target is INDETERMINATE, not free — >=5 green PRs were "
             "closed unmerged this way in 48h under the shared gh identity "
-            "(OMN-16485). If this work is yours, record ownership first:\n"
-            f"    {_claim_command(target, lane_id, run_id)}\n"
+            "(OMN-16485). "
             "Recording the claim IS the attribution record that is otherwise "
             "missing; it is not a formality to route around."
         ),
@@ -896,7 +897,18 @@ def main(argv: list[str] | None = None) -> int:
     Exit codes: 0 allow, 3 block, 1 internal error (the wrapper treats an
     internal error on a verb-matching command as a block).
     """
-    parser = argparse.ArgumentParser(description="Lane-ownership gate for gh mutations")
+    parser = argparse.ArgumentParser(
+        description="Lane-ownership gate for gh mutations",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "PR close precondition (record it before gh pr close):\n"
+            f"  python3 {shlex.quote(_cli_path())} list\n"
+            f"  python3 {shlex.quote(_cli_path())} claim <owner/repo>#<number> --action close\n"
+            "Use a lowercase owner/repo claim key. Stop if a peer owns the target;\n"
+            "claim using the same lane/run/session as the close.\n"
+            "Close template: docs/guides/pr-close-preconditions.md"
+        ),
+    )
     parser.add_argument(
         "--command-file", required=True, help="File holding the Bash command"
     )

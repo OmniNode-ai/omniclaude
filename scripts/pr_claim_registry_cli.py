@@ -183,7 +183,17 @@ def _cmd_release(
 def main(argv: list[str] | None = None) -> int:
     """Run the claim registry CLI."""
     parser = argparse.ArgumentParser(
-        description="Inspect and manage PR lane-ownership claims (OMN-16485)."
+        description="Inspect and manage PR lane-ownership claims (OMN-16485).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "PR close precondition (record it before gh pr close):\n"
+            "  python3 $OMNI_HOME/omniclaude/scripts/pr_claim_registry_cli.py list\n"
+            "  python3 $OMNI_HOME/omniclaude/scripts/pr_claim_registry_cli.py "
+            "claim <owner/repo>#<number> --action close\n"
+            "Use a lowercase owner/repo claim key. Stop if a peer owns the target;\n"
+            "claim using the same lane/run/session as the close.\n"
+            "Close template: docs/guides/pr-close-preconditions.md"
+        ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

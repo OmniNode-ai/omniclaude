@@ -301,6 +301,15 @@ repos:
         language: system
         pass_filenames: true
         stages: [commit-msg]
+      - id: pr-close-preconditions
+        name: PR close preconditions and refusal contract (OMN-19160)
+        entry: >-
+          bash -c 'PYTHONDONTWRITEBYTECODE=1 uv run pytest
+          tests/hooks/test_pr_close_preconditions.py -q -p no:cacheprovider'
+        language: system
+        pass_filenames: false
+        files: '^(plugins/onex/hooks/(lib/pr_ownership_guard\.py|scripts/pre_tool_use_(pr_ownership_guard|bash_guards)\.sh)|scripts/pr_claim_registry_cli\.py|plugins/onex/skills/dep_cascade_dedup/SKILL\.md|docs/guides/pr-close-preconditions\.md|tests/hooks/test_pr_close_preconditions\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
       - id: reject-legacy-session-id-reads
         name: Reject legacy session-id env-var reads
         entry: .pre-commit-hooks/reject-legacy-session-id-reads.sh
