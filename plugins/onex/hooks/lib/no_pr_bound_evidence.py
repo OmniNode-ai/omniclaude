@@ -67,6 +67,8 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import http.client
+import json
 import os
 import re
 import signal
@@ -77,7 +79,8 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
+from uuid import uuid4
 
 from linear_done_verify import PRStatus, _gh_api_json
 
@@ -754,6 +757,181 @@ class ContractRead:
     error: str = ""
 
 
+class VerdictReadStatus(StrEnum):
+    FOUND = "found"
+    ABSENT = "absent"
+    ERROR = "error"
+
+
+@dataclass(frozen=True)
+class VerdictRead:
+    status: VerdictReadStatus
+    row: dict[str, Any] | None = None
+    error: str = ""
+
+
+VerdictReader = Callable[[str], VerdictRead]
+
+
+# OMN-20071: the projection read the Done gate makes is declared in a hook
+# contract (runtime URL as an ${env.VAR} overlay, command, topic, limit), so
+# this module carries no endpoint or topic literal.
+_VERDICT_READ_CONTRACT = (
+    Path(__file__).resolve().parent.parent
+    / "contracts"
+    / "hook_done_gate_verdict_read.yaml"
+)
+_ENV_REF = re.compile(r"\$\{env\.(?P<name>[A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _verdict_read_declaration() -> dict[str, Any] | str:
+    """The declared projection read, or why it cannot be read."""
+    try:
+        import yaml
+    except ImportError:
+        return "PyYAML is unavailable to read the verdict-read contract"
+    try:
+        loaded = yaml.safe_load(_VERDICT_READ_CONTRACT.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        return f"verdict-read contract unreadable: {exc}"
+    declared = loaded.get("projection_read") if isinstance(loaded, dict) else None
+    if not isinstance(declared, dict) or not all(
+        isinstance(declared.get(key), str) and declared[key]
+        for key in ("runtime_url", "command_name", "topic")
+    ):
+        return "verdict-read contract declares no complete projection_read mapping"
+    return declared
+
+
+def runtime_read_repo_verdict(ticket_id: str) -> VerdictRead:
+    """Read the latest product-repository verdict through the projection node."""
+    declared = _verdict_read_declaration()
+    if isinstance(declared, str):
+        return VerdictRead(VerdictReadStatus.ERROR, error=declared)
+    url_ref = str(declared["runtime_url"])
+    runtime_url = _ENV_REF.sub(
+        lambda ref: os.environ.get(ref.group("name"), ""), url_ref
+    ).strip()
+    if not runtime_url:
+        names = ", ".join(m.group("name") for m in _ENV_REF.finditer(url_ref))
+        return VerdictRead(VerdictReadStatus.ERROR, error=f"{names} is unset")
+    parts = urlsplit(runtime_url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return VerdictRead(
+            VerdictReadStatus.ERROR,
+            error=f"runtime URL {runtime_url!r} is not an http(s) URL",
+        )
+    timeout = float(declared.get("timeout_seconds") or 15)
+    request_body = {
+        "command_name": declared["command_name"],
+        "correlation_id": str(uuid4()),
+        "timeout_ms": int(timeout * 1000),
+        "payload": {
+            "topic": declared["topic"],
+            "row_ticket_id": ticket_id,
+            "order_by": "completed_at",
+            "order": "desc",
+            "limit": int(declared.get("limit") or 100),
+        },
+    }
+    connection_class = (
+        http.client.HTTPSConnection
+        if parts.scheme == "https"
+        else http.client.HTTPConnection
+    )
+    try:
+        connection = connection_class(parts.hostname, parts.port, timeout=timeout)
+        try:
+            connection.request(
+                "POST",
+                f"{parts.path.rstrip('/')}/skill",
+                body=json.dumps(request_body).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            http_status, raw = response.status, response.read()
+        finally:
+            connection.close()
+    except (OSError, http.client.HTTPException, ValueError) as exc:
+        return VerdictRead(
+            VerdictReadStatus.ERROR, error=f"runtime transport error: {exc}"
+        )
+    if http_status != 200:
+        return VerdictRead(
+            VerdictReadStatus.ERROR,
+            error=f"runtime answered HTTP {http_status}: {raw[:200]!r}",
+        )
+    try:
+        data = json.loads(raw)
+    except (ValueError, UnicodeError) as exc:
+        return VerdictRead(
+            VerdictReadStatus.ERROR, error=f"non-JSON runtime response: {exc}"
+        )
+    if not isinstance(data, dict) or data.get("ok") is not True:
+        error = data.get("error", "missing ok=true") if isinstance(data, dict) else data
+        return VerdictRead(VerdictReadStatus.ERROR, error=f"runtime refusal: {error}")
+    outputs = data.get("output_payloads")
+    payload = None
+    for output in outputs if isinstance(outputs, list) else []:
+        if not isinstance(output, dict):
+            continue
+        if "ok" in output:
+            payload = output
+            break
+        nested = output.get("payload")
+        if isinstance(nested, dict) and "ok" in nested:
+            payload = nested
+            break
+    if payload is None:
+        return VerdictRead(
+            VerdictReadStatus.ERROR, error="runtime response missing rows payload"
+        )
+    if payload.get("ok") is not True:
+        return VerdictRead(
+            VerdictReadStatus.ERROR,
+            error=f"projection refusal: {payload.get('error', 'missing ok=true')}",
+        )
+    rows = payload.get("rows")
+    if rows is None and isinstance(payload.get("payload"), dict):
+        nested = payload["payload"]
+        if nested.get("ok", True) is not True:
+            return VerdictRead(
+                VerdictReadStatus.ERROR,
+                error=f"projection refusal: {nested.get('error', 'missing ok=true')}",
+            )
+        rows = nested.get("rows")
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        return VerdictRead(
+            VerdictReadStatus.ERROR,
+            error="projection response missing or malformed rows",
+        )
+    ranked: list[tuple[datetime, int, dict[str, Any]]] = []
+    for row in rows:
+        if (
+            row.get("ticket_id") != ticket_id
+            or row.get("contract_source") != "product_repository"
+        ):
+            continue
+        completed = _timestamp(row.get("completed_at"))
+        if completed is None:
+            return VerdictRead(
+                VerdictReadStatus.ERROR, error="repo verdict has invalid completed_at"
+            )
+        try:
+            cursor = int(row.get("projection_cursor") or 0)
+        except (TypeError, ValueError) as exc:
+            return VerdictRead(
+                VerdictReadStatus.ERROR,
+                error=f"repo verdict has invalid projection_cursor: {exc}",
+            )
+        ranked.append((completed, cursor, row))
+    if not ranked:
+        return VerdictRead(VerdictReadStatus.ABSENT)
+    return VerdictRead(
+        VerdictReadStatus.FOUND, row=max(ranked, key=lambda item: item[:2])[2]
+    )
+
+
 # (repo "owner/name", ref sha, ticket_id).
 ContractReader = Callable[[str, str, str], ContractRead]
 # (repo, sha): named check runs on that sha, or None when unreadable.
@@ -848,6 +1026,7 @@ def evaluate_repo_evidence(
     *,
     read_contract: ContractReader = gh_read_contract,
     read_check_runs: CheckRunReader = gh_read_check_runs,
+    read_verdict: VerdictReader = runtime_read_repo_verdict,
 ) -> RepoEvidenceVerdict:
     """Evaluate bindings and verified heads, with all I/O through readers."""
     candidates = {
@@ -882,8 +1061,8 @@ def evaluate_repo_evidence(
     engaged: list[tuple[PRStatus, dict[str, Any], list[dict[str, Any]]]] = []
     skipped: list[str] = []
     for pr, contract in contracts:
+        assert pr.ref.repo is not None
         repo = pr.ref.repo
-        assert repo is not None
         source = f"{repo}#{pr.ref.number}"
         runs = read_check_runs(repo, pr.head_sha)
         if runs is None:
@@ -907,16 +1086,20 @@ def evaluate_repo_evidence(
             continue
         engaged.append((pr, contract, kept))
     if not engaged:
-        return RepoEvidenceVerdict(RepoEvidenceOutcome.NOT_ENGAGED, "; ".join(skipped))
+        return _evaluate_repo_verdict(
+            ticket_id,
+            descriptions,
+            contracts,
+            "; ".join(skipped),
+            read_verdict,
+            read_contract,
+        )
 
-    bindings: dict[str, list[str]] = {}
-    sources: list[str] = []
     for pr, contract, kept in engaged:
+        assert pr.ref.repo is not None
         repo = pr.ref.repo
-        assert repo is not None
         source = f"{repo}#{pr.ref.number}"
         context = f"{source} at head {pr.head_sha} and merge {pr.merge_commit_sha}"
-        sources.append(context)
         # Check-run ids only grow, so the newest copy is the highest id: a rerun
         # still in progress has no completed_at and must not lose to an old success.
         newest = max(kept, key=lambda r: int(r.get("id") or 0))
@@ -927,18 +1110,131 @@ def evaluate_repo_evidence(
                 f"has status={newest.get('status')} and "
                 f"conclusion={newest.get('conclusion')}; obtain a completed success.",
             )
-        head_contract = _parse_contract(
-            read_contract(repo, pr.head_sha, ticket_id), ticket_id, context
+        defect = _verified_head_defect(
+            pr, contract, ticket_id, read_contract, verifier="the check run"
         )
-        if isinstance(head_contract, RepoEvidenceVerdict):
-            return head_contract
-        if head_contract != contract:
-            return RepoEvidenceVerdict(
-                RepoEvidenceOutcome.REFUSED,
-                f"{context}: contract changed between the verified head and the merge "
-                "commit: the check run does not cover what merged; verify the "
-                "merged contract in a new PR.",
-            )
+        if defect is not None:
+            return defect
+    return _evaluate_repo_bindings(
+        descriptions,
+        [(pr, contract) for pr, contract, _kept in engaged],
+        "repo-bound: ",
+    )
+
+
+def _verified_head_defect(
+    pr: PRStatus,
+    contract: dict[str, Any],
+    ticket_id: str,
+    read_contract: ContractReader,
+    *,
+    verifier: str,
+) -> RepoEvidenceVerdict | None:
+    context = f"{pr.ref.repo}#{pr.ref.number} at head {pr.head_sha} and merge {pr.merge_commit_sha}"
+    assert pr.ref.repo is not None
+    head_contract = _parse_contract(
+        read_contract(pr.ref.repo, pr.head_sha, ticket_id), ticket_id, context
+    )
+    if isinstance(head_contract, RepoEvidenceVerdict):
+        return head_contract
+    if head_contract != contract:
+        return RepoEvidenceVerdict(
+            RepoEvidenceOutcome.REFUSED,
+            f"{context}: contract changed between the verified head and the merge "
+            f"commit: {verifier} does not cover what merged; verify the "
+            "merged contract in a new PR.",
+        )
+    return None
+
+
+def _evaluate_repo_verdict(
+    ticket_id: str,
+    descriptions: Sequence[str],
+    contracts: list[tuple[PRStatus, dict[str, Any]]],
+    skipped_detail: str,
+    read_verdict: VerdictReader,
+    read_contract: ContractReader,
+) -> RepoEvidenceVerdict:
+    read = read_verdict(ticket_id)
+    if read.status is VerdictReadStatus.ERROR or (
+        read.status is VerdictReadStatus.FOUND and read.row is None
+    ):
+        return RepoEvidenceVerdict(
+            RepoEvidenceOutcome.NOT_ENGAGED,
+            skipped_detail
+            + "; repo-owned dod_verify verdict unreadable: "
+            + (read.error or "FOUND without a row"),
+        )
+    if read.status is VerdictReadStatus.ABSENT:
+        return RepoEvidenceVerdict(RepoEvidenceOutcome.NOT_ENGAGED, skipped_detail)
+    row = read.row
+    assert row is not None
+    repository, sha, path = (
+        value if isinstance(value, str) else ""
+        for value in (
+            row.get("contract_repository"),
+            row.get("contract_commit_sha"),
+            row.get("contract_repo_path"),
+        )
+    )
+    bound = next(
+        (
+            (pr, contract)
+            for pr, contract in contracts
+            if pr.ref.repo is not None
+            and pr.ref.repo.casefold() == repository.casefold()
+            and sha in (pr.head_sha, pr.merge_commit_sha)
+            and path == f"contracts/{ticket_id}.yaml"
+        ),
+        None,
+    )
+    sources = ", ".join(f"{pr.ref.repo}#{pr.ref.number}" for pr, _contract in contracts)
+    verdict_context = (
+        f"the latest repo-owned dod_verify verdict for {ticket_id} "
+        f"(run {row.get('correlation_id')}, completed {row.get('completed_at')})"
+    )
+    if bound is None:
+        heads = ", ".join(pr.head_sha[:12] for pr, _contract in contracts)
+        merges = ", ".join(pr.merge_commit_sha[:12] for pr, _contract in contracts)
+        return RepoEvidenceVerdict(
+            RepoEvidenceOutcome.REFUSED,
+            f"{sources}: {verdict_context} was taken at {repository}@{sha[:12]} "
+            f"{path}, not at the merged head {heads} or merge commit {merges} "
+            f"of {sources}; verify the merged contract.",
+        )
+    pr, contract = bound
+    if row.get("status") != "verified":
+        return RepoEvidenceVerdict(
+            RepoEvidenceOutcome.REFUSED,
+            f"{pr.ref.repo}#{pr.ref.number}: {verdict_context} has "
+            f"status={row.get('status')}; obtain a verified verdict for the merged contract.",
+        )
+    if sha == pr.head_sha:
+        defect = _verified_head_defect(
+            pr, contract, ticket_id, read_contract, verifier="the verdict"
+        )
+        if defect is not None:
+            return defect
+    return _evaluate_repo_bindings(
+        descriptions,
+        [(pr, contract)],
+        f"repo-bound verdict {row.get('correlation_id')} at {sha[:12]}: ",
+    )
+
+
+def _evaluate_repo_bindings(
+    descriptions: Sequence[str],
+    contracts: list[tuple[PRStatus, dict[str, Any]]],
+    pass_prefix: str,
+) -> RepoEvidenceVerdict:
+    """Apply the identical criterion and binds_ac bar to both repo verdict sources."""
+    bindings: dict[str, list[str]] = {}
+    sources: list[str] = []
+    for pr, contract in contracts:
+        source = f"{pr.ref.repo}#{pr.ref.number}"
+        sources.append(
+            f"{source} at head {pr.head_sha} and merge {pr.merge_commit_sha}"
+        )
         for item in evidence_items(contract):
             for label in item.binds:
                 bindings.setdefault(label, []).append(f"{item.item_id} ({source})")
@@ -980,7 +1276,7 @@ def evaluate_repo_evidence(
         )
     return RepoEvidenceVerdict(
         RepoEvidenceOutcome.PASSED,
-        "repo-bound: "
+        pass_prefix
         + ", ".join(
             f"{label}<-{sorted(bindings[label])[0]}" for label in sorted(labels)
         ),
@@ -1002,6 +1298,9 @@ __all__ = [
     "OccTicketEvidence",
     "RepoEvidenceOutcome",
     "RepoEvidenceVerdict",
+    "VerdictRead",
+    "VerdictReadStatus",
+    "VerdictReader",
     "acceptance_criteria_items",
     "bounded_fetch",
     "canonical_ac_label",
@@ -1013,5 +1312,6 @@ __all__ = [
     "live_acceptance_criteria_items",
     "load_ticket_occ_evidence",
     "receipt_defect",
+    "runtime_read_repo_verdict",
     "staleness_defect",
 ]

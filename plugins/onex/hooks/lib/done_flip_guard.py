@@ -46,9 +46,11 @@ the bound-receipt bar, and every other path is a further condition):
    ALLOW anything on their own (OMN-20368).
 7. Repo evidence first (``no_pr_bound_evidence``): a merged product PR's
    ``contracts/<TICKET>.yaml`` binds every labelled criterion, and a green
-   ``repo-evidence / dod-verify`` GitHub Actions check on its head verifies
-   the same contract that merged. Once engaged, this verdict is final and
-   OCC is not consulted. A contract without the check has not adopted it.
+   verdict comes from the ``repo-evidence / dod-verify`` check run or, when
+   the repository has no check run, from the latest repo-owned ``dod_verify``
+   verdict read through ``node_projection_read_effect`` at the merged head
+   (OMN-20071). It verifies the same contract that merged. Once engaged, this
+   verdict is final and OCC is not consulted.
 8. When repo evidence is not engaged, the bound-receipt bar
    (``no_pr_bound_evidence``), on ``origin/dev`` of the
    local onex_change_control clone: ``contracts/<TICKET>.yaml`` binds EVERY
@@ -120,6 +122,7 @@ from no_pr_bound_evidence import (
     BoundEvidenceVerdict,
     RepoEvidenceOutcome,
     RepoEvidenceVerdict,
+    VerdictReader,
     bounded_fetch,
     evaluate_bound_evidence,
     evaluate_repo_evidence,
@@ -578,7 +581,9 @@ def _repo_evidence_refusal(ticket_id: str, detail: str, *, why: str) -> Decision
         f"the product repository's contracts/{ticket_id}.yaml binding EVERY "
         "labelled acceptance criterion through `binds_ac`, plus a green "
         '"repo-evidence / dod-verify" GitHub Actions check run on the merged '
-        "head verifying the same contract that merged. OCC is not consulted "
+        "head verifying the same contract that merged, or, where the repository "
+        "has no such check run, a verified repo-owned dod_verify verdict taken at "
+        "the merged head or merge commit. OCC is not consulted "
         "once the repo carries the evidence. What is missing: "
         f"{detail} Land the bindings and a passing check in the product repository."
     )
@@ -590,6 +595,7 @@ def decide(
     occ_probe: Callable[..., BoundEvidenceVerdict] | None = None,
     repo_evidence_probe: Callable[[str, list[str], list[PRStatus]], RepoEvidenceVerdict]
     | None = None,
+    verdict_reader: VerdictReader | None = None,
     pr_fetcher: Callable[[Any], Any] = fetch_pr_status,
     linear_fetcher: Callable[[str], dict[str, Any] | None] = _default_linear_fetcher,
     receipt_lister: Callable[[str], list[dict[str, str]]] | None = None,
@@ -609,7 +615,9 @@ def decide(
     All I/O boundaries are injectable so unit tests stay hermetic:
       * ``repo_evidence_probe(ticket_id, descriptions, merged_statuses)`` ->
         repo verdict (default: :func:`no_pr_bound_evidence.evaluate_repo_evidence`
-        with its GitHub readers). An engaged verdict is final, before OCC.
+        with its GitHub and runtime readers). An engaged verdict is final, before OCC.
+      * ``verdict_reader(ticket_id)`` -> latest repo-owned durable verdict, used
+        by the default repo probe only when product contracts have no check run.
       * ``occ_probe(ticket_id, description, merged_pr=bool)`` -> verdict on the
         bound-receipt bar, read off ``origin/dev`` of the OCC clone. Defaults
         to :func:`no_pr_bound_evidence.evaluate_bound_evidence` over one load of
@@ -681,7 +689,9 @@ def decide(
                 occ_repo_path(workspace_root), ticket_id
             )
 
-            def probe(tid: str, desc: str, merged_pr: bool = False) -> Any:
+            def default_probe(
+                tid: str, desc: str, merged_pr: bool = False
+            ) -> BoundEvidenceVerdict:
                 return evaluate_bound_evidence(
                     tid,
                     desc,
@@ -694,6 +704,8 @@ def decide(
                         else ("target_identity", "working_dir")
                     ),
                 )
+
+            probe = default_probe
 
     def _repo_verdict(
         descriptions: list[str], statuses: list[PRStatus] | None
@@ -726,9 +738,13 @@ def decide(
                 ticket_id=ticket_id or None,
             ).pr_statuses
         merged_statuses = [s for s in statuses if s.state == "MERGED"]
-        return (repo_evidence_probe or evaluate_repo_evidence)(
-            ticket_id, descriptions, merged_statuses
-        )
+        if repo_evidence_probe is not None:
+            return repo_evidence_probe(ticket_id, descriptions, merged_statuses)
+        if verdict_reader is not None:
+            return evaluate_repo_evidence(
+                ticket_id, descriptions, merged_statuses, read_verdict=verdict_reader
+            )
+        return evaluate_repo_evidence(ticket_id, descriptions, merged_statuses)
 
     def _bar(
         descriptions: list[str],

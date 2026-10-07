@@ -115,6 +115,9 @@ def _probe(
         repo_evidence.evaluate_repo_evidence,
         read_contract=read_contract or contract_reader,
         read_check_runs=read_check_runs or check_reader,
+        read_verdict=lambda _tid: repo_evidence.VerdictRead(
+            repo_evidence.VerdictReadStatus.ABSENT
+        ),
     )
 
     def probe(ticket_id: str, descriptions: list[str], statuses: list[Any]) -> Any:

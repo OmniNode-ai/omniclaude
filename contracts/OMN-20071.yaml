@@ -1,0 +1,51 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-20071
+title: "The Done gate takes a repo-owned verdict from the dod_verify verdict row at the merged head, and decides OCC-only tickets as before"
+summary: >
+  OMN-20071 lets the Done gate read the latest repo-owned dod_verify verdict
+  through node_projection_read_effect when the product repository carries the
+  ticket contract without a repo-evidence check run. The verdict must bind the
+  merged head or merge commit and every criterion; OCC-only decisions are replayed
+  against the base gate at 139d3480a.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: AC4
+    statement: 'AC4: The omniclaude Done gate looks for a ticket''s contract first in the repository its PR merged into and takes the verdict from the S3 check run on the merged head (or from the `dod_verify` verdict through the existing projection access node, never the database directly, per RULING 2026-10-02T15:56:36Z), and treats onex_change_control as the source only for tickets whose contracts are there -- falsifier: the gate admits Done on a scratch ticket whose omnimarket contract leaves one criterion unbound, or refuses it after every criterion is bound and the S3 check run on the merged head is green'
+  - id: AC5
+    statement: 'AC5: The gate still decides a ticket whose contract is only in onex_change_control exactly as it does today -- falsifier: replaying recorded Done-gate inputs for OCC-only tickets through the changed gate yields a decision that differs from the pre-change decision for any of them'
+evidence_requirements:
+  - kind: tests
+    description: "Repo-owned verdict and check-run Done-gate suites pass"
+    command: "uv run pytest tests/hooks/test_done_flip_guard_repo_verdict.py tests/hooks/test_done_flip_guard_repo_evidence.py -q -p no:randomly"
+  - kind: tests
+    description: "OCC-only replay and existing Done-gate suites pass"
+    command: "uv run pytest tests/hooks/test_done_flip_guard_occ_only_replay_omn20071.py tests/hooks/test_done_flip_guard.py tests/hooks/test_done_flip_guard_requires_bound_receipt.py tests/hooks/test_done_flip_guard_false_positives.py -q -p no:randomly"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-repo-verdict-tests-pass
+    description: >
+      Repo-owned verdicts at the merged head or merge commit pass only when every
+      criterion is bound; a wrong commit, failed verdict or unbound criterion refuses.
+    binds_ac: [AC4]
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_repo_verdict.py tests/hooks/test_done_flip_guard_repo_evidence.py -q -p no:randomly"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-occ-only-replay-tests-pass
+    description: >
+      Every recorded OCC-only gate decision equals the decision at 139d3480a.
+    binds_ac: [AC5]
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_occ_only_replay_omn20071.py tests/hooks/test_done_flip_guard.py tests/hooks/test_done_flip_guard_requires_bound_receipt.py tests/hooks/test_done_flip_guard_false_positives.py -q -p no:randomly"
+        cwd: "${OMNI_HOME}/omniclaude"

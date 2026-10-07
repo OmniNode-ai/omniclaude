@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# hook_done_gate_verdict_read.yaml -- where the Done gate reads a ticket's
+# latest repo-owned dod_verify verdict (OMN-20071, OR.3 AC4).
+#
+# The verdict rows live in omninode_internal.dod_verify_runs, written by
+# omnimarket's node_projection_dod_verdict. The gate never reads that database:
+# it asks the runtime's projection access node, node_projection_read_effect,
+# through the runtime's POST /skill ingress (RULING 2026-10-02T15:56:36Z).
+# The exposure (topic, columns, row_ticket_id filter) is declared by
+# omnimarket's node_projection_dod_verdict contract; this file names it so the
+# hook carries no topic or endpoint literal.
+#
+# runtime_url uses the ${env.VAR} overlay convention: the runtime's HTTP base
+# URL comes from the per-lane ONEX_RUNTIME_URL, never a default. When it is
+# unset the verdict is unreadable, so the gate does not engage this source and
+# decides as it did before OMN-20071.
+projection_read:
+  runtime_url: "${env.ONEX_RUNTIME_URL}"
+  command_name: "node_projection_read_effect"
+  topic: "onex.snapshot.projection.dod-verdict.v1" # onex-topic-allow: projection snapshot topics use onex.snapshot.* prefix by convention
+  limit: 100
+  timeout_seconds: 15

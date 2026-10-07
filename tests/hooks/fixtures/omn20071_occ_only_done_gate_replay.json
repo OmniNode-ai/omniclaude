@@ -1,0 +1,810 @@
+{
+  "base_commit": "139d3480a",
+  "cases": [
+    {
+      "name": "occ_pass_merged",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "Done"
+          }
+        },
+        "linear_issue": {
+          "description": "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [
+          {
+            "repo": "OmniNode-ai/omnimarket",
+            "number": 3300,
+            "state": "MERGED",
+            "merge_state": "CLEAN",
+            "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "merge_commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": true,
+            "detail": "bound: AC1<-dod-ac1, AC2<-dod-ac2",
+            "merged_pr": true
+          }
+        },
+        "receipts": [
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac1",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          },
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac2",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          }
+        ],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": true,
+        "reason": "durable_evidence:occ_bound_receipts:all_prs_merged"
+      },
+      "occ_descriptions_read": [
+        "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second"
+      ],
+      "product_contract_repositories_read": [
+        "OmniNode-ai/omnimarket"
+      ]
+    },
+    {
+      "name": "occ_unbound_criterion",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "Done"
+          }
+        },
+        "linear_issue": {
+          "description": "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [
+          {
+            "repo": "OmniNode-ai/omnimarket",
+            "number": 3300,
+            "state": "MERGED",
+            "merge_state": "CLEAN",
+            "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "merge_commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": false,
+            "detail": "AC2: no dod_evidence item binds this criterion",
+            "merged_pr": true
+          }
+        },
+        "receipts": [],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": false,
+        "reason": "no_bound_dod_receipt for OMN-90001: a Done transition needs a passing definition-of-done check for every acceptance criterion. The bar (OMN-20368) is contracts/OMN-90001.yaml on origin/dev of onex_change_control binding EVERY labelled acceptance criterion through `binds_ac`, each discharged by a PASS receipt under drift/dod_receipts/OMN-90001/ taken against the current contract entry. What is missing: AC2: no dod_evidence item binds this criterion. Ticked boxes, a merged PR, an evidence comment or an exemption label do not substitute for it: run dod_verify, land the binding and the receipts through an evidence PR, then flip."
+      },
+      "occ_descriptions_read": [
+        "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second"
+      ],
+      "product_contract_repositories_read": [
+        "OmniNode-ai/omnimarket"
+      ]
+    },
+    {
+      "name": "occ_missing_receipt",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "Done"
+          }
+        },
+        "linear_issue": {
+          "description": "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [
+          {
+            "repo": "OmniNode-ai/omnimarket",
+            "number": 3300,
+            "state": "MERGED",
+            "merge_state": "CLEAN",
+            "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "merge_commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": false,
+            "detail": "AC2: dod-ac2 has no bound PASS receipt",
+            "merged_pr": true
+          }
+        },
+        "receipts": [],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": false,
+        "reason": "no_bound_dod_receipt for OMN-90001: a Done transition needs a passing definition-of-done check for every acceptance criterion. The bar (OMN-20368) is contracts/OMN-90001.yaml on origin/dev of onex_change_control binding EVERY labelled acceptance criterion through `binds_ac`, each discharged by a PASS receipt under drift/dod_receipts/OMN-90001/ taken against the current contract entry. What is missing: AC2: dod-ac2 has no bound PASS receipt. Ticked boxes, a merged PR, an evidence comment or an exemption label do not substitute for it: run dod_verify, land the binding and the receipts through an evidence PR, then flip."
+      },
+      "occ_descriptions_read": [
+        "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second"
+      ],
+      "product_contract_repositories_read": [
+        "OmniNode-ai/omnimarket"
+      ]
+    },
+    {
+      "name": "occ_stale_contract_entry",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "Done"
+          }
+        },
+        "linear_issue": {
+          "description": "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [
+          {
+            "repo": "OmniNode-ai/omnimarket",
+            "number": 3300,
+            "state": "MERGED",
+            "merge_state": "CLEAN",
+            "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "merge_commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": false,
+            "detail": "AC1: contract entry dod-ac1 changed since the receipt was taken (contract_entry_sha256 does not match the contract on origin/dev)",
+            "merged_pr": true
+          }
+        },
+        "receipts": [
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac1",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "old-entry"
+          },
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac2",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "old-entry"
+          }
+        ],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": false,
+        "reason": "no_bound_dod_receipt for OMN-90001: a Done transition needs a passing definition-of-done check for every acceptance criterion. The bar (OMN-20368) is contracts/OMN-90001.yaml on origin/dev of onex_change_control binding EVERY labelled acceptance criterion through `binds_ac`, each discharged by a PASS receipt under drift/dod_receipts/OMN-90001/ taken against the current contract entry. What is missing: AC1: contract entry dod-ac1 changed since the receipt was taken (contract_entry_sha256 does not match the contract on origin/dev). Ticked boxes, a merged PR, an evidence comment or an exemption label do not substitute for it: run dod_verify, land the binding and the receipts through an evidence PR, then flip."
+      },
+      "occ_descriptions_read": [
+        "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second"
+      ],
+      "product_contract_repositories_read": [
+        "OmniNode-ai/omnimarket"
+      ]
+    },
+    {
+      "name": "no_pr_fresh_receipts",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "Done"
+          }
+        },
+        "linear_issue": {
+          "description": "## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": true,
+            "detail": "bound: AC1<-dod-ac1, AC2<-dod-ac2",
+            "merged_pr": false
+          }
+        },
+        "receipts": [
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac1",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          },
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac2",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          }
+        ],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": true,
+        "reason": "durable_evidence:occ_bound_receipts"
+      },
+      "occ_descriptions_read": [
+        "## Acceptance criteria\n- AC1 -- first\n- AC2 -- second"
+      ],
+      "product_contract_repositories_read": []
+    },
+    {
+      "name": "no_pr_stale_receipts",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "Done"
+          }
+        },
+        "linear_issue": {
+          "description": "## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": false,
+            "detail": "AC1: read time 2026-09-01T12:00:00+00:00 is older than the 7-day freshness window",
+            "merged_pr": false
+          }
+        },
+        "receipts": [
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac1",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-09-01T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          },
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac2",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-09-01T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          }
+        ],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": false,
+        "reason": "no_bound_dod_receipt for OMN-90001: a Done transition needs a passing definition-of-done check for every acceptance criterion. The bar (OMN-20368) is contracts/OMN-90001.yaml on origin/dev of onex_change_control binding EVERY labelled acceptance criterion through `binds_ac`, each discharged by a PASS receipt under drift/dod_receipts/OMN-90001/ taken against the current contract entry. What is missing: AC1: read time 2026-09-01T12:00:00+00:00 is older than the 7-day freshness window. Ticked boxes, a merged PR, an evidence comment or an exemption label do not substitute for it: run dod_verify, land the binding and the receipts through an evidence PR, then flip."
+      },
+      "occ_descriptions_read": [
+        "## Acceptance criteria\n- AC1 -- first\n- AC2 -- second"
+      ],
+      "product_contract_repositories_read": []
+    },
+    {
+      "name": "open_pr",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "Done"
+          }
+        },
+        "linear_issue": {
+          "description": "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [
+          {
+            "repo": "OmniNode-ai/omnimarket",
+            "number": 3300,
+            "state": "OPEN",
+            "merge_state": "CLEAN",
+            "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "merge_commit_sha": ""
+          }
+        ],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": true,
+            "detail": "bound: AC1<-dod-ac1, AC2<-dod-ac2",
+            "merged_pr": true
+          }
+        },
+        "receipts": [
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac1",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          },
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac2",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          }
+        ],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": false,
+        "reason": "pr_not_merged\nCannot mark Done \u2014 referenced PRs are not merged:\n  - OmniNode-ai/omnimarket#3300: state=OPEN mergeState=CLEAN"
+      },
+      "occ_descriptions_read": [],
+      "product_contract_repositories_read": []
+    },
+    {
+      "name": "unchecked_box",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "Done"
+          }
+        },
+        "linear_issue": {
+          "description": "## Acceptance criteria\n- [ ] AC1 -- first\n- [ ] AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "## Acceptance criteria\n- [ ] AC1 -- first\n- [ ] AC2 -- second": {
+            "passed": true,
+            "detail": "bound: AC1<-dod-ac1, AC2<-dod-ac2",
+            "merged_pr": false
+          }
+        },
+        "receipts": [
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac1",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          },
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac2",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          }
+        ],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": false,
+        "reason": "unchecked_acceptance_criteria: 2 unchecked box(es) remain in the ticket description: - [ ] AC1 -- first; - [ ] AC2 -- second. Ticking them is not the remedy: a box is ticked only once a bound PASS dod_verify receipt covers it (OMN-15030 / OMN-20368)."
+      },
+      "occ_descriptions_read": [],
+      "product_contract_repositories_read": []
+    },
+    {
+      "name": "cancel_state",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "Canceled"
+          }
+        },
+        "linear_issue": {
+          "description": "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [
+          {
+            "repo": "OmniNode-ai/omnimarket",
+            "number": 3300,
+            "state": "MERGED",
+            "merge_state": "CLEAN",
+            "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "merge_commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": false,
+            "detail": "missing receipt",
+            "merged_pr": true
+          }
+        },
+        "receipts": [],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": true,
+        "reason": "carve_out:cancel_state"
+      },
+      "occ_descriptions_read": [],
+      "product_contract_repositories_read": []
+    },
+    {
+      "name": "non_done_tick_occ_pass",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "In Progress",
+            "description": "## Acceptance criteria\n- [x] AC1 -- first\n- [ ] AC2 -- second"
+          }
+        },
+        "linear_issue": {
+          "description": "## Acceptance criteria\n- [ ] AC1 -- first\n- [ ] AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "## Acceptance criteria\n- [x] AC1 -- first\n- [ ] AC2 -- second": {
+            "passed": true,
+            "detail": "bound: AC1<-dod-ac1, AC2<-dod-ac2",
+            "merged_pr": true
+          }
+        },
+        "receipts": [
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac1",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          },
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac2",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          }
+        ],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": true,
+        "reason": "not_done_state"
+      },
+      "occ_descriptions_read": [
+        "## Acceptance criteria\n- [x] AC1 -- first\n- [ ] AC2 -- second"
+      ],
+      "product_contract_repositories_read": []
+    },
+    {
+      "name": "non_done_tick_occ_block",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "In Progress",
+            "description": "## Acceptance criteria\n- [x] AC1 -- first\n- [ ] AC2 -- second"
+          }
+        },
+        "linear_issue": {
+          "description": "## Acceptance criteria\n- [ ] AC1 -- first\n- [ ] AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "## Acceptance criteria\n- [x] AC1 -- first\n- [ ] AC2 -- second": {
+            "passed": false,
+            "detail": "AC2: dod-ac2 has no bound PASS receipt",
+            "merged_pr": true
+          }
+        },
+        "receipts": [],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": false,
+        "reason": "ac_tick_without_receipt for OMN-90001: this edit ticks 1 acceptance box(es) (ac1 -- first) and no bound PASS receipt covers the criteria. The bar (OMN-20368) is contracts/OMN-90001.yaml on origin/dev of onex_change_control binding EVERY labelled acceptance criterion through `binds_ac`, each discharged by a PASS receipt under drift/dod_receipts/OMN-90001/ taken against the current contract entry. What is missing: AC2: dod-ac2 has no bound PASS receipt. Ticked boxes, a merged PR, an evidence comment or an exemption label do not substitute for it: run dod_verify, land the binding and the receipts through an evidence PR, then flip."
+      },
+      "occ_descriptions_read": [
+        "## Acceptance criteria\n- [x] AC1 -- first\n- [ ] AC2 -- second"
+      ],
+      "product_contract_repositories_read": []
+    },
+    {
+      "name": "state_by_id",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "00000000-0000-4000-8000-000000000001"
+          }
+        },
+        "linear_issue": {
+          "description": "## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": true,
+            "detail": "bound",
+            "merged_pr": false
+          }
+        },
+        "receipts": [
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac1",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          },
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac2",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          }
+        ],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": false,
+        "reason": "state_by_id: state 00000000-0000-4000-8000-000000000001 was passed by id, so the guard cannot tell whether this is a Done transition. Pass the state by name (Done, In Progress, ...)."
+      },
+      "occ_descriptions_read": [],
+      "product_contract_repositories_read": []
+    },
+    {
+      "name": "missing_ticket_id",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "state": "Done"
+          }
+        },
+        "linear_issue": {
+          "description": "## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": true,
+            "detail": "bound",
+            "merged_pr": false
+          }
+        },
+        "receipts": [
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac1",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          },
+          {
+            "ticket_id": "OMN-90001",
+            "evidence_item_id": "dod-ac2",
+            "status": "PASS",
+            "check_type": "command",
+            "runner": "runner",
+            "verifier": "verifier",
+            "probe_stdout": "ok",
+            "target_identity": "dev",
+            "run_timestamp": "2026-10-06T12:00:00Z",
+            "contract_entry_sha256": "current-entry"
+          }
+        ],
+        "probe_error": false,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": false,
+        "reason": "no_ticket_id: a Done transition or an acceptance-box tick needs the issue id so its bound receipts can be read. Pass 'id'."
+      },
+      "occ_descriptions_read": [],
+      "product_contract_repositories_read": []
+    },
+    {
+      "name": "unreadable_occ_probe_error",
+      "inputs": {
+        "tool_call": {
+          "tool_name": "mcp__linear-server__update_issue",
+          "tool_input": {
+            "id": "OMN-90001",
+            "state": "Done"
+          }
+        },
+        "linear_issue": {
+          "description": "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second",
+          "labels": [],
+          "attachment_urls": []
+        },
+        "pr_statuses": [
+          {
+            "repo": "OmniNode-ai/omnimarket",
+            "number": 3300,
+            "state": "MERGED",
+            "merge_state": "CLEAN",
+            "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "merge_commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "product_contract_status": "absent",
+        "occ_verdicts": {
+          "Implemented in https://github.com/OmniNode-ai/omnimarket/pull/3300\n\n## Acceptance criteria\n- AC1 -- first\n- AC2 -- second": {
+            "passed": false,
+            "detail": "unused",
+            "merged_pr": true
+          }
+        },
+        "receipts": [],
+        "probe_error": true,
+        "now": "2026-10-07T12:00:00+00:00"
+      },
+      "decision": {
+        "allowed": false,
+        "reason": "no_bound_dod_receipt for OMN-90001: a Done transition needs a passing definition-of-done check for every acceptance criterion. The bar (OMN-20368) is contracts/OMN-90001.yaml on origin/dev of onex_change_control binding EVERY labelled acceptance criterion through `binds_ac`, each discharged by a PASS receipt under drift/dod_receipts/OMN-90001/ taken against the current contract entry. What is missing: OMNI_HOME is unset/invalid, so the local onex_change_control clone cannot be resolved. Ticked boxes, a merged PR, an evidence comment or an exemption label do not substitute for it: run dod_verify, land the binding and the receipts through an evidence PR, then flip."
+      },
+      "occ_descriptions_read": [],
+      "product_contract_repositories_read": [
+        "OmniNode-ai/omnimarket"
+      ]
+    }
+  ]
+}
