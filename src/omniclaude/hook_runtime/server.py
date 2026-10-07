@@ -353,6 +353,8 @@ class HookRuntimeServer:
                 _cost: float = (
                     float(_cost_val) if isinstance(_cost_val, (int, float)) else 0.0
                 )
+                _tenant_val = payload.get("tenant_id")
+                _tenant: str | None = str(_tenant_val) if _tenant_val else None
                 try:
                     await emit_task_delegated(
                         bus=self._event_bus,
@@ -376,6 +378,7 @@ class HookRuntimeServer:
                         repo=_repo,
                         is_shadow=bool(payload.get("is_shadow", False)),
                         llm_call_id=str(payload.get("llm_call_id", "") or ""),
+                        tenant_id=_tenant,
                     )
                     return HookRuntimeResponse(decision="ack").model_dump_json()
                 except Exception:
