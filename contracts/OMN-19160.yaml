@@ -1,0 +1,25 @@
+schema_version: "1.0.0"
+ticket_id: OMN-19160
+title: "Surface the PR close claim precondition before the close is refused"
+summary: >
+  The existing claim-before-close requirement is exposed in the guard help,
+  the claim CLI and the close template. The missing-claim refusal leads with
+  the missing claim and puts its exact remedy on the next line.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Close-precondition tests pass"
+    command: "uv run pytest tests/hooks/test_pr_close_preconditions.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-close-precondition-tests
+    description: "Close-precondition tests pin the missing-claim refusal wording through the registered Bash entrypoint"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_pr_close_preconditions.py -q"
