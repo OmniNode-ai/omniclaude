@@ -44,11 +44,11 @@ max_runtime_version: "1.0.0"
 # flat: session_start_onex_cli_pin_check.sh parses this block with awk.
 onex_cli:
   package: "omnibase-infra"
-  min_version: "0.38.4"
+  min_version: "0.38.67"
   console_script_package: "omnibase-core"
   console_script_min_version: "0.46.8"
-  install_hint: "uv tool install --with 'omnibase-infra>=0.38.4' 'omnibase-core>=0.46.8'"
-  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4'"
+  install_hint: "uv tool install --with 'omnibase-infra>=0.38.67' 'omnibase-core>=0.46.8'"
+  install_hint_pipx: "pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.67'"
   # See plugins/onex-delegate/plugin-compat.yaml for the full blocker note:
   # omnibase-infra 0.38.4 is not yet published to PyPI (OMN-16041).
   installable_from_pypi: false

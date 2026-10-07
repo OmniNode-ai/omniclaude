@@ -5,7 +5,7 @@ JSON to stdout — the full LLM response and metrics, never truncated. RuntimeLo
 logs and intermediate context go to a capture file + the artifact store, never to you.
 
 ```bash
-onex delegate "<prompt>" [--task-type <type>] [--max-tokens <n>]
+onex delegate "<prompt>" --json [--task-type <type>] [--max-tokens <n>]
 ```
 
 Call the bare `onex` on PATH — never `uv run onex`, which resolves the venv of
@@ -14,6 +14,7 @@ the current directory's project and fails outside a repo that co-installs
 `onex delegate --help` does not exit 0.
 
 - `<prompt>` — the task to delegate (required).
+- `--json` — required. Prints the one typed JSON result on stdout; without it `onex delegate` prints the human form when stdout is not a terminal (omnibase-infra >= 0.38.67, OMN-20124).
 - `--task-type` — `test | document | research | code_generation | refactor | reasoning | review`. Omit to auto-classify from the prompt.
 - `--max-tokens` — response budget (default 2048).
 
