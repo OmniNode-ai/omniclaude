@@ -156,6 +156,7 @@ async def test_publish_delegation_event_writes_to_sqlite(tmp_path: Path) -> None
                 "tokens_input": 100,
                 "tokens_output": 50,
                 "delegation_success": True,
+                "tenant_id": "omninode",
             },
         }
         writer.write((json.dumps(request) + "\n").encode())

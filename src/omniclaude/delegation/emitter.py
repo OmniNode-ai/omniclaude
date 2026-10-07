@@ -42,6 +42,7 @@ async def emit_task_delegated(
     repo: str | None = None,
     is_shadow: bool = False,
     llm_call_id: str = "",
+    tenant_id: str | None = None,
 ) -> None:
     """Emit a task-delegated event to ``onex.evt.omniclaude.task-delegated.v1``.
 
@@ -72,6 +73,9 @@ async def emit_task_delegated(
         "repo": repo,
         "is_shadow": is_shadow,
         "llm_call_id": llm_call_id,
+        # The projection refuses a terminal with no declared tenant (OMN-20651),
+        # so the caller must name the submitting tenant; never defaulted here.
+        "tenant_id": tenant_id,
     }
 
     value = json.dumps(payload).encode("utf-8")
