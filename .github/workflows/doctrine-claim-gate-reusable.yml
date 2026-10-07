@@ -1,22 +1,13 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# Doctrine-claim gate (reusable). OMN-18529, W2-2 of the enforcement-integration
-# plan, and the companion to OMN-18528 which corrected four doctrine sentences
-# that said a mechanism was unenforced while the ticket each named was Done.
-#
-# What it refuses: a sentence asserting a mechanism is unbuilt, in flight or
-# blocked, when the ticket it names is in a state that claim cannot be true of.
-# Three claim types, each binding a ticket to a ROLE with its own expected state
-# set. "in flight" accepts a `started` ticket and nothing else, because a
-# reclassified in-flight item lands in Backlog and an open-versus-closed
-# predicate would wave it through -- which is how one rule read as imminent for
-# three weeks with its ticket never once started.
-#
-# It fails closed on an unreadable file, an unparseable sentence, an
-# unresolvable ticket id, an unreachable tracker, and on a scan matching ZERO
-# claim sentences. That last one is deliberate: a gate that audits nothing and
-# reports green is the defect this whole workstream exists to remove.
+# Doctrine-claim gate (reusable), OMN-18529. Each unbuilt, in_flight or blocked
+# claim requires an HTML doctrine-claim marker naming type, ticket and role in
+# the same prose block or table row; rewording cannot hide a claim. One marker
+# names one ticket. Malformed markers, missing tickets or roles, and ticket-state
+# contradictions refuse: in_flight requires started; unbuilt and blocked require
+# non-terminal states. Unreadable input, missing credentials, an unreachable
+# tracker, and ZERO claim sentences or markers also refuse.
 #
 # Usage in caller repos:
 #   jobs:

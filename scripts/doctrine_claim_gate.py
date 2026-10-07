@@ -1,63 +1,57 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Doctrine-claim gate — a sentence saying a mechanism is unenforced must be true.
+"""Doctrine-claim gate — explicit claims must match live ticket state.
 
-OMN-18529 (W2-2). The companion to OMN-18528, which corrected four sentences in
-the registry doctrine file that said a mechanism was unenforced, in flight or
-never audited while the ticket each named was already Done. That was the
-correction; this is the check that stops it recurring.
+OMN-18529. Every claim that a mechanism is unbuilt, in flight or blocked carries
+an HTML comment with whitespace-separated key=value tokens, exactly these keys:
 
-**What it refuses.** A doctrine sentence that asserts a mechanism is not built,
-is being built, or is waiting on something, while the ticket it names is in a
-state that claim cannot be true of. Three claim types, each binding a ticket to
-a ROLE with its own expected state set:
+    <!-- doctrine-claim: type=unbuilt ticket=OMN-1234 role=implementation -->
 
-* ``unbuilt`` binds the IMPLEMENTATION ticket and refuses ``completed`` or
-  ``canceled``; anything else passes.
-* ``in_flight`` binds the IMPLEMENTATION ticket and passes ``started`` ONLY.
-  ``backlog``, ``unstarted``, ``completed`` and ``canceled`` all refuse.
-* ``blocked`` binds the BLOCKER ticket and refuses ``completed`` or
-  ``canceled``; anything else passes.
+One marker names one ticket; a claim naming two tickets carries two markers.
+A marker can appear anywhere in the same block (a run of non-blank lines).
+Each Markdown table row is its own block. Code fences are ignored.
+
+* ``unbuilt`` requires role ``implementation`` and accepts any non-terminal
+  state (``triage``, ``backlog``, ``unstarted``, ``started``).
+* ``in_flight`` requires role ``implementation`` and accepts ``started`` only.
+* ``blocked`` allows role ``blocker`` or ``implementation`` and accepts any
+  non-terminal state. ``completed`` and ``canceled`` refuse both unbuilt and
+  blocked claims.
 
 **Open-versus-closed is not a sufficient predicate, and that is the whole
 point.** A check that only asks whether the named ticket is open passes a
-sentence claiming work is *in flight* whose ticket sits in Backlog — and
-Backlog is exactly where a reclassified in-flight item lands. Rule 18 of the
-registry doctrine file spent three weeks reading as imminent for that reason,
-its ticket never once started. So ``in_flight`` accepts ``started`` and
-nothing else.
+claim of work *in flight* whose ticket sits in Backlog, and Backlog is exactly
+where a reclassified in-flight item lands. Rule 18 of the registry doctrine
+file spent three weeks reading as imminent for that reason, so ``in_flight``
+accepts ``started`` and nothing else.
 
-**It fails closed, everywhere.** An unreadable file, an unparseable sentence,
-an unresolvable ticket id, an unreachable ticket-state source, and a scan that
-matches zero claim sentences are each a refusal, never a pass. The
-zero-sentence case is deliberate and is the shape this whole epic exists to
-remove: a gate that audits nothing and reports green is worse than no gate,
-because it manufactures confidence. If this checker is ever pointed at a file
-with no claims in it, that is a wiring error and it says so loudly.
+Claim-shaped prose is checked for every matching type after markers are
+removed. Each type requires a marker, so rewording cannot hide a claim.
+Malformed markers, missing tickets, and missing or disallowed roles refuse.
+Only fully valid markers cause ticket-state lookups.
 
-**The ticket-state source is named here, in the checker's own source, as AC3
-requires.** It is the Linear GraphQL API at :data:`TICKET_STATE_ENDPOINT`,
-authenticated with the token in :data:`TICKET_STATE_ENV`. There is no snapshot
-file and no offline mode.
+An unreadable file, an unresolvable ticket, an unreachable tracker, or missing
+credentials refuses. A scan with ZERO claim sentences or markers also refuses:
+a gate that audits nothing and reports green manufactures confidence.
+Claim-shaped prose without markers returns findings rather than an empty scan.
+
+**The ticket-state source is named here, in the checker's own source.** It is
+the Linear GraphQL API at :data:`TICKET_STATE_ENDPOINT`, authenticated with
+the token in :data:`TICKET_STATE_ENV`. There is no snapshot file and no offline
+mode. A missing credential is a refusal rather than a skip: a gate that cannot
+read its input has not passed, it has not run.
 
 *This deliberately diverges from the nearest precedent in this repository.*
 ``.github/workflows/stale-todo-gate.yml`` reads the same secret and, when it is
 absent, prints a warning and **skips** — a silent pass on a merge-gating path,
-which is the class of defect this epic was opened to remove. A missing
-credential here is a refusal: a gate that cannot read its input has not passed,
-it has not run.
+which is the class of defect this gate exists to remove.
 
-**Where it lives and why.** Here, in the repository that owns hooks and gates,
-because the registry repository refuses functional code outside its
-documentation and test trees. The registry repository consumes it as a pinned
-reusable workflow plus an exported pre-commit hook — one implementation, one
-verdict — which is the settled shape ``kb_doc_gate.py`` already uses across the
-same two repositories.
+The registry repository consumes this checker as a pinned reusable workflow
+plus an exported pre-commit hook — one implementation, one verdict.
 
 Exit codes: ``0`` every claim holds, ``1`` findings, ``2`` the gate could not
-run (which is also a failure, reported distinctly so a wiring fault is not read
-as a doctrine defect).
+run (also a failure, distinguished from a doctrine defect).
 """
 
 from __future__ import annotations
@@ -111,8 +105,7 @@ TICKET_RE: Final[re.Pattern[str]] = re.compile(r"\bOMN-\d{3,6}\b")
 # The claim-sentence family. AC1: a family, not one phrasing.
 # --------------------------------------------------------------------------
 
-#: Ordered. The FIRST matching pattern decides the claim type, so the more
-#: specific phrasings come first. Each entry is (claim_type, pattern).
+#: Every distinct matching type is claim-shaped. Each entry is (type, pattern).
 CLAIM_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     # blocked — the sentence says what the work waits on
     ("blocked", re.compile(r"\bblocked\s+on\b", re.I)),
@@ -136,51 +129,18 @@ CLAIM_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     ("unbuilt", re.compile(r"\bnever\s+been\s+started\b", re.I)),
 )
 
-#: Phrasings that mark the ticket AFTER them as the blocker rather than the
-#: implementation. AC7: a role is declared, never defaulted silently.
-BLOCKER_ROLE_RE: Final[re.Pattern[str]] = re.compile(
-    r"\b(?:blocked\s+on|wait(?:s|ing)?\s+on|gated\s+on|blocker(?:\s+is)?)\b[^.]{0,80}?"
-    r"(OMN-\d{3,6})",
-    re.I,
-)
-
-#: Phrasings that positively mark a ticket as the implementation. Without one
-#: of these, a single-id sentence still binds to implementation (that is the
-#: ordinary case and is not a guess); a MULTI-id sentence with no role markers
-#: is a finding of its own kind, because defaulting there would resolve two
-#: ids against one expected set.
-_IMPL_MARKER: Final[str] = (
-    r"tracked\s+(?:in|by)|tracks|implemented\s+(?:in|by)|built\s+(?:in|by)|"
-    r"lands?\s+in|ticket\s+is"
-)
-# `covers` and `adds` are deliberately NOT markers. They describe what a
-# ticket did, not that it OWNS the claim: rule 12 says the gate is unenforced
-# and then cites OMN-15218 for "covering exactly one lane", a true sentence
-# about a Done ticket. Treating a description verb as ownership turned that
-# into a contradiction finding on correct prose.
-
-#: Matched in BOTH directions, because doctrine writes it both ways: "tracked
-#: in OMN-1234" and "OMN-16725 tracks adding the pattern". A marker-before-id
-#: pattern alone missed rule 17, the single most important case in the corpus,
-#: and silently downgraded a state contradiction to a weaker no-ticket finding.
-IMPL_ROLE_RE: Final[re.Pattern[str]] = re.compile(
-    rf"(?:\b(?:{_IMPL_MARKER})[^.]{{0,80}}?(OMN-\d{{3,6}}))"
-    rf"|(?:(OMN-\d{{3,6}})[^.]{{0,40}}?\b(?:{_IMPL_MARKER}))",
-    re.I,
-)
-
-#: The states each claim type accepts, per role.
+#: The states each claim type accepts, keyed by type.
 EXPECTED_STATES: Final[dict[str, frozenset[str]]] = {
     "unbuilt": KNOWN_STATE_TYPES - TERMINAL_STATE_TYPES,
     "blocked": KNOWN_STATE_TYPES - TERMINAL_STATE_TYPES,
     "in_flight": frozenset({"started"}),
 }
 
-#: Which role each claim type binds its ticket to.
-CLAIM_ROLE: Final[dict[str, str]] = {
-    "unbuilt": "implementation",
-    "in_flight": "implementation",
-    "blocked": "blocker",
+#: Roles must be declared explicitly in each marker.
+ALLOWED_ROLES: Final[dict[str, frozenset[str]]] = {
+    "unbuilt": frozenset({"implementation"}),
+    "in_flight": frozenset({"implementation"}),
+    "blocked": frozenset({"blocker", "implementation"}),
 }
 
 
@@ -189,16 +149,36 @@ class GateError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class Claim:
-    """One claim sentence, its type, and the tickets it binds."""
+class Marker:
+    """One explicit marker and the prose block it annotates."""
+
+    path: str
+    line: int
+    claim_type: str | None
+    ticket: str | None
+    role: str | None
+    raw: str
+    sentence: str
+    closed: bool
+
+
+@dataclass(frozen=True)
+class ClaimShaped:
+    """All claim types found in a block after stripping marker text."""
 
     path: str
     line: int
     sentence: str
-    claim_type: str
-    implementation: tuple[str, ...]
-    blocker: tuple[str, ...]
-    unroled: tuple[str, ...]
+    claim_types: tuple[str, ...]
+    marker_types: frozenset[str]
+
+
+@dataclass(frozen=True)
+class Scan:
+    """Markers and claim-shaped blocks extracted from doctrine files."""
+
+    markers: tuple[Marker, ...]
+    claims: tuple[ClaimShaped, ...]
 
 
 @dataclass(frozen=True)
@@ -219,31 +199,25 @@ class Finding:
 
 
 # --------------------------------------------------------------------------
-# Sentence extraction
+# Block and marker extraction
 # --------------------------------------------------------------------------
 
 _FENCE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*```")
-_SENTENCE_SPLIT_RE: Final[re.Pattern[str]] = re.compile(r"(?<=[.!?])\s+(?=[A-Z*`\[])")
+_MARKER_START_RE: Final[re.Pattern[str]] = re.compile(r"<!--\s*doctrine-claim\b")
+# Stop at the next marker start as well as the closing delimiter, so an
+# unclosed marker cannot swallow a later marker in the same block.
+_MARKER_RE: Final[re.Pattern[str]] = re.compile(
+    r"<!--\s*doctrine-claim\b(?:(?!<!--\s*doctrine-claim\b|-->).)*"
+    r"(?:-->|$|(?=<!--\s*doctrine-claim\b))",
+    re.S,
+)
 
 
 def iter_blocks(text: str) -> list[tuple[int, str]]:
-    """Yield ``(1-based first line, block text)`` for prose outside code fences.
+    """Return prose blocks with first-line numbers, ignoring code fences.
 
-    The unit is a BLOCK -- a run of non-blank lines -- not a sentence, and
-    that is load-bearing rather than incidental. Doctrine routinely states the
-    claim in one sentence and names its ticket in the next:
-
-        This is currently doctrine only. OMN-16725 tracks adding the pattern
-        to the existing PreToolUse Bash guard ...
-
-    A sentence-scoped binder reads the first sentence as a claim naming no
-    ticket and never resolves OMN-16725 at all, which converts the exact
-    finding this gate exists to produce into a weaker, unfalsifiable one. The
-    first draft of this module did precisely that, and the corpus caught it.
-
-    Fenced blocks are skipped: a claim quoted inside a code sample is a
-    quotation, not an assertion the document makes. Table rows are kept, since
-    the registry doctrine file states several live claims inside tables.
+    A block is a run of non-blank lines, except that each table row is its own
+    block. Newlines are preserved so marker locations retain their line numbers.
     """
     out: list[tuple[int, str]] = []
     in_fence = False
@@ -253,115 +227,55 @@ def iter_blocks(text: str) -> list[tuple[int, str]]:
         if _FENCE_RE.match(raw):
             in_fence = not in_fence
             if buf:
-                out.append((start, " ".join(buf)))
+                out.append((start, "\n".join(buf)))
                 buf = []
             continue
         if in_fence:
             continue
         line = raw.strip()
-        if not line:
+        if not line or line.startswith("|"):
             if buf:
-                out.append((start, " ".join(buf)))
+                out.append((start, "\n".join(buf)))
                 buf = []
+            if line:
+                out.append((lineno, line))
             continue
         if not buf:
             start = lineno
         buf.append(line)
     if buf:
-        out.append((start, " ".join(buf)))
+        out.append((start, "\n".join(buf)))
     return out
 
 
-def binding_scope(block: str, pattern: re.Pattern[str]) -> str:
-    """Return the text a claim's tickets are bound FROM.
-
-    The claim sentence, plus the one that follows it when the claim sentence
-    names no ticket of its own. Both halves are needed and neither is safe
-    alone:
-
-    * sentence-only misses the commonest doctrine shape, where the claim and
-      its ticket are adjacent sentences ("This is currently doctrine only.
-      OMN-16725 tracks adding the pattern ...");
-    * whole-block sweeps in every id the paragraph happens to mention. The
-      first draft did that and reported five findings against rule 21's
-      "Related tickets:" list, which makes no claim about any of them. A gate
-      that cries about a reference list is one people turn off, which is the
-      failure this epic exists to remove -- so the scope stops at the
-      elaboration.
-    """
-    parts = [p.strip() for p in _SENTENCE_SPLIT_RE.split(block) if p.strip()]
-    for index, part in enumerate(parts):
-        if not pattern.search(part):
+def _marker_tokens(raw: str) -> tuple[dict[str, str], list[str]]:
+    """Recover declared values and report every grammar problem."""
+    body = _MARKER_START_RE.sub("", raw, count=1)
+    if body.endswith("-->"):
+        body = body[:-3]
+    body = body.strip()
+    problems: list[str] = []
+    if not body.startswith(":"):
+        problems.append("marker requires a colon after doctrine-claim")
+    else:
+        body = body[1:]
+    values: dict[str, str] = {}
+    for token in body.split():
+        if "=" not in token:
+            problems.append(f"token {token!r} is not key=value")
             continue
-        if TICKET_RE.search(part):
-            return part
-        nxt = parts[index + 1] if index + 1 < len(parts) else ""
-        # The fallback reaches into the next sentence ONLY when that sentence
-        # positively marks its ticket as the implementation ("OMN-16725 TRACKS
-        # adding the pattern"). Without that gate it also binds a supporting
-        # CITATION as the implementation: rule 12's gap paragraph says the gate
-        # is unenforced and then cites OMN-15218 for covering one lane, which
-        # is a true sentence about a Done ticket, and the ungated fallback
-        # reported it as a contradiction. A false finding on a correct sentence
-        # is how a gate loses its audience.
-        if IMPL_ROLE_RE.search(nxt):
-            return f"{part} {nxt}".strip()
-        return part
-    return block
+        key, value = token.split("=", 1)
+        if key not in {"type", "ticket", "role"}:
+            problems.append(f"unknown key {key!r}; keys are exactly type, ticket, role")
+        if key in values:
+            problems.append(f"duplicate key {key!r}")
+        else:
+            values[key] = value
+    return values, problems
 
 
-def claim_sentence(block: str, pattern: re.Pattern[str]) -> str:
-    """Return the sentence inside ``block`` that carries the claim, for the message."""
-    for part in _SENTENCE_SPLIT_RE.split(block):
-        if pattern.search(part):
-            return part.strip()
-    return block.strip()
-
-
-def classify(sentence: str) -> str | None:
-    """Return the claim type of ``sentence``, or None when it makes no claim."""
-    for claim_type, pattern in CLAIM_PATTERNS:
-        if pattern.search(sentence):
-            return claim_type
-    return None
-
-
-def bind_roles(
-    sentence: str,
-) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
-    """Split the tickets a sentence names into (implementation, blocker, unroled).
-
-    A single id with no marker binds to implementation: that is the ordinary
-    shape and reading it any other way would refuse most of the corpus. Two or
-    more ids with no marker distinguishing them is the ``unroled`` case, a
-    finding of its own kind, because a default there would resolve both against
-    one expected set — AC7's falsifier exactly.
-    """
-    ids = tuple(dict.fromkeys(TICKET_RE.findall(sentence)))
-    if not ids:
-        return (), (), ()
-    blockers = tuple(
-        dict.fromkeys(m.upper() for m in BLOCKER_ROLE_RE.findall(sentence))
-    )
-    impls = tuple(
-        dict.fromkeys(
-            g.upper()
-            for match in IMPL_ROLE_RE.findall(sentence)
-            for g in (match if isinstance(match, tuple) else (match,))
-            if g
-        )
-    )
-    marked = set(blockers) | set(impls)
-    rest = tuple(i for i in ids if i not in marked)
-    if len(ids) == 1 and not marked:
-        return ids, (), ()
-    if rest and len(ids) > 1:
-        return impls, blockers, rest
-    return impls or rest, blockers, ()
-
-
-def collect_claims(path: Path) -> list[Claim]:
-    """Parse one file into claims. Raises :class:`GateError` if unreadable."""
+def collect_claims(path: Path) -> Scan:
+    """Parse one file into markers and claim-shaped prose; refuse unreadable input."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -369,26 +283,48 @@ def collect_claims(path: Path) -> list[Claim]:
     except UnicodeDecodeError as exc:
         raise GateError(f"doctrine file {path} is not valid UTF-8: {exc}") from exc
 
-    claims: list[Claim] = []
+    markers: list[Marker] = []
+    claims: list[ClaimShaped] = []
     for lineno, block in iter_blocks(text):
-        hit = next((pat for _t, pat in CLAIM_PATTERNS if pat.search(block)), None)
-        if hit is None:
-            continue
-        claim_type = classify(block)
-        assert claim_type is not None  # noqa: S101 - same scan as `hit`
-        impls, blockers, unroled = bind_roles(binding_scope(block, hit))
-        claims.append(
-            Claim(
-                path=str(path),
-                line=lineno,
-                sentence=claim_sentence(block, hit),
-                claim_type=claim_type,
-                implementation=impls,
-                blocker=blockers,
-                unroled=unroled,
+        matches = list(_MARKER_RE.finditer(block))
+        sentence = " ".join(_MARKER_RE.sub("", block).split())
+        block_markers: list[Marker] = []
+        for match in matches:
+            raw = match.group()
+            values, _ = _marker_tokens(raw)
+            block_markers.append(
+                Marker(
+                    path=str(path),
+                    line=lineno + block[: match.start()].count("\n"),
+                    claim_type=values.get("type"),
+                    ticket=values.get("ticket"),
+                    role=values.get("role"),
+                    raw=raw,
+                    sentence=sentence,
+                    closed=raw.endswith("-->"),
+                )
+            )
+        markers.extend(block_markers)
+        claim_types = tuple(
+            dict.fromkeys(
+                claim_type
+                for claim_type, pattern in CLAIM_PATTERNS
+                if pattern.search(sentence)
             )
         )
-    return claims
+        if claim_types:
+            claims.append(
+                ClaimShaped(
+                    path=str(path),
+                    line=lineno,
+                    sentence=sentence,
+                    claim_types=claim_types,
+                    marker_types=frozenset(
+                        m.claim_type for m in block_markers if m.claim_type is not None
+                    ),
+                )
+            )
+    return Scan(tuple(markers), tuple(claims))
 
 
 # --------------------------------------------------------------------------
@@ -468,79 +404,113 @@ def resolve_states(tickets: set[str], *, token: str | None = None) -> dict[str, 
 # --------------------------------------------------------------------------
 
 
-def evaluate(claims: list[Claim], states: dict[str, str]) -> list[Finding]:
-    """Turn claims plus resolved states into findings."""
+def _marker_findings(marker: Marker) -> list[Finding]:
+    """Validate a marker without reading the tracker."""
+    _, problems = _marker_tokens(marker.raw)
+    if not marker.closed:
+        problems.append("unclosed doctrine-claim comment; requires -->")
+    if marker.claim_type not in EXPECTED_STATES:
+        problems.append(
+            f"type {marker.claim_type!r} must be unbuilt, in_flight or blocked"
+        )
+    ticket_valid = (
+        marker.ticket is not None and TICKET_RE.fullmatch(marker.ticket) is not None
+    )
+    issues = [("MARKER_MALFORMED", problem) for problem in problems]
+    if not ticket_valid:
+        issues.append(
+            (
+                "MARKER_NAMES_NO_TICKET",
+                "marker requires one ticket matching OMN- followed by 3 to 6 digits",
+            )
+        )
+    allowed_roles = ALLOWED_ROLES.get(marker.claim_type or "")
+    if not marker.role or (
+        allowed_roles is not None and marker.role not in allowed_roles
+    ):
+        issues.append(
+            (
+                "MARKER_HAS_NO_ROLE",
+                f"role {marker.role!r} is missing or not allowed for type {marker.claim_type!r}",
+            )
+        )
+    return [
+        Finding(
+            kind,
+            marker.path,
+            marker.line,
+            marker.ticket if ticket_valid else None,
+            detail,
+            marker.sentence,
+        )
+        for kind, detail in issues
+    ]
+
+
+def evaluate(scan: Scan, states: dict[str, str]) -> list[Finding]:
+    """Turn a scan plus resolved states into findings."""
     findings: list[Finding] = []
-    for claim in claims:
-        if not (claim.implementation or claim.blocker or claim.unroled):
-            findings.append(
-                Finding(
-                    kind="CLAIM_NAMES_NO_TICKET",
-                    path=claim.path,
-                    line=claim.line,
-                    ticket=None,
-                    detail=(
-                        f"a {claim.claim_type} claim names no ticket, so nothing can "
-                        "ever falsify it and it will never be revisited"
-                    ),
-                    sentence=claim.sentence,
-                )
-            )
-            continue
-        if claim.unroled:
-            findings.append(
-                Finding(
-                    kind="TICKET_HAS_NO_DECLARED_ROLE",
-                    path=claim.path,
-                    line=claim.line,
-                    ticket=", ".join(claim.unroled),
-                    detail=(
-                        "the sentence names more than one ticket and does not say which "
-                        "is the implementation and which is the blocker; resolving both "
-                        "against one expected state set would be a guess"
-                    ),
-                    sentence=claim.sentence,
-                )
-            )
-        expected = EXPECTED_STATES[claim.claim_type]
-        role_of = dict.fromkeys(claim.implementation, "implementation")
-        role_of.update(dict.fromkeys(claim.blocker, "blocker"))
-        for ticket, role in sorted(role_of.items()):
-            state = states.get(ticket)
-            if state is None:  # pragma: no cover - resolve_states fails closed first
-                raise GateError(f"{ticket} was never resolved")
-            if state not in expected:
+    for claim in scan.claims:
+        for claim_type in claim.claim_types:
+            if claim_type not in claim.marker_types:
                 findings.append(
                     Finding(
-                        kind="CLAIM_CONTRADICTED_BY_TICKET_STATE",
+                        kind="UNMARKED_CLAIM",
                         path=claim.path,
                         line=claim.line,
-                        ticket=ticket,
-                        detail=(
-                            f"the sentence claims {claim.claim_type!r} and binds {ticket} as the "
-                            f"{role}, but {ticket} is {state!r}; a {claim.claim_type} claim accepts "
-                            f"only {sorted(expected)}"
-                        ),
+                        ticket=None,
+                        detail=f"a {claim_type} claim requires a marker so rewording cannot hide a claim",
                         sentence=claim.sentence,
                     )
                 )
+    for marker in scan.markers:
+        invalid = _marker_findings(marker)
+        if invalid:
+            findings.extend(invalid)
+            continue
+        assert marker.ticket is not None and marker.claim_type is not None  # noqa: S101 - validated above
+        state = states.get(marker.ticket)
+        if state is None:  # pragma: no cover - resolve_states fails closed first
+            raise GateError(f"{marker.ticket} was never resolved")
+        expected = EXPECTED_STATES[marker.claim_type]
+        if state not in expected:
+            findings.append(
+                Finding(
+                    kind="CLAIM_CONTRADICTED_BY_TICKET_STATE",
+                    path=marker.path,
+                    line=marker.line,
+                    ticket=marker.ticket,
+                    detail=(
+                        f"the sentence claims {marker.claim_type!r} and binds {marker.ticket} as the "
+                        f"{marker.role}, but {marker.ticket} is {state!r}; a {marker.claim_type} claim accepts "
+                        f"only {sorted(expected)}"
+                    ),
+                    sentence=marker.sentence,
+                )
+            )
     return findings
 
 
 def run(paths: list[Path], *, token: str | None = None) -> tuple[int, list[Finding]]:
     """Run the gate. Returns ``(exit_code, findings)``."""
-    claims: list[Claim] = []
-    for path in paths:
-        claims.extend(collect_claims(path))
-    if not claims:
+    scans = [collect_claims(path) for path in paths]
+    scan = Scan(
+        tuple(marker for item in scans for marker in item.markers),
+        tuple(claim for item in scans for claim in item.claims),
+    )
+    if not scan.markers and not scan.claims:
         raise GateError(
-            "the scan matched ZERO claim sentences across "
+            "the scan matched ZERO claim sentences or markers across "
             f"{[str(p) for p in paths]}. A gate that audits nothing and reports green is "
             "the defect this gate exists to remove, so an empty scan is a refusal."
         )
-    wanted = {t for c in claims for t in (*c.implementation, *c.blocker, *c.unroled)}
-    states = resolve_states(wanted, token=token)
-    findings = evaluate(claims, states)
+    wanted = {
+        marker.ticket
+        for marker in scan.markers
+        if marker.ticket is not None and not _marker_findings(marker)
+    }
+    states = resolve_states(wanted, token=token) if wanted else {}
+    findings = evaluate(scan, states)
     return (1 if findings else 0), findings
 
 
