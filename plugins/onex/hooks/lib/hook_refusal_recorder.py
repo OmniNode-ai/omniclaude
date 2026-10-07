@@ -41,11 +41,11 @@ recorded. Refusals inside the window increment a counter, and the next row
 after the window carries it. A reader therefore sees the event at once, and
 learns its volume as soon as the window turns.
 
-NEVER RAISES, NEVER BLOCKS. This runs behind a hook that is refusing a tool
-call. Every failure — an unreadable state directory, a missing ledger, a lock
-timeout, a ledger that refuses the row — is swallowed and reported only in
-this module's own exit code, which the calling hook ignores. A recorder that
-could break a guard would be worse than the gap it fills.
+FAILURES ARE LOUD. This runs behind a hook that is refusing a tool call.
+An unresolved registry or failed append exits non-zero with a redacted reason
+on stderr, without advancing the emission state. The calling hook already
+refused the tool; the recorder reports its own failure without changing that
+guard's verdict. A retry remains eligible until the row has landed.
 
 ISOLATION. Called from ``hook_record_refusal`` in ``error-guard.sh``, which
 backgrounds and disowns it exactly as ``emit_to_journal`` does, so the
@@ -192,7 +192,10 @@ def state_dir() -> Path:
     base = os.environ.get("ONEX_STATE_DIR")
     if base:
         return Path(base) / "hook_refusals"
-    return Path.home() / ".onex_state" / "hook_refusals"
+    registry_root = _resolve_registry_root()
+    if registry_root is None:
+        raise RuntimeError("OMNI_HOME must name an absolute registry root")
+    return registry_root / ".onex_state" / "hook_refusals"
 
 
 def _read_state(path: Path) -> tuple[float | None, int]:
@@ -249,14 +252,15 @@ def should_emit(
     directory: Path,
     surface_after: int | None = None,
 ) -> tuple[bool, int]:
-    """Decide, and record the decision. Returns ``(emit, suppressed_count)``.
+    """Decide whether a row is due. Returns ``(emit, suppressed_count)``.
 
     ``surface_after`` limits initial suppression for the secret guard; once
     a session exceeds it every attempt emits, even across hourly windows.
 
     ``suppressed_count`` is the number of refusals of this key that were
     swallowed since the last emitted row, and is meaningful only when
-    ``emit`` is true.
+    ``emit`` is true. Only suppression of an already recorded refusal changes
+    state here; the caller commits a new emission after its append succeeds.
     """
     path = directory / f"{key}.json"
     last_emitted, suppressed = _read_state(path)
@@ -279,7 +283,6 @@ def should_emit(
             attempts=attempts,
         )
         return False, 0
-    _write_state(path, last_emitted=now, suppressed=0, attempts=attempts)
     return True, suppressed
 
 
@@ -383,11 +386,18 @@ def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
     the locked writer is the only sanctioned path and it also carries the
     dedupe-on-retry behaviour this caller would otherwise need itself.
     """
-    if (
-        not project.is_absolute()
-        or not (project / "pyproject.toml").is_file()
-        or not ledger.is_file()
-    ):
+    if not project.is_absolute() or not (project / "pyproject.toml").is_file():
+        print(
+            "hook refusal recorder: ledger writer project is unavailable: "
+            + redact(str(project)),
+            file=sys.stderr,
+        )
+        return False
+    if not ledger.is_file():
+        print(
+            "hook refusal recorder: ledger is unavailable: " + redact(str(ledger)),
+            file=sys.stderr,
+        )
         return False
     try:
         completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
@@ -409,9 +419,20 @@ def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
             timeout=180,
             check=False,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(
+            "hook refusal recorder: ledger writer failed: " + redact(str(exc)),
+            file=sys.stderr,
+        )
         return False
-    return completed.returncode == 0
+    if completed.returncode != 0:
+        print(
+            f"hook refusal recorder: ledger writer exited {completed.returncode}: "
+            + redact(completed.stderr or "no stderr reason")[:MAX_DETAIL_CHARS],
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def _resolve_registry_root() -> Path | None:
@@ -422,7 +443,7 @@ def _resolve_registry_root() -> Path | None:
     tree.
     """
     value = os.environ.get("OMNI_HOME")
-    return Path(value) if value else None
+    return Path(value) if value and Path(value).is_absolute() else None
 
 
 def extract_detail(raw: str) -> str:
@@ -521,11 +542,48 @@ def main(argv: list[str] | None = None) -> int:
         if session:
             key = dedupe_key(guard, reason, f"{lane}:{session}")
 
+    if args.print_row:
+        print(
+            build_row(
+                guard=guard,
+                reason=reason,
+                lane=lane,
+                lane_source=lane_source,
+                detail=detail,
+                key=key,
+                suppressed=0,
+                timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            )
+        )
+        return 0
+
+    registry_root = _resolve_registry_root()
+    if registry_root is None:
+        print(
+            "hook refusal recorder: OMNI_HOME must name an absolute registry root; "
+            "dedupe state unchanged",
+            file=sys.stderr,
+        )
+        return 1
+    project = Path(
+        os.environ.get("OMNIBASE_INTERNAL_HOME")
+        or registry_root.parent / "omnibase_internal"
+    )
+    if not project.is_absolute():
+        print(
+            "hook refusal recorder: OMNIBASE_INTERNAL_HOME must be absolute; "
+            "dedupe state unchanged",
+            file=sys.stderr,
+        )
+        return 1
+
+    directory = state_dir()
+    now = time.time()
     emit, suppressed = should_emit(
         key,
-        now=time.time(),
+        now=now,
         window_seconds=args.window_seconds,
-        directory=state_dir(),
+        directory=directory,
         surface_after=SECRET_REPEAT_THRESHOLD if repeated_secret else None,
     )
     if not emit:
@@ -541,34 +599,32 @@ def main(argv: list[str] | None = None) -> int:
         suppressed=suppressed,
         timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
-    if args.print_row:
-        print(row)
-        return 0
-
-    registry_root = _resolve_registry_root()
-    if registry_root is None:
-        return 0
     ledger = (
         Path(args.ledger)
         if args.ledger
         else registry_root / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
     )
-    project = Path(
-        os.environ.get("OMNIBASE_INTERNAL_HOME")
-        or registry_root.parent / "omnibase_internal"
-    )
-    if not project.is_absolute():
-        return 0
-    # The return value is deliberately discarded. A failed append is a
-    # dropped row, which is bad; a non-zero exit from a process the refusing
-    # hook backgrounded would be worse than bad in a different way, because
-    # the hook's own log would then carry a failure that is not the guard's.
-    append_row(row, ledger=ledger, project=project, timeout=args.timeout)
+    if not append_row(row, ledger=ledger, project=project, timeout=args.timeout):
+        print(
+            "hook refusal recorder: ledger append failed; dedupe state unchanged",
+            file=sys.stderr,
+        )
+        return 1
+    state_path = directory / f"{key}.json"
+    attempts = 0
+    if repeated_secret:
+        try:
+            attempts = max(0, int(json.loads(state_path.read_text()).get("attempts", 0)))
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+        attempts += 1
+    _write_state(state_path, last_emitted=now, suppressed=0, attempts=attempts)
     return 0
 
 
 if __name__ == "__main__":  # pragma: no cover - process entry
     try:
         sys.exit(main())
-    except Exception:  # noqa: BLE001 - a recorder must never break a guard
-        sys.exit(0)
+    except Exception as exc:  # noqa: BLE001 - report failure at the process boundary
+        print("hook refusal recorder: " + redact(str(exc)), file=sys.stderr)
+        sys.exit(1)
