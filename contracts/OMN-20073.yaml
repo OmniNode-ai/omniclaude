@@ -1,0 +1,61 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20073"
+title: "Repo-owned DoD evidence caller for omniclaude, S5 shadow count"
+summary: "omniclaude owns its DoD evidence contract and delegates verification to the receipt-gate reusable in caller-evidence mode, with the OCC difference step on, so every pull request records the new-path verdict beside OCC's verdict on the same head. A focused test checks the base-branch caller wiring and binds every repo contract acceptance criterion to an existing pytest test file."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-repo-evidence-gate"
+    statement: |-
+      omniclaude must wire a base-branch caller evidence gate that runs beside OCC, and bind every repo-owned acceptance criterion to runnable test evidence.
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: omniclaude carries a caller workflow for the receipt-gate's caller-evidence mode that runs from the base branch (pull_request_target), pins the reusable by full sha and sets evidence-source caller -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k workflow_shape
+      - id: "AC2"
+        statement: |-
+          AC2: the caller sets compare-with-occ to "true" with a verifier-version that ships the occ-difference classifier, so the S5 shadow count records the new-path verdict beside OCC's -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s5_shadow_count
+      - id: "AC3"
+        statement: |-
+          AC3: every acceptance criterion of every contracts/OMN-*.yaml in omniclaude is bound by binds_ac to a test_passes item whose selector names a test file that exists -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k contract_binds
+evidence_requirements:
+  - kind: "tests"
+    description: "The caller workflow has the required base-branch trigger, immutable pin, inputs and read-only permissions."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k workflow_shape"
+  - kind: "tests"
+    description: "The caller turns the OCC difference step on with a verifier that ships it."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s5_shadow_count"
+  - kind: "tests"
+    description: "Every repo-owned contract criterion binds to test evidence in an existing test file."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k contract_binds"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-repo-evidence-ac1"
+    description: "The focused workflow test proves the caller's base-branch trigger, full-SHA reusable pin and caller-evidence input."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k workflow_shape"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-repo-evidence-ac2"
+    description: "The focused workflow test proves the caller compares with OCC and pins a verifier that ships the difference classifier."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s5_shadow_count"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
+  - id: "dod-repo-evidence-ac3"
+    description: "The contract binding test proves every repo contract criterion binds to test evidence in an existing test file."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k contract_binds"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
