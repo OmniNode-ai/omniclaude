@@ -211,6 +211,56 @@ _load_path_alarm() {
 # Never let a probe of the load path break the line that reports it.
 _load_path_alarm || true
 
+# --------------------------------------------------------------------------- #
+# A journal nothing drains (OMN-17427)
+# --------------------------------------------------------------------------- #
+#
+# Every hook emit appends to the local journal and returns; the resident drainer
+# is the only thing that publishes it. The drainer is installed by hand
+# (scripts/install-hook-emit-drainer.sh, "the operator's deploy step") and no
+# bring-up path runs that step, so a host that never had it run keeps hooking
+# normally while nothing it records ever reaches the bus.
+#
+# Measured, 2026-10-07: h202 carried 38,653 pending records, the oldest from
+# 2026-09-30, with no unit file on disk, while h201 -- where the installer had
+# been run -- drained. Nothing on h202 said so: the journal is bounded, so it
+# drops its oldest records rather than failing, and the emit path stays green.
+#
+# Absent the installed definition AND a record in the journal is the cheap,
+# unambiguous half of that state: one stat on a healthy host, and a `find` that
+# stops at the first record only on a host that is already wrong. It is not
+# "the drainer is down" (that needs a process check this budget cannot pay for)
+# and it does not read the installed unit's content; it only refuses to let the
+# never-installed case be silent. Like the load-path alarm it sits above the
+# session-intent gate: quiet buys no silence from a host losing its telemetry.
+_drainer_alarm() {
+    local label="ai.omninode.hook-emit-drainer" definition journal
+    case "${OSTYPE:-}" in
+        darwin*) definition="${HOME}/Library/LaunchAgents/${label}.plist" ;;
+        *) definition="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/${label}.service" ;;
+    esac
+    [[ -e "$definition" ]] && return 0
+
+    if [[ -n "${ONEX_HOOK_EMIT_JOURNAL_DIR:-}" ]]; then
+        journal="$ONEX_HOOK_EMIT_JOURNAL_DIR"
+    elif [[ -n "${ONEX_STATE_DIR:-}" ]]; then
+        journal="${ONEX_STATE_DIR}/hook_emit_journal"
+    else
+        journal="${HOME}/.onex_state/hook_emit_journal"
+    fi
+    [[ -d "$journal" ]] || return 0
+    [[ -n "$(find "$journal" -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ]] || return 0
+
+    say "ALARM: hook events are journalled on this host and nothing publishes them."
+    say "  The drainer is not installed (missing: ${definition}), so the journal"
+    say "  only grows -- and drops its oldest records at its bound."
+    say "    journal: $journal"
+    say "    repair:  bash \"\$OMNI_HOME/omniclaude/scripts/install-hook-emit-drainer.sh\""
+    say "  Then check it publishes: install-hook-emit-drainer.sh --status shows Pending falling."
+    return 0
+}
+_drainer_alarm || true
+
 # Session intent (OMN-18368): under `quiet` and `tick` this hook prints nothing
 # further. The routine one-line verdict is status output, and a session opened
 # to re-authenticate asked for none.

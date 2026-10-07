@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -1290,3 +1291,125 @@ def test_a_decline_does_not_overwrite_a_verdict_a_real_run_earned(
     assert ws.status_file.read_text(encoding="utf-8") == earned, (
         "a decline overwrote the verdict a real run had earned"
     )
+
+
+# --------------------------------------------------------------------------- #
+# A journal nothing drains (OMN-17427)
+# --------------------------------------------------------------------------- #
+def _drainer_definition(home: Path) -> Path:
+    """Where the installer puts the drainer's supervisor definition on this OS."""
+    label = "ai.omninode.hook-emit-drainer"
+    if sys.platform == "darwin":
+        return home / "Library" / "LaunchAgents" / f"{label}.plist"
+    return home / ".config" / "systemd" / "user" / f"{label}.service"
+
+
+def _drainer_env(ws: _Workspace, home: Path, **overrides: str) -> dict[str, str]:
+    env = ws.env(HOME=str(home), **overrides)
+    # An XDG override on the host running pytest would move the unit directory.
+    env.pop("XDG_CONFIG_HOME", None)
+    env.pop("ONEX_HOOK_EMIT_JOURNAL_DIR", None)
+    return env
+
+
+def _run_session_line(env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", str(_SESSION_LINE)],
+        input=_STDIN,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+
+
+def _journal_a_record(ws: _Workspace) -> Path:
+    journal = ws.state / "hook_emit_journal"
+    journal.mkdir(parents=True, exist_ok=True)
+    (journal / "01790794139806298278_40a246a0.json").write_text("{}", encoding="utf-8")
+    return journal
+
+
+def test_drainer_alarm_names_the_gap_and_the_installer(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    """The h202 shape: records journalled, no drainer definition on disk."""
+    home = tmp_path / "home"
+    home.mkdir()
+    journal = _journal_a_record(ws)
+
+    result = _run_session_line(_drainer_env(ws, home))
+
+    assert result.returncode == 0, result.stderr
+    assert "ALARM" in result.stdout, result.stdout
+    assert "nothing publishes them" in result.stdout, result.stdout
+    assert str(_drainer_definition(home)) in result.stdout, result.stdout
+    assert str(journal) in result.stdout, result.stdout
+    assert "install-hook-emit-drainer.sh" in result.stdout, result.stdout
+
+
+def test_drainer_alarm_is_silent_once_the_drainer_is_installed(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    """Positive control. Without it an always-ALARM bug reads as a pass."""
+    home = tmp_path / "home"
+    definition = _drainer_definition(home)
+    definition.parent.mkdir(parents=True)
+    definition.write_text("", encoding="utf-8")
+    _journal_a_record(ws)
+
+    result = _run_session_line(_drainer_env(ws, home))
+
+    assert result.returncode == 0, result.stderr
+    assert "ALARM" not in result.stdout, result.stdout
+
+
+def test_drainer_alarm_is_silent_with_nothing_to_drain(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    """No drainer is not a finding on a host whose journal holds no record."""
+    home = tmp_path / "home"
+    home.mkdir()
+
+    absent = _run_session_line(_drainer_env(ws, home))
+    assert absent.returncode == 0, absent.stderr
+    assert "ALARM" not in absent.stdout, absent.stdout
+
+    (ws.state / "hook_emit_journal").mkdir()
+    empty = _run_session_line(_drainer_env(ws, home))
+    assert empty.returncode == 0, empty.stderr
+    assert "ALARM" not in empty.stdout, empty.stdout
+
+
+def test_drainer_alarm_follows_the_journal_dir_override(
+    ws: _Workspace, tmp_path: Path
+) -> None:
+    """The journal writer honours ONEX_HOOK_EMIT_JOURNAL_DIR, so the probe must."""
+    home = tmp_path / "home"
+    home.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "01790794139806298278_40a246a0.json").write_text(
+        "{}", encoding="utf-8"
+    )
+    env = _drainer_env(ws, home)
+    env["ONEX_HOOK_EMIT_JOURNAL_DIR"] = str(elsewhere)
+
+    result = _run_session_line(env)
+
+    assert "ALARM" in result.stdout, result.stdout
+    assert str(elsewhere) in result.stdout, result.stdout
+
+
+@pytest.mark.parametrize("intent", ["quiet", "tick"])
+def test_drainer_alarm_is_not_bought_silent_by_session_intent(
+    ws: _Workspace, tmp_path: Path, intent: str
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    _journal_a_record(ws)
+
+    result = _run_session_line(_drainer_env(ws, home, OMNICLAUDE_SESSION_INTENT=intent))
+
+    assert result.returncode == 0, result.stderr
+    assert "ALARM" in result.stdout, result.stdout
