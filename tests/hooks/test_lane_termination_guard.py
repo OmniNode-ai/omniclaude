@@ -729,6 +729,97 @@ class TestLaneRegistry:
         }
         assert open_names == {"lane-a", "lane-b"}
 
+    def test_close_reads_only_its_own_sessions_records(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OMN-17427: closing a lane must not read the whole registry.
+
+        ``close_lane`` ran ``load_records()`` on every ``SubagentStop``. On the
+        operator Mac the registry held 59,609 records (one per lane since
+        2026-08-29) and the read took 16 s idle and up to the 120 s hook
+        timeout under load, once per workflow agent: about 440 s of a lab-fill
+        run's 1,020 s budget, so the fill timed out (exit 143) on most fires.
+        Once the session index exists, a close reads only its own session.
+        """
+
+        import lane_registry
+
+        open_lane(
+            {
+                "tool_name": "Task",
+                "session_id": "sess-1",
+                "tool_input": {"name": "warm"},
+            }
+        )
+        close_lane(
+            session_id="sess-1",
+            lane_name="warm",
+            terminal_state=EnumLaneTerminalState.COMPLETED,
+            terminal_reason="completed",
+        )
+
+        def _whole_registry_read() -> tuple[ModelLaneRecord, ...]:
+            raise AssertionError("close_lane read the whole lane registry")
+
+        monkeypatch.setattr(lane_registry, "load_records", _whole_registry_read)
+        open_lane(
+            {
+                "tool_name": "Task",
+                "session_id": "sess-2",
+                "tool_input": {"name": "lane-a"},
+            }
+        )
+        open_lane(
+            {
+                "tool_name": "Task",
+                "session_id": "sess-2",
+                "tool_input": {"name": "lane-b"},
+            }
+        )
+
+        closed = close_lane(
+            session_id="sess-2",
+            lane_name="lane-b",
+            terminal_state=EnumLaneTerminalState.COMPLETED,
+            terminal_reason="completed",
+        )
+
+        assert closed is not None
+        assert closed.lane_name == "lane-b"
+        assert not closed.lane_id.startswith("unattributed-")
+        states = {
+            (record.session_id, record.lane_name): record.status
+            for record in load_records()  # the module import, not the patched name
+        }
+        assert states[("sess-2", "lane-a")] is EnumLaneStatus.OPEN
+        assert states[("sess-2", "lane-b")] is EnumLaneStatus.CLOSED
+
+    def test_a_record_written_before_the_index_still_closes_by_name(self) -> None:
+        """Records from before the session index are indexed once, not lost."""
+
+        import lane_registry
+
+        legacy = ModelLaneRecord(
+            lane_id="lane-legacy0000000000000",
+            lane_name="legacy-lane",
+            session_id="sess-old",
+            tool_name="Task",
+            dispatched_at="2026-10-01T00:00:00+00:00",
+            status=EnumLaneStatus.OPEN,
+        )
+        assert lane_registry._write_record(legacy) is not None
+
+        closed = close_lane(
+            session_id="sess-old",
+            lane_name="legacy-lane",
+            terminal_state=EnumLaneTerminalState.COMPLETED,
+            terminal_reason="completed",
+        )
+
+        assert closed is not None
+        assert closed.lane_id == "lane-legacy0000000000000"
+        assert [record.status for record in load_records()] == [EnumLaneStatus.CLOSED]
+
     def test_registry_degrades_without_a_state_dir(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
