@@ -478,6 +478,9 @@ fi
 
 _warn_gateway_read() {
   [ "$_gateway" = "bypass" ] && [ "${ONEX_GH_WARN:-}" != "0" ] || return 0
+  # The harness link shapes never warn, even when no branch resolves (a
+  # detached HEAD) and the call falls through the cache to the pass-through.
+  _cacheable "$@" && return 0
   _resolve_lane
   if [ "${ONEX_GH_WARN:-}" != "1" ] && [ ! -t 2 ]; then
     case "$_lane_src" in env|agent-env|registry|session) ;; *) return 0 ;; esac
@@ -1030,7 +1033,7 @@ fi
 
 # Pass-through. Run rather than exec, so the exit code can be logged; stdin,
 # stdout, stderr and the terminal are inherited unchanged.
-_warn_gateway_read
+_warn_gateway_read "$@"
 _run_gh "$@"
 _rc=$?
 _log "$_rc" none
