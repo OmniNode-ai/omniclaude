@@ -289,7 +289,7 @@ python3 -c "import yaml; print(list(yaml.safe_load(open('.github/workflows/ci.ym
 - Standalone lint gates (hook log paths, skill MCP references, verification evidence, plan verified-state) live in their own workflows AND run as pre-commit hooks; if one fires, fix the underlying issue, never bypass.
 - PRs do not bump the onex plugin version (OMN-20710, port of OMN-20497). After a change lands on dev,
   `.github/workflows/plugin-version-bump.yml` raises `plugins/onex/.claude-plugin/plugin.json` and the onex entry in
-  `plugins/onex-dev-marketplace/.claude-plugin/marketplace.json` together in one bot PR (`automation/omn-20710-plugin-version-bump`).
+  `plugins/*-marketplace/.claude-plugin/marketplace.json` together in one bot PR (`automation/omn-20710-plugin-version-bump`).
   The Plugin Version Bump Gate refuses only a lowered or non-numeric version or the two files disagreeing;
   resolve a version-line conflict by taking dev's value.
 - CI uv version: read the pin from `.github/workflows/ci.yml` before lock-file changes; ruff behavior may differ local vs CI.

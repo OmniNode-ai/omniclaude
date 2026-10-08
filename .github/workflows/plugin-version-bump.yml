@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# OMN-20710: port the OMN-20497 post-merge bot bump from omniclaude-internal.
+# OMN-20710: port the OMN-20497 post-merge bot bump from the internal repo.
 # Operator RULING 2026-10-08T03:53:09Z lane=orchestrator-716d: one bot bump PR
 # after each dev merge; the per-PR check refuses only a lowered or broken version
 # (and disagreement between the two version files). PRs no longer claim the
@@ -121,7 +121,7 @@ jobs:
             git fetch -q origin "+refs/heads/${BUMP_BRANCH}:refs/remotes/origin/${BUMP_BRANCH}"
           fi
           if [ -n "$remote" ] && \
-            git diff --quiet "$remote" HEAD -- plugins/onex/.claude-plugin/plugin.json plugins/onex-dev-marketplace/.claude-plugin/marketplace.json && \
+            git diff --quiet "$remote" HEAD -- plugins/onex/.claude-plugin/plugin.json plugins/*-marketplace/.claude-plugin/marketplace.json && \
             git merge-tree --write-tree "$remote" HEAD > /dev/null; then
             echo "${BUMP_BRANCH} already carries this bump without a conflict with dev; nothing to push."
           else
@@ -134,7 +134,7 @@ jobs:
           printf '%s\n' \
             "## Summary" \
             "" \
-            "Automated post-merge plugin version bump. PRs no longer bump plugins/onex. This one bot PR raises plugins/onex/.claude-plugin/plugin.json and the onex entry in plugins/onex-dev-marketplace/.claude-plugin/marketplace.json together so the version-keyed plugin cache delivers merged changes." \
+            "Automated post-merge plugin version bump. PRs no longer bump plugins/onex. This one bot PR raises plugins/onex/.claude-plugin/plugin.json and the onex entry in plugins/*-marketplace/.claude-plugin/marketplace.json together so the version-keyed plugin cache delivers merged changes." \
             "" \
             "Kept open as the single bump PR, updated in place when the next version changes, and closed when dev needs no bump." \
             "" \
