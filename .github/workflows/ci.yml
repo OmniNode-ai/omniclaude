@@ -32,6 +32,36 @@ env:
   ONEX_STATE_DIR: /tmp/onex-state
 
 jobs:
+  comment-render-delegation:
+    name: Comment Render Delegation (OMN-18512)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.3"
+      - name: Install focused-test dependencies
+        run: |
+          set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
+          attempt=1
+          until uv sync --frozen --group dev --python "3.12"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "uv sync failed; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
+      - name: Prove declared CLI resolution and recorded fallback
+        run: uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov
+
   refusal-surface:
     name: Refusal Surface (OMN-18983)
     # Independent, fail-closed member of the required CI Summary umbrella.

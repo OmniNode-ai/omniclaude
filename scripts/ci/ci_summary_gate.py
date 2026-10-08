@@ -64,6 +64,7 @@ GATE_JOBS: tuple[str, ...] = (
     "Quality Gate",
     "Refusal Surface (OMN-18983)",
     "PR Failure Citations (OMN-18782)",
+    "Comment Render Delegation (OMN-18512)",
     "Runtime Profiles",  # OMN-20184: required runtime contract validation
     "Tests Gate",
     "Security Gate",
@@ -133,6 +134,7 @@ STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
     {
         "Refusal Surface (OMN-18983)",
         "PR Failure Citations (OMN-18782)",
+        "Comment Render Delegation (OMN-18512)",
         "Runtime Profiles",
         "no-noncanonical-lifecycle-classes",
         "Shape-Gate Independence (OMN-20298)",
