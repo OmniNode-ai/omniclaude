@@ -1276,11 +1276,11 @@ repos:
         always_run: true
         stages: [pre-commit]
 
-      # OMN-16913: a change under plugins/onex needs a plugin version bump. The
-      # plugin cache is version-keyed, so an unbumped change never reaches an
-      # installed cache. Same validator runs in CI (plugin-version-bump-gate.yml).
+      # OMN-20710: refuse lowered or broken versions and marketplace disagreement.
+      # PRs no longer bump; plugin-version-bump.yml does after merging to dev.
+      # Same validator runs in CI (plugin-version-bump-gate.yml).
       - id: plugin-version-bump-gate
-        name: Plugin version bump (OMN-16913)
+        name: Plugin version not lowered or broken (OMN-20710)
         entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_plugin_version_bump.py --base origin/dev --defer-to-workflow-in-ci
         language: system
         pass_filenames: false
