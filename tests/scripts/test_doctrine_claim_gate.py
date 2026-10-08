@@ -1,15 +1,9 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""OMN-18529 W2-2: the doctrine-claim gate refuses a claim its ticket contradicts.
+"""OMN-18529: explicit doctrine claims fail closed against injected ticket states.
 
-Every test here injects ticket states rather than calling the tracker. The
-injection seam is a keyword argument on :func:`evaluate` and a monkeypatched
-:func:`resolve_states`; neither is reachable from argv, which is the same shape
-the production promotion gate uses for its health probe. A test that reached
-the live tracker would be measuring Linear's uptime, not this checker.
-
-The suite is organised around the acceptance criteria that have falsifiers with
-teeth, and each assertion that could pass vacuously carries its opposite.
+Tests never call the live tracker. Refusals have passing controls, and passing
+assertions have refusing controls so empty scans cannot prove compliance.
 """
 
 from __future__ import annotations
@@ -17,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -30,245 +25,532 @@ sys.modules["doctrine_claim_gate"] = gate
 _spec.loader.exec_module(gate)
 
 
-def _claims(tmp_path: Path, text: str) -> list[object]:
+@pytest.fixture(autouse=True)
+def _no_live_tracker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        gate.urllib.request,
+        "urlopen",
+        Mock(side_effect=AssertionError("tests must never call the live tracker")),
+    )
+
+
+def _write(tmp_path: Path, text: str) -> Path:
     path = tmp_path / "doctrine.md"
     path.write_text(text, encoding="utf-8")
-    return gate.collect_claims(path)
+    return path
 
 
-def _findings(tmp_path: Path, text: str, states: dict[str, str]) -> list[object]:
+def _claims(tmp_path: Path, text: str):
+    return gate.collect_claims(_write(tmp_path, text))
+
+
+def _findings(tmp_path: Path, text: str, states: dict[str, str]):
     return gate.evaluate(_claims(tmp_path, text), states)
 
 
-def _kinds(findings: list[object]) -> list[str]:
+def _kinds(findings) -> list[str]:
     return [f.kind for f in findings]
 
 
-# --------------------------------------------------------------------------
-# AC1 — the claim-sentence FAMILY, not one phrasing
-# --------------------------------------------------------------------------
+def _marker(
+    claim_type: str = "unbuilt",
+    ticket: str = "OMN-1001",
+    role: str = "implementation",
+) -> str:
+    return f"<!-- doctrine-claim: type={claim_type} ticket={ticket} role={role} -->"
+
+
+@pytest.mark.unit
+def test_done_ticket_refuses_with_rule_sentence_ticket_and_main_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sentence = "The guard is doctrine only."
+    text = f"{sentence} {_marker()}"
+    findings = _findings(tmp_path, text, {"OMN-1001": "completed"})
+    assert _kinds(findings) == ["CLAIM_CONTRADICTED_BY_TICKET_STATE"]
+    rendered = findings[0].render()
+    for part in (findings[0].kind, sentence, "OMN-1001"):
+        assert part in rendered
+    assert _findings(tmp_path, text, {"OMN-1001": "started"}) == []
+    resolver = Mock(return_value={"OMN-1001": "completed"})
+    monkeypatch.setattr(gate, "resolve_states", resolver)
+    assert gate.main([str(_write(tmp_path, text))]) == 1
+    resolver.assert_called_once_with({"OMN-1001"}, token=None)
+    assert rendered in capsys.readouterr().err
+
+
+@pytest.mark.unit
+def test_open_ticket_passes_and_main_exits_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    text = f"The guard is doctrine only. {_marker()}"
+    assert _findings(tmp_path, text, {"OMN-1001": "backlog"}) == []
+    assert _kinds(_findings(tmp_path, text, {"OMN-1001": "completed"})) == [
+        "CLAIM_CONTRADICTED_BY_TICKET_STATE"
+    ]
+    resolver = Mock(return_value={"OMN-1001": "backlog"})
+    monkeypatch.setattr(gate, "resolve_states", resolver)
+    assert gate.main([str(_write(tmp_path, text))]) == 0
+    resolver.assert_called_once_with({"OMN-1001"}, token=None)
+    output = capsys.readouterr()
+    assert output.err == ""
+    assert "every claim holds" in output.out
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "phrasing",
+    ("claim_type", "sentence"),
     [
-        "This is currently doctrine only. OMN-1001 tracks adding the guard.",
-        "This is not mechanically enforced. OMN-1001 tracks adding the guard.",
-        "Hardening is in flight: OMN-1001 tracks the work.",
-        "The rollout is pending merge; OMN-1001 tracks it.",
+        ("blocked", "The runner is blocked on delivery."),
+        ("blocked", "The runner waits on delivery."),
+        ("blocked", "The runner is gated on delivery."),
+        ("in_flight", "Hardening is in flight."),
+        ("in_flight", "The rollout is pending merge."),
+        ("in_flight", "The rollout is pending."),
+        ("in_flight", "The guard is being built."),
+        ("in_flight", "Hardening is currently in progress."),
+        ("unbuilt", "The rule is not mechanically enforced."),
+        ("unbuilt", "This is doctrine only."),
+        ("unbuilt", "Nothing enforces the rule."),
+        ("unbuilt", "The rule is not enforced."),
+        ("unbuilt", "The mechanism is never audited."),
+        ("unbuilt", "The workflow does not yet read the receipt."),
+        ("unbuilt", "The mechanism is not built."),
+        ("unbuilt", "The mechanism is not started."),
+        ("unbuilt", "The mechanism has never been started."),
     ],
 )
-def test_every_phrasing_in_the_family_is_recognised(
-    tmp_path: Path, phrasing: str
+def test_claim_phrasings_require_markers(
+    tmp_path: Path, claim_type: str, sentence: str
 ) -> None:
-    """AC1: four phrasings, each naming a Done ticket, each a finding."""
-    findings = _findings(tmp_path, phrasing, {"OMN-1001": "completed"})
-    assert _kinds(findings) == ["CLAIM_CONTRADICTED_BY_TICKET_STATE"], phrasing
-
-
-@pytest.mark.unit
-def test_a_claim_naming_no_ticket_is_its_own_finding(tmp_path: Path) -> None:
-    """AC1: silence is not an acceptable outcome for an unfalsifiable claim."""
-    findings = _findings(
-        tmp_path, "The staging workflow does not yet read the receipt.", {}
+    unmarked = _findings(tmp_path, sentence, {})
+    assert _kinds(unmarked) == ["UNMARKED_CLAIM"]
+    assert claim_type in unmarked[0].detail
+    assert "marker" in unmarked[0].detail
+    assert "rewording cannot hide a claim" in unmarked[0].detail
+    assert (
+        _findings(
+            tmp_path, f"{sentence} {_marker(claim_type)}", {"OMN-1001": "started"}
+        )
+        == []
     )
-    assert _kinds(findings) == ["CLAIM_NAMES_NO_TICKET"]
 
 
 @pytest.mark.unit
-def test_prose_making_no_claim_produces_no_finding(tmp_path: Path) -> None:
-    """The negative control for AC1. Without it the parametrised test above
-    proves only that the checker reports something, not that it discriminates."""
-    text = "The guard runs on every pull request and refuses a mismatch. OMN-1001 shipped it."
-    path = tmp_path / "clean.md"
-    path.write_text(text, encoding="utf-8")
-    assert gate.collect_claims(path) == []
-
-
-# --------------------------------------------------------------------------
-# AC7 / AC8 — claim type binds a ROLE with its own expected state set
-# --------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-def test_in_flight_refuses_a_backlog_ticket_and_passes_a_started_one(
+def test_rewording_with_a_different_type_marker_leaves_claim_uncovered(
     tmp_path: Path,
 ) -> None:
-    """AC8, the criterion that exists because open-versus-closed is not enough.
-
-    Both halves run in the SAME test so the Backlog refusal cannot be read as
-    the checker refusing everything. Backlog is exactly where a reclassified
-    in-flight item lands, which is how rule 18 read as imminent for three weeks.
-    """
-    text = "Hardening is in flight: OMN-1001 tracks the work."
-    refused = _findings(tmp_path, text, {"OMN-1001": "backlog"})
-    allowed = _findings(tmp_path, text, {"OMN-1001": "started"})
-    assert _kinds(refused) == ["CLAIM_CONTRADICTED_BY_TICKET_STATE"]
-    assert allowed == []
+    sentence = "The guard is doctrine only."
+    findings = _findings(
+        tmp_path, f"{sentence} {_marker('blocked')}", {"OMN-1001": "started"}
+    )
+    assert _kinds(findings) == ["UNMARKED_CLAIM"]
+    assert "unbuilt" in findings[0].detail
+    assert _findings(tmp_path, f"{sentence} {_marker()}", {"OMN-1001": "started"}) == []
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("state", ["backlog", "unstarted", "started", "triage"])
-def test_unbuilt_passes_every_non_terminal_state(tmp_path: Path, state: str) -> None:
-    text = "This is currently doctrine only. OMN-1001 tracks adding the guard."
-    assert _findings(tmp_path, text, {"OMN-1001": state}) == []
+def test_every_distinct_claim_type_in_a_block_requires_a_marker(tmp_path: Path) -> None:
+    sentence = "The runner is doctrine only, in flight and blocked on delivery."
+    scan = _claims(tmp_path, f"{sentence} {_marker('blocked')}")
+    assert scan.claims[0].claim_types == ("blocked", "in_flight", "unbuilt")
+    assert scan.claims[0].marker_types == frozenset({"blocked"})
+    findings = gate.evaluate(scan, {"OMN-1001": "started"})
+    assert _kinds(findings) == ["UNMARKED_CLAIM", "UNMARKED_CLAIM"]
+    assert [f.detail.split()[1] for f in findings] == ["in_flight", "unbuilt"]
+    marked = f"{sentence} {_marker('blocked')} {_marker('in_flight')} {_marker()}"
+    assert _findings(tmp_path, marked, {"OMN-1001": "started"}) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "tokens",
+    [
+        "type=unbuilt role=implementation",
+        "type=unbuilt ticket=banana role=implementation",
+    ],
+)
+def test_marker_names_no_ticket(tmp_path: Path, tokens: str) -> None:
+    findings = _findings(tmp_path, f"<!-- doctrine-claim: {tokens} -->", {})
+    assert _kinds(findings) == ["MARKER_NAMES_NO_TICKET"]
+    assert _findings(tmp_path, _marker(), {"OMN-1001": "started"}) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "tokens",
+    ["type=in_flight ticket=OMN-1001", "type=in_flight ticket=OMN-1001 role=blocker"],
+)
+def test_marker_has_no_allowed_role(tmp_path: Path, tokens: str) -> None:
+    assert _kinds(_findings(tmp_path, f"<!-- doctrine-claim: {tokens} -->", {})) == [
+        "MARKER_HAS_NO_ROLE"
+    ]
+    assert _findings(tmp_path, _marker("in_flight"), {"OMN-1001": "started"}) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "<!-- doctrine-claim: type=unknown ticket=OMN-1001 role=implementation -->",
+        f"{_marker()[:-3]} extra=value -->",
+        _marker()[:-3],
+        "<!-- doctrine-claim: ticket=OMN-1001 role=implementation -->",
+        f"{_marker()[:-3]} bare-token -->",
+        f"{_marker()[:-3]} type=unbuilt -->",
+        "<!-- doctrine-claim type=unbuilt ticket=OMN-1001 role=implementation -->",
+    ],
+)
+def test_malformed_marker(tmp_path: Path, raw: str) -> None:
+    assert _kinds(_findings(tmp_path, raw, {})) == ["MARKER_MALFORMED"]
+    assert _findings(tmp_path, _marker(), {"OMN-1001": "started"}) == []
+
+
+@pytest.mark.unit
+def test_marker_tokens_accept_any_order_and_whitespace(tmp_path: Path) -> None:
+    raw = (
+        "<!-- doctrine-claim: role=implementation\t ticket=OMN-1001\n type=unbuilt -->"
+    )
+    text = f"The guard is doctrine only.\n{raw}"
+    scan = _claims(tmp_path, text)
+    assert len(scan.markers) == 1
+    marker = scan.markers[0]
+    assert (marker.claim_type, marker.ticket, marker.role, marker.closed) == (
+        "unbuilt",
+        "OMN-1001",
+        "implementation",
+        True,
+    )
+    assert gate.evaluate(scan, {"OMN-1001": "started"}) == []
+    assert _kinds(gate.evaluate(scan, {"OMN-1001": "completed"})) == [
+        "CLAIM_CONTRADICTED_BY_TICKET_STATE"
+    ]
+
+
+@pytest.mark.unit
+def test_unclosed_marker_does_not_hide_the_next_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    text = f"{_marker()[:-3]}\n{_marker(ticket='OMN-1002')}"
+    scan = _claims(tmp_path, text)
+    assert [marker.closed for marker in scan.markers] == [False, True]
+    resolver = Mock(return_value={"OMN-1001": "started", "OMN-1002": "started"})
+    monkeypatch.setattr(gate, "resolve_states", resolver)
+    code, findings = gate.run([_write(tmp_path, text)])
+    assert code == 1
+    assert _kinds(findings) == ["MARKER_MALFORMED"]
+    assert findings[0].ticket == "OMN-1001"
+    resolver.assert_called_once_with({"OMN-1002"}, token=None)
+    resolver.reset_mock()
+    assert gate.run(
+        [_write(tmp_path, f"{_marker()}\n{_marker(ticket='OMN-1002')}")]
+    ) == (0, [])
+    resolver.assert_called_once_with({"OMN-1001", "OMN-1002"}, token=None)
+
+
+@pytest.mark.unit
+def test_marker_reports_each_problem(tmp_path: Path) -> None:
+    text = "<!-- doctrine-claim: type=unknown ticket=banana extra=value bare-token"
+    findings = _findings(tmp_path, text, {})
+    assert _kinds(findings) == [
+        "MARKER_MALFORMED",
+        "MARKER_MALFORMED",
+        "MARKER_MALFORMED",
+        "MARKER_MALFORMED",
+        "MARKER_NAMES_NO_TICKET",
+        "MARKER_HAS_NO_ROLE",
+    ]
+    assert _findings(tmp_path, _marker(), {"OMN-1001": "started"}) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "raw",
+    [
+        _marker()[:-3],
+        f"{_marker()[:-3]} extra=value -->",
+        "<!-- doctrine-claim: type=unbuilt role=implementation -->",
+        "<!-- doctrine-claim: type=unbuilt ticket=banana role=implementation -->",
+        "<!-- doctrine-claim: type=unbuilt ticket=OMN-1001 -->",
+        _marker("in_flight", role="blocker"),
+    ],
+)
+def test_invalid_markers_never_call_the_resolver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    resolver = Mock(side_effect=AssertionError("invalid markers must not resolve"))
+    monkeypatch.setattr(gate, "resolve_states", resolver)
+    code, findings = gate.run([_write(tmp_path, raw)])
+    assert code == 1
+    assert findings
+    resolver.assert_not_called()
+    resolver.side_effect = None
+    resolver.return_value = {"OMN-1001": "started"}
+    assert gate.run([_write(tmp_path, _marker())]) == (0, [])
+    resolver.assert_called_once_with({"OMN-1001"}, token=None)
+
+
+@pytest.mark.unit
+def test_only_valid_marker_tickets_are_resolved_across_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    invalid = tmp_path / "invalid.md"
+    invalid.write_text(_marker(ticket="banana"), encoding="utf-8")
+    valid = _write(tmp_path, _marker())
+    resolver = Mock(return_value={"OMN-1001": "started"})
+    monkeypatch.setattr(gate, "resolve_states", resolver)
+    code, findings = gate.run([invalid, valid], token="injected")
+    assert code == 1
+    assert _kinds(findings) == ["MARKER_NAMES_NO_TICKET"]
+    resolver.assert_called_once_with({"OMN-1001"}, token="injected")
+    assert gate.run([valid], token="injected") == (0, [])
+
+
+@pytest.mark.unit
+def test_in_flight_refuses_backlog_and_passes_started(tmp_path: Path) -> None:
+    text = f"Hardening is in flight. {_marker('in_flight')}"
+    assert _kinds(_findings(tmp_path, text, {"OMN-1001": "backlog"})) == [
+        "CLAIM_CONTRADICTED_BY_TICKET_STATE"
+    ]
+    assert _findings(tmp_path, text, {"OMN-1001": "started"}) == []
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("state", ["completed", "canceled"])
-def test_unbuilt_refuses_a_terminal_state(tmp_path: Path, state: str) -> None:
-    text = "This is currently doctrine only. OMN-1001 tracks adding the guard."
+def test_unbuilt_refuses_terminal_states(tmp_path: Path, state: str) -> None:
+    text = f"The guard is doctrine only. {_marker()}"
     assert _kinds(_findings(tmp_path, text, {"OMN-1001": state})) == [
         "CLAIM_CONTRADICTED_BY_TICKET_STATE"
     ]
+    assert _findings(tmp_path, text, {"OMN-1001": "started"}) == []
 
 
 @pytest.mark.unit
-def test_a_blocked_claim_binds_the_blocker_role(tmp_path: Path) -> None:
-    """AC7: the blocker role resolves against its own expected set."""
-    text = "The runner does not ship yet because it is blocked on OMN-2002."
-    claims = _claims(tmp_path, text)
-    assert claims[0].blocker == ("OMN-2002",)
-    assert _kinds(gate.evaluate(claims, {"OMN-2002": "completed"})) == [
+@pytest.mark.parametrize("state", ["triage", "backlog", "unstarted", "started"])
+def test_unbuilt_passes_non_terminal_states(tmp_path: Path, state: str) -> None:
+    text = f"The guard is doctrine only. {_marker()}"
+    assert _findings(tmp_path, text, {"OMN-1001": state}) == []
+    assert _kinds(_findings(tmp_path, text, {"OMN-1001": "completed"})) == [
         "CLAIM_CONTRADICTED_BY_TICKET_STATE"
     ]
-    assert gate.evaluate(claims, {"OMN-2002": "started"}) == []
 
 
 @pytest.mark.unit
-def test_two_unroled_ids_are_a_finding_rather_than_a_default(tmp_path: Path) -> None:
-    """AC7's falsifier: resolving both against one expected set would be a guess."""
-    text = "Consumer-side hardening is in flight: OMN-1001 is Done; OMN-2002 moves the anchor."
-    findings = _findings(
-        tmp_path, text, {"OMN-1001": "completed", "OMN-2002": "completed"}
+def test_blocked_blocker_refuses_completed_and_passes_started(tmp_path: Path) -> None:
+    text = f"The runner is blocked on delivery. {_marker('blocked', role='blocker')}"
+    scan = _claims(tmp_path, text)
+    assert scan.markers[0].role == "blocker"
+    refused = gate.evaluate(scan, {"OMN-1001": "completed"})
+    assert _kinds(refused) == ["CLAIM_CONTRADICTED_BY_TICKET_STATE"]
+    for part in ("blocked", "blocker", "OMN-1001", "completed", "started"):
+        assert part in refused[0].detail
+    assert gate.evaluate(scan, {"OMN-1001": "started"}) == []
+
+
+@pytest.mark.unit
+def test_table_rows_cannot_share_a_marker(tmp_path: Path) -> None:
+    first = f"| Guard | doctrine only {_marker()} |"
+    second = "| Runner | not mechanically enforced |"
+    findings = _findings(tmp_path, f"{first}\n{second}", {"OMN-1001": "started"})
+    assert _kinds(findings) == ["UNMARKED_CLAIM"]
+    assert findings[0].line == 2
+    assert findings[0].sentence == second
+    assert (
+        _findings(
+            tmp_path, f"{first}\n{second[:-1]} {_marker()} |", {"OMN-1001": "started"}
+        )
+        == []
     )
-    assert "TICKET_HAS_NO_DECLARED_ROLE" in _kinds(findings)
-
-
-# --------------------------------------------------------------------------
-# AC2 — fails closed, everywhere
-# --------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-def test_an_empty_scan_is_a_refusal_not_a_pass(tmp_path: Path) -> None:
-    """AC2's sharpest clause: a gate that audits nothing must not report green."""
-    path = tmp_path / "no_claims.md"
-    path.write_text(
-        "This document asserts nothing about any mechanism.\n", encoding="utf-8"
+def test_fenced_claims_and_markers_are_ignored(tmp_path: Path) -> None:
+    text = f"The guard is doctrine only. {_marker()}"
+    scan = _claims(tmp_path, f"Real prose.\n\n```markdown\n{text}\n```\n")
+    assert scan.markers == ()
+    assert scan.claims == ()
+    visible = _claims(tmp_path, text)
+    assert len(visible.markers) == 1
+    assert len(visible.claims) == 1
+    assert _kinds(gate.evaluate(visible, {"OMN-1001": "completed"})) == [
+        "CLAIM_CONTRADICTED_BY_TICKET_STATE"
+    ]
+
+
+@pytest.mark.unit
+def test_markers_anywhere_in_block_are_stripped_before_matching(tmp_path: Path) -> None:
+    for text in (
+        f"{_marker()}\nThe guard is doctrine only.",
+        f"The guard is doctrine only.\n{_marker()}",
+        f"The guard {_marker()} is doctrine only.",
+    ):
+        scan = _claims(tmp_path, text)
+        assert len(scan.markers) == 1
+        assert len(scan.claims) == 1
+        assert "doctrine-claim" not in scan.claims[0].sentence
+        assert scan.markers[0].sentence == scan.claims[0].sentence
+        assert gate.evaluate(scan, {"OMN-1001": "started"}) == []
+        assert _kinds(gate.evaluate(scan, {"OMN-1001": "completed"})) == [
+            "CLAIM_CONTRADICTED_BY_TICKET_STATE"
+        ]
+    scan = _claims(tmp_path, _marker("in_flight"))
+    assert len(scan.markers) == 1
+    assert scan.claims == ()
+    assert scan.markers[0].sentence == ""
+    assert _claims(tmp_path, "Hardening is in flight.").claims[0].claim_types == (
+        "in_flight",
     )
-    with pytest.raises(gate.GateError, match="ZERO claim sentences"):
-        gate.run([path], token="unused")
 
 
 @pytest.mark.unit
-def test_an_unreadable_file_is_a_refusal(tmp_path: Path) -> None:
+def test_one_marker_per_ticket_and_marker_line_numbers(tmp_path: Path) -> None:
+    text = (
+        "The runner is blocked on delivery of OMN-1001 and OMN-1002.\n"
+        f"{_marker('blocked', role='blocker')}\n"
+        f"{_marker('blocked', ticket='OMN-1002')}"
+    )
+    scan = _claims(tmp_path, text)
+    assert [(m.ticket, m.line) for m in scan.markers] == [
+        ("OMN-1001", 2),
+        ("OMN-1002", 3),
+    ]
+    assert gate.evaluate(scan, {"OMN-1001": "started", "OMN-1002": "backlog"}) == []
+    findings = gate.evaluate(scan, {"OMN-1001": "completed", "OMN-1002": "completed"})
+    assert _kinds(findings) == ["CLAIM_CONTRADICTED_BY_TICKET_STATE"] * 2
+    assert [f.ticket for f in findings] == ["OMN-1001", "OMN-1002"]
+
+
+@pytest.mark.unit
+def test_zero_claims_and_markers_refuses_but_marker_only_audits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _write(tmp_path, "The guard runs on every pull request.")
+    with pytest.raises(gate.GateError, match="ZERO claim sentences or markers"):
+        gate.run([path])
+    monkeypatch.setattr(
+        gate, "resolve_states", Mock(return_value={"OMN-1001": "started"})
+    )
+    assert gate.run([_write(tmp_path, _marker())]) == (0, [])
+
+
+@pytest.mark.unit
+def test_unmarked_claim_via_run_returns_findings_without_resolving(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    resolver = Mock(
+        side_effect=AssertionError("unmarked prose has no tickets to resolve")
+    )
+    monkeypatch.setattr(gate, "resolve_states", resolver)
+    path = _write(tmp_path, "The guard is doctrine only.")
+    code, findings = gate.run([path])
+    assert code == 1
+    assert _kinds(findings) == ["UNMARKED_CLAIM"]
+    resolver.assert_not_called()
+    resolver.side_effect = None
+    resolver.return_value = {"OMN-1001": "started"}
+    assert gate.run([_write(tmp_path, f"The guard is doctrine only. {_marker()}")]) == (
+        0,
+        [],
+    )
+    resolver.assert_called_once_with({"OMN-1001"}, token=None)
+
+
+@pytest.mark.unit
+def test_unreadable_file_refuses(tmp_path: Path) -> None:
     with pytest.raises(gate.GateError, match="unreadable"):
         gate.collect_claims(tmp_path / "absent.md")
+    assert len(_claims(tmp_path, _marker()).markers) == 1
 
 
 @pytest.mark.unit
-def test_a_missing_credential_is_a_refusal_not_a_skip(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """AC3's falsifier, and the divergence from the nearest precedent.
+def test_non_utf8_file_refuses(tmp_path: Path) -> None:
+    path = tmp_path / "invalid.md"
+    path.write_bytes(b"\xff")
+    with pytest.raises(gate.GateError, match="not valid UTF-8"):
+        gate.collect_claims(path)
+    assert len(_claims(tmp_path, _marker()).markers) == 1
 
-    The stale-TODO gate reads the same secret and skips when it is absent. This
-    one refuses: a gate that cannot read its input has not passed, it has not
-    run.
-    """
+
+@pytest.mark.unit
+def test_missing_credential_refuses_and_empty_tickets_need_no_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv(gate.TICKET_STATE_ENV, raising=False)
     with pytest.raises(gate.GateError, match="REFUSES rather than skipping"):
         gate.resolve_states({"OMN-1001"})
-
-
-@pytest.mark.unit
-def test_the_credential_is_read_and_a_present_one_does_not_refuse(monkeypatch) -> None:
-    """The control for the test above: the refusal is about ABSENCE, not about
-    resolve_states refusing unconditionally. An empty ticket set resolves with
-    no credential read at all, so a present credential is not required here —
-    what is proven is that the refusal path is reached only when work exists."""
-    monkeypatch.delenv(gate.TICKET_STATE_ENV, raising=False)
     assert gate.resolve_states(set()) == {}
 
 
 @pytest.mark.unit
-def test_the_state_source_is_named_in_the_module(monkeypatch) -> None:
-    """AC3: the resolution source is named in the checker's own source."""
+def test_unreadable_tracker_refuses_and_main_exits_two(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        gate.urllib.request,
+        "urlopen",
+        Mock(side_effect=gate.urllib.error.URLError("tracker unavailable")),
+    )
+    with pytest.raises(gate.GateError, match="ticket-state source unreachable"):
+        gate.resolve_states({"OMN-1001"}, token="injected")
+    assert gate.resolve_states(set(), token="injected") == {}
+    monkeypatch.setenv(gate.TICKET_STATE_ENV, "injected")
+    assert gate.main([str(_write(tmp_path, _marker()))]) == 2
+    assert "COULD NOT RUN" in capsys.readouterr().err
+    monkeypatch.setattr(
+        gate, "resolve_states", Mock(return_value={"OMN-1001": "started"})
+    )
+    assert gate.main([str(_write(tmp_path, _marker()))]) == 0
+
+
+@pytest.mark.unit
+def test_the_state_source_is_named_in_the_module() -> None:
     assert gate.TICKET_STATE_ENDPOINT.startswith("https://")
     assert gate.TICKET_STATE_ENV == "LINEAR_API_KEY"
-    # Whitespace-normalised: the phrase is wrapped across lines in the module,
-    # and a raw substring search would pass or fail on the line width rather
-    # than on whether the source names its source.
     source = " ".join(_MODULE_PATH.read_text(encoding="utf-8").split()).lower()
     assert "ticket_state_endpoint" in source
     assert "no snapshot file and no offline mode" in source
 
 
-# --------------------------------------------------------------------------
-# Binder scope — each of the three calibration passes has a regression test
-# --------------------------------------------------------------------------
-
-
 @pytest.mark.unit
-def test_a_reference_list_in_the_same_block_is_not_swept_in(tmp_path: Path) -> None:
-    """The first calibration: block-scoped binding reported five findings
-    against a Related-tickets list that makes no claim about any of them."""
-    text = (
-        "The runner is not started and no branch exists. "
-        "Related tickets: OMN-3001 (the runner), OMN-3002 (a re-vendor), OMN-3003 (a lift)."
+def test_pre_correction_measurement_and_corrected_twin(tmp_path: Path) -> None:
+    before = (
+        f"The receipt guard is doctrine only. {_marker(ticket='OMN-1001')}\n\n"
+        f"Hardening is in flight. {_marker('in_flight', ticket='OMN-1002')}\n\n"
+        "The audit mechanism is absent, blocked on delivery of its implementation. "
+        f"{_marker('blocked', ticket='OMN-1003')}\n\n"
+        "The staging workflow does not yet read the receipt."
     )
-    findings = _findings(
-        tmp_path, text, dict.fromkeys(["OMN-3001", "OMN-3002", "OMN-3003"], "completed")
+    states = {
+        "OMN-1001": "completed",
+        "OMN-1002": "completed",
+        "OMN-1003": "completed",
+        "OMN-1004": "started",
+    }
+    scan = _claims(tmp_path, before)
+    assert len(scan.claims) == 4
+    assert len(scan.markers) == 3
+    findings = gate.evaluate(scan, states)
+    assert sorted(_kinds(findings)) == sorted(
+        [
+            "CLAIM_CONTRADICTED_BY_TICKET_STATE",
+            "CLAIM_CONTRADICTED_BY_TICKET_STATE",
+            "CLAIM_CONTRADICTED_BY_TICKET_STATE",
+            "UNMARKED_CLAIM",
+        ]
     )
-    assert _kinds(findings) == ["CLAIM_NAMES_NO_TICKET"]
-
-
-@pytest.mark.unit
-def test_an_adjacent_tracking_sentence_binds_but_a_citation_does_not(
-    tmp_path: Path,
-) -> None:
-    """Calibrations two and three, as a matched pair.
-
-    A following sentence that says its ticket TRACKS the work binds it. One
-    that merely cites a ticket for what it covers does not, because treating a
-    description verb as ownership reported a contradiction on correct prose.
-    """
-    tracking = "This is currently doctrine only. OMN-1001 tracks adding the guard."
-    citation = (
-        "This is not mechanically enforced at the gate. "
-        "OMN-2002's interlock covers exactly one lane."
+    assert {f.ticket for f in findings if f.ticket} == {
+        "OMN-1001",
+        "OMN-1002",
+        "OMN-1003",
+    }
+    corrected = (
+        "The receipt guard exists and checks receipts. OMN-1001 delivered it.\n\n"
+        "Hardening exists and runs on every pull request. OMN-1002 delivered it.\n\n"
+        "The audit mechanism exists and runs automatically. OMN-1003 delivered it.\n\n"
+        "The staging workflow does not yet read the receipt. "
+        f"{_marker(ticket='OMN-1004')}"
     )
-    assert _kinds(_findings(tmp_path, tracking, {"OMN-1001": "completed"})) == [
-        "CLAIM_CONTRADICTED_BY_TICKET_STATE"
-    ]
-    assert _kinds(_findings(tmp_path, citation, {"OMN-2002": "completed"})) == [
-        "CLAIM_NAMES_NO_TICKET"
-    ]
-
-
-@pytest.mark.unit
-def test_the_ownership_marker_matches_in_both_directions(tmp_path: Path) -> None:
-    """Calibration three: a marker-before-id pattern alone missed the corpus's
-    flagship case and silently downgraded a contradiction to a weaker finding."""
-    after = "This is currently doctrine only. OMN-1001 tracks adding the guard."
-    before = "This is currently doctrine only. The work is tracked in OMN-1001."
-    for text in (after, before):
-        assert _kinds(_findings(tmp_path, text, {"OMN-1001": "completed"})) == [
-            "CLAIM_CONTRADICTED_BY_TICKET_STATE"
-        ], text
-
-
-@pytest.mark.unit
-def test_a_claim_inside_a_code_fence_is_a_quotation_not_an_assertion(
-    tmp_path: Path,
-) -> None:
-    text = "Real prose here.\n\n```\nThis is currently doctrine only. OMN-1001 tracks it.\n```\n"
-    assert gate.collect_claims(_write(tmp_path, text)) == []
-
-
-def _write(tmp_path: Path, text: str) -> Path:
-    path = tmp_path / "fenced.md"
-    path.write_text(text, encoding="utf-8")
-    return path
+    corrected_scan = _claims(tmp_path, corrected)
+    assert len(corrected_scan.claims) == 1
+    assert len(corrected_scan.markers) == 1
+    assert gate.evaluate(corrected_scan, states) == []
