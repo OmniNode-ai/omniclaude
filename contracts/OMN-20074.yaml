@@ -1,0 +1,45 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20074"
+title: "Prepare omniclaude's repo-evidence caller and required-checks manifest for the S6 cut-over"
+summary: "Prepare omniclaude's caller and required-checks manifest for plan S6 of the OCC retirement, epic OMN-20068. This change lands with the S6 dev protection change and not before, after the skipped repo-evidence / verify row is resolved without a sweep exclusion."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn20074-s6-prep"
+    statement: |-
+      omniclaude must enforce repo-owned evidence and retire the OCC branch-protection manifest rows together with the S6 dev protection change.
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: the repo-evidence caller sets shadow "false" and compare-with-occ "false" after the S6 cut-over -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s6_cutover
+      - id: "AC2"
+        statement: |-
+          AC2: the required-checks manifest drops occ-preflight / eligibility and verify / verify, keeps the skip-token scan REQUIRED and carries no repo-evidence row -- falsifier: uv run pytest tests/ci/test_occ_manifest_rows_dropped_omn20074.py -q
+evidence_requirements:
+  - kind: "tests"
+    description: "The caller enforces repo-owned evidence with shadow and compare-with-occ set to false after the S6 cut-over."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s6_cutover"
+  - kind: "tests"
+    description: "The manifest drops the OCC contexts, keeps the skip-token scan REQUIRED and carries no repo-evidence row."
+    command: "uv run pytest tests/ci/test_occ_manifest_rows_dropped_omn20074.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn-20074-ac1"
+    description: "The focused caller test proves shadow and compare-with-occ are quoted false inputs after the S6 cut-over."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s6_cutover"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn-20074-ac2"
+    description: "The focused manifest tests prove the OCC contexts are dropped, the skip-token scan remains REQUIRED and no repo-evidence row is added."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_occ_manifest_rows_dropped_omn20074.py -q"
+        cwd: "${OMNI_HOME}/omniclaude"
