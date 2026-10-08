@@ -20,3 +20,8 @@ allowed:
   # Read by tests/hooks/test_refusal_surface_omn18983.py, which asserts the
   # retired-guard disposition it records; the test fails if the file moves.
   - "docs/guards/refusal-surface.md"
+
+  # OMN-18784: the coverage record the empty-evidence regression test reads
+  # (tests/ci/test_ci_evidence_omn18784.py) lists the removed suites and test
+  # counts; it is a test fixture of record, not canonical documentation.
+  - "docs/testing/ci-evidence.md"

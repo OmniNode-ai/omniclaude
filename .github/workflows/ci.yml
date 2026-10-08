@@ -2637,17 +2637,12 @@ jobs:
       - name: Run hooks tests
         working-directory: ${{ github.workspace }}
         run: |
-          if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
-            uv run pytest tests/hooks/ -v \
-              --splits 2 \
-              --group ${{ matrix.split }} \
-              --cov=src/omniclaude \
-              --cov-report=term-missing \
-              --junitxml=junit-hooks.xml
-          else
-            echo "No hooks tests found in tests/hooks/ -- skipping"
-            echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="hooks" tests="0" errors="0" failures="0" skipped="0"></testsuite></testsuites>' > junit-hooks.xml
-          fi
+          uv run pytest tests/hooks/ -v \
+            --splits 2 \
+            --group ${{ matrix.split }} \
+            --cov=src/omniclaude \
+            --cov-report=term-missing \
+            --junitxml=junit-hooks.xml
 
       - name: Upload hooks test results
         uses: actions/upload-artifact@v7
@@ -2819,13 +2814,14 @@ jobs:
       # exit 4 converts it into a red job, which is what a missing test deserves.
       #
       # Enforcement does not rest on this step alone. `Skip Count Ratchet` reads
-      # the report below against a recorded baseline of 30 collected, and its
-      # nonzero-baseline rule refuses a report that collected nothing. A future
+      # the report below against the restored router baseline of 30 collected,
+      # and refuses each empty report before pooling. A future
       # edit that empties this suite fails there even if it exits 0 here.
+      # OMN-18784: run the CI evidence checks in this existing gate as well.
       - name: Run agent framework tests
         working-directory: ${{ github.workspace }}
         run: |
-          uv run pytest tests/test_enhanced_router.py -v \
+          uv run pytest tests/test_enhanced_router.py tests/ci/test_ci_evidence_omn18784.py -v \
             --cov=src/omniclaude \
             --cov-report=term-missing \
             --junitxml=junit-agent-framework.xml
@@ -3622,9 +3618,9 @@ jobs:
             --suite omniclaude/test-split \
             --junit "${reports[@]}"
 
-      # OMN-18805. This suite is `count` mode with max_skips 0: it is a single
-      # file of 30 unconditional tests with no selector in front of it and no
-      # skip in it, so both the number and the zero are comparable run to run.
+      # This suite is `count` mode with max_skips 0: the restored router tests
+      # and the CI evidence checks are unconditional, with no selector or skip,
+      # so both the number and the zero are comparable run to run.
       #
       # The entry exists because the job it guards was green from nothing until
       # OMN-18805 restored real tests to it. OMN-18790 refused to register it
