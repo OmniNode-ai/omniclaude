@@ -61,8 +61,8 @@ SELF_JOB_NAME = "CI Summary"
 # These mirror the exact set the old needs-based ``ci-summary`` depended on;
 # each is an ``if: always()`` fail-closed aggregator over its leaf jobs.
 GATE_JOBS: tuple[str, ...] = (
-    "Refusal Surface (OMN-18983)",
     "Quality Gate",
+    "Refusal Surface (OMN-18983)",
     "Runtime Profiles",  # OMN-20184: required runtime contract validation
     "Tests Gate",
     "Security Gate",

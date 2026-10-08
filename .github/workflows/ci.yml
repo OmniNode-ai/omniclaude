@@ -52,7 +52,21 @@ jobs:
         with:
           version: "0.6.1"
       - name: Install focused-test dependencies
-        run: uv sync --frozen --group dev --python "3.12"
+        run: |
+          set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
+          attempt=1
+          until uv sync --frozen --group dev --python "3.12"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "uv sync failed; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
       - name: Verify registered guard refusal surface
         run: uv run pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
 
