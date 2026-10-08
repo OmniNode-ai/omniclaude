@@ -27,6 +27,7 @@ import asyncio
 import json
 import subprocess
 import uuid
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -53,6 +54,20 @@ from omniclaude.nodes.node_git_effect.models.model_git_result import GitResultSt
 # ---------------------------------------------------------------------------
 
 _CORRELATION_ID = uuid.uuid4()
+
+
+@pytest.fixture(autouse=True)
+def admitted_lane(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise subprocess behavior with a real, isolated positive admission input."""
+    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
+    ledger.write_text(
+        "2026-10-01T00:00:00Z | CLAIM | lane=subprocess-test | ticket=OMN-18645 | "
+        "actor=codex | worktree=none | no post-CLAIM rulings\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ONEX_LANE", "subprocess-test")
+    monkeypatch.setenv("ONEX_LEDGER_PATH", str(ledger))
+    monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path / "state"))
 
 
 def _make_proc_mock(

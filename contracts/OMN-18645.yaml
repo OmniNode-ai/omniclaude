@@ -1,0 +1,29 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18645
+title: "Surface mid-lane rulings before push and merge"
+summary: >
+  The Git effect admission handler, registered Bash guard, and
+  HandlerGitSubprocess re-read the ledger before a lane's git push or gh pr
+  merge. They surface every RULING timestamped after the lane's latest CLAIM
+  and refuse publishing until the lane appends an ACK row for each ruling that
+  copies its re=, ruling=, and ruling-sha256= cells. Surfaced rulings are
+  retained in an append-only journal so an edited, deleted, or rolled ruling
+  stays pending until acknowledged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Ledger ruling re-read tests pass"
+    command: "uv run pytest tests/hooks/test_ledger_ruling_reread.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-ledger-ruling-reread-tests
+    description: "Ruling re-read tests pin the refusal and the ACK positive control through the Bash guard and Git effect handler"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_ledger_ruling_reread.py -q"

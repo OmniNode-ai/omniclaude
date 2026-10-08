@@ -27,6 +27,9 @@ import subprocess
 from asyncio.subprocess import PIPE
 from uuid import UUID
 
+from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (
+    ruling_reread_refusal,
+)
 from omniclaude.nodes.node_git_effect.models import (
     GitOperation,
     ModelGitRequest,
@@ -306,6 +309,12 @@ class HandlerGitSubprocess:
             return self._unavailable_result("git", request)
         timeout = OPERATION_TIMEOUTS[request.operation]
         async with self._semaphore:
+            if args and args[0] == "push":
+                refusal = await asyncio.to_thread(
+                    ruling_reread_refusal, os.environ, request.working_directory
+                )
+                if refusal is not None:
+                    return self._ruling_refusal_result(request, refusal)
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "git",
@@ -351,6 +360,12 @@ class HandlerGitSubprocess:
             full_args.extend(["-R", request.repo])
         timeout = OPERATION_TIMEOUTS[request.operation]
         async with self._semaphore:
+            if args[:2] == ["pr", "merge"]:
+                refusal = await asyncio.to_thread(
+                    ruling_reread_refusal, os.environ, request.working_directory
+                )
+                if refusal is not None:
+                    return self._ruling_refusal_result(request, refusal)
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "gh",
@@ -381,6 +396,16 @@ class HandlerGitSubprocess:
                 return self._timeout_result(request, timeout)
 
         return self._parse_git_result(request, proc.returncode, stdout, stderr)
+
+    @staticmethod
+    def _ruling_refusal_result(request: ModelGitRequest, reason: str) -> ModelGitResult:
+        return ModelGitResult(
+            operation=request.operation.value,
+            status=GitResultStatus.FAILED,
+            error=reason,
+            error_code="LEDGER_RULING_UNACKNOWLEDGED",
+            correlation_id=request.correlation_id,
+        )
 
     async def _run_gh_json(
         self, args: list[str], request: ModelGitRequest

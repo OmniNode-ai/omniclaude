@@ -59,6 +59,11 @@ Foreground waits synchronously for the typed result. The handler MUST NOT call
 Every worker spawned by this skill (when the archetype is `dispatch_worker`)
 follows the same pre-push checklist before reporting "Primary task done":
 
+- Before push or merge, re-read the ledger for RULING rows appended after CLAIM.
+  Apply each surfaced ruling, then append an ACK citing its row and digest as
+  printed by the Git effect admission guard. Acknowledgement grants no new
+  authority. The guard refuses publishing until every new ruling is acknowledged.
+
 - Run `env -u PYTHONPATH uv run pytest tests/ -v` with no `-k` filter (full suite, no narrow filter); `env -u PYTHONPATH` prevents hook-exported PYTHONPATH from shadowing the worktree's local `src/`
 - Run ruff format + ruff check on `src/` and `tests/`
 - Run `pre-commit run --all-files` and address every failure
