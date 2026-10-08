@@ -120,14 +120,12 @@ jobs:
   # changing where anything actually executes is a separate single-owner claim
   # on the seam variable, which is OMN-16682 and not this ticket.
   #
-  # THIS REPOSITORY HOSTS THE REUSABLE WORKFLOW AND IS NOW ITS FIRST CALLER.
-  # `.github/workflows/route-runner-reusable.yml` landed here under OMN-18423
-  # with zero real callers — the only other mention of it in this tree is the
-  # prose comment in hostile-reviewer.yml explaining why that lab-touching job
-  # deliberately does NOT route through it. Because the workflow is local, the
-  # `uses:` below is the LOCAL form and carries no cross-repo sha: a caller in
-  # this repository must move with the file it calls, and pinning a sha of our
-  # own history here would let the two drift within a single commit.
+  # THE REUSABLE WORKFLOW IS NOW HOSTED IN OMNIMARKET. The `uses:` below pins
+  # `OmniNode-ai/omnimarket/.github/workflows/route-runner-reusable.yml` at a
+  # full sha, the same as every other caller. This repository's own copy of
+  # that file is no longer called from here. The other mention of the workflow
+  # in this tree is the prose comment in hostile-reviewer.yml explaining why
+  # that lab-touching job deliberately does NOT route through it.
   #
   # ONE CONSUMER IS WIRED: `env-var-registry`. It is the cheapest job in this
   # workflow whose `runs-on` currently resolves through the shared V1 seam
@@ -160,7 +158,7 @@ jobs:
   # job PLACEMENT would change to reveal it.
   route:
     name: Runner Route (OMN-18031)
-    uses: ./.github/workflows/route-runner-reusable.yml
+    uses: OmniNode-ai/omnimarket/.github/workflows/route-runner-reusable.yml@01a0d1b3e7d7ba1a09012f9af245ba29afa000b5
     with:
       workflow_path: .github/workflows/ci.yml
     secrets:
