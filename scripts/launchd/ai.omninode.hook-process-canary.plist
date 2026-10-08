@@ -59,6 +59,8 @@
     <string>__HOME__</string>
     <key>OMNIBASE_INTERNAL_HOME</key>
     <string>__INTERNAL_HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
     <key>ONEX_LEDGER_PATH</key>
     <string>__LEDGER__</string>
     <key>PATH</key>
