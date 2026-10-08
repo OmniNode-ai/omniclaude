@@ -29,6 +29,14 @@
 repos:
   - repo: local
     hooks:
+      - id: hooks-shard-coverage
+        name: Hooks shard coverage and report admission (OMN-19681)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/ci\.yml|tests/ci/test_hooks_shard_omn19681\.py|scripts/ci/skip_count_ratchet\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: comment-render-delegation
         name: Comment Render Delegation (OMN-18512)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov
