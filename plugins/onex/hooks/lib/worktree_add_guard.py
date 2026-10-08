@@ -55,6 +55,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_scope import Scope
 
 _HOOKS_LIB = Path(__file__).parent
 if str(_HOOKS_LIB) not in sys.path:
@@ -62,7 +63,6 @@ if str(_HOOKS_LIB) not in sys.path:
 
 from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # noqa: E402
     HereDoc,
-    Scope,
     ShellSyntaxError,
     UnresolvableWord,
     Word,

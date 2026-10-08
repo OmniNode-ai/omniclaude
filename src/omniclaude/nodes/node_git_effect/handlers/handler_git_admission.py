@@ -193,7 +193,7 @@ from collections import ChainMap
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Final
+from typing import Final
 
 from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
 from omniclaude.nodes.node_git_effect.models import (
@@ -363,14 +363,14 @@ class Decision:
     fetch_repo: str = ""
 
 
-def _require_str(raw: Any, key: str) -> str:
+def _require_str(raw: Mapping[str, object], key: str) -> str:
     value = raw.get(key)
     if not isinstance(value, str) or not value:
         raise PolicyError(f"policy field {key!r} must be a non-empty string")
     return value
 
 
-def _str_list(raw: Any, key: str) -> list[str]:
+def _str_list(raw: Mapping[str, object], key: str) -> list[str]:
     value = raw.get(key)
     if (
         not isinstance(value, list)
@@ -381,7 +381,7 @@ def _str_list(raw: Any, key: str) -> list[str]:
     return value
 
 
-def _positive_number(raw: Any, key: str) -> float:
+def _positive_number(raw: Mapping[str, object], key: str) -> float:
     value = raw.get(key)
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         raise PolicyError(f"policy field {key!r} must be a positive number")
@@ -450,7 +450,7 @@ def load_policy(path: Path | None = None) -> Policy:
     )
 
 
-def _str_pairs(raw: Any, key: str) -> tuple[tuple[str, str], ...]:
+def _str_pairs(raw: Mapping[str, object], key: str) -> tuple[tuple[str, str], ...]:
     value = raw.get(key)
     if (
         not isinstance(value, dict)
@@ -1317,7 +1317,7 @@ def _is_revision(token: str, cwd: Path, policy: Policy) -> bool:
 
 
 def _checkout_shape(
-    args: list[str], policy: Policy, is_revision: Any
+    args: list[str], policy: Policy, is_revision: Callable[[str], bool]
 ) -> _RestoreShape | None:
     """The restore a `git checkout` performs, or None when it is not one."""
     if "--" in args:
@@ -1430,7 +1430,7 @@ def _restore_shape(args: list[str]) -> _RestoreShape | None:
 
 
 def _parse_restore(
-    invocation: _GitInvocation, policy: Policy, is_revision: Any
+    invocation: _GitInvocation, policy: Policy, is_revision: Callable[[str], bool]
 ) -> _RestoreShape | None:
     args = list(invocation.args)
     if any(

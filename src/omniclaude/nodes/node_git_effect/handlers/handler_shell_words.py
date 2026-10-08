@@ -57,7 +57,6 @@ from collections import ChainMap
 from collections.abc import (
     Callable,
     Iterable,
-    Iterator,
     Mapping,
     MutableMapping,
     Sequence,
@@ -66,11 +65,20 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_heredoc import HereDoc
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_redirect import Redirect
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_word import (
+    _ASSIGNMENT,
+    _UNQUOTED_BRACE,
+    _UNQUOTED_GLOB,
+    Operator,
+    ShellSyntaxError,
+    UnresolvableWord,
+    Word,
+    WordPart,
+)
 
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-_UNQUOTED_GLOB = re.compile(r"[*?\[]")
-_UNQUOTED_BRACE = re.compile(r"\{[^{}]*(?:,|\.\.)[^{}]*\}")
 _PARAMETER = re.compile(r"\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)")
 
 # Variables the shell itself changes while a command runs, so the value a
@@ -81,122 +89,6 @@ _SETTERS = frozenset({"read", "unset", "mapfile", "readarray"})
 
 # Operators that end one simple command and start the next.
 SEPARATORS = frozenset({";", ";;", "&", "&&", "|", "||", "|&", "\n", "(", ")"})
-
-
-class ShellSyntaxError(ValueError):
-    """The command cannot be split into words (an unbalanced quote, most likely)."""
-
-
-class UnresolvableWord(ValueError):
-    """A word whose value the shell would compute and this module will not."""
-
-
-@dataclass(frozen=True)
-class WordPart:
-    text: str
-    # "none": unquoted; "double": inside double quotes; "literal": single
-    # quotes or a backslash escape, where nothing is expanded.
-    quote: EnumQuoteKind
-
-
-@dataclass(frozen=True)
-class Word:
-    parts: tuple[WordPart, ...]
-
-    @property
-    def text(self) -> str:
-        """The word with quotes removed and nothing expanded."""
-        return "".join(part.text for part in self.parts)
-
-    @property
-    def splits(self) -> bool:
-        """True when an unquoted expansion makes the shell word-split this word."""
-        return any(
-            part.quote == EnumQuoteKind.NONE and ("$" in part.text or "`" in part.text)
-            for part in self.parts
-        )
-
-    @property
-    def is_plain(self) -> bool:
-        """True when the word needs no expansion at all."""
-        for part in self.parts:
-            if part.quote == EnumQuoteKind.LITERAL:
-                continue
-            if "$" in part.text or "`" in part.text:
-                return False
-            if part.quote == EnumQuoteKind.NONE and (
-                part.text.startswith("~")
-                or _UNQUOTED_GLOB.search(part.text)
-                or _UNQUOTED_BRACE.search(part.text)
-            ):
-                return False
-        return True
-
-    def assignment(self) -> tuple[str, Word] | None:
-        """``(NAME, value)`` when this word is a ``NAME=value`` assignment."""
-        if not self.parts or self.parts[0].quote != EnumQuoteKind.NONE:
-            return None
-        head = self.parts[0].text
-        match = _ASSIGNMENT.match(head)
-        if match is None:
-            return None
-        name = head[: match.end() - 1]
-        rest = head[match.end() :]
-        value_parts = (
-            (WordPart(rest, EnumQuoteKind.NONE),) if rest else ()
-        ) + self.parts[1:]
-        return name, Word(value_parts)
-
-
-@dataclass(frozen=True)
-class Operator:
-    text: str
-
-
-class HereDoc:
-    """A here-document, placed where its ``<<`` operator was.
-
-    The body is filled in when the tokenizer reaches it, on the lines after the
-    command. ``expands`` is False when any part of the delimiter was quoted,
-    in which case the shell expands nothing inside the body.
-    """
-
-    def __init__(self, strip_tabs: bool) -> None:
-        self.strip_tabs = strip_tabs
-        self.delimiter = ""
-        self.expands = True
-        self.body = ""
-
-    def as_word(self) -> Word:
-        """The body as a word, quoted the way the shell reads it."""
-        return Word(
-            (
-                WordPart(
-                    self.body,
-                    EnumQuoteKind.DOUBLE if self.expands else EnumQuoteKind.LITERAL,
-                ),
-            )
-        )
-
-
-class Redirect:
-    """A redirection, emitted only by ``tokenize(..., keep_redirects=True)``.
-
-    ``op`` is the operator without its descriptor digits (``>``, ``>>``,
-    ``<``, ``<<<``, ``&>``, ``>|``, ``>&``); ``fd`` is the digits glued before
-    it (``"2"`` in ``2>err.log``) or ``None``; ``target`` is the word after it,
-    or ``None`` when the operator takes none (``>&-``). A here-document is a
-    :class:`HereDoc`, never a ``Redirect``.
-
-    Most guards want redirections dropped, which is the default. A guard that
-    has to know which file a command writes (OMN-19542: a body file written by
-    an earlier segment of the same command) asks for them.
-    """
-
-    def __init__(self, op: str, fd: str | None) -> None:
-        self.op = op
-        self.fd = fd
-        self.target: Word | None = None
 
 
 Token = Word | Operator | HereDoc | Redirect
@@ -704,23 +596,6 @@ _WRAPPERS = frozenset({"env", "sudo", "command", "nohup", "time", "timeout", "xa
 
 class _Untokenisable(ShellSyntaxError):
     """A command whose words cannot be read."""
-
-
-class Scope(Mapping[str, str | None]):
-    """Environment overlaid by the command's own assignments."""
-
-    def __init__(self, env: Mapping[str, str], local: Mapping[str, str | None]):
-        self._env, self._local = env, local
-
-    def __getitem__(self, key: str) -> str | None:
-        return self._local[key] if key in self._local else self._env[key]
-
-    def __iter__(self) -> Iterator[str]:
-        yield from self._local
-        yield from (k for k in self._env if k not in self._local)
-
-    def __len__(self) -> int:
-        return len(set(self._env) | set(self._local))
 
 
 def resolve_path(
