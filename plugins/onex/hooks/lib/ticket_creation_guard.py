@@ -154,6 +154,16 @@ The honest limit, as everywhere else here: this refuses an ACCIDENT. It cannot
 tell a lane that a criterion is wrong, and a lane that means to change one may
 still do so -- and must then re-accept the binding in the same act.
 
+**The approved-edit path (OMN-19401).** An operator-ruled correction has a route:
+the update adds a line of its own reading ``Criterion-edit ruling: <timestamp>``
+whose timestamp is the first cell of a RULING row on the rolling ledger naming
+the same ticket and carrying the operator's quoted words. The row is resolved
+from ``ONEX_LEDGER_PATH`` (else ``$OMNI_HOME/docs/tracking/``) and its archive;
+a row that is absent, a MSG, for another ticket or without the operator's
+words refuses, as does a citation the ticket already carries (an approval is
+single use). It is a shape check, not a truth check: it cannot read whether the
+words say yes, nor that they cover this criterion.
+
 What rules 6 and 7 enforce, and what they cannot
 ------------------------------------------------
 Rule 6 enforces that a falsifier was NAMED. It cannot judge whether the named
@@ -633,6 +643,10 @@ class Finding:
 #: callable so the decision core stays a pure function of what it is handed,
 #: and the network lives in one place.
 BodyLookup = Callable[[str], "str | None"]
+
+#: Rule 9's second seam (OMN-19401): the ledger rows whose timestamp cell is the
+#: given stamp, oldest first. An empty list is "no such row", which refuses.
+RulingLookup = Callable[[str], "list[str]"]
 
 
 def _string_list(raw: Any, key: str, source: Path) -> tuple[str, ...]:
@@ -1426,12 +1440,76 @@ def apply_description_patch(previous: str, operations: Any) -> str:
     return body
 
 
+#: The approved-edit citation (OMN-19401). Whole-line anchored for the same reason
+#: the binding line is: a substring would pass on prose that merely mentions a
+#: ruling. The stamp is the RULING row's own first cell on the rolling ledger.
+CRITERION_EDIT_CITATION: Final[str] = "Criterion-edit ruling: <row timestamp>"
+_CITATION_LINE: Final[re.Pattern[str]] = re.compile(
+    r"^[ \t]*Criterion-edit ruling:[ \t]*"
+    r"(?P<stamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)[ \t]*$",
+    re.MULTILINE,
+)
+_LEDGER_CELL_SEPARATOR: Final[str] = " | "
+
+
+def ruling_row_approves(row: str, stamp: str, issue_ref: str) -> bool:
+    """True when ``row`` is an operator RULING row for ``issue_ref`` at ``stamp``.
+
+    A shape check, not a truth check -- the posture rule 18's OPERATOR-CONSENT
+    ledger-row guard takes. It confirms the row exists, is a RULING (a MSG is
+    never operator consent), names THIS ticket in its own ``ticket=`` cell, and
+    carries the operator's quoted words. It cannot read whether the words say
+    yes, or that they cover this particular criterion.
+    """
+    cells = row.strip().split(_LEDGER_CELL_SEPARATOR)
+    if len(cells) < 3 or cells[0] != stamp or cells[1] != "RULING":
+        return False
+    if f"ticket={issue_ref.upper()}" not in (c.strip() for c in cells):
+        return False
+    return any(len(c) > 2 and c.startswith('"') and c.endswith('"') for c in cells)
+
+
+def _approving_ruling(
+    issue_ref: str,
+    previous: str,
+    proposed: str,
+    ruling_lookup: RulingLookup | None,
+) -> tuple[bool, list[str]]:
+    """``(approved, stamps cited)`` for a criterion rewrite.
+
+    Only a citation this update ADDS counts: one already on the ticket would turn
+    a single approval into a standing licence for every later rewrite.
+    """
+    already = {m.group("stamp") for m in _CITATION_LINE.finditer(previous)}
+    cited = [
+        m.group("stamp")
+        for m in _CITATION_LINE.finditer(proposed)
+        if m.group("stamp") not in already
+    ]
+    if ruling_lookup is None:
+        return False, cited
+    for stamp in cited:
+        if any(
+            ruling_row_approves(row, stamp, issue_ref) for row in ruling_lookup(stamp)
+        ):
+            return True, cited
+    return False, cited
+
+
 def _criterion_text_findings(
     issue_ref: str,
     tool_input: dict[str, Any],
     body_lookup: BodyLookup | None,
+    ruling_lookup: RulingLookup | None = None,
 ) -> list[Finding]:
     """Rule 9 -- an existing criterion's own line may not be rewritten.
+
+    **The approved-edit path (OMN-19401).** A rewrite is admitted when the
+    proposed body ADDS a ``Criterion-edit ruling: <timestamp>`` line that
+    resolves, through ``ruling_lookup``, to an operator RULING row on the rolling
+    ledger naming this ticket (see :func:`ruling_row_approves`). A citation that
+    does not resolve leaves the rewrite refused and adds
+    ``criterion_ruling_unresolved`` saying why.
 
     Only the labels present BOTH before and after are compared. Adding a
     criterion and removing one are authoring, not rewriting, and neither can
@@ -1490,10 +1568,36 @@ def _criterion_text_findings(
 
     before = criterion_lines(previous)
     after = criterion_lines(proposed)
+    rewritten = [
+        label
+        for label in sorted(set(before) & set(after))
+        if before[label] != after[label]
+    ]
+    if not rewritten:
+        return []
+    approved, cited = _approving_ruling(issue_ref, previous, proposed, ruling_lookup)
+    if approved:
+        return []
     findings: list[Finding] = []
-    for label in sorted(set(before) & set(after)):
-        if before[label] == after[label]:
-            continue
+    if cited:
+        findings.append(
+            Finding(
+                code="criterion_ruling_unresolved",
+                field="description",
+                reason=(
+                    f"the update cites {', '.join(cited)} but no operator RULING "
+                    f"row with that timestamp names {issue_ref} and carries the "
+                    "operator's quoted words on the rolling ledger"
+                ),
+                fix=(
+                    "cite the first cell of an existing RULING row for this "
+                    "ticket; a MSG, a row for another ticket and a row with no "
+                    "quoted operator answer do not approve an edit. A citation "
+                    "already on the ticket does not count again"
+                ),
+            )
+        )
+    for label in rewritten:
         findings.append(
             Finding(
                 code="criterion_text_rewritten",
@@ -1508,8 +1612,10 @@ def _criterion_text_findings(
                     "block. A contract's ac_bindings pins this line by hash, so "
                     "editing it reverts every binding on it to unproven and "
                     "turns the change-control gate red. If the criterion itself "
-                    "is genuinely wrong, change it and re-accept the binding in "
-                    "the same act"
+                    "is genuinely wrong and the operator ruled the correction, "
+                    "add a line of its own, "
+                    f"'{CRITERION_EDIT_CITATION}', citing that RULING row on the "
+                    "rolling ledger, and re-accept the binding in the same act"
                 ),
             )
         )
@@ -1702,6 +1808,7 @@ def check_save_issue(
     tool_input: Any,
     policy: Policy,
     body_lookup: BodyLookup | None = None,
+    ruling_lookup: RulingLookup | None = None,
 ) -> list[Finding]:
     """Return every failing admission rule for one ``save_issue`` call.
 
@@ -1711,6 +1818,8 @@ def check_save_issue(
     ``body_lookup`` is rule 9's only window onto anything outside the payload,
     and it is an argument rather than an import so this function stays a pure
     function of what it is given; see :func:`_criterion_text_findings`.
+    ``ruling_lookup`` is its second window, onto the rolling ledger, and serves
+    only the approved-edit path.
     """
 
     if not isinstance(tool_input, dict):
@@ -1752,7 +1861,7 @@ def check_save_issue(
                     )
                 ]
             return _criterion_text_findings(
-                str(tool_input["id"]), tool_input, body_lookup
+                str(tool_input["id"]), tool_input, body_lookup, ruling_lookup
             )
         return [
             Finding(
@@ -2066,6 +2175,54 @@ def _body_network_lookup(api_key: str) -> BodyLookup:
     return lookup
 
 
+def _ledger_path() -> Path | None:
+    """The rolling ledger to resolve rulings against, or ``None``.
+
+    ``ONEX_LEDGER_PATH`` first, which is where a dispatched lane's copy lives;
+    ``$OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md`` second.
+    """
+    explicit = os.environ.get("ONEX_LEDGER_PATH", "").strip()
+    if explicit:
+        return Path(explicit)
+    home = os.environ.get("OMNI_HOME", "").strip()
+    if home:
+        return Path(home) / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
+    return None
+
+
+def ledger_rows_for_stamp(ledger: Path, stamp: str) -> list[str]:
+    """Every row of ``ledger`` (and its rolled archive) whose first cell is ``stamp``.
+
+    An unreadable file contributes no rows, so an unreadable ledger approves
+    nothing: the rewrite stays refused.
+    """
+    files = [ledger]
+    archive = ledger.parent / "archive"
+    if archive.is_dir():
+        files.extend(sorted(archive.glob(f"{ledger.stem}_*-split.md")))
+    prefix = f"{stamp}{_LEDGER_CELL_SEPARATOR}"
+    rows: list[str] = []
+    for path in files:
+        if path.is_symlink() or not path.is_file():
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        rows.extend(line for line in lines if line.startswith(prefix))
+    return rows
+
+
+def _ledger_ruling_lookup() -> RulingLookup:
+    """Bind rule 9's ledger seam to the rolling ledger on this machine."""
+    ledger = _ledger_path()
+
+    def lookup(stamp: str) -> list[str]:
+        return ledger_rows_for_stamp(ledger, stamp) if ledger is not None else []
+
+    return lookup
+
+
 def _block(reason: str, reason_code: str) -> int:
     json.dump(
         {"decision": "block", "reason": reason, "reason_code": reason_code}, sys.stdout
@@ -2116,7 +2273,12 @@ def main(argv: list[str] | None = None) -> int:
     tool_input = payload.get("tool_input")
     is_update = isinstance(tool_input, dict) and _is_present(tool_input.get("id"))
 
-    findings = check_save_issue(tool_input, policy, body_lookup=body_lookup)
+    findings = check_save_issue(
+        tool_input,
+        policy,
+        body_lookup=body_lookup,
+        ruling_lookup=_ledger_ruling_lookup(),
+    )
     if findings:
         # Nothing is written to stderr on this path. The shell wrapper captures
         # stdout and stderr TOGETHER and then reads `.reason` out of the result
