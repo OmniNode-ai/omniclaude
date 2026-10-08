@@ -4,12 +4,15 @@
 """PreToolUse model router hook — advisory delegation to cheaper models (OMN-7810).
 
 Classifies tool calls by estimated complexity and suggests delegation to cheaper
-models for simple tasks. Runs in ADVISORY mode (warn only, does not block).
+models for simple tasks. The shipped config and module default use ADVISORY
+mode (warn only, does not block). Explicitly configuring "enforce" enables
+blocking for implementation tools; this module owns that mode decision.
 
 Complexity heuristics (no network calls, <50ms budget):
 - Bash: long pipelines / multi-step commands → high; simple commands → low
 - Edit/Write: large diffs or architecture files → high; small changes → low
-- Read/Grep/Glob: always low (information gathering)
+- Read/Grep/Glob: always low (information gathering), excluded from the shipped
+  implementation tools and passed through by the shell wrapper
 
 Exit codes:
     0 — allow (pass through, possibly with advisory on stderr)
