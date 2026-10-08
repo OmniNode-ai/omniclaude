@@ -3,11 +3,10 @@
 
 name: Plugin Version Bump Gate
 
-# OMN-16913. The Claude Code plugin cache is keyed on the manifest version, so a
-# change under plugins/onex/ that lands without a bump never reaches an installed
-# cache. This fails a pull request that changes plugins/onex/ (tests and bytecode
-# excepted) without raising plugins/onex/.claude-plugin/plugin.json `version`
-# above its merge-base value, or whose dev marketplace entry pins another version.
+# OMN-20710 (port of OMN-20497): refuse a lowered or broken plugin version or
+# disagreement between plugin.json and the onex dev marketplace entry. PRs no
+# longer bump the version; post-merge plugin-version-bump.yml does in one bot PR.
+# Resolve version-line conflicts by taking dev's value in both files.
 #
 # No `paths:` filter, deliberately: a filtered gate under a context something
 # waits for is skip-vector 1 (see hook-inventory-gate.yml). The job is a
@@ -47,7 +46,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Require a plugin version bump for plugin changes
+      - name: Refuse lowered or broken plugin versions and marketplace disagreement
         env:
           BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |

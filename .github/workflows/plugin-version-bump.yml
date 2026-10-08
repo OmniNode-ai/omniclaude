@@ -1,0 +1,152 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-20710: port the OMN-20497 post-merge bot bump from omniclaude-internal.
+# Operator RULING 2026-10-08T03:53:09Z lane=orchestrator-716d: one bot bump PR
+# after each dev merge; the per-PR check refuses only a lowered or broken version
+# (and disagreement between the two version files). PRs no longer claim the
+# same next version and knock each other red when one merges.
+# Lane cause-claude-bump-2245 measured 47 of dev's 161 merges since 2026-09-30
+# setting the plugin version.
+#
+# The version-keyed plugin cache still needs a bump for shipped changes. Run the
+# validator's own --bump-to-base against the last dev commit that set the version,
+# raising plugin.json and the dev marketplace entry together in one fixed bot PR.
+# There is no hold: every dev merge is checked, with a schedule as a delivery
+# backstop. Update the branch only when its versions differ or it conflicts with
+# dev; each push reruns full CI and dev does not require branches up to date.
+# Close the PR when dev already carries a version for every merged change.
+
+name: Plugin Version Bump
+
+on:
+  push:
+    branches: [dev]
+  schedule:
+    - cron: '*/30 * * * *' # Backstop for a push event GitHub did not deliver.
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-version-bump
+  cancel-in-progress: false
+
+jobs:
+  plugin-version-bump:
+    name: plugin-version-bump
+    runs-on: ${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]') }}
+    timeout-minutes: 15
+    env:
+      BUMP_BRANCH: automation/omn-20710-plugin-version-bump
+    steps:
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: omniclaude
+          permission-contents: write
+          permission-pull-requests: write
+          # A force-push onto newer dev carries whatever workflow files dev changed
+          # in between; GitHub refuses that from an App without this scope.
+          permission-workflows: write
+
+      # Full history: find the version-setting commit with git log over the manifest.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Bump onex changed since its version was last set
+        id: bump
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/plugin-version-bump.log"
+          : > "$log"
+          last="$(git log -1 --format=%H -G'"version"' -- plugins/onex/.claude-plugin/plugin.json)"
+          if [ -z "$last" ]; then
+            echo "::error::no commit on dev sets the version in plugins/onex/.claude-plugin/plugin.json"
+            exit 1
+          fi
+          python scripts/validation/validate_plugin_version_bump.py --base "$last" --bump-to-base | tee -a "$log"
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open, update or close the one bump pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          CHANGED: ${{ steps.bump.outputs.changed }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          open="$(gh pr list --repo "$REPO" --base dev --head "$BUMP_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ "$CHANGED" != "true" ]; then
+            echo "dev already carries a version for every merged plugin change."
+            if [ -n "$open" ]; then
+              gh pr close "$open" --repo "$REPO" --delete-branch \
+                --comment "dev already carries a version for every merged plugin change, so this bump is no longer needed (OMN-20710). Closed by ${RUN_URL}"
+            fi
+            exit 0
+          fi
+          tip="$(git rev-parse HEAD)"
+          live="$(git ls-remote origin refs/heads/dev | cut -f1)"
+          if [ "$live" != "$tip" ]; then
+            echo "dev moved from $tip to $live during this run; the run that push queued rebuilds the bump."
+            exit 0
+          fi
+          git config user.name "onexbot-occ-writer[bot]"
+          git config user.email "307849072+onexbot-occ-writer[bot]@users.noreply.github.com"
+          {
+            echo "chore(OMN-20710): post-merge plugin version bump"
+            echo
+            grep '^bumped ' "${RUNNER_TEMP}/plugin-version-bump.log"
+          } > "${RUNNER_TEMP}/plugin-version-bump.msg"
+          git commit -q -a -F "${RUNNER_TEMP}/plugin-version-bump.msg" \
+            --trailer "Onex-Workflow: ${GITHUB_WORKFLOW}" --trailer "Onex-Run: ${RUN_URL}"
+          remote="$(git ls-remote origin "refs/heads/${BUMP_BRANCH}" | cut -f1)"
+          if [ -n "$remote" ]; then
+            git fetch -q origin "+refs/heads/${BUMP_BRANCH}:refs/remotes/origin/${BUMP_BRANCH}"
+          fi
+          if [ -n "$remote" ] && \
+            git diff --quiet "$remote" HEAD -- plugins/onex/.claude-plugin/plugin.json plugins/onex-dev-marketplace/.claude-plugin/marketplace.json && \
+            git merge-tree --write-tree "$remote" HEAD > /dev/null; then
+            echo "${BUMP_BRANCH} already carries this bump without a conflict with dev; nothing to push."
+          else
+            git push --force origin "HEAD:refs/heads/${BUMP_BRANCH}"
+          fi
+          if [ -n "$open" ]; then
+            echo "Updated #${open} in place."
+            exit 0
+          fi
+          printf '%s\n' \
+            "## Summary" \
+            "" \
+            "Automated post-merge plugin version bump. PRs no longer bump plugins/onex. This one bot PR raises plugins/onex/.claude-plugin/plugin.json and the onex entry in plugins/onex-dev-marketplace/.claude-plugin/marketplace.json together so the version-keyed plugin cache delivers merged changes." \
+            "" \
+            "Kept open as the single bump PR, updated in place when the next version changes, and closed when dev needs no bump." \
+            "" \
+            "## Ticket" \
+            "" \
+            "OMN-20710 (port of OMN-20497)" \
+            "" \
+            "## Triggered by" \
+            "" \
+            "${RUN_URL}" \
+            "" \
+            "Evidence-Ticket: OMN-20710" > "${RUNNER_TEMP}/plugin-version-bump.body"
+          gh pr create --repo "$REPO" --base dev --head "$BUMP_BRANCH" \
+            --title "chore(OMN-20710): post-merge plugin version bump" \
+            --body-file "${RUNNER_TEMP}/plugin-version-bump.body"
