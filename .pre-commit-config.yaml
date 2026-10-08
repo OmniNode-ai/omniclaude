@@ -311,6 +311,15 @@ repos:
         language: system
         pass_filenames: true
         stages: [commit-msg]
+      - id: ticket-refusal-reason
+        name: Ticket refusal lane, guard and reason contract (OMN-19381)
+        entry: >-
+          uv run --frozen pytest tests/hooks/test_refusal_row_lane_omn19381.py
+          -q -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        files: '^(plugins/onex/hooks/(lib/(ticket_creation_guard|hook_refusal_recorder|hook_refusal_lane)\.py|lib/hook_refusal\.sh|scripts/pre_tool_use_ticket_creation_gate\.sh)|tests/hooks/test_refusal_row_lane_omn19381\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
+        stages: [pre-commit]
       - id: pr-close-preconditions
         name: PR close preconditions and refusal contract (OMN-19160)
         entry: >-
