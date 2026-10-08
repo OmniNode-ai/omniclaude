@@ -31,7 +31,6 @@ NON_CANONICAL: tuple[str, ...] = (
     "omniclaude.nodes.node_linear_effect",
     "omniclaude.nodes.node_local_coding_orchestrator",
     "omniclaude.nodes.node_local_llm_inference_effect",
-    "omniclaude.nodes.node_manifest_fetch_effect",
     "omniclaude.nodes.node_pattern_persistence_effect",
     "omniclaude.nodes.node_personality_logging_effect",
     "omniclaude.nodes.node_routing_emission_effect",
