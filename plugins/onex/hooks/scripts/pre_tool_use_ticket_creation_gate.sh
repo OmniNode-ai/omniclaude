@@ -139,8 +139,12 @@ unset _SELF
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 # shellcheck source=./onex-paths.sh
-source "${SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
-LOG_FILE="${ONEX_HOOK_LOG:-${HOME}/.claude/onex-hooks.log}"
+if ! source "${SCRIPT_DIR}/onex-paths.sh"; then
+    printf '%s\n' '{"decision":"block","reason":"OMN-18983: refusal log path is unresolved; set an absolute OMNI_HOME or ONEX_STATE_DIR"}'
+    trap - EXIT
+    exit 2
+fi
+LOG_FILE="${ONEX_HOOK_LOG}"
 [[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
 
 _log() {
@@ -157,7 +161,6 @@ _block() {
     # turn's terminal and a log nobody reads. Backgrounded and fail-open.
     hook_record_refusal "$1" "$2" 2>/dev/null || true
     _hook_status "BLOCKED" "$1" "0" 2>/dev/null || true
-    _log "BLOCKED: $1"
     jq -n --arg reason "$2" '{"decision": "block", "reason": $reason}'
     trap - EXIT
     exit 2

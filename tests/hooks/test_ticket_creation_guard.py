@@ -839,13 +839,13 @@ def _hook_ledger(tmp_path: Path) -> Path:
     """Where the guard's log lines actually land.
 
     `onex-paths.sh` *exports* ONEX_HOOK_LOG unconditionally as
-    ``$ONEX_STATE_DIR/logs/hooks.log``, overwriting whatever the caller set. So
+    ``$ONEX_STATE_DIR/hooks/logs/hooks.log``, overwriting whatever the caller set. So
     a caller-supplied ONEX_HOOK_LOG is not honoured, and asserting against one
     would test a file no hook on this machine ever writes. The state-dir path is
     the shared hook ledger every sibling guard logs to; that is the surface
     these tests read.
     """
-    return tmp_path / "state" / "logs" / "hooks.log"
+    return tmp_path / "state" / "hooks" / "logs" / "hooks.log"
 
 
 def _run_hook(
@@ -1107,9 +1107,19 @@ def test_a_refusal_is_recorded_in_the_hook_log(tmp_path: Path) -> None:
         },
         tmp_path,
     )
-    log = _hook_ledger(tmp_path).read_text(encoding="utf-8")
-    assert "BLOCKED" in log
-    assert "ticket-creation-gate" in log
+    # OMN-18983: the shared recorder owns the attributed refusal, asynchronously.
+    import time
+
+    deadline = time.monotonic() + 5
+    log = ""
+    while time.monotonic() < deadline:
+        log = _hook_ledger(tmp_path).read_text(encoding="utf-8")
+        if "class=refusal" in log:
+            break
+        time.sleep(0.02)
+    assert "class=refusal" in log
+    assert "guard=pre_tool_use_ticket_creation_gate.sh |" in log
+    assert "lane_source=" in log
 
 
 # ---------------------------------------------------------------------------

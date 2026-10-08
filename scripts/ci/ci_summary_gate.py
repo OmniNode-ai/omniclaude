@@ -62,6 +62,7 @@ SELF_JOB_NAME = "CI Summary"
 # each is an ``if: always()`` fail-closed aggregator over its leaf jobs.
 GATE_JOBS: tuple[str, ...] = (
     "Quality Gate",
+    "Refusal Surface (OMN-18983)",
     "Runtime Profiles",  # OMN-20184: required runtime contract validation
     "Tests Gate",
     "Security Gate",
@@ -129,6 +130,7 @@ GATE_JOBS: tuple[str, ...] = (
 # omnibase_infra STRICT_GATE_JOBS posture of the OMN-15214 canary).
 STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
     {
+        "Refusal Surface (OMN-18983)",
         "Runtime Profiles",
         "no-noncanonical-lifecycle-classes",
         "Shape-Gate Independence (OMN-20298)",
