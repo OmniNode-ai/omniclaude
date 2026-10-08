@@ -28,15 +28,16 @@
 # real; compare-with-occ "false" stops the difference step from waiting for an
 # OCC verdict and failing closed. verifier-version stays 0.4.294, a release
 # that ships the classifier (node_dod_verify occ-difference, omnimarket#3277),
-# so a rollback turns comparison back on with one input. With shadow "false"
-# the reusable at this pin skips repo-evidence / verify (its `if:` is
-# `inputs.evidence-source != 'caller' || inputs.shadow == 'true'`), and CI
-# Summary's L5 default-deny sweep fails a skipped external row, so this change
-# lands only after that row is resolved without a sweep exclusion, together
-# with the S6 dev protection change, and not before.
+# so a rollback turns comparison back on with one input. At this pin
+# (omnibase_core#1909, squash 7394003b2) the reusable's verify job, in
+# caller-evidence mode, shadow or not, reports a no-op so its check-run concludes
+# success rather than skipped, so CI Summary's L5 default-deny sweep sees a
+# success row and needs no exclusion; this change lands together with the
+# S6 dev protection change.
 #
 # The reusable is pinned by full SHA. It must be a commit that carries the
-# shadow input; this is the squash commit of omnibase_core#1901 on dev.
+# shadow input and the caller-mode verify no-op; this is the squash commit of
+# omnibase_core#1909 on dev.
 # omniclaude does not host receipt-gate.yml.
 
 name: Repo Evidence Gate
@@ -56,7 +57,7 @@ permissions:
 
 jobs:
   repo-evidence:
-    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@033db282217c224f8063b94966a7f3fdd26b7894 # OMN-20073: the squash commit of omnibase_core#1901 on dev (receipt-gate shadow input)
+    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@7394003b290a140df6ddf0921a510ca10f642218 # OMN-20074: the squash commit of omnibase_core#1909 on dev (caller-mode verify reports a success no-op)
     with:
       evidence-source: caller
       verifier-version: 0.4.294

@@ -84,6 +84,10 @@ def test_caller_enforces_and_stops_comparing_with_occ_after_the_s6_cutover() -> 
     job = yaml.safe_load(CALLER_PATH.read_text(encoding="utf-8"))["jobs"][
         "repo-evidence"
     ]
+    assert job["uses"].endswith("@7394003b290a140df6ddf0921a510ca10f642218"), (
+        "the S6 caller must pin the omnibase_core#1909 squash commit, whose "
+        "caller-mode verify reports success instead of skipped"
+    )
     assert job["with"].get("shadow") == "false", (
         'the S6 cut-over requires shadow: "false" (a quoted string input), so '
         "the repo-evidence verdict is enforced"
