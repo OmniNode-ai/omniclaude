@@ -2659,6 +2659,8 @@ def ruling_reread_refusal(
                 "Acknowledgement records reading; it grants no authority to disregard a ruling.\n"
                 + "\n".join(pending)
             )
+    except BlockingIOError:
+        return "BLOCKED (OMN-18645): ruling re-read journal is locked by another publisher; retry the publish."
     except (OSError, UnicodeError, ValueError) as exc:
         return f"BLOCKED (OMN-18645): ledger ruling re-read could not be verified ({exc}); repair the ledger/journal before publishing."
     return None

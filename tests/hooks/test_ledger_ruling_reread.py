@@ -346,6 +346,19 @@ def test_corrupt_journal_refuses(ledger_env: dict[str, str]) -> None:
     assert "could not be verified" in (guard.ruling_reread_refusal(os.environ) or "")
 
 
+def test_journal_contention_refuses_by_name(ledger_env: dict[str, str]) -> None:
+    import fcntl
+
+    append(ledger_env, RULING)
+    journal = Path(ledger_env["ONEX_STATE_DIR"]) / "hooks/ruling-reread.jsonl"
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    with journal.open("a+", encoding="utf-8") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        assert "locked by another publisher" in (
+            guard.ruling_reread_refusal(os.environ) or ""
+        )
+
+
 def test_ack_removal_reinstates_refusal(ledger_env: dict[str, str]) -> None:
     append(ledger_env, RULING)
     acknowledge(ledger_env)
