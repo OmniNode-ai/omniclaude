@@ -16,3 +16,7 @@ allowed:
   # harness loads — not prose that belongs in the knowledge base. The ruling
   # names it explicitly ("omniclaude plugins/**"). 228 files as of 2026-09-01.
   - "plugins/**"
+
+  # Read by tests/hooks/test_refusal_surface_omn18983.py, which asserts the
+  # retired-guard disposition it records; the test fails if the file moves.
+  - "docs/guards/refusal-surface.md"
