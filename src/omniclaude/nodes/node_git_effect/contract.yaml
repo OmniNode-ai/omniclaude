@@ -264,7 +264,7 @@ handler_routing:
         module: omniclaude.nodes.node_git_effect.models
         name: ModelGitRequest
       handler:
-        module: omniclaude.nodes.node_git_effect.handlers.handler_git_admission
+        module: omniclaude.nodes.node_git_effect.handlers.handler_git_admission_transport
         name: HandlerGitAdmissionTransport
       output_events: [ModelGitResult]
   default_backend: subprocess

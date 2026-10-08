@@ -190,7 +190,7 @@ import subprocess
 import sys
 import time
 from collections import ChainMap
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final
@@ -198,7 +198,6 @@ from typing import Final
 from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
 from omniclaude.nodes.node_git_effect.models import (
     GitOperation,
-    GitResultStatus,
     ModelGitRequest,
     ModelGitResult,
 )
@@ -2625,26 +2624,6 @@ def dispatch(
     if not isinstance(result, ModelGitResult) or result.admission is None:
         raise RuntimeError("git admission runtime returned no typed verdict")
     return result.admission
-
-
-class HandlerGitAdmissionTransport:
-    """Route the existing Git node request to its typed admission handler."""
-
-    def handle(self, request: ModelGitRequest) -> ModelGitResult:
-        if (
-            request.operation is not GitOperation.ADMISSION_CHECK
-            or request.admission is None
-        ):
-            raise ValueError(
-                "git admission requires the admission_check operation and payload"
-            )
-        admission = HandlerGitAdmission().handle(request.admission)
-        return ModelGitResult(
-            operation=request.operation.value,
-            status=GitResultStatus.SUCCESS,
-            admission=admission,
-            correlation_id=request.correlation_id,
-        )
 
 
 def main(argv: list[str] | None = None) -> int:
