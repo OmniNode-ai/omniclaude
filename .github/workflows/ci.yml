@@ -69,6 +69,10 @@ jobs:
           done
       - name: Verify registered guard refusal surface
         run: uv run pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
+      - name: Verify ledger ruling re-read before publishing (OMN-18645)
+        run: uv run pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov
+      - name: Verify Git effect subprocess compatibility
+        run: uv run pytest tests/unit/nodes/node_git_effect/test_handler_git_subprocess.py -q --no-cov
 
   # =============================================================================
   # Per-run runner routing (OMN-18031)

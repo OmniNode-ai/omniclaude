@@ -665,6 +665,14 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      - id: ledger-ruling-reread-regression
+        name: Ledger ruling re-read before publishing (OMN-18645)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/(nodes/node_git_effect/|shared/handler_skill_requested\.py)|plugins/onex/(hooks/scripts/pre_tool_use_shared_tree_git_guard\.sh|skills/_shared/skill_orchestrator_template\.md)|tests/hooks/test_ledger_ruling_reread\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
+        stages: [pre-commit]
+
       - id: ruff-check
         name: ruff check (staged files)
         entry: bash scripts/uv-run-worktree-safe.sh ruff check
