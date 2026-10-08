@@ -339,6 +339,52 @@ def test_a_script_that_cannot_refuse_is_not_reported(tree: Path) -> None:
     assert observer not in _subjects(tree, _KIND)
 
 
+def test_a_refusal_form_that_sits_only_in_a_comment_is_not_gate_shaped(
+    tree: Path,
+) -> None:
+    """The comment-stripping control of OMN-18530 acceptance.
+
+    A script whose only refusal form sits in a comment is not gate-shaped.
+    An uncommented refusal in the same body must still make it a gate.
+    """
+    name = "omn18530_probe_comment_only.sh"
+    body = (
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        '# exit 2\n# "decision": "block"\n#   "continue": false\n'
+        "exit 0\n"
+    )
+    _add_script(tree, name, body)
+    assert name not in _subjects(tree, _KIND)
+
+    live = "omn18530_probe_comment_live.sh"
+    _add_script(tree, live, body.replace("exit 0\n", "exit 2\nexit 0\n"))
+    assert live in _subjects(tree, _KIND)
+
+
+def test_a_bare_name_in_non_comment_prose_is_not_a_call(tree: Path) -> None:
+    """The reachability control of OMN-18530 acceptance.
+
+    A script mentioned by name in another script's prose, not invoked, is
+    still an entrypoint. A real path invocation must make it a callee.
+    """
+    name = "omn18530_probe_prose_named.sh"
+    _add_script(tree, name, "#!/usr/bin/env bash\nexit 2\n")
+    caller = sorted(_registered_scripts(tree))[0]
+    caller_path = tree / _SCRIPTS_REL / caller
+    caller_path.write_text(
+        caller_path.read_text(encoding="utf-8") + f'\necho "see {name} for the rule"\n',
+        encoding="utf-8",
+    )
+    assert name in _subjects(tree, _KIND)
+
+    caller_path.write_text(
+        caller_path.read_text(encoding="utf-8")
+        + f'\n"${{CLAUDE_PLUGIN_ROOT}}/hooks/scripts/{name}"\n',
+        encoding="utf-8",
+    )
+    assert name not in _subjects(tree, _KIND)
+
+
 def test_a_wrapper_that_execs_a_refusing_guard_is_reported(tree: Path) -> None:
     """Delegation carries refusal; plain invocation does not.
 
