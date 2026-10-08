@@ -27,6 +27,16 @@
 #   pre-commit run --all-files --hook-stage pre-push  # Run pre-push hooks
 
 repos:
+  # OMN-18782: the same Git-node admission rule over authored PR body files.
+  - repo: local
+    hooks:
+      - id: pr-failure-citations
+        name: Require PR failure citations (OMN-18782)
+        entry: uv run --no-project --with pydantic python scripts/lint_verification_evidence.py --pr-body --body-files
+        language: system
+        files: '(^|/)(PR_BODY|pr[-_]body)\.md$'
+        stages: [pre-commit]
+
   # OMN-14655 (SHA reconciliation, D1f/§3d.8): converged from two separate
   # omnibase_core repo: blocks pinned at DIFFERENT revs (458f44e for
   # check-stub-implementations, 63635097 for no-noncanonical-lifecycle-classes)

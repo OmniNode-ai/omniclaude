@@ -12,6 +12,7 @@ on:
     branches: [main, dev, 'hotfix/**']
   pull_request:
     branches: [main, dev]
+    types: [opened, synchronize, reopened, edited]
   merge_group:
   workflow_dispatch:
 
@@ -69,6 +70,30 @@ jobs:
           done
       - name: Verify registered guard refusal surface
         run: uv run pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
+
+  # OMN-18782: independent admission check, including body-only edits.
+  pr-failure-citations:
+    name: PR Failure Citations (OMN-18782)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.3"
+      - name: Exercise refused and accepted citation inputs
+        run: >-
+          uv run --no-project --with pytest --with pytest-asyncio
+          --with python-dotenv --with pydantic --with pyyaml
+          python -m pytest tests/unit/nodes/node_git_effect/test_pr_failure_citation.py -q
+      - name: Require paragraph-local failure citations
+        run: >-
+          uv run --no-project --with pydantic
+          python scripts/lint_verification_evidence.py --pr-body
+          --github-event "$GITHUB_EVENT_PATH" --event-name "$GITHUB_EVENT_NAME"
 
   # =============================================================================
   # Per-run runner routing (OMN-18031)

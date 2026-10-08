@@ -107,8 +107,10 @@ _VERDICT_WORD = (
 
 PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
-        "statusCheckRollup read as a PR pass/fail verdict (use `gh pr checks` — "
-        "rollup caches stale terminal state)",
+        (
+            "statusCheckRollup read as a PR pass/fail verdict (use `gh pr checks` — "
+            "rollup caches stale terminal state)"
+        ),
         re.compile(
             rf"(?:statusCheckRollup[^.\n]*{_VERDICT_WORD}"
             rf"|{_VERDICT_WORD}[^.\n]*statusCheckRollup)",
@@ -116,8 +118,10 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
     (
-        "state asserted from a LOCAL CLONE (verify existence against "
-        "`origin/dev`, not a local canonical clone)",
+        (
+            "state asserted from a LOCAL CLONE (verify existence against "
+            "`origin/dev`, not a local canonical clone)"
+        ),
         re.compile(
             rf"{_VERIFY_VERB}[^.\n]*\b(?:against|from|in|via|using)\b[^.\n]*"
             r"\blocal\s+(?:canonical\s+)?clone\b",
@@ -125,8 +129,10 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
     (
-        "state asserted from TICKET TEXT (verify current state against the live "
-        "projection/bus, not ticket prose)",
+        (
+            "state asserted from TICKET TEXT (verify current state against the live "
+            "projection/bus, not ticket prose)"
+        ),
         re.compile(
             rf"\bticket\b[^.\n]*{_STATE_VERB}[^.\n]*"
             r"\b(?:so|therefore|thus|hence|proving|which\s+proves|confirming)\b",
@@ -198,8 +204,73 @@ def _discover(root: Path) -> list[Path]:
     return sorted({p for p in candidates if p.is_file() and _in_scope(p)})
 
 
+def _pr_body_main(argv: list[str]) -> int:
+    """OMN-18782: use the Git node's admission rule at CI/pre-commit seams."""
+    import argparse
+    import json
+    import os
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+    from omniclaude.nodes.node_git_effect.handlers.handler_git_subprocess import (
+        pr_failure_citation_errors,
+    )
+
+    parser = argparse.ArgumentParser(description="Validate PR failure citations")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--body-files", nargs="+", type=Path)
+    source.add_argument("--github-event", type=Path)
+    parser.add_argument("--event-name", default=os.environ.get("GITHUB_EVENT_NAME"))
+    args = parser.parse_args(argv)
+    bodies: list[tuple[str, str]] = []
+    try:
+        if args.github_event is not None:
+            event = json.loads(args.github_event.read_text(encoding="utf-8"))
+            if not isinstance(event, dict):
+                raise ValueError("event must be a JSON object")
+            if args.event_name not in (
+                "pull_request",
+                "push",
+                "merge_group",
+                "workflow_dispatch",
+            ):
+                raise ValueError("missing or unsupported event name")
+            if args.event_name == "pull_request":
+                pr = event.get("pull_request")
+                if not isinstance(pr, dict) or "body" not in pr:
+                    raise ValueError("PR event must contain pull_request.body")
+                body = pr["body"]
+                if body is not None and not isinstance(body, str):
+                    raise ValueError("PR body must be text or null")
+                bodies.append(("PR body", body or ""))
+            else:
+                print(
+                    f"PR failure citations: {args.event_name} has no PR body; admission runs on PR events."
+                )
+                return 0
+        else:
+            bodies = [
+                (str(path), path.read_text(encoding="utf-8"))
+                for path in args.body_files
+            ]
+    except (OSError, UnicodeError, ValueError) as exc:
+        print(f"PR failure citations: cannot evaluate input: {exc}", file=sys.stderr)
+        return 2
+
+    refused = False
+    for label, body in bodies:
+        for error in pr_failure_citation_errors(body):
+            print(f"{label}: {error}", file=sys.stderr)
+            refused = True
+    if refused:
+        return 1
+    print(f"PR failure citations: PASS ({len(bodies)} bodies evaluated)")
+    return 0
+
+
 def main(argv: Iterable[str]) -> int:
     args = list(argv)
+    if args and args[0] == "--pr-body":
+        return _pr_body_main(args[1:])
     if args and args[0] == "--self-test":
         return _self_test()
 
