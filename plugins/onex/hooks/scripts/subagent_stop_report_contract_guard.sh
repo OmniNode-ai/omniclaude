@@ -90,7 +90,13 @@ case "${rc}" in
             exit 0
         fi
         # OMN-18946: see hook_record_refusal in error-guard.sh.
-        hook_record_refusal "subagent report contract refused" "the lane's final return matched the bare-Done clobber signature" 2>/dev/null || true
+        # OMN-20398: name the classifier's own reason. The detail used to be the
+        # constant "matched the bare-Done clobber signature" for every RED reason,
+        # so a refused result line was filed as a bare-Done clobber.
+        _red_reason="${OUTPUT#*REPORT CONTRACT RED (}"
+        _red_reason="${_red_reason%%)*}"
+        [[ "${_red_reason}" =~ ^[a-z_]+$ ]] || _red_reason="unknown"
+        hook_record_refusal "subagent report contract refused" "the lane's final return failed the report contract: ${_red_reason}" 2>/dev/null || true
         printf '%s\n' "${OUTPUT}"
         exit 2
         ;;

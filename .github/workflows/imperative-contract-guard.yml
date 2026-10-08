@@ -18,7 +18,7 @@ permissions:
 jobs:
   occ-preflight:
     # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@52851458622f368c3b596c82bf810bc6acce1d5e
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6
     permissions:
       contents: read
       pull-requests: read
@@ -40,4 +40,4 @@ jobs:
     # policy -- an immutable ref that no unreleased upstream commit can move
     # under us -- without the regression. Re-point it at @main once
     # onex_change_control cuts a release carrying OMN-14780.
-    uses: OmniNode-ai/onex_change_control/.github/workflows/imperative-contract-guard.yml@ebe30bc3589c9f803e8920b941ddaef07b17ed90
+    uses: OmniNode-ai/onex_change_control/.github/workflows/imperative-contract-guard.yml@f81a37f80de412743ade0891b3293f359b970f50

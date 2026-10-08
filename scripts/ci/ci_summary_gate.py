@@ -937,6 +937,21 @@ EXTERNAL_SWEEP_EXCLUSIONS: dict[str, SweepExclusion] = {
         added="2026-09-21",
         expires="2026-12-20",
     ),
+    "verify / dod-verify": SweepExclusion(
+        reason=(
+            "This check-run is the caller-evidence job of the receipt-gate "
+            "reusable. It declares `if: inputs.evidence-source == 'caller'`, "
+            "and call-receipt-gate.yml does not set that input, so the job "
+            "concludes skipped on every pull request head, and on dev. "
+            "The enforcing contexts are verify / verify and "
+            "occ-preflight / eligibility. Excluding this entry prevents "
+            "the gate from reading a job that was declared inapplicable as "
+            "a failure."
+        ),
+        ticket="OMN-20073",
+        added="2026-10-06",
+        expires="2026-12-20",
+    ),
     _MARKER_AUDIT_CONTEXT: SweepExclusion(
         reason=(
             "This check-run concluded skipped on two heads and never reported "

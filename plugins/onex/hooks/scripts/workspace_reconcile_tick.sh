@@ -14,8 +14,9 @@
 # so the install tracks the clones and this tick is what closes the gap.
 #
 # What it does, at most once every ONEX_RECONCILE_TICK_SECONDS (default 600):
-#   1. bootstrap the omnibase_infra clone IF the reconciler is not present yet
-#   2. run omnibase_infra/scripts/reconcile-host.sh
+#   1. bootstrap the omnibase_infra clone IF neither reconciler path is available
+#   2. run onex-host-reconcile from the omnibase_internal clone's .venv
+#      (legacy reconcile-host.sh is a transitional fallback)
 #   3. write a receipt line and the one-line status the SessionStart hook reads
 #
 # This hook owns THROTTLING, DETACHMENT and the STATUS LINE. It owns no repair
@@ -32,8 +33,9 @@
 # as it existed. And the Mac having its own implementation meant the two hosts
 # were reconciled by different code, so a fix on one was not a fix on the other.
 #
-# There is now ONE reconciler, `reconcile-host.sh`, run identically here and
+# There is now ONE reconciler, `onex-host-reconcile`, run identically here and
 # from `.201`'s cron unit. It proves every surface moved by reading it back.
+# The legacy `omnibase_infra/scripts/reconcile-host.sh` is a transitional fallback.
 #
 # Why a PostToolUse tick and not a scheduler
 # ------------------------------------------
@@ -152,24 +154,75 @@ printf '%s\n' "$_now" > "$_STAMP" 2>/dev/null || exit 0
 # ---------------------------------------------------------------------------
 # The tick body, run detached so no tool call ever waits on it
 # ---------------------------------------------------------------------------
+# Where `onex-host-reconcile` lives (OMN-17427). It is a console script of the
+# omnibase_internal project, not of omnibase_infra and not of the dispatch venv:
+# `reconcile-workspace-venvs.sh` builds the dispatch venv from the runtime
+# siblings and has never installed omnibase_internal into it, so the path this
+# tick used to look at ($ONEX_DISPATCH_VENV/bin/onex-host-reconcile) held nothing
+# on any host and the session line printed "DRIFT: no workspace reconciler" for
+# as long as it stayed that way.
+#
+# The command is installed where every omnibase_internal command already is: the
+# project's own `.venv`, kept current by its `onex-internal-clone-sync` timer
+# (systemd on a lab host, launchd on the Mac; both run `uv sync --frozen`, which
+# installs every console script the project declares). This resolves THAT file.
+# It runs no `uv` itself -- the console script's shebang is the project venv's
+# interpreter, so the tick still starts no interpreter of its own.
+#
+# Which clone: OMNIBASE_INTERNAL_HOME when set (the same declaration the timer
+# and the ledger writer honour), else the sibling of OMNI_HOME as written, then
+# the sibling of its resolved target. A symlinked OMNI_HOME can put a stale
+# second copy beside the link (h201: ~/Code/omnibase_internal beside the link,
+# /data/omninode/omnibase_internal beside the target), so the answer is the
+# first candidate that actually holds an executable command, not the first
+# directory. Sets _RECONCILER (the path, or empty) and _RECONCILER_TRIED (every
+# path it looked at, for the ABSENT line); runs in the caller's shell, not a
+# command substitution, so both survive the call.
+_resolve_host_reconcile() {
+    local -a homes=()
+    local home resolved
+    if [[ -n "${OMNIBASE_INTERNAL_HOME:-}" ]]; then
+        homes+=("${OMNIBASE_INTERNAL_HOME%/}")
+    else
+        # Lexical parents, not `/..`: the kernel resolves `link/..` through the
+        # symlink, which would make the "as written" candidate the resolved one.
+        home="${OMNI_HOME%/}"
+        homes+=("${home%/*}/omnibase_internal")
+        resolved="$(cd "$OMNI_HOME" 2>/dev/null && pwd -P)"
+        [[ -n "$resolved" && "$resolved" != "$home" ]] && homes+=("${resolved%/*}/omnibase_internal")
+    fi
+    _RECONCILER=""
+    _RECONCILER_TRIED=""
+    for home in "${homes[@]}"; do
+        _RECONCILER_TRIED+="${_RECONCILER_TRIED:+ }${home}/.venv/bin/onex-host-reconcile"
+        if [[ -x "${home}/.venv/bin/onex-host-reconcile" ]]; then
+            _RECONCILER="${home}/.venv/bin/onex-host-reconcile"
+            return 0
+        fi
+    done
+    return 1
+}
+
 _run_tick() {
-    local ts reconciler bootstrap_note="" verdict rc
+    local ts canonical legacy bootstrap_note="" verdict rc
     if (( _ONEX_PRINTF_T )); then TZ=UTC printf -v ts '%(%Y-%m-%dT%H:%M:%SZ)T' -1; else ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; fi
 
-    reconciler="$OMNI_HOME/omnibase_infra/scripts/reconcile-host.sh"
+    _resolve_host_reconcile || true
+    canonical="$_RECONCILER"
+    legacy="$OMNI_HOME/omnibase_infra/scripts/reconcile-host.sh"
 
     # ---- bootstrap: how the reconciler itself gets here --------------------
     # The tick no longer pulls the clones. That leaves exactly one ordering
     # problem: on a host whose omnibase_infra clone predates OMN-17307, the
     # reconciler does not exist yet, and nothing else advances the clone that
     # would deliver it. So the ONE repo the tick still advances by itself is
-    # omnibase_infra, and only while the reconciler is absent.
+    # omnibase_infra, and only while both reconciler paths are absent.
     #
     # It is verified by content like everything else -- HEAD is re-read after
     # the pull and compared to origin/dev. A bootstrap that reports success on
     # `git pull`'s exit status would be the OMN-17307 defect reintroduced in the
     # one place nobody would look for it.
-    if [[ ! -f "$reconciler" ]]; then
+    if [[ -z "$canonical" && ! -f "$legacy" ]]; then
         local infra="$OMNI_HOME/omnibase_infra" head_before head_after target
         if [[ -d "$infra/.git" ]]; then
             head_before="$(git -C "$infra" rev-parse HEAD 2>/dev/null)"
@@ -196,14 +249,19 @@ _run_tick() {
     # defect OMN-17307 exists to end, sitting in the scheduler. It also had no
     # idea that a clone with core.bare=true fetches cleanly forever while every
     # checkout fails (OMN-17291), because nothing here ever re-read HEAD.
-    if [[ ! -f "$reconciler" ]]; then
-        printf '%s tick=complete reconciler=ABSENT path=%s %s\n' \
-            "$ts" "$reconciler" "$bootstrap_note" >> "$_RECEIPTS"
-        printf 'DRIFT: no workspace reconciler at %s as of %s\n' "$reconciler" "$ts" > "$_STATUS"
+    if [[ -n "$canonical" ]]; then
+        "$canonical" --omni-home "$OMNI_HOME" >>"$_RECEIPTS" 2>&1
+    elif [[ -f "$legacy" ]]; then
+        # Drop this fallback once omnibase_infra deletes the script and every
+        # host has the command.
+        bash "$legacy" --omni-home "$OMNI_HOME" >>"$_RECEIPTS" 2>&1
+    else
+        printf '%s tick=complete reconciler=ABSENT tried=%s %s\n' \
+            "$ts" "$_RECONCILER_TRIED" "$bootstrap_note" >> "$_RECEIPTS"
+        printf 'DRIFT: no workspace reconciler: onex-host-reconcile is not installed in the omnibase_internal clone (tried %s) as of %s\n' \
+            "$_RECONCILER_TRIED" "$ts" > "$_STATUS"
         return 0
     fi
-
-    bash "$reconciler" --omni-home "$OMNI_HOME" >>"$_RECEIPTS" 2>&1
     rc=$?
 
     # 4 is DECLINED (OMN-18608): the reconciler did nothing because a live peer

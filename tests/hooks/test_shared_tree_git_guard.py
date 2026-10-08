@@ -52,12 +52,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOKS_DIR = REPO_ROOT / "plugins" / "onex" / "hooks"
 LIB_DIR = HOOKS_DIR / "lib"
 HOOK_SCRIPT = HOOKS_DIR / "scripts" / "pre_tool_use_shared_tree_git_guard.sh"
-POLICY_PATH = HOOKS_DIR / "config" / "shared_tree_git_guard_policy.json"
+POLICY_PATH = (
+    REPO_ROOT / "src/omniclaude/nodes/node_git_effect/git_admission_policy.json"
+)
 NAMESAKE_SCRIPT = "pre_tool_use_scope_gate.sh"
 
 sys.path.insert(0, str(LIB_DIR))
 
-from shared_tree_git_guard import (  # noqa: E402
+from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (  # noqa: E402
     GATE_BIT_NAME,
     TICKET,
     Policy,
@@ -90,6 +92,12 @@ def _init(repo: Path) -> None:
     _git("-C", str(repo), "config", "user.email", "t@example.com")
     _git("-C", str(repo), "config", "user.name", "t")
     _git("-C", str(repo), "commit", "-q", "--allow-empty", "-m", "init")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_ambient_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in load_policy(POLICY_PATH).fetch_lane_envs:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
@@ -190,6 +198,17 @@ def test_policy_loads_and_declares_expected_vocabulary(policy: Policy) -> None:
         {"reset", "switch", "clean", "rebase"}
     )
     assert policy.unconditional_subcommands <= policy.refused_subcommands
+
+
+def test_refusal_routes_commits_to_packaged_lock(
+    registry: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        "git reset --hard", policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked
+    assert "onex-commit-lock" in decision.reason
+    assert "scripts/commit_lock.py" not in decision.reason
 
 
 def test_missing_policy_file_raises(tmp_path: Path) -> None:
@@ -425,16 +444,10 @@ def test_cd_prefix_into_the_registry_is_refused_from_a_worktree_cwd(
     assert decision.blocked, command
 
 
-def test_unresolvable_cd_target_leaves_the_effective_directory_unchanged(
+def test_unresolvable_cd_target_refuses_a_shared_tree_mutation(
     registry: Path, code_clone: Path, policy: Policy
 ) -> None:
-    """An unexpanded variable is not a licence, and not a new refusal.
-
-    shlex does not expand a variable, so the target cannot be resolved. The
-    effective directory then stays where it was, which is exactly the
-    behaviour before this change: no protection is lost in the shared tree,
-    and nothing that passed elsewhere starts failing.
-    """
+    """An unknown directory could be the registry, wherever the shell starts."""
     blocked = evaluate_bash_command(
         'cd "$WT" && git reset --hard origin/main',
         policy,
@@ -449,7 +462,7 @@ def test_unresolvable_cd_target_leaves_the_effective_directory_unchanged(
         cwd=code_clone,
         registry_root=registry,
     )
-    assert not allowed.blocked, allowed.reason
+    assert allowed.blocked, allowed.reason
 
 
 #: OMN-19229 AC4. `cd "$WT"` and `git -C "$WT"` are expanded from the hook's

@@ -431,20 +431,18 @@ def test_parse_finds_an_edit_in_a_later_segment(policy: Policy) -> None:
     assert len(edits) == 1
 
 
-def test_body_file_variable_from_the_hook_environment_is_not_trusted(
+def test_body_file_variable_from_the_hook_environment_is_resolved(
     policy: Policy, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The hook's environment may name a different file from the one gh
-    uploads, so a variable the command did not assign is not read."""
+    """An unchanged inherited variable names the same file the shell uploads."""
     body_file = tmp_path / "body.md"
     body_file.write_text("the new body\n", encoding="utf-8")
     monkeypatch.setenv("OMN19229_B", str(body_file))
     (edit,) = parse_pr_body_edits(
         'gh pr edit 42 -R OmniNode-ai/omniclaude --body-file "$OMN19229_B"', policy
     )
-    assert edit.new_body is None
-    assert edit.unreadable_reason is not None
-    assert "assigned earlier in this same command" in edit.unreadable_reason
+    assert edit.new_body == body_file.read_text()
+    assert edit.unreadable_reason is None
 
 
 def test_body_file_under_home_is_expanded(
@@ -486,7 +484,6 @@ def test_unset_body_file_variable_is_unreadable_not_guessed(
 @pytest.mark.parametrize(
     "command",
     [
-        'export OMN19229_B={new}; gh pr edit 5 --body-file "$OMN19229_B"',
         'read OMN19229_B; gh pr edit 5 --body-file "$OMN19229_B"',
         'cd {tmp} && gh pr edit 5 --body-file "$PWD/new.md"',
     ],

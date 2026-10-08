@@ -91,11 +91,16 @@ Also check: if the package at the target version is already in the repo's lock f
 
 ### Step 4: Close superseded PRs (unless --dry-run) <!-- ai-slop-ok: skill-step-heading -->
 
-For each superseded PR:
+For each superseded PR, follow the
+[PR close preconditions and claim-before-close template](../../docs/pr-close-preconditions.md)
+before the first close attempt. A peer claim stops this close. The claim and
+close use the same executing lane, run and session; the registry CLI resolves
+them, so this skill supplies no `--lane` override. The dry-run path executes
+neither claim nor close.
 
-```bash
-gh pr close {number} --repo OmniNode-ai/{repo} --comment "${close_comment:-Superseded by #${keeper_number} which targets ${package}@${newer_version}. Closed by dep-cascade-dedup.}"
-```
+Template inputs: `pr_repo=OmniNode-ai/{repo}`, `pr_number={number}` and
+`close_comment` set to the supplied reason, or
+`Superseded by #{keeper_number} which targets {package}@{newer_version}. Closed by dep-cascade-dedup.`
 
 ### Step 5: Report <!-- ai-slop-ok: skill-step-heading -->
 

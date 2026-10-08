@@ -16,7 +16,7 @@ import pytest
 LIB_DIR = Path(__file__).resolve().parents[2] / "plugins" / "onex" / "hooks" / "lib"
 sys.path.insert(0, str(LIB_DIR))
 
-from shell_words import (  # noqa: E402
+from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # noqa: E402
     HereDoc,
     Redirect,
     ShellSyntaxError,

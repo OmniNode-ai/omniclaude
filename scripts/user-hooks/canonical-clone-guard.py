@@ -92,6 +92,7 @@ import shlex
 import signal
 import sys
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NoReturn
 
@@ -238,7 +239,11 @@ def _log(msg: str) -> None:
             return
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a") as fh:
-            fh.write(msg.rstrip("\n") + "\n")
+            # OMN-18982: every line is dated, or a morning sweep cannot say
+            # which day's refusals it is reading.
+            stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            for line in msg.rstrip("\n").split("\n"):
+                fh.write(f"{stamp} {line}\n")
 
 
 def _deny(reason: str) -> NoReturn:

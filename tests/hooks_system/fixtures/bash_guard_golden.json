@@ -224,17 +224,65 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`cd $NOPE` cannot be resolved: `$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
   },
-  "canonical\tcd \"$OMN19229_R\" && git reset --hard origin/main": {},
-  "canonical\tcd \"$OMN19229_UNSET\" && git reset --hard origin/main": {},
-  "canonical\tcd \"$OMN19229_WT\" && git reset --hard origin/dev": {},
-  "canonical\tcd \"$WT\" && git reset --hard origin/dev": {},
-  "canonical\tcd \"$WT\" && git reset --hard origin/main": {},
-  "canonical\tcd \"${OMN19229_WT}\" && git rebase origin/dev": {},
+  "canonical\tcd \"$OMN19229_R\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tcd \"$OMN19229_UNSET\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tcd \"$OMN19229_WT\" && git reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tcd \"$WT\" && git reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tcd \"$WT\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tcd \"${OMN19229_WT}\" && git rebase origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git rebase` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tcd && git reset --hard origin/main": {},
   "canonical\tcd /tmp\ngh pr edit 42 --repo": {},
   "canonical\tcd /tmp\ngit -C {REG} reset --hard": {},
@@ -252,17 +300,33 @@
   "canonical\tcd {REG}\ngit reset --hard origin/main": {},
   "canonical\tcd {REG} && cd \"$OLDPWD\" && cd {REG} && git reset --hard origin/main": {},
   "canonical\tcd {REG} && cd {WT} && git rebase origin/dev": {},
-  "canonical\tcd {REG} && git -C \"$PWD\" reset --hard origin/main": {},
+  "canonical\tcd {REG} && git -C \"$PWD\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tcd {REG} && git checkout -b lane/x": {},
   "canonical\tcd {REG} && git clean -fd": {},
   "canonical\tcd {REG} && git rebase origin/main": {},
   "canonical\tcd {REG} && git reset --hard origin/main": {},
-  "canonical\tcd {REG}/sub* && git reset --hard origin/main": {},
+  "canonical\tcd {REG}/sub* && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tcd {SP} && gh pr edit 5 --body-file \"$PWD/new.md\"": {
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $PWD/new.md cannot be resolved: `$PWD` is set by the shell as the command runs, not by this environment. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (5). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$PWD` is set by the shell as the command runs, not by this environment. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (5). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -495,7 +559,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $OMN19229_B cannot be resolved: `$OMN19229_B` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$OMN19229_B` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -576,7 +640,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $S/b.md cannot be resolved: `$S` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$S` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -612,7 +676,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $OMN19229_B cannot be resolved: `$OMN19229_B` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$OMN19229_B` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -699,9 +763,33 @@
     "rc": 2
    }
   },
-  "canonical\tgit -C \"$OMN19229_R\" reset --hard origin/main": {},
-  "canonical\tgit -C \"$OMN19229_UNSET\" reset --hard origin/main": {},
-  "canonical\tgit -C \"$OMN19229_WT\" reset --hard origin/dev": {},
+  "canonical\tgit -C \"$OMN19229_R\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tgit -C \"$OMN19229_UNSET\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "canonical\tgit -C \"$OMN19229_WT\" reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tgit -C ${WSENV}/second-clone worktree add omni_worktrees/OMN-19236/second-clone -b feat/omn-19236 origin/dev": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
@@ -754,7 +842,15 @@
   "canonical\tgit checkout -B lane/some-branch": {},
   "canonical\tgit checkout -b lane/ledger-rows-1435-fix": {},
   "canonical\tgit checkout -b lane/some-branch": {},
-  "canonical\tgit checkout HEAD -- $TARGET": {},
+  "canonical\tgit checkout HEAD -- $TARGET": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git checkout` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path '$TARGET' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tgit checkout HEAD -- ./docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout HEAD -- ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout HEAD -- docs/a.md docs/b.md": {},
@@ -762,7 +858,15 @@
   "canonical\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md.bak": {},
   "canonical\tgit checkout HEAD -- docs/tracking/archive/2026-09-18.md": {},
-  "canonical\tgit checkout HEAD -- src/{guard,other}.py": {},
+  "canonical\tgit checkout HEAD -- src/{guard,other}.py": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git checkout` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path 'src/{guard,other}.py' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tgit checkout docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "canonical\tgit checkout main": {},
   "canonical\tgit checkout origin/main": {},
@@ -949,7 +1053,7 @@
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under ${WSENV}/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C ${WSENV} merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through scripts/commit_lock.py; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under ${WSENV}/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C ${WSENV} merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-${WSENV}/../omnibase_internal}\" onex-commit-lock --repo \"${WSENV}\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
     },
     "rc": 2
    }
@@ -960,7 +1064,15 @@
   "canonical\tgit reset --soft HEAD~1": {},
   "canonical\tgit reset 637e93c5a8": {},
   "canonical\tgit reset origin/main": {},
-  "canonical\tgit restore $F": {},
+  "canonical\tgit restore $F": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git restore` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path '$F' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "canonical\tgit restore --source=$SHA -- src/guard.py": {},
   "canonical\tgit rev-parse HEAD": {},
   "canonical\tgit show HEAD:docs/a.md": {},
@@ -1519,17 +1631,65 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`cd $NOPE` cannot be resolved: `$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
   },
-  "worktree\tcd \"$OMN19229_R\" && git reset --hard origin/main": {},
-  "worktree\tcd \"$OMN19229_UNSET\" && git reset --hard origin/main": {},
-  "worktree\tcd \"$OMN19229_WT\" && git reset --hard origin/dev": {},
-  "worktree\tcd \"$WT\" && git reset --hard origin/dev": {},
-  "worktree\tcd \"$WT\" && git reset --hard origin/main": {},
-  "worktree\tcd \"${OMN19229_WT}\" && git rebase origin/dev": {},
+  "worktree\tcd \"$OMN19229_R\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tcd \"$OMN19229_UNSET\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tcd \"$OMN19229_WT\" && git reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tcd \"$WT\" && git reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tcd \"$WT\" && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tcd \"${OMN19229_WT}\" && git rebase origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git rebase` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tcd && git reset --hard origin/main": {},
   "worktree\tcd /tmp\ngh pr edit 42 --repo": {},
   "worktree\tcd /tmp\ngit -C {REG} reset --hard": {},
@@ -1547,17 +1707,33 @@
   "worktree\tcd {REG}\ngit reset --hard origin/main": {},
   "worktree\tcd {REG} && cd \"$OLDPWD\" && cd {REG} && git reset --hard origin/main": {},
   "worktree\tcd {REG} && cd {WT} && git rebase origin/dev": {},
-  "worktree\tcd {REG} && git -C \"$PWD\" reset --hard origin/main": {},
+  "worktree\tcd {REG} && git -C \"$PWD\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tcd {REG} && git checkout -b lane/x": {},
   "worktree\tcd {REG} && git clean -fd": {},
   "worktree\tcd {REG} && git rebase origin/main": {},
   "worktree\tcd {REG} && git reset --hard origin/main": {},
-  "worktree\tcd {REG}/sub* && git reset --hard origin/main": {},
+  "worktree\tcd {REG}/sub* && git reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tcd {SP} && gh pr edit 5 --body-file \"$PWD/new.md\"": {
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $PWD/new.md cannot be resolved: `$PWD` is set by the shell as the command runs, not by this environment. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (5). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$PWD` is set by the shell as the command runs, not by this environment. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (5). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1677,7 +1853,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (api-pr-close) on OmniNode-ai/omniclaude#2019 (via gh api): no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "Missing PR claim: 'omninode-ai/omniclaude#2019' has no active ownership claim. REFUSED (api-pr-close) on OmniNode-ai/omniclaude#2019 (via gh api).\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1725,7 +1901,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "Missing PR claim: 'omninode-ai/omniclaude#2019' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#2019.\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1734,7 +1910,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "Missing PR claim: 'omninode-ai/omniclaude#2019' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#2019.\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1743,7 +1919,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "Missing PR claim: 'omninode-ai/omniclaude#2019' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#2019.\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1752,7 +1928,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "Missing PR claim: 'omninode-ai/omniclaude#2019' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#2019.\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1761,7 +1937,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "Missing PR claim: 'omninode-ai/omniclaude#2019' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#2019.\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1790,7 +1966,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $OMN19229_B cannot be resolved: `$OMN19229_B` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$OMN19229_B` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1871,7 +2047,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $S/b.md cannot be resolved: `$S` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$S` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1907,7 +2083,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the path $OMN19229_B cannot be resolved: `$OMN19229_B` is unset. Only a variable assigned earlier in this same command is expanded here; pass a literal path, or assign it in the command. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: `$OMN19229_B` is unset. Run the step that prepares the body as its own Bash call first, then run the edit as its own Bash call with --body-file <path>; the guard then reads the finished file (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1927,7 +2103,7 @@
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "REFUSED (pr-reopen) on OmniNode-ai/omniclaude#2019: no lane holds a claim on 'omninode-ai/omniclaude#2019', so this close cannot be attributed to any lane. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). If this work is yours, record ownership first:\n    python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close\nRecording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     "reason": "Missing PR claim: 'omninode-ai/omniclaude#2019' has no active ownership claim. REFUSED (pr-reopen) on OmniNode-ai/omniclaude#2019.\n    env ONEX_LANE_ID=wt:OMN-1/omniclaude ONEX_RUN_ID=wt:OMN-1/omniclaude python3 {CLONE}/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#2019' --action close --lane wt:OMN-1/omniclaude --run-id wt:OMN-1/omniclaude\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
     },
     "rc": 2
    }
@@ -1986,9 +2162,33 @@
     "rc": 2
    }
   },
-  "worktree\tgit -C \"$OMN19229_R\" reset --hard origin/main": {},
-  "worktree\tgit -C \"$OMN19229_UNSET\" reset --hard origin/main": {},
-  "worktree\tgit -C \"$OMN19229_WT\" reset --hard origin/dev": {},
+  "worktree\tgit -C \"$OMN19229_R\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tgit -C \"$OMN19229_UNSET\" reset --hard origin/main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tgit -C \"$OMN19229_WT\" reset --hard origin/dev": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git reset` directory cannot be resolved; the guard cannot determine whether it mutates the shared registry clone. Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit -C ${WSENV}/second-clone worktree add omni_worktrees/OMN-19236/second-clone -b feat/omn-19236 origin/dev": {
    "pre_tool_use_worktree_guard.sh": {
     "out": {
@@ -2025,7 +2225,15 @@
   "worktree\tgit checkout -B lane/some-branch": {},
   "worktree\tgit checkout -b lane/ledger-rows-1435-fix": {},
   "worktree\tgit checkout -b lane/some-branch": {},
-  "worktree\tgit checkout HEAD -- $TARGET": {},
+  "worktree\tgit checkout HEAD -- $TARGET": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git checkout` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path '$TARGET' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit checkout HEAD -- ./docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout HEAD -- ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout HEAD -- docs/a.md docs/b.md": {},
@@ -2033,7 +2241,15 @@
   "worktree\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout HEAD -- docs/tracking/ROLLING_WORK_LEDGER.md.bak": {},
   "worktree\tgit checkout HEAD -- docs/tracking/archive/2026-09-18.md": {},
-  "worktree\tgit checkout HEAD -- src/{guard,other}.py": {},
+  "worktree\tgit checkout HEAD -- src/{guard,other}.py": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git checkout` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path 'src/{guard,other}.py' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit checkout docs/tracking/ROLLING_WORK_LEDGER.md": {},
   "worktree\tgit checkout main": {},
   "worktree\tgit checkout origin/main": {},
@@ -2244,7 +2460,7 @@
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under ${WSENV}/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C ${WSENV} merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through scripts/commit_lock.py; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under ${WSENV}/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C ${WSENV} merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-${WSENV}/../omnibase_internal}\" onex-commit-lock --repo \"${WSENV}\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
     },
     "rc": 2
    }
@@ -2255,7 +2471,15 @@
   "worktree\tgit reset --soft HEAD~1": {},
   "worktree\tgit reset 637e93c5a8": {},
   "worktree\tgit reset origin/main": {},
-  "worktree\tgit restore $F": {},
+  "worktree\tgit restore $F": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED: `git restore` is a path-scoped restore, and whether it would discard uncommitted work could not be determined: the restore path '$F' cannot be resolved by the shared shell expansion helper (OMN-18874, Operating Rule 17). Remedy: pass literal paths, or commit first and restore by path per Operating Rule 17. An unverifiable restore is refused, never assumed safe, because the loss it risks is silent and unrecoverable. Instead: (1) read the pre-image without touching the tree: git show <rev>:<path> > <scratch file>; or (2) commit the work first and confirm the commit landed with git log -1 -- after that, git checkout <ref> -- <path> and the restore with git checkout HEAD -- <path> are both allowed, because every byte they overwrite is then in a commit. Or name each path literally, from a directory the guard can resolve (an absolute -C <path>, or a literal cd), and a restore over a clean path passes. To disable this guard: onex hooks disable SCOPE_GATE"
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit restore --source=$SHA -- src/guard.py": {},
   "worktree\tgit rev-parse HEAD": {},
   "worktree\tgit show HEAD:docs/a.md": {},

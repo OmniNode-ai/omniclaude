@@ -871,6 +871,61 @@ def test_an_unreachable_broker_dead_letters_nothing(jdir: Path) -> None:
     )
 
 
+def test_a_run_of_one_refused_class_does_not_wedge_the_head(jdir: Path) -> None:
+    """OMN-17427: two refused records in a row must not wedge the drain.
+
+    The stand-down probe published ``pending[1]`` and nothing else. When the
+    record behind the head belonged to the same refused class, the probe failed
+    for the same reason the head did, so the drainer read a refused class as an
+    unreachable broker and moved nothing, forever. Measured on the operator Mac
+    on 2026-10-06/07: a burst of ``pr.state.observed`` records (topic not
+    granted to the publishing principal) held the head from 22:27Z, and 24,530
+    authorized hook records queued behind it for six and a half hours while the
+    log repeated "the broker is unreachable".
+
+    The probe has to ask the broker about a DIFFERENT class: a record of
+    another class that publishes proves the broker answers.
+    """
+    for i in range(3):
+        journal.append(
+            jdir, event_type="denied.class", payload={"i": i}, correlation_id=None
+        )
+    for i in range(3, 6):
+        journal.append(
+            jdir, event_type="ok.class", payload={"i": i}, correlation_id=None
+        )
+
+    emitter = RefusingEmitter("denied.class")
+    _drain_n_cycles(jdir, emitter, drainer.DEFAULT_QUARANTINE_AFTER_FAILURES * 4)
+
+    assert len(emitter.published) == 3, (
+        "the authorized records behind a run of refused ones never published: "
+        f"{emitter.published}"
+    )
+    assert journal.list_pending(jdir) == [], "the journal did not drain"
+    quarantined = [
+        p
+        for p in (jdir / "quarantine").glob("*.json")
+        if not p.name.endswith(".reason.json")
+    ]
+    assert len(quarantined) == 3
+
+
+def test_a_same_class_backlog_on_a_dead_broker_still_moves_nothing(
+    jdir: Path,
+) -> None:
+    """The negative control for the test above: a dead broker is still a stall."""
+    for event_type in ("denied.class", "denied.class", "ok.class"):
+        journal.append(jdir, event_type=event_type, payload={}, correlation_id=None)
+    before = {p.path.name for p in journal.list_pending(jdir)}
+
+    _drain_n_cycles(
+        jdir, DeadBrokerEmitter(), drainer.DEFAULT_QUARANTINE_AFTER_FAILURES * 3
+    )
+
+    assert {p.path.name for p in journal.list_pending(jdir)} == before
+
+
 def test_a_transient_failure_still_halts_the_drain(jdir: Path) -> None:
     """OMN-19074 AC4: ordinary ordering is untouched.
 

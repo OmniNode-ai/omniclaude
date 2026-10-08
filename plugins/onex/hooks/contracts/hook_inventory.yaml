@@ -844,7 +844,10 @@ expected_hooks:
       Prints one line saying whether the canonical clones and locally-installed
       venvs are in sync, with the verdict's age, labelling anything older than
       30 minutes or of unknown age as unproven. Print-only: pure bash, no
-      network, no writes, reads exactly one file.
+      network, no writes, reads workspace-reconcile.status and, when present,
+      host-drift.status (OMN-17427). Prints the host-drift verdict with its age;
+      older than 35 minutes or unknown age is an ALERT because the drift check
+      itself has stopped reporting. Both verdicts respect quiet/tick intent.
     enforcement: false
     lite_mode_exit: true
     mask:
@@ -1317,6 +1320,10 @@ disabled_hooks:
   # dated, on a list. OMN-18531 holds the list, and `review_by` is the date
   # this gate stops accepting "not yet" as the answer.
   #
+  # Review date moved 2026-10-05 -> 2026-10-31 for all rows below: the OMN-18531
+  # triage has not produced a verdict for any of them, and the date lapsing on the
+  # clock turned every PR's hook-inventory gate red regardless of its diff. The
+  # triage is still owed; 2026-10-31 matches the other dated rows in this file.
   # Ordered by filename. Every `reason` quotes that script's own header rather
   # than a house sentence, because the triage starts from what it claims to do.
 
@@ -1329,7 +1336,7 @@ disabled_hooks:
       check in this gate could see it. Its own header says ensure-plugin-venv.sh
       — Build plugin venv in CLAUDE_PLUGIN_DATA. Whether that rule is enforced
       by another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1353,7 +1360,7 @@ disabled_hooks:
       check in this gate could see it. Its own header says preToolUse Idle
       Notification Rate Limiter (OMN-8924). Whether that rule is enforced by
       another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1377,7 +1384,7 @@ disabled_hooks:
       check in this gate could see it. Its own header says preToolUse Verifier
       Role Guard (OMN-8925). Whether that rule is enforced by another live
       surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1401,7 +1408,7 @@ disabled_hooks:
       check in this gate could see it. Its own header says postToolUse:
       Delegation Counter. Whether that rule is enforced by another live surface
       today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1425,7 +1432,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says postToolUse
       Agent-Result Verifier (OMN-9055/OMN-9107). Whether that rule is enforced
       by another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1449,7 +1456,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says postToolUse
       aislop blocking gate for high-severity write content. Whether that rule is
       enforced by another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1474,7 +1481,7 @@ disabled_hooks:
       Quality Enforcement Hook - Portable Plugin Version Intercepts
       Write/Edit/MultiEdit operations for quality validation. Whether that rule
       is enforced by another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1498,7 +1505,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says preToolUse
       Agent Dispatch Gate [OMN-8510]. Whether that rule is enforced by another
       live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1522,7 +1529,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says preToolUse
       Agent Tool Gate (OMN-8842). Whether that rule is enforced by another live
       surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1547,7 +1554,7 @@ disabled_hooks:
       Authorization Gate Hook - Portable Plugin Version Intercepts Edit/Write
       operations for authorization validation. Whether that rule is enforced by
       another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1571,7 +1578,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says preToolUse
       Branch Protection Rollout-Verification Guard. Whether that rule is
       enforced by another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1595,7 +1602,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says context Scope
       Auditor — PreToolUse hook (OMN-5237). Whether that rule is enforced by
       another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1619,7 +1626,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says preToolUse
       Delegation Hook (OMN-10607). Whether that rule is enforced by another live
       surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1646,7 +1653,7 @@ disabled_hooks:
       direct ONEX node implementation writes that bypass subagent dispatch.
       Whether that rule is enforced by another live surface today is NOT decided
       here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1670,7 +1677,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says preToolUse
       Dispatch Guard — Ticket + DoD Evidence (OMN-8490). Whether that rule is
       enforced by another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1694,7 +1701,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says doD Completion
       Guard — PreToolUse hook. Whether that rule is enforced by another live
       surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1718,7 +1725,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says preToolUse
       Hostile Review Gate [OMN-8702]. Whether that rule is enforced by another
       live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1742,7 +1749,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says linear Done-
       state PR verification guard [OMN-8415]. Whether that rule is enforced by
       another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1768,7 +1775,7 @@ disabled_hooks:
       by complexity and suggests delegation to cheaper models for simple
       implementation tasks. Whether that rule is enforced by another live
       surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1792,7 +1799,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says pipeline Gate
       — PreToolUse hook. Whether that rule is enforced by another live surface
       today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1817,7 +1824,7 @@ disabled_hooks:
       Plan Existence Gate Hook Blocks Edit/Write on ticket-shaped branches
       when no file exists under docs/plans/ in the repository root. Whether that rule is enforced by another live surface today is NOT
       decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1844,7 +1851,7 @@ disabled_hooks:
       all automated workflows go through the proper agent layer for ONEX
       capabilities. Whether that rule is enforced by another live surface today
       is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1869,7 +1876,7 @@ disabled_hooks:
       Pre-Push Validator Hook Intercepts git push commands and runs adaptive
       validation checks before allowing push. Whether that rule is enforced by
       another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1895,7 +1902,7 @@ disabled_hooks:
       manifest (produced by /onex:scope_check) and blocks edits to files outside
       the declared scope. If no scope manifest exists, passes through. Whether
       that rule is enforced by another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1922,7 +1929,7 @@ disabled_hooks:
       rate limit, (3) Linear MCP process. Uses a 5-minute cache to avoid running
       full checks on every Bash invocation. Whether that rule is enforced by
       another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1947,7 +1954,7 @@ disabled_hooks:
       Task-Boundary Tests Hook [OMN-7261] Intercepts git commit / gh pr create
       and runs targeted tests first. Whether that rule is enforced by another
       live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1971,7 +1978,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says preToolUse TDD
       Dispatch Gate (OMN-8846). Whether that rule is enforced by another live
       surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -1995,7 +2002,7 @@ disabled_hooks:
       why no check in this gate could see it. Its own header says preToolUse
       Team-Lead Foreground Guard (OMN-7843). Whether that rule is enforced by
       another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -2020,7 +2027,7 @@ disabled_hooks:
       Workflow Guard Hook (OMN-6231, OMN-7810) Enforces workflow preconditions:.
       Whether that rule is enforced by another live surface today is NOT decided
       here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -2044,7 +2051,7 @@ disabled_hooks:
       check in this gate could see it. Its own header says stop/SubagentStop
       guard for unauthorized agent-surfaced [skip-*] bypass tokens. Whether that
       rule is enforced by another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -2070,7 +2077,7 @@ disabled_hooks:
       today is NOT decided here. hooks.json carries no Stop key at all, so this
       script is unreachable today whatever any registration says; restoring it
       means adding the event group, not only a row.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -2096,7 +2103,7 @@ disabled_hooks:
       surface today is NOT decided here. hooks.json carries no Stop key at all,
       so this script is unreachable today whatever any registration says;
       restoring it means adding the event group, not only a row.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -2123,7 +2130,7 @@ disabled_hooks:
       surface today is NOT decided here. hooks.json carries no Stop key at all,
       so this script is unreachable today whatever any registration says;
       restoring it means adding the event group, not only a row.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"
@@ -2147,7 +2154,7 @@ disabled_hooks:
       check in this gate could see it. Its own header says subagentStop wrapper
       for the shared skip-token surface guard. Whether that rule is enforced by
       another live surface today is NOT decided here.
-    review_by: "2026-10-05"
+    review_by: "2026-10-31"
     restoration:
       kind: "triage"
       reenable_ticket: "OMN-18531"

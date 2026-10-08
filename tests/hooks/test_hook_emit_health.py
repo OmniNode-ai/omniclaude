@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -237,6 +238,38 @@ class TestCli:
         )
         assert rc == 0
         assert json.loads(capsys.readouterr().out)["alerting"] is False
+
+    def test_contract_refusals_persist_across_processes_and_surface_in_cli(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        journal_dir = tmp_path / "hook_emit_journal"
+        code = (
+            "import sys; from pathlib import Path; "
+            "sys.path.insert(0, sys.argv[1]); import hook_emit_health as health; "
+            "[health.record_contract_refusal(Path(sys.argv[2])) for _ in range(10)]"
+        )
+        processes = [
+            subprocess.Popen(
+                [sys.executable, "-c", code, str(MODULE_PATH.parent), str(journal_dir)]
+            )
+            for _ in range(8)
+        ]
+        for process in processes:
+            assert process.wait(timeout=30) == 0
+        assert health.main(["--journal-dir", str(journal_dir)]) == 0
+        assert json.loads(capsys.readouterr().out)["contract_refused_total"] == 80
+        assert health.journal_depth(journal_dir) == 0
+
+    @pytest.mark.parametrize("total", [-1, True, "1"])
+    def test_corrupt_refusal_count_is_never_reset_to_zero(
+        self, tmp_path: Path, total: object
+    ) -> None:
+        path = tmp_path / health.CONTRACT_REFUSALS_FILENAME
+        body = json.dumps({"contract_refused_total": total})
+        path.write_text(body, encoding="utf-8")
+        with pytest.raises(ValueError):
+            health.record_contract_refusal(tmp_path / "hook_emit_journal")
+        assert path.read_text(encoding="utf-8") == body
 
 
 @pytest.mark.unit

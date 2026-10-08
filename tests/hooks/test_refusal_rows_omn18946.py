@@ -200,9 +200,11 @@ class TestTheRateLimit:
         )
         assert emit is True
         assert suppressed == 0
+        assert not (tmp_path / "k.json").exists()
 
     def test_a_looping_refusal_is_one_row_not_thousands(self, tmp_path: Path) -> None:
-        recorder.should_emit("k", now=1000.0, window_seconds=3600, directory=tmp_path)
+        # This state represents a row whose append has already succeeded.
+        recorder._write_state(tmp_path / "k.json", last_emitted=1000.0, suppressed=0)
         emitted = sum(
             recorder.should_emit(
                 "k", now=1000.0 + i, window_seconds=3600, directory=tmp_path
@@ -217,7 +219,7 @@ class TestTheRateLimit:
         """The volume is reported, not lost — a looping refusal must be
         visibly a loop rather than a single tidy row.
         """
-        recorder.should_emit("k", now=1000.0, window_seconds=3600, directory=tmp_path)
+        recorder._write_state(tmp_path / "k.json", last_emitted=1000.0, suppressed=0)
         for i in range(1, 6):
             recorder.should_emit(
                 "k", now=1000.0 + i, window_seconds=3600, directory=tmp_path
@@ -234,7 +236,7 @@ class TestTheRateLimit:
         """The control against a rate limit keyed on nothing, which would let
         one noisy guard silence every other guard on the machine.
         """
-        recorder.should_emit("a", now=1000.0, window_seconds=3600, directory=tmp_path)
+        recorder._write_state(tmp_path / "a.json", last_emitted=1000.0, suppressed=0)
         emit, _ = recorder.should_emit(
             "b", now=1000.0, window_seconds=3600, directory=tmp_path
         )
@@ -294,21 +296,22 @@ class TestTheProcessNeverBreaksAGuard:
         assert "| FRICTION |" in result.stdout
         assert "compound-line-could-not-be-tokenised" in result.stdout
 
-    def test_it_exits_zero_with_no_omni_home_and_writes_nothing(
+    def test_it_refuses_with_no_omni_home_and_writes_nothing(
         self, tmp_path: Path
     ) -> None:
-        """No ledger reachable is a dropped row, never a broken guard."""
+        """An unreachable ledger must not silently mark a refusal emitted."""
         result = self._run(["--guard", "g", "--reason", "r", "--detail", "d"], tmp_path)
-        assert result.returncode == 0, result.stderr
+        assert result.returncode != 0
+        assert "OMNI_HOME" in result.stderr
+        assert not (tmp_path / "state").exists()
 
-    def test_a_second_run_inside_the_window_prints_nothing(
-        self, tmp_path: Path
-    ) -> None:
+    def test_inspection_does_not_suppress_a_second_run(self, tmp_path: Path) -> None:
         args = ["--guard", "g", "--reason", "same class", "--print-row"]
         first = self._run(args, tmp_path)
         second = self._run(args, tmp_path)
         assert first.stdout.strip()
-        assert not second.stdout.strip()
+        assert second.stdout.strip()
+        assert not (tmp_path / "state").exists()
 
 
 class TestItAppendsThroughTheLockedWriter:
@@ -595,6 +598,11 @@ class TestTheLockIsTakenOnlyWhenARowIsWritten:
                 "ONEX_LEDGER_WRITE_VIA": "bus",
             },
         )
-        assert result.returncode == 0, result.stderr
+        if override == "declared":
+            assert result.returncode == 0, result.stderr
+        else:
+            assert result.returncode != 0
+            assert result.stderr.strip()
+            assert not (tmp_path / "state").exists()
         assert marker.exists() == (override == "declared")
         assert ledger.read_text() == "existing\n"

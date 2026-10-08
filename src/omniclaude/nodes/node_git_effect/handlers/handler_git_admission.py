@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 r"""Fail-closed shared-tree git admission gate for the shared registry clone (OMN-18798).
 
@@ -23,7 +23,7 @@ measured in the shared clone and neither had a mechanical defence:
    lane's uncommitted edit.
 
 2. **Stranding**, which destroys nothing and is quieter. A feature branch
-   checked out in the shared clone makes ``commit_lock.py`` refuse EVERY
+   checked out in the shared clone makes ``onex-commit-lock`` refuse EVERY
    other lane's ledger commit -- exit 78, ``STRANDED CLONE`` -- for as long
    as it stays checked out. Three rows appended at 01:24Z reached a
    committed copy only at 11:17Z; the refusals at 02:37Z named the branch.
@@ -42,7 +42,7 @@ root -- ``git rev-parse --show-toplevel`` semantics applied to the ``-C
 <path>`` argument, or to the command's own ``cwd`` when no ``-C`` is given
 -- IS the registry clone at ``$OMNI_HOME`` itself, AND its subcommand
 matches a
-refused shape declared in ``shared_tree_git_guard_policy.json``:
+refused shape declared in ``git_admission_policy.json``:
 
 * ``reset``, ``switch``, ``clean``, ``rebase`` -- in every form;
 * ``checkout`` -- except the Operating Rule 17 path-scoped restore recipe
@@ -152,12 +152,12 @@ determined.
 
 An operand the shell computes (a variable, ``~``, a substitution, brace
 expansion) is not refused for being computed (OMN-17427). A variable the
-environment or an earlier assignment in the command resolves is read. One
-that cannot be resolved is judged by the worst thing it could name: a path
-operand becomes the whole tree, a source operand credits nothing as already
-saved. The restore is then refused exactly when some path of the tree holds
-work that exists nowhere else, so a clean tree passes and a tree holding
-uncommitted work does not. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
+environment or an earlier assignment in the command resolves is read. A path
+operand that cannot be resolved is refused as indeterminate (OMN-19380),
+even over a clean tree: pass literal paths, or commit first and restore by
+path per Operating Rule 17. An unresolved source operand credits nothing as
+already saved; the declared reachable refs still determine whether its
+literal paths hold uncommitted work. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
 refused on the same ground, since it may be a branch switch or a path
 restore; the refusal names ``git switch`` as the unambiguous verb. A
 conflicted path is judged too: ``--ours``/``--theirs``/``-m`` rewrite its
@@ -188,28 +188,45 @@ import re
 import subprocess
 import sys
 import time
+from collections import ChainMap
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Final
+from typing import Final
 
-_HOOKS_LIB = Path(__file__).parent
-if str(_HOOKS_LIB) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_LIB))
+from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
 
-from collections import ChainMap  # noqa: E402
-from collections.abc import Mapping  # noqa: E402
-
-from shell_words import (  # noqa: E402
+from .handler_shell_words import (
     Operator,
     ShellSyntaxError,
     UnresolvableWord,
     Word,
+    WordPart,
+    apply_assignments,
+    directory_target,
     expand_word,
+    git_directory,
     shadow,
     shadowed_names,
     tokenize,
     unquoted,
 )
+
+
+class _ShellWord(str):
+    """String-compatible policy token retaining the tokenizer's quoting."""
+
+    word: Word
+
+    def __new__(cls, word: Word) -> _ShellWord:
+        lexeme = super().__new__(cls, word.text)
+        lexeme.word = word
+        return lexeme
+
+
+def _word(token: str) -> Word:
+    return token.word if isinstance(token, _ShellWord) else unquoted(token)
+
 
 #: What a path token may expand from: the hook's environment, with every
 #: name the command itself sets marked unresolvable.
@@ -230,9 +247,7 @@ __all__ = [
 ]
 
 DEFAULT_POLICY_PATH: Final[Path] = (
-    Path(__file__).resolve().parent.parent
-    / "config"
-    / "shared_tree_git_guard_policy.json"
+    Path(__file__).resolve().parent.parent / "git_admission_policy.json"
 )
 
 #: The mask bit this guard is gated by, named in every refusal so a lane
@@ -314,6 +329,7 @@ class Policy:
     git_probe_timeout_seconds: float
     worktree_root_envs: tuple[str, ...]
     # The lane git-fetch arm (OMN-20495). See _lane_fetch_refusal.
+    clone_sync_engine: str = "canonical_clone_sync.py"
     fetch_ticket: str = ""
     fetch_subcommands: frozenset[str] = frozenset()
     fetch_github_hosts: frozenset[str] = frozenset()
@@ -334,14 +350,14 @@ class Decision:
     fetch_repo: str = ""
 
 
-def _require_str(raw: Any, key: str) -> str:
+def _require_str(raw: Mapping[str, object], key: str) -> str:
     value = raw.get(key)
     if not isinstance(value, str) or not value:
         raise PolicyError(f"policy field {key!r} must be a non-empty string")
     return value
 
 
-def _str_list(raw: Any, key: str) -> list[str]:
+def _str_list(raw: Mapping[str, object], key: str) -> list[str]:
     value = raw.get(key)
     if (
         not isinstance(value, list)
@@ -352,7 +368,7 @@ def _str_list(raw: Any, key: str) -> list[str]:
     return value
 
 
-def _positive_number(raw: Any, key: str) -> float:
+def _positive_number(raw: Mapping[str, object], key: str) -> float:
     value = raw.get(key)
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         raise PolicyError(f"policy field {key!r} must be a positive number")
@@ -421,7 +437,7 @@ def load_policy(path: Path | None = None) -> Policy:
     )
 
 
-def _str_pairs(raw: Any, key: str) -> tuple[tuple[str, str], ...]:
+def _str_pairs(raw: Mapping[str, object], key: str) -> tuple[tuple[str, str], ...]:
     value = raw.get(key)
     if (
         not isinstance(value, dict)
@@ -463,7 +479,7 @@ def _segments(command: str) -> list[list[str]] | None:
             else:
                 current.append(tok.text)
         elif isinstance(tok, Word):
-            current.append(tok.text)
+            current.append(_ShellWord(tok))
         # A HereDoc is data handed to a program, never a command line.
     if current:
         segments.append(current)
@@ -492,6 +508,7 @@ class _GitInvocation:
     #: global flags before the subcommand, `-C` excluded; values of the
     #: separated two-token forms are folded in as `<flag>=<value>`.
     global_flags: tuple[str, ...] = ()
+    directories: tuple[Word, ...] = ()
 
 
 def _parse_git(tokens: list[str]) -> _GitInvocation | None:
@@ -501,6 +518,7 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
         return None
     args = stripped[1:]
     target_arg: str | None = None
+    directories: list[Word] = []
     global_flags: list[str] = []
     idx = 0
     while idx < len(args):
@@ -508,7 +526,16 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
         if tok == "-C":
             if idx + 1 < len(args):
                 target_arg = args[idx + 1]
+                directories.append(_word(target_arg))
             idx += 2
+            continue
+        if tok.startswith("-C") and len(tok) > 2:
+            original = _word(tok)
+            head = original.parts[0]
+            operand = Word((WordPart(head.text[2:], head.quote),) + original.parts[1:])
+            target_arg = _ShellWord(operand)
+            directories.append(operand)
+            idx += 1
             continue
         if tok in _GIT_VALUE_FLAGS:
             value = args[idx + 1] if idx + 1 < len(args) else ""
@@ -534,6 +561,7 @@ def _parse_git(tokens: list[str]) -> _GitInvocation | None:
         subcommand=args[idx],
         args=tuple(args[idx + 1 :]),
         global_flags=tuple(global_flags),
+        directories=tuple(directories),
     )
 
 
@@ -547,7 +575,7 @@ def _expand_path(token: str, scope: Scope) -> str | None:
     refusal that held before still holds.
     """
     try:
-        return expand_word(unquoted(token), scope)
+        return expand_word(_word(token), scope)
     except UnresolvableWord:
         if "$" in token or "`" in token:
             return None
@@ -558,8 +586,20 @@ def _expand_path(token: str, scope: Scope) -> str | None:
 def _resolve_target_dir(
     invocation: _GitInvocation, cwd: Path, scope: Scope | None = None
 ) -> Path:
+    if invocation.directories:
+        try:
+            resolved = git_directory(
+                list(invocation.directories),
+                scope if scope is not None else os.environ,
+                cwd,
+            )
+            return Path(resolved) if resolved is not None else cwd
+        except UnresolvableWord:
+            return cwd / (invocation.target_arg or "")
     if invocation.target_arg:
-        expanded = _expand_path(invocation.target_arg, scope or os.environ)
+        expanded = _expand_path(
+            invocation.target_arg, scope if scope is not None else os.environ
+        )
         raw = expanded or invocation.target_arg
         candidate = Path(raw)
         return candidate if candidate.is_absolute() else (cwd / candidate)
@@ -703,32 +743,10 @@ def _resolve_cd_target(
     force at that point, so a chain composes.
     """
     stripped = _strip_wrappers(tokens)
-    if not stripped:
+    try:
+        return Path(directory_target([_word(t) for t in stripped], scope, current))
+    except UnresolvableWord:
         return None
-    if os.path.basename(stripped[0]) not in policy.directory_changing_programs:
-        return None
-    operands = [tok for tok in stripped[1:] if not tok.startswith("-")]
-    if not operands:
-        home = os.environ.get("HOME")
-        return Path(home) if home else None
-    if len(operands) > 1:
-        return None
-    target = operands[0]
-    if target == "-":
-        # `cd -` returns to the PREVIOUS directory, which this guard does
-        # not track. Unresolvable rather than guessed.
-        return None
-    expanded = _expand_path(target, scope)
-    if expanded is None:
-        # An unexpanded variable this guard cannot answer. Returning None
-        # leaves the effective directory where it was, which is exactly the
-        # behaviour before this change: nothing in the shared tree stops
-        # being refused, and nothing outside it starts being refused.
-        return None
-    candidate = Path(expanded)
-    if not candidate.is_absolute():
-        candidate = current / candidate
-    return Path(os.path.normpath(str(candidate)))
 
 
 def _push_destination_refs(invocation: _GitInvocation) -> list[str]:
@@ -858,7 +876,7 @@ def _refusal_detail(
             return (
                 "`git switch` moves the whole shared tree to another "
                 "branch. Every other lane keeps working in the tree it "
-                "moved, and while the clone is off `main` commit_lock.py "
+                "moved, and while the clone is off `main` onex-commit-lock "
                 "refuses every peer lane's ledger commit with exit 78, "
                 "STRANDED CLONE"
             )
@@ -878,7 +896,7 @@ def _refusal_detail(
                 "`git checkout -b` creates a feature branch in the clone "
                 "every lane shares. Nothing is destroyed and that is what "
                 "makes it dangerous: while the branch is checked out, "
-                "commit_lock.py refuses EVERY other lane's ledger commit "
+                "onex-commit-lock refuses EVERY other lane's ledger commit "
                 "with exit 78, STRANDED CLONE, and the only signal is an "
                 "exit code on somebody else's terminal. Measured once "
                 "already -- three rows appended at 01:24Z reached a "
@@ -889,7 +907,7 @@ def _refusal_detail(
             return (
                 f"the path operand resolves to {protected[0]}, the "
                 "append-only coordination surface every lane appends to "
-                "through commit_lock.py. A path-scoped restore is the "
+                "through onex-commit-lock. A path-scoped restore is the "
                 "Operating Rule 17 recipe and is allowed on every other "
                 "path, but on THIS one it returns the file to HEAD -- not "
                 "to what was in the working tree -- so every row appended "
@@ -922,7 +940,7 @@ def _refusal_detail(
         return (
             "`git checkout <ref>` moves the whole shared tree to another "
             "commit, reverting peer lanes' uncommitted edits and stranding "
-            "the clone off `main`, where commit_lock.py refuses every "
+            "the clone off `main`, where onex-commit-lock refuses every "
             "peer's ledger commit. Operands with no `--` separator are "
             "refused even when a path is meant, because git itself cannot "
             "tell a ref from a path there and neither can this guard -- use "
@@ -987,7 +1005,7 @@ def _refusal_detail(
             "refuses costs the tree's UNCOMMITTED state; this one rewrites "
             "history that is already safe, and after a ledger roll the "
             "remote copy is the only surviving one. Nothing here needs it: "
-            "append rows through commit_lock.py, sync with "
+            "append rows through onex-commit-lock, sync with "
             "`git merge --ff-only origin/main`, push to a FRESH branch, "
             "open a pull request and land it by squash"
         )
@@ -1005,7 +1023,7 @@ def _refusal_detail(
                     "every lane shares. It moves nothing by itself, which is "
                     "why it reads as harmless -- but a branch created here "
                     "exists to be checked out, and the moment it is, "
-                    "commit_lock.py refuses EVERY other lane's ledger commit "
+                    "onex-commit-lock refuses EVERY other lane's ledger commit "
                     "with exit 78, STRANDED CLONE, and the only signal is an "
                     "exit code on somebody else's terminal. Create the branch "
                     "with the worktree that will hold it instead: git -C "
@@ -1286,7 +1304,7 @@ def _is_revision(token: str, cwd: Path, policy: Policy) -> bool:
 
 
 def _checkout_shape(
-    args: list[str], policy: Policy, is_revision: Any
+    args: list[str], policy: Policy, is_revision: Callable[[str], bool]
 ) -> _RestoreShape | None:
     """The restore a `git checkout` performs, or None when it is not one."""
     if "--" in args:
@@ -1399,7 +1417,7 @@ def _restore_shape(args: list[str]) -> _RestoreShape | None:
 
 
 def _parse_restore(
-    invocation: _GitInvocation, policy: Policy, is_revision: Any
+    invocation: _GitInvocation, policy: Policy, is_revision: Callable[[str], bool]
 ) -> _RestoreShape | None:
     args = list(invocation.args)
     if any(
@@ -1415,11 +1433,6 @@ def _parse_restore(
     return _restore_shape(args)
 
 
-#: The pathspec that names every path of the repository, whatever directory
-#: git runs in. It stands in for an operand the shell computes.
-_WHOLE_TREE: Final[str] = ":/"
-
-
 def _is_shell_computed(operand: str) -> bool:
     """Does the shell compute this operand, so the command text cannot name it?
 
@@ -1428,6 +1441,8 @@ def _is_shell_computed(operand: str) -> bool:
     Globs are left alone -- git's own pathspec globbing matches a superset of
     what the shell expands.
     """
+    if isinstance(operand, _ShellWord) and operand.word.is_plain:
+        return False
     return (
         "$" in operand
         or "`" in operand
@@ -1441,46 +1456,31 @@ def _read_operand(operand: str, scope: Scope) -> str:
 
     OMN-17427. An operand naming a variable the environment or an earlier
     assignment in this command resolves to one word is that word. Anything
-    else is returned unchanged and is left to ``_widen_computed_operands``.
+    else is returned unchanged and is left to ``_check_computed_operands``.
     """
     if "$" not in operand and not operand.startswith("~"):
         return operand
     value = _expand_path(operand, scope)
-    if value is None or len(value.split()) != 1:
+    if value is None or (_word(operand).splits and len(value.split()) != 1):
         return operand
-    return value
+    return _ShellWord(Word((WordPart(value, EnumQuoteKind.LITERAL),)))
 
 
-def _widen_computed_operands(shape: _RestoreShape) -> _RestoreShape:
-    """Judge an operand the shell computes by the worst thing it could name.
+def _check_computed_operands(shape: _RestoreShape) -> _RestoreShape:
+    """Refuse unresolved restore paths; an unknown source credits no saved work.
 
-    OMN-17427. This was ``_require_literal``, which refused every restore with
-    an operand the shell computes (``git checkout "$SHA" -- <path>``,
-    ``git restore "$F"``), so a lane whose worktree held nothing to lose was
-    refused all the same, on the grounds that "what it names cannot be read".
-    What matters is what could be lost, not what is named:
-
-    * a path the shell computes may name any path of the repository, so the
-      named paths become the whole tree, and the restore is refused exactly
-      when SOME path of the tree holds work that exists nowhere else;
-    * a source the shell computes carries unknown content, so it can credit
-      no path as already saved, and only the declared reachable refs can.
-
-    A clean tree therefore passes, and a tree holding uncommitted work is
-    refused, as before.
+    OMN-19380. Resolvable paths have already passed through ``_read_operand``
+    and the shared expansion helper. Probing the whole tree for an unresolved
+    path cannot establish which paths the shell will hand to git.
     """
-    paths = shape.paths
-    if any(_is_shell_computed(path) for path in paths):
-        paths = (_WHOLE_TREE,)
+    for path in shape.paths:
+        if _is_shell_computed(path):
+            raise _Indeterminate(
+                f"the restore path {path!r} cannot be resolved by the shared "
+                "shell expansion helper"
+            )
     source_unknown = shape.source is not None and _is_shell_computed(shape.source)
-    return _RestoreShape(
-        source=shape.source,
-        paths=paths,
-        writes_index=shape.writes_index,
-        writes_worktree=shape.writes_worktree,
-        overlay=shape.overlay,
-        source_unknown=source_unknown,
-    )
+    return replace(shape, source_unknown=source_unknown)
 
 
 def _parse_porcelain(raw: bytes) -> list[tuple[str, str]]:
@@ -1690,7 +1690,9 @@ def _render_restore_indeterminate(
     return (
         f"BLOCKED: `git {invocation.subcommand}` is a path-scoped restore, and "
         "whether it would discard uncommitted work could not be determined: "
-        f"{why} ({policy.restore_ticket}, {policy.restore_rule}). An "
+        f"{why} ({policy.restore_ticket}, {policy.restore_rule}). "
+        "Remedy: pass literal paths, or commit first and restore by path per "
+        "Operating Rule 17. An "
         "unverifiable restore is refused, never assumed safe, because the "
         "loss it risks is silent and unrecoverable. Instead: "
         f"{policy.restore_safe_alternatives}. Or name each path literally, "
@@ -1773,7 +1775,7 @@ def _restore_refusal(
                 "an earlier cd, or its -C operand, could not be resolved, so "
                 "neither can the tree it writes"
             )
-        shape = _widen_computed_operands(shape)
+        shape = _check_computed_operands(shape)
         lost = _paths_losing_work(shape, target_dir, git_root, policy)
     except _Indeterminate as exc:
         return _render_restore_indeterminate(policy, invocation, str(exc))
@@ -1803,12 +1805,13 @@ def _is_directory_change(tokens: list[str], policy: Policy) -> bool:
 
 
 def _target_is_absolute(invocation: _GitInvocation, scope: Scope) -> bool:
-    """Is the `-C` target an absolute path once the shell has expanded it?"""
-    arg = invocation.target_arg
-    if arg is None:
-        return False
-    expanded = _expand_path(arg, scope)
-    return expanded is not None and Path(expanded).is_absolute()
+    if invocation.directories:
+        try:
+            return git_directory(list(invocation.directories), scope, None) is not None
+        except UnresolvableWord:
+            return False
+    raw = _expand_path(invocation.target_arg, scope) if invocation.target_arg else None
+    return raw is not None and Path(raw).is_absolute()
 
 
 def _plainly_names_refused_verb(command: str, policy: Policy) -> bool:
@@ -1838,7 +1841,8 @@ def _peel_grouping(segment: list[str]) -> tuple[list[str], int, int]:
     opened = 0
     while tokens:
         head = tokens[0]
-        if head == "{":
+        if head in {"{", "do"}:
+            # OMN-19380: a loop body begins with do before its first command.
             tokens = tokens[1:]
         elif head.startswith("(") and not head.startswith("$("):
             opened += 1
@@ -1873,19 +1877,8 @@ def _track_assignments(segment: list[str], scope: Scope) -> None:
     command word (``WT=x <command>``) assigns only for that one command and
     is not tracked.
     """
-    if not isinstance(scope, ChainMap):
-        return
-    tokens = segment[1:] if segment[:1] == ["export"] else segment
-    if not tokens or not all(_ASSIGNMENT.match(t) for t in tokens):
-        return
-    for token in tokens:
-        name, _, value = token.partition("=")
-        if name not in scope.maps[0]:
-            continue
-        try:
-            scope.maps[0][name] = expand_word(unquoted(value), scope)
-        except UnresolvableWord:
-            scope.maps[0][name] = None
+    if isinstance(scope, ChainMap):
+        apply_assignments([_word(t) for t in segment], scope, scope.maps[0])
 
 
 # ---------------------------------------------------------------------------
@@ -1917,10 +1910,8 @@ def _track_assignments(segment: list[str], scope: Scope) -> None:
 # word, an unknown name) is refused, never assumed safe; outside one nothing
 # is read at all.
 
-#: The refresh a refusal points at, beside this module in every install.
-CLONE_SYNC_ENGINE: Final[Path] = (
-    Path(__file__).resolve().parent / "canonical_clone_sync.py"
-)
+#: The default refresh engine a refusal points at.
+CLONE_SYNC_ENGINE: Final[Path] = Path("canonical_clone_sync.py")
 FETCH_LOG_NAME: Final[str] = "git-fetch-guard.log"
 
 _FETCH_VALUE_FLAGS: Final[dict[str, frozenset[str]]] = {
@@ -2151,7 +2142,9 @@ def _lane_name(policy: Policy, environ: Mapping[str, str]) -> str:
 def _fetch_refusal_text(
     policy: Policy, verb: str, repo: str, detail: str, branch: str | None
 ) -> str:
-    refresh = f"python3 {CLONE_SYNC_ENGINE} refresh {repo or '<owner>/<repo>'} --wait"
+    refresh = (
+        f"python3 {policy.clone_sync_engine} refresh {repo or '<owner>/<repo>'} --wait"
+    )
     if branch:
         refresh += f" --branch {branch}"
     return (
@@ -2197,7 +2190,13 @@ def _lane_fetch_refusal(
     if any(environ.get(k) == v for k, v in policy.fetch_allow_env):
         return None
     target: Path | None = effective_cwd if cwd_known else None
-    if invocation.target_arg is not None:
+    if invocation.directories:
+        try:
+            resolved = git_directory(list(invocation.directories), scope, target)
+            target = Path(resolved) if resolved is not None else None
+        except UnresolvableWord:
+            target = None
+    elif invocation.target_arg is not None:
         expanded = _expand_path(invocation.target_arg, scope)
         if expanded is None:
             target = None
@@ -2394,12 +2393,54 @@ def evaluate_bash_command(
             continue
         if invocation.subcommand not in policy.refused_subcommands:
             continue
-        if invocation.target_arg is None:
+        if invocation.directories:
+            try:
+                target_known = (
+                    git_directory(
+                        list(invocation.directories),
+                        scope,
+                        effective_cwd if cwd_known else None,
+                    )
+                    is not None
+                )
+            except UnresolvableWord:
+                target_known = False
+        elif invocation.target_arg is None:
             target_known = cwd_known
         else:
             target_known = _target_is_absolute(invocation, scope) or (
                 cwd_known and _expand_path(invocation.target_arg, scope) is not None
             )
+        if not target_known:
+            # Unknown location cannot justify a mutation that could hit the registry.
+            restore = _restore_refusal(
+                invocation,
+                policy,
+                effective_cwd,
+                False,
+                registry_root,
+                worktree_roots,
+                scope,
+                env_relocated=exported_relocation or _assigns_git_location(segment),
+            )
+            if restore is not None:
+                return Decision(blocked=True, reason=restore)
+            detail = _refusal_detail(
+                invocation,
+                policy,
+                None,
+                target_dir=effective_cwd,
+                git_root=registry_root or effective_cwd,
+            )
+            if detail is not None:
+                return Decision(
+                    blocked=True,
+                    reason=(
+                        f"BLOCKED: `git {invocation.subcommand}` directory cannot be resolved; "
+                        "the guard cannot determine whether it mutates the shared registry clone. "
+                        "Prepare the directory in a separate Bash call or pass a literal absolute -C target"
+                    ),
+                )
         try:
             target_dir = _resolve_target_dir(invocation, effective_cwd, scope)
         except OSError as exc:
@@ -2464,7 +2505,7 @@ def evaluate_bash_command(
 
 
 def _block(reason: str) -> int:
-    print(json.dumps({"decision": "block", "reason": reason}))
+    sys.stdout.write(json.dumps({"decision": "block", "reason": reason}) + "\n")
     return 2
 
 
@@ -2476,6 +2517,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="override the policy JSON path (defaults to the co-located config)",
     )
+    parser.add_argument("--clone-sync-engine", default="canonical_clone_sync.py")
     args = parser.parse_args(argv)
 
     try:
@@ -2514,6 +2556,13 @@ def main(argv: list[str] | None = None) -> int:
             f"could not be loaded, so this command cannot be checked ({exc})."
         )
 
+    policy = replace(
+        policy,
+        clone_sync_engine=str(Path(args.clone_sync_engine).resolve())
+        if "/" in args.clone_sync_engine
+        else args.clone_sync_engine,
+    )
+
     cwd_raw = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
     cwd = Path(cwd_raw)
     registry_root = resolve_registry_root(policy)
@@ -2535,9 +2584,11 @@ def main(argv: list[str] | None = None) -> int:
         return _block(decision.reason)
 
     if decision.notes:
-        print(json.dumps({"decision": "allow", "notes": list(decision.notes)}))
+        sys.stdout.write(
+            json.dumps({"decision": "allow", "notes": list(decision.notes)}) + "\n"
+        )
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

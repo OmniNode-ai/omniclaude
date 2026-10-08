@@ -1221,3 +1221,34 @@ def test_questions_go_to_dialogs_whenever_there_is_a_desktop() -> None:
         body = _functions(fn)
         assert '"$IS_TTY"' not in body, fn
         assert '"$PROMPT_TTY"' in body, fn
+
+
+def test_workspace_config_is_written_to_declared_owner(tmp_path: Path) -> None:
+    text = SCRIPT.read_text()
+    start = text.index("write_workspace_runtime_config()")
+    functions = text[start : text.index("phase2_verified()", start)]
+    root = tmp_path / "workspace"
+    owner = root / ".onex/workspace-config"
+    env = {
+        **os.environ,
+        "WORKSPACE": str(root),
+        "WORKSPACE_CONFIG_ROOT": str(owner),
+        "WORKSPACE_RUNTIME_CONFIG_REL": "config/onex/runtime/runtime_config.yaml",
+        "WORKSPACE_RUNTIME_CONFIG_MARK": "# Written by omninode-dev-setup.",
+    }
+    subprocess.run(
+        [
+            "bash",
+            "-c",
+            functions
+            + "\nwrite_workspace_runtime_config; workspace_runtime_config_present",
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    target = owner / "config/onex/runtime/runtime_config.yaml"
+    assert target.is_file()
+    assert 'type: "inmemory"' in target.read_text()
+    assert not (root / "config").exists()

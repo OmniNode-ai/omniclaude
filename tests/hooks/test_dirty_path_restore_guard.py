@@ -56,12 +56,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOKS_DIR = REPO_ROOT / "plugins" / "onex" / "hooks"
 LIB_DIR = HOOKS_DIR / "lib"
 HOOK_SCRIPT = HOOKS_DIR / "scripts" / "pre_tool_use_shared_tree_git_guard.sh"
-POLICY_PATH = HOOKS_DIR / "config" / "shared_tree_git_guard_policy.json"
+POLICY_PATH = (
+    REPO_ROOT / "src/omniclaude/nodes/node_git_effect/git_admission_policy.json"
+)
 
 sys.path.insert(0, str(LIB_DIR))
 
-import shared_tree_git_guard  # noqa: E402
-from shared_tree_git_guard import (  # noqa: E402
+from omniclaude.nodes.node_git_effect.handlers import (
+    handler_git_admission as shared_tree_git_guard,  # noqa: E402
+)
+from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (  # noqa: E402
     Decision,
     Policy,
     evaluate_bash_command,
@@ -970,14 +974,12 @@ def test_shell_wrapper_logs_a_deliberate_disable(
 
 
 # ---------------------------------------------------------------------------
-# OMN-17427: an operand the shell computes is judged by what it could name
+# OMN-17427 / OMN-19380: resolve paths before checking for lost work
 # ---------------------------------------------------------------------------
 #
-# The arm refused every restore whose operand the shell computes ("the operand
-# '$HEAD' is expanded by the shell"), so a lane whose worktree held nothing to
-# lose was refused all the same. What must still refuse is the loss itself: a
-# computed operand may name any path, so it is refused exactly when SOME path
-# of the tree holds work that exists nowhere else.
+# Unknown sources credit no saved content. Unknown paths must be refused as
+# indeterminate even over a clean tree; inherited and literal-assigned paths
+# are expanded and judged on the named path instead.
 
 COMPUTED_OPERAND_SHAPES = [
     'git checkout HEAD -- "$TARGET"',
@@ -996,11 +998,12 @@ COMPUTED_OPERAND_SHAPES = [
 
 
 @pytest.mark.parametrize("shape", COMPUTED_OPERAND_SHAPES)
-def test_a_computed_operand_over_a_clean_tree_passes(
+def test_a_computed_operand_over_a_clean_tree_is_judged(
     shape: str, worktree: Path, fleet_root: Path, policy: Policy
 ) -> None:
     decision = _evaluate(shape, policy, worktree, fleet_root)
-    assert not decision.blocked, (shape, decision.reason)
+    unknown_path = "$TARGET" in shape or "$F" in shape or "{guard,other}" in shape
+    assert decision.blocked == unknown_path, (shape, decision.reason)
 
 
 @pytest.mark.parametrize("shape", COMPUTED_OPERAND_SHAPES)
@@ -1011,16 +1014,20 @@ def test_a_computed_operand_over_uncommitted_work_is_refused(
     decision = _evaluate(shape, policy, worktree, fleet_root)
     assert decision.blocked, shape
     assert RESTORE_TICKET in decision.reason
-    assert "src/guard.py" in decision.reason
+    assert (
+        "could not be determined" in decision.reason
+        or "src/guard.py" in decision.reason
+    )
 
 
-def test_a_computed_operand_over_an_untracked_file_is_not_a_loss(
+def test_a_computed_operand_over_an_untracked_file_is_indeterminate(
     worktree: Path, fleet_root: Path, policy: Policy
 ) -> None:
-    """A restore never removes an untracked file, computed operand or not."""
+    """An untracked file does not make an unknown restore path resolvable."""
     (worktree / "notes.txt").write_text("only copy\n")
     decision = _evaluate('git restore "$F"', policy, worktree, fleet_root)
-    assert not decision.blocked, decision.reason
+    assert decision.blocked
+    assert "could not be determined" in decision.reason
 
 
 def test_a_computed_source_cannot_credit_a_dirty_path_as_saved(
@@ -1075,11 +1082,104 @@ def test_a_variable_the_command_sets_to_a_literal_is_read_not_widened(
     assert "src/guard.py" in dirty.reason
 
 
-def test_a_computed_operand_over_work_saved_on_a_reachable_ref_passes(
-    worktree: Path, fleet_root: Path, policy: Policy
+def test_a_resolved_operand_over_work_saved_on_a_reachable_ref_passes(
+    worktree: Path, fleet_root: Path, policy: Policy, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The Rule 17 committed-first sequence keeps working with a computed path."""
     (worktree / "src" / "guard.py").write_text(IMPL_TEXT)
     _commit_all(worktree, "implementation")
+    monkeypatch.setenv("TARGET", "src/guard.py")
     decision = _evaluate('git checkout HEAD -- "$TARGET"', policy, worktree, fleet_root)
+    assert not decision.blocked, decision.reason
+
+
+# OMN-19380: resolve inherited restore paths, refuse unknown paths explicitly.
+@pytest.mark.parametrize("shape", ['git checkout HEAD -- "$P"', 'git restore "$P"'])
+def test_shared_tree_restore_expands_env_operand(
+    shape: str,
+    worktree: Path,
+    fleet_root: Path,
+    policy: Policy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P", "src/other.py")
+    # An unrelated dirty path must not turn a resolved clean path into the whole tree.
+    (worktree / "src" / "guard.py").write_text(IMPL_TEXT)
+    decision = _evaluate(shape, policy, worktree, fleet_root)
+    assert not decision.blocked, decision.reason
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        'for P in src/guard.py; do git checkout HEAD -- "$P"; done',
+        'P=$(printf src/guard.py); git checkout HEAD -- "$P"',
+        'git checkout HEAD -- "$(printf src/guard.py)"',
+        "git checkout HEAD -- `printf src/guard.py`",
+        "git checkout HEAD -- src/{guard,other}.py",
+    ],
+)
+def test_shared_tree_restore_unresolvable_still_refused(
+    shape: str,
+    worktree: Path,
+    fleet_root: Path,
+    policy: Policy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Shadow even an inherited clean path; the command may replace it.
+    monkeypatch.setenv("P", "src/other.py")
+    decision = _evaluate(shape, policy, worktree, fleet_root)
+    assert decision.blocked, shape
+    assert "could not be determined" in decision.reason
+
+
+@pytest.mark.parametrize("staged", [False, True])
+def test_shared_tree_restore_expanded_dirty_refused(
+    staged: bool,
+    worktree: Path,
+    fleet_root: Path,
+    policy: Policy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("P", "src/guard.py")
+    target = worktree / "src" / "guard.py"
+    target.write_text(IMPL_TEXT)
+    if staged:
+        _git("add", "src/guard.py", cwd=worktree)
+    expanded = _evaluate('git checkout HEAD -- "$P"', policy, worktree, fleet_root)
+    literal = _evaluate(
+        "git checkout HEAD -- src/guard.py", policy, worktree, fleet_root
+    )
+    assert expanded.blocked
+    assert expanded.reason == literal.reason
+    assert target.read_text() == IMPL_TEXT
+
+
+def test_shared_tree_restore_refusal_names_remedy(
+    worktree: Path,
+    fleet_root: Path,
+    policy: Policy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("P", raising=False)
+    decision = _evaluate('git checkout HEAD -- "$P"', policy, worktree, fleet_root)
+    assert decision.blocked
+    actionable_line = decision.reason.splitlines()[0]
+    assert "pass literal paths" in actionable_line
+    assert "commit first and restore by path" in actionable_line
+    assert "Operating Rule 17" in actionable_line
+
+
+def test_shared_tree_restore_loop_literal_path_is_admitted(
+    worktree: Path,
+    fleet_root: Path,
+    policy: Policy,
+) -> None:
+    (worktree / "src" / "guard.py").write_text(IMPL_TEXT)
+    decision = _evaluate(
+        "for P in src/guard.py; do git checkout HEAD -- src/other.py; done",
+        policy,
+        worktree,
+        fleet_root,
+    )
     assert not decision.blocked, decision.reason
