@@ -253,6 +253,8 @@ handler_routing:
 invariants:
   - all_prs_include_ticket_stamp: true
   - no_subprocess_outside_handler: true
+  # OMN-18782: enforced by the existing subprocess backend on create and update.
+  - failure_claim_paragraphs_require_citations: true
 
 # Error handling
 error_handling:

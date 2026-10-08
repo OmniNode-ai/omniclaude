@@ -63,6 +63,7 @@ SELF_JOB_NAME = "CI Summary"
 GATE_JOBS: tuple[str, ...] = (
     "Quality Gate",
     "Refusal Surface (OMN-18983)",
+    "PR Failure Citations (OMN-18782)",
     "Runtime Profiles",  # OMN-20184: required runtime contract validation
     "Tests Gate",
     "Security Gate",
@@ -131,6 +132,7 @@ GATE_JOBS: tuple[str, ...] = (
 STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
     {
         "Refusal Surface (OMN-18983)",
+        "PR Failure Citations (OMN-18782)",
         "Runtime Profiles",
         "no-noncanonical-lifecycle-classes",
         "Shape-Gate Independence (OMN-20298)",
