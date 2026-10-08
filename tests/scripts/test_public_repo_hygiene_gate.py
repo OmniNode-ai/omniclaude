@@ -1409,3 +1409,21 @@ def test_the_repo_enforces_the_five_classes_on_added_lines() -> None:
         "person-name",
         "private-network",
     } <= config.enforce_classes
+
+
+def test_vocabulary_environment_path_reaches_the_real_gate(
+    tmp_path: Path, vocab: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_repo(tmp_path / "repo", {"README.md": "clean document\n"})
+    monkeypatch.setenv("OMNI_HYGIENE_VOCAB_PATH", str(vocab))
+    monkeypatch.delenv("OMNI_HOME", raising=False)
+    assert gate.main(["--repo-root", str(root)]) == 0
+
+
+def test_old_workspace_path_is_never_a_vocabulary_fallback(
+    tmp_path: Path, vocab: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_repo(tmp_path / "repo", {"README.md": "clean document\n"})
+    monkeypatch.delenv("OMNI_HYGIENE_VOCAB_PATH", raising=False)
+    monkeypatch.setenv("OMNI_HOME", str(tmp_path))
+    assert gate.main(["--repo-root", str(root)]) == 2

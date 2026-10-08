@@ -306,7 +306,7 @@ jobs:
           path: .public-repo-hygiene-vocabulary
           persist-credentials: false
           sparse-checkout: |
-            docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
+            vocabularies/public_repo_hygiene_vocabulary.yaml
           sparse-checkout-cone-mode: false
 
       # Unpinned for the same reason as the vocabulary above: it is DATA read
@@ -335,7 +335,7 @@ jobs:
                 && '.omniclaude-public-repo-hygiene/scripts/public_repo_hygiene_gate.py'
                 || 'scripts/public_repo_hygiene_gate.py' }}
           DIFF_BASE: ${{ steps.diff-base.outputs.sha }}
-          VOCAB_PATH: .public-repo-hygiene-vocabulary/docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
+          VOCAB_PATH: .public-repo-hygiene-vocabulary/vocabularies/public_repo_hygiene_vocabulary.yaml
           LAB_VOCAB_PATH: .public-repo-hygiene-lab-vocabulary/vocabularies/public_repo_hygiene_lab_vocabulary.yaml
         run: |
           set -euo pipefail
