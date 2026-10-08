@@ -1,0 +1,24 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18782
+title: "Refuse uncited PR failure claims"
+summary: >
+  The git effect handler and the verification-evidence linter refuse a PR body
+  paragraph that claims a failure without a run link, bisect commit or ticket.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Failure-citation tests pass"
+    command: "uv run pytest tests/unit/nodes/node_git_effect/test_pr_failure_citation.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-pr-failure-citation-tests
+    description: "Failure-citation tests pin the refused uncited paragraph and the accepted cited paragraph"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/nodes/node_git_effect/test_pr_failure_citation.py -q"
