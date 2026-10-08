@@ -467,6 +467,8 @@ def test_installer_renders_a_complete_plist(tmp_path: Path) -> None:
             str(ledger),
             "--internal-home",
             str(tmp_path / "omnibase_internal"),
+            "--omni-home",
+            str(tmp_path / "workspace"),
         ],
         capture_output=True,
         text=True,
@@ -484,7 +486,18 @@ def test_installer_renders_a_complete_plist(tmp_path: Path) -> None:
     # Cutover plan C1: the ALERT row is appended by onex-ledger under uv, not the lock script.
     assert "<key>OMNIBASE_INTERNAL_HOME</key>" in run.stdout
     assert f"<string>{tmp_path / 'omnibase_internal'}</string>" in run.stdout
+    assert "<key>OMNI_HOME</key>" in run.stdout
+    assert f"<string>{tmp_path / 'workspace'}</string>" in run.stdout
     assert "ONEX_LEDGER_LOCK_SCRIPT" not in run.stdout
+
+
+def test_the_plist_template_carries_omni_home_for_the_dual_write() -> None:
+    template = (
+        REPO_ROOT / "scripts" / "launchd" / "ai.omninode.hook-process-canary.plist"
+    ).read_text()
+    assert "<key>OMNI_HOME</key>" in template
+    assert "__OMNI_HOME__" in template
+    assert "s|__OMNI_HOME__|" in _INSTALLER.read_text()
 
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="renders the cron line on Linux")
@@ -501,3 +514,36 @@ def test_installer_renders_a_cron_line_that_cannot_stack_up(tmp_path: Path) -> N
         and " timeout 50 " in run.stdout
         and "--once" in run.stdout
     )
+
+
+@pytest.mark.skipif(sys.platform == "darwin", reason="renders the cron line on Linux")
+def test_installer_cron_line_with_a_ledger_carries_omni_home(tmp_path: Path) -> None:
+    command = [
+        "bash",
+        str(_INSTALLER),
+        "--dry-run",
+        "--state-dir",
+        str(tmp_path / "state"),
+        "--ledger",
+        str(tmp_path / "ledger.md"),
+        "--internal-home",
+        str(tmp_path / "omnibase_internal"),
+    ]
+    run = subprocess.run(
+        [*command, "--omni-home", str(tmp_path / "workspace")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    assert f"OMNI_HOME={tmp_path / 'workspace'}" in run.stdout
+    env = dict(os.environ)
+    env.pop("OMNI_HOME", None)
+    run = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert run.returncode != 0
