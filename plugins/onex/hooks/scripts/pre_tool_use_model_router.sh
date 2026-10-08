@@ -6,12 +6,16 @@
 # Advisory-mode hook that classifies tool calls by complexity and suggests
 # delegation to cheaper models for simple implementation tasks.
 #
-# Enforcement tiers:
+# Python verdicts forwarded by this wrapper:
 #   Advisory (exit 0 + stderr): task is simple, suggest delegation
 #   Pass-through (exit 0): task is complex enough for Opus, or orchestration tool
-#   Block (exit 2): enforce mode only — redirects to delegation pipeline
+#   Block (exit 2): Python refusal — redirects to delegation pipeline
+# Python reads hooks/config/model_router_hook.yaml and applies its mode;
+# the shipped mode and the Python fallback are advisory. This wrapper forwards
+# Python's exit code; it does not decide the configured mode itself.
+# Read, Grep and Glob always pass through as information-gathering tools.
 #
-# Hook registration: hooks.json PreToolUse, matcher "^(Bash|Read|Edit|Write|Grep|Glob)$"
+# Candidate PreToolUse hook; registration is governed by the hook inventory.
 
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -67,7 +71,7 @@ TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null) || {
 }
 
 # Only intercept implementation tools
-if [[ ! "$TOOL_NAME" =~ ^(Bash|Read|Edit|Write|Grep|Glob)$ ]]; then
+if [[ ! "$TOOL_NAME" =~ ^(Bash|Edit|Write)$ ]]; then
     echo "$TOOL_INFO"
     exit 0
 fi
