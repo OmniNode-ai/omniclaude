@@ -6,6 +6,7 @@
 # The reusable workflow it calls lives in this repository, so the `uses:` is a
 # local path rather than a pinned cross-repository SHA. Caller repositories pin
 # an immutable omniclaude SHA instead; see the reusable workflow's header.
+# This caller reads the lab node's branch-claim check for the PR head.
 #
 # It RECORDS. The operator ruling of 2026-09-13T09:11:33Z put the refusing half
 # behind a measurement of the release path, so `mode` stays at its default here.
@@ -24,8 +25,11 @@ concurrency:
 
 permissions:
   contents: read
+  checks: read
 
 jobs:
   branch-claim-check:
     uses: ./.github/workflows/branch-claim-check-reusable.yml
+    with:
+      claim_source: work-ledger
     secrets: inherit
