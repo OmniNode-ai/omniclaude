@@ -1439,6 +1439,16 @@ repos:
         files: >-
           ^(scripts/ci/skip_count_ratchet\.py|config/skip_count_baseline\.yaml|tests/ci/test_skip_count_ratchet_omn18790\.py|\.github/workflows/ci\.yml)$
 
+      # OMN-18784: the same evidence checks run in Agent Framework Tests.
+      # Always run so deleting a workflow or a test cannot evade the check.
+      - id: ci-test-evidence
+        name: CI test evidence (OMN-18784)
+        entry: bash scripts/uv-run-worktree-safe.sh python -m pytest tests/ci/test_ci_evidence_omn18784.py -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: precommit-pin-parity
         name: Pre-commit/CI pin-parity check (OMN-14655)
         entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_precommit_pin_parity.py
