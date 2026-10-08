@@ -223,11 +223,15 @@ def test_record_one_line_per_call(
 
 
 @pytest.mark.unit
-def test_record_lane_falls_back_to_session_then_parent(env: dict[str, str]) -> None:
+def test_record_lane_falls_back_to_session_then_parent(
+    env: dict[str, str], tmp_path: Path
+) -> None:
     _gh(env, "pr", "list", extra={"CLAUDE_CODE_SESSION_ID": "sess-1"})
     e = dict(env)
     e.pop("CLAUDE_CODE_SESSION_ID", None)
-    _gh(e, "pr", "list")
+    # Control the direct parent instead of inheriting the pytest launch shape:
+    # `python -m pytest` is correctly attributed as a module by the shim.
+    _script_lane(e, tmp_path, ["bash", "-c", "gh pr list; true"])
     first, second = _log_lines(env)
     assert (first["lane"], first["lane_source"], first["session"]) == (
         "session:sess-1",
