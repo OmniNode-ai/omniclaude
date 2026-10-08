@@ -527,7 +527,7 @@ def test_installer_cron_line_with_a_ledger_carries_omni_home(tmp_path: Path) -> 
         "--ledger",
         str(tmp_path / "ledger.md"),
         "--internal-home",
-        str(tmp_path / "omnibase_internal"),
+        str(tmp_path / "internal_home"),
     ]
     run = subprocess.run(
         [*command, "--omni-home", str(tmp_path / "workspace")],
