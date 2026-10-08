@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""OMN-20073: omniclaude repo-owned evidence and its S5 shadow caller."""
+"""OMN-20073/OMN-20074: omniclaude repo-owned evidence, its S5 shadow caller and the S6 cut-over."""
 
 from __future__ import annotations
 
@@ -69,21 +69,28 @@ def test_caller_workflow_shape() -> None:
     assert "secrets: inherit" not in text, "caller must not inherit secrets"
 
 
-def test_caller_compares_with_occ_for_the_s5_shadow_count() -> None:
+def test_caller_verifier_ships_the_occ_difference_classifier() -> None:
     job = yaml.safe_load(CALLER_PATH.read_text(encoding="utf-8"))["jobs"][
         "repo-evidence"
     ]
-    assert job["with"].get("compare-with-occ") == "true", (
-        'the S5 shadow count requires compare-with-occ: "true" (a quoted string input)'
-    )
-    assert job["with"].get("shadow") == "true", (
-        'the S5 shadow count requires shadow: "true" (a quoted string input), so '
-        "no repo-evidence job concludes anything but success"
-    )
     version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
     assert version >= _DIFFERENCE_CLASSIFIER_FLOOR, (
         "verifier-version must ship node_dod_verify occ-difference "
         f"(>= {'.'.join(map(str, _DIFFERENCE_CLASSIFIER_FLOOR))})"
+    )
+
+
+def test_caller_enforces_and_stops_comparing_with_occ_after_the_s6_cutover() -> None:
+    job = yaml.safe_load(CALLER_PATH.read_text(encoding="utf-8"))["jobs"][
+        "repo-evidence"
+    ]
+    assert job["with"].get("shadow") == "false", (
+        'the S6 cut-over requires shadow: "false" (a quoted string input), so '
+        "the repo-evidence verdict is enforced"
+    )
+    assert job["with"].get("compare-with-occ") == "false", (
+        'the S6 cut-over requires compare-with-occ: "false" (a quoted string input), '
+        "so the difference step stops waiting for an OCC verdict and failing closed"
     )
 
 
