@@ -98,10 +98,10 @@ onex_maybe_rotate_log() {
     n=$(( n + 1 ))
     if (( n >= 16 )); then
         n=0
-        printf '%s\n' "$n" > "$tick_file" 2>/dev/null || true
+        { printf '%s\n' "$n" > "$tick_file"; } 2>/dev/null || true
         onex_rotate_log_if_over "$file" || true
     else
-        printf '%s\n' "$n" > "$tick_file" 2>/dev/null || true
+        { printf '%s\n' "$n" > "$tick_file"; } 2>/dev/null || true
     fi
     return 0
 }

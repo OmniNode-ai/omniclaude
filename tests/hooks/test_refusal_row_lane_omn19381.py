@@ -68,6 +68,21 @@ trap - EXIT
 exit 0
 """
 
+# Run the shipped decision core with only its tracker read replaced. The hook,
+# refusal seam, recorder and lane resolver are real; no network is used.
+_TICKET_BODY_READER = (
+    f"#!{sys.executable}\n"
+    "import importlib.util, json, os, sys\n"
+    "spec = importlib.util.spec_from_file_location('ticket_fixture', sys.argv[1])\n"
+    "module = importlib.util.module_from_spec(spec)\n"
+    "sys.modules[spec.name] = module\n"
+    "spec.loader.exec_module(module)\n"
+    "module._resolve_api_key = lambda: 'fixture'\n"
+    "module._fetch_issue_body = lambda *_: json.loads(os.environ['TEST_TICKET_BODY'])\n"
+    "sys.exit(module.main([]))\n"
+)
+_TICKET_BODY = "## Acceptance criteria\n\n- [ ] AC1: A refusal names its lane.\n"
+
 
 class Sandbox:
     """A scratch registry root: ledger, locked writer, lane registry, sessions."""
@@ -542,6 +557,158 @@ class TestEveryGuardIsNamed:
     def test_refusal_row_guard_named_on_the_row(self, box: Sandbox) -> None:
         row = box.refuse(box.payload(), env={"TEST_HOOK_NAME": "pre_tool_use_x.sh"})
         assert _cell(row, "guard") == "pre_tool_use_x.sh"
+
+
+def _run_ticket_gate(
+    box: Sandbox, tool_input: dict[str, object], previous: str | None = _TICKET_BODY
+) -> subprocess.CompletedProcess[str]:
+    reader = box.tmp / "ticket-body-reader"
+    reader.write_text(_TICKET_BODY_READER, encoding="utf-8")
+    reader.chmod(0o755)
+    hooks = json.loads((HOOKS_DIR / "hooks.json").read_text(encoding="utf-8"))
+    commands = [
+        hook["command"]
+        for group in hooks["hooks"]["PreToolUse"]
+        for hook in group["hooks"]
+        if hook["command"].endswith("/pre_tool_use_ticket_creation_gate.sh")
+    ]
+    assert len(commands) == 1, commands
+    command = commands[0].replace("${CLAUDE_PLUGIN_ROOT}", str(HOOKS_DIR.parent))
+    payload = box.payload(tool_input=tool_input)
+    payload["tool_name"] = "mcp__linear-server__save_issue"
+    return subprocess.run(
+        ["bash", command],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=box.env(
+            {
+                "CLAUDE_PROJECT_DIR": str(REPO_ROOT),
+                "CLAUDE_PLUGIN_ROOT": str(HOOKS_DIR.parent),
+                "PLUGIN_PYTHON_BIN": str(reader),
+                "OMNICLAUDE_MODE": "full",
+                "ONEX_STATE_DIR": str(box.tmp / "hook-state"),
+                "ONEX_LANE": "omn19381-ticket-gate",
+                "TEST_TICKET_BODY": json.dumps(previous),
+            }
+        ),
+        timeout=30,
+    )
+
+
+@pytest.mark.parametrize(
+    ("tool_input", "previous", "reason"),
+    [
+        (
+            {
+                "id": "OMN-19381",
+                "description": _TICKET_BODY.replace("names", "guesses"),
+            },
+            _TICKET_BODY,
+            "issue-update-criterion-text-rewritten",
+        ),
+        (
+            {"id": "OMN-19381", "description": _TICKET_BODY},
+            None,
+            "issue-update-criterion-text-unreadable",
+        ),
+        (
+            {"team": "Omninode", "title": "Unbound work", "description": "No binding"},
+            _TICKET_BODY,
+            "issue-create-not-bound-to-a-commitment",
+        ),
+    ],
+    ids=["criterion-rewrite", "unreadable-update", "unbound-create"],
+)
+def test_ticket_gate_update_refusal_reason_token(
+    box: Sandbox,
+    tool_input: dict[str, object],
+    previous: str | None,
+    reason: str,
+) -> None:
+    """AC4: the registered hook refuses once and records its actual cause.
+
+    The unbound create is a positive control for the existing reason token;
+    an unreadable update must not be called a criterion rewrite either.
+    """
+    result = _run_ticket_gate(box, tool_input, previous)
+    assert result.returncode == 2, result.stdout + result.stderr
+    decision = json.loads(result.stdout)
+    assert decision["decision"] == "block"
+    assert result.stderr == ""
+    deadline = time.monotonic() + 20
+    state_files: list[Path] = []
+    while time.monotonic() < deadline:
+        state_files = list((box.tmp / "refusal_state").glob("*.json"))
+        if state_files:
+            break
+        time.sleep(0.05)
+    assert len(state_files) == 1, result.stdout + result.stderr
+    rows = [row for row in box.ledger.read_text().splitlines() if "| FRICTION |" in row]
+    assert len(rows) == 1, rows
+    row = rows[0]
+    assert _cell(row, "lane") == "omn19381-ticket-gate"
+    assert _cell(row, "guard") == "pre_tool_use_ticket_creation_gate.sh"
+    assert _cell(row, "reason") == reason
+    assert _cell(row, "lane_source") == "env"
+    assert _cell(row, "suppressed_since_last_row") == "0"
+    assert json.loads(state_files[0].read_text())["suppressed"] == 0
+    if previous is None:
+        assert "could not be read" in decision["reason"]
+    elif "id" in tool_input:
+        assert "rewrites AC1's own line" in decision["reason"]
+    else:
+        assert "parentId" in decision["reason"]
+
+
+@pytest.mark.parametrize(
+    "tool_input",
+    [
+        {"id": "OMN-19381", "description": _TICKET_BODY},
+        {"id": "OMN-19381", "description": _TICKET_BODY.replace("[ ]", "[x]")},
+        {"id": "OMN-19381", "state": "In Progress"},
+    ],
+    ids=["unchanged-criterion", "checkbox-only", "state-only"],
+)
+def test_ticket_gate_valid_update_has_no_refusal(
+    box: Sandbox, tool_input: dict[str, object]
+) -> None:
+    result = _run_ticket_gate(box, tool_input)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout == ""
+    assert "| FRICTION |" not in box.ledger.read_text()
+    assert not list((box.tmp / "refusal_state").glob("*.json"))
+
+
+def test_ticket_refusal_contract_is_wired_to_ci_and_precommit() -> None:
+    import yaml
+
+    config = yaml.safe_load((REPO_ROOT / ".pre-commit-config.yaml").read_text())
+    hooks = [
+        hook
+        for repo in config["repos"]
+        for hook in repo["hooks"]
+        if hook["id"] == "ticket-refusal-reason"
+    ]
+    assert len(hooks) == 1
+    hook = hooks[0]
+    test_file = "tests/hooks/test_refusal_row_lane_omn19381.py"
+    assert test_file in hook["entry"]
+    assert hook["pass_filenames"] is False
+    assert hook["stages"] == ["pre-commit"]
+    for path in (
+        "plugins/onex/hooks/lib/ticket_creation_guard.py",
+        "plugins/onex/hooks/scripts/pre_tool_use_ticket_creation_gate.sh",
+        test_file,
+        ".github/workflows/ci.yml",
+    ):
+        assert re.search(hook["files"], path), path
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    steps = [step for job in workflow["jobs"].values() for step in job.get("steps", [])]
+    assert any(
+        test_file in step.get("run", "") and "pytest" in step["run"] for step in steps
+    )
 
 
 class TestARelativelySourcedSeamSurvivesACd:

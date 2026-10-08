@@ -2641,6 +2641,10 @@ jobs:
             bash scripts/init-db.sh
           fi
 
+      - name: Verify refusal lane and reason contract (OMN-19381)
+        working-directory: ${{ github.workspace }}
+        run: uv run --frozen pytest tests/hooks/test_refusal_row_lane_omn19381.py -q -p no:cacheprovider
+
       - name: Run hooks tests
         working-directory: ${{ github.workspace }}
         run: |
