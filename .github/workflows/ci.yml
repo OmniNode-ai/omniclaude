@@ -2366,7 +2366,10 @@ jobs:
           # Exit code 5 = no tests collected (expected for some splits)
           set +e
           paths=$(echo '${{ needs.detect-changes.outputs.selected_paths }}' | jq -r '.[]')
+          # OMN-18982 AC-5: logging and installer tests also run on smart-selection PRs.
           uv run pytest -o addopts="" $paths \
+            tests/scripts/test_canonical_clone_guard.py \
+            tests/scripts/test_install_canonical_clone_guard.py \
             --ignore=tests/integration \
             --splits ${{ needs.detect-changes.outputs.split_count }} \
             --group ${{ matrix.split }} \
