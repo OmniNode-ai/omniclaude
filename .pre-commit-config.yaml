@@ -27,6 +27,16 @@
 #   pre-commit run --all-files --hook-stage pre-push  # Run pre-push hooks
 
 repos:
+  - repo: local
+    hooks:
+      - id: comment-render-delegation
+        name: Comment Render Delegation (OMN-18512)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/(nodes/node_skill_comment_sweep_orchestrator/|runtime/wiring_dispatchers\.py|shared/models/model_skill_completion_event\.py)|plugins/onex/skills/comment_sweep/|tests/unit/nodes/test_comment_sweep_delegation\.py|scripts/ci/ci_summary_gate\.py|\.github/workflows/ci\.yml|\.pre-commit-config\.yaml|\.github/required-checks\.yaml)'
+        stages: [pre-commit]
+
   # OMN-18782: the same Git-node admission rule over authored PR body files.
   - repo: local
     hooks:

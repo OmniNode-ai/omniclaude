@@ -18,6 +18,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from omniclaude.nodes.node_skill_comment_sweep_orchestrator.models.model_render_delegation import (
+    ModelRenderDelegation,
+)
 from omniclaude.shared.models.model_skill_result import SkillResultStatus
 
 
@@ -159,6 +162,11 @@ class ModelSkillCompletionEvent(BaseModel):
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+    render_delegation: ModelRenderDelegation | None = Field(
+        default=None,
+        description="Work-side reply route, including attempts with no receipt",
+    )
 
     event_id: UUID = Field(
         ...,

@@ -90,6 +90,43 @@ Both halves are required and they fail in opposite directions:
   stderr on either command** — an errored query and an empty one are
   indistinguishable once the error is discarded.
 
+## Reply rendering
+
+Collect tracker facts and compute counts and identifiers deterministically. For each
+reply, submit one `ModelSkillRequest` to the existing
+`onex.cmd.omniclaude.comment_sweep.v1` command topic. Its `args` carry:
+
+| Argument | Value |
+| -- | -- |
+| `render-prompt` | the rendering instruction followed by the verified fact table |
+| `work-unit-id` | a stable identifier for this reply's work unit |
+| `delegation-lane` | the overlay's declared lab lane |
+| `ticket` | the owning ticket, when declared |
+
+The node's `HandlerCommentSweepSkill` renders this phase. It invokes the declared
+`$OMNI_HOME/omnibase_infra/scripts/onex` wrapper, whose CLI environment is
+`$ONEX_DISPATCH_VENV` or `$OMNI_HOME/.onex-dispatch-venv`. The hooks environment and
+an ambient `onex` on PATH do not supply the CLI. No environment is rebuilt by this handler.
+
+The handler tries `onex delegate` with `--task-type document`, an explicit lab lane,
+and the declared state root. A successful render must have a fresh matching receipt
+naming its endpoint and model. If the binary, wrapper, chain or receipt is unavailable,
+the existing caller-injected renderer completes the reply as a fallback. The recorded
+`render_delegation.outcome` is `delegated` or `fallback`; a fallback names its reason,
+the missing command and the CLI venv searched. Preserve that record in the sweep report.
+
+Before invoking the chain, the handler writes a work-side `pending` result under
+`$OMNI_HOME/.onex_state/comment-sweep/<correlation_id>.json`, then replaces it with
+the delegated or fallback result. An interrupted render therefore remains visible
+without a delegation receipt. The completion event
+carries the record and its `artifact_path`; read that result's `output` to write the
+reply draft into the overlay's `draft_directory`. A fallback output's `RESULT:` block
+reports execution status and is excluded from the draft body. A failed evidence write
+is a failed render, never a successful delegation. No comment is posted.
+
+This records rendering evidence for the later routing-share readback. It does not
+activate that readback or infer its denominator from delegation receipts.
+
 ## Mechanical replacement
 
 **none yet.** The replacement is a scheduled trigger with a firing receipt, plus

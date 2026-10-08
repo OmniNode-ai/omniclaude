@@ -32,6 +32,22 @@ env:
   ONEX_STATE_DIR: /tmp/onex-state
 
 jobs:
+  comment-render-delegation:
+    name: Comment Render Delegation (OMN-18512)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.3"
+      - name: Install focused-test dependencies
+        run: uv sync --frozen --group dev --python "3.12"
+      - name: Prove declared CLI resolution and recorded fallback
+        run: uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov
+
   refusal-surface:
     name: Refusal Surface (OMN-18983)
     # Independent, fail-closed member of the required CI Summary umbrella.
