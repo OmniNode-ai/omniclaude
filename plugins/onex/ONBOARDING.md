@@ -51,7 +51,7 @@ bytes it serves cannot change after this page was written. And `shasum -c` refus
 if they did change anyway — it prints `lab-onboarding.sh: OK` when the download matches, and
 `FAILED` otherwise, which stops you before `bash` ever sees the file. Do not skip that line.
 
-Inside Claude Code you can instead run `/onex:lab_onboarding`, which does the same thing from
+Inside Claude Code you can instead run `/onex:omninode_dev_setup`, which does the same thing from
 the plugin's own copy and needs no download.
 
 To see what the run would do to this machine without touching it:
@@ -128,7 +128,9 @@ receipt. If phase 3 passes, the machine works.
 ## When it is done
 
 You have a working setup when the run exits 0 and phase 6 reports every check passing.
-Confirm it yourself:
+Confirm it yourself, in a new terminal (or after `exec zsh`): the run writes `OMNIBASE_PATH`,
+`ONEX_WORKSPACE_CONFIG_ROOT` and your `PATH` to your shell profile, and a terminal opened
+before the run has none of them.
 
 ```bash
 onex delegate "Reply with exactly one word: hello"
