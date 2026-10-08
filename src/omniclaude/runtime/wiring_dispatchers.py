@@ -492,9 +492,10 @@ class SkillCommandDispatcher:
                 event_emitter=emit_event,
             )
 
+        backend_selected: str = backend_type
         render_delegation = getattr(result, "render_delegation", None)
         if render_delegation is not None and render_delegation.outcome == "delegated":
-            backend_type = "onex_delegate"
+            backend_selected = "onex_delegate"
             backend_detail = f"{render_delegation.model}@{render_delegation.endpoint}"
 
         # Emit completion event
@@ -504,7 +505,7 @@ class SkillCommandDispatcher:
             skill_name=skill_id,
             command_topic=topic or "unknown",
             status=result.status,
-            backend_selected=backend_type,
+            backend_selected=backend_selected,
             backend_detail=backend_detail,
             duration_ms=int((time.perf_counter() - t0) * 1000),
             error_code=None

@@ -104,8 +104,8 @@ reply, submit one `ModelSkillRequest` to the existing
 | `ticket` | the owning ticket, when declared |
 
 The node's `HandlerCommentSweepSkill` renders this phase. It invokes the declared
-`$OMNI_HOME/omnibase_infra/scripts/onex` wrapper, whose CLI environment is
-`$ONEX_DISPATCH_VENV` or `$OMNI_HOME/.onex-dispatch-venv`. The hooks environment and
+`$OMNI_HOME/omnibase_infra/scripts/onex` wrapper, whose CLI environment is # local-path-ok: the handler reads OMNI_HOME literally (handler_comment_sweep_skill.py)
+`$ONEX_DISPATCH_VENV` or `$OMNI_HOME/.onex-dispatch-venv`. The hooks environment and # local-path-ok: the handler reads OMNI_HOME literally (handler_comment_sweep_skill.py)
 an ambient `onex` on PATH do not supply the CLI. No environment is rebuilt by this handler.
 
 The handler tries `onex delegate` with `--task-type document`, an explicit lab lane,
@@ -116,7 +116,7 @@ the existing caller-injected renderer completes the reply as a fallback. The rec
 the missing command and the CLI venv searched. Preserve that record in the sweep report.
 
 Before invoking the chain, the handler writes a work-side `pending` result under
-`$OMNI_HOME/.onex_state/comment-sweep/<correlation_id>.json`, then replaces it with
+`$OMNI_HOME/.onex_state/comment-sweep/<correlation_id>.json`, then replaces it with # local-path-ok: the handler reads OMNI_HOME literally (handler_comment_sweep_skill.py)
 the delegated or fallback result. An interrupted render therefore remains visible
 without a delegation receipt. The completion event
 carries the record and its `artifact_path`; read that result's `output` to write the
