@@ -20,9 +20,6 @@ ONEX_SCHEMA_COMPAT_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "onex-schema-compat.yml"
 )
 PLUGIN_COMPAT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "plugin-compat-gate.yml"
-INTEGRATION_TESTS_WORKFLOW = (
-    REPO_ROOT / ".github" / "workflows" / "integration-tests.yml"
-)
 NO_FAKED_BOUNDARY_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "no-faked-boundary.yml"
 )
@@ -323,21 +320,12 @@ def test_ci_uv_sync_steps_pin_python(ci_workflow: dict[str, Any]) -> None:
     assert offenders == []
 
 
-def test_legacy_integration_tests_workflow_remains_manual_only() -> None:
-    loaded = yaml.safe_load(INTEGRATION_TESTS_WORKFLOW.read_text(encoding="utf-8"))
-    assert isinstance(loaded, dict)
-    triggers = loaded.get(True)
-    assert isinstance(triggers, dict)
-    assert set(triggers) == {"workflow_dispatch"}
-
-
 @pytest.mark.parametrize(
     "workflow_path",
     [
         WORKFLOW_PATH,
         ONEX_SCHEMA_COMPAT_WORKFLOW,
         PLUGIN_COMPAT_WORKFLOW,
-        INTEGRATION_TESTS_WORKFLOW,
     ],
 )
 def test_cache_restore_steps_are_opt_in_for_ci_timeout_resilience(

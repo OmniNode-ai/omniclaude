@@ -10,6 +10,8 @@
 # not an onex plugin hook: it has to keep working while the plugin is switched,
 # broken, or mid-redeploy. That also means `deploy_local_plugin` does NOT install
 # it — this script is the only sanctioned path from tracked source to live hook.
+# The stdlib lane-attribution readers are installed beside it and drift-checked
+# as well (OMN-18982), so the hook does not depend on a live plugin or worktree.
 #
 # Usage:
 #   install-canonical-clone-guard.sh            # dry-run: report drift + registration
@@ -51,27 +53,42 @@ done
 [[ -f "$SRC" ]] || { echo "ERROR: tracked source missing: $SRC" >&2; exit 1; }
 src_sha="$(sha256_of "$SRC")"
 
-state="missing"
-if [[ -f "$DST" ]]; then
-  if [[ "$(sha256_of "$DST")" == "$src_sha" ]]; then
-    state="identical"
-    [[ -x "$DST" ]] || state="not-executable"
-  else
-    state="DRIFT"
+# The user-level hook remains independent of the plugin installation. Ship the
+# existing stdlib attribution readers with it, not a path into a worktree.
+copy_pending=0
+echo "source: $SRC (sha256 ${src_sha:0:12})"
+for source in "$SRC" \
+  "$SCRIPT_DIR/../src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_lane.py" \
+  "$SCRIPT_DIR/../plugins/onex/hooks/lib/hook_lane_attribution.py"; do
+  [[ -f "$source" ]] || { echo "ERROR: tracked source missing: $source" >&2; exit 1; }
+  name="$(basename "$source")"
+  destination="$HOOK_DIR/$name"
+  state="missing"
+  if [[ -f "$destination" ]]; then
+    if [[ "$(sha256_of "$destination")" == "$(sha256_of "$source")" ]]; then
+      state="identical"
+      [[ "$source" != "$SRC" || -x "$destination" ]] || state="not-executable"
+    else
+      state="DRIFT"
+    fi
   fi
-fi
 
-if (( apply )) && [[ "$state" != "identical" ]]; then
-  mkdir -p "$HOOK_DIR"
-  if [[ "$state" == "DRIFT" ]]; then
-    backup="$DST.bak.$(date -u +%Y%m%dT%H%M%SZ)"
-    cp -p "$DST" "$backup"
-    echo "backup: $backup"
+  if (( apply )) && [[ "$state" != "identical" ]]; then
+    mkdir -p "$HOOK_DIR"
+    if [[ "$state" == "DRIFT" ]]; then
+      backup="$destination.bak.$(date -u +%Y%m%dT%H%M%SZ)"
+      cp -p "$destination" "$backup"
+      echo "backup: $backup"
+    fi
+    cp "$source" "$destination"
+    [[ "$source" != "$SRC" ]] || chmod 755 "$destination"
+    state="identical"
   fi
-  cp "$SRC" "$DST"
-  chmod 755 "$DST"
-  state="identical"
-fi
+  [[ "$state" == "identical" ]] || copy_pending=1
+  label="$name"
+  [[ "$source" != "$SRC" ]] || label="installed"
+  echo "$label: $state ($destination)"
+done
 
 registered="no"
 if [[ -f "$SETTINGS" ]]; then
@@ -92,12 +109,9 @@ PY
   fi
 fi
 
-echo "source: $SRC (sha256 ${src_sha:0:12})"
-echo "installed: $state ($DST)"
 echo "registered: $registered ($SETTINGS)"
 
-pending=0
-[[ "$state" == "identical" ]] || pending=1
+pending=$copy_pending
 [[ "$registered" == "yes" ]] || pending=1
 
 if [[ "$registered" != "yes" ]]; then

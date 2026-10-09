@@ -204,9 +204,9 @@ def test_review_step_invokes_cli_review_with_model(
     # Only real flags: a key followed by a line continuation, never the word
     # after "--model" in a comment inside the run block.
     models = re.findall(r"--model\s+([A-Za-z0-9_.-]+)\s*\\\n", combined)
-    assert models == ["qwen3-review", "gpt-oss-review"], (
+    assert models == ["qwen3-review", "local-studio-planner"], (
         "review job must pass exactly the two DIFFERENT lab models, "
-        f"qwen3-review and gpt-oss-review, each on its own lab host; found {models}. "
+        f"qwen3-review and local-studio-planner, each on its own lab host; found {models}. "
         "deepseek-r1, qwen3-review and qwen3-review-b were three keys for one "
         "backend (OMN-16481), so the old pair reviewed with a single model "
         "twice, and a cloud reviewer would send a private diff off the lab "
@@ -225,6 +225,33 @@ def test_review_step_invokes_cli_review_with_model(
         "do not pipe review JSON into python3 - with a heredoc; Python reads "
         "the script from stdin and the JSON payload is lost"
     )
+
+
+def test_review_step_resolves_second_voter_url_from_actions_variable(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-20422: the second voter's URL comes from the renamed Actions variable.
+
+    The registry key is ``local-studio-planner`` and its ``env_var`` is
+    ``LLM_LOCAL_STUDIO_PLANNER_URL``. A review step that still exported the
+    retired ``LLM_GPT_OSS_REVIEW_URL`` would leave the new key without a URL,
+    and the vote would fail as an unreachable reviewer. The address itself
+    lives in the repository Actions variable, not in this public file.
+    """
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    review_job = jobs["hostile-review"]
+    assert isinstance(review_job, dict)
+    steps = review_job.get("steps") or []
+    review_step = next(
+        step for step in steps if isinstance(step, dict) and step.get("id") == "review"
+    )
+    env = review_step.get("env") or {}
+
+    assert env.get("LLM_LOCAL_STUDIO_PLANNER_URL") == (
+        "${{ vars.LLM_LOCAL_STUDIO_PLANNER_URL }}"
+    )
+    assert "LLM_GPT_OSS_REVIEW_URL" not in env
 
 
 def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
@@ -609,7 +636,7 @@ def test_verdict_parser_behaviour_on_quorum_payloads(
     mentioning it. These fixtures exercise the four cases that matter, and
     each zero has its positive control beside it.
     """
-    two_models = ["qwen3-review", "gpt-oss-review"]
+    two_models = ["qwen3-review", "local-studio-planner"]
 
     # One model raised a finding, the other did not: reported, not blocking.
     below = _run_verdict_snippet(

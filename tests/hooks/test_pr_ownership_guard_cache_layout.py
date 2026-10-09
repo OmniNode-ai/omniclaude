@@ -144,6 +144,7 @@ def _run(
     env["ONEX_STATE_DIR"] = str(state_dir)
     env["HOME"] = str(home)
     env["ONEX_LANE_ID"] = lane_id
+    env["ONEX_RUN_ID"] = "run-1"
     payload = {"tool_name": "Bash", "tool_input": {"command": command}}
     return subprocess.run(
         ["bash", str(plugin_root / _SCRIPT_RELPATH)],

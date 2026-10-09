@@ -19,12 +19,14 @@
 2. Run the session preflight at the given intent. A blocker stops the dispatch.
 3. Resolve `--brief` inside `brief_directory` **as committed**, never from the
    working tree:
-   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <root> --dir <brief_directory> --stem <brief>`,
-   where `<root>` is the directory `workspace_root_env` names. A non-zero exit
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <content_root> --dir <brief_directory> --stem <brief>`,
+   where `<content_root>` is selected by `content_repo_env` when set, otherwise
+   `content_repo_path` relative to `workspace_root_env`. Without content fields,
+   it is the workspace root. An unresolved configured root or non-zero exit
    is a hard stop; do not dispatch the closest match, and never fall back to a
    file on disk.
 4. Read `rules_block_path` **as committed**:
-   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <root> --path <rules_block_path>`.
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/read_committed_file.py" --repo <content_root> --path <rules_block_path>`.
    Its stdout is the block to inject, byte for byte; its stderr names the ref,
    the commit and the byte count. A non-zero exit (missing, or zero bytes) is a
    hard stop. Never read the file with an editor or `cat`: in a shared clone

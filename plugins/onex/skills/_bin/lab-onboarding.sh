@@ -1065,6 +1065,7 @@ write_profile_block() { # file
   {
     printf '%s\n' "$PROFILE_BEGIN"
     printf 'export OMNIBASE_PATH="%s"\n' "$WORKSPACE"
+    printf 'export ONEX_WORKSPACE_CONFIG_ROOT="%s"\n' "$WORKSPACE_CONFIG_ROOT"
     printf 'export OMNI_HOME="%s"   # legacy name, still read by the reconcile scripts\n' "$WORKSPACE"
     # shellcheck disable=SC2016  # written literally; expands in the user's shell
     printf 'eval "$(%s shellenv)"\n' "$(brew_bin)"
@@ -1144,11 +1145,12 @@ pin_clone_at_proven() { # repo
 #
 # The container stack declares its own transport through its compose lane; this
 # file is the native answer and the CLI's default.
+WORKSPACE_CONFIG_ROOT="$WORKSPACE/.onex/workspace-config"
 WORKSPACE_RUNTIME_CONFIG_REL="config/onex/runtime/runtime_config.yaml"
 WORKSPACE_RUNTIME_CONFIG_MARK="# Written by omninode-dev-setup."
 
 write_workspace_runtime_config() {
-  local f="$WORKSPACE/$WORKSPACE_RUNTIME_CONFIG_REL"
+  local f="$WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL"
   mkdir -p "$(dirname "$f")" || return 1
   cat >"$f" <<YAML
 $WORKSPACE_RUNTIME_CONFIG_MARK
@@ -1170,7 +1172,7 @@ YAML
 
 workspace_runtime_config_present() {
   grep -qF "$WORKSPACE_RUNTIME_CONFIG_MARK" \
-    "$WORKSPACE/$WORKSPACE_RUNTIME_CONFIG_REL" 2>/dev/null
+    "$WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL" 2>/dev/null
 }
 
 phase2_verified() {
@@ -1210,11 +1212,12 @@ phase2() {
   say "  Default branch (no proven pin): ${default_repos:-none}"
   write_workspace_runtime_config ||
     { FAILED_STEP="declare the workspace runtime config"
-      phase_fail "could not write $WORKSPACE/$WORKSPACE_RUNTIME_CONFIG_REL; check the directory is writable"; }
+      phase_fail "could not write $WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL; check the directory is writable"; }
   say "  Workspace transport declared in $WORKSPACE_RUNTIME_CONFIG_REL (in-memory: everything runs on this Mac)."
   write_profile_block "$HOME/.zshrc"
   case "${SHELL:-}" in */bash) write_profile_block "$HOME/.bash_profile" ;; esac
   export OMNIBASE_PATH="$WORKSPACE" OMNI_HOME="$WORKSPACE"
+  export ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
   say "  OMNIBASE_PATH (and legacy OMNI_HOME), Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
   phase_pass
 }

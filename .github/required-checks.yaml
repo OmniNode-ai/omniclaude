@@ -33,6 +33,14 @@ classification: toolchain
 repo: omniclaude
 
 gates:
+  - name: "Comment Render Delegation (OMN-18512)"
+    mode: REQUIRED
+    producer_kind: local
+    workflow: ci.yml
+    job_path: ["comment-render-delegation"]
+    skip_semantics: never
+    rationale: "Required by CI Summary; proves declared CLI resolution and explicit render fallback."
+
   - name: "CI Summary"
     mode: REQUIRED
     producer_kind: local

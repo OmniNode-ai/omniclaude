@@ -44,6 +44,12 @@
 # holding that pipe would make the capture wait for the recorder. Fail-open
 # by construction -- this function returns 0 whatever happens.
 #
+# WHERE THE RECORDING LIVES (OMN-20685). omniclaude's node_hook_refusal_record_effect:
+# this seam makes one process call into its handler module (`python -m`, with
+# the plugin hook library named by --hooks-lib so the handler can import its
+# siblings), and hook_refusal_detail asks the same module to extract a verdict's
+# diagnostic. It replaced the standalone recorder and lane-resolver scripts.
+#
 # Usage: hook_record_refusal <reason> [detail]
 #
 #   reason   the refusal CLASS. The recorder normalises it into the dedupe
@@ -61,6 +67,9 @@ _ONEX_HOOK_REFUSAL_LIB="${BASH_SOURCE[0]%/*}"
 [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_REFUSAL_LIB=.
 [[ "$_ONEX_HOOK_REFUSAL_LIB" == /* ]] || _ONEX_HOOK_REFUSAL_LIB="${PWD}/${_ONEX_HOOK_REFUSAL_LIB}"
 
+# The handler module of node_hook_refusal_record_effect, the one entry the guards call.
+_ONEX_HOOK_REFUSAL_MODULE="omniclaude.nodes.node_hook_refusal_record_effect.handlers.handler_hook_refusal_record"
+
 hook_record_refusal() {
     local guard="${_OMNICLAUDE_HOOK_NAME:-unknown-hook}"
     local reason="${1:-unspecified}"
@@ -68,8 +77,6 @@ hook_record_refusal() {
     local payload="${_OMNICLAUDE_HOOK_PAYLOAD:-${TOOL_INFO:-${STDIN_JSON:-}}}"
 
     local lib_dir="${HOOKS_LIB:-$_ONEX_HOOK_REFUSAL_LIB}"
-    local recorder="${lib_dir}/hook_refusal_recorder.py"
-    [[ -f "$recorder" ]] || return 0
 
     local py="${PYTHON_CMD:-}"
     if [[ -z "$py" ]]; then
@@ -87,7 +94,8 @@ hook_record_refusal() {
     local cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 
     (
-        "$py" "$recorder" \
+        "$py" -P -m "$_ONEX_HOOK_REFUSAL_MODULE" \
+            --hooks-lib "$lib_dir" \
             --guard "$guard" \
             --reason "$reason" \
             --detail "$detail" \
@@ -100,4 +108,12 @@ hook_record_refusal() {
     ) >>"${LOG_FILE:-/dev/null}" 2>&1 </dev/null &
     disown 2>/dev/null || true
     return 0
+}
+
+# Decode ONLY the decision envelope, never the hook input. Keeps the missing
+# evidence before the truncation limit and redacts before returning to shell.
+hook_refusal_detail() {
+    local py="${PYTHON_CMD:-python3}"
+    "$py" -P -m "$_ONEX_HOOK_REFUSAL_MODULE" --hooks-lib "${HOOKS_LIB:-$_ONEX_HOOK_REFUSAL_LIB}" --extract-detail \
+        || printf 'rule=diagnostic_unavailable exit=%s\n' "$?"
 }

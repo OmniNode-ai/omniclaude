@@ -10,15 +10,36 @@ description: >
   Tool execution event emitted after each tool completes in Claude Code.
   Captures tool execution metadata for observability.
 
+# OMN-17047: registered hook -> journal appender -> hook_emit_drainer.py
+# -> node_event_emit_effect registry fan-out. Consumers are runtime contract
+# bindings, checked by validate_hook_callees.py; process health is a live probe.
 producer:
-  repo: "omniclaude"
-  file: "src/omniclaude/hooks/handler_event_emitter.py"
-  function: "emit_tool_executed"
-
-consumer:
-  repo: "omnibase_infra"
-  file: "src/omnibase_infra/services/session/consumer.py"
-  model: "ModelHookToolExecutedPayload"
+  repo: omniclaude
+  file: plugins/onex/hooks/scripts/post_tool_use_bus_mirror.sh
+  hook_event: PostToolUse
+  event_type: tool.executed
+  emitter:
+    file: plugins/onex/hooks/lib/hook_emit_append.py
+    function: append_event
+consumers:
+- repo: omnimarket
+  contract: src/omnimarket/nodes/node_projection_session_replay/contract.yaml
+  file: src/omnimarket/nodes/node_projection_session_replay/handlers/handler_projection_session_replay.py
+  class: HandlerProjectionSessionReplay
+  model: ModelSessionReplayEvent
+  model_file: src/omnimarket/nodes/node_projection_session_replay/models/model_session_replay.py
+- repo: omnimarket
+  contract: src/omnimarket/nodes/node_projection_hook_ledger/contract.yaml
+  file: src/omnimarket/nodes/node_projection_hook_ledger/handlers/handler_hook_ledger_projection.py
+  class: HandlerHookLedgerProjection
+  model: ModelHookLedgerProjectionRequest
+  model_file: src/omnimarket/nodes/node_projection_hook_ledger/models/model_hook_ledger_event.py
+- repo: omnimarket
+  contract: src/omnimarket/nodes/node_projection_work_events/contract.yaml
+  file: src/omnimarket/nodes/node_projection_work_events/handlers/handler_projection_work_events.py
+  class: HandlerProjectionWorkEvents
+  model: ModelWorkEventInbound
+  model_file: src/omnimarket/nodes/node_projection_work_events/models/model_work_event.py
 
 required_fields:
   - name: "entity_id"

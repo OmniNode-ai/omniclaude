@@ -132,9 +132,16 @@ jobs:
     # Fast, hermetic unit slice (no postgres/redis/kafka services). The coverage
     # dimension is folded into this job for the shadow surface — its conclusion is
     # passed as BOTH tests_conclusion and coverage_conclusion below.
-    name: tests+coverage (shadow)
+    name: tests+coverage (shadow) (split ${{ matrix.split }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # OMN-17427: single-job pytest measured 18m49s against a 20m ceiling;
+    # the job was cancelled on every armed PR on 2026-10-07.
+    # Shard the suite the same way as ci.yml's tests matrix to fit the ceiling.
+    strategy:
+      fail-fast: false
+      matrix:
+        split: [1, 2]
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
@@ -150,7 +157,7 @@ jobs:
       - name: Auto-generate skill nodes
         run: uv run python scripts/generate_skill_node.py --all
       - name: Unit tests (fast, hermetic slice)
-        run: uv run pytest tests/ -m "unit and not integration" -q --no-header
+        run: uv run pytest tests/ -m "unit and not integration" -q --no-header --splits 2 --group ${{ matrix.split }}
 
   security-shadow:
     # The SECURITY product dimension, run INDEPENDENTLY of occ-preflight. This

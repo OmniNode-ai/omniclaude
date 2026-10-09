@@ -17,7 +17,10 @@ This module is the pure decision core.  It answers one question:
 
 It performs NO network I/O.  Ownership resolves entirely from the local
 ``pr_claim_registry`` claims directory plus a locally-resolvable lane identity,
-so it is safe to run in the ``PreToolUse`` hot path.
+so it is safe to run in the ``PreToolUse`` hot path. Active claims must match
+the caller's lane and full run identity; a recorded full session must match
+too (OMN-19699). A session fallback may resolve a named claim only when both
+full session and run match. Shared session prefixes never prove ownership.
 
 Net-negative design (OMN-15483 precedent): this extends the claim vocabulary
 that ALREADY ships in ``pr_claim_registry`` rather than inventing a second one.
@@ -52,6 +55,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -529,9 +533,9 @@ def resolve_lane_id(
     Returns ``None`` when nothing is resolvable, which every caller must treat
     as INDETERMINATE and therefore refusing.
 
-    Two lanes sharing one worktree collapse to a single id.  That is a
-    deliberate under-block: it can permit a mutation between co-located lanes,
-    but it never blocks an unrelated lane's own work.
+    This is the caller's local lane label. When it falls back to a session,
+    the verdict may use a claim's readable lane if its full session and run
+    both match. Explicit peer lanes still refuse even with shared identities.
     """
     environment = dict(os.environ) if env is None else env
 
@@ -544,11 +548,23 @@ def resolve_lane_id(
     if worktree_lane:
         return worktree_lane
 
-    session = environment.get("CLAUDE_CODE_SESSION_ID", "").strip()
+    from session_id import resolve_session_id
+
+    session = resolve_session_id(env=environment, default=None)
     if session:
         return _sanitize_lane(f"session:{session[:16]}")
 
     return None
+
+
+def resolve_run_id(env: dict[str, str] | None = None) -> str | None:
+    """Resolve the full mutation run, shared by the CLI and hook (OMN-19699)."""
+    from session_id import resolve_session_id
+
+    environment = dict(os.environ) if env is None else env
+    return environment.get("ONEX_RUN_ID", "").strip() or resolve_session_id(
+        env=environment, default=None
+    )
 
 
 def _lane_from_worktree(
@@ -606,8 +622,25 @@ def _cli_path() -> str:
     return str(source)
 
 
-def _claim_command(target_key: str) -> str:
-    return f"python3 {_cli_path()} claim '{target_key}' --action close"
+def _claim_command(
+    target_key: str, lane_id: str | None = None, run_id: str | None = None
+) -> str:
+    command = f"python3 {shlex.quote(_cli_path())} claim {shlex.quote(target_key)} --action close"
+    if lane_id:
+        command += f" --lane {shlex.quote(lane_id)}"
+    if run_id:
+        command += f" --run-id {shlex.quote(run_id)}"
+    # The hook can resolve a worktree lane while Bash runs the remedy elsewhere.
+    # Bind the CLI to the identity this hook already resolved, without changing
+    # the hook's environment or trusting an arbitrary --lane alias.
+    bindings = []
+    if lane_id:
+        bindings.append(shlex.quote(f"ONEX_LANE_ID={lane_id}"))
+    if run_id:
+        bindings.append(shlex.quote(f"ONEX_RUN_ID={run_id}"))
+    if bindings:
+        command = "env " + " ".join(bindings) + " " + command
+    return command
 
 
 def decide(
@@ -615,6 +648,11 @@ def decide(
     lane_id: str | None,
     claim_status: ClaimStatus,
     claim_lane: str | None,
+    *,
+    run_id: str | None = None,
+    claim_run: str | None = None,
+    session_id: str | None = None,
+    claim_session: str | None = None,
 ) -> Decision:
     """Return the verdict for one mutation. Pure; no I/O."""
     verb = mutation.verb
@@ -673,10 +711,18 @@ def decide(
                 message=(
                     f"REFUSED ({verb}) on {mutation.detail}: an active claim exists "
                     f"on '{target}' but it records no lane, so it cannot prove this "
-                    "lane owns the work. Re-claim it with: " + _claim_command(target)
+                    "lane owns the work. Re-claim it with: "
+                    + _claim_command(target, lane_id, run_id)
                 ),
             )
-        if claim_lane != lane_id:
+        session_owns_claim = bool(
+            session_id
+            and run_id
+            and lane_id == _sanitize_lane(f"session:{session_id[:16]}")
+            and claim_session == session_id
+            and claim_run == run_id
+        )
+        if claim_lane != lane_id and not session_owns_claim:
             return Decision(
                 allowed=False,
                 reason_code="CROSS_LANE",
@@ -691,12 +737,28 @@ def decide(
                     f"release '{target}' <run-id>"
                 ),
             )
+        if (claim_session and claim_session != session_id) or (
+            run_id is not None and claim_run != run_id
+        ):
+            return Decision(
+                allowed=False,
+                reason_code="CROSS_RUN",
+                verb=verb,
+                target_key=target,
+                message=(
+                    f"REFUSED ({verb}) on {mutation.detail}: owned by lane "
+                    f"'{claim_lane}' in run '{claim_run}', session '{claim_session}', "
+                    f"and you are run '{run_id}', session '{session_id}'. "
+                    "A matching lane name cannot authorize another run or session. "
+                    "Coordinate with the holder in the rolling work ledger."
+                ),
+            )
         return Decision(
             allowed=True,
             reason_code="OWNED_BY_SELF",
             verb=verb,
             target_key=target,
-            message=f"allowed: lane '{lane_id}' holds an active claim on {target}",
+            message=f"allowed: lane '{claim_lane}' holds an active claim on {target}",
         )
 
     # claim_status is "absent" or "expired" from here on.
@@ -719,12 +781,13 @@ def decide(
         verb=verb,
         target_key=target,
         message=(
-            f"REFUSED ({verb}) on {mutation.detail}: no lane holds a claim on "
-            f"'{target}', so this close cannot be attributed to any lane. An "
+            f"Missing PR claim: '{target}' has no active ownership claim. "
+            f"REFUSED ({verb}) on {mutation.detail}.\n"
+            f"    {_claim_command(target, lane_id, run_id)}\n"
+            "Run the command above only if this work is yours, before closing. An "
             "unclaimed target is INDETERMINATE, not free — >=5 green PRs were "
             "closed unmerged this way in 48h under the shared gh identity "
-            "(OMN-16485). If this work is yours, record ownership first:\n"
-            f"    {_claim_command(target)}\n"
+            "(OMN-16485). "
             "Recording the claim IS the attribution record that is otherwise "
             "missing; it is not a formality to route around."
         ),
@@ -736,27 +799,35 @@ def decide(
 # ---------------------------------------------------------------------------
 
 
-def _read_claim(claims_dir: Path, target_key: str) -> tuple[ClaimStatus, str | None]:
+def _read_claim(
+    claims_dir: Path, target_key: str
+) -> tuple[ClaimStatus, str | None, str | None, str | None]:
     """Read a claim, distinguishing absent from unreadable (fail-closed input)."""
     from pr_claim_registry import filesystem_key, is_active
 
     claim_file = claims_dir / f"{filesystem_key(target_key)}.json"
     if not claim_file.exists():
-        return "absent", None
+        return "absent", None, None, None
     try:
         data = json.loads(claim_file.read_text())
     except (json.JSONDecodeError, OSError):
-        return "unreadable", None
+        return "unreadable", None, None, None
     if not isinstance(data, dict):
-        return "unreadable", None
+        return "unreadable", None, None, None
 
     lane = data.get("lane_id")
     lane_value = lane if isinstance(lane, str) and lane.strip() else None
+    run = data.get("claimed_by_run")
+    session = data.get("claimed_by_session")
+    if (run is not None and (not isinstance(run, str) or not run.strip())) or (
+        session is not None and (not isinstance(session, str) or not session.strip())
+    ):
+        return "unreadable", lane_value, None, None
     try:
         active = is_active(data)
     except (TypeError, ValueError):
-        return "unreadable", lane_value
-    return ("active" if active else "expired"), lane_value
+        return "unreadable", lane_value, run, session
+    return ("active" if active else "expired"), lane_value, run, session
 
 
 def evaluate_command(
@@ -792,13 +863,30 @@ def evaluate_mutations(
     no guarded mutation (OMN-16983).
     """
     lane_id = resolve_lane_id(env=env, cwd=cwd)
+    from session_id import resolve_session_id
+
+    run_id = resolve_run_id(env=env) or lane_id
+    session_id = resolve_session_id(env=env, default=None)
     decisions: list[Decision] = []
     for mutation in mutations:
         if mutation.target_key is None:
             decisions.append(decide(mutation, lane_id, "absent", None))
             continue
-        status, claim_lane = _read_claim(claims_dir, mutation.target_key)
-        decisions.append(decide(mutation, lane_id, status, claim_lane))
+        status, claim_lane, claim_run, claim_session = _read_claim(
+            claims_dir, mutation.target_key
+        )
+        decisions.append(
+            decide(
+                mutation,
+                lane_id,
+                status,
+                claim_lane,
+                run_id=run_id,
+                claim_run=claim_run,
+                session_id=session_id,
+                claim_session=claim_session,
+            )
+        )
     return decisions
 
 
@@ -817,7 +905,18 @@ def main(argv: list[str] | None = None) -> int:
     Exit codes: 0 allow, 3 block, 1 internal error (the wrapper treats an
     internal error on a verb-matching command as a block).
     """
-    parser = argparse.ArgumentParser(description="Lane-ownership gate for gh mutations")
+    parser = argparse.ArgumentParser(
+        description="Lane-ownership gate for gh mutations",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "PR close precondition (record it before gh pr close):\n"
+            f"  python3 {shlex.quote(_cli_path())} list\n"
+            f"  python3 {shlex.quote(_cli_path())} claim <owner/repo>#<number> --action close\n"
+            "Use a lowercase owner/repo claim key. Stop if a peer owns the target;\n"
+            "claim using the same lane/run/session as the close.\n"
+            "Close template: plugins/onex/docs/pr-close-preconditions.md"
+        ),
+    )
     parser.add_argument(
         "--command-file", required=True, help="File holding the Bash command"
     )
@@ -884,9 +983,10 @@ def main(argv: list[str] | None = None) -> int:
         if decision.record_claim and decision.target_key and lane_id:
             registry.acquire(
                 pr_key=decision.target_key,
-                run_id=resolve_session_id(default=lane_id),
+                run_id=resolve_run_id() or lane_id,
                 action=decision.verb,
                 lane_id=lane_id,
+                session_id=resolve_session_id(default=None),
             )
 
     return EXIT_ALLOW

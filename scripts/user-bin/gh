@@ -74,6 +74,15 @@
 # scripts/user-bin/gh_usage_report.py turns the log into requests per lane.
 # ONEX_GH_USAGE_LOG=0 turns the log off for one call.
 #
+# Gateway read marking (OMN-17427, phase a): JSON usage lines mark reads as
+# gateway (ONEX_GH_GATEWAY=1) or bypass, and non-reads as "". Bypass reads warn
+# before execution for attributed sessions/lanes or a terminal, unless
+# ONEX_GH_WARN=0; ONEX_GH_WARN=1 opts programs in. The two cached harness
+# PR-link shapes never warn, hit or miss: the harness asks every few seconds
+# and phase (c) answers them from the PR-state projection.
+# Last-resort attribution names known caller roles through up to six ancestors,
+# then the direct parent's script, module or command. Roles never grant access.
+#
 # This file must stay bash 3.2 compatible: /bin/bash on macOS is 3.2.
 
 ONEX_GH_SHIM_TTL="${ONEX_GH_SHIM_TTL:-600}"
@@ -184,6 +193,7 @@ _resolve_lane() {
   _lane=""; _lane_src=""
   local agent="" cwd="" suffix="" ticket="" repo_dir="" worktree=""
   local registry_dir="" record="" hash="" registered="" parent="" pargs="" script="" w=""
+  local pid="$PPID" steps=0 next="" info="" direct_args="" role="" job=0 module="" rest=""
   if [ -n "${ONEX_LANE:-}" ]; then
     _lane="$(_clean "$ONEX_LANE")"; _lane_src="env"
     return
@@ -227,21 +237,60 @@ _resolve_lane() {
     _lane="session:$(_clean "$CLAUDE_CODE_SESSION_ID")"; _lane_src="session"
     return
   fi
-  # Last resort, one `ps` fork: when the parent is an interpreter running a
-  # script (a launchd job, a cron tick), name the script; otherwise the command.
-  pargs="$(ps -o args= -p "$PPID" 2>/dev/null)"
-  set -f
-  set -- $pargs
-  set +f
-  parent="$(basename "${1:-}" 2>/dev/null)"
+  # Phase (a) of the GitHub gateway plan (OMN-17427): roles are attribution
+  # only and never grant anything. The PR-state guard's allow decision stays
+  # direct-parent-only (see _prs_caller_allowed). This walk runs only when no
+  # env/registry/session attribution exists.
+  while [ "$steps" -lt 6 ]; do
+    case "$pid" in ""|*[!0-9]*) break ;; esac
+    [ "$pid" -gt 1 ] || break
+    # "<ppid> <args...>", split by parameter expansion like PATH above: no word
+    # splitting and no glob expansion of the ancestor's command line.
+    info="$(ps -ww -o ppid= -o args= -p "$pid" 2>/dev/null)"
+    info="${info#"${info%%[![:space:]]*}"}"
+    [ -n "$info" ] || break
+    next="${info%%[[:space:]]*}"
+    pargs="${info#"$next"}"
+    pargs="${pargs#"${pargs%%[![:space:]]*}"}"
+    [ "$steps" -eq 0 ] && direct_args="$pargs"
+    role=""; job=0
+    case "$pargs" in *omnibase_internal.pr_watcher*) role="pr-watcher" ;; esac
+    rest="$pargs "
+    while [ -z "$role" ] && [ -n "$rest" ]; do
+      w="${rest%% *}"
+      rest="${rest#* }"
+      [ -n "$w" ] || continue
+      if [ "$job" -eq 1 ]; then role="$w"; break; fi
+      case "${w##*/}" in
+        landing_controller.py) role="landing-controller" ;;
+        landing_worker_run.py) role="landing-worker" ;;
+        landing_lab_prover.py) role="landing-lab-prover" ;;
+        onex_remote_lane.py) role="remote-lane-runner" ;;
+        morning_workflows_tick.sh) job=1 ;;
+      esac
+    done
+    if [ -n "$role" ]; then
+      _lane="role:$(_clean "$role")"; _lane_src="role"
+      return
+    fi
+    pid="$next"
+    steps=$((steps + 1))
+  done
+  # No known role: the direct parent's script, module or command, as before.
+  rest="$direct_args "
+  w="${rest%% *}"
+  rest="${rest#* }"
+  parent="$(basename "$w" 2>/dev/null)"
   case "$parent" in
     python|Python|python3*|bash|sh|zsh|node|uv|ruby)
-      shift
       # Only the first non-option word can be the script; `-m <module>` runs a
       # module, so a later .py word (`python -m pytest tests/x.py`) is an argument.
-      for w in "$@"; do
+      while [ -n "$rest" ]; do
+        w="${rest%% *}"
+        rest="${rest#* }"
+        [ -n "$w" ] || continue
         case "$w" in
-          -m) break ;;
+          -m) rest="${rest#"${rest%%[![:space:]]*}"}"; module="${rest%% *}"; break ;;
           -*) continue ;;
           *.py|*.sh|*.js|*.mjs) script="$(basename "$w" 2>/dev/null)" ;;
         esac
@@ -249,6 +298,10 @@ _resolve_lane() {
       done
       ;;
   esac
+  if [ -n "$module" ]; then
+    _lane="module:$(_clean "$module")"; _lane_src="module"
+    return
+  fi
   if [ -n "$script" ]; then
     _lane="script:$(_clean "$script")"; _lane_src="script"
     return
@@ -375,14 +428,14 @@ _log() {
   if [ -n "$_route" ]; then
     identity="${_route%% *}"
     case "$_route" in *\ *) route_reason="${_route#* }" ;; esac
-    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","identity":"%s","route_reason":"%s","parent":"%s","host":"%s","pid":%s}\n' \
+    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","identity":"%s","route_reason":"%s","parent":"%s","host":"%s","pid":%s,"gateway":"%s"}\n' \
       "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
-      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$(_clean "$identity")" "$(_clean "$route_reason")" "$_parent_lane" "$_lane_host" "$$" \
+      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$(_clean "$identity")" "$(_clean "$route_reason")" "$_parent_lane" "$_lane_host" "$$" "$_gateway" \
       >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
   else
-    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","parent":"%s","host":"%s","pid":%s}\n' \
+    printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","parent":"%s","host":"%s","pid":%s,"gateway":"%s"}\n' \
       "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
-      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$_parent_lane" "$_lane_host" "$$" \
+      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$_parent_lane" "$_lane_host" "$$" "$_gateway" \
       >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
   fi
 }
@@ -415,6 +468,26 @@ _sha() {
 
 _classify "$@"
 _route=""
+# This env marker is attribution only in phase (a); the later boundary is
+# that only the gateway holds a credential.
+_gateway=""
+if [ "$_method" = "GET" ] || [ "$_method" = "HEAD" ] || \
+   { [ "$_cls" = "api graphql" ] && [ "$_method" = "POST" ]; }; then
+  if [ "${ONEX_GH_GATEWAY:-}" = "1" ]; then _gateway="gateway"; else _gateway="bypass"; fi
+fi
+
+_warn_gateway_read() {
+  [ "$_gateway" = "bypass" ] && [ "${ONEX_GH_WARN:-}" != "0" ] || return 0
+  # The harness link shapes never warn, even when no branch resolves (a
+  # detached HEAD) and the call falls through the cache to the pass-through.
+  _cacheable "$@" && return 0
+  _resolve_lane
+  if [ "${ONEX_GH_WARN:-}" != "1" ] && [ ! -t 2 ]; then
+    case "$_lane_src" in env|agent-env|registry|session) ;; *) return 0 ;; esac
+  fi
+  printf 'gh shim (OMN-17427): direct GitHub read by %s (%s %s %s); reads are moving to the GitHub gateway on the event bus. Set ONEX_GH_WARN=0 to silence this line.\n' \
+    "$_lane" "$_cls" "$_method" "${_endpoint:--}" >&2
+}
 
 # --- secondary-rate-limited search guard (OMN-19852) -------------------------
 _search_call=0
@@ -960,6 +1033,7 @@ fi
 
 # Pass-through. Run rather than exec, so the exit code can be logged; stdin,
 # stdout, stderr and the terminal are inherited unchanged.
+_warn_gateway_read "$@"
 _run_gh "$@"
 _rc=$?
 _log "$_rc" none

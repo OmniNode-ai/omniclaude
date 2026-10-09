@@ -5,20 +5,26 @@
 # Shell path resolver for ONEX state directory.
 # Source this file to export derived path variables.
 #
-# Requires ONEX_STATE_DIR to be set in the environment.
+# Requires an explicit ONEX_STATE_DIR or an absolute OMNI_HOME registry root.
 
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
-    # Auto-default to ~/.onex_state on fresh installs so hooks don't hard-fail.
-    # On full-platform installs this is set via ~/.omnibase/.env.
-    # Users can override by setting ONEX_STATE_DIR in their shell profile.
-    export ONEX_STATE_DIR="${HOME}/.onex_state"
+    if [[ "${OMNI_HOME:-}" != /* ]]; then
+        printf '%s\n' 'onex-paths: OMNI_HOME must name an absolute registry root when ONEX_STATE_DIR is unset' >&2
+        return 1
+    fi
+    export ONEX_STATE_DIR="${OMNI_HOME}/.onex_state"
+fi
+if [[ "$ONEX_STATE_DIR" != /* ]]; then
+    printf '%s\n' 'onex-paths: ONEX_STATE_DIR must be absolute' >&2
+    return 1
 fi
 
 export ONEX_LOG_DIR="${ONEX_STATE_DIR}/logs"
 export ONEX_HOOKS_STATE_DIR="${ONEX_STATE_DIR}/hooks"
 export ONEX_PIPELINES_DIR="${ONEX_STATE_DIR}/pipelines"
 export ONEX_SESSION_STATE_DIR="${ONEX_STATE_DIR}/sessions"
-export ONEX_HOOK_LOG="${ONEX_STATE_DIR}/logs/hooks.log"
+# The guard-sweep reads hooks/ (not the general logs/ partition).
+export ONEX_HOOK_LOG="${ONEX_HOOKS_STATE_DIR}/logs/hooks.log"
 export ONEX_HANDOFF_DIR="${ONEX_STATE_DIR}/handoff"
 export ONEX_WORKTREES_DIR="${ONEX_STATE_DIR}/worktrees"
 
@@ -92,10 +98,10 @@ onex_maybe_rotate_log() {
     n=$(( n + 1 ))
     if (( n >= 16 )); then
         n=0
-        printf '%s\n' "$n" > "$tick_file" 2>/dev/null || true
+        { printf '%s\n' "$n" > "$tick_file"; } 2>/dev/null || true
         onex_rotate_log_if_over "$file" || true
     else
-        printf '%s\n' "$n" > "$tick_file" 2>/dev/null || true
+        { printf '%s\n' "$n" > "$tick_file"; } 2>/dev/null || true
     fi
     return 0
 }

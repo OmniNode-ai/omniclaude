@@ -1014,6 +1014,57 @@ def test_the_lab_class_gate_refuses_an_unknown_class(
     assert _cli(root, vocab, "--only-classes", "lab-confgi") == 2
 
 
+def test_the_vocabulary_defaults_to_omni_hygiene_vocab_path(
+    tmp_path: Path,
+    vocab: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("OMNI_HYGIENE_VOCAB_PATH", str(vocab))
+    root = _make_repo(tmp_path / "r", {"src/x.txt": f"contact {PERSON}\n"})
+    argv = ["--repo-root", str(root)]
+    assert gate.main(argv) == 1
+    assert "person-name" in capsys.readouterr().out
+    (root / "src" / "x.txt").write_text("hello\n", encoding="utf-8")
+    assert gate.main(argv) == 0
+
+
+def test_no_vocabulary_and_no_env_refuses_even_with_omni_home(
+    tmp_path: Path,
+    vocab: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("OMNI_HYGIENE_VOCAB_PATH", raising=False)
+    workspace_root = tmp_path / "workspace"
+    registry_vocab = (
+        workspace_root
+        / "docs"
+        / "workflows"
+        / "_shared"
+        / "public_repo_hygiene_vocabulary.yaml"
+    )
+    registry_vocab.parent.mkdir(parents=True)
+    registry_vocab.write_bytes(vocab.read_bytes())
+    monkeypatch.setenv("OMNI_HOME", str(workspace_root))
+    root = _make_repo(tmp_path / "r", {"src/x.txt": "hello\n"})
+    assert gate.main(["--repo-root", str(root)]) == 2
+    assert "OMNI_HYGIENE_VOCAB_PATH is not set" in capsys.readouterr().err
+
+
+def test_omni_hygiene_vocab_path_naming_no_file_refuses(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("OMNI_HYGIENE_VOCAB_PATH", str(tmp_path / "missing.yaml"))
+    root = _make_repo(tmp_path / "r", {"src/x.txt": "hello\n"})
+    assert gate.main(["--repo-root", str(root)]) == 2
+    assert "THE GATE DID NOT RUN" in capsys.readouterr().err
+    monkeypatch.setenv("OMNI_HYGIENE_VOCAB_PATH", str(tmp_path))
+    assert gate.main(["--repo-root", str(root)]) == 2
+
+
 def test_the_lab_vocabulary_defaults_beside_the_vocabulary(
     tmp_path: Path, vocab: Path
 ) -> None:

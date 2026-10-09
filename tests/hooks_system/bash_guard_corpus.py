@@ -81,6 +81,9 @@ _WORKSPACE_NAME_RE = re.compile(r"\b" + _WORKSPACE_NAME + r"\b")
 # The workspace root's environment variable name, which also names the
 # private registry, likewise: {WSENV} in the corpus and in every record.
 _WORKSPACE_ENV_RE = re.compile(r"\b" + _WORKSPACE_ENV + r"\b")
+# A private repository a remedy names (OMN-18936): the hygiene gate refuses its
+# literal name on any added line, so a re-recorded refusal writes {INTERNAL_NAME}.
+_INTERNAL_NAME_RE = re.compile(r"\b" + "omnibase" + "_internal" + r"\b")
 
 
 @dataclass(frozen=True)
@@ -123,6 +126,7 @@ class Workspace:
         for path, name in pairs:
             text = text.replace(path, name)
         text = _WORKSPACE_ENV_RE.sub("{WSENV}", text)
+        text = _INTERNAL_NAME_RE.sub("{INTERNAL_NAME}", text)
         return _WORKSPACE_NAME_RE.sub("{WS_NAME}", text)
 
 

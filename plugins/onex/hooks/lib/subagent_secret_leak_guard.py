@@ -49,8 +49,8 @@ fast." Concretely:
 
 The hook's own output (additionalContext) NEVER echoes the matched secret,
 the redacted message, or the raw message -- only a verdict, a match count,
-and a generic instruction. additionalContext becomes part of the transcript
-too, so it must be safe to emit unconditionally.
+pattern IDs, line numbers and a redaction instruction. additionalContext
+becomes part of the transcript too, so it must be safe to emit unconditionally.
 
 Refs: OMN-15062.
 """
@@ -64,7 +64,7 @@ from enum import StrEnum
 from typing import Any
 
 from extract_last_assistant_message_utils import _extract_last_assistant_message
-from secret_redactor import redact_secrets_with_count
+from secret_redactor import SECRET_PATTERNS, redact_secrets_with_count
 
 
 class EnumSecretGuardVerdict(StrEnum):
@@ -85,6 +85,7 @@ class ModelSecretGuardResult:
     verdict: EnumSecretGuardVerdict
     redacted_count: int
     reason: str
+    locations: tuple[str, ...] = ()
 
 
 def scan_stop_event(stop_event: dict[str, Any]) -> ModelSecretGuardResult:
@@ -117,6 +118,33 @@ def scan_stop_event(stop_event: dict[str, Any]) -> ModelSecretGuardResult:
 
     try:
         result = redact_secrets_with_count(message)
+        # IDs describe rules, never captured labels or values. Scan the original
+        # message for line positions: prior replacements can change offsets.
+        pattern_ids = (
+            "openai-key",
+            "aws-access-key",
+            "github-pat",
+            "github-oauth",
+            "slack-token",
+            "stripe-key",
+            "google-api-key",
+            "jwt",
+            "private-key",
+            "bearer-token",
+            "url-password",
+            "labelled-secret",
+            "secret-key-name",
+            "prose-credential",
+        )
+        locations = tuple(
+            dict.fromkeys(
+                f"pattern={pattern_id} line={message.count(chr(10), 0, match.start()) + 1}"
+                for pattern_id, (pattern, _) in zip(
+                    pattern_ids, SECRET_PATTERNS, strict=True
+                )
+                for match in pattern.finditer(message)
+            )
+        )[:8]
     except Exception:  # noqa: BLE001 - fail SAFE: assume unsafe, never pass through
         return ModelSecretGuardResult(
             verdict=EnumSecretGuardVerdict.BLOCK,
@@ -129,6 +157,7 @@ def scan_stop_event(stop_event: dict[str, Any]) -> ModelSecretGuardResult:
             verdict=EnumSecretGuardVerdict.BLOCK,
             redacted_count=result.redacted_count,
             reason="secret_pattern_matched",
+            locations=locations,
         )
 
     return ModelSecretGuardResult(
@@ -166,8 +195,8 @@ def _hook_output(result: ModelSecretGuardResult) -> dict[str, Any]:
     }
     if result.verdict is EnumSecretGuardVerdict.BLOCK:
         envelope["hookSpecificOutput"]["additionalContext"] = (
-            f"SubagentStop secret-leak guard: {result.reason} "
-            f"(matches={result.redacted_count}). "
+            f"SubagentStop secret-leak guard: {'; '.join(result.locations[:8])} "
+            f"{result.reason} (matches={result.redacted_count}). "
             "Final message appears to contain a credential/secret. "
             "Redact it (describe it, e.g. 'the Postgres password', never "
             "quote the value) and finish again."

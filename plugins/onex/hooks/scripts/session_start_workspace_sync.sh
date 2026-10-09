@@ -5,7 +5,7 @@
 # SessionStart workspace-sync line (OMN-17190)
 # ============================================
 #
-# Prints ONE line at session start:
+# Prints the workspace verdict and, when installed, the host-drift verdict:
 #
 #     [workspace-sync] clones/venv: in sync as of 2026-08-30T14:52:11Z
 #     [workspace-sync] DRIFT: omnimarket not pulled (dirty or non-ff) as of ...
@@ -17,9 +17,14 @@
 # Same failure class as the session goal being invisible until recalled
 # (OMN-17168, session_start_goal_surface.sh).
 #
+# OMN-17427: lab hosts drifted from merged state for 36 hours with nothing
+# paying attention. The scheduled check publishes bus events; this line is
+# the operator-facing alert surface at session start. No Slack.
+#
 # Contract
 # --------
-#   Reads:   $ONEX_HOOKS_STATE_DIR/workspace-reconcile.status  (only)
+#   Reads:   $ONEX_HOOKS_STATE_DIR/workspace-reconcile.status
+#            $ONEX_HOOKS_STATE_DIR/host-drift.status (when present)
 #   Writes:  stdout only.
 #   Blocks:  never. Exit 0 on every path, including a missing status file.
 #
@@ -28,7 +33,10 @@
 # Deriving this live means `git rev-parse` per clone plus a `uv sync --check`
 # per venv -- seconds, measured, on a path contracted to be fast. So the tick
 # (workspace_reconcile_tick.sh) does the work on its own schedule and leaves a
-# one-line verdict; this hook prints it. The cost here is one `cat`.
+# one-line verdict; this hook prints it. Host drift likewise comes from the
+# scheduled check_host_drift operation, every 15 minutes; its verdict becomes
+# an ALERT after 35 minutes without a report. Reading it adds one bash read
+# and one mtime probe, sharing the current clock with the workspace verdict.
 #
 # The obvious risk of reading a cached verdict is reporting a stale "in sync"
 # as if it were current, so the age is ALWAYS printed and a verdict older than
@@ -95,7 +103,7 @@ source "${_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 # running session, fleet-wide, for at least three days.
 #
 # This line said "clones/venv: in sync" throughout, and it was not lying: the
-# reconciler it quotes (omnibase_infra/scripts/reconcile-host.sh) checks
+# reconciler it quotes (onex-host-reconcile, formerly omnibase_infra/scripts/reconcile-host.sh) checks
 # core.bare through its clone-health verifier, but only over
 # SIBLING_CLONE_MANIFEST -- omnibase_infra, omnibase_core, omnibase_spi,
 # omnibase_compat, omnimarket. That is the runtime-image sibling set.
@@ -203,6 +211,56 @@ _load_path_alarm() {
 # Never let a probe of the load path break the line that reports it.
 _load_path_alarm || true
 
+# --------------------------------------------------------------------------- #
+# A journal nothing drains (OMN-17427)
+# --------------------------------------------------------------------------- #
+#
+# Every hook emit appends to the local journal and returns; the resident drainer
+# is the only thing that publishes it. The drainer is installed by hand
+# (scripts/install-hook-emit-drainer.sh, "the operator's deploy step") and no
+# bring-up path runs that step, so a host that never had it run keeps hooking
+# normally while nothing it records ever reaches the bus.
+#
+# Measured, 2026-10-07: h202 carried 38,653 pending records, the oldest from
+# 2026-09-30, with no unit file on disk, while h201 -- where the installer had
+# been run -- drained. Nothing on h202 said so: the journal is bounded, so it
+# drops its oldest records rather than failing, and the emit path stays green.
+#
+# Absent the installed definition AND a record in the journal is the cheap,
+# unambiguous half of that state: one stat on a healthy host, and a `find` that
+# stops at the first record only on a host that is already wrong. It is not
+# "the drainer is down" (that needs a process check this budget cannot pay for)
+# and it does not read the installed unit's content; it only refuses to let the
+# never-installed case be silent. Like the load-path alarm it sits above the
+# session-intent gate: quiet buys no silence from a host losing its telemetry.
+_drainer_alarm() {
+    local label="ai.omninode.hook-emit-drainer" definition journal
+    case "${OSTYPE:-}" in
+        darwin*) definition="${HOME}/Library/LaunchAgents/${label}.plist" ;;
+        *) definition="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/${label}.service" ;;
+    esac
+    [[ -e "$definition" ]] && return 0
+
+    if [[ -n "${ONEX_HOOK_EMIT_JOURNAL_DIR:-}" ]]; then
+        journal="$ONEX_HOOK_EMIT_JOURNAL_DIR"
+    elif [[ -n "${ONEX_STATE_DIR:-}" ]]; then
+        journal="${ONEX_STATE_DIR}/hook_emit_journal"
+    else
+        journal="${HOME}/.onex_state/hook_emit_journal"
+    fi
+    [[ -d "$journal" ]] || return 0
+    [[ -n "$(find "$journal" -maxdepth 1 -name '*.json' -print -quit 2>/dev/null)" ]] || return 0
+
+    say "ALARM: hook events are journalled on this host and nothing publishes them."
+    say "  The drainer is not installed (missing: ${definition}), so the journal"
+    say "  only grows -- and drops its oldest records at its bound."
+    say "    journal: $journal"
+    say "    repair:  bash \"\$OMNI_HOME/omniclaude/scripts/install-hook-emit-drainer.sh\""
+    say "  Then check it publishes: install-hook-emit-drainer.sh --status shows Pending falling."
+    return 0
+}
+_drainer_alarm || true
+
 # Session intent (OMN-18368): under `quiet` and `tick` this hook prints nothing
 # further. The routine one-line verdict is status output, and a session opened
 # to re-authenticate asked for none.
@@ -228,6 +286,42 @@ fi
 
 _STATE_DIR="${ONEX_HOOKS_STATE_DIR:-${HOME}/.onex_state/hooks}"
 _STATUS="${_STATE_DIR}/workspace-reconcile.status"
+_now=""
+
+# Called only below the same mode/intent gates as the workspace verdict.
+_print_host_drift() {
+    local status="${_STATE_DIR}/host-drift.status" line="" mtime age_min
+    local _PREFIX="[host-drift]"
+    [[ -f "$status" && -r "$status" ]] || return 0
+    IFS= read -r line 2>/dev/null < "$status" || true
+    [[ -n "$line" ]] || return 0
+
+    # Same mtime semantics as the workspace block. Select the platform's stat
+    # syntax directly so the added verdict costs only one mtime call.
+    case "${OSTYPE:-}" in
+        darwin*) mtime="$(stat -f %m "$status" 2>/dev/null)" ;;
+        *) mtime="$(stat -c %Y "$status" 2>/dev/null)" ;;
+    esac
+    if [[ "$mtime" =~ ^[0-9]+$ ]]; then
+        # Reuse the workspace clock; resolve it here only if that block had
+        # no verdict/mtime and therefore never needed the current time.
+        [[ -n "${_now:-}" ]] || _now="$(date -u +%s)"
+        if [[ "$_now" =~ ^[0-9]+$ ]]; then
+            age_min=$(( ( _now - mtime ) / 60 ))
+            (( age_min < 0 )) && age_min=0
+            if (( age_min > 35 )); then
+                say "$line"
+                say "  (host-drift verdict is ${age_min}m old — the drift check itself has stopped reporting; treat it as an ALERT)"
+            else
+                say "$line (checked ${age_min}m ago)"
+            fi
+            return 0
+        fi
+    fi
+    say "$line"
+    say "  (host-drift verdict age UNKNOWN — the drift check itself has stopped reporting; treat it as an ALERT)"
+    return 0
+}
 
 if [[ ! -r "$_STATUS" ]]; then
     # Honest unknown. Never render "no data" as "in sync" -- that is the exact
@@ -237,28 +331,36 @@ if [[ ! -r "$_STATUS" ]]; then
     say "    $_STATUS"
     say "  To settle it now:"
     say "    bash \$OMNI_HOME/omnibase_infra/scripts/reconcile-workspace-venvs.sh --check"
+    _print_host_drift
     exit 0
 fi
 
 _line="$(head -n1 "$_STATUS" 2>/dev/null)"
-[[ -n "$_line" ]] || exit 0
+if [[ -z "$_line" ]]; then
+    _print_host_drift
+    exit 0
+fi
 
 # Age from the file's own mtime -- the tick rewrites the file every run, so
 # mtime is the verdict's age by construction and needs no parsing.
 _mtime="$(date -u -r "$_STATUS" +%s 2>/dev/null || stat -c %Y "$_STATUS" 2>/dev/null || echo "")"
 if [[ -n "$_mtime" ]]; then
-    _age_min=$(( ( $(date -u +%s) - _mtime ) / 60 ))
+    _now="$(date -u +%s)"
+    _age_min=$(( ( _now - _mtime ) / 60 ))
     (( _age_min < 0 )) && _age_min=0
     if (( _age_min > _STALE_MINUTES )); then
         say "$_line"
         say "  (verdict is ${_age_min}m old — older than ${_STALE_MINUTES}m, so treat it as unproven)"
+        _print_host_drift
         exit 0
     fi
     say "$_line (checked ${_age_min}m ago)"
+    _print_host_drift
     exit 0
 fi
 
 # No readable mtime: age unknown, which must never render as fresh.
 say "$_line"
 say "  (verdict age UNKNOWN — treat it as unproven)"
+_print_host_drift
 exit 0

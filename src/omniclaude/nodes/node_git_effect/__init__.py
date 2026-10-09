@@ -26,10 +26,23 @@ Exported Components:
         HandlerGitSubprocess - Subprocess-based backend implementation
 """
 
-from .handlers import HandlerGitSubprocess
-from .models import ModelGitRequest, ModelGitResult, ModelPRListFilters
-from .node import NodeGitEffect
-from .protocols import ProtocolGitOperations
+import importlib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .handlers import HandlerGitSubprocess
+    from .models import ModelGitRequest, ModelGitResult, ModelPRListFilters
+    from .node import NodeGitEffect
+    from .protocols import ProtocolGitOperations
+
+_EXPORTS = {
+    "NodeGitEffect": "node",
+    "ModelGitRequest": "models.model_git_request",
+    "ModelGitResult": "models.model_git_result",
+    "ModelPRListFilters": "models.model_git_request",
+    "ProtocolGitOperations": "protocols.protocol_git_operations",
+    "HandlerGitSubprocess": "handlers.handler_git_subprocess",
+}
 
 __all__ = [
     # Node
@@ -43,3 +56,13 @@ __all__ = [
     # Handlers
     "HandlerGitSubprocess",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name in _EXPORTS:
+        submodule = _EXPORTS[name]
+        module = importlib.import_module(f"{__name__}.{submodule}")
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

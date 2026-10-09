@@ -1,6 +1,6 @@
 ---
 version: 3.2.0
-description: "Single-command delegation to a model you choose: one you run, or your own provider key. Runs `onex delegate \"<prompt>\"` which builds the payload, dispatches node_delegate_skill_orchestrator, and prints one typed ModelSkillResult[ModelDelegateSkillResponse]. Handled inline — no subagent, no payload file, no cat of workflow_result.json."
+description: "Single-command delegation to a model you choose: one you run, or your own provider key. Runs `onex delegate \"<prompt>\" --json` which builds the payload, dispatches node_delegate_skill_orchestrator, and prints one typed ModelSkillResult[ModelDelegateSkillResponse]. Handled inline — no subagent, no payload file, no cat of workflow_result.json."
 skill_kind: dispatch
 mode: full
 level: basic
@@ -63,13 +63,13 @@ and the command is the same. Three packages, one environment (the pins are decla
 | Package | Provides |
 |---|---|
 | `omnibase-core >= 0.46.8` | the `onex` console script and the `onex.cli` entry-point loader |
-| `omnibase-infra >= 0.38.4` | the `delegate` subcommand, registered into the `onex.cli` group |
+| `omnibase-infra >= 0.38.67` | the `delegate` subcommand, registered into the `onex.cli` group, and its `--json` flag |
 | `omnimarket >= 0.4.205` | `node_delegate_skill_orchestrator`, the node the subcommand dispatches |
 
 Install (this is the command to run):
 
 ```bash
-uv tool install --with 'omnibase-infra>=0.38.4' --with 'omnimarket>=0.4.205' 'omnibase-core>=0.46.8'
+uv tool install --with 'omnibase-infra>=0.38.67' --with 'omnimarket>=0.4.205' 'omnibase-core>=0.46.8'
 ```
 
 All three come from PyPI. There is no source checkout to clone and no workspace variable to
@@ -83,7 +83,7 @@ Claude Code again from that new window so it can find `onex`.
 With `pipx` instead of `uv`:
 
 ```bash
-pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.4' 'omnimarket>=0.4.205'
+pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.67' 'omnimarket>=0.4.205'
 ```
 
 Then, once per machine, give it an identity and a model (quickstart steps 2 and 3):

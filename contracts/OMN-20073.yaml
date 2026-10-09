@@ -1,0 +1,71 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20073"
+title: "Repo-owned DoD evidence caller for omniclaude, S5 shadow count"
+summary: "omniclaude owns its DoD evidence contract and delegates verification to the receipt-gate reusable in caller-evidence mode, with the OCC difference step on, so every pull request records the new-path verdict beside OCC's verdict on the same head. The caller runs in shadow mode so no repo-evidence check-run concludes anything but success and CI Summary's default-deny external sweep stays green with no exclusion. A focused test checks the base-branch caller wiring, proves the sweep, and checks that every repo contract that declares binds_ac binds each criterion to an existing pytest test file."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-repo-evidence-gate"
+    statement: |-
+      omniclaude must wire a base-branch caller evidence gate that runs beside OCC, and bind every repo-owned acceptance criterion to runnable test evidence.
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: omniclaude carries a caller workflow for the receipt-gate's caller-evidence mode that runs from the base branch (pull_request_target), pins the reusable by full sha and sets evidence-source caller -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k workflow_shape
+      - id: "AC2"
+        statement: |-
+          AC2: the caller sets compare-with-occ to "true" with a verifier-version that ships the occ-difference classifier, so the S5 shadow count records the new-path verdict beside OCC's -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s5_shadow_count
+      - id: "AC3"
+        statement: |-
+          AC3: every acceptance criterion of every contracts/OMN-*.yaml in omniclaude that declares binds_ac is bound to a test_passes item whose pytest selector names a test file that exists -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k contract_binds
+      - id: "AC4"
+        statement: |-
+          AC4: the caller sets shadow to "true", and with that caller present evaluate_external_sweep reports no failure for repo-evidence / verify and repo-evidence / dod-verify (including a row that carries a planted OCC disagreement) with no entry added to EXTERNAL_SWEEP_EXCLUSIONS or CONDITIONAL_SWEEP_EXCLUSIONS, while a skipped verify or a failed dod-verify still fails the sweep -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k external_sweep
+evidence_requirements:
+  - kind: "tests"
+    description: "The caller workflow has the required base-branch trigger, immutable pin, inputs and read-only permissions."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k workflow_shape"
+  - kind: "tests"
+    description: "The caller turns the OCC difference step on with a verifier that ships it."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s5_shadow_count"
+  - kind: "tests"
+    description: "Every repo-owned contract that declares binds_ac binds each criterion to test evidence in an existing test file."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k contract_binds"
+  - kind: "tests"
+    description: "The sweep stays green with the shadow caller present, still refuses non-success repo-evidence rows, and needs no exclusion."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k external_sweep"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-repo-evidence-ac1"
+    description: "The focused workflow test proves the caller's base-branch trigger, full-SHA reusable pin and caller-evidence input."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k workflow_shape"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-repo-evidence-ac2"
+    description: "The focused workflow test proves the caller compares with OCC and pins a verifier that ships the difference classifier."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s5_shadow_count"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-repo-evidence-ac3"
+    description: "The contract binding test proves every repo contract that declares binds_ac binds each criterion to test evidence in an existing test file."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k contract_binds"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-repo-evidence-ac4"
+    description: "The sweep tests prove CI Summary's external sweep stays green with the shadow caller and needs no exclusion."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k external_sweep"
+        cwd: "${OMNI_HOME}/omniclaude"

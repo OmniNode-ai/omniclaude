@@ -346,7 +346,10 @@ def test_evaluate_allows_owner_and_refuses_peer(tmp_path: Path) -> None:
     command = "gh pr close 2019 --repo OmniNode-ai/omniclaude"
 
     owner = evaluate_command(
-        command, claims_dir=claims, env={"ONEX_LANE_ID": LANE_A}, cwd=tmp_path
+        command,
+        claims_dir=claims,
+        env={"ONEX_LANE_ID": LANE_A, "ONEX_RUN_ID": "run-1"},
+        cwd=tmp_path,
     )
     peer = evaluate_command(
         command, claims_dir=claims, env={"ONEX_LANE_ID": LANE_B}, cwd=tmp_path
@@ -412,7 +415,7 @@ def test_expired_claim_does_not_strand_the_pr_forever(tmp_path: Path) -> None:
     fresh = evaluate_command(
         "gh pr close 2019 --repo OmniNode-ai/omniclaude",
         claims_dir=claims,
-        env={"ONEX_LANE_ID": LANE_B},
+        env={"ONEX_LANE_ID": LANE_B, "ONEX_RUN_ID": "run-1"},
         cwd=tmp_path,
     )
     assert fresh[0].allowed is True

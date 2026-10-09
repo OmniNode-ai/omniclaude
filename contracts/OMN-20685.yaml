@@ -1,0 +1,46 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20685
+title: "Route Git admission through the existing Git effect node"
+summary: >
+  Step 1 of 2: the shared-tree, dirty-restore and lane-fetch admission guard and
+  its shell tokenizer move from the hook library into the existing
+  node_git_effect package, unchanged in behaviour and with no contract binding,
+  so the node stays in the canonical handler-shape baseline. The hook script
+  runs the relocated module. Step 2 binds the admission_check operation in the
+  node contract with the hand-flip proof the ratchet requires.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Relocated guard matches the pre-relocation golden and its suites pass"
+    command: "uv run pytest tests/hooks/test_git_admission_parity.py tests/hooks/test_shared_tree_git_guard.py tests/hooks/test_dirty_path_restore_guard.py tests/hooks/test_git_fetch_guard.py -q"
+  - kind: tests
+    description: "The hook refusal recorder decides every recorded refusal's row through omnimarket's node_hook_refusal_row_compute and matches the recorded rows"
+    command: "uv run pytest tests/hooks/test_refusal_rows_omn18946.py -q"
+  - kind: tests
+    description: "node_hook_refusal_record_effect records the same rows, rate-limit state, extracted details and lanes as the standalone recorder it replaced"
+    command: "uv run pytest tests/hooks/test_hook_refusal_effect_parity.py tests/hooks/test_refusal_recorder_state_omn20265.py tests/hooks/test_refusal_row_lane_omn19381.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-git-admission-parity
+    description: "Relocated admission guard returns the pre-relocation guard's recorded verdict for every corpus case"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_git_admission_parity.py -q"
+  - id: dod-hook-refusal-row-parity
+    description: "The repointed hook refusal recorder yields the pre-repoint recorder's row and dedupe key for every recorded refusal"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_refusal_rows_omn18946.py -q"
+  - id: dod-hook-refusal-effect-parity
+    description: "The node's handler replays the recorded scenarios of the old recorder and lane resolver with identical exit codes, rows, state and lanes"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_hook_refusal_effect_parity.py -q"

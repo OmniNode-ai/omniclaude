@@ -46,7 +46,14 @@ OMNICLAUDE_NODES_DIR = (
 # exists so the gate blocks NEW collisions without being permanently red on
 # an already-known, already-tracked one. Remove this entry when OMN-14592
 # resolves the duplicate.
-_KNOWN_COLLISIONS_BASELINE = frozenset({"node_skill_dispatch_engine_orchestrator"})
+#
+# omnimarket 0.4.304 (f6b1af76bb9f) began shipping node_manifest_fetch_effect,
+# which omniclaude already declares under src/omniclaude/nodes/. The sibling
+# lock refresh (OMN-13902) surfaced it; freeze it the same way until one owner
+# is picked.
+_KNOWN_COLLISIONS_BASELINE = frozenset(
+    {"node_skill_dispatch_engine_orchestrator", "node_manifest_fetch_effect"}
+)
 
 
 def _read_contract_name(contract_path: Path) -> str | None:
