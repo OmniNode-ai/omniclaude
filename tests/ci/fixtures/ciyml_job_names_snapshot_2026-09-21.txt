@@ -41,7 +41,7 @@ F5.1 No compact cmd topic
 Golden Chain Integrity
 Golden Chain Live
 Hook System Tests (OMN-20109)
-Hooks System Tests (${{ matrix.split }}/2)
+Hooks System Tests (${{ matrix.split }}/3)
 Kafka Import Guard
 Markdown Link Check
 Merge Test Coverage
