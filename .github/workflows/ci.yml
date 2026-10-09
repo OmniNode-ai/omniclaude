@@ -102,6 +102,8 @@ jobs:
         run: uv run pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
       - name: Verify ledger ruling re-read before publishing (OMN-18645)
         run: uv run pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov
+      - name: Verify hooks shard coverage and report admission (OMN-19681)
+        run: uv run pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov
       - name: Verify Git effect subprocess compatibility
         run: uv run pytest tests/unit/nodes/node_git_effect/test_handler_git_subprocess.py -q --no-cov
 
@@ -2648,8 +2650,11 @@ jobs:
       - name: Run hooks tests
         working-directory: ${{ github.workspace }}
         run: |
+          # OMN-19681: without timings, least_duration interleaves adjacent cases
+          # instead of concentrating the expensive first half on one shard.
           uv run pytest tests/hooks/ -v \
             --splits 2 \
+            --splitting-algorithm least_duration \
             --group ${{ matrix.split }} \
             --cov=src/omniclaude \
             --cov-report=term-missing \
@@ -3599,8 +3604,8 @@ jobs:
           echo "Lowering the bar is an edit to config/skip_count_baseline.yaml."
           echo "================================================================"
           mapfile -t reports < <(find junit-reports -name 'junit-hooks.xml' -type f | sort)
-          if [ "${#reports[@]}" -eq 0 ]; then
-            echo "::error::Hooks System Tests ran but produced no JUnit report to read."
+          if [ "${#reports[@]}" -ne 2 ]; then
+            echo "::error::Hooks System Tests requires both shard reports; found ${#reports[@]}."
             echo "That is an uploader defect, not an empty result -- failing closed."
             exit 1
           fi
