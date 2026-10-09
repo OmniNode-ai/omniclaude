@@ -163,7 +163,6 @@ plugins/onex/hooks/lib/post_tool_use_friction_check.py
 plugins/onex/hooks/lib/post_tool_use_secret_redact_guard.py
 plugins/onex/hooks/lib/pr_body_stamp_guard.py
 plugins/onex/hooks/lib/pr_claim_registry.py
-plugins/onex/hooks/lib/pr_ownership_guard.py
 plugins/onex/hooks/lib/preexisting_fix_lock.py
 plugins/onex/hooks/lib/preflight_reality_check.py
 plugins/onex/hooks/lib/prepush_validator.py

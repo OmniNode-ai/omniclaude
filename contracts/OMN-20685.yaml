@@ -18,6 +18,9 @@ evidence_requirements:
   - kind: tests
     description: "The hook refusal recorder decides every recorded refusal's row through omnimarket's node_hook_refusal_row_compute and matches the recorded rows"
     command: "uv run pytest tests/hooks/test_refusal_rows_omn18946.py -q"
+  - kind: tests
+    description: "node_pr_ownership_guard_effect returns the verdicts, exit codes and claim files of the standalone ownership guard it replaced, for 79 recorded cases"
+    command: "uv run pytest tests/hooks/test_pr_ownership_effect_parity.py tests/unit/hooks/test_pr_ownership_guard.py tests/hooks/test_pr_ownership_guard_cache_layout.py -q"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -35,3 +38,9 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/hooks/test_refusal_rows_omn18946.py -q"
+  - id: dod-pr-ownership-effect-parity
+    description: "The PR ownership node replays the recorded cases of the standalone guard with identical exit codes, verdicts and resulting claim files"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_pr_ownership_effect_parity.py -q"

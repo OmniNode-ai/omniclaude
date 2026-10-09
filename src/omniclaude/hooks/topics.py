@@ -518,6 +518,16 @@ class TopicBase(StrEnum):
     """Emitted when a task reaches a terminal state with a verification verdict."""
 
     # ==========================================================================
+    # PR ownership guard (OMN-20685)
+    # node_pr_ownership_guard_effect command and terminal event.
+    # ==========================================================================
+    PR_OWNERSHIP_CHECK = "onex.cmd.omniclaude.pr-ownership-check.v1"
+    """Command: judge a Bash command's guarded GitHub mutations by lane ownership."""
+
+    PR_OWNERSHIP_CHECKED = "onex.evt.omniclaude.pr-ownership-checked.v1"
+    """Terminal event: the ownership verdict for the command."""
+
+    # ==========================================================================
     # Delegation pipeline topics (OMN-7103)
     # Node-based delegation orchestrator command/event bus topics.
     # ==========================================================================
