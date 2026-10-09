@@ -13,12 +13,14 @@
 # terminal, as a macOS notification, and as a line in the status file, so a
 # failure is never discovered at the end of a long run.
 #
-#   0 Preflight          reads the machine; changes nothing; your model key and the Docker question
+#   0 Preflight          reads the machine; changes nothing; every question is asked here:
+#                        your models and their keys, Docker, and the Mac password
 #   1 Base tools         Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv
 #   2 Workspace          the canonical clones, OMNIBASE_PATH (and legacy OMNI_HOME), PATH
-#   3 onex + model key   dispatch venv, onex, local identity, your own key, one delegation on it
+#   3 onex + models      dispatch venv, onex, local identity, then each model you chose set up
+#                        with `onex models add` and tested with one delegation pinned to it
 #   4 Docker             optional: only if you said yes; Docker Desktop installed, or started
-#                        if stopped, then the local stack on your key
+#                        if stopped, then the local stack on your keys
 #   5 Claude Code        the full onex plugin from your omniclaude clone, and omni and
 #                        onex-overlays when this GitHub login can read omniclaude-internal
 #   6 Verify             the checks for the selected modes, one line each
@@ -34,9 +36,10 @@
 #   --containers         answer the Docker question yes in advance
 #   --no-containers      answer it no in advance
 #                        (neither: the one question is asked after preflight)
-#   --provider NAME      gemini | openrouter | openai | ollama   (default: asked up front).
-#                        Gemini, OpenRouter and OpenAI take your own key; Ollama runs a
-#                        model on this Mac, no key
+#   --provider LIST      one or more of gemini, openrouter, openai, ollama, comma-separated
+#                        (default: asked up front). Gemini, OpenRouter and OpenAI take your
+#                        own key, asked for one at a time; Ollama runs a model on this Mac,
+#                        no key. Delegation chooses among the ones set up
 #   --ollama-model NAME  the model Ollama downloads (default: chosen from this Mac's memory)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else $OMNI_HOME, else ~/code/omni)
 #   --restart            forget completed phases and run every phase again
@@ -108,9 +111,11 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-case "$PROVIDER" in ''|openrouter|gemini|openai|ollama) ;; *)
-  printf 'omninode-dev-setup: --provider must be gemini, openrouter, openai or ollama\n' >&2; exit 2 ;;
-esac
+for _p in $(printf '%s' "$PROVIDER" | tr ',' ' '); do
+  case "$_p" in openrouter|gemini|openai|ollama) ;; *)
+    printf 'omninode-dev-setup: --provider must be gemini, openrouter, openai or ollama (or a comma-separated list of them)\n' >&2; exit 2 ;;
+  esac
+done
 [ -n "$WORKSPACE" ] || { printf 'omninode-dev-setup: --workspace needs a directory\n' >&2; exit 2; }
 
 # ---------------------------------------------------------------------------
@@ -168,13 +173,10 @@ if command -v launchctl >/dev/null 2>&1 && [ "$(launchctl managername 2>/dev/nul
 fi
 [ "${ONBOARD_TEST_NO_GUI:-0}" = "1" ] && GUI_SESSION=0   # test seam: no desktop to ask on
 
-# Questions go to dialogs whenever there is a desktop, so they stand apart from
-# the progress the terminal is printing. Terminal prompts are for a Mac with no
-# desktop (over ssh), or when asked for with ONBOARD_PROMPTS=terminal.
-PROMPT_TTY=0
-if [ "$IS_TTY" -eq 1 ] && { [ "$GUI_SESSION" -eq 0 ] || [ "${ONBOARD_PROMPTS:-}" = "terminal" ]; }; then
-  PROMPT_TTY=1
-fi
+# Every question is asked in the terminal, and all of them in preflight, before
+# anything installs, so they never interleave with the progress that follows.
+# The desktop is used only for the notification when a phase ends.
+PROMPT_TTY=$IS_TTY
 
 notify() { # title message
   [ "$GUI_SESSION" -eq 1 ] || return 0
@@ -376,32 +378,17 @@ brew_bin() {
 }
 
 # ---------------------------------------------------------------------------
-# Privilege and secrets. On a terminal these prompt there; without one (a
-# Claude Code tool call, an ssh session) they use a macOS dialog. A value is
-# held only in a shell variable and handed over on stdin.
+# Privilege and secrets, asked in the terminal. A value is held only in a shell
+# variable and handed over on stdin.
 # ---------------------------------------------------------------------------
-ASKPASS="$RUN_DIR/askpass.sh"
-make_askpass() {
-  cat >"$ASKPASS" <<'SH'
-#!/bin/bash
-/usr/bin/osascript -e 'activate' -e 'display dialog "OmniNode onboarding needs your Mac administrator password to install developer tools." with title "OmniNode onboarding" default answer "" with hidden answer buttons {"Cancel","OK"} default button "OK"' -e 'text returned of result' 2>/dev/null
-SH
-  chmod 700 "$ASKPASS"
-}
-
 SUDO_KEEPALIVE_PID=""
 ensure_sudo() {
   sudo -n true 2>/dev/null && return 0
   if [ "$PROMPT_TTY" -eq 1 ]; then
-    say "  The next step needs your Mac administrator password (asked once, by sudo)."
+    say "  Installing needs your Mac administrator password (asked once, by sudo)."
     sudo -v || return 1
-  elif [ "$GUI_SESSION" -eq 1 ]; then
-    make_askpass
-    export SUDO_ASKPASS="$ASKPASS"
-    say "  A dialog is asking for your Mac administrator password."
-    sudo -A -v || return 1
   else
-    say "  Administrator access is needed and there is no terminal or desktop to ask on."
+    say "  Administrator access is needed and there is no terminal to ask on."
     return 1
   fi
   if [ -z "$SUDO_KEEPALIVE_PID" ]; then
@@ -411,10 +398,20 @@ ensure_sudo() {
   return 0
 }
 
+# Whether the phases ahead install something that needs the administrator
+# password, so preflight asks for it once, with the other questions.
+needs_admin() {
+  if [ -n "${ONBOARD_TEST_NEEDS_ADMIN:-}" ]; then [ "$ONBOARD_TEST_NEEDS_ADMIN" = "1" ]; return; fi
+  xcode-select -p >/dev/null 2>&1 || return 0
+  [ -n "$(brew_bin)" ] || return 0
+  [ "$MODE2_OK" -eq 1 ] && [ "$(docker_state)" = "not installed" ] && return 0
+  return 1
+}
+
 # The developer chose to stop. Only offered before anything installs, so it is
 # true that nothing was installed.
 quit_setup() {
-  PENDING_KEY=""; SECRET=""
+  clear_keys; SECRET=""
   say ""
   say "  Nothing was installed. Run onboarding again when you're ready."
   printf 'phase=0 name="Preflight" result=QUIT\n' >>"$STATUS"
@@ -422,39 +419,16 @@ quit_setup() {
   exit 4
 }
 
-QUIT_REQUESTED=0
-read_secret() { # prompt -> SECRET; QUIT_REQUESTED=1 when the developer chose "Quit setup"
+read_secret() { # prompt -> SECRET, read hidden from the terminal; empty at end of input
   SECRET=""
-  if [ "$PROMPT_TTY" -eq 1 ]; then
-    printf '%s ' "$1"
-    IFS= read -r -s SECRET
-    printf '\n'
-  elif [ "$GUI_SESSION" -eq 1 ]; then
-    # The terminal prompt is indented to line up with the run's output; a dialog is not.
-    SECRET="$(/usr/bin/osascript - "$(printf '%s' "$1" | sed 's/^[[:space:]]*//')" 2>/dev/null <<'OSA'
-on run argv
-  -- ACTIVATE FIRST. Without it the dialog appears without keyboard focus and the
-  -- text field cannot be typed into: the developer sees a locked field and a
-  -- Continue button that returns an empty answer. Click-only dialogs are
-  -- unaffected, which is why this showed up only on the two that take typing.
-  activate
-  try
-    set r to display dialog (item 1 of argv) & return & return & "Your key stays on this Mac, in onex's key store. It is never shown or logged." with title "Your model key" default answer "" with hidden answer buttons {"Quit setup", "Continue"} default button "Continue" cancel button "Quit setup" with icon note
-  on error number -128
-    return "__ONBOARDING_QUIT__"
-  end try
-  return text returned of r
-end run
-OSA
-)"
-    if [ "$SECRET" = "__ONBOARDING_QUIT__" ]; then SECRET=""; QUIT_REQUESTED=1; fi  # pragma: allowlist secret (a quit marker, not a credential)
-  fi
+  printf '%s ' "$1"
+  IFS= read -r -s SECRET || SECRET=""
+  printf '\n'
 }
 
 cleanup() {
   [ -n "$SUDO_KEEPALIVE_PID" ] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
-  rm -f "$ASKPASS" 2>/dev/null
-  SECRET=""; CAPTURED=""; PENDING_KEY=""
+  SECRET=""; CAPTURED=""; clear_keys
   return 0
 }
 trap cleanup EXIT
@@ -462,29 +436,14 @@ trap cleanup EXIT
 # ---------------------------------------------------------------------------
 # In a VM: said once, before any question, so no choice is made without knowing.
 vm_notice() {
-  local a=""
   say ""
   say "  We detected that this Mac is a virtual machine."
   say "  Docker can't run inside a macOS VM, so the local stack isn't offered here."
   say "  Everything else works. A model on this Mac (Ollama) will be slow in a VM;"
   say "  a key (Gemini, OpenRouter or OpenAI) is the better choice."
-  say ""
-  if [ "$PROMPT_TTY" -eq 0 ] && [ "$GUI_SESSION" -eq 1 ]; then
-    a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
-try
-activate
-  display dialog "We detected that this Mac is a virtual machine." & return & return & "Docker can't run inside a macOS VM, so the local stack isn't offered here. Everything else works." & return & return & "A model on this Mac (Ollama) will be slow in a VM; a key (Gemini, OpenRouter or OpenAI) is the better choice." with title "This is a virtual machine" buttons {"Quit setup", "Continue"} default button "Continue" cancel button "Quit setup" with icon note
-on error number -128
-  return "q"
-end try
-return "c"
-OSA
-)"
-    [ "$a" = "q" ] && quit_setup
-  fi
 }
 
-ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag.
+ask_docker() { # note -> 0 yes, 1 no, 2 quit. Asked in the terminal; never a flag.
   local a=""
   say ""
   say "  One optional extra: running the stack on this Mac"
@@ -492,7 +451,7 @@ ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag
   say "  $1" | fold -s -w 84 | sed '2,$s/^/  /'
   say ""
   say "  You're already covered: onex runs your delegations natively on this Mac, on the"
-  say "  model you chose."
+  say "  models you chose."
   say ""
   say "  If you work on runtime, node or projection code, you can also run your own copy"
   say "  of the stack here in Docker: a database, a message broker and the two runtime"
@@ -508,170 +467,242 @@ ask_docker() { # note -> 0 yes, 1 no. On a terminal, else a dialog; never a flag
   say ""
   if [ "$PROMPT_TTY" -eq 1 ]; then
     printf '  Set up the local stack in Docker too? [y/N, q to quit] '
-    IFS= read -r a
-  elif [ "$GUI_SESSION" -eq 1 ]; then
-    a="$(/usr/bin/osascript - "$1" "$DOCKER_MEM_GB" 2>/dev/null <<'OSA'
-on run argv
-  set msg to (item 1 of argv) & return & return & "You're already covered: onex runs your delegations natively on this Mac, on the model you chose." & return & return & "If you work on runtime, node or projection code, you can also run your own copy of the stack here in Docker (a database, a message broker and the runtime kernels), so you can try changes without touching anything shared." & return & return & "What it takes:" & return & "  • about " & (item 2 of argv) & " GB of memory while it runs" & return & "  • about 15 GB of disk" & return & "  • 10-20 minutes the first time" & return & return & "Not sure? Choose Not now. You can add it any time by running onboarding again with --containers."
-  try
-activate
-    set r to display dialog msg with title "Run the stack locally in Docker?" buttons {"Quit setup", "Not now", "Yes, set it up"} default button "Not now" cancel button "Quit setup" with icon note
-  on error number -128
-    return "q"
-  end try
-  if button returned of r is "Yes, set it up" then return "y"
-  return "n"
-end run
-OSA
-)"
-    say "  Set up the local stack in Docker too? ${a:-n} (answered in a dialog)"
+    IFS= read -r a || a=""
   else
-    say "  No terminal or desktop to ask on, so the stack is not run locally (--containers adds it)."
+    say "  No terminal to ask on, so the stack is not run locally (--containers adds it)."
   fi
   case "$a" in y|Y|yes|YES) return 0 ;; q|Q|quit|QUIT) return 2 ;; *) return 1 ;; esac
 }
 
 # ---------------------------------------------------------------------------
-# The model key. Developers bring their own (OpenRouter or Gemini); there
-# is no lab-model fallback. Settled in preflight, before anything installs, so
-# the run never stops mid-way to ask. The key is held only in this process
-# (never exported, logged or written) until phase 3 stores it in onex.
+# Your models: any combination of Gemini, OpenRouter, OpenAI and Ollama, at
+# least one. Delegation chooses among them for each task; the developer never
+# picks one per run. Settled in preflight, before anything installs, so the run
+# never stops mid-way to ask. Each key is held only in this process (never
+# exported, logged or written) until phase 3 hands it to `onex models add` on
+# stdin.
 # ---------------------------------------------------------------------------
-PENDING_KEY=""
-MODEL_CHOICE=""
+ALL_MODELS="gemini openrouter openai ollama"
+MODELS=""     # the chosen models, in menu order, space-separated
+SKIPPED=""    # chosen, then skipped at the key prompt
+STORED=""     # providers an earlier run already stored a key for
+KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""
 
-provider_home() { case "$1" in openrouter) echo "OpenRouter" ;; gemini) echo "Google" ;; openai) echo "OpenAI" ;; *) echo "$1" ;; esac; }
+pending_key() { case "$1" in gemini) printf '%s' "$KEY_GEMINI" ;; openrouter) printf '%s' "$KEY_OPENROUTER" ;; openai) printf '%s' "$KEY_OPENAI" ;; esac; }
+set_pending_key() { case "$1" in gemini) KEY_GEMINI="$2" ;; openrouter) KEY_OPENROUTER="$2" ;; openai) KEY_OPENAI="$2" ;; esac; }
+clear_keys() { KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""; }
+
+uses_key() { case "$1" in gemini|openrouter|openai) return 0 ;; *) return 1 ;; esac; }
+in_list() { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; } # word list
+has_model() { in_list "$1" "$MODELS"; }
+is_stored() { in_list "$1" "$STORED"; }
+drop_model() { local p out=""; for p in $MODELS; do [ "$p" = "$1" ] || out="$out $p"; done; MODELS="${out# }"; }
+keyed_models() { local p out=""; for p in $MODELS; do uses_key "$p" && out="$out $p"; done; echo "${out# }"; }
+count_words() { set -- $1; echo $#; }
+in_menu_order() { local p out=""; for p in $ALL_MODELS; do in_list "$p" "$1" && out="$out $p"; done; echo "${out# }"; }
 
 provider_label() {
   case "$1" in
+    gemini) echo "Gemini" ;;
     openrouter) echo "OpenRouter" ;;
     openai) echo "OpenAI" ;;
-    gemini) echo "Gemini (Google AI Studio)" ;;
-    ollama) echo "Ollama (on this Mac)" ;;
+    ollama) echo "Ollama" ;;
+    anthropic) echo "Anthropic (Claude)" ;;
     *) echo "$1" ;;
   esac
 }
+labels() { local p out=""; for p in $1; do out="$out, $(provider_label "$p")"; done; echo "${out#, }"; }
+a_an() { case "$1" in [AEIOUaeiou]*) echo "an" ;; *) echo "a" ;; esac; }
+key_page() { case "$1" in gemini) echo "aistudio.google.com/apikey" ;; openrouter) echo "openrouter.ai/keys" ;; openai) echo "platform.openai.com/api-keys" ;; esac; }
 
-stored_key_providers() { # every provider an earlier run already stored a key for
+# The provider whose keys start like this one, most specific prefix first (an
+# OpenRouter or Anthropic key also starts with sk-); empty when unknown.
+key_looks_like() {
+  case "$1" in
+    sk-or-*) echo openrouter ;;
+    sk-ant-*) echo anthropic ;;
+    AIza*) echo gemini ;;
+    sk-*) echo openai ;;
+  esac
+}
+
+stored_key_providers() { # every provider an earlier run already stored a key for, one per line
   [ -x "$HOME/.local/bin/onex" ] || return 1
   local p list found=1
   list="$(env -u PYTHONPATH "$HOME/.local/bin/onex" secret list 2>/dev/null)" || return 1
-  for p in openrouter gemini openai; do
+  for p in gemini openrouter openai; do
     printf '%s\n' "$list" | grep -qE "^[[:space:]]+llm\.$p\.api_key[[:space:]]" && { echo "$p"; found=0; }
   done
   return "$found"
 }
 
-# Which stored key a run uses is the developer's choice, never this order: the
-# order below decides only when there is no terminal and no desktop to ask on,
-# and the run says so when it falls back to it.
-stored_key_provider() { # the first stored provider, for the unattended case
-  local first
-  first="$(stored_key_providers | head -n 1)" || return 1
-  [ -n "$first" ] || return 1
-  echo "$first"
+# "1,3,4", "1 3 4", "134" and "4,1,3" all choose the same models; repeats are
+# ignored. Sets MODELS in menu order; 1 when the answer chooses nothing valid.
+parse_model_choice() {
+  local a p i=0 picked=""
+  a="$(printf '%s' "$1" | tr -d ', ')"
+  [ -n "$a" ] || return 1
+  case "$a" in *[!1-4]*) return 1 ;; esac
+  for p in $ALL_MODELS; do
+    i=$((i + 1))
+    case "$a" in *"$i"*) picked="$picked $p" ;; esac
+  done
+  MODELS="${picked# }"
 }
 
-# A stored key is an OFFER, not a decision. A first run on a bare Mac has
-# nothing stored and never reaches this; every later run does, and switching
-# provider is ordinary. Sets MODEL_CHOICE and REUSE_STORED=1 to keep the stored
-# key; leaves REUSE_STORED=0 to fall through to the full model menu.
-REUSE_STORED=0
-offer_stored_key() { # newline-separated stored providers
-  local stored="$1" n a p i
-  n="$(printf '%s\n' "$stored" | grep -c .)"
-  REUSE_STORED=0
-  if [ "$PROMPT_TTY" -eq 1 ]; then
-    say ""
-    say "  Your model"
-    say ""
-    if [ "$n" -eq 1 ]; then
-      say "  This Mac already has your $(provider_label "$stored") key stored."
-      say ""
-      printf '  Use it? [Y/n to choose a different model, q to quit] '
-      IFS= read -r a
-      case "$a" in
-        ''|y|Y|yes|YES) MODEL_CHOICE="$stored"; REUSE_STORED=1 ;;
-        q|Q|quit|QUIT) quit_setup ;;
-      esac
-    else
-      say "  This Mac already has keys stored for:"
-      i=0
-      for p in $stored; do i=$((i + 1)); say "    $i) $(provider_label "$p")"; done
-      say "    n) choose a different model, or replace one of these keys"
-      say ""
-      printf '  Which one? [1-%s, n, q to quit] ' "$n"
-      IFS= read -r a
-      case "$a" in
-        q|Q|quit|QUIT) quit_setup ;;
-        n|N) ;;
-        ''|*[!0-9]*) ;;
-        *) if [ "$a" -ge 1 ] && [ "$a" -le "$n" ]; then
-             MODEL_CHOICE="$(printf '%s\n' "$stored" | sed -n "${a}p")"; REUSE_STORED=1
-           fi ;;
-      esac
-    fi
-  elif [ "$GUI_SESSION" -eq 1 ]; then
-    a="$(/usr/bin/osascript - "$stored" 2>/dev/null <<'OSA'
-on run argv
-  set stored to paragraphs of (item 1 of argv)
-  set opts to {}
-  repeat with p in stored
-    if length of (p as text) > 0 then set end of opts to "Use my stored " & (p as text) & " key"
-  end repeat
-  set end of opts to "Choose a different model"
-  try
-activate
-    set r to choose from list opts with title "Your model" with prompt "This Mac already has a model key stored. Use it, or choose a different model (which also lets you replace a stored key)." OK button name "Continue" cancel button name "Quit setup"
-  on error number -128
-    return "QUIT"
-  end try
-  if r is false then return "QUIT"
-  return item 1 of r
-OSA
-)"
-    case "$a" in
-      QUIT) quit_setup ;;
-      "Use my stored "*)
-        p="${a#Use my stored }"; MODEL_CHOICE="${p% key}"; REUSE_STORED=1 ;;
+ask_models() { # -> MODELS
+  local a p i=0 note
+  say ""
+  say "  Your models"
+  say ""
+  say "  Choose one or more. Delegation picks among them for each task."
+  say ""
+  for p in $ALL_MODELS; do
+    i=$((i + 1)); note=""
+    is_stored "$p" && note="  (key stored)"
+    [ "$p" = "ollama" ] && ollama_overrides_ours && note="  (set up)"
+    case "$p" in
+      gemini)     say "    $i) Gemini      your key, from aistudio.google.com/apikey$note" ;;
+      openrouter) say "    $i) OpenRouter  your key, from openrouter.ai/keys (its free models need no credit)$note" ;;
+      openai)     say "    $i) OpenAI      your key, from platform.openai.com/api-keys (needs credits)$note" ;;
+      ollama)     say "    $i) Ollama      on this Mac, no key. Slower, especially on Intel; it downloads"
+                  say "                   a model sized to this Mac$note" ;;
     esac
-  else
-    # Nobody to ask: the scan order decides, and the run names what it chose.
-    MODEL_CHOICE="$(printf '%s\n' "$stored" | sed -n 1p)"
-    REUSE_STORED=1
-    say "  No terminal or desktop to ask on, so the stored $(provider_label "$MODEL_CHOICE") key is used"
-    say "  (--provider names another one)."
-  fi
+  done
+  say ""
+  say "    q) quit setup (nothing has been installed yet)"
+  while :; do
+    say ""
+    printf '  Choose one or more, e.g. 1,3,4: '
+    IFS= read -r a || quit_setup
+    case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
+    parse_model_choice "$a" && break
+    say "  Choose at least one, 1 to 4 (for example 1,3), or q to quit."
+  done
+  say ""
+  say "  You chose: $(labels "$MODELS")"
 }
 
-ask_provider() { # -> MODEL_CHOICE, or empty when nobody can be asked
-  local a=""
-  if [ "$PROMPT_TTY" -eq 1 ]; then
-    say ""
-    say "  Your model"
-    say ""
-    say "  Delegations run on a model you choose:"
-    say "    1) Gemini      - your Google AI Studio key, from aistudio.google.com/apikey"
-    say "    2) OpenRouter  - your openrouter.ai key (its free models work with no credit)"
-    say "    3) OpenAI      - your platform.openai.com key (it needs credits on the account)"
-    say "    4) Ollama      - a model on this Mac, no key. Slower than a key, especially on"
-    say "                     Intel, and it downloads a model sized to this Mac"
-    say ""
-    say "    q) quit setup (nothing has been installed yet)"
-    say ""
-    printf '  Which one? Choose 1, 2, 3 or 4: '
-    IFS= read -r a
-    case "$a" in 1) MODEL_CHOICE=gemini ;; 2) MODEL_CHOICE=openrouter ;; 3) MODEL_CHOICE=openai ;; 4) MODEL_CHOICE=ollama ;; q|Q) quit_setup ;; esac
-  elif [ "$GUI_SESSION" -eq 1 ]; then
-    a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
-activate
-set r to choose from list {"Gemini (your Google AI Studio key)", "OpenRouter (your key)", "OpenAI (your key; needs credits)", "Ollama (on this Mac, no key)"} with title "Your model" with prompt "Delegations run on a model you choose. Gemini, OpenRouter and OpenAI use your own key. Ollama runs a model on this Mac with no key: slower, especially on Intel, and it downloads a model sized to this Mac." OK button name "Continue" cancel button name "Quit setup"
-if r is false then return "QUIT"
-return item 1 of r
-OSA
-)"
-    case "$a" in Gemini*) MODEL_CHOICE=gemini ;; OpenRouter*) MODEL_CHOICE=openrouter ;; OpenAI*) MODEL_CHOICE=openai ;; Ollama*) MODEL_CHOICE=ollama ;; QUIT) quit_setup ;; esac
+# One hidden prompt per chosen model that takes a key, in menu order, each
+# naming its provider and "n of m". A key already entered in this run is kept,
+# so changing the choice at the summary never asks for it again.
+ask_keys() {
+  local keyed p n=0 total label value looks a
+  keyed="$(keyed_models)"
+  total="$(count_words "$keyed")"
+  [ "$total" -gt 0 ] || return 0
+  say ""
+  say "  Your keys stay on this Mac, in onex's key store. They are never shown or logged,"
+  say "  and each is only ever sent to its own provider."
+  for p in $keyed; do
+    n=$((n + 1)); label="$(provider_label "$p")"
+    if [ -n "$(pending_key "$p")" ]; then
+      say "  $label key ($n of $total): already entered."
+      continue
+    fi
+    while :; do
+      say ""
+      if is_stored "$p"; then
+        read_secret "  $label key ($n of $total) — stored; press Enter to keep it, or paste a new one (input is hidden):"
+        if [ -z "$SECRET" ]; then say "  Keeping your stored $label key."; break; fi
+      else
+        read_secret "  $label key ($n of $total) — paste it from $(key_page "$p") (input is hidden):"
+      fi
+      value="$SECRET"; SECRET=""
+      if [ -z "$value" ]; then
+        printf '  No key entered. Skip %s for now? [Y = skip, n = try again] ' "$label"
+        IFS= read -r a || quit_setup
+        case "$a" in n|N|no|NO) continue ;; esac
+        drop_model "$p"; SKIPPED="${SKIPPED:+$SKIPPED }$p"
+        say "  Skipped $label. Add it any time: onex models add $p"
+        break
+      fi
+      looks="$(key_looks_like "$value")"
+      if [ -n "$looks" ] && [ "$looks" != "$p" ]; then
+        value=""
+        say "  ✗ That looks like $(a_an "$(provider_label "$looks")") $(provider_label "$looks") key, not $(a_an "$label") $label key."
+        continue
+      fi
+      set_pending_key "$p" "$value"; value=""
+      say "  $label key received."
+      break
+    done
+  done
+}
+
+confirm_models() { # 0 continue, 1 change the choice; q quits
+  local p a
+  say ""
+  say "  Ready to set up:"
+  for p in $MODELS; do
+    if [ "$p" = "ollama" ]; then
+      if ollama_overrides_ours; then say "    Ollama      already set up on this Mac"
+      else say "    Ollama      no key; downloads a model sized to this Mac's $(ram_gb) GB of memory"; fi
+    elif [ -n "$(pending_key "$p")" ]; then
+      say "    $(printf '%-11s' "$(provider_label "$p")") key received"
+    else
+      say "    $(printf '%-11s' "$(provider_label "$p")") your stored key"
+    fi
+  done
+  for p in $SKIPPED; do say "    $(printf '%-11s' "$(provider_label "$p")") skipped (no key)"; done
+  say ""
+  printf '  Continue? [Y = yes, c = change, q = quit] '
+  IFS= read -r a || quit_setup
+  case "$a" in
+    c|C|change|CHANGE) return 1 ;;
+    q|Q|quit|QUIT) quit_setup ;;
+  esac
+  return 0
+}
+
+# With no terminal there is nobody to ask: --provider names the models, else
+# every stored key (and Ollama, when an earlier run set it up) is used. A model
+# that needs a key and has none stops the run before anything installs.
+settle_models_unattended() {
+  local p missing=""
+  if [ -z "$MODELS" ]; then
+    MODELS="$STORED"
+    ollama_overrides_ours && MODELS="$MODELS ollama"
+    MODELS="$(in_menu_order "$MODELS")"
   fi
+  for p in $(keyed_models); do is_stored "$p" || missing="$missing $p"; done
+  if [ -z "$MODELS" ] || [ -n "$missing" ]; then
+    FAILED_STEP="choose your models"
+    if [ -n "$missing" ]; then LAST_ERR="no key is stored for$missing, and there is no terminal to ask for one on"
+    else LAST_ERR="no model was chosen, and there is no terminal to ask on"; fi
+    phase_fail "run this in Terminal, or pass --provider with models whose keys are stored, or ollama. Nothing was installed"
+  fi
+  say "  No terminal to ask on, so these models are used: $(labels "$MODELS")."
+}
+
+settle_models() {
+  STORED="$(stored_key_providers 2>/dev/null | tr '\n' ' ')"; STORED="${STORED% }"
+  [ -z "$PROVIDER" ] || MODELS="$(in_menu_order "$(printf '%s' "$PROVIDER" | tr ',' ' ')")"
+  if [ "$PROMPT_TTY" -eq 0 ]; then settle_models_unattended; else
+    local asked_by_flag=0
+    [ -n "$MODELS" ] && asked_by_flag=1
+    while :; do
+      if [ "$asked_by_flag" -eq 1 ]; then
+        asked_by_flag=0
+        say ""
+        say "  Your models (from --provider): $(labels "$MODELS")"
+      else
+        ask_models
+      fi
+      SKIPPED=""
+      ask_keys
+      if [ -z "$MODELS" ]; then
+        say ""
+        say "  Every model was skipped. Choose at least one."
+        continue
+      fi
+      confirm_models && break
+    done
+    # Keys for models dropped at the summary are forgotten here.
+    local p
+    for p in gemini openrouter openai; do has_model "$p" || set_pending_key "$p" ""; done
+  fi
+  if has_model ollama; then settle_ollama; fi
 }
 
 # ---------------------------------------------------------------------------
@@ -786,50 +817,6 @@ backends:
 YAML
 }
 
-uses_key() { case "$1" in gemini|openrouter|openai) return 0 ;; *) return 1 ;; esac; }
-
-settle_model_key() {
-  local stored
-  # An earlier run that chose Ollama left its routes in place; they still route first.
-  if [ -z "$PROVIDER" ] && ollama_overrides_ours; then PROVIDER=ollama; fi
-  if [ "$PROVIDER" = "ollama" ]; then
-    MODEL_CHOICE=ollama
-    settle_ollama
-    return 0
-  fi
-  # An explicit --provider is a decision already made, and it reaches the key
-  # prompt even when that provider's key is stored: replacing a key for the
-  # provider you already have is the only way to rotate one.
-  if [ -z "$PROVIDER" ] && stored="$(stored_key_providers)"; then
-    offer_stored_key "$stored"
-    if [ "$REUSE_STORED" -eq 1 ]; then
-      say "  Model key: your $MODEL_CHOICE key is already stored; it will be used."
-      return 0
-    fi
-    MODEL_CHOICE=""
-  fi
-  [ -n "$MODEL_CHOICE" ] || MODEL_CHOICE="$PROVIDER"
-  [ -n "$MODEL_CHOICE" ] || ask_provider
-  if [ -z "$MODEL_CHOICE" ]; then
-    FAILED_STEP="choose your model"
-    LAST_ERR="no model was chosen, and there is no terminal or desktop to ask on"
-    phase_fail "run this in Terminal, or pass --provider gemini|openrouter|openai|ollama. Nothing was installed"
-  fi
-  if [ "$MODEL_CHOICE" = "ollama" ]; then settle_ollama; return 0; fi
-  say ""
-  say "  Your key stays on this Mac, in onex's key store. It is never shown or logged,"
-  say "  and it is only ever sent to $(provider_home "$MODEL_CHOICE")."
-  read_secret "  Paste your $(provider_label "$MODEL_CHOICE") API key (input is hidden):"
-  [ "$QUIT_REQUESTED" -eq 1 ] && quit_setup
-  PENDING_KEY="$SECRET"; SECRET=""
-  if [ -z "$PENDING_KEY" ]; then
-    FAILED_STEP="your model key"
-    LAST_ERR="no key was given; developers bring their own key and the lab's models are not used"
-    phase_fail "get a Google AI Studio, OpenRouter or OpenAI key, or choose Ollama (no key), and run this again. Nothing was installed"
-  fi
-  say "  Model key: received (held in memory; stored in onex in phase 3)."
-}
-
 # ===========================================================================
 # Phase 0: preflight. Reads only.
 # ===========================================================================
@@ -914,11 +901,12 @@ phase0() {
     exit 3
   fi
 
-  # The model comes first: it is the one choice every run needs. Docker is one
-  # question on top of it, asked only when this Mac can run it; the flags answer
-  # either in advance.
+  # Every question is asked here, before anything installs: the models come
+  # first (every run needs at least one), then Docker, asked only when this Mac
+  # can run it (the flags answer it in advance), then its licence terms, then
+  # the administrator password.
   if [ "$PREFLIGHT_ONLY" -eq 0 ] && is_vm; then vm_notice; fi
-  [ "$PREFLIGHT_ONLY" -eq 1 ] || settle_model_key
+  [ "$PREFLIGHT_ONLY" -eq 1 ] || settle_models
 
   local docker_note
   case "$dstate" in
@@ -953,8 +941,16 @@ phase0() {
   else
     SELECTED="native onex. No local Docker:$MODE2_WHY"
   fi
+  if [ "$PREFLIGHT_ONLY" -eq 0 ] && [ "$MODE2_OK" -eq 1 ] && [ "$dstate" = "not installed" ]; then ask_docker_terms; fi
+  if [ "$PREFLIGHT_ONLY" -eq 0 ] && needs_admin; then
+    say ""
+    ensure_sudo || { FAILED_STEP="administrator password"; LAST_ERR="sudo was not given the password"
+      phase_fail "run this again and enter your Mac password when asked. Nothing was installed"; }
+  fi
+  say ""
   say "  Will set up: $SELECTED"
-  uses_key "$MODEL_CHOICE" && say "  Model: your own $(provider_label "$MODEL_CHOICE") key"
+  [ "$PREFLIGHT_ONLY" -eq 1 ] || say "  Models: $(labels "$MODELS")"
+  say "  Everything from here runs without questions."
   phase_pass "$SELECTED"
 }
 AMBIENT_FOUND=""
@@ -1244,33 +1240,6 @@ link_onex() {
   ln -s "$wrapper" "$link"
 }
 
-provider_offered() { # slug -> 0 when onex routes a key for it
-  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$1" <<'PY' 2>>"$LOG"
-import sys
-from omnimarket.routing.byok_provider_backends import resolve_byok_provider_backend
-sys.exit(0 if resolve_byok_provider_backend(sys.argv[1]) is not None else 1)
-PY
-}
-
-provider_endpoints() { # slug -> the endpoint URLs the catalogue routes that provider's keys to (routable plans only)
-  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$1" <<'PY' 2>>"$LOG"
-import sys
-from importlib.resources import files
-import yaml
-doc = yaml.safe_load(files("omnimarket").joinpath("configs/byok_provider_backends.v1.yaml").read_text())
-urls = set()
-def walk(node):
-    if isinstance(node, dict):
-        if node.get("provider") == sys.argv[1] and node.get("endpoint_url") and node.get("customer_routable", True):
-            urls.add(node["endpoint_url"])
-        for v in node.values(): walk(v)
-    elif isinstance(node, list):
-        for v in node: walk(v)
-walk(doc)
-print(" ".join(sorted(urls)))
-PY
-}
-
 key_stored() { onex_run secret list 2>/dev/null | grep -qE "^[[:space:]]+llm\.$1\.api_key[[:space:]]"; }
 
 # A lab-model overrides file an earlier version of this script wrote declares a
@@ -1286,17 +1255,6 @@ retire_lab_model_overrides() {
   else
     say "  ⚠ $f declares a local model; it is used before your key. Remove it if you want the key used."
   fi
-}
-
-# The provider's own words from the latest capture log (a delegation that fails on
-# the provider is retried and ends in a timeout that names none of them).
-provider_error() {
-  local c
-  # shellcheck disable=SC2012  # onex names its capture files; newest-first is what matters
-  c="$(ls -t "$HOME/.onex_state/captures/"*.log 2>/dev/null | head -n 1)"
-  [ -n "$c" ] || return 0
-  grep -A3 'provider response' "$c" | grep -E '"message"' | tail -n 1 |
-    sed -e 's/^[^:]*"message": *"//' -e 's/",\{0,1\} *$//' | cut -c1-300
 }
 
 # receipt_field JSON KEY -> the first value of KEY anywhere in the receipt JSON
@@ -1331,9 +1289,63 @@ stamp_proven_floor() {
     --output "$WORKSPACE/.onex-workspace-floor.json"
 }
 
+# Phase 3 hands each key to `onex models add` on stdin and tests the rest with
+# `onex models test`: both run one delegation pinned to that model's backend,
+# and a pin answered by any other backend fails. Through the dispatch venv's
+# own entrypoint, like delegate_hello: the wrapper refuses until the floor is
+# stamped, after this phase.
+models_cmd() { (cd "$HOME" && env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/onex" models "$@"); }
+
+RES_GEMINI=""; RES_OPENROUTER=""; RES_OPENAI=""; RES_OLLAMA=""
+set_result() { case "$1" in gemini) RES_GEMINI="$2" ;; openrouter) RES_OPENROUTER="$2" ;; openai) RES_OPENAI="$2" ;; ollama) RES_OLLAMA="$2" ;; esac; }
+result_of() { case "$1" in gemini) echo "$RES_GEMINI" ;; openrouter) echo "$RES_OPENROUTER" ;; openai) echo "$RES_OPENAI" ;; ollama) echo "$RES_OLLAMA" ;; esac; }
+passed_models() { local p out=""; for p in $MODELS; do case "$(result_of "$p")" in pass*) out="$out $p" ;; esac; done; echo "${out# }"; }
+
+# result_line provider -> "Gemini  ✓ answered (model)" and the like
+result_line() {
+  local p="$1" r label
+  r="$(result_of "$p")"; label="$(printf '%-11s' "$(provider_label "$p")")"
+  case "$r" in
+    pass:*) echo "$label ✓ answered (${r#pass:})" ;;
+    fail:*) echo "$label ✗ ${r#fail:}" ;;
+    *) echo "$label skipped (no key)" ;;
+  esac
+}
+
+record_model_status() { # provider
+  local r verdict
+  r="$(result_of "$1")"
+  case "$r" in pass:*) verdict=PASS ;; fail:*) verdict=FAIL ;; *) verdict=SKIPPED ;; esac
+  printf 'model=%s result=%s detail="%s"\n' "$1" "$verdict" "$(printf '%s' "${r#*:}" | tr '"' "'")" >>"$STATUS"
+}
+
+setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason>
+  local p="$1" key out err line status
+  err="$RUN_DIR/models.err"
+  key="$(pending_key "$p")"; set_pending_key "$p" ""
+  if [ -n "$key" ]; then
+    out="$(printf '%s' "$key" | models_cmd add "$p" --json 2>"$err")"
+  else
+    out="$(models_cmd test "$p" --json 2>"$err")"
+  fi
+  key=""
+  printf '%s\n' "$out" | grep -vE '^\{' >>"$LOG"
+  cat "$err" >>"$LOG" 2>/dev/null
+  line="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
+  status="$(receipt_field "$line" status)"
+  case "$status" in
+    passed) set_result "$p" "pass:$(receipt_field "$line" model)" ;;
+    failed) set_result "$p" "fail:$(receipt_field "$line" reason | cut -c1-300)" ;;
+    not_set_up) set_result "$p" "fail:no key is stored for it" ;;
+    *) set_result "$p" "fail:$(sed -n 's/^Error: //p' "$err" | tail -n 1 | cut -c1-300)" ;;
+  esac
+  [ "$(result_of "$p")" = "fail:" ] && set_result "$p" "fail:onex models gave no result; see the log"
+  rm -f "$err"
+}
+
 phase3() {
-  phase_start 3 "onex, local identity and your model" "3-10 minutes"
-  local endpoint
+  phase_start 3 "onex, local identity and your models" "3-10 minutes, more when Ollama downloads a model"
+  local p passed
 
   say "  Building the workspace dispatch environment (onex)…"
   retry "build the dispatch venv" nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --proven ||
@@ -1343,6 +1355,8 @@ phase3() {
   ONEX="$HOME/.local/bin/onex"
   step "onex --version" onex_run --version || phase_fail "run 'onex --version' to see why it does not start"
   say "  $(onex_run --version 2>/dev/null | tail -n 1)"
+  step "onex models is available" models_cmd --help ||
+    phase_fail "this onex has no 'onex models' command yet; update the omnimarket clone, then run this again"
 
   if onex_run local identity >/dev/null 2>&1; then
     say "  Local identity: present"
@@ -1351,112 +1365,77 @@ phase3() {
     say "  Local identity: minted"
   fi
 
-  local choice="$MODEL_CHOICE"
-  if [ "$choice" = "ollama" ]; then phase3_ollama; return; fi
-  # The key settled in preflight. No lab-model fallback: without a routable key
-  # the phase fails.
-  if ! provider_offered "$choice"; then
-    PENDING_KEY=""
-    FAILED_STEP="check that onex routes a $choice key"
-    LAST_ERR="this onex's provider catalogue does not offer $choice yet; the key was not stored"
-    phase_fail "update the omnimarket clone, or run this again with another provider (--provider gemini|openrouter|openai|ollama)"
-  fi
-  if [ -n "$PENDING_KEY" ]; then
-    # The CLI checks the key before storing it and refuses one the catalogue
-    # does not allow; its words are shown.
-    local refusal
-    if refusal="$(printf '%s' "$PENDING_KEY" | onex_run secret set --force "llm.$choice.api_key" 2>&1)"; then
-      PENDING_KEY=""
-      printf '%s\n' "$refusal" >>"$LOG"
-      say "  Stored your $choice key in the onex secret store."
-      printf '%s\n' "$refusal" | grep -E '^Model:' | sed 's/^/  /' | tee -a "$LOG"
-    else
-      PENDING_KEY=""
-      printf '%s\n' "$refusal" >>"$LOG"
-      FAILED_STEP="store the $choice key"
-      LAST_ERR="$(printf '%s\n' "$refusal" | grep -E 'Error|refus|not ' | tail -n 3 | tr '\n' ' ' | cut -c1-400)"
-      say "  $LAST_ERR"
-      phase_fail "use a key the message above allows, then run this again with --provider $choice"
+  # Ollama's routes are written before any test: a keyless local model routes
+  # first, so it must be in place for the unpinned check below.
+  if has_model ollama; then
+    if ! setup_ollama; then
+      set_result ollama "fail:$FAILED_STEP: ${LAST_ERR:-see the log}"
+      FAILED_STEP=""; LAST_ERR=""
     fi
-  elif key_stored "$choice"; then
-    say "  Your $choice key is already stored; keeping it."
   else
-    FAILED_STEP="your $choice key"; LAST_ERR="no key is stored and none was given"
-    phase_fail "run this again and paste your key when asked"
+    retire_lab_model_overrides
   fi
-  retire_lab_model_overrides
 
-  say "  Running one delegation…"
-  if ! retry_capture "one onex delegate" delegate_hello; then
-    local perr; perr="$(provider_error)"
-    if [ -n "$perr" ]; then
-      LAST_ERR="$choice said: $perr"
-      phase_fail "fix it on the provider's side (the message above names what), then run this again"
+  say ""
+  for p in $MODELS; do
+    if [ -n "$(result_of "$p")" ]; then :; else
+      say "  Setting up $(provider_label "$p") and running one delegation on it…"
+      setup_model "$p"
     fi
+    say "  $(result_line "$p")"
+  done
+  for p in $SKIPPED; do say "  $(result_line "$p")"; done
+  for p in $MODELS $SKIPPED; do record_model_status "$p"; done
+
+  passed="$(passed_models)"
+  if [ -z "$passed" ]; then
+    FAILED_STEP="set up at least one model"
+    LAST_ERR="none of your models answered its test delegation (the lines above say why)"
+    phase_fail "fix what the lines above name, then run this again, or add a model later with 'onex models add <provider>'"
+  fi
+
+  # One delegation with no pin: delegation chooses the model, as it will for the
+  # developer's own work.
+  say "  Running one delegation without choosing a model…"
+  retry_capture "one onex delegate" delegate_hello ||
     phase_fail "run 'onex delegate \"Reply with exactly one word: hello\"' to see the error"
-  fi
-  endpoint="$(receipt_field "$CAPTURED" endpoint)"
-  # Exact URL, not host: one provider can serve several routes from one host. A
-  # receipt naming any other endpoint (a lab model included) fails the phase.
-  local urls ok=0 p
-  urls="$(provider_endpoints "$choice")"
-  for p in $urls; do [ "$p" = "$endpoint" ] && ok=1; done
-  if [ "$ok" -ne 1 ]; then
-    FAILED_STEP="check the delegation went to your $choice key"
-    LAST_ERR="the receipt names ${endpoint:-no endpoint}, not a $choice route (${urls:-none declared})"
-    phase_fail "the key was stored but did not route; run 'onex secret list' and 'onex delegate --json \"hello\"' to see why"
-  fi
-  say "  Delegation answered by $(receipt_field "$CAPTURED" model) at ${endpoint:-an endpoint the receipt does not name}"
+  say "  Delegation chose $(receipt_field "$CAPTURED" model) ($(receipt_field "$CAPTURED" backend_id))."
   CAPTURED=""
+  [ "$OLLAMA_HEADLESS" -eq 1 ] && say "  Ollama is running without its app here; after a restart, start it with 'ollama serve'."
   step "stamp the proven workspace floor" stamp_proven_floor ||
     phase_fail "see the log; the proven floor could not be written from the dispatch venv"
-  phase_pass "model: your $choice key"
+  phase_pass "$(count_words "$passed") of $(count_words "$MODELS $SKIPPED") models ready: $(labels "$passed")"
 }
 
-phase3_ollama() {
-  step "read the Ollama settings from the workspace's model config" load_ollama_config ||
-    phase_fail "update the omnimarket clone (its model config declares the ollama block), then run this again"
+# Ollama installed and started, its model downloaded and onex's local routes
+# pointed at it. 1 with FAILED_STEP and LAST_ERR set when a step fails, so a
+# failure here costs Ollama alone and the run goes on with the other models.
+setup_ollama() {
+  step "read the Ollama settings from the workspace's model config" load_ollama_config || {
+    LAST_ERR="the omnimarket clone's model config declares no ollama block; update it"; return 1; }
   local need=$((M1_DISK_GB + OLLAMA_DOWNLOAD_GB))
   if ! ollama_has_model "$OLLAMA_MODEL" 2>/dev/null && [ "$(disk_free_gb)" -lt "$need" ]; then
     FAILED_STEP="free disk for $OLLAMA_MODEL"
     LAST_ERR="$(disk_free_gb) GB free; $OLLAMA_MODEL needs about $OLLAMA_DOWNLOAD_GB GB more ($need GB in all)"
-    phase_fail "free some disk, or run this again with --provider gemini, openrouter or openai (a key, no download)"
+    return 1
   fi
   if [ -z "$(ollama_bin)" ]; then
     say "  Installing Ollama (the app; it carries the ollama command)…"
-    retry "install Ollama" install_ollama ||
-      phase_fail "install Ollama from ollama.com/download, then run this again"
-    [ -n "$(ollama_bin)" ] || { FAILED_STEP="find Ollama after installing it"; phase_fail "install Ollama from ollama.com/download, then run this again"; }
+    retry "install Ollama" install_ollama || { LAST_ERR="install it from ollama.com/download"; return 1; }
+    [ -n "$(ollama_bin)" ] || { FAILED_STEP="find Ollama after installing it"; LAST_ERR="install it from ollama.com/download"; return 1; }
   else
     say "  Ollama: present"
   fi
-  step "start Ollama" start_ollama || phase_fail "open the Ollama app once, then run this again"
+  step "start Ollama" start_ollama || { LAST_ERR="open the Ollama app once"; return 1; }
   if ollama_has_model "$OLLAMA_MODEL"; then
     say "  Model $OLLAMA_MODEL: present"
   else
     say "  Downloading $OLLAMA_MODEL (about $OLLAMA_DOWNLOAD_GB GB)…"
-    retry "download $OLLAMA_MODEL" "$(ollama_bin)" pull "$OLLAMA_MODEL" ||
-      phase_fail "run 'ollama pull $OLLAMA_MODEL' to see the error, then run this again"
+    retry "download $OLLAMA_MODEL" "$(ollama_bin)" pull "$OLLAMA_MODEL" || {
+      LAST_ERR="run 'ollama pull $OLLAMA_MODEL' to see the error"; return 1; }
   fi
-  step "point onex's local routes at Ollama" write_ollama_overrides "$OLLAMA_MODEL" ||
-    phase_fail "see the log; $HOME/$OVERRIDES_FILE_REL was not written"
-
-  say "  Running one delegation on $OLLAMA_MODEL (a local model can take a minute)…"
-  retry_capture "one onex delegate" delegate_hello ||
-    phase_fail "run 'onex delegate \"Reply with exactly one word: hello\"' to see the error"
-  local endpoint model
-  endpoint="$(receipt_field "$CAPTURED" endpoint)"; model="$(receipt_field "$CAPTURED" model)"
-  CAPTURED=""
-  if [ "$endpoint" != "$OLLAMA_URL$OLLAMA_CHAT_PATH" ]; then
-    FAILED_STEP="check the delegation went to Ollama"
-    LAST_ERR="the receipt names ${endpoint:-no endpoint}, not $OLLAMA_URL$OLLAMA_CHAT_PATH"
-    phase_fail "a key stored by an earlier run may be routing first; run 'onex delegate --json \"hello\"' to see the route"
-  fi
-  say "  Delegation answered by $model at $endpoint"
-  [ "$OLLAMA_HEADLESS" -eq 1 ] && say "  Ollama is running without its app here; after a restart, start it with 'ollama serve'."
-  step "stamp the proven workspace floor" stamp_proven_floor ||
-    phase_fail "see the log; the proven floor could not be written from the dispatch venv"
-  phase_pass "model: $OLLAMA_MODEL on this Mac (Ollama)"
+  step "point onex's local routes at Ollama" write_ollama_overrides "$OLLAMA_MODEL" || {
+    LAST_ERR="$HOME/$OVERRIDES_FILE_REL was not written"; return 1; }
 }
 
 # accepted_backend JSON -> the backend id of the attempt whose answer was accepted
@@ -1538,27 +1517,27 @@ wait_for_docker() {
   return 1
 }
 
-accept_docker_terms() { # fresh install only, and only with the developer's yes
-  local a="n"
+# Asked in preflight with the other questions, so the install in phase 4 never
+# stops to ask. Docker Desktop's own window asks again later if this is no.
+DOCKER_TERMS=""
+ask_docker_terms() {
+  local a=""
+  say ""
   say "  Docker Desktop requires accepting the Docker Subscription Service Agreement:"
   say "    https://www.docker.com/legal/docker-subscription-service-agreement"
   if [ "$PROMPT_TTY" -eq 1 ]; then
-    printf '  Accept it now? [y/N] '; IFS= read -r a
-  elif [ "$GUI_SESSION" -eq 1 ]; then
-    a="$(/usr/bin/osascript 2>/dev/null <<'OSA'
-activate
-set r to display dialog "Docker Desktop requires accepting the Docker Subscription Service Agreement (docker.com/legal/docker-subscription-service-agreement)." & return & return & "Accept it now? If not, Docker Desktop shows its terms when it starts." with title "Docker's terms" buttons {"Not now", "Accept"} default button "Accept" with icon note
-if button returned of r is "Accept" then return "y"
-return "n"
-OSA
-)"
+    printf '  Accept it now? [y/N] (if not, Docker Desktop shows its terms when it starts) '
+    IFS= read -r a || a=""
   fi
+  case "$a" in y|Y|yes|YES) DOCKER_TERMS=y ;; *) DOCKER_TERMS=n ;; esac
+}
+
+accept_docker_terms() { # fresh install only, and only with the developer's yes from preflight
   # shellcheck disable=SC2024  # the log is the user's own file; only install needs root
-  case "$a" in
-    y|Y|yes|YES) sudo -n /Applications/Docker.app/Contents/MacOS/install --accept-license --user "$(id -un)" >>"$LOG" 2>&1 ;;
-    *) say "  Not accepted here; Docker Desktop will show its terms when it starts." ;;
+  case "$DOCKER_TERMS" in
+    y) sudo -n /Applications/Docker.app/Contents/MacOS/install --accept-license --user "$(id -un)" >>"$LOG" 2>&1 ;;
+    *) say "  Docker's terms were not accepted in preflight; Docker Desktop will show them when it starts." ;;
   esac
-  return 0
 }
 
 restart_docker() {
@@ -1685,13 +1664,16 @@ phase4() {
     say "  The local stack is already there; checking it instead of rebuilding it."
   else
     step "make local-env" make -C "$WORKSPACE/omnibase_infra" local-env || phase_fail "see the log for make local-env's message"
-    if [ "$MODEL_CHOICE" = "ollama" ]; then
+    if in_list ollama "$(passed_models)"; then
       step "point the stack's local model at Ollama" point_bundle_model "http://host.docker.internal:$OLLAMA_PORT$OLLAMA_CHAT_PATH" "$OLLAMA_MODEL" ||
         phase_fail "set model_endpoint and served_model_id in ~/.omnibase/local.bifrost.yaml by hand, then run this again"
     fi
   fi
-  # The key path: the stack serves a tenant of its own and holds your key for it.
-  if uses_key "$MODEL_CHOICE"; then
+  # The key path: the stack serves a tenant of its own and holds your keys for
+  # it. Only keys that answered their test in phase 3 go to the stack.
+  local keyed p
+  keyed="$(for p in $(passed_models); do uses_key "$p" && printf '%s ' "$p"; done)"; keyed="${keyed% }"
+  if [ -n "$keyed" ]; then
     step "give the stack a tenant for your key" ensure_stack_tenant ||
       phase_fail "run 'make tenant-local' in omnibase_infra, then run this again"
   fi
@@ -1703,32 +1685,34 @@ phase4() {
   say "  Waiting for the stack to report healthy (a cold boot takes several minutes)…"
   wait_until "the local stack to become healthy" 900 15 stack_healthy ||
     phase_fail "run 'make status-local' in omnibase_infra; if the main kernel is still provisioning topics, wait and run this again"
-  if uses_key "$MODEL_CHOICE"; then
-    step "register your $MODEL_CHOICE key in the stack's own store" register_key_in_stack "$MODEL_CHOICE" ||
-      phase_fail "run 'make secret-local PROVIDER=$MODEL_CHOICE' in omnibase_infra and paste the key, then run this again"
-    sleep 10   # the tenant credentials projection turns the registration into your route
+  if [ -n "$keyed" ]; then
+    for p in $keyed; do
+      step "register your $(provider_label "$p") key in the stack's own store" register_key_in_stack "$p" ||
+        phase_fail "run 'make secret-local PROVIDER=$p' in omnibase_infra and paste the key, then run this again"
+    done
+    sleep 10   # the tenant credentials projection turns each registration into your route
   fi
   retry_capture "one delegation through the stack" stack_delegate ||
     phase_fail "the stack is up but the delegation failed; see the log"
   local served; served="$(accepted_backend "$CAPTURED")"; CAPTURED=""
-  if [ "$MODEL_CHOICE" = "ollama" ]; then
+  if [ -n "$keyed" ]; then
+    # With a tenant, the stack answers only on that tenant's keys. A delegation
+    # that falls through to another route still reports success, so the
+    # accepted backend is what proves one of your keys was used.
+    local ok=0
+    for p in $keyed; do case "$served" in "byok-$p"*) ok=1 ;; esac; done
+    if [ "$ok" -eq 1 ]; then say "  Answered by one of your keys ($served)."; else
+      FAILED_STEP="check the delegation went to one of your keys"
+      LAST_ERR="the answer came from ${served:-no backend}, not byok-<one of: $keyed>"
+      phase_fail "the keys are registered but did not route; see 'make status-local' and the runtime logs"
+    fi
+  else
     case "$served" in
       local-*) say "  Answered by Ollama on this Mac ($served)." ;;
       *) FAILED_STEP="check the stack's delegation went to Ollama"
          LAST_ERR="the answer came from ${served:-no backend}, not a local route"
          phase_fail "check that Ollama is running and ~/.omnibase/local.bifrost.yaml names it" ;;
     esac
-  elif uses_key "$MODEL_CHOICE"; then
-    # A delegation that falls through to another route still reports success, so
-    # the accepted backend is what proves the key was used.
-    case "$served" in
-      "byok-$MODEL_CHOICE"*) say "  Answered by your $MODEL_CHOICE key ($served)." ;;
-      *) FAILED_STEP="check the delegation went to your $MODEL_CHOICE key"
-         LAST_ERR="the answer came from ${served:-no backend}, not byok-$MODEL_CHOICE"
-         phase_fail "the key is registered but did not route; see 'make status-local' and the runtime logs" ;;
-    esac
-  else
-    say "  Answered by ${served:-an unnamed backend}."
   fi
   phase_pass "stack healthy, one delegation answered (stop it with 'make down-local' from the checkout that started it)"
 }
@@ -1834,7 +1818,7 @@ phase6() {
   check "workspace floor proven (the onex wrapper delegates)" retry "delegate through the workspace wrapper" workspace_floor
   check "a delegation row in the local store" sqlite_rows
   check "onex metering reads it" onex_run metering
-  if [ "$MODEL_CHOICE" = "ollama" ]; then
+  if in_list ollama "$(passed_models)"; then
     check "Ollama answers on this Mac" ollama_up
     check "Ollama has $OLLAMA_MODEL" ollama_has_model "$OLLAMA_MODEL"
   fi
@@ -1852,6 +1836,7 @@ phase6() {
 
 # ===========================================================================
 main() {
+  local p
   say "OmniNode developer onboarding (local runtime). Status file: $STATUS"
   [ "$RESTART" -eq 1 ] && rm -f "$DONE_FILE"
   phase0
@@ -1864,11 +1849,10 @@ main() {
   phase6
   hr
   say "Done. Set up: $SELECTED."
-  if [ "$MODEL_CHOICE" = "ollama" ]; then
-    say "Model: $OLLAMA_MODEL on this Mac, through Ollama (no key)."
-  else
-    say "Model: your own $(provider_label "$MODEL_CHOICE") key."
-  fi
+  say "Your models:"
+  for p in $MODELS $SKIPPED; do say "  $(result_line "$p")"; done
+  say "$(count_words "$(passed_models)") of $(count_words "$MODELS $SKIPPED") models ready. Delegation chooses among them for each task."
+  say "Add or fix one any time: onex models add <gemini|openrouter|openai>; see them all: onex models list"
   say "Next:"
   say "  1. Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect."
   say "  2. Open Claude Code (run 'claude') and sign in with your Anthropic account the first"

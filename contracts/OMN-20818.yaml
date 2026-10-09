@@ -1,0 +1,65 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20818
+title: "Onboarding: choose several models and their keys in one terminal pass"
+summary: >
+  Onboarding asks every question in the terminal, before anything installs:
+  any combination of Gemini, OpenRouter, OpenAI and Ollama (at least one),
+  each key at its own hidden prompt naming the provider, Docker and its terms,
+  and the Mac password. Phase 3 sets up each model with onex models add and
+  reports one result line per model.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-multi-model-onboarding
+    statement: "One onboarding pass sets up any combination of models, asking everything in the terminal up front."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: No question is a macOS dialog: model choice, keys, Docker yes/no, Docker's licence terms and the Mac password are all asked in the terminal. The finish/stop notification stays.
+      - id: "AC2"
+        statement: |-
+          AC2: Every question is asked before anything installs; the Docker licence question moves from mid-run to right after a yes to Docker.
+      - id: "AC3"
+        statement: |-
+          AC3: The developer chooses one or more models by number (`1,3,4`, `1 3 4` or `134`); an empty or out-of-range answer asks again.
+      - id: "AC4"
+        statement: |-
+          AC4: Each key-based model is asked for one at a time at a hidden prompt naming the provider and "n of m"; Ollama gets no key prompt.
+      - id: "AC5"
+        statement: |-
+          AC5: A key that looks like another provider's is refused and asked again, naming the provider it looks like.
+      - id: "AC6"
+        statement: |-
+          AC6: An empty key offers to skip that model; skipping every model asks the choice again.
+      - id: "AC7"
+        statement: |-
+          AC7: A provider with a stored key offers to keep it (Enter) or replace it.
+      - id: "AC8"
+        statement: |-
+          AC8: A summary of the choices is shown before anything installs, with continue, change or quit.
+      - id: "AC9"
+        statement: |-
+          AC9: Each chosen model is set up with `onex models add` and tested with one delegation pinned to it; the run ends with one line per model (pass, failed with the provider's reason, or skipped) and fails only if no model passed.
+      - id: "AC10"
+        statement: |-
+          AC10: Ollama and key-based models can be set up together.
+      - id: "AC11"
+        statement: |-
+          AC11: `--provider` takes a comma-separated list; the skill doc matches.
+evidence_requirements:
+  - kind: tests
+    description: "The onboarding script asks every question in the terminal before installing, takes several models and their keys, and reports one result per model"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_lab_onboarding_proven_set_omn20381.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20818-multi-model-onboarding
+    description: "Several models chosen by number, keys asked one at a time and checked for the wrong provider, skips, stored keys, the summary, Docker terms up front, one result line per model, and phase 4 on every passing key"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_lab_onboarding_proven_set_omn20381.py -q"
+    binds_ac: ["AC1", "AC2", "AC3", "AC4", "AC5", "AC6", "AC7", "AC8", "AC9", "AC10", "AC11"]
