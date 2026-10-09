@@ -100,7 +100,9 @@ _PR_OWNER_REPO_HASH_RE = re.compile(
 # commonly precede the token ("the", "a", "merged", "that") match neither and
 # are rejected, so "Fixed in the PR #2504" stays unresolvable.
 _ANCHOR_WORD_RE = re.compile(r"([A-Za-z][\w.-]*)[^\w]*$")
-_ORG_REPO_NAME_RE = re.compile(r"^(?:omni|onex|knowledge-base)[\w.-]*$", re.IGNORECASE)
+_ORG_REPO_NAME_RE = re.compile(
+    r"^(?:omni|onex|knowledge[-_]base)[\w.-]*$", re.IGNORECASE
+)
 
 # OMN-18749: a CLOSED-unmerged citation can never become merged, so a gate that
 # treats it like an OPEN one holds its ticket forever and recommends the one
