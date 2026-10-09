@@ -27,6 +27,9 @@ import subprocess
 from asyncio.subprocess import PIPE
 from uuid import UUID
 
+from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (
+    ruling_reread_refusal,
+)
 from omniclaude.nodes.node_git_effect.models import (
     GitOperation,
     ModelGitRequest,
@@ -90,6 +93,85 @@ REQUIRED_FIELDS: dict[GitOperation, list[str]] = {
 
 # Regex for extracting PR number/url from gh pr create output
 _PR_URL_RE = re.compile(r"https://github\.com/[^/]+/[^/]+/pull/(\d+)")
+
+# OMN-18782: family matches, never an override vocabulary. A citation belongs
+# to the paragraph making the claim; a PR's unrelated ticket stamp credits none.
+_FAILURE_CLAIM_RE = re.compile(r"\b(?:pre[-\s]?existing|unrelated)\b", re.I)
+_FAILURE_WORD_RE = re.compile(
+    r"\b(?:fail(?:s|ed|ing|ures?)?|errors?|broken)\b"
+    r"|\b(?:CI|checks?|tests?|build)\s+(?:(?:is|are|was|were)\s+)?red\b",
+    re.I,
+)
+_RUN_CITATION_RE = re.compile(
+    r"https://github\.com/[\w.-]+/[\w.-]+/actions/runs/[1-9]\d*(?=[/#?\s)>\]]|$)"
+)
+_FAILURE_TICKET_RE = re.compile(r"\bOMN-[1-9]\d*\b")
+_BISECT_CITATION_RE = re.compile(
+    r"\b(?:bisect(?:ed|ion)?\b[^\n]*\b(?:identified|found|isolated|first bad|to)\b"
+    r"[^\n]*\b[0-9a-f]{7,40}\b|[0-9a-f]{7,40}\b[^\n]*\bfirst bad commit\b)",
+    re.I,
+)
+
+
+def pr_failure_citation_errors(body: str) -> list[str]:
+    """Return actionable diagnostics for uncited failure-claim paragraphs.
+
+    This checks citation presence, not whether evidence proves the assertion.
+    Fenced examples, blockquotes and HTML comments are documentation rather
+    than author assertions, and cannot supply citations to surrounding prose.
+    """
+    body = re.sub(r"<!--.*?-->", "", body, flags=re.S)
+    prose: list[str] = []
+    fence: str | None = None
+    for line in body.splitlines():
+        marker = re.match(r"^\s{0,3}(`{3,}|~{3,})", line)
+        if fence is not None:
+            if re.fullmatch(
+                r"\s{0,3}" + re.escape(fence[0]) + "{" + str(len(fence)) + r",}\s*",
+                line,
+            ):
+                fence = None
+            prose.append("")
+        elif marker:
+            fence = marker.group(1)
+            prose.append("")
+        elif line.lstrip().startswith(">"):
+            prose.append("")
+        else:
+            prose.append(line)
+    errors = []
+    for paragraph in re.split(r"\n\s*\n", "\n".join(prose)):
+        if not (
+            _FAILURE_CLAIM_RE.search(paragraph) and _FAILURE_WORD_RE.search(paragraph)
+        ):
+            continue
+        if any(
+            pattern.search(paragraph)
+            for pattern in (
+                _RUN_CITATION_RE,
+                _BISECT_CITATION_RE,
+                _FAILURE_TICKET_RE,
+            )
+        ):
+            continue
+        errors.append(
+            "Failure-claim paragraph requires a run link, a bisect result with "
+            "a commit, or a ticket specific to this failure:\n" + paragraph.strip()
+        )
+    return errors
+
+
+def _citation_refusal(request: ModelGitRequest) -> ModelGitResult | None:
+    errors = pr_failure_citation_errors(request.pr_body or "")
+    if not errors:
+        return None
+    return ModelGitResult(
+        operation=request.operation.value,
+        status=GitResultStatus.FAILED,
+        error="\n\n".join(errors),
+        error_code="UNCITED_FAILURE_CLAIM",
+        correlation_id=request.correlation_id,
+    )
 
 
 def _inject_ticket_stamp(
@@ -227,6 +309,12 @@ class HandlerGitSubprocess:
             return self._unavailable_result("git", request)
         timeout = OPERATION_TIMEOUTS[request.operation]
         async with self._semaphore:
+            if args and args[0] == "push":
+                refusal = await asyncio.to_thread(
+                    ruling_reread_refusal, os.environ, request.working_directory
+                )
+                if refusal is not None:
+                    return self._ruling_refusal_result(request, refusal)
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "git",
@@ -272,6 +360,12 @@ class HandlerGitSubprocess:
             full_args.extend(["-R", request.repo])
         timeout = OPERATION_TIMEOUTS[request.operation]
         async with self._semaphore:
+            if args[:2] == ["pr", "merge"]:
+                refusal = await asyncio.to_thread(
+                    ruling_reread_refusal, os.environ, request.working_directory
+                )
+                if refusal is not None:
+                    return self._ruling_refusal_result(request, refusal)
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "gh",
@@ -302,6 +396,16 @@ class HandlerGitSubprocess:
                 return self._timeout_result(request, timeout)
 
         return self._parse_git_result(request, proc.returncode, stdout, stderr)
+
+    @staticmethod
+    def _ruling_refusal_result(request: ModelGitRequest, reason: str) -> ModelGitResult:
+        return ModelGitResult(
+            operation=request.operation.value,
+            status=GitResultStatus.FAILED,
+            error=reason,
+            error_code="LEDGER_RULING_UNACKNOWLEDGED",
+            correlation_id=request.correlation_id,
+        )
 
     async def _run_gh_json(
         self, args: list[str], request: ModelGitRequest
@@ -380,6 +484,9 @@ class HandlerGitSubprocess:
 
     async def pr_create(self, request: ModelGitRequest) -> ModelGitResult:
         """Create a pull request with mandatory ticket stamp block."""
+        refusal = _citation_refusal(request)
+        if refusal is not None:
+            return refusal
         # Ticket linkage guard (OMN-6919) — warn if title has no OMN-XXXX
         if request.pr_title and not ModelGitRequest.validate_pr_title_ticket_ref(
             request.pr_title
@@ -423,6 +530,9 @@ class HandlerGitSubprocess:
 
     async def pr_update(self, request: ModelGitRequest) -> ModelGitResult:
         """Update an existing pull request."""
+        refusal = _citation_refusal(request)
+        if refusal is not None:
+            return refusal
         args = ["pr", "edit", str(request.pr_number or 0)]
         if request.pr_title:
             args.extend(["--title", request.pr_title])

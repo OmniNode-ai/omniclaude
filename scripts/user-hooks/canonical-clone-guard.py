@@ -72,6 +72,10 @@ installed to ~/.claude/hooks/ by omniclaude/scripts/install-canonical-clone-guar
 Do not edit the installed copy in place. Decisions are logged to
 $ONEX_STATE_DIR/hooks/canonical-clone-guard.log (default
 $OMNI_HOME/.onex_state/hooks/canonical-clone-guard.log), never under ~/.claude/.
+Each line carries the UTC event time and lane attribution from the existing
+refusal resolver (payload, lane environment, registry or open CLAIM). Sum
+unresolved_refusal_count for refusals that could not name a lane; multiline
+refusals count once, and a worktree-only attribution remains unresolved.
 
 Contract (current Claude Code): to DENY, print
   {"hookSpecificOutput": {"hookEventName": "PreToolUse",
@@ -97,6 +101,27 @@ from pathlib import Path
 from typing import NoReturn
 
 CONVERGE_SCRIPT = "converge-canonical-clone.sh"
+
+# Attribution is resolved once from the hook payload, never from command text.
+_LOG_LANE = ("", "unresolved")
+
+
+def _resolve_log_lane(payload: dict[str, object], cwd: str) -> tuple[str, str]:
+    """Use the recorder's stdlib resolver, also shipped beside the live hook."""
+    with contextlib.suppress(Exception):
+        sibling = Path(__file__).resolve().parent
+        library = sibling.parent.parent / "plugins" / "onex" / "hooks" / "lib"
+        resolver_dir = (
+            sibling if (sibling / "hook_refusal_lane.py").is_file() else library
+        )
+        if not (resolver_dir / "hook_refusal_lane.py").is_file():
+            return "", "unresolved"
+        sys.path.insert(0, str(resolver_dir))
+        import hook_refusal_lane
+
+        return hook_refusal_lane.resolve_refusal_lane(payload, cwd=cwd)
+    return "", "unresolved"
+
 
 # git subcommands that always create local divergence in a clone. Read-only
 # subcommands (status, log, diff, show, fetch, pull, rev-parse, remote, config,
@@ -242,8 +267,15 @@ def _log(msg: str) -> None:
             # OMN-18982: every line is dated, or a morning sweep cannot say
             # which day's refusals it is reading.
             stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-            for line in msg.rstrip("\n").split("\n"):
-                fh.write(f"{stamp} {line}\n")
+            lane, source = _LOG_LANE
+            unattributed = source in {"unresolved", "worktree"}
+            for index, line in enumerate(msg.rstrip("\n").split("\n")):
+                # Count an unattributed refusal once, including multiline commands.
+                count = int(unattributed and index == 0 and msg.startswith("DENY "))
+                fh.write(
+                    f"{stamp} {line} | lane={json.dumps(lane or 'unresolved')}"
+                    f" | lane_source={source} | unresolved_refusal_count={count}\n"
+                )
 
 
 def _deny(reason: str) -> NoReturn:
@@ -1229,6 +1261,7 @@ def _iter_bypass_checks(command: str) -> Iterator[tuple[str, str]]:
 
 
 def main() -> None:
+    global _LOG_LANE
     try:
         raw = sys.stdin.read()
     except Exception:  # noqa: BLE001 — fail open
@@ -1249,6 +1282,7 @@ def main() -> None:
     tool_input = data.get("tool_input", {}) or {}
     cwd = data.get("cwd") or os.getcwd()
     env = dict(os.environ)
+    _LOG_LANE = _resolve_log_lane(data, cwd)
 
     roots: list[str] = []
     roots_error = ""

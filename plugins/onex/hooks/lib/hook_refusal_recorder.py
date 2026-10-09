@@ -73,6 +73,7 @@ and a separate change, not a line here.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -311,11 +312,35 @@ def build_row(
         f"{timestamp} | {ROW_CLASS} | lane={redact(lane) or 'unresolved'} | "
         f"actor=hook | model=none | class=refusal | guard={guard} | "
         f"reason={reason} | lane_source={lane_source} | dedupe={key} | "
+        "refusal_count=1 | "
         f"suppressed_since_last_row={suppressed} | "
         f'detail="{detail}" | existing=OMN-18946 | cost=~1 lane-minute | '
         "This row exists because a hook refusal is otherwise terminal-only "
         "and unaggregated (OMN-18946)"
     )
+
+
+def append_refusal_log(row: str, registry_root: Path | None) -> None:
+    """Record every attempt before ledger deduplication, including unresolved lanes.
+
+    This is the declared guard-sweep surface. Reuse the ledger row's timestamp,
+    redaction and lane resolution rather than producing an unattributed second
+    account of the same refusal in each shell wrapper.
+    """
+    configured = os.environ.get("ONEX_STATE_DIR")
+    if configured:
+        base = Path(configured)
+    elif registry_root is not None:
+        base = registry_root / ".onex_state"
+    else:
+        raise ValueError("OMNI_HOME must name an absolute registry root")
+    if not base.is_absolute():
+        raise ValueError("ONEX_STATE_DIR must be absolute")
+    log = base / "hooks" / "logs" / "hooks.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open("a", encoding="utf-8") as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        stream.write(row + "\n")
 
 
 #: Most of a hook payload read from stdin. A Workflow payload carries the
@@ -556,8 +581,33 @@ def main(argv: list[str] | None = None) -> int:
 
     registry_root = None
     project = None
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     if not args.print_row:
         registry_root = _resolve_registry_root()
+        # An explicit state root can retain the refusal even if the registry
+        # needed by the aggregate writer is unavailable. Never lose both.
+        try:
+            append_refusal_log(
+                build_row(
+                    guard=guard,
+                    reason=reason,
+                    lane=lane,
+                    lane_source=lane_source,
+                    detail=detail,
+                    key=key,
+                    suppressed=0,
+                    timestamp=timestamp,
+                ),
+                registry_root,
+            )
+        except (OSError, ValueError) as exc:
+            print(
+                "hook refusal recorder: "
+                + redact(str(exc))
+                + "; dedupe state unchanged",
+                file=sys.stderr,
+            )
+            return 1
         if registry_root is None:
             print(
                 "hook refusal recorder: OMNI_HOME must name an absolute registry root; "
@@ -597,7 +647,7 @@ def main(argv: list[str] | None = None) -> int:
         detail=detail,
         key=key,
         suppressed=suppressed,
-        timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        timestamp=timestamp,
     )
     if args.print_row:
         print(row)

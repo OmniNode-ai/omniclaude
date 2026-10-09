@@ -67,16 +67,12 @@ Exit codes: 0 = within baseline; 1 = the skip set grew; 2 = usage or input error
 (fail-closed — an absent, unparsable or unregistered input is a failure, never a
 pass).
 
-ONE DIVERGENCE FROM THE ORIGIN FILE (OMN-18790), deliberately
--------------------------------------------------------------
-omniclaude's ci.yml writes a SYNTHETIC EMPTY JUnit report
-(``tests="0" skipped="0"``) as a fallback when a suite's test files are not
-found. To a counter that is indistinguishable from a suite that ran and skipped
-nothing, so it would read as a clean zero and satisfy this gate forever while
-the suite ran no test at all. :func:`refuse_empty_observation` refuses it: a
-suite whose recorded baseline collected more than zero, observed collecting
-zero, is fail-closed input. This belongs upstream too; it is written as a
-generic rule, not an omniclaude special case.
+EMPTY-REPORT DEFENCE (OMN-18784)
+------------------------------
+The former fallback XML writers are removed. ``observe`` refuses each report
+that collected zero tests before pooling shards, and ``evaluate`` derives its
+verdict from the empty-selection check as well as the skip baseline. A real
+peer report cannot mask an empty shard. No baseline legitimizes zero execution.
 
 SYNC: ci.yml job ``skip-count-ratchet`` + GATE_JOBS and STRICT_SUCCESS_JOBS
 entries in scripts/ci/ci_summary_gate.py + pre-commit hook
@@ -245,11 +241,16 @@ def observe(paths: list[Path]) -> Observation:
             raise InputError(
                 f"JUnit report is not parsable XML: {path}: {exc}"
             ) from exc
+        report_collected = 0
         for suite in root.iter("testsuite"):
             try:
-                collected += int(suite.get("tests", 0) or 0)
+                report_collected += int(suite.get("tests", 0) or 0)
             except ValueError as exc:
                 raise InputError(f"{path}: testsuite/@tests is not an integer") from exc
+        # OMN-18784: a real peer shard cannot mask an empty job report.
+        if report_collected <= 0:
+            raise InputError(f"JUnit report {path} collected 0 tests; failing closed")
+        collected += report_collected
         for testcase in root.iter("testcase"):
             if testcase.find("skipped") is not None:
                 skipped.add(node_id(testcase))
@@ -259,7 +260,7 @@ def observe(paths: list[Path]) -> Observation:
 
 
 def refuse_empty_observation(entry: BaselineEntry, observed: Observation) -> None:
-    """OMN-18790: a nonzero-baseline suite that collected NOTHING is fail-closed input.
+    """OMN-18784: a suite that collected nothing is fail-closed input.
 
     A workflow that writes a placeholder JUnit report when it finds no test
     files — ``tests="0" skipped="0"`` — hands this gate a document that is
@@ -268,12 +269,10 @@ def refuse_empty_observation(entry: BaselineEntry, observed: Observation) -> Non
     suite executed no test at all: the same false-green shape the ratchet
     exists to refuse, arriving through the gate's own input.
 
-    This is deliberately narrow. It fires only when the RECORDED baseline
-    collected more than zero and the OBSERVED run collected zero, so a suite
-    that genuinely skips nothing is still a ratchet candidate rather than an
-    error, and a suite legitimately baselined at zero is untouched.
+    Zero skips after real execution remains valid. Zero collection cannot be
+    legitimized by a baseline or by calling the evaluator outside the CLI.
     """
-    if entry.baseline_collected > 0 and observed.collected == 0:
+    if observed.collected <= 0 or observed.files <= 0:
         raise InputError(
             f"suite {entry.key!r} ({entry.repo} / {entry.job}) collected 0 tests "
             f"across {observed.files} JUnit report(s), against a recorded baseline "
@@ -286,6 +285,10 @@ def refuse_empty_observation(entry: BaselineEntry, observed: Observation) -> Non
 
 def evaluate(entry: BaselineEntry, observed: Observation) -> tuple[int, list[str]]:
     """Return (exit code, report lines). Pure — no I/O, no clock, no environment."""
+    try:
+        refuse_empty_observation(entry, observed)
+    except InputError as exc:
+        return EXIT_INPUT, [f"::error::{exc}"]
     lines: list[str] = [
         "================================================================",
         f"Skip Count Ratchet (OMN-18776) — {entry.key}",
@@ -622,7 +625,9 @@ def main(argv: list[str] | None = None) -> int:
         entry = BaselineEntry.load(args.baseline, args.suite)
         refuse_empty_observation(entry, observed)
     except InputError as exc:
-        print(f"::error::skip-count-ratchet input error (fail-closed): {exc}")
+        print(
+            f"::error::skip-count-ratchet input error (fail-closed), suite {args.suite!r}: {exc}"
+        )
         return EXIT_INPUT
 
     code, lines = evaluate(entry, observed)

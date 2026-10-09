@@ -1,0 +1,25 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18512
+title: "Delegate comment-sweep render via SkillCommandDispatcher with declared CLI"
+summary: >
+  The comment-sweep skill handler delegates its render through
+  SkillCommandDispatcher using the declared CLI venv, and records a typed
+  delegated or fallback result for every render.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Comment-sweep render delegation tests pass"
+    command: "uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-comment-sweep-render-delegation-tests
+    description: "Render delegation tests pin the declared-CLI delegation, the missing-binary fallback and the bus route publication"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q"

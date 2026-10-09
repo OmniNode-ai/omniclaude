@@ -411,10 +411,9 @@ def test_ac7_synthetic_empty_junit_is_refused_for_a_nonzero_baseline(
         '<testsuite name="hooks" tests="0" errors="0" failures="0" skipped="0">'
         "</testsuite></testsuites>"
     )
-    assert synthetic in workflow, (
-        "positive control: this is the literal fallback report ci.yml writes; if "
-        "this assertion fails the workflow changed and this defence must be "
-        "re-aimed rather than deleted"
+    assert synthetic not in workflow, (
+        "OMN-18784 removed the fallback writer. Keep exercising its report as "
+        "a red fixture rather than requiring the workflow to retain the defect."
     )
 
     junit = tmp_path / "junit-hooks.xml"

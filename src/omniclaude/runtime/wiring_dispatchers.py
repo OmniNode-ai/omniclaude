@@ -39,6 +39,12 @@ from omnibase_core.enums import EnumMessageCategory
 from omnibase_core.models.dispatch.model_dispatch_route import ModelDispatchRoute
 
 from omniclaude.hooks.topics import TopicBase
+from omniclaude.nodes.node_skill_comment_sweep_orchestrator.handler_comment_sweep_skill import (
+    HandlerCommentSweepSkill,
+)
+from omniclaude.nodes.node_skill_comment_sweep_orchestrator.models.model_render_delegation import (
+    ModelRenderDelegation,
+)
 from omniclaude.shared.handler_skill_requested import handle_skill_requested
 from omniclaude.shared.models.model_skill_completion_event import (
     EnumUsageSource,
@@ -50,7 +56,10 @@ from omniclaude.shared.models.model_skill_node_contract import (
     ModelSkillNodeContract,
 )
 from omniclaude.shared.models.model_skill_request import ModelSkillRequest
-from omniclaude.shared.models.model_skill_result import SkillResultStatus
+from omniclaude.shared.models.model_skill_result import (
+    ModelSkillResult,
+    SkillResultStatus,
+)
 from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
 
 if TYPE_CHECKING:
@@ -470,11 +479,24 @@ class SkillCommandDispatcher:
         )
 
         # Dispatch via shared handler
-        result = await handle_skill_requested(
-            skill_request,
-            task_dispatcher=task_dispatcher,
-            event_emitter=emit_event,
-        )
+        result: ModelSkillResult
+        if skill_id == "comment-sweep":
+            result = await HandlerCommentSweepSkill(
+                task_dispatcher=task_dispatcher,
+                event_emitter=emit_event,
+            ).handle(skill_request)
+        else:
+            result = await handle_skill_requested(
+                skill_request,
+                task_dispatcher=task_dispatcher,
+                event_emitter=emit_event,
+            )
+
+        backend_selected: str = backend_type
+        render_delegation = getattr(result, "render_delegation", None)
+        if render_delegation is not None and render_delegation.outcome == "delegated":
+            backend_selected = "onex_delegate"
+            backend_detail = f"{render_delegation.model}@{render_delegation.endpoint}"
 
         # Emit completion event
         await self._emit_completion(
@@ -483,7 +505,7 @@ class SkillCommandDispatcher:
             skill_name=skill_id,
             command_topic=topic or "unknown",
             status=result.status,
-            backend_selected=backend_type,
+            backend_selected=backend_selected,
             backend_detail=backend_detail,
             duration_ms=int((time.perf_counter() - t0) * 1000),
             error_code=None
@@ -494,6 +516,7 @@ class SkillCommandDispatcher:
             source_payload=payload,
             backend_prompt=backend_prompt,
             backend_result=backend_result,
+            render_delegation=render_delegation,
         )
 
         return f"dispatched:{skill_id}:{result.status.value}"
@@ -580,6 +603,7 @@ class SkillCommandDispatcher:
         source_payload: Any = None,  # ONEX_EXCLUDE: any_type - envelope boundary
         backend_prompt: str | None = None,
         backend_result: Any = None,  # ONEX_EXCLUDE: any_type - backend boundary
+        render_delegation: ModelRenderDelegation | None = None,
     ) -> None:
         """Emit a ``ModelSkillCompletionEvent`` to the unified completion topic.
 
@@ -630,33 +654,53 @@ class SkillCommandDispatcher:
                 task_id=dispatch_metadata["task_id"],
                 dispatch_id=dispatch_metadata["dispatch_id"],
                 ticket_id=dispatch_metadata["ticket_id"],
-                artifact_path=dispatch_metadata["artifact_path"],
+                artifact_path=render_delegation.artifact_path
+                if render_delegation is not None
+                else dispatch_metadata["artifact_path"],
                 model_calls=model_calls,
                 token_cost=token_cost,
                 dollars_cost=dollars_cost,
                 cost_provenance=cost_provenance,
+                render_delegation=render_delegation,
                 error_code=error_code,
                 error_message=bounded_error,
                 correlation_id=correlation_id,
             )
             if self._event_bus is not None and hasattr(self._event_bus, "publish"):
-                await self._event_bus.publish(
-                    _COMPLETION_TOPIC,
-                    event.model_dump(mode="json"),
-                )
+                if render_delegation is not None:
+                    await self._event_bus.publish(
+                        _COMPLETION_TOPIC,
+                        key=None,
+                        value=event.model_dump_json().encode("utf-8"),
+                    )
+                else:
+                    await self._event_bus.publish(
+                        _COMPLETION_TOPIC,
+                        event.model_dump(mode="json"),
+                    )
                 contract_topic = _completion_topic_for_contract(
                     contract=contract,
                     status=status,
                 )
                 if (
-                    skill_name == _DISPATCH_WORKER_SKILL_ID
+                    (
+                        skill_name == _DISPATCH_WORKER_SKILL_ID
+                        or render_delegation is not None
+                    )
                     and contract_topic
                     and contract_topic != _COMPLETION_TOPIC
                 ):
-                    await self._event_bus.publish(
-                        contract_topic,
-                        event.model_dump(mode="json"),
-                    )
+                    if render_delegation is not None:
+                        await self._event_bus.publish(
+                            contract_topic,
+                            key=None,
+                            value=event.model_dump_json().encode("utf-8"),
+                        )
+                    else:
+                        await self._event_bus.publish(
+                            contract_topic,
+                            event.model_dump(mode="json"),
+                        )
             else:
                 logger.debug(
                     "Completion event (no event bus): skill=%s status=%s",

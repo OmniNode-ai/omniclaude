@@ -8,7 +8,7 @@
 # Invokes omniintelligence.review_pairing.cli_review (node-based path via
 # HandlerLlmCliSubprocess / adapter_codex_reviewer) with
 # --model qwen3-review --model gpt-oss-review: two DIFFERENT lab models
-# (OMN-17492, operator rulings 2026-09-25), Qwen3.8-27B and gpt-oss-120b,
+# (OMN-17492, operator rulings 2026-09-25), Qwen3.8-27B and Qwen3.6-35B-A3B (the gpt-oss-review key, OMN-20422),
 # each on its own lab host. Private diffs go only to lab models, never to a
 # third-party cloud reviewer. Both hosts are always on (operator,
 # 2026-09-25), so there is no single-model pass: a lost reviewer is a
@@ -125,7 +125,7 @@ jobs:
     # NOT a bare hardcoded label either.
     #
     # WHY NOT THE SEAM: this job calls DeepSeek-R1 on the lab host over the
-    # LAN (# onex-allow-internal-ip), reading the lab endpoint variable and two
+    # LAN, reading the lab endpoint variable and two
     # trust-boundary variables from the runner's own environment. Only the
     # self-hosted `omnibase-ci` fleet has any of the three. omniclaude is a
     # PUBLIC repository whose seam is deliberately `["ubuntu-latest"]` at org and
@@ -348,6 +348,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          # OMN-20422 (RULING 2026-10-09T04:15:56Z): the gpt-oss-review key resolves its URL from
+          # this variable, so the second voter is Qwen3.6-35B-A3B on a second port of the
+          # lab host that serves delegation. The address lives in this repository's Actions
+          # variable of the same name, not in the file: this is a public repository, and the
+          # hardcoded-lab-config and public-hygiene gates refuse a lab address in it.
+          LLM_GPT_OSS_REVIEW_URL: ${{ vars.LLM_GPT_OSS_REVIEW_URL }}
           # LLM_DEEPSEEK_URL is read directly from the runner's environment (Infisical-injected
           # or set in the runner's shell profile on .201) — no GitHub secret needed
         working-directory: ../omniintelligence

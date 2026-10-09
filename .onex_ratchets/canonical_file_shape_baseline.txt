@@ -281,7 +281,6 @@ plugins/onex/hooks/scripts/pre_tool_use_dispatch_mode_guardrail.sh
 plugins/onex/hooks/scripts/pre_tool_use_dod_completion_guard.sh
 plugins/onex/hooks/scripts/pre_tool_use_done_flip_guard.sh
 plugins/onex/hooks/scripts/pre_tool_use_git_stash_guard.sh
-plugins/onex/hooks/scripts/pre_tool_use_hostile_review_gate.sh
 plugins/onex/hooks/scripts/pre_tool_use_lane_liveness_guard.sh
 plugins/onex/hooks/scripts/pre_tool_use_lane_open.sh
 plugins/onex/hooks/scripts/pre_tool_use_linear_done_verify.sh

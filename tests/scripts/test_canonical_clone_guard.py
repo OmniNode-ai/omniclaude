@@ -24,12 +24,14 @@ Gap coverage from the 2026-08-24 omnimarket forensics (ledger row
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -102,6 +104,7 @@ def run_guard(
     with_omni_home: bool = True,
     raw_stdin: str | None = None,
     extra_env: dict[str, str] | None = None,
+    extra_payload: dict[str, object] | None = None,
 ) -> Verdict:
     env = {"PATH": os.environ.get("PATH", ""), "HOME": str(registry.home)}
     if with_omni_home:
@@ -111,7 +114,12 @@ def run_guard(
         raw_stdin
         if raw_stdin is not None
         else json.dumps(
-            {"tool_name": tool_name, "tool_input": tool_input, "cwd": str(cwd)}
+            {
+                "tool_name": tool_name,
+                "tool_input": tool_input,
+                "cwd": str(cwd),
+                **(extra_payload or {}),
+            }
         )
     )
     proc = subprocess.run(
@@ -900,3 +908,154 @@ def test_multiline_guard_log_message_dates_every_line(registry: Registry) -> Non
     stamp = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z ")
     assert lines
     assert all(stamp.match(ln) for ln in lines), lines
+
+
+def log_fields(line: str) -> tuple[datetime, str, dict[str, str]]:
+    stamp, message = line.split(" ", 1)
+    parsed = datetime.fromisoformat(stamp)
+    assert stamp.endswith("Z") and parsed.tzinfo == UTC
+    message, *cells = message.split(" | ")
+    fields = dict(cell.split("=", 1) for cell in cells)
+    return parsed, message.split(" ", 1)[0], fields
+
+
+@pytest.mark.unit
+def test_deny_allow_unresolved_logs_are_dated_and_attributed(
+    registry: Registry,
+) -> None:
+    """AC-2: exercise every logged verdict, rather than matching date text."""
+    before = datetime.now(UTC).replace(microsecond=0)
+    env = {"ONEX_LANE": "replay-omn18982"}
+    denied = bash(
+        registry, "git commit -m x", registry.clone("omnimarket"), extra_env=env
+    )
+    allowed = bash(
+        registry,
+        f"bash {registry.clone('omniclaude')}/scripts/converge-canonical-clone.sh omnimarket && git status",
+        registry.home,
+        extra_env=env,
+    )
+    unknown = bash(
+        registry, "cd - && git commit -m x", registry.clone("omnimarket"), extra_env=env
+    )
+    assert denied.denied and not allowed.denied and not unknown.denied
+    after = datetime.now(UTC)
+    verdicts = set()
+    for line in registry.log.splitlines():
+        stamp, verdict, fields = log_fields(line)
+        assert before <= stamp <= after
+        assert json.loads(fields["lane"]) == "replay-omn18982"
+        assert fields["lane_source"] == "env"
+        assert fields["unresolved_refusal_count"] == "0"
+        verdicts.add(verdict)
+    assert verdicts == {"DENY", "ALLOW", "UNRESOLVED"}
+
+
+@pytest.mark.unit
+def test_refusal_resolves_live_claim_and_ignores_terminal_claim(
+    registry: Registry,
+) -> None:
+    worktree = registry.worktree("OMN-1/omnimarket")
+    ledger = worktree.parents[2] / "docs/tracking/ROLLING_WORK_LEDGER.md"
+    ledger.write_text(
+        f"2026-10-08T00:00:00Z | CLAIM | lane=claim-replay | ticket=OMN-1 | worktree={worktree}\n",
+        encoding="utf-8",
+    )
+    command = f"git -C {registry.clone('omnimarket')} commit -m x"
+    assert bash(registry, command, worktree).denied
+    _stamp, verdict, fields = log_fields(registry.log.splitlines()[-1])
+    assert verdict == "DENY"
+    assert json.loads(fields["lane"]) == "claim-replay"
+    assert fields["lane_source"] == "claim"
+    assert fields["unresolved_refusal_count"] == "0"
+
+    with ledger.open("a", encoding="utf-8") as fh:
+        fh.write("2026-10-08T00:01:00Z | TERMINAL | lane=claim-replay | outcome=done\n")
+    assert bash(registry, command, worktree).denied
+    _stamp, _verdict, fields = log_fields(registry.log.splitlines()[-1])
+    assert json.loads(fields["lane"]) != "claim-replay"
+    assert fields["lane_source"] == "worktree"
+    assert fields["unresolved_refusal_count"] == "1"
+
+
+@pytest.mark.unit
+def test_unattributed_refusals_are_explicit_and_countable(registry: Registry) -> None:
+    for _ in range(2):
+        assert bash(registry, "git commit -m x", registry.clone("omnimarket")).denied
+    # An unresolved target is allowed, so it is not another refused operation.
+    assert not bash(
+        registry, "cd - && git commit -m x", registry.clone("omnimarket")
+    ).denied
+    records = [log_fields(line) for line in registry.log.splitlines()]
+    assert all(json.loads(fields["lane"]) == "unresolved" for _, _, fields in records)
+    assert all(fields["lane_source"] == "unresolved" for _, _, fields in records)
+    assert sum(int(fields["unresolved_refusal_count"]) for _, _, fields in records) == 2
+
+
+@pytest.mark.unit
+def test_multiline_unattributed_refusal_is_counted_once(registry: Registry) -> None:
+    assert bash(
+        registry,
+        "echo ready\ngit commit --no-verify -m x",
+        registry.clone("omnimarket"),
+    ).denied
+    records = [log_fields(line) for line in registry.log.splitlines()]
+    assert len(records) == 2
+    assert all(fields["lane_source"] == "unresolved" for _, _, fields in records)
+    assert sum(int(fields["unresolved_refusal_count"]) for _, _, fields in records) == 1
+
+
+@pytest.mark.unit
+def test_child_refusal_does_not_inherit_parent_lane(registry: Registry) -> None:
+    verdict = bash(
+        registry,
+        "git commit -m x",
+        registry.clone("omnimarket"),
+        extra_env={"ONEX_LANE": "parent-lane"},
+        extra_payload={"agent_id": "unregistered-child"},
+    )
+    assert verdict.denied
+    _stamp, _verdict, fields = log_fields(verdict.log.splitlines()[-1])
+    assert json.loads(fields["lane"]) == "unresolved"
+    assert fields["unresolved_refusal_count"] == "1"
+
+
+@pytest.mark.unit
+def test_guard_has_one_log_write_site() -> None:
+    """AC-3: a second append or write anywhere in the guard is a regression."""
+    tree = ast.parse(GUARD.read_text(encoding="utf-8"))
+    writes = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"write", "writelines", "write_text", "write_bytes"}
+    ]
+    opens = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and (
+            (isinstance(node.func, ast.Attribute) and node.func.attr == "open")
+            or (isinstance(node.func, ast.Name) and node.func.id == "open")
+        )
+    ]
+    logger = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_log"
+    )
+    assert len(writes) == len(opens) == 1
+    assert writes[0] in list(ast.walk(logger))
+    assert opens[0] in list(ast.walk(logger))
+
+
+@pytest.mark.unit
+def test_guard_logging_tests_are_in_both_ci_selections() -> None:
+    workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert (
+        'uv run pytest -o addopts="" $paths \\\n            tests/scripts/test_canonical_clone_guard.py \\'
+        in workflow
+    )
+    assert 'uv run pytest -o addopts="" tests/ \\' in workflow
+    assert "--ignore=tests/scripts/test_canonical_clone_guard.py" not in workflow
