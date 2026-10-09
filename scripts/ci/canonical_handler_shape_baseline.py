@@ -26,7 +26,6 @@ NON_CANONICAL: tuple[str, ...] = (
     "omniclaude.nodes.node_channel_sms_adapter",
     "omniclaude.nodes.node_channel_telegram_adapter",
     "omniclaude.nodes.node_friction_observer_compute",
-    "omniclaude.nodes.node_git_effect",
     "omniclaude.nodes.node_github_pr_watcher_effect",
     "omniclaude.nodes.node_linear_effect",
     "omniclaude.nodes.node_local_coding_orchestrator",

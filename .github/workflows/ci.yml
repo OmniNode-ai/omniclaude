@@ -584,6 +584,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # A hand-flip proof names a base_ref the ratchet reads the legacy handler
+          # from (git show), and the in-PR baseline-removal check reads origin/dev;
+          # neither resolves in a depth-1 checkout (omnimarket's ratchet job: same).
+          fetch-depth: 0
 
       - name: Resolve the pinned omnibase-core version
         id: core_pin
