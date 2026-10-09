@@ -19,7 +19,7 @@ node_name: node_skill_comment_sweep_orchestrator
 
 contract_version:
   major: 1
-  minor: 0
+  minor: 1
   patch: 0
 
 node_version:
@@ -47,8 +47,8 @@ input_model:
   module: omniclaude.shared.models
 
 output_model:
-  name: ModelSkillResult
-  module: omniclaude.shared.models
+  name: ModelCommentSweepResult
+  module: omniclaude.nodes.node_skill_comment_sweep_orchestrator.models.model_comment_sweep_result
 
 # Execution backend configuration
 execution:
@@ -82,7 +82,7 @@ capabilities:
 io_operations:
   - operation: skill_requested
     description: Dispatch comment_sweep skill invocation to polymorphic agent
-    handler_method: handle_skill_requested
+    handler_method: handle
     input_fields:
       - skill_name: str
       - skill_path: str
@@ -94,14 +94,15 @@ io_operations:
       - output: str | None
       - error: str | None
       - correlation_id: UUID
+      - render_delegation: ModelRenderDelegation | None
     idempotent: false
 
 # Dependencies
 dependencies:
-  - name: handler_skill_requested
+  - name: handler_comment_sweep_skill
     type: handler
-    function: handle_skill_requested
-    module: omniclaude.shared
+    class_name: HandlerCommentSweepSkill
+    module: omniclaude.nodes.node_skill_comment_sweep_orchestrator.handler_comment_sweep_skill
     pluggable: false
 
 # Error handling
@@ -138,4 +139,20 @@ handler_routing:
         module: "omniclaude.nodes.node_skill_comment_sweep_orchestrator.handler_comment_sweep_skill"
       description: "Dispatch comment_sweep through the shared skill request handler"
   execution_mode: "single"
-  max_timeout_seconds: 30
+  # OMN-18512: the CLI's bounded terminal wait plus the existing fallback renderer.
+  max_timeout_seconds: 600
+
+# Reply rendering is a phase of this existing bus capability, selected by args.
+# A normal sweep collects tracker facts through the shared agent dispatcher.
+# Each reply then sends one command to this same node, with a stable work unit id.
+render_delegation:
+  request_args:
+    required: [render-prompt, work-unit-id, delegation-lane]
+    optional: [ticket]
+  cli_wrapper: "$OMNI_HOME/omnibase_infra/scripts/onex"
+  cli_venv: "$ONEX_DISPATCH_VENV or $OMNI_HOME/.onex-dispatch-venv"
+  state_root: "$OMNI_HOME/.onex_state"
+  task_type: document
+  work_side_artifact: "comment-sweep/<correlation_id>.json"
+  fallback: caller_injected_task_dispatcher
+  output_field: render_delegation

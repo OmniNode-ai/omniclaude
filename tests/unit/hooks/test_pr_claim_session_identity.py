@@ -92,6 +92,41 @@ def test_different_run_with_same_session_and_lane_is_refused(caller, tmp_path):
     assert "run-self" in decision.message
 
 
+@pytest.mark.parametrize("peer_run", [False, True])
+def test_named_claim_with_session_only_hook_identity(caller, tmp_path, peer_run):
+    owner = {**caller, "ONEX_LANE_ID": "repo-drain-x"}
+    result = claim(owner, tmp_path, "--lane", "repo-drain-x")
+    assert result.returncode == 0, result.stderr
+    data = json.loads(
+        next((tmp_path / "state/pr-queue/claims").glob("*.json")).read_text()
+    )
+    assert data["lane_id"] == "repo-drain-x"
+    hook = {**caller, "ONEX_RUN_ID": "run-peer" if peer_run else "run-self"}
+    decision = verdict(hook, tmp_path)
+    assert decision.allowed is (not peer_run)
+    assert "repo-drain-x" in decision.message
+
+
+@pytest.mark.parametrize(
+    "missing_field", [None, "claimed_by_session", "claimed_by_run"]
+)
+def test_named_claim_session_fallback_requires_full_identity(
+    caller, tmp_path, missing_field
+):
+    owner = {**caller, "ONEX_LANE_ID": "repo-drain-x"}
+    assert claim(owner, tmp_path, "--lane", "repo-drain-x").returncode == 0
+    if missing_field:
+        path = next((tmp_path / "state/pr-queue/claims").glob("*.json"))
+        data = json.loads(path.read_text())
+        data.pop(missing_field)
+        path.write_text(json.dumps(data))
+    else:
+        caller["CLAUDE_CODE_SESSION_ID"] = SESSION + "-peer"
+    decision = verdict(caller, tmp_path)
+    assert not decision.allowed
+    assert "repo-drain-x" in decision.message
+
+
 def test_missing_run_does_not_authorize_a_named_lane_claim(caller, tmp_path):
     caller.pop("CLAUDE_CODE_SESSION_ID")
     caller["ONEX_LANE_ID"] = "owner-lane"

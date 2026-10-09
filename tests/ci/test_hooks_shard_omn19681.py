@@ -18,6 +18,7 @@ report at all. Each test below is named for the falsifier it refuses.
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -25,6 +26,8 @@ from typing import Any
 
 import pytest
 import yaml
+
+from scripts.ci.skip_count_ratchet import observe
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -249,3 +252,106 @@ def test_ratchet_script_counts_skips_summed_across_both_shard_reports(
     else:
         assert result.returncode == 0, out
         assert "12" in out, f"expected the combined skip count (12) in output: {out}"
+
+
+# The cold-start split must spread adjacent expensive cases across both shards.
+# There is no durations file in this workflow, so contiguous count-based halves
+# put all the early expensive cases on shard 1.
+def test_hooks_shards_interleave_without_recorded_durations(tmp_path: Path) -> None:
+    step = next(
+        step
+        for step in _job(HOOKS_JOB_KEY)["steps"]
+        if step.get("name") == "Run hooks tests"
+    )
+    args = shlex.split(step["run"].replace("${{ matrix.split }}", "1"))
+    split_args = []
+    for flag in ("--splits", "--splitting-algorithm"):
+        if flag in args:
+            index = args.index(flag)
+            split_args.extend(args[index : index + 2])
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    (tmp_path / "test_cases.py").write_text(
+        "import pytest\n"
+        "@pytest.mark.parametrize('case', range(8))\n"
+        "def test_case(case):\n"
+        "    if case < 4:\n"
+        "        pytest.skip('synthetic early hooks cases')\n",
+        encoding="utf-8",
+    )
+    reports = []
+    ids = []
+    for shard in (1, 2):
+        report = tmp_path / f"junit-hooks-{shard}.xml"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-c",
+                "pytest.ini",
+                "test_cases.py",
+                "-q",
+                *split_args,
+                "--group",
+                str(shard),
+                f"--junitxml={report}",
+            ],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        observation = observe([report])
+        assert observation.collected == 4
+        assert observation.count == 2
+        # Names are generated locally by the eight-case pytest fixture above.
+        ids.append(
+            set(re.findall(r'<testcase[^>]* name="([^"]+)"', report.read_text()))
+        )
+        reports.append(str(report))
+    assert not ids[0] & ids[1]
+    assert len(ids[0] | ids[1]) == 8
+    result = _run_ratchet(
+        "--baseline",
+        str(BASELINE),
+        "--suite",
+        "omniclaude/hooks-tests",
+        "--junit",
+        *reports,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "4 unique skipped / 8 collected, across 2 JUnit report(s)" in result.stdout
+
+
+@pytest.mark.parametrize("report_count", [0, 1, 2, 3])
+def test_ratchet_refuses_incomplete_hooks_shard_reports(
+    tmp_path: Path,
+    report_count: int,
+) -> None:
+    step = next(
+        step
+        for step in _job(RATCHET_JOB_KEY)["steps"]
+        if step.get("name") == "Enforce the skip-count baseline — Hooks System Tests"
+    )
+    # Execute the workflow's report admission check before the ratchet command.
+    admission = step["run"].split("uv run", 1)[0]
+    for shard in range(report_count):
+        directory = tmp_path / "junit-reports" / f"hooks-test-results-{shard + 1}"
+        directory.mkdir(parents=True)
+        (directory / JUNIT_BASENAME).write_text(_junit(2, prefix=str(shard)))
+    (tmp_path / "junit-reports").mkdir(exist_ok=True)
+    result = subprocess.run(
+        ["bash", "-e", "-c", admission],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (result.returncode == 0) == (report_count == 2), (
+        f"expected exactly two hooks reports, found {report_count}: "
+        + result.stdout
+        + result.stderr
+    )
+    if report_count == 2:
+        assert "Reading 2 JUnit report(s)." in result.stdout

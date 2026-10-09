@@ -71,6 +71,7 @@ APP_BOT_EMAIL = "307849072+onexbot-occ-writer[bot]@users.noreply.github.com"
 # Workflow file -> job ids that push a branch and must therefore comply.
 BRANCH_PUSHERS: dict[str, tuple[str, ...]] = {
     "sibling-lock-refresh.yml": ("refresh",),
+    "plugin-version-bump.yml": ("plugin-version-bump",),
 }
 
 # Workflow file -> why it is out of scope. Every exemption is a stated reason, not a

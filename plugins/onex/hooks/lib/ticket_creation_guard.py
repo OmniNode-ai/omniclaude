@@ -2066,8 +2066,10 @@ def _body_network_lookup(api_key: str) -> BodyLookup:
     return lookup
 
 
-def _block(reason: str) -> int:
-    json.dump({"decision": "block", "reason": reason}, sys.stdout)
+def _block(reason: str, reason_code: str) -> int:
+    json.dump(
+        {"decision": "block", "reason": reason, "reason_code": reason_code}, sys.stdout
+    )
     sys.stdout.write("\n")
     return 3
 
@@ -2121,7 +2123,16 @@ def main(argv: list[str] | None = None) -> int:
         # with jq, so a diagnostic line here would not be a diagnostic -- it
         # would corrupt the refusal into the wrapper's generic fallback text and
         # throw away every finding this function just computed.
-        return _block(render_block_reason(findings, policy, update=is_update))
+        # OMN-19381: the wrapper records this stable code, rather than guessing
+        # a create-admission cause from the rendered update diagnostic.
+        reason_code = (
+            "issue-update-" + findings[0].code.replace("_", "-")
+            if is_update
+            else "issue-create-not-bound-to-a-commitment"
+        )
+        return _block(
+            render_block_reason(findings, policy, update=is_update), reason_code
+        )
     if body_lookup is None:
         sys.stderr.write(
             "[ticket_creation_guard] no LINEAR_API_KEY in the environment or "

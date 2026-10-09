@@ -61,7 +61,10 @@ def read_pin(ref: str) -> str | None:
             if not paths.strip():
                 return None
             raise
-    return parse_pin(workflow_text)
+    pin = parse_pin(workflow_text)
+    if ref != "HEAD" and pin is None:
+        raise ValueError(f"{ref}:{WORKFLOW_PATH} has no 40-hex omnibase_core git pin")
+    return pin
 
 
 def repo_fingerprints(baseline_text: str) -> set[str]:

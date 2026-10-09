@@ -172,7 +172,7 @@ def test_a_named_dark_gate_script_is_reported_when_its_declaration_is_removed(
 ) -> None:
     """A real member of the population, not a synthetic one.
 
-    This change declares all 34 as placeholders so the merged tree is green.
+    OMN-18531 replaced the 34 placeholders with verdicts so the merged tree is green.
     Deleting one declaration has to bring its finding straight back, or the
     declarations are load-bearing for the gate's silence rather than for its
     correctness.
@@ -570,54 +570,51 @@ def test_the_live_tree_is_green(tree: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_every_placeholder_declaration_is_a_triage_not_a_verdict() -> None:
-    """AC7, read off the file.
+def test_no_triage_placeholder_remains_and_every_verdict_is_dated_and_owned() -> None:
+    """OMN-18531 AC, read off the file.
 
-    A placeholder that says ``re_register`` has taken the decision OMN-18531
-    exists to take, and a placeholder that says ``delete`` has taken a worse
-    one. Each carries an owner, a review date inside the following sprint, and
-    the ticket that replaces it.
+    The OMN-18530 placeholders said "dark, owned, dated, on a list" and nothing
+    more. Every one has been replaced by a real verdict, so no ``triage`` row may
+    remain, and each verdict still carries an owner, a reason and a review date
+    inside the window the other dated rows use.
     """
     data = yaml.safe_load((_REPO_ROOT / _INVENTORY_REL).read_text(encoding="utf-8"))
-    placeholders = [
+    kinds = {row["restoration"]["kind"] for row in data["disabled_hooks"]}
+    assert "triage" not in kinds, sorted(kinds)
+
+    verdicts = [
         row
         for row in data["disabled_hooks"]
-        if row["restoration"]["reenable_ticket"] == _TRIAGE_TICKET
+        if row["reason"].lstrip().startswith("Verdict OMN-18531")
     ]
-    assert len(placeholders) == 34, len(placeholders)
-
-    for row in placeholders:
+    assert len(verdicts) >= 30, len(verdicts)
+    for row in verdicts:
         where = row["script"]
-        assert row["restoration"]["kind"] == "triage", where
+        assert row["restoration"]["kind"] in {"re_register", "delete"}, where
         assert row["owner"].strip(), where
-        assert row["reason"].strip(), where
+        assert row["restoration"]["action"].strip(), where
         review = row["review_by"]
         review = review if isinstance(review, date) else date.fromisoformat(review)
-        # Window moved to 2026-10-31 with the rows' review date: the first review date lapsed
-        # before the OMN-18531 triage gave a verdict, and a lapsed date reds every PR's gate.
-        assert date(2026, 9, 28) <= review <= date(2026, 10, 31), (where, review)
+        assert date(2026, 9, 28) <= review <= date(2026, 12, 31), (where, review)
 
 
-def test_the_placeholders_cover_exactly_what_the_kind_matches(tree: Path) -> None:
-    """No placeholder declares a script the kind would not have flagged.
+def test_the_verdicts_cover_exactly_what_the_kind_matches(tree: Path) -> None:
+    """Every gate-shaped script the kind matches is declared, and nothing else is.
 
-    A declaration for something the gate never matched is an owner assigned to
-    a script nobody needs to triage, and it makes the 34 unverifiable.
+    With every disabled row removed the kind reports the whole gate-shaped
+    dark population; each member has to be a declared row (so the gate is green
+    for a reason, not by omission), and a deleted script may not keep a row.
     """
     data = _read_inventory(tree)
-    placeholders = {
-        row["script"]
-        for row in data["disabled_hooks"]
-        if row["restoration"]["reenable_ticket"] == _TRIAGE_TICKET
-    }
-    data["disabled_hooks"] = [
-        row
-        for row in data["disabled_hooks"]
-        if row["restoration"]["reenable_ticket"] != _TRIAGE_TICKET
-    ]
+    declared = {row["script"] for row in data["disabled_hooks"]}
+    data["disabled_hooks"] = []
     _write_inventory(tree, data)
 
-    assert _subjects(tree, _KIND) == placeholders
+    matched = _subjects(tree, _KIND)
+    assert matched, "the kind matches nothing: the control proves nothing"
+    assert matched <= declared, sorted(matched - declared)
+    on_disk = {p.name for p in (tree / _SCRIPTS_REL).iterdir()}
+    assert not (declared - on_disk), sorted(declared - on_disk)
 
 
 # ---------------------------------------------------------------------------

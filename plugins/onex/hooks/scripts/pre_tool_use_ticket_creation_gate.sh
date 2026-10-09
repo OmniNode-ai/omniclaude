@@ -241,10 +241,13 @@ fi
 
 if [[ $GUARD_RC -eq 3 ]]; then
     REASON=$(printf '%s' "$GUARD_OUT" | jq -r '.reason // empty' 2>/dev/null || true)
+    REASON_CODE=$(printf '%s' "$GUARD_OUT" | jq -r '.reason_code // empty' 2>/dev/null || true)
     if [[ -z "$REASON" ]]; then
-        REASON="BLOCKED: this Linear issue create is not bound to a commitment (OMN-17942), and the guard's own detail payload was unreadable."
+        REASON="BLOCKED: this Linear issue write was refused, and the guard's own detail payload was unreadable."
     fi
-    _block "issue create not bound to a commitment" "$REASON"
+    # OMN-19381: use the decision core's cause for this write. A criterion
+    # rewrite and an unreadable update are not create-admission refusals.
+    _block "${REASON_CODE:-issue write refused without a reason code}" "$REASON"
 fi
 
 _block "guard evaluation failed (rc=${GUARD_RC})" \
