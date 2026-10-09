@@ -769,20 +769,32 @@ class TestRefusalRowNamesTheRealReason:
     fingerprint read as a false red on a result line with no way to tell which."""
 
     def test_detail_carries_the_classifier_reason(self, tmp_path) -> None:
-        recorder_dir = tmp_path / "lib"
-        recorder_dir.mkdir()
         argv_file = tmp_path / "argv.json"
-        (recorder_dir / "hook_refusal_recorder.py").write_text(
+        # A stand-in interpreter: the node's handler module is captured, every
+        # other call runs the real one.
+        capture = tmp_path / "capture_argv.py"
+        capture.write_text(
             "import json, sys\n"
             f"open({str(argv_file)!r}, 'w').write(json.dumps(sys.argv[1:]))\n",
             encoding="utf-8",
         )
+        stub = tmp_path / "python-stub"
+        stub.write_text(
+            "#!/bin/bash\n"
+            'for a in "$@"; do\n'
+            '  if [[ "$a" == omniclaude.nodes.node_hook_refusal_record_effect.* ]]; then\n'
+            f'    exec {sys.executable} {capture} "$@"\n'
+            "  fi\n"
+            "done\n"
+            f'exec {sys.executable} "$@"\n',
+            encoding="utf-8",
+        )
+        stub.chmod(0o755)
         env = {
             **os.environ,
             "ONEX_STATE_DIR": str(tmp_path / "state"),
             "CLAUDE_PROJECT_DIR": str(_LIB_DIR.parents[3]),
-            "PLUGIN_PYTHON_BIN": sys.executable,
-            "HOOKS_LIB": str(recorder_dir),
+            "PLUGIN_PYTHON_BIN": str(stub),
         }
         proc = subprocess.run(
             [

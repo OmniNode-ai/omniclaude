@@ -25,6 +25,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "install-canonical-clone-guard.sh"
 SOURCE = REPO_ROOT / "scripts" / "user-hooks" / "canonical-clone-guard.py"
 ATTRIBUTION_LIB = REPO_ROOT / "plugins" / "onex" / "hooks" / "lib"
+LANE_HANDLERS = (
+    REPO_ROOT / "src/omniclaude/nodes/node_hook_refusal_record_effect/handlers"
+)
+#: Each helper the installer ships beside the hook, and the tracked file it comes from.
+HELPERS = {
+    "handler_hook_refusal_lane.py": LANE_HANDLERS,
+    "hook_lane_attribution.py": ATTRIBUTION_LIB,
+}
 
 EXIT_OK = 0
 EXIT_PENDING = 3
@@ -162,20 +170,20 @@ def test_tracked_source_is_a_valid_hook_and_installer_is_portable() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("name", ["hook_refusal_lane.py", "hook_lane_attribution.py"])
+@pytest.mark.parametrize("name", sorted(HELPERS))
 def test_attribution_helper_drift_is_reported_and_repaired(
     home: Path, name: str
 ) -> None:
     _register(home, str(home / ".claude/hooks/canonical-clone-guard.py"))
     assert _run(home, "--apply").returncode == EXIT_OK
     helper = home / ".claude/hooks" / name
-    assert _sha(helper) == _sha(ATTRIBUTION_LIB / name)
+    assert _sha(helper) == _sha(HELPERS[name] / name)
     helper.write_text("# stale resolver\n", encoding="utf-8")
     check = _run(home)
     assert check.returncode == EXIT_PENDING
     assert f"{name}: DRIFT" in check.stdout
     assert _run(home, "--apply").returncode == EXIT_OK
-    assert _sha(helper) == _sha(ATTRIBUTION_LIB / name)
+    assert _sha(helper) == _sha(HELPERS[name] / name)
     assert len(list(helper.parent.glob(f"{name}.bak.*"))) == 1
     assert _run(home).returncode == EXIT_OK
     helper.unlink()

@@ -110,16 +110,23 @@ def _resolve_log_lane(payload: dict[str, object], cwd: str) -> tuple[str, str]:
     """Use the recorder's stdlib resolver, also shipped beside the live hook."""
     with contextlib.suppress(Exception):
         sibling = Path(__file__).resolve().parent
-        library = sibling.parent.parent / "plugins" / "onex" / "hooks" / "lib"
-        resolver_dir = (
-            sibling if (sibling / "hook_refusal_lane.py").is_file() else library
+        repo = sibling.parent.parent
+        library = repo / "plugins" / "onex" / "hooks" / "lib"
+        node_handlers = (
+            repo / "src/omniclaude/nodes/node_hook_refusal_record_effect/handlers"
         )
-        if not (resolver_dir / "hook_refusal_lane.py").is_file():
+        resolver_dirs = (
+            [sibling]
+            if (sibling / "handler_hook_refusal_lane.py").is_file()
+            else [node_handlers, library]
+        )
+        if not (resolver_dirs[0] / "handler_hook_refusal_lane.py").is_file():
             return "", "unresolved"
-        sys.path.insert(0, str(resolver_dir))
-        import hook_refusal_lane
+        for resolver_dir in reversed(resolver_dirs):
+            sys.path.insert(0, str(resolver_dir))
+        import handler_hook_refusal_lane
 
-        return hook_refusal_lane.resolve_refusal_lane(payload, cwd=cwd)
+        return handler_hook_refusal_lane.resolve_refusal_lane(payload, cwd=cwd)
     return "", "unresolved"
 
 

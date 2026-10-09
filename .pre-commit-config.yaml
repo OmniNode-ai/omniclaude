@@ -336,7 +336,7 @@ repos:
           -q -p no:cacheprovider
         language: system
         pass_filenames: false
-        files: '^(plugins/onex/hooks/(lib/(ticket_creation_guard|hook_refusal_recorder|hook_refusal_lane)\.py|lib/hook_refusal\.sh|scripts/pre_tool_use_ticket_creation_gate\.sh)|tests/hooks/test_refusal_row_lane_omn19381\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
+        files: '^(plugins/onex/hooks/(lib/ticket_creation_guard\.py|lib/hook_refusal\.sh|scripts/pre_tool_use_ticket_creation_gate\.sh)|src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_(record|lane)\.py|tests/hooks/test_refusal_row_lane_omn19381\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
         stages: [pre-commit]
       - id: git-command-segment-regression
         name: Git command segment admission and diagnostics (OMN-18936)
