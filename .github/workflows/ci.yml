@@ -79,6 +79,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.6.1"
@@ -98,6 +100,15 @@ jobs:
             sleep "$sleep_seconds"
             attempt=$((attempt + 1))
           done
+      # OMN-19055: classifications and snapshot refresh triggers fail closed.
+      - name: Verify CI Summary external-context classification and snapshots
+        env:
+          CI_SNAPSHOT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: |
+          set -euo pipefail
+          CI_SNAPSHOT_CHANGED_FILES="$(git diff --name-only "$CI_SNAPSHOT_BASE" --)"
+          export CI_SNAPSHOT_CHANGED_FILES
+          uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov
       - name: Verify registered guard refusal surface
         run: uv run pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
       - name: Verify ledger ruling re-read before publishing (OMN-18645)

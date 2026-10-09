@@ -29,6 +29,19 @@
 repos:
   - repo: local
     hooks:
+      - id: ci-summary-external-contexts
+        name: CI Summary external contexts and snapshot refresh (OMN-19055)
+        entry: >-
+          bash -c 'set -euo pipefail;
+          CI_SNAPSHOT_CHANGED_FILES="$(git diff --name-only HEAD --)";
+          export CI_SNAPSHOT_CHANGED_FILES;
+          bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_ci_summary_gate.py
+          -q --no-cov -k TestExternalContextCompleteness'
+        language: system
+        pass_filenames: false
+        files: '^(scripts/ci/ci_summary_gate\.py|tests/ci/(test_ci_summary_gate\.py|fixtures/.*)|\.github/(required-checks\.yaml|workflows/ci\.yml)|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: hooks-shard-coverage
         name: Hooks shard coverage and report admission (OMN-19681)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov
