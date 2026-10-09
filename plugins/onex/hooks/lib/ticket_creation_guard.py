@@ -2194,11 +2194,13 @@ def ledger_rows_for_stamp(ledger: Path, stamp: str) -> list[str]:
     """Every row of ``ledger`` (and its rolled archive) whose first cell is ``stamp``.
 
     An unreadable file contributes no rows, so an unreadable ledger approves
-    nothing: the rewrite stays refused.
+    nothing: the rewrite stays refused. A symlinked ledger, a symlinked
+    ``archive`` directory and a symlinked archive file are never followed, so a
+    ruling cannot be read from outside the ledger's own directory.
     """
     files = [ledger]
     archive = ledger.parent / "archive"
-    if archive.is_dir():
+    if archive.is_dir() and not archive.is_symlink():
         files.extend(sorted(archive.glob(f"{ledger.stem}_*-split.md")))
     prefix = f"{stamp}{_LEDGER_CELL_SEPARATOR}"
     rows: list[str] = []

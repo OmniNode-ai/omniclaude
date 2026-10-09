@@ -2586,6 +2586,31 @@ def test_the_ledger_reader_finds_a_ruling_in_a_rolled_archive(tmp_path: Path) ->
     assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == [_RULING_ROW]
 
 
+def test_the_ledger_reader_does_not_follow_a_symlinked_archive_directory(
+    tmp_path: Path,
+) -> None:
+    """A ruling reachable only through a symlinked ``archive`` approves nothing."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "ROLLING_WORK_LEDGER_2026-10-08-split.md").write_text(
+        f"{_RULING_ROW}\n", encoding="utf-8"
+    )
+    home = tmp_path / "home"
+    home.mkdir()
+    ledger = home / "ROLLING_WORK_LEDGER.md"
+    ledger.write_text("live row only\n", encoding="utf-8")
+    (home / "archive").symlink_to(elsewhere, target_is_directory=True)
+    assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == []
+
+
+def test_the_ledger_reader_does_not_follow_a_symlinked_ledger(tmp_path: Path) -> None:
+    real = tmp_path / "real.md"
+    real.write_text(f"{_RULING_ROW}\n", encoding="utf-8")
+    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
+    ledger.symlink_to(real)
+    assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == []
+
+
 def test_main_admits_an_approved_rewrite_end_to_end(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
