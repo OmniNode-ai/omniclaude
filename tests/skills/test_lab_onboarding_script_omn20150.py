@@ -471,6 +471,8 @@ def test_one_question_after_preflight_decides_docker(
         "ONBOARD_TEST_ADMIN": "1",
         "ONBOARD_TEST_NEEDS_ADMIN": "0",
         "ONBOARD_TEST_NO_GUI": "1",
+        # Docker present, so a yes asks no licence question (CI runners have none).
+        "ONBOARD_TEST_DOCKER": "running",
     }
     out, returncode = _drive_tty(
         ["/bin/bash", str(phase0_only), "--provider", "gemini"],
