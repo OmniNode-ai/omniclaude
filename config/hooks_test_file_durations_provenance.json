@@ -1,0 +1,17 @@
+{
+  "ticket": "OMN-19681",
+  "record": "config/hooks_test_file_durations.json",
+  "unit": "seconds of pytest setup, call and teardown, summed per test file",
+  "basis": "mean over the runs below of each file's summed junit test time",
+  "source_runs": [
+    {"run_id": 37920463610, "head_sha": "dd29f6f7", "event": "pull_request", "attempt": 1},
+    {"run_id": 37923726003, "head_sha": "8254677e", "event": "pull_request", "attempt": 1},
+    {"run_id": 37926958609, "head_sha": "00df690a", "event": "pull_request", "attempt": 1},
+    {"run_id": 37940464442, "head_sha": "2b1d67e8", "event": "pull_request", "attempt": 1}
+  ],
+  "recorded_on": "2026-10-09",
+  "file_count": 192,
+  "suite_test_seconds": "586 to 749 across the four runs, 683 in the mean record",
+  "planner": "the 'Plan this shard's hooks test files (OMN-19681)' step of the hooks-tests job in .github/workflows/ci.yml",
+  "refresh": "gh run download <run-id> -p 'hooks-test-results-*' -D <dir>; sum each junit testcase's time by its test file (the classname's module path, tests.hooks.test_x.TestY -> tests/hooks/test_x.py), average over runs and write {file: seconds} to config/hooks_test_file_durations.json"
+}
