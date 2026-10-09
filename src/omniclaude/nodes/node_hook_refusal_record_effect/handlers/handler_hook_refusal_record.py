@@ -546,9 +546,13 @@ class HandlerHookRefusalRecord:
                     "hook refusal recorder: OMNI_HOME must name an absolute registry "
                     "root; dedupe state unchanged"
                 )
+            # The default lives in a plugin hook-library sibling, on sys.path
+            # through --hooks-lib; a declared project does not need it.
             project = Path(
                 os.environ.get("OMNIBASE_INTERNAL_HOME")
-                or registry_root.parent / "omnibase_internal"
+                or importlib.import_module("hook_emit_bounded").ledger_writer_project(
+                    registry_root
+                )
             )
             if not project.is_absolute():
                 return failed(
