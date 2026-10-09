@@ -116,8 +116,6 @@ plugins/onex/hooks/lib/hook_latency_instrumentation.py
 plugins/onex/hooks/lib/hook_policy.py
 plugins/onex/hooks/lib/hook_quality_gate.py
 plugins/onex/hooks/lib/hook_refusal.sh
-plugins/onex/hooks/lib/hook_refusal_lane.py
-plugins/onex/hooks/lib/hook_refusal_recorder.py
 plugins/onex/hooks/lib/hook_turn_id.py
 plugins/onex/hooks/lib/idle_ratelimit.py
 plugins/onex/hooks/lib/intent_classifier.py

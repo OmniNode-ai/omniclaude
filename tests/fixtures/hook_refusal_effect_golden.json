@@ -1,0 +1,393 @@
+{
+ "extract_detail": [
+  "plain reason [redacted]",
+  "ctx line",
+  "why",
+  "verdict_has_no_diagnostic",
+  "verdict_json_invalid",
+  "verdict_has_no_diagnostic",
+  "rule=no_bound_dod_receipt ticket=OMN-12345 citation=contracts/OMN-12345.yaml no_bound_dod_receipt for OMN-12345 x",
+  "[redacted] yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+ ],
+ "lane": {
+  "claim_ambiguous_by_ticket": [
+   "wt:OMN-222/repo",
+   "worktree"
+  ],
+  "claim_by_worktree": [
+   "alpha",
+   "claim"
+  ],
+  "command_names_worktree": [
+   "alpha",
+   "claim"
+  ],
+  "env_ignored_for_subagent": [
+   "",
+   "unresolved"
+  ],
+  "env_lane": [
+   "from-env",
+   "env"
+  ],
+  "file_path_names_worktree": [
+   "wt:OMN-333/repo",
+   "worktree"
+  ],
+  "no_payload": [
+   "",
+   "unresolved"
+  ],
+  "terminated_claim_falls_to_worktree": [
+   "wt:OMN-333/repo",
+   "worktree"
+  ],
+  "unresolved": [
+   "",
+   "unresolved"
+  ]
+ },
+ "record": {
+  "custom_window": [
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=w | lane_source=env | dedupe=bfa1b0b51f5b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 1,
+    "rc": 0,
+    "state": {
+     "bfa1b0b51f5b.json": {
+      "attempts": 0,
+      "last_emitted": 100.0,
+      "suppressed": 0
+     }
+    }
+   },
+   {
+    "appended": [],
+    "log_lines": 2,
+    "rc": 0,
+    "state": {
+     "bfa1b0b51f5b.json": {
+      "attempts": 0,
+      "last_emitted": 100.0,
+      "suppressed": 1
+     }
+    }
+   },
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=w | lane_source=env | dedupe=bfa1b0b51f5b | refusal_count=1 | suppressed_since_last_row=1 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 3,
+    "rc": 0,
+    "state": {
+     "bfa1b0b51f5b.json": {
+      "attempts": 0,
+      "last_emitted": 111.0,
+      "suppressed": 0
+     }
+    }
+   }
+  ],
+  "different_keys_do_not_share_a_window": [
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=a.sh | reason=one | lane_source=env | dedupe=ce2d5b80d27f | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 1,
+    "rc": 0,
+    "state": {
+     "ce2d5b80d27f.json": {
+      "attempts": 0,
+      "last_emitted": 100.0,
+      "suppressed": 0
+     }
+    }
+   },
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=b.sh | reason=one | lane_source=env | dedupe=cd05babe10db | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 2,
+    "rc": 0,
+    "state": {
+     "cd05babe10db.json": {
+      "attempts": 0,
+      "last_emitted": 101.0,
+      "suppressed": 0
+     },
+     "ce2d5b80d27f.json": {
+      "attempts": 0,
+      "last_emitted": 100.0,
+      "suppressed": 0
+     }
+    }
+   },
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=a.sh | reason=two | lane_source=env | dedupe=8b1a6ec3ac48 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 3,
+    "rc": 0,
+    "state": {
+     "8b1a6ec3ac48.json": {
+      "attempts": 0,
+      "last_emitted": 102.0,
+      "suppressed": 0
+     },
+     "cd05babe10db.json": {
+      "attempts": 0,
+      "last_emitted": 101.0,
+      "suppressed": 0
+     },
+     "ce2d5b80d27f.json": {
+      "attempts": 0,
+      "last_emitted": 100.0,
+      "suppressed": 0
+     }
+    }
+   },
+   {
+    "appended": [],
+    "log_lines": 4,
+    "rc": 0,
+    "state": {
+     "8b1a6ec3ac48.json": {
+      "attempts": 0,
+      "last_emitted": 102.0,
+      "suppressed": 1
+     },
+     "cd05babe10db.json": {
+      "attempts": 0,
+      "last_emitted": 101.0,
+      "suppressed": 0
+     },
+     "ce2d5b80d27f.json": {
+      "attempts": 0,
+      "last_emitted": 100.0,
+      "suppressed": 0
+     }
+    }
+   }
+  ],
+  "print_row_writes_nothing": [
+   {
+    "appended": [],
+    "log_lines": 0,
+    "rc": 0,
+    "state": {}
+   },
+   {
+    "appended": [],
+    "log_lines": 0,
+    "rc": 0,
+    "state": {}
+   }
+  ],
+  "redaction_and_field_breakers": [
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=redacted-forged | lane_source=env | dedupe=234637e39ccb | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted]   cell next row\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 1,
+    "rc": 0,
+    "state": {
+     "234637e39ccb.json": {
+      "attempts": 0,
+      "last_emitted": 100.0,
+      "suppressed": 0
+     }
+    }
+   }
+  ],
+  "secret_guard_sessions_are_separate": [
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 1,
+    "rc": 0,
+    "state": {
+     "42c80749499b.json": {
+      "attempts": 1,
+      "last_emitted": 100.0,
+      "suppressed": 0
+     }
+    }
+   },
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=1abd95f1821d | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 2,
+    "rc": 0,
+    "state": {
+     "1abd95f1821d.json": {
+      "attempts": 1,
+      "last_emitted": 101.0,
+      "suppressed": 0
+     },
+     "42c80749499b.json": {
+      "attempts": 1,
+      "last_emitted": 100.0,
+      "suppressed": 0
+     }
+    }
+   },
+   {
+    "appended": [],
+    "log_lines": 3,
+    "rc": 0,
+    "state": {
+     "1abd95f1821d.json": {
+      "attempts": 1,
+      "last_emitted": 101.0,
+      "suppressed": 0
+     },
+     "42c80749499b.json": {
+      "attempts": 2,
+      "last_emitted": 100.0,
+      "suppressed": 1
+     }
+    }
+   }
+  ],
+  "secret_guard_surfaces_the_fourth": [
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 1,
+    "rc": 0,
+    "state": {
+     "42c80749499b.json": {
+      "attempts": 1,
+      "last_emitted": 100.0,
+      "suppressed": 0
+     }
+    }
+   },
+   {
+    "appended": [],
+    "log_lines": 2,
+    "rc": 0,
+    "state": {
+     "42c80749499b.json": {
+      "attempts": 2,
+      "last_emitted": 100.0,
+      "suppressed": 1
+     }
+    }
+   },
+   {
+    "appended": [],
+    "log_lines": 3,
+    "rc": 0,
+    "state": {
+     "42c80749499b.json": {
+      "attempts": 3,
+      "last_emitted": 100.0,
+      "suppressed": 2
+     }
+    }
+   },
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | refusal_count=1 | suppressed_since_last_row=2 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 4,
+    "rc": 0,
+    "state": {
+     "42c80749499b.json": {
+      "attempts": 4,
+      "last_emitted": 103.0,
+      "suppressed": 0
+     }
+    }
+   },
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 5,
+    "rc": 0,
+    "state": {
+     "42c80749499b.json": {
+      "attempts": 5,
+      "last_emitted": 104.0,
+      "suppressed": 0
+     }
+    }
+   },
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 6,
+    "rc": 0,
+    "state": {
+     "42c80749499b.json": {
+      "attempts": 6,
+      "last_emitted": 105.0,
+      "suppressed": 0
+     }
+    }
+   }
+  ],
+  "window_then_new_row": [
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=same-class | lane_source=env | dedupe=81b14f4657c6 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"d1\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 1,
+    "rc": 0,
+    "state": {
+     "81b14f4657c6.json": {
+      "attempts": 0,
+      "last_emitted": 100.0,
+      "suppressed": 0
+     }
+    }
+   },
+   {
+    "appended": [],
+    "log_lines": 2,
+    "rc": 0,
+    "state": {
+     "81b14f4657c6.json": {
+      "attempts": 0,
+      "last_emitted": 100.0,
+      "suppressed": 1
+     }
+    }
+   },
+   {
+    "appended": [],
+    "log_lines": 3,
+    "rc": 0,
+    "state": {
+     "81b14f4657c6.json": {
+      "attempts": 0,
+      "last_emitted": 100.0,
+      "suppressed": 2
+     }
+    }
+   },
+   {
+    "appended": [
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=same-class | lane_source=env | dedupe=81b14f4657c6 | refusal_count=1 | suppressed_since_last_row=2 | detail=\"d4\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    ],
+    "log_lines": 4,
+    "rc": 0,
+    "state": {
+     "81b14f4657c6.json": {
+      "attempts": 0,
+      "last_emitted": 4000.0,
+      "suppressed": 0
+     }
+    }
+   }
+  ]
+ }
+}

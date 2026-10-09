@@ -46,7 +46,7 @@ HOOKS_JSON = HOOKS_DIR / "hooks.json"
 ERROR_GUARD = SCRIPTS_DIR / "error-guard.sh"
 #: Where the function lives since OMN-19381; error-guard.sh sources it.
 REFUSAL_SEAM = LIB_DIR / "hook_refusal.sh"
-RECORDER = LIB_DIR / "hook_refusal_recorder.py"
+RECORDER_MODULE = "omniclaude.nodes.node_hook_refusal_record_effect.handlers.handler_hook_refusal_record"
 
 #: The shell function every deny path must call.
 RECORD_FN = "hook_record_refusal"
@@ -57,15 +57,7 @@ RECORD_FN = "hook_record_refusal"
 _EXIT_TWO = re.compile(r"^\s*exit 2\s*$", re.MULTILINE)
 
 
-def _load_recorder():
-    spec = importlib.util.spec_from_file_location("hook_refusal_recorder", RECORDER)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-recorder = _load_recorder()
+recorder = importlib.import_module(RECORDER_MODULE)
 
 ROW_TIMESTAMP = "2026-09-21T05:00:00Z"
 
@@ -308,7 +300,15 @@ class TestTheProcessNeverBreaksAGuard:
 
     def _run(self, args: list[str], tmp_path: Path) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(RECORDER), *args],
+            [
+                sys.executable,
+                "-P",
+                "-m",
+                RECORDER_MODULE,
+                "--hooks-lib",
+                str(LIB_DIR),
+                *args,
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -504,8 +504,8 @@ class TestTheSeamItself:
         never asked whether the callee existed.
         """
         source = REFUSAL_SEAM.read_text(encoding="utf-8")
-        assert "hook_refusal_recorder.py" in source
-        assert RECORDER.is_file()
+        assert RECORDER_MODULE in source
+        assert importlib.util.find_spec(RECORDER_MODULE) is not None
 
     def test_the_call_is_backgrounded(self) -> None:
         """The operator's refusal message must never wait on a ledger lock."""
@@ -541,7 +541,11 @@ class TestTheLockIsTakenOnlyWhenARowIsWritten:
         return subprocess.run(
             [
                 sys.executable,
-                str(RECORDER),
+                "-P",
+                "-m",
+                RECORDER_MODULE,
+                "--hooks-lib",
+                str(LIB_DIR),
                 "--guard",
                 "g",
                 "--reason",

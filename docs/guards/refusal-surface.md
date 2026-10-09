@@ -1,8 +1,9 @@
 # Guard refusal surface (OMN-18983)
 
 The four live worktree, git-stash, credential-rotation and ticket-creation guards
-use the existing `hook_record_refusal` seam, `hook_refusal_recorder.py` and
-`hook_refusal_lane.py`. The Bash guards run through their registered combined
+use the existing `hook_record_refusal` seam and the handlers of
+`node_hook_refusal_record_effect` (`handler_hook_refusal_record.py` and
+`handler_hook_refusal_lane.py`). The Bash guards run through their registered combined
 entrypoint; the admission guard runs on its registered Linear matcher.
 
 With `ONEX_STATE_DIR` unset, the declared log is

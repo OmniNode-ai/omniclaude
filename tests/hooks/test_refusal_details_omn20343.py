@@ -146,7 +146,11 @@ def test_secret_leak_repeat_refusal_surfaces_pattern(tmp_path):
     }
     command = [
         sys.executable,
-        str(LIB / "hook_refusal_recorder.py"),
+        "-P",
+        "-m",
+        "omniclaude.nodes.node_hook_refusal_record_effect.handlers.handler_hook_refusal_record",
+        "--hooks-lib",
+        str(LIB),
         "--guard",
         "subagent_stop_secret_leak_guard.sh",
         "--reason",
@@ -202,7 +206,9 @@ def test_secret_leak_refusal_detail_names_pattern_and_never_value(
 
 def test_diagnostic_failure_keeps_secret_guard_blocked(guard_box):
     box, plugin, _ = guard_box
-    (plugin / "hooks/lib/hook_refusal_recorder.py").unlink()
+    # The detail extractor imports its redactor from the named hook library;
+    # naming a library without it makes the extraction fail.
+    guard_box[2]["HOOKS_LIB"] = str(box.home / "no-such-hooks-lib")
     payload = box.payload()
     payload["last_assistant_message"] = "ghp_" + "Z" * 36
     proc = subprocess.run(
