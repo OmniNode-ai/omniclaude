@@ -17,6 +17,14 @@ occurrence was found by a person noticing it rather than by any surface
 reporting it. A gate whose refusals reach no aggregated surface cannot be
 told apart from a gate that never fires.
 
+WHERE THE ROW IS DECIDED. The redaction, reason normalisation, dedupe key and
+row layout are omnimarket's ``node_hook_refusal_row_compute`` (OMN-20685); this
+module calls its handler in-process, as every hook reaches an omnimarket node,
+and keeps only what is bound to this host: the rate-limit state, the lane
+resolution and the ledger append. The handler import adds about 50 ms to a
+refusal and pulls in no ``omnibase_core``; it is paid only on a refusal, never
+on a tool call a guard allows.
+
 WHAT THIS DOES. One ``FRICTION``-class row per refusal, appended to the
 rolling work ledger through ``onex-ledger`` — the same locked
 writer every other lane uses, never a direct write — carrying the guard, a
@@ -74,7 +82,6 @@ from __future__ import annotations
 
 import argparse
 import fcntl
-import hashlib
 import json
 import os
 import re
@@ -85,6 +92,23 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TextIO
 
+try:
+    from omnimarket.nodes.node_hook_refusal_row_compute.handlers.handler_hook_refusal_row import (
+        MAX_DETAIL_CHARS,
+        HandlerHookRefusalRowCompute,
+        redact,
+    )
+    from omnimarket.nodes.node_hook_refusal_row_compute.models import (
+        ModelHookRefusalRowRequest,
+        ModelHookRefusalRowResult,
+    )
+except ImportError as exc:
+    raise SystemExit(
+        "hook refusal recorder: omnimarket's node_hook_refusal_row_compute is "
+        f"not importable by this interpreter ({exc}); run it with the plugin "
+        "venv (PLUGIN_PYTHON_BIN)"
+    ) from exc
+
 #: One row per (guard, reason, lane) per hour. An hour is the window the
 #: ticket names, and it is also the cadence the morning sweep reads at, so a
 #: finer window would add rows no reader distinguishes.
@@ -92,92 +116,6 @@ DEFAULT_WINDOW_SECONDS = 3600
 # OMN-20343: SubagentStop retries are actionable immediately after the third
 # refusal. This exception applies only to the secret guard, keyed by session.
 SECRET_REPEAT_THRESHOLD = 3
-
-#: Ledger row class. `FRICTION` is the existing class the morning friction
-#: sweep already selects on; a new class would need a new reader, which is
-#: how the surface being fixed here got lost in the first place.
-ROW_CLASS = "FRICTION"
-
-#: How much of the refusal text a row carries. A refusal message is a
-#: paragraph; a ledger row is a line. The first line names the class, which
-#: is what a reader triages on, and the guard plus reason token identify it
-#: exactly.
-MAX_DETAIL_CHARS = 240
-
-#: Values that must never reach an append-only shared file. The redaction is
-#: deliberately blunt: a refusal message quotes the command that was refused,
-#: and a refused command is exactly the kind that carries a token.
-_SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{16,}"),
-    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
-    re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),
-    re.compile(r"\bsk-[A-Za-z0-9]{20,}"),
-    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
-    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
-    re.compile(r"(?i)\b(secret|token|password|api[_-]?key)\s*[=:]\s*\S+"),
-)
-
-#: Segments dropped when a reason is normalised into a dedupe token. A guard
-#: interpolates the offending path, branch or count into the reason it logs,
-#: and a dedupe key carrying one would be unique on every refusal — which
-#: would defeat the rate limit and turn this module into the second flood.
-#: Any whitespace-delimited token containing a separator: a filesystem path,
-#: a URL, a branch name. Removed WHOLE and BEFORE slugification — splitting
-#: first would turn one path into a handful of surviving word-shaped
-#: segments, which is exactly the per-instance variation the key must not
-#: carry.
-_PATHLIKE_SEGMENT = re.compile(r"\S*[/\\]\S*")
-#: A bare number: a line number, a count, a duration. A ticket id like
-#: `omn18335` is NOT dropped — it is stable for the refusal class and is the
-#: most useful thing a reader can see in the key.
-_BARE_NUMBER = re.compile(r"^[0-9]+$")
-_SLUG_SPLIT = re.compile(r"[^a-z0-9]+")
-
-#: Characters a ledger row cannot carry. The ledger is pipe-delimited and
-#: line-oriented, so a pipe or a newline inside a field would forge a column
-#: or a row to every reader that splits on them.
-_FIELD_BREAKERS = re.compile(r"[|\r\n]+")
-
-
-def redact(text: str) -> str:
-    """Strip credential-shaped substrings and anything that breaks a row."""
-    for pattern in _SECRET_PATTERNS:
-        text = pattern.sub("[redacted]", text)
-    return _FIELD_BREAKERS.sub(" ", text).strip()
-
-
-def normalise_reason(reason: str) -> str:
-    """Collapse a guard's own reason text into a stable, low-cardinality token.
-
-    Guards log a human phrase, often with the offending path or branch
-    interpolated into it. That phrase identifies the refusal CLASS well and
-    makes a terrible dedupe key: one refusal per path is one row per path.
-    Lowercase, split on non-alphanumerics, drop the segments that carry the
-    instance rather than the class, and cap the result.
-
-    Returns ``"unspecified"`` rather than an empty token when nothing
-    survives, so a row is still written and still groups.
-    """
-    lowered = _PATHLIKE_SEGMENT.sub(" ", reason.strip().lower())
-    kept = [
-        seg for seg in _SLUG_SPLIT.split(lowered) if seg and not _BARE_NUMBER.match(seg)
-    ]
-    # The leading words carry the class; a long tail is usually the instance.
-    slug = "-".join(kept[:8])
-    return slug[:64] or "unspecified"
-
-
-def dedupe_key(guard: str, reason: str, lane: str) -> str:
-    """Stable short key for one refusal CLASS.
-
-    Deliberately excludes the refusal detail and the command: a guard
-    refusing the same class of thing on twenty different files is one
-    recurring friction, not twenty. Including the lane keeps two lanes hitting
-    the same guard visible as two, which is the fact that turns "a lane is
-    stuck" into "the guard is wrong".
-    """
-    raw = f"{guard}\x1f{reason}\x1f{lane}".encode()
-    return hashlib.sha256(raw).hexdigest()[:12]
 
 
 def state_dir() -> Path:
@@ -287,36 +225,37 @@ def should_emit(
     return True, suppressed
 
 
-def build_row(
+def decide_row(
     *,
     guard: str,
     reason: str,
     lane: str,
     lane_source: str,
     detail: str,
-    key: str,
+    session: str,
     suppressed: int,
     timestamp: str,
-) -> str:
-    """One pipe-delimited ledger row.
+) -> ModelHookRefusalRowResult:
+    """Ask the row-decision node for one refusal's redacted, keyed ledger row.
 
-    Field order and spelling follow the rows already in the ledger so an
-    existing reader needs no change: leading timestamp, class, then
-    ``name=value`` fields.
+    The redaction, reason normalisation, dedupe key and row layout are the
+    omnimarket node's (``node_hook_refusal_row_compute``, OMN-20685); this
+    caller keeps only what needs this host: the rate-limit state, the lane
+    resolution and the ledger append. The node's handler is called in-process,
+    the way every other hook reaches an omnimarket node, so a refusal does not
+    pay the runtime import that ``RuntimeLocal`` would add.
     """
-    # Redacted here as well as at the CLI boundary. This function's contract
-    # is "one well-formed row", and a caller passing raw text must not be
-    # able to forge a column or a second row through it.
-    detail = redact(detail)[:MAX_DETAIL_CHARS]
-    return (
-        f"{timestamp} | {ROW_CLASS} | lane={redact(lane) or 'unresolved'} | "
-        f"actor=hook | model=none | class=refusal | guard={guard} | "
-        f"reason={reason} | lane_source={lane_source} | dedupe={key} | "
-        "refusal_count=1 | "
-        f"suppressed_since_last_row={suppressed} | "
-        f'detail="{detail}" | existing=OMN-18946 | cost=~1 lane-minute | '
-        "This row exists because a hook refusal is otherwise terminal-only "
-        "and unaggregated (OMN-18946)"
+    return HandlerHookRefusalRowCompute().handle(
+        ModelHookRefusalRowRequest(
+            guard=guard,
+            reason=reason,
+            detail=detail,
+            lane=lane,
+            lane_source=lane_source,
+            session=session,
+            suppressed=suppressed,
+            timestamp=timestamp,
+        )
     )
 
 
@@ -552,10 +491,6 @@ def main(argv: list[str] | None = None) -> int:
     if not args.guard or not args.reason:
         parser.error("--guard and --reason are required for recording")
 
-    guard = redact(args.guard)[:64] or "unknown-guard"
-    reason = normalise_reason(redact(args.reason))
-    detail = redact(args.detail)[:MAX_DETAIL_CHARS]
-
     payload = read_payload(sys.stdin) if args.payload_stdin else None
     lane, lane_source = resolve_lane_fields(
         args.cwd,
@@ -565,41 +500,40 @@ def main(argv: list[str] | None = None) -> int:
         payload=payload,
         ledger=args.ledger,
     )
-    key = dedupe_key(guard, reason, lane)
-    repeated_secret = guard == "subagent_stop_secret_leak_guard.sh"
-    if repeated_secret:
-        # Lane attribution is a separate concern. A retry budget must not be
-        # shared by unrelated sessions, even when both have an unresolved lane.
-        session = args.session_id or (payload or {}).get("session_id")
-        session = (
-            session
-            or args.transcript_path
-            or (payload or {}).get("agent_transcript_path")
+    # Lane attribution is a separate concern. The secret guard's retry budget
+    # must not be shared by unrelated sessions, even when both have an
+    # unresolved lane, so the node keys that guard by session as well.
+    session = (
+        args.session_id
+        or (payload or {}).get("session_id")
+        or args.transcript_path
+        or (payload or {}).get("agent_transcript_path")
+    )
+
+    def decide(suppressed: int, timestamp: str) -> ModelHookRefusalRowResult:
+        return decide_row(
+            guard=args.guard,
+            reason=args.reason,
+            lane=lane,
+            lane_source=lane_source,
+            detail=args.detail,
+            session=str(session) if session else "",
+            suppressed=suppressed,
+            timestamp=timestamp,
         )
-        if session:
-            key = dedupe_key(guard, reason, f"{lane}:{session}")
 
     registry_root = None
     project = None
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    first = decide(0, timestamp)
+    key = first.key
+    repeated_secret = first.repeated_secret
     if not args.print_row:
         registry_root = _resolve_registry_root()
         # An explicit state root can retain the refusal even if the registry
         # needed by the aggregate writer is unavailable. Never lose both.
         try:
-            append_refusal_log(
-                build_row(
-                    guard=guard,
-                    reason=reason,
-                    lane=lane,
-                    lane_source=lane_source,
-                    detail=detail,
-                    key=key,
-                    suppressed=0,
-                    timestamp=timestamp,
-                ),
-                registry_root,
-            )
+            append_refusal_log(first.row, registry_root)
         except (OSError, ValueError) as exc:
             print(
                 "hook refusal recorder: "
@@ -639,16 +573,7 @@ def main(argv: list[str] | None = None) -> int:
     if not emit:
         return 0
 
-    row = build_row(
-        guard=guard,
-        reason=reason,
-        lane=lane,
-        lane_source=lane_source,
-        detail=detail,
-        key=key,
-        suppressed=suppressed,
-        timestamp=timestamp,
-    )
+    row = decide(suppressed, timestamp).row
     if args.print_row:
         print(row)
         if repeated_secret:

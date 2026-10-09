@@ -67,26 +67,49 @@ def _load_recorder():
 
 recorder = _load_recorder()
 
+ROW_TIMESTAMP = "2026-09-21T05:00:00Z"
+
+
+def _decide(
+    *,
+    guard: str = "g",
+    reason: str = "r",
+    lane: str = "l",
+    lane_source: str = "sidecar",
+    detail: str = "",
+    session: str = "",
+    suppressed: int = 0,
+):
+    """The row decision, through the recorder's seam to the omnimarket node."""
+    return recorder.decide_row(
+        guard=guard,
+        reason=reason,
+        lane=lane,
+        lane_source=lane_source,
+        detail=detail,
+        session=session,
+        suppressed=suppressed,
+        timestamp=ROW_TIMESTAMP,
+    )
+
 
 class TestTheRowIsWellFormed:
     def test_a_row_carries_every_field_a_reader_triages_on(self) -> None:
-        row = recorder.build_row(
+        decided = _decide(
             guard="pre_tool_use_bash_guard.sh",
             reason="compound-line-cannot-be-tokenised",
             lane="omn18946-lane",
-            lane_source="sidecar",
             detail="BLOCKED: this command could not be tokenised",
-            key="abc123def456",
             suppressed=4,
-            timestamp="2026-09-21T05:00:00Z",
         )
+        row = decided.row
         for field in (
             "| FRICTION |",
             "lane=omn18946-lane",
             "class=refusal",
             "guard=pre_tool_use_bash_guard.sh",
             "reason=compound-line-cannot-be-tokenised",
-            "dedupe=abc123def456",
+            f"dedupe={decided.key}",
             "suppressed_since_last_row=4",
         ):
             assert field in row, field
@@ -95,34 +118,49 @@ class TestTheRowIsWellFormed:
         """The ledger is line-oriented. A row spanning two lines is two rows
         to every reader, and the second is malformed.
         """
-        row = recorder.build_row(
-            guard="g",
-            reason="r",
-            lane="l",
-            lane_source="sidecar",
-            detail="first line\nsecond line",
-            key="k",
-            suppressed=0,
-            timestamp="2026-09-21T05:00:00Z",
-        )
+        row = _decide(detail="first line\nsecond line").row
         assert "\n" not in row
 
     def test_an_unresolved_lane_is_named_not_guessed(self) -> None:
         """A row attributing one lane's friction to a neighbour is worse than
         a row naming no lane at all.
         """
-        row = recorder.build_row(
-            guard="g",
-            reason="r",
-            lane="",
-            lane_source="unresolved",
-            detail="",
-            key="k",
-            suppressed=0,
-            timestamp="2026-09-21T05:00:00Z",
-        )
+        row = _decide(lane="", lane_source="unresolved").row
         assert "lane=unresolved" in row
         assert "lane_source=unresolved" in row
+
+
+GOLDEN = REPO_ROOT / "tests" / "fixtures" / "hook_refusal_row_golden.json"
+
+
+class TestTheNodeDecidesTheSameRowTheRecorderDid:
+    """The row logic moved to omnimarket's node_hook_refusal_row_compute
+    (OMN-20685). The golden file holds what this recorder produced, for the
+    inputs it was given, at commit ad0aa0ddc, the last revision that computed
+    rows itself. A repoint that changed one byte of any row fails here.
+    """
+
+    def test_every_recorded_refusal_yields_the_recorded_row(self) -> None:
+        golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
+        assert len(golden["cases"]) >= 100  # positive control: not an empty file
+        for case in golden["cases"]:
+            request = case["request"]
+            decided = recorder.decide_row(
+                guard=request["guard"],
+                reason=request["reason"],
+                lane=request.get("lane", ""),
+                lane_source=request.get("lane_source", "unresolved"),
+                detail=request.get("detail", ""),
+                session=request.get("session", ""),
+                suppressed=request.get("suppressed", 0),
+                timestamp=request["timestamp"],
+            )
+            expected = case["expected"]
+            assert decided.row == expected["row"], request
+            assert decided.key == expected["key"], request
+
+    def test_positive_control_a_changed_input_changes_the_row(self) -> None:
+        assert _decide(reason="one class").row != _decide(reason="another class").row
 
 
 class TestRedaction:
@@ -159,37 +197,39 @@ class TestRedaction:
         assert breaker not in cleaned
 
 
+def _decide_reason(text: str) -> str:
+    return _decide(reason=text).reason
+
+
 class TestTheReasonBecomesAStableKey:
     def test_the_same_class_on_two_paths_is_one_key(self) -> None:
         """The rate limit is worthless if the key varies per instance. A guard
         refusing the same class on twenty files is one recurring friction.
         """
-        a = recorder.normalise_reason("Worktree path outside canonical root: /a/b/c")
-        b = recorder.normalise_reason("Worktree path outside canonical root: /x/y/z")
+        a = _decide_reason("Worktree path outside canonical root: /a/b/c")
+        b = _decide_reason("Worktree path outside canonical root: /x/y/z")
         assert a == b == "worktree-path-outside-canonical-root"
 
     def test_positive_control_two_different_classes_are_two_keys(self) -> None:
         """The control against a normaliser that collapses everything to one
         token, which would hide every refusal but the first behind one row.
         """
-        a = recorder.normalise_reason("worktree path outside canonical root")
-        b = recorder.normalise_reason("command could not be tokenised")
+        a = _decide_reason("worktree path outside canonical root")
+        b = _decide_reason("command could not be tokenised")
         assert a != b
 
     def test_a_bare_number_is_dropped_and_a_ticket_id_is_kept(self) -> None:
-        with_line = recorder.normalise_reason("refused at line 412")
-        other_line = recorder.normalise_reason("refused at line 9")
+        with_line = _decide_reason("refused at line 412")
+        other_line = _decide_reason("refused at line 9")
         assert with_line == other_line
-        assert "omn" in recorder.normalise_reason("refused by OMN-18335")
+        assert "omn" in _decide_reason("refused by OMN-18335")
 
     def test_an_empty_reason_still_groups(self) -> None:
-        assert recorder.normalise_reason("   ") == "unspecified"
+        assert _decide_reason("   ") == "unspecified"
 
     def test_two_lanes_hitting_one_guard_stay_two_rows(self) -> None:
         """The fact that turns "a lane is stuck" into "the guard is wrong"."""
-        assert recorder.dedupe_key("g", "r", "lane-a") != recorder.dedupe_key(
-            "g", "r", "lane-b"
-        )
+        assert _decide(lane="lane-a").key != _decide(lane="lane-b").key
 
 
 class TestTheRateLimit:
