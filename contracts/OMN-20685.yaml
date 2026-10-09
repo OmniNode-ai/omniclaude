@@ -15,6 +15,9 @@ evidence_requirements:
   - kind: tests
     description: "Relocated guard matches the pre-relocation golden and its suites pass"
     command: "uv run pytest tests/hooks/test_git_admission_parity.py tests/hooks/test_shared_tree_git_guard.py tests/hooks/test_dirty_path_restore_guard.py tests/hooks/test_git_fetch_guard.py -q"
+  - kind: tests
+    description: "The hook refusal recorder decides every recorded refusal's row through omnimarket's node_hook_refusal_row_compute and matches the recorded rows"
+    command: "uv run pytest tests/hooks/test_refusal_rows_omn18946.py -q"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -26,3 +29,9 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/hooks/test_git_admission_parity.py -q"
+  - id: dod-hook-refusal-row-parity
+    description: "The repointed hook refusal recorder yields the pre-repoint recorder's row and dedupe key for every recorded refusal"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_refusal_rows_omn18946.py -q"

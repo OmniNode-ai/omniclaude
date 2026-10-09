@@ -41,7 +41,19 @@ def isolated_recorder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return (
         tmp_path
         / "state/hook_refusals"
-        / (recorder.dedupe_key("test-guard", "test-refusal", "lane") + ".json")
+        / (
+            recorder.decide_row(
+                guard="test-guard",
+                reason="test-refusal",
+                lane="lane",
+                lane_source="env",
+                detail="",
+                session="",
+                suppressed=0,
+                timestamp="2026-10-09T06:00:00Z",
+            ).key
+            + ".json"
+        )
     )
 
 
