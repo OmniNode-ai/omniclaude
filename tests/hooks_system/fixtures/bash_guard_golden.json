@@ -1053,7 +1053,7 @@
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under ${WSENV}/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C ${WSENV} merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-${WSENV}/../omnibase_internal}\" onex-commit-lock --repo \"${WSENV}\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED: this Bash command could not be tokenised in the segment starting at line 1, column 1 (unterminated single quote) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under ${WSENV}/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C ${WSENV} merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-${WSENV}/../{INTERNAL_NAME}}\" onex-commit-lock --repo \"${WSENV}\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
     },
     "rc": 2
    }
@@ -1747,7 +1747,15 @@
   "worktree\tcd {WT} && git checkout -b lane/another": {},
   "worktree\tcd {WT} && git clean -fd": {},
   "worktree\tcd {WT} && git merge origin/dev": {},
-  "worktree\tcd {WT} && git push --force-with-lease origin HEAD:lane/my-branch": {},
+  "worktree\tcd {WT} && git push --force-with-lease origin HEAD:lane/my-branch": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tcd {WT} && git rebase origin/dev": {},
   "worktree\tcd {WT} && git reset --hard origin/dev": {},
   "worktree\tcd {WT}; git rebase origin/dev": {},
@@ -2098,7 +2106,15 @@
    }
   },
   "worktree\tgh pr list --repo OmniNode-ai/omniclaude": {},
-  "worktree\tgh pr merge 2019 --squash": {},
+  "worktree\tgh pr merge 2019 --squash": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgh pr reopen 2019 -R OmniNode-ai/omniclaude": {
    "pre_tool_use_pr_ownership_guard.sh": {
     "out": {
@@ -2329,43 +2345,83 @@
     "rc": 2
    }
   },
-  "worktree\tgit push": {},
-  "worktree\tgit push --force": {},
+  "worktree\tgit push": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tgit push --force": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit push --force origin +dev": {
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'dev', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'dev' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
   },
-  "worktree\tgit push --force origin HEAD:lane/my-branch": {},
+  "worktree\tgit push --force origin HEAD:lane/my-branch": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit push --force origin dev": {
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'dev', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'dev' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
   },
-  "worktree\tgit push --force origin lane-branch": {},
+  "worktree\tgit push --force origin lane-branch": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit push --force origin main": {
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'main', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'main' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
   },
-  "worktree\tgit push --force origin refs/heads/lane/my-branch": {},
+  "worktree\tgit push --force origin refs/heads/lane/my-branch": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit push --force origin refs/heads/main": {
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'main', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'main' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
@@ -2374,7 +2430,7 @@
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'main', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'main' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
@@ -2383,27 +2439,43 @@
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'dev', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'dev' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
   },
-  "worktree\tgit push --force-with-lease origin HEAD:lane/my-branch": {},
+  "worktree\tgit push --force-with-lease origin HEAD:lane/my-branch": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit push --force-with-lease origin HEAD:main": {
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'main', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'main' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
   },
-  "worktree\tgit push --force-with-lease origin lane-branch": {},
+  "worktree\tgit push --force-with-lease origin lane-branch": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit push --force-with-lease origin main": {
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'main', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'main' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
@@ -2412,17 +2484,25 @@
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'main', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'main' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
   },
-  "worktree\tgit push --set-upstream origin lane-branch": {},
+  "worktree\tgit push --set-upstream origin lane-branch": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit push -f origin lane/mine:dev": {
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'dev', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'dev' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
@@ -2431,25 +2511,65 @@
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'main', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'main' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
   },
-  "worktree\tgit push -fu origin lane-branch": {},
-  "worktree\tgit push -q origin main": {},
-  "worktree\tgit push -u origin lane-branch": {},
-  "worktree\tgit push origin main": {},
+  "worktree\tgit push -fu origin lane-branch": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tgit push -q origin main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tgit push -u origin lane-branch": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
+  "worktree\tgit push origin main": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit push origin main --force": {
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git push --force` in {WT} (OMN-18798, Operating Rule 19). This is your own tree and almost everything in it is your business -- but this force-pushes 'main', a branch every lane and CI share. Rewriting it is not a per-lane decision however private the tree this was typed in, and it can destroy commits no local clone has a copy of. Force-pushing your OWN feature branch is untouched and is the normal way to land a rebase -- name it explicitly, as in `git push --force-with-lease origin HEAD:<your-branch>`. To change 'main' itself, open a pull request and land it. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
     },
     "rc": 2
    }
   },
-  "worktree\tgit push origin main:refs/heads/lane-branch": {},
+  "worktree\tgit push origin main:refs/heads/lane-branch": {
+   "pre_tool_use_shared_tree_git_guard.sh": {
+    "out": {
+     "decision": "block",
+     "reason": "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+    },
+    "rc": 2
+   }
+  },
   "worktree\tgit rebase --continue": {},
   "worktree\tgit rebase -i HEAD~3": {},
   "worktree\tgit rebase origin/main": {},
@@ -2460,7 +2580,7 @@
    "pre_tool_use_shared_tree_git_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: this Bash command could not be tokenised (an unbalanced quote, most likely) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under ${WSENV}/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C ${WSENV} merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-${WSENV}/../omnibase_internal}\" onex-commit-lock --repo \"${WSENV}\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
+     "reason": "BLOCKED: this Bash command could not be tokenised in the segment starting at line 1, column 1 (unterminated single quote) and its raw text names git together with one of the verbs refused in the shared registry clone (OMN-18798, Operating Rule 19), so whether it moves the tree every other lane is working in cannot be determined. An unverifiable shared-tree mutation is refused, never assumed safe. Fix the quoting and re-run, or use a sanctioned alternative -- do the work in a worktree under ${WSENV}/omni_worktrees/<ticket>/<repo> instead of the shared clone, created with git worktree add -b so the branch and the place to use it arrive together; sync with git -C ${WSENV} merge --ff-only origin/main, or run the ruled ledger publish loop on main -- commit_lock rows, git merge --no-edit origin/main, push a FRESH branch, open a pull request and land it; append ledger rows through scripts/ledger_lock.py and commit them through uv run --project \"${OMNIBASE_INTERNAL_HOME:-${WSENV}/../{INTERNAL_NAME}}\" onex-commit-lock --repo \"${WSENV}\"; or restore individual files with a path-scoped git checkout <ref> -- <path> naming each path, which is refused on the append-only ledger itself and over any path holding uncommitted work. To disable this guard: onex hooks disable SCOPE_GATE"
     },
     "rc": 2
    }

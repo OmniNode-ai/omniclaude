@@ -1740,9 +1740,9 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help=(
-            "path to the PRIVATE denylist vocabulary. Defaults to "
-            "$OMNI_HOME/docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml "
-            "locally; CI fetches it from the private repo and passes the path."
+            "path to the PRIVATE denylist vocabulary. When omitted, the path "
+            "is read from $OMNI_HYGIENE_VOCAB_PATH; with neither, the gate "
+            "refuses to run. CI fetches the vocabulary and passes the path."
         ),
     )
     parser.add_argument(
@@ -1806,23 +1806,27 @@ def main(argv: list[str] | None = None) -> int:
     if vocab_path is None:
         import os
 
-        workspace_root = os.environ.get("OMNI_HOME")
-        if not workspace_root:
+        vocabulary_env = os.environ.get("OMNI_HYGIENE_VOCAB_PATH")
+        if not vocabulary_env:
             print(
-                "::error::--vocabulary was not given and OMNI_HOME is not set, so "
+                "::error::--vocabulary was not given and OMNI_HYGIENE_VOCAB_PATH "
+                "is not set, so "
                 "the private denylist vocabulary cannot be located. The gate "
                 "fails closed rather than scanning with no vocabulary. "
                 "THE GATE DID NOT RUN.",
                 file=sys.stderr,
             )
             return 2
-        vocab_path = (
-            Path(workspace_root)
-            / "docs"
-            / "workflows"
-            / "_shared"
-            / "public_repo_hygiene_vocabulary.yaml"
-        )
+        vocab_path = Path(vocabulary_env)
+        if not vocab_path.is_file():
+            print(
+                "::error::OMNI_HYGIENE_VOCAB_PATH does not name a readable "
+                "file, so the private denylist vocabulary cannot be loaded. "
+                "The gate fails closed rather than scanning with no "
+                "vocabulary. THE GATE DID NOT RUN.",
+                file=sys.stderr,
+            )
+            return 2
 
     if args.refresh_visibility:
         try:

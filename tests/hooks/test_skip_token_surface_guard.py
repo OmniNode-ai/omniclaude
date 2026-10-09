@@ -106,7 +106,7 @@ def test_hooks_json_registers_guard_for_stop_and_subagent_stop() -> None:
     hooks_json = REPO_ROOT / "plugins" / "onex" / "hooks" / "hooks.json"
     data = json.loads(hooks_json.read_text())
 
-    # The guard is on the OMN-18531 triage list: dark by decision, not by
+    # The guard carries an OMN-18531 declare-dark verdict: dark by decision, not by
     # accident. Stop now carries an unrelated observer (OMN-19551), so the
     # "no hooks registered" skip below no longer covers that case.
     inventory = yaml.safe_load(
@@ -119,18 +119,18 @@ def test_hooks_json_registers_guard_for_stop_and_subagent_stop() -> None:
             / "hook_inventory.yaml"
         ).read_text()
     )
-    triaged = {
+    declared_dark = {
         row.get("script")
         for rows in inventory.values()
         if isinstance(rows, list)
         for row in rows
         if isinstance(row, dict)
-        and (row.get("restoration") or {}).get("kind") == "triage"
+        and (row.get("restoration") or {}).get("kind") in {"triage", "re_register"}
     }
-    if "skip_token_surface_guard.sh" in triaged:
+    if "skip_token_surface_guard.sh" in declared_dark:
         pytest.skip(
-            "skip_token_surface_guard.sh is triaged dark under OMN-18531. "
-            "Re-enable this assertion when that triage registers it."
+            "skip_token_surface_guard.sh is declared dark under OMN-18531. "
+            "Re-enable this assertion when that verdict registers it."
         )
 
     for event_name in ("Stop", "SubagentStop"):

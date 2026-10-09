@@ -182,6 +182,8 @@ sessions already open when it lands are not covered until they restart.
 from __future__ import annotations
 
 import argparse
+import fcntl
+import hashlib
 import json
 import logging
 import os
@@ -460,7 +462,7 @@ def _str_pairs(raw: Mapping[str, object], key: str) -> tuple[tuple[str, str], ..
     return tuple(sorted(value.items()))
 
 
-def _segments(command: str) -> list[list[str]] | None:
+def _segments(command: str) -> list[list[str]]:
     """The simple commands of ``command``, each as its dequoted words.
 
     OMN-17427. This read the command with ``shlex``, which is not a shell
@@ -476,10 +478,7 @@ def _segments(command: str) -> list[list[str]] | None:
     A subshell parenthesis stays a word of its own, which ``_peel_grouping``
     reads.
     """
-    try:
-        tokens = tokenize(command)
-    except ShellSyntaxError:
-        return None
+    tokens = tokenize(command)
     segments: list[list[str]] = []
     current: list[str] = []
     for tok in tokens:
@@ -2323,14 +2322,19 @@ def evaluate_bash_command(
     worktree_roots: tuple[Path, ...] = (),
 ) -> Decision:
     notes: list[str] = []
-    segments = _segments(command)
-    if segments is None:
+    try:
+        segments = _segments(command)
+    except ShellSyntaxError as exc:
         if _plainly_names_refused_verb(command, policy):
+            prefix = command[: exc.segment_start or 0]
+            line = prefix.count("\n") + 1
+            column = len(prefix.rsplit("\n", 1)[-1]) + 1
             return Decision(
                 blocked=True,
                 reason=(
-                    "BLOCKED: this Bash command could not be tokenised (an "
-                    "unbalanced quote, most likely) and its raw text names "
+                    "BLOCKED: this Bash command could not be tokenised "
+                    f"in the segment starting at line {line}, column {column} "
+                    f"({exc}) and its raw text names "
                     "git together with one of the verbs refused in the "
                     f"shared registry clone ({policy.ticket}, "
                     f"{policy.rule}), so whether it moves the tree every "
@@ -2548,6 +2552,10 @@ class HandlerGitAdmission:
         command = tool_input.get("command") if isinstance(tool_input, dict) else None
         if not isinstance(command, str) or not command:
             return verdict(False)
+        if _is_publish_command(command):
+            ruling_refusal = ruling_reread_refusal(os.environ, payload.get("cwd"))
+            if ruling_refusal is not None:
+                return verdict(True, ruling_refusal)
         try:
             policy = replace(
                 load_policy(request.policy_path),
@@ -2624,6 +2632,162 @@ def dispatch(
     if not isinstance(result, ModelGitResult) or result.admission is None:
         raise RuntimeError("git admission runtime returned no typed verdict")
     return result.admission
+
+
+def _is_publish_command(command: str) -> bool:
+    """Reuse the shell reader: quoted prose and here-doc bodies are not actions."""
+    try:
+        segments = _segments(command)
+    except ShellSyntaxError:
+        # An unverifiable publishing command must still reach the refusal boundary.
+        return bool(re.search(r"\b(?:git|gh)\b.*\b(?:push|merge)\b", command))
+    for segment in segments:
+        words, _, _ = _peel_grouping(segment)
+        words = _drop_timeout(words)
+        words = _strip_wrappers(words)
+        while words and (
+            words[0] in {"-u", "--unset", "-i", "--ignore-environment", "--"}
+            or words[0].startswith("--unset=")
+        ):
+            words = words[2:] if words[0] in {"-u", "--unset"} else words[1:]
+            words = _strip_wrappers(words)
+        git = _parse_git(words)
+        if git is not None and git.subcommand == "push":
+            return True
+        words = _strip_wrappers(words)
+        if not words or os.path.basename(words[0]) != "gh":
+            continue
+        args = words[1:]
+        while args and args[0].startswith("-"):
+            if args[0] in {"-R", "--repo", "--hostname"}:
+                args = args[2:]
+            else:
+                args = args[1:]
+        if args[:2] == ["pr", "merge"]:
+            return True
+    return False
+
+
+def ruling_reread_refusal(
+    environ: Mapping[str, str], working_directory: str | None = None
+) -> str | None:
+    """OMN-18645: project every post-CLAIM ruling, requiring an exact ledger ACK.
+
+    The append-only journal retains first-seen ruling text and its citation. Editing,
+    deleting or rolling a ledger row never acknowledges it. No per-lane/ticket
+    exception or clear command exists; ACKs are re-read from the ledger on every
+    attempt. This is shared by PreToolUse and the bus-wired Git effect handler.
+    """
+    lane = environ.get("ONEX_LANE") or environ.get("ONEX_LANE_ID")
+    if not lane:
+        directory = working_directory or os.getcwd()
+        if any(
+            marker in directory for marker in ("/omni_worktrees/", "/lab-run/runs/")
+        ):
+            return "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
+        return None  # Operator calls outside a lane have no lane CLAIM to compare.
+    ledger_name = environ.get("ONEX_LEDGER_PATH")
+    state_root = environ.get("ONEX_STATE_DIR")
+    if not ledger_name or not state_root:
+        return "BLOCKED (OMN-18645): lane publishing requires ONEX_LEDGER_PATH and ONEX_STATE_DIR."
+    ledger = Path(ledger_name).resolve()
+    try:
+        # Rolls move rows; read all rolls, never an arbitrary tail or age cutoff.
+        sources = [*sorted((ledger.parent / "archive").glob("*-split.md")), ledger]
+        rows: list[tuple[str, str, dict[str, str], str, str]] = []
+        for source in sources:
+            for number, raw in enumerate(
+                source.read_text(encoding="utf-8").splitlines(), 1
+            ):
+                cells = [cell.strip() for cell in raw.split(" | ")]
+                if len(cells) < 2:
+                    continue
+                stamp = cells[0].removeprefix("- ").strip()
+                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", stamp):
+                    continue
+                fields = dict(cell.split("=", 1) for cell in cells[2:] if "=" in cell)
+                rows.append((stamp, cells[1], fields, f"{source}:{number}", raw))
+        claims = [
+            stamp
+            for stamp, kind, fields, _, _ in rows
+            if kind == "CLAIM" and fields.get("lane") == lane
+        ]
+        if not claims:
+            return f"BLOCKED (OMN-18645): no ledger CLAIM found for lane={lane}; publishing cannot prove a ruling re-read."
+        # Earlier observations remain pending even when a lane re-claims.
+        claim = max(claims)
+        journal = Path(state_root) / "hooks" / "ruling-reread.jsonl"
+        journal.parent.mkdir(parents=True, exist_ok=True)
+        pending: list[str] = []
+        with journal.open("a+", encoding="utf-8") as store:
+            # No waiting inside a publishing gate: contention is a named refusal.
+            fcntl.flock(store, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            store.seek(0)
+            entries: dict[tuple[str, str, str], tuple[str, str, str, str]] = {}
+            for line in store:
+                record = json.loads(line)
+                if (
+                    not isinstance(record, list)
+                    or len(record) != 7
+                    or not all(isinstance(value, str) for value in record)
+                ):
+                    raise ValueError("malformed ruling observation")
+                source, actor, digest, stamp, ref, citation, raw = record
+                if hashlib.sha256(raw.encode("utf-8")).hexdigest() != digest:
+                    raise ValueError("ruling observation digest mismatch")
+                key = (source, actor, digest)
+                value = (stamp, ref, citation, raw)
+                if key in entries and entries[key] != value:
+                    raise ValueError("conflicting ruling observation")
+                entries[key] = value
+            for stamp, kind, fields, citation, raw in rows:
+                if kind != "RULING" or stamp < claim:
+                    continue
+                digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+                ref = fields.get("id") or stamp
+                key = (str(ledger), lane, digest)
+                if key not in entries:
+                    store.write(json.dumps([*key, stamp, ref, citation, raw]) + "\n")
+                    entries[key] = (stamp, ref, citation, raw)
+            store.flush()
+            os.fsync(store.fileno())
+            observed = sorted(
+                (
+                    (digest, *value)
+                    for (source, actor, digest), value in entries.items()
+                    if source == str(ledger) and actor == lane
+                ),
+                key=lambda observation: (observation[1], observation[0]),
+            )
+            for digest, stamp, ref, citation, raw in observed:
+                acknowledged = any(
+                    kind == "ACK"
+                    and ack_stamp > stamp
+                    and fields.get("lane") == lane
+                    and fields.get("from") == lane
+                    and fields.get("id") == f"{ack_stamp}-{lane}"
+                    and bool(fields.get("to"))
+                    and fields.get("re") == ref
+                    and fields.get("ruling") == citation
+                    and fields.get("ruling-sha256") == digest
+                    for ack_stamp, kind, fields, _, _ in rows
+                )
+                if not acknowledged:
+                    pending.append(
+                        f"{citation}: {raw}\nACK requires re={ref} | ruling={citation} | ruling-sha256={digest}"
+                    )
+        if pending:
+            return (
+                f"BLOCKED (OMN-18645): lane={lane} must re-read the ledger for RULING rows appended after CLAIM ({claim}). "
+                "Apply each ruling before appending a ledger ACK with lane= and from= naming your lane, to= naming its author, id=<ACK timestamp>-<your lane>, its citation and digest. "
+                "Acknowledgement records reading; it grants no authority to disregard a ruling.\n"
+                + "\n".join(pending)
+            )
+    except BlockingIOError:
+        return "BLOCKED (OMN-18645): ruling re-read journal is locked by another publisher; retry the publish."
+    except (OSError, UnicodeError, ValueError) as exc:
+        return f"BLOCKED (OMN-18645): ledger ruling re-read could not be verified ({exc}); repair the ledger/journal before publishing."
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:

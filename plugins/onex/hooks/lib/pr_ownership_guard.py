@@ -19,7 +19,8 @@ It performs NO network I/O.  Ownership resolves entirely from the local
 ``pr_claim_registry`` claims directory plus a locally-resolvable lane identity,
 so it is safe to run in the ``PreToolUse`` hot path. Active claims must match
 the caller's lane and full run identity; a recorded full session must match
-too (OMN-19699). Shared session prefixes never substitute for run ownership.
+too (OMN-19699). A session fallback may resolve a named claim only when both
+full session and run match. Shared session prefixes never prove ownership.
 
 Net-negative design (OMN-15483 precedent): this extends the claim vocabulary
 that ALREADY ships in ``pr_claim_registry`` rather than inventing a second one.
@@ -532,9 +533,9 @@ def resolve_lane_id(
     Returns ``None`` when nothing is resolvable, which every caller must treat
     as INDETERMINATE and therefore refusing.
 
-    Two lanes sharing one worktree collapse to a single id.  That is a
-    deliberate under-block: it can permit a mutation between co-located lanes,
-    but it never blocks an unrelated lane's own work.
+    This is the caller's local lane label. When it falls back to a session,
+    the verdict may use a claim's readable lane if its full session and run
+    both match. Explicit peer lanes still refuse even with shared identities.
     """
     environment = dict(os.environ) if env is None else env
 
@@ -714,7 +715,14 @@ def decide(
                     + _claim_command(target, lane_id, run_id)
                 ),
             )
-        if claim_lane != lane_id:
+        session_owns_claim = bool(
+            session_id
+            and run_id
+            and lane_id == _sanitize_lane(f"session:{session_id[:16]}")
+            and claim_session == session_id
+            and claim_run == run_id
+        )
+        if claim_lane != lane_id and not session_owns_claim:
             return Decision(
                 allowed=False,
                 reason_code="CROSS_LANE",
@@ -750,7 +758,7 @@ def decide(
             reason_code="OWNED_BY_SELF",
             verb=verb,
             target_key=target,
-            message=f"allowed: lane '{lane_id}' holds an active claim on {target}",
+            message=f"allowed: lane '{claim_lane}' holds an active claim on {target}",
         )
 
     # claim_status is "absent" or "expired" from here on.

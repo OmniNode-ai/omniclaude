@@ -83,7 +83,13 @@ source "${_OBG_LIB}/bash_guard_core.sh"
 # before they start concurrently. Otherwise every guard that looks before the
 # first one creates it races to mkdir it too, and how many do depends on how
 # slow the machine is: more execs per call on a loaded runner.
-_OBG_LOG_DIR="${ONEX_STATE_DIR:-${HOME}/.onex_state}/logs"
+if [[ ( -z "${ONEX_STATE_DIR:-}" && "${OMNI_HOME:-}" != /* ) ||
+      ( -n "${ONEX_STATE_DIR:-}" && "$ONEX_STATE_DIR" != /* ) ]]; then
+    printf '%s\n' 'onex-paths: set an absolute OMNI_HOME or ONEX_STATE_DIR for the refusal log' >&2
+    printf '%s\n' '{"decision":"block","reason":"OMN-18983: refusal log path is unresolved; set an absolute OMNI_HOME or ONEX_STATE_DIR"}'
+    exit 2
+fi
+_OBG_LOG_DIR="${ONEX_STATE_DIR:-${OMNI_HOME}/.onex_state}/hooks/logs"
 [[ -d "$_OBG_LOG_DIR" ]] || mkdir -p "$_OBG_LOG_DIR" 2>/dev/null || true
 
 ONEX_BASH_GUARDS_REQ="${TMPDIR:-/tmp}"

@@ -207,6 +207,13 @@ def test_relocated_guard_matches_pre_relocation_golden(
 ) -> None:
     observed = observe_cases(guard, tmp_path, monkeypatch)
     expected = json.loads(GOLDEN.read_text())["cases"]
+    # OMN-18936: a tokeniser refusal names the failed segment and its syntax
+    # error. The golden stays the pre-relocation record; only this wording moved.
+    expected["registry:16"]["reason"] = expected["registry:16"]["reason"].replace(
+        "could not be tokenised (an unbalanced quote, most likely)",
+        "could not be tokenised in the segment starting at line 1, column 1 "
+        "(unterminated single quote)",
+    )
     assert set(observed) == set(expected)
     for case_id in observed:
         assert observed[case_id] == expected[case_id], case_id

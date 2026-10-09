@@ -43,6 +43,8 @@ description: >
   merge operations (direct and merge-queue), tag management, and label
   management with pluggable backends. Every PR body created via this node
   contains a mandatory ticket stamp block.
+  Push and merge re-read ledger RULING rows appended after the lane CLAIM,
+  refusing until exact ledger ACKs cite each surfaced row (OMN-18645).
 
 # Strongly typed I/O models
 input_model:
@@ -278,6 +280,8 @@ handler_routing:
 invariants:
   - all_prs_include_ticket_stamp: true
   - no_subprocess_outside_handler: true
+  # OMN-18782: enforced by the existing subprocess backend on create and update.
+  - failure_claim_paragraphs_require_citations: true
 
 # Error handling
 error_handling:

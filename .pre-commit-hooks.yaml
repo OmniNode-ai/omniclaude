@@ -203,21 +203,19 @@
 - id: doctrine-claim-gate
   name: Doctrine-claim gate — a claim of "unenforced" must match its ticket (OMN-18529)
   description: >
-    Refuses a doctrine sentence asserting a mechanism is unbuilt, in flight or
-    blocked when the ticket it names is in a state that claim cannot be true
-    of. Three claim types, each binding a ticket to a role with its own
-    expected state set; "in flight" accepts a started ticket and nothing else,
-    because a reclassified in-flight item lands in Backlog and open-versus-
-    closed would pass it. Fails closed on an unreadable file, an unresolvable
-    ticket, an unreachable tracker, and on a scan matching ZERO claim
-    sentences. See scripts/doctrine_claim_gate.py for the full rule.
+    Requires an explicit HTML doctrine-claim marker with type, ticket and role
+    for every unbuilt, in_flight or blocked claim; rewording cannot hide a claim.
+    One marker names one ticket in the same prose block or table row. Refuses
+    malformed markers, missing tickets or roles, and ticket-state contradictions;
+    in_flight requires started, while unbuilt and blocked require non-terminal
+    states. Fails closed on unreadable input, unavailable tracker credentials or
+    states, and ZERO claim sentences or markers (OMN-18529).
 
-    REQUIRES the tracker credential in the environment. That is deliberate and
-    it is the whole design: this gate refuses rather than skipping when it
-    cannot read ticket state, because a gate that cannot read its input has
-    not passed, it has not run. It fires only on the doctrine file, so the
-    blast radius of that strictness is a commit that edits doctrine claims,
-    which is exactly when the check matters.
+    REQUIRES the tracker credential in the environment. That is deliberate:
+    this gate refuses rather than skipping when it cannot read ticket state,
+    because a gate that cannot read its input has not passed, it has not run.
+    It fires only on the doctrine file, so the blast radius of that
+    strictness is a commit that edits doctrine claims.
   language: script
   entry: scripts/doctrine_claim_gate.py
   files: ^CLAUDE\.md$

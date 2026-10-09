@@ -171,27 +171,42 @@ def test_repeated_consistent_pins_pass(
     network.assert_not_called()
 
 
-@pytest.mark.parametrize("base_text", [None, "name: new gate without a core pin"])
-def test_no_base_pin_passes(
+def test_absent_base_workflow_passes(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    base_text: str | None,
 ) -> None:
-    git = _pins(monkeypatch, tmp_path, base_text=base_text)
+    git = _pins(monkeypatch, tmp_path, base_text=None)
     network = _network(monkeypatch, [AssertionError("must not download")])
     assert gate.check_growth("origin/dev") == 0
     assert "nothing to compare (new gate)" in capsys.readouterr().out
     network.assert_not_called()
-    if base_text is None:
-        assert git.call_args_list[-1].args[0] == [
-            "git",
-            "ls-tree",
-            "--name-only",
-            "origin/dev",
-            "--",
-            gate.WORKFLOW_PATH,
-        ]
+    assert git.call_args_list[-1].args[0] == [
+        "git",
+        "ls-tree",
+        "--name-only",
+        "origin/dev",
+        "--",
+        gate.WORKFLOW_PATH,
+    ]
+
+
+@pytest.mark.parametrize(
+    "base_text",
+    ["", "name: existing gate without a core pin", _workflow("a" * 39)],
+    ids=["empty", "missing-pin", "short-pin"],
+)
+def test_existing_base_workflow_without_valid_pin_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    base_text: str,
+) -> None:
+    _pins(monkeypatch, tmp_path, base_text=base_text)
+    network = _network(monkeypatch, [AssertionError("must not download")])
+    assert gate.check_growth("origin/dev") == 1
+    assert "origin/dev:" in capsys.readouterr().err
+    network.assert_not_called()
 
 
 def test_unobtainable_base_ref_fails(

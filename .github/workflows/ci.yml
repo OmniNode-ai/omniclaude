@@ -12,6 +12,7 @@ on:
     branches: [main, dev, 'hotfix/**']
   pull_request:
     branches: [main, dev]
+    types: [opened, synchronize, reopened, edited]
   merge_group:
   workflow_dispatch:
 
@@ -31,6 +32,107 @@ env:
   ONEX_STATE_DIR: /tmp/onex-state
 
 jobs:
+  comment-render-delegation:
+    name: Comment Render Delegation (OMN-18512)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.3"
+      - name: Install focused-test dependencies
+        run: |
+          set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
+          attempt=1
+          until uv sync --frozen --group dev --python "3.12"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "uv sync failed; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
+      - name: Prove declared CLI resolution and recorded fallback
+        run: uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov
+
+  refusal-surface:
+    name: Refusal Surface (OMN-18983)
+    # Independent, fail-closed member of the required CI Summary umbrella.
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+      - name: Install focused-test dependencies
+        run: |
+          set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
+          attempt=1
+          until uv sync --frozen --group dev --python "3.12"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "uv sync failed; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
+      - name: Verify registered guard refusal surface
+        run: uv run pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
+      - name: Verify ledger ruling re-read before publishing (OMN-18645)
+        run: uv run pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov
+      - name: Verify hooks shard coverage and report admission (OMN-19681)
+        run: uv run pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov
+      - name: Verify Git effect subprocess compatibility
+        run: uv run pytest tests/unit/nodes/node_git_effect/test_handler_git_subprocess.py -q --no-cov
+
+  # OMN-18782: independent admission check, including body-only edits.
+  pr-failure-citations:
+    name: PR Failure Citations (OMN-18782)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "0.8.3"
+      - name: Exercise refused and accepted citation inputs
+        run: >-
+          uv run --no-project --with pytest --with pytest-asyncio
+          --with python-dotenv --with pydantic --with pyyaml
+          python -m pytest tests/unit/nodes/node_git_effect/test_pr_failure_citation.py -q
+      - name: Require paragraph-local failure citations
+        run: >-
+          uv run --no-project --with pydantic
+          python scripts/lint_verification_evidence.py --pr-body
+          --github-event "$GITHUB_EVENT_PATH" --event-name "$GITHUB_EVENT_NAME"
+
   # =============================================================================
   # Per-run runner routing (OMN-18031)
   # =============================================================================
@@ -54,14 +156,12 @@ jobs:
   # changing where anything actually executes is a separate single-owner claim
   # on the seam variable, which is OMN-16682 and not this ticket.
   #
-  # THIS REPOSITORY HOSTS THE REUSABLE WORKFLOW AND IS NOW ITS FIRST CALLER.
-  # `.github/workflows/route-runner-reusable.yml` landed here under OMN-18423
-  # with zero real callers — the only other mention of it in this tree is the
-  # prose comment in hostile-reviewer.yml explaining why that lab-touching job
-  # deliberately does NOT route through it. Because the workflow is local, the
-  # `uses:` below is the LOCAL form and carries no cross-repo sha: a caller in
-  # this repository must move with the file it calls, and pinning a sha of our
-  # own history here would let the two drift within a single commit.
+  # THE REUSABLE WORKFLOW IS NOW HOSTED IN OMNIMARKET. The `uses:` below pins
+  # `OmniNode-ai/omnimarket/.github/workflows/route-runner-reusable.yml` at a
+  # full sha, the same as every other caller. This repository's own copy of
+  # that file is no longer called from here. The other mention of the workflow
+  # in this tree is the prose comment in hostile-reviewer.yml explaining why
+  # that lab-touching job deliberately does NOT route through it.
   #
   # ONE CONSUMER IS WIRED: `env-var-registry`. It is the cheapest job in this
   # workflow whose `runs-on` currently resolves through the shared V1 seam
@@ -94,7 +194,7 @@ jobs:
   # job PLACEMENT would change to reveal it.
   route:
     name: Runner Route (OMN-18031)
-    uses: ./.github/workflows/route-runner-reusable.yml
+    uses: OmniNode-ai/omnimarket/.github/workflows/route-runner-reusable.yml@01a0d1b3e7d7ba1a09012f9af245ba29afa000b5
     with:
       workflow_path: .github/workflows/ci.yml
     secrets:
@@ -2307,7 +2407,10 @@ jobs:
           # Exit code 5 = no tests collected (expected for some splits)
           set +e
           paths=$(echo '${{ needs.detect-changes.outputs.selected_paths }}' | jq -r '.[]')
+          # OMN-18982 AC-5: logging and installer tests also run on smart-selection PRs.
           uv run pytest -o addopts="" $paths \
+            tests/scripts/test_canonical_clone_guard.py \
+            tests/scripts/test_install_canonical_clone_guard.py \
             --ignore=tests/integration \
             --splits ${{ needs.detect-changes.outputs.split_count }} \
             --group ${{ matrix.split }} \
@@ -2405,7 +2508,7 @@ jobs:
           path: junit-test-${{ matrix.split }}.xml
 
   hooks-tests:
-    name: Hooks System Tests (${{ matrix.split }}/2)
+    name: Hooks System Tests (${{ matrix.split }}/3)
     needs: [occ-preflight, zone-filter]
     if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
@@ -2422,7 +2525,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        split: [1, 2]
+        split: [1, 2, 3]
     services:
       postgres:
         image: postgres:16-alpine
@@ -2545,20 +2648,72 @@ jobs:
             bash scripts/init-db.sh
           fi
 
+      - name: Verify refusal lane and reason contract (OMN-19381)
+        working-directory: ${{ github.workspace }}
+        run: uv run --frozen pytest tests/hooks/test_refusal_row_lane_omn19381.py -q -p no:cacheprovider
+
+      - name: Verify git command segment admission and diagnostics (OMN-18936)
+        working-directory: ${{ github.workspace }}
+        run: uv run --frozen pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov -p no:cacheprovider
+
+      # OMN-19681: the shards are planned by recorded duration, not cut by test
+      # count. The first rebalance (least_duration with no timings) still ran the
+      # two shards' "Run hooks tests" step 220-540 s on PR runs 37915819364 to
+      # 37940464442. config/hooks_test_file_durations.json holds seconds per test
+      # file, and this step deals the files of tests/hooks longest-first onto the
+      # lightest of 3 shards, so every runner derives the same plan from the same
+      # tree and record. A file missing from the record takes the record's median,
+      # so a new test file is assigned exactly once without a record edit. Three
+      # shards because the suite totals 586-749 s of test time on those runs: two
+      # perfectly balanced shards still sit at 293-375 s plus session overhead,
+      # around the 360 s bar. tests/ci/test_hooks_shard_omn19681.py runs this
+      # step's own script over the real tree and proves its files are exactly the
+      # files pytest collects.
+      - name: Plan this shard's hooks test files (OMN-19681)
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run python - "${{ matrix.split }}" 3 > .hooks_shard_files <<'PY'
+          import fnmatch
+          import json
+          import os
+          import statistics
+          import sys
+
+          group, splits = int(sys.argv[1]), int(sys.argv[2])
+          record = json.load(open("config/hooks_test_file_durations.json"))
+          skip_dirs = ("*.egg", ".*", "_darcs", "build", "CVS", "dist", "node_modules", "venv", "{arch}")
+          files = []
+          for directory, subdirs, names in os.walk("tests/hooks"):
+              subdirs[:] = sorted(d for d in subdirs if not any(fnmatch.fnmatchcase(d, p) for p in skip_dirs))
+              files += [
+                  os.path.join(directory, n)
+                  for n in names
+                  if fnmatch.fnmatchcase(n, "test_*.py") or fnmatch.fnmatchcase(n, "*_test.py")
+              ]
+          fallback = statistics.median(record.values())
+          weight = {f: record.get(f, fallback) for f in files}
+          loads = [0.0] * splits
+          shards = [[] for _ in range(splits)]
+          for f in sorted(weight, key=lambda f: (-weight[f], f)):
+              lightest = min(range(splits), key=lambda i: (loads[i], i))
+              shards[lightest].append(f)
+              loads[lightest] += weight[f]
+          if not shards[group - 1]:
+              sys.exit(f"hooks shard {group}/{splits} has no test files")
+          print(f"hooks shard {group}/{splits}: {len(shards[group - 1])} files, planned {loads[group - 1]:.0f} s of {sum(loads):.0f} s", file=sys.stderr)
+          print("\n".join(sorted(shards[group - 1])))
+          PY
+          cat .hooks_shard_files
+
       - name: Run hooks tests
         working-directory: ${{ github.workspace }}
         run: |
-          if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
-            uv run pytest tests/hooks/ -v \
-              --splits 2 \
-              --group ${{ matrix.split }} \
-              --cov=src/omniclaude \
-              --cov-report=term-missing \
-              --junitxml=junit-hooks.xml
-          else
-            echo "No hooks tests found in tests/hooks/ -- skipping"
-            echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="hooks" tests="0" errors="0" failures="0" skipped="0"></testsuite></testsuites>' > junit-hooks.xml
-          fi
+          mapfile -t shard_files < .hooks_shard_files
+          test "${#shard_files[@]}" -gt 0
+          uv run pytest "${shard_files[@]}" -v \
+            --cov=src/omniclaude \
+            --cov-report=term-missing \
+            --junitxml=junit-hooks.xml
 
       - name: Upload hooks test results
         uses: actions/upload-artifact@v7
@@ -2730,13 +2885,14 @@ jobs:
       # exit 4 converts it into a red job, which is what a missing test deserves.
       #
       # Enforcement does not rest on this step alone. `Skip Count Ratchet` reads
-      # the report below against a recorded baseline of 30 collected, and its
-      # nonzero-baseline rule refuses a report that collected nothing. A future
+      # the report below against the restored router baseline of 30 collected,
+      # and refuses each empty report before pooling. A future
       # edit that empties this suite fails there even if it exits 0 here.
+      # OMN-18784: run the CI evidence checks in this existing gate as well.
       - name: Run agent framework tests
         working-directory: ${{ github.workspace }}
         run: |
-          uv run pytest tests/test_enhanced_router.py -v \
+          uv run pytest tests/test_enhanced_router.py tests/ci/test_ci_evidence_omn18784.py -v \
             --cov=src/omniclaude \
             --cov-report=term-missing \
             --junitxml=junit-agent-framework.xml
@@ -3503,8 +3659,8 @@ jobs:
           echo "Lowering the bar is an edit to config/skip_count_baseline.yaml."
           echo "================================================================"
           mapfile -t reports < <(find junit-reports -name 'junit-hooks.xml' -type f | sort)
-          if [ "${#reports[@]}" -eq 0 ]; then
-            echo "::error::Hooks System Tests ran but produced no JUnit report to read."
+          if [ "${#reports[@]}" -ne 3 ]; then
+            echo "::error::Hooks System Tests requires all 3 shard reports; found ${#reports[@]}."
             echo "That is an uploader defect, not an empty result -- failing closed."
             exit 1
           fi
@@ -3533,9 +3689,9 @@ jobs:
             --suite omniclaude/test-split \
             --junit "${reports[@]}"
 
-      # OMN-18805. This suite is `count` mode with max_skips 0: it is a single
-      # file of 30 unconditional tests with no selector in front of it and no
-      # skip in it, so both the number and the zero are comparable run to run.
+      # This suite is `count` mode with max_skips 0: the restored router tests
+      # and the CI evidence checks are unconditional, with no selector or skip,
+      # so both the number and the zero are comparable run to run.
       #
       # The entry exists because the job it guards was green from nothing until
       # OMN-18805 restored real tests to it. OMN-18790 refused to register it

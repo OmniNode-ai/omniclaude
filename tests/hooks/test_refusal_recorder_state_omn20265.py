@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -15,14 +14,11 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-RECORDER = (
-    Path(__file__).resolve().parents[2]
-    / "plugins/onex/hooks/lib/hook_refusal_recorder.py"
+from omniclaude.nodes.node_hook_refusal_record_effect.handlers import (
+    handler_hook_refusal_record as recorder,
 )
-spec = importlib.util.spec_from_file_location("recorder_state_omn20265", RECORDER)
-assert spec and spec.loader
-recorder = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(recorder)
+
+RECORDER_MODULE = recorder.__name__
 
 ARGS = ["--guard", "test-guard", "--reason", "test-refusal"]
 NOW = 10_000.0
@@ -41,7 +37,19 @@ def isolated_recorder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return (
         tmp_path
         / "state/hook_refusals"
-        / (recorder.dedupe_key("test-guard", "test-refusal", "lane") + ".json")
+        / (
+            recorder.decide_row(
+                guard="test-guard",
+                reason="test-refusal",
+                lane="lane",
+                lane_source="env",
+                detail="",
+                session="",
+                suppressed=0,
+                timestamp="2026-10-09T06:00:00Z",
+            ).key
+            + ".json"
+        )
     )
 
 
@@ -197,7 +205,15 @@ def test_recorder_cli_failed_append_is_loud_and_retryable(tmp_path: Path) -> Non
 
     def run() -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(RECORDER), *ARGS, "--ledger", str(ledger)],
+            [
+                sys.executable,
+                "-P",
+                "-m",
+                RECORDER_MODULE,
+                *ARGS,
+                "--ledger",
+                str(ledger),
+            ],
             env=env,
             capture_output=True,
             text=True,
@@ -209,7 +225,9 @@ def test_recorder_cli_failed_append_is_loud_and_retryable(tmp_path: Path) -> Non
     assert failed.returncode != 0
     assert "ledger writer exited 42: fixture writer failure" in failed.stderr
     assert "dedupe state unchanged" in failed.stderr
-    assert not (registry / ".onex_state").exists()
+    assert not (registry / ".onex_state/hook_refusals").exists()
+    log = registry / ".onex_state/hooks/logs/hooks.log"
+    assert "| FRICTION | lane=lane |" in log.read_text()
     assert not (tmp_path / "home/.onex_state").exists()
 
     fail.unlink()
@@ -220,5 +238,6 @@ def test_recorder_cli_failed_append_is_loud_and_retryable(tmp_path: Path) -> Non
     states = list((registry / ".onex_state/hook_refusals").glob("*.json"))
     assert len(states) == 1
     assert json.loads(states[0].read_text())["suppressed"] == 0
+    assert log.read_text().count("refusal_count=1 |") == 2
     assert ledger.read_text() == "fixture\n"
     assert not (tmp_path / "home/.onex_state").exists()

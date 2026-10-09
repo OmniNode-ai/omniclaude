@@ -839,13 +839,13 @@ def _hook_ledger(tmp_path: Path) -> Path:
     """Where the guard's log lines actually land.
 
     `onex-paths.sh` *exports* ONEX_HOOK_LOG unconditionally as
-    ``$ONEX_STATE_DIR/logs/hooks.log``, overwriting whatever the caller set. So
+    ``$ONEX_STATE_DIR/hooks/logs/hooks.log``, overwriting whatever the caller set. So
     a caller-supplied ONEX_HOOK_LOG is not honoured, and asserting against one
     would test a file no hook on this machine ever writes. The state-dir path is
     the shared hook ledger every sibling guard logs to; that is the surface
     these tests read.
     """
-    return tmp_path / "state" / "logs" / "hooks.log"
+    return tmp_path / "state" / "hooks" / "logs" / "hooks.log"
 
 
 def _run_hook(
@@ -1107,9 +1107,19 @@ def test_a_refusal_is_recorded_in_the_hook_log(tmp_path: Path) -> None:
         },
         tmp_path,
     )
-    log = _hook_ledger(tmp_path).read_text(encoding="utf-8")
-    assert "BLOCKED" in log
-    assert "ticket-creation-gate" in log
+    # OMN-18983: the shared recorder owns the attributed refusal, asynchronously.
+    import time
+
+    deadline = time.monotonic() + 5
+    log = ""
+    while time.monotonic() < deadline:
+        log = _hook_ledger(tmp_path).read_text(encoding="utf-8")
+        if "class=refusal" in log:
+            break
+        time.sleep(0.02)
+    assert "class=refusal" in log
+    assert "guard=pre_tool_use_ticket_creation_gate.sh |" in log
+    assert "lane_source=" in log
 
 
 # ---------------------------------------------------------------------------
@@ -2430,6 +2440,202 @@ def test_rule_nine_reproduces_the_live_omn_18387_regression() -> None:
     assert _update_codes(
         {"id": "OMN-18387", "description": after}, previous=before
     ) == {"criterion_text_rewritten"}
+
+
+# ---------------------------------------------------------------------------
+# Rule 9's approved-edit path (OMN-19401)
+# ---------------------------------------------------------------------------
+#
+# An operator-ruled correction to a criterion had no route: the rule refuses
+# any rewrite of a label present before and after, and a remove-plus-add of one
+# id is the same rewrite. The route is a citation line in the proposed body that
+# resolves to an operator RULING row on the rolling ledger for THAT ticket.
+
+_RULING_STAMP: Final[str] = "2026-10-08T22:53:25Z"
+_RULING_ROW: Final[str] = (
+    f"{_RULING_STAMP} | RULING | lane=orchestrator-9f8a | ticket=OMN-18387 | "
+    "question=May AC2 be corrected? | kind=decision | "
+    '"You do it."'
+)
+_CITATION: Final[str] = f"Criterion-edit ruling: {_RULING_STAMP}"
+
+
+def _corrected(body: str = _AC_BODY, citation: str | None = _CITATION) -> str:
+    corrected = body.replace("RUNTIME_SERVICES", "RUNTIME_SERVICES_AND_PROJECTIONS")
+    assert corrected != body
+    return corrected if citation is None else f"{corrected}\n{citation}\n"
+
+
+def _ledger(*rows: str) -> Any:
+    """A ``ruling_lookup`` over fixed rows, keyed the way the real one is."""
+    return lambda stamp: [row for row in rows if row.startswith(stamp)]
+
+
+def _approved_codes(
+    description: str, rows: tuple[str, ...] = (_RULING_ROW,), issue: str = "OMN-18387"
+) -> set[str]:
+    return {
+        f.code
+        for f in _GUARD.check_save_issue(
+            {"id": issue, "description": description},
+            POLICY,
+            body_lookup=lambda _ref: _AC_BODY,
+            ruling_lookup=_ledger(*rows),
+        )
+    }
+
+
+def test_an_unapproved_rewrite_is_still_refused() -> None:
+    """No citation, no path: the corrected line alone is the old refusal."""
+    assert _approved_codes(_corrected(citation=None)) == {"criterion_text_rewritten"}
+
+
+def test_a_rewrite_citing_a_resolvable_ruling_for_the_ticket_is_admitted() -> None:
+    assert _approved_codes(_corrected()) == set()
+
+
+def test_the_approved_path_covers_a_patch_update() -> None:
+    patch = [
+        {"op": "replace", "old_string": "RUNTIME_SERVICES", "new_string": "RTS_PLUS"},
+        {"op": "insert_after", "anchor": "without a red test.\n", "text": _CITATION},
+    ]
+    findings = _GUARD.check_save_issue(
+        {"id": "OMN-18387", "patch": patch},
+        POLICY,
+        body_lookup=lambda _ref: _AC_BODY,
+        ruling_lookup=_ledger(_RULING_ROW),
+    )
+    assert list(findings) == []
+
+
+def test_a_citation_that_resolves_to_no_ledger_row_is_refused() -> None:
+    codes = _approved_codes(_corrected(), rows=())
+    assert "criterion_text_rewritten" in codes
+    assert "criterion_ruling_unresolved" in codes
+
+
+def test_a_ruling_row_for_another_ticket_does_not_approve() -> None:
+    other = _RULING_ROW.replace("ticket=OMN-18387", "ticket=OMN-19999")
+    assert "criterion_ruling_unresolved" in _approved_codes(_corrected(), rows=(other,))
+
+
+def test_a_row_that_is_not_a_ruling_does_not_approve() -> None:
+    msg = _RULING_ROW.replace("| RULING |", "| MSG |")
+    assert "criterion_ruling_unresolved" in _approved_codes(_corrected(), rows=(msg,))
+
+
+def test_a_ruling_row_without_the_operators_words_does_not_approve() -> None:
+    unquoted = _RULING_ROW.replace(' | "You do it."', "")
+    assert "criterion_ruling_unresolved" in _approved_codes(
+        _corrected(), rows=(unquoted,)
+    )
+
+
+def test_a_ruling_among_same_second_rows_is_found() -> None:
+    msg = _RULING_ROW.replace("| RULING |", "| MSG |")
+    assert _approved_codes(_corrected(), rows=(msg, _RULING_ROW)) == set()
+
+
+def test_a_citation_already_on_the_ticket_does_not_approve_a_later_rewrite() -> None:
+    """A lingering citation is not a standing licence."""
+    previous = _AC_BODY + f"\n{_CITATION}\n"
+    findings = _GUARD.check_save_issue(
+        {"id": "OMN-18387", "description": _corrected(previous, _CITATION)},
+        POLICY,
+        body_lookup=lambda _ref: previous,
+        ruling_lookup=_ledger(_RULING_ROW),
+    )
+    assert {f.code for f in findings} >= {"criterion_text_rewritten"}
+
+
+def test_the_citation_is_a_whole_line_not_a_substring() -> None:
+    prose = f"As {_CITATION} said"
+    assert "criterion_text_rewritten" in _approved_codes(_corrected(citation=prose))
+
+
+def test_a_citation_with_no_ledger_seam_is_refused() -> None:
+    findings = _GUARD.check_save_issue(
+        {"id": "OMN-18387", "description": _corrected()},
+        POLICY,
+        body_lookup=lambda _ref: _AC_BODY,
+    )
+    assert {f.code for f in findings} >= {"criterion_text_rewritten"}
+
+
+def test_the_refusal_names_the_approved_edit_path() -> None:
+    findings = _check_update(_update(description=_corrected(citation=None)))
+    assert "Criterion-edit ruling:" in findings[0].fix
+
+
+def test_the_ledger_reader_finds_a_ruling_in_the_live_file(tmp_path: Path) -> None:
+    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
+    ledger.write_text(f"unrelated\n{_RULING_ROW}\n", encoding="utf-8")
+    assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == [_RULING_ROW]
+    assert _GUARD.ledger_rows_for_stamp(ledger, "2026-01-01T00:00:00Z") == []
+    assert _GUARD.ledger_rows_for_stamp(tmp_path / "absent.md", _RULING_STAMP) == []
+
+
+def test_the_ledger_reader_finds_a_ruling_in_a_rolled_archive(tmp_path: Path) -> None:
+    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
+    ledger.write_text("live row only\n", encoding="utf-8")
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    (archive / "ROLLING_WORK_LEDGER_2026-10-08-split.md").write_text(
+        f"{_RULING_ROW}\n", encoding="utf-8"
+    )
+    assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == [_RULING_ROW]
+
+
+def test_the_ledger_reader_does_not_follow_a_symlinked_archive_directory(
+    tmp_path: Path,
+) -> None:
+    """A ruling reachable only through a symlinked ``archive`` approves nothing."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "ROLLING_WORK_LEDGER_2026-10-08-split.md").write_text(
+        f"{_RULING_ROW}\n", encoding="utf-8"
+    )
+    home = tmp_path / "home"
+    home.mkdir()
+    ledger = home / "ROLLING_WORK_LEDGER.md"
+    ledger.write_text("live row only\n", encoding="utf-8")
+    (home / "archive").symlink_to(elsewhere, target_is_directory=True)
+    assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == []
+
+
+def test_the_ledger_reader_does_not_follow_a_symlinked_ledger(tmp_path: Path) -> None:
+    real = tmp_path / "real.md"
+    real.write_text(f"{_RULING_ROW}\n", encoding="utf-8")
+    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
+    ledger.symlink_to(real)
+    assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == []
+
+
+def test_main_admits_an_approved_rewrite_end_to_end(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The decision core as the hook runs it: env ledger, stdin payload, exit code."""
+    import io
+
+    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
+    ledger.write_text(f"{_RULING_ROW}\n", encoding="utf-8")
+    monkeypatch.setenv("ONEX_LEDGER_PATH", str(ledger))
+    monkeypatch.setattr(_GUARD, "_resolve_api_key", lambda: "k")
+    monkeypatch.setattr(_GUARD, "_fetch_issue_body", lambda _ref, _key: _AC_BODY)
+
+    def run(description: str) -> tuple[int, str]:
+        payload = {
+            "tool_name": "mcp__linear-server__save_issue",
+            "tool_input": {"id": "OMN-18387", "description": description},
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        written = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", written)
+        return _GUARD.main([]), written.getvalue()
+
+    assert run(_corrected()) == (0, "")
+    code, out = run(_corrected(citation=None))
+    assert code == 3 and "criterion_text_rewritten" in json.loads(out)["reason"]
 
 
 # ---------------------------------------------------------------------------

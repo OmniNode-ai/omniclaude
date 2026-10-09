@@ -15,6 +15,8 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -22,6 +24,15 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "install-canonical-clone-guard.sh"
 SOURCE = REPO_ROOT / "scripts" / "user-hooks" / "canonical-clone-guard.py"
+ATTRIBUTION_LIB = REPO_ROOT / "plugins" / "onex" / "hooks" / "lib"
+LANE_HANDLERS = (
+    REPO_ROOT / "src/omniclaude/nodes/node_hook_refusal_record_effect/handlers"
+)
+#: Each helper the installer ships beside the hook, and the tracked file it comes from.
+HELPERS = {
+    "handler_hook_refusal_lane.py": LANE_HANDLERS,
+    "hook_lane_attribution.py": ATTRIBUTION_LIB,
+}
 
 EXIT_OK = 0
 EXIT_PENDING = 3
@@ -156,3 +167,86 @@ def test_tracked_source_is_a_valid_hook_and_installer_is_portable() -> None:
     for needle in ("/Users" + "/", "/Volumes" + "/"):
         assert needle not in text
     assert "set -euo pipefail" in text
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", sorted(HELPERS))
+def test_attribution_helper_drift_is_reported_and_repaired(
+    home: Path, name: str
+) -> None:
+    _register(home, str(home / ".claude/hooks/canonical-clone-guard.py"))
+    assert _run(home, "--apply").returncode == EXIT_OK
+    helper = home / ".claude/hooks" / name
+    assert _sha(helper) == _sha(HELPERS[name] / name)
+    helper.write_text("# stale resolver\n", encoding="utf-8")
+    check = _run(home)
+    assert check.returncode == EXIT_PENDING
+    assert f"{name}: DRIFT" in check.stdout
+    assert _run(home, "--apply").returncode == EXIT_OK
+    assert _sha(helper) == _sha(HELPERS[name] / name)
+    assert len(list(helper.parent.glob(f"{name}.bak.*"))) == 1
+    assert _run(home).returncode == EXIT_OK
+    helper.unlink()
+    missing = _run(home)
+    assert missing.returncode == EXIT_PENDING
+    assert f"{name}: missing" in missing.stdout
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("lane_source", ["env", "claim", "unresolved"])
+def test_installed_guard_replays_dated_attributed_refusal(
+    home: Path, lane_source: str
+) -> None:
+    """AC-4: exercise the installed copy under a bare, isolated interpreter."""
+    installed = home / ".claude/hooks/canonical-clone-guard.py"
+    _register(home, str(installed))
+    assert _run(home, "--apply").returncode == EXIT_OK
+    workspace = home / "registry"
+    canonical = workspace / "omniclaude"
+    (canonical / ".git").mkdir(parents=True)
+    worktree = workspace / "omni_worktrees/OMN-18982/omniclaude"
+    worktree.mkdir(parents=True)
+    ledger = workspace / "docs/tracking/ROLLING_WORK_LEDGER.md"
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text(
+        f"2026-10-08T00:00:00Z | CLAIM | lane=installed-replay | ticket=OMN-18982 | worktree={worktree}\n",
+        encoding="utf-8",
+    )
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": str(home),
+        "OMNI_HOME": str(workspace),
+    }
+    if lane_source == "env":
+        env["ONEX_LANE"] = "installed-replay"
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": f"git -C {canonical} commit -m x"},
+        "cwd": str(worktree if lane_source == "claim" else home),
+    }
+    before = datetime.now(UTC).replace(microsecond=0)
+    proc = subprocess.run(
+        [sys.executable, "-I", str(installed)],
+        input=json.dumps(payload),
+        env=env,
+        cwd=home,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    log = workspace / ".onex_state/hooks/canonical-clone-guard.log"
+    stamp, message = log.read_text(encoding="utf-8").strip().split(" ", 1)
+    assert stamp.endswith("Z")
+    assert datetime.fromisoformat(stamp).tzinfo == UTC
+    assert before <= datetime.fromisoformat(stamp) <= datetime.now(UTC)
+    assert message.startswith("DENY ")
+    _detail, *cells = message.split(" | ")
+    fields = dict(cell.split("=", 1) for cell in cells)
+    assert fields["lane_source"] == lane_source
+    assert json.loads(fields["lane"]) == (
+        "unresolved" if lane_source == "unresolved" else "installed-replay"
+    )
+    assert fields["unresolved_refusal_count"] == str(int(lane_source == "unresolved"))
+    assert _run(home).returncode == EXIT_OK

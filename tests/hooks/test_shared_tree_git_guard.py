@@ -1273,6 +1273,76 @@ def test_untokenisable_command_naming_no_refused_verb_passes(
     assert not decision.blocked
 
 
+@pytest.mark.parametrize("delimiter", ["EOF", "'EOF'", "\\EOF"])
+def test_heredoc_then_worktree_commit_is_admitted(
+    delimiter: str, registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    """OMN-18936 AC-1: message prose cannot poison the git invocation."""
+    command = (
+        f"cat > /tmp/message.txt <<{delimiter}\n"
+        "Don't git reset or merge the shared tree.\nEOF\n"
+        f"git -C {registry_worktree} commit -F /tmp/message.txt"
+    )
+    decision = evaluate_bash_command(
+        command, policy, cwd=registry, registry_root=registry
+    )
+    assert not decision.blocked, decision.reason
+    ambiguous = evaluate_bash_command(
+        command + " 'unbalanced", policy, cwd=registry, registry_root=registry
+    )
+    assert ambiguous.blocked
+    assert "segment starting at line 4, column 1" in ambiguous.reason
+
+
+@pytest.mark.parametrize(
+    "operand", ["'unbalanced", '"unbalanced', "$(unbalanced", "`unbalanced"]
+)
+@pytest.mark.parametrize(
+    "prefix", ["echo ready && ", "cat <<'EOF'\nDon't reset.\nEOF\n"]
+)
+def test_parse_refusal_identifies_the_git_segment(
+    operand: str, prefix: str, registry: Path, policy: Policy
+) -> None:
+    """OMN-18936 AC-3: locate the failed segment without echoing its arguments."""
+    command = prefix + "git reset --hard " + operand
+    decision = evaluate_bash_command(
+        command, policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked
+    line = prefix.count("\n") + 1
+    column = len(prefix.rsplit("\n", 1)[-1]) + 1
+    assert f"segment starting at line {line}, column {column}" in decision.reason
+    assert "unterminated" in decision.reason
+    assert operand not in decision.reason
+
+
+def test_shell_wrapper_reports_failed_segment_after_heredoc(
+    tmp_path: Path, registry: Path
+) -> None:
+    """The registered adapter must expose the same AC-3 diagnostic."""
+    result = _run_hook(
+        tmp_path,
+        "cat <<'EOF'\nDon't reset.\nEOF\ngit reset --hard 'unbalanced",
+        cwd=registry,
+        omni_home_dir=str(registry),
+    )
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert "segment starting at line 4, column 1" in result.stdout + result.stderr
+
+
+def test_shell_wrapper_admits_heredoc_then_worktree_commit(
+    tmp_path: Path, registry: Path, registry_worktree: Path
+) -> None:
+    result = _run_hook(
+        tmp_path,
+        "cat > /tmp/message.txt <<'EOF'\nDon't git reset.\nEOF\n"
+        f"git -C {registry_worktree} commit -F /tmp/message.txt",
+        cwd=registry,
+        omni_home_dir=str(registry),
+    )
+    assert result.returncode == 0, (result.stdout, result.stderr)
+
+
 # ---------------------------------------------------------------------------
 # OMN-17427: the command is read the way the shell reads it
 # ---------------------------------------------------------------------------
@@ -1454,6 +1524,7 @@ def _run_hook(
         # `cwd` field -- not this env var -- is what the decision core
         # resolves its target directory from.
         "CLAUDE_PROJECT_DIR": str(REPO_ROOT),
+        "PLUGIN_PYTHON_BIN": sys.executable,
         "ONEX_HOOK_LOG": str(tmp_path / "hook.log"),
         "ONEX_STATE_DIR": str(tmp_path / "state"),
         "OMNICLAUDE_MODE": "full",

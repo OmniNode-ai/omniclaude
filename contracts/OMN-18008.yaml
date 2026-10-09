@@ -1,0 +1,32 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18008
+title: "Remove node_manifest_fetch_effect from omniclaude"
+summary: >
+  omnimarket is the home of node_manifest_fetch_effect. The duplicate copy in
+  omniclaude, its unit test and its canonical handler-shape baseline line are
+  deleted, and the public skill hygiene real-lan-ip ratchet shrinks from 65 to
+  63. No caller in omniclaude resolves to the deleted node.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "The deleted node leaves no package, test or baseline entry behind and the node package still imports"
+    command: "test ! -e src/omniclaude/nodes/node_manifest_fetch_effect && test ! -e tests/unit/nodes/node_manifest_fetch_effect && ! grep -q node_manifest_fetch_effect scripts/ci/canonical_handler_shape_baseline.py && uv run python -c 'import omniclaude.nodes'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn18008-node-removed
+    description: "node_manifest_fetch_effect, its test and its baseline line are gone from omniclaude"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test ! -e src/omniclaude/nodes/node_manifest_fetch_effect && test ! -e tests/unit/nodes/node_manifest_fetch_effect && ! grep -q node_manifest_fetch_effect scripts/ci/canonical_handler_shape_baseline.py"
+  - id: dod-omn18008-nodes-import
+    description: "The omniclaude node package still imports with the node removed"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run python -c 'import omniclaude.nodes'"

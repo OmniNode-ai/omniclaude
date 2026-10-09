@@ -86,7 +86,7 @@ _OMNICLAUDE_HOOK_PAYLOAD="$TOOL_INFO"
 # through is decided by the Git effect node admission handler, which tokenises the
 # command. A payload naming neither `git` nor any refused verb cannot be a
 # refused shape, so it never pays for an interpreter start.
-if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'git'; then
+if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'git|gh'; then
     _hook_status "PASS" "no git vocabulary" "0" 2>/dev/null || true
     exit 0
 fi

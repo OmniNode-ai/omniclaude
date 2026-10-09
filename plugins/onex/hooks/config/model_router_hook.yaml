@@ -1,20 +1,19 @@
 # Model Router Hook Configuration (OMN-7810)
-# Enforcement-mode hook that routes implementation tasks to cheaper models.
+# Advisory-mode hook that suggests delegation of implementation tasks.
 
 # Master switch — set to false to disable entirely
 enabled: true
 
-# Enforcement mode: "advisory" (warn only) or "enforce" (hard block)
-mode: enforce
+# Matches the Python module default. Opt in to "enforce" to hard-block
+# simple implementation tasks; "advisory" warns only.
+mode: advisory
 
-# Tools that trigger delegation classification
+# Tools that trigger delegation classification. Read, Grep and Glob gather
+# information and must not be eligible for a delegation hard block.
 implementation_tools:
   - Bash
-  - Read
   - Edit
   - Write
-  - Grep
-  - Glob
 
 # Tools that always pass through (orchestration)
 orchestration_tools:

@@ -1,0 +1,27 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18936
+title: "Preserve failed segment offsets in git guard admission refusals"
+summary: >
+  The node_git_effect shell tokenizer keeps the source offset of the command
+  segment it failed to tokenise. A git admission refusal for an untokenisable
+  command names that segment's start line and column and the syntax-error type,
+  without echoing operands. A heredoc elsewhere in the compound no longer hides
+  where the failure is. The fail-closed admission policy is unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Shared-tree git guard and admission parity tests pass"
+    command: "uv run pytest tests/hooks/test_shared_tree_git_guard.py tests/hooks/test_git_admission_parity.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-git-segment-diagnostics-tests
+    description: "Heredoc-plus-commit admission and failed-segment line/column diagnostics are pinned through the handler and the registered hook"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py tests/hooks/test_git_admission_parity.py -q --no-cov"

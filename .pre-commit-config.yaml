@@ -27,6 +27,34 @@
 #   pre-commit run --all-files --hook-stage pre-push  # Run pre-push hooks
 
 repos:
+  - repo: local
+    hooks:
+      - id: hooks-shard-coverage
+        name: Hooks shard coverage and report admission (OMN-19681)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/ci\.yml|tests/ci/test_hooks_shard_omn19681\.py|scripts/ci/skip_count_ratchet\.py|config/hooks_test_file_durations\.json|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
+      - id: comment-render-delegation
+        name: Comment Render Delegation (OMN-18512)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/(nodes/node_skill_comment_sweep_orchestrator/|runtime/wiring_dispatchers\.py|shared/models/model_skill_completion_event\.py)|plugins/onex/skills/comment_sweep/|tests/unit/nodes/test_comment_sweep_delegation\.py|scripts/ci/ci_summary_gate\.py|\.github/workflows/ci\.yml|\.pre-commit-config\.yaml|\.github/required-checks\.yaml)'
+        stages: [pre-commit]
+
+  # OMN-18782: the same Git-node admission rule over authored PR body files.
+  - repo: local
+    hooks:
+      - id: pr-failure-citations
+        name: Require PR failure citations (OMN-18782)
+        entry: uv run --no-project --with pydantic python scripts/lint_verification_evidence.py --pr-body --body-files
+        language: system
+        files: '(^|/)(PR_BODY|pr[-_]body)\.md$'
+        stages: [pre-commit]
+
   # OMN-14655 (SHA reconciliation, D1f/§3d.8): converged from two separate
   # omnibase_core repo: blocks pinned at DIFFERENT revs (458f44e for
   # check-stub-implementations, 63635097 for no-noncanonical-lifecycle-classes)
@@ -301,6 +329,24 @@ repos:
         language: system
         pass_filenames: true
         stages: [commit-msg]
+      - id: ticket-refusal-reason
+        name: Ticket refusal lane, guard and reason contract (OMN-19381)
+        entry: >-
+          uv run --frozen pytest tests/hooks/test_refusal_row_lane_omn19381.py
+          -q -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        files: '^(plugins/onex/hooks/(lib/ticket_creation_guard\.py|lib/hook_refusal\.sh|scripts/pre_tool_use_ticket_creation_gate\.sh)|src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_(record|lane)\.py|tests/hooks/test_refusal_row_lane_omn19381\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
+        stages: [pre-commit]
+      - id: git-command-segment-regression
+        name: Git command segment admission and diagnostics (OMN-18936)
+        entry: >-
+          uv run --frozen pytest tests/hooks/test_shared_tree_git_guard.py
+          -q --no-cov -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/nodes/node_git_effect/handlers/handler_(git_admission|shell_word|shell_words)\.py|plugins/onex/hooks/scripts/pre_tool_use_shared_tree_git_guard\.sh|tests/hooks/test_shared_tree_git_guard\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
+        stages: [pre-commit]
       - id: pr-close-preconditions
         name: PR close preconditions and refusal contract (OMN-19160)
         entry: >-
@@ -655,6 +701,22 @@ repos:
         language: system
         types: [python]
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
+        stages: [pre-commit]
+
+      - id: refusal-surface
+        name: Refusal Surface (OMN-18983)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      - id: ledger-ruling-reread-regression
+        name: Ledger ruling re-read before publishing (OMN-18645)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/(nodes/node_git_effect/|shared/handler_skill_requested\.py)|plugins/onex/(hooks/scripts/pre_tool_use_shared_tree_git_guard\.sh|skills/_shared/skill_orchestrator_template\.md)|tests/hooks/test_ledger_ruling_reread\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
         stages: [pre-commit]
 
       - id: ruff-check
@@ -1240,11 +1302,11 @@ repos:
         always_run: true
         stages: [pre-commit]
 
-      # OMN-16913: a change under plugins/onex needs a plugin version bump. The
-      # plugin cache is version-keyed, so an unbumped change never reaches an
-      # installed cache. Same validator runs in CI (plugin-version-bump-gate.yml).
+      # OMN-20710: refuse lowered or broken versions and marketplace disagreement.
+      # PRs no longer bump; plugin-version-bump.yml does after merging to dev.
+      # Same validator runs in CI (plugin-version-bump-gate.yml).
       - id: plugin-version-bump-gate
-        name: Plugin version bump (OMN-16913)
+        name: Plugin version not lowered or broken (OMN-20710)
         entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_plugin_version_bump.py --base origin/dev --defer-to-workflow-in-ci
         language: system
         pass_filenames: false
@@ -1420,6 +1482,16 @@ repos:
         stages: [pre-commit]
         files: >-
           ^(scripts/ci/skip_count_ratchet\.py|config/skip_count_baseline\.yaml|tests/ci/test_skip_count_ratchet_omn18790\.py|\.github/workflows/ci\.yml)$
+
+      # OMN-18784: the same evidence checks run in Agent Framework Tests.
+      # Always run so deleting a workflow or a test cannot evade the check.
+      - id: ci-test-evidence
+        name: CI test evidence (OMN-18784)
+        entry: bash scripts/uv-run-worktree-safe.sh python -m pytest tests/ci/test_ci_evidence_omn18784.py -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
 
       - id: precommit-pin-parity
         name: Pre-commit/CI pin-parity check (OMN-14655)

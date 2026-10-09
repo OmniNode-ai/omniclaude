@@ -253,6 +253,9 @@ async def handle_skill_requested(
     prompt = (
         f"Execute the skill defined at {request.skill_path!r}{args_clause}.\n"
         f"Read the skill definition from that path before executing.\n"
+        "Before any push or merge, re-read the ledger for RULING rows appended after CLAIM. "
+        "Apply each ruling and append a ledger ACK citing its row and digest as printed "
+        "by the Git effect admission guard; acknowledgement grants no new authority.\n"
         f"After execution, you MUST include a structured RESULT: block in your "
         f"output with the following format:\n\n"
         f"RESULT:\n"

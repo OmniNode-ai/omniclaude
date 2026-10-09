@@ -525,6 +525,16 @@ class TopicBase(StrEnum):
     """Emitted when a task reaches a terminal state with a verification verdict."""
 
     # ==========================================================================
+    # Hook refusal recording (OMN-20685)
+    # node_hook_refusal_record_effect command and terminal event.
+    # ==========================================================================
+    HOOK_REFUSAL_RECORD = "onex.cmd.omniclaude.hook-refusal-record.v1"
+    """Command: record one hook refusal on the rolling work ledger."""
+
+    HOOK_REFUSAL_RECORDED = "onex.evt.omniclaude.hook-refusal-recorded.v1"
+    """Terminal event: the refusal's recording outcome (row already redacted)."""
+
+    # ==========================================================================
     # Delegation pipeline topics (OMN-7103)
     # Node-based delegation orchestrator command/event bus topics.
     # ==========================================================================

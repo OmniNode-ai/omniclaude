@@ -17,6 +17,9 @@ _UNQUOTED_BRACE = re.compile(r"\{[^{}]*(?:,|\.\.)[^{}]*\}")
 class ShellSyntaxError(ValueError):
     """The command cannot be split into words (an unbalanced quote, most likely)."""
 
+    # Set by the tokenizer at a shell separator, never by searching raw prose.
+    segment_start: int | None = None
+
 
 class UnresolvableWord(ValueError):
     """A word whose value the shell would compute and this module will not."""

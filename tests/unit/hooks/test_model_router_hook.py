@@ -15,11 +15,14 @@ Tests advisory-mode delegation classification:
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 # The module lives in plugins/onex/hooks/lib/ — add it to sys.path for import
 _HOOKS_LIB = str(
@@ -28,7 +31,11 @@ _HOOKS_LIB = str(
 if _HOOKS_LIB not in sys.path:
     sys.path.insert(0, _HOOKS_LIB)
 
-from model_router_hook import classify_complexity, run_model_router
+from model_router_hook import _load_config, classify_complexity, run_model_router
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_PLUGIN_ROOT = _REPO_ROOT / "plugins" / "onex"
+_WRAPPER = _PLUGIN_ROOT / "hooks" / "scripts" / "pre_tool_use_model_router.sh"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -176,3 +183,87 @@ def test_invalid_json_fails_open() -> None:
     """Invalid JSON input should fail open."""
     exit_code, output = run_model_router("not-json")
     assert exit_code == 0
+
+
+@pytest.mark.unit
+def test_shipped_mode_matches_module_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The installed config must preserve the module's advisory default."""
+    config = _load_config(str(_PLUGIN_ROOT))
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(_PLUGIN_ROOT))
+    payload = _edit("README.md")
+    shipped = run_model_router(payload)
+    with patch(
+        "model_router_hook._load_config",
+        return_value={key: value for key, value in config.items() if key != "mode"},
+    ):
+        default = run_model_router(payload)
+    assert shipped == default == (0, payload)
+    assert config["mode"] == "advisory"
+
+
+@pytest.mark.unit
+def test_shipped_config_excludes_read_only_tools() -> None:
+    config = _load_config(str(_PLUGIN_ROOT))
+    assert {"Read", "Grep", "Glob"}.isdisjoint(config["implementation_tools"])
+    assert {"Bash", "Edit", "Write"} <= set(config["implementation_tools"])
+
+
+def _run_wrapper(
+    payload: str, plugin_root: Path, tmp_path: Path
+) -> subprocess.CompletedProcess[str]:
+    env = {
+        **os.environ,
+        "CLAUDE_PROJECT_DIR": str(_REPO_ROOT),
+        "CLAUDE_PLUGIN_ROOT": str(plugin_root),
+        "PLUGIN_PYTHON_BIN": sys.executable,
+        "ONEX_STATE_DIR": str(tmp_path / "state"),
+        "LOG_FILE": str(tmp_path / "router.log"),
+        "_ERROR_GUARD_LOG_DIR": str(tmp_path / "errors"),
+    }
+    return subprocess.run(
+        ["bash", str(_WRAPPER)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=_REPO_ROOT,
+        timeout=30,
+        check=False,
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("tool_name", ["Read", "Grep", "Glob"])
+def test_shipped_wrapper_allows_read_only_tools(tool_name: str, tmp_path: Path) -> None:
+    payload = _tool_json(tool_name, {"file_path": "README.md", "pattern": "README"})
+    result = _run_wrapper(payload, _PLUGIN_ROOT, tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == payload
+
+
+@pytest.mark.unit
+def test_wrapper_explicit_enforcement_controls(tmp_path: Path) -> None:
+    """Exercise real Python verdicts through the absolute-path shell entrypoint."""
+    plugin_root = tmp_path / "plugin"
+    hooks = plugin_root / "hooks"
+    config_dir = hooks / "config"
+    config_dir.mkdir(parents=True)
+    for directory in ("scripts", "lib"):
+        (hooks / directory).symlink_to(
+            _PLUGIN_ROOT / "hooks" / directory, target_is_directory=True
+        )
+    config = _load_config(str(_PLUGIN_ROOT))
+    config["mode"] = "enforce"
+    (config_dir / "model_router_hook.yaml").write_text(yaml.safe_dump(config))
+
+    refused = _run_wrapper(_edit("README.md"), plugin_root, tmp_path)
+    assert refused.returncode == 2, refused.stderr
+    assert json.loads(refused.stdout)["decision"] == "block"
+    log = (tmp_path / "router.log").read_text()
+    assert "BLOCKED Edit: delegation required" in log
+    assert "failing open" not in log
+
+    payload = _tool_json("Read", {"file_path": "README.md"})
+    allowed = _run_wrapper(payload, plugin_root, tmp_path)
+    assert allowed.returncode == 0, allowed.stderr
+    assert allowed.stdout.strip() == payload

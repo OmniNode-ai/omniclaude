@@ -310,6 +310,7 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
     # dropped; for `<<` it is the delimiter of this here-document.
     drop_next: HereDoc | Redirect | bool = False
     i = 0
+    segment_start = 0
     n = len(command)
 
     def finish_word() -> None:
@@ -333,11 +334,15 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
     while i < n:
         ch = command[i]
         if ch in " \t\r":
+            if segment_start == i:
+                segment_start += 1
             finish_word()
             i += 1
             continue
         if ch == "\\":
             if i + 1 < n and command[i + 1] == "\n":
+                if segment_start == i:
+                    segment_start += 2
                 i += 2
                 continue
             if i + 1 < n:
@@ -352,6 +357,7 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
             finish_word()
             tokens.append(Operator("\n"))
             i = _read_heredoc_bodies(command, i + 1, pending_heredocs)
+            segment_start = i
             continue
         if ch in "<>" or (ch == "&" and command[i + 1 : i + 2] == ">"):
             # An all-digit word glued to the operator is its file descriptor.
@@ -394,27 +400,32 @@ def tokenize(command: str, *, keep_redirects: bool = False) -> list[Token]:
                 j += 1
             tokens.append(Operator(command[i:j]))
             i = j
+            segment_start = i
             continue
-        if ch == "'":
-            end = command.find("'", i + 1)
-            if end < 0:
-                raise ShellSyntaxError("unterminated single quote")
-            builder.add(command[i + 1 : end], EnumQuoteKind.LITERAL)
-            i = end + 1
-            continue
-        if ch == '"':
-            text, i = _scan_double(command, i + 1)
-            builder.add(text, EnumQuoteKind.DOUBLE)
-            continue
-        if ch == "$":
-            end = _scan_dollar(command, i)
-            builder.add(command[i:end], EnumQuoteKind.NONE)
-            i = end
-            continue
-        if ch == "`":
-            end = _scan_backtick(command, i)
-            builder.add(command[i:end], EnumQuoteKind.NONE)
-            i = end
+        if ch in "'\"$`":
+            try:
+                if ch == "'":
+                    end = command.find("'", i + 1)
+                    if end < 0:
+                        raise ShellSyntaxError("unterminated single quote")
+                    builder.add(command[i + 1 : end], EnumQuoteKind.LITERAL)
+                    i = end + 1
+                elif ch == '"':
+                    text, i = _scan_double(command, i + 1)
+                    builder.add(text, EnumQuoteKind.DOUBLE)
+                else:
+                    end = (
+                        _scan_dollar(command, i)
+                        if ch == "$"
+                        else _scan_backtick(command, i)
+                    )
+                    builder.add(command[i:end], EnumQuoteKind.NONE)
+                    i = end
+            except ShellSyntaxError as exc:
+                # OMN-18936: locate the failed simple command without exposing
+                # its operands or reading heredoc data as executable shell.
+                exc.segment_start = segment_start
+                raise
             continue
         builder.add(ch, EnumQuoteKind.NONE)
         i += 1

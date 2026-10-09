@@ -473,3 +473,50 @@ def test_a_superseding_item_of_another_repo_still_supersedes(
     assert ran == []
     assert "[SUMMARY] OMN-1: 0/1 PASS, 1 WARN, 0 BLOCK" in result.stdout
     assert "[~] repo_scope: NOT THIS REPO'S ITEM" in result.stdout
+
+
+# The pinned runner (91f5b691, 2026-07-24) predates ``execution_scope``
+# (onex_change_control 7a56bb68, 2026-07-30) and executes every item. OMN-19401's
+# live dev-lane probes declare ``local_done_gate`` and read ``$OMNI_HOME``, which
+# the hosted job does not set, so they BLOCKed omniclaude#2623.
+def _local_done_gate(check_value: str = "echo gate-ran >> ran.log; exit 1") -> dict:
+    return {
+        "id": "dod-live-probe-ac3",
+        "description": "executing probe that needs the launching host",
+        "source": "generated",
+        "execution_scope": "local_done_gate",
+        "checks": [{"check_type": "command", "check_value": check_value}],
+    }
+
+
+def test_a_local_done_gate_item_is_neither_run_nor_counted(tmp_path: Path) -> None:
+    result, ran = _run_driver(tmp_path, [_local_done_gate(), _OWN])
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert ran == ["own-ran"]
+    assert "[SUMMARY] OMN-1: 1/1 PASS, 0 WARN, 0 BLOCK" in result.stdout
+    assert "[-] execution_scope: NOT-EVALUATED [local_done_gate]" in result.stdout
+
+
+def test_an_item_with_the_default_execution_scope_still_runs(tmp_path: Path) -> None:
+    hosted = {**_local_done_gate(), "execution_scope": "hosted_and_local"}
+    result, ran = _run_driver(tmp_path, [hosted])
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert ran == ["gate-ran"]
+    assert "NOT-EVALUATED" not in result.stdout
+
+
+def test_a_superseding_local_done_gate_item_still_supersedes(tmp_path: Path) -> None:
+    own_red = {
+        **_OWN,
+        "checks": [
+            {"check_type": "command", "check_value": "echo own-ran >> ran.log; exit 3"}
+        ],
+    }
+    superseding = {
+        **_local_done_gate(),
+        "evidence_artifact": f"supersedes_dod_evidence:{_OWN['id']}",
+    }
+    result, ran = _run_driver(tmp_path, [own_red, superseding])
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert ran == []
+    assert "[~] superseded: SUPERSEDED" in result.stdout
