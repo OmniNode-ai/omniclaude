@@ -14,6 +14,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from omnibase_infra.models.pricing.model_pricing_table import ModelPricingTable
 
 
 def _import_module() -> Any:
@@ -52,8 +53,13 @@ def agent_event() -> dict[str, Any]:
 @pytest.mark.unit
 class TestCostCalculation:
     def test_opus_baseline_cost(self, mod: Any) -> None:
+        # OMN-20833: the rate is the omnibase_infra pricing manifest's.
+        entry = ModelPricingTable.from_yaml().get_entry("claude-opus-4-6")
+        assert entry is not None
         cost = mod._cost_usd("claude-opus-4-6", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(15.00 + 75.00)
+        assert cost == pytest.approx(
+            (entry.input_cost_per_1k + entry.output_cost_per_1k) * 1_000
+        )
 
     def test_sonnet_cost_lower_than_opus(self, mod: Any) -> None:
         sonnet = mod._cost_usd("claude-sonnet-4-6", 100_000, 100_000)
@@ -143,7 +149,8 @@ class TestRecordToolCall:
         assert record["is_delegated"] == 0
         assert record["actual_model"] == mod.BASELINE_MODEL
         assert record["savings_method"] == "baseline_self"
-        assert record["pricing_manifest_version"] == mod.PRICING_MANIFEST_VERSION
+        assert record["pricing_manifest_version"] == mod._manifest_version()
+        assert record["pricing_manifest_version"].startswith("omnibase_infra-")
 
     def test_delegation_result_consumed_and_returned(
         self, mod: Any, state_dir: Path, agent_event: dict[str, Any]
