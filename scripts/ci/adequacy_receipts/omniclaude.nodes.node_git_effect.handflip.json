@@ -1,5 +1,5 @@
 {
-  "base_ref": "0ddba385971a03ee33f9f5ea4dc101ced613b253", "base_ref_note": "dev head before the relocation # pragma: allowlist secret",
+  "base_ref": "dc2381074d8e71a779095b7442d28751b2fd9faf", "base_ref_note": "dev head this branch was last merged with, after the OMN-18936 tokeniser change to _segments and evaluate_bash_command # pragma: allowlist secret",
   "canonical_handler_module": "omniclaude.nodes.node_git_effect.handlers.handler_git_admission",
   "legacy_handler_module": "omniclaude.nodes.node_git_effect.handlers.handler_git_admission",
   "node_id": "omniclaude.nodes.node_git_effect",

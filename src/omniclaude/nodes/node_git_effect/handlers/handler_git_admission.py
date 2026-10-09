@@ -2552,10 +2552,6 @@ class HandlerGitAdmission:
         command = tool_input.get("command") if isinstance(tool_input, dict) else None
         if not isinstance(command, str) or not command:
             return verdict(False)
-        if _is_publish_command(command):
-            ruling_refusal = ruling_reread_refusal(os.environ, payload.get("cwd"))
-            if ruling_refusal is not None:
-                return verdict(True, ruling_refusal)
         try:
             policy = replace(
                 load_policy(request.policy_path),
@@ -2790,6 +2786,21 @@ def ruling_reread_refusal(
     return None
 
 
+def _publish_ruling_refusal(raw_payload: str) -> str | None:
+    """OMN-18645: the hook refuses a publishing command before any dispatch."""
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        return None  # the admission handler refuses an unreadable payload itself
+    if not isinstance(payload, dict):
+        return None
+    tool_input = payload.get("tool_input")
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if not isinstance(command, str) or not _is_publish_command(command):
+        return None
+    return ruling_reread_refusal(os.environ, payload.get("cwd"))
+
+
 def main(argv: list[str] | None = None) -> int:
     """Hook transport adapter; all admission decisions go through the bus."""
     import tempfile
@@ -2799,8 +2810,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--clone-sync-engine", default="canonical_clone_sync.py")
     args = parser.parse_args(argv)
     try:
+        raw_payload = sys.stdin.read()
+        ruling_refusal = _publish_ruling_refusal(raw_payload)
+        if ruling_refusal is not None:
+            sys.stdout.write(
+                json.dumps({"decision": "block", "reason": ruling_refusal}) + "\n"
+            )
+            return 2
         request = ModelGitAdmissionRequest(
-            raw_payload=sys.stdin.read(),
+            raw_payload=raw_payload,
             policy_path=args.policy,
             clone_sync_engine=args.clone_sync_engine,
         )

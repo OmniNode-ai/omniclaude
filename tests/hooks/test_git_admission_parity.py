@@ -202,11 +202,9 @@ def test_golden_names_its_source() -> None:
     assert len(golden["cases"]) >= 35
 
 
-def test_relocated_guard_matches_pre_relocation_golden(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    observed = observe_cases(guard, tmp_path, monkeypatch)
-    expected = json.loads(GOLDEN.read_text())["cases"]
+def _golden_cases() -> dict[str, Any]:
+    """The recorded verdicts, with the one wording that moved after the recording."""
+    expected: dict[str, Any] = json.loads(GOLDEN.read_text())["cases"]
     # OMN-18936: a tokeniser refusal names the failed segment and its syntax
     # error. The golden stays the pre-relocation record; only this wording moved.
     expected["registry:16"]["reason"] = expected["registry:16"]["reason"].replace(
@@ -214,6 +212,14 @@ def test_relocated_guard_matches_pre_relocation_golden(
         "could not be tokenised in the segment starting at line 1, column 1 "
         "(unterminated single quote)",
     )
+    return expected
+
+
+def test_relocated_guard_matches_pre_relocation_golden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed = observe_cases(guard, tmp_path, monkeypatch)
+    expected = _golden_cases()
     assert set(observed) == set(expected)
     for case_id in observed:
         assert observed[case_id] == expected[case_id], case_id
@@ -259,7 +265,7 @@ def test_typed_handler_matches_pre_relocation_golden(
     return the recorded verdict for every case (payload cases run ``main``,
     which dispatches through the contract-declared in-memory runtime)."""
     observed = observe_cases(_ThroughHandler, tmp_path, monkeypatch)
-    expected = json.loads(GOLDEN.read_text())["cases"]
+    expected = _golden_cases()
     assert set(observed) == set(expected)
     for case_id in observed:
         assert observed[case_id] == expected[case_id], case_id
