@@ -22,8 +22,10 @@ Architecture Handshake
 Architecture Invariants
 Build Docker Image
 CI Summary
+Canonical File Shape (OMN-20304)
 Canonical Handler-Shape Ratchet
 Code Quality
+Comment Render Delegation (OMN-18512)
 Contract Compliance
 Contract Compliance Check
 Cross-Repo Boundary Parity
@@ -38,7 +40,8 @@ Exports Validation
 F5.1 No compact cmd topic
 Golden Chain Integrity
 Golden Chain Live
-Hooks System Tests
+Hook System Tests (OMN-20109)
+Hooks System Tests (${{ matrix.split }}/3)
 Kafka Import Guard
 Markdown Link Check
 Merge Test Coverage
@@ -47,13 +50,18 @@ Migration Freeze
 Mode Metadata Integrity
 OCC Companion Merged Gate (OMN-15214)
 ONEX Compliance
+PR Failure Citations (OMN-18782)
+Pre-commit Suite (OMN-19612)
 Pyright Type Checking
 Python Security Scan
 Quality Gate
+Refusal Surface (OMN-18983)
 Registry Consistency
 Runner Route (OMN-18031)
+Runtime Profiles
 Secret Detection
 Security Gate
+Shape-Gate Independence (OMN-20298)
 Skill Contract Validation
 Skill Hygiene
 Skill Monorepo-Ref Gate
