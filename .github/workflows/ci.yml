@@ -307,6 +307,12 @@ jobs:
           uv run python scripts/check_onex_cli_imports.py
           uv run onex --help > /dev/null
 
+      - name: Native dev-head monitor acceptance
+        # OMN-18836: the native monitor's acceptance falsifiers also run locally.
+        # Keep this inside the existing required quality gate.
+        working-directory: ${{ github.workspace }}
+        run: uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov
+
       - name: Ruff format check
         working-directory: ${{ github.workspace }}
         run: uv run ruff format --check src/ tests/
