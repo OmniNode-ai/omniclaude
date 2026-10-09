@@ -1878,8 +1878,8 @@ requires-dist = [
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=f9c3bb1d9cfe7b45c5e26e53ca9bf7226af5710f" },
-    { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=43be97b1f47435dfbbd835ff8f5b4484c4dee282" },
-    { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=43be97b1f47435dfbbd835ff8f5b4484c4dee282" },
+    { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=33a29cdfba6f14be6f94c3c77a05e29f345c692b" },
+    { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=33a29cdfba6f14be6f94c3c77a05e29f345c692b" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'skills'", specifier = ">=1.23.0,<2.0.0" },
@@ -1926,7 +1926,7 @@ dev = [
 [[package]]
 name = "omninode-intelligence"
 version = "0.24.0"
-source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=43be97b1f47435dfbbd835ff8f5b4484c4dee282#43be97b1f47435dfbbd835ff8f5b4484c4dee282" }
+source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=33a29cdfba6f14be6f94c3c77a05e29f345c692b#33a29cdfba6f14be6f94c3c77a05e29f345c692b" }
 dependencies = [
     { name = "confluent-kafka" },
     { name = "httpx" },
