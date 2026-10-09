@@ -326,9 +326,9 @@ exit 1
 # gate fails closed on it (see DEGRADED_QUORUM_STUB).
 PASSING_STUB = """#!/usr/bin/env bash
 echo "Model 'qwen3-review' succeeded in 233.5s (0 finding(s))." >&2
-echo "Model 'gpt-oss-review' succeeded in 41.2s (0 finding(s))." >&2
+echo "Model 'local-studio-planner' succeeded in 41.2s (0 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["qwen3-review", "gpt-oss-review"], "total_findings": 0, "results": [{"success": true, "findings": []}], "quorum": {"verdict": "passed", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 0, "blocking_findings": [], "warning_findings": []}}
+{"models_succeeded": ["qwen3-review", "local-studio-planner"], "total_findings": 0, "results": [{"success": true, "findings": []}], "quorum": {"verdict": "passed", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 0, "blocking_findings": [], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -343,9 +343,9 @@ exit 0
 # (OMN-18479). One model raising it alone is a warning and does not.
 BLOCKING_STUB = """#!/usr/bin/env bash
 echo "Model 'qwen3-review' succeeded in 6.2s (1 finding(s))." >&2
-echo "Model 'gpt-oss-review' succeeded in 8.1s (1 finding(s))." >&2
+echo "Model 'local-studio-planner' succeeded in 8.1s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["qwen3-review", "gpt-oss-review"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}, {"success": true, "model": "gpt-oss-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2, "file_path": "a/b.py", "line_start": 12}], "warning_findings": []}}
+{"models_succeeded": ["qwen3-review", "local-studio-planner"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}, {"success": true, "model": "local-studio-planner", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2, "file_path": "a/b.py", "line_start": 12}], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -354,9 +354,9 @@ exit 0
 # something, because an empty row is indistinguishable from no finding.
 UNMAPPABLE_STUB = """#!/usr/bin/env bash
 echo "Model 'qwen3-review' succeeded in 1.0s (1 finding(s))." >&2
-echo "Model 'gpt-oss-review' succeeded in 1.4s (1 finding(s))." >&2
+echo "Model 'local-studio-planner' succeeded in 1.4s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["qwen3-review", "gpt-oss-review"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}, {"success": true, "model": "gpt-oss-review", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2}], "warning_findings": []}}
+{"models_succeeded": ["qwen3-review", "local-studio-planner"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}, {"success": true, "model": "local-studio-planner", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2}], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -366,7 +366,7 @@ exit 0
 # produced a blocking verdict from a single opinion.
 DEGRADED_QUORUM_STUB = """#!/usr/bin/env bash
 echo "Model 'qwen3-review' succeeded in 6.2s (1 finding(s))." >&2
-echo "Model 'gpt-oss-review' FAILED in 0.4s (0 finding(s))." >&2
+echo "Model 'local-studio-planner' FAILED in 0.4s (0 finding(s))." >&2
 echo "ERROR: DEGRADED QUORUM \u2014 1 model(s) succeeded, 2 required for agreement." >&2
 cat <<'JSON'
 {"models_succeeded": ["qwen3-review"], "total_findings": 1, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12}]}], "quorum": {"verdict": "degraded_quorum", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 1, "blocking_findings": [], "warning_findings": [{"agreement_count": 1}]}}
@@ -564,10 +564,10 @@ def test_a_successful_review_still_carries_its_stderr(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert outputs["verdict"] == "passed"
-    assert outputs["models_succeeded"] == "qwen3-review,gpt-oss-review"
+    assert outputs["models_succeeded"] == "qwen3-review,local-studio-planner"
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["verdict"] == "passed"
-    assert payload["models_succeeded"] == ["qwen3-review", "gpt-oss-review"]
+    assert payload["models_succeeded"] == ["qwen3-review", "local-studio-planner"]
     assert "Model 'qwen3-review' succeeded" in payload["stderr"]
     assert "Model 'qwen3-review' succeeded" in result.stdout
 
