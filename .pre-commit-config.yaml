@@ -34,7 +34,7 @@ repos:
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov
         language: system
         pass_filenames: false
-        files: '^(\.github/workflows/ci\.yml|tests/ci/test_hooks_shard_omn19681\.py|scripts/ci/skip_count_ratchet\.py|\.pre-commit-config\.yaml)$'
+        files: '^(\.github/workflows/ci\.yml|tests/ci/test_hooks_shard_omn19681\.py|scripts/ci/skip_count_ratchet\.py|config/hooks_test_file_durations\.json|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
       - id: comment-render-delegation

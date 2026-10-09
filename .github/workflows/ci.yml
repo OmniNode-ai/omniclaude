@@ -2503,7 +2503,7 @@ jobs:
           path: junit-test-${{ matrix.split }}.xml
 
   hooks-tests:
-    name: Hooks System Tests (${{ matrix.split }}/2)
+    name: Hooks System Tests (${{ matrix.split }}/3)
     needs: [occ-preflight, zone-filter]
     if: needs.occ-preflight.result == 'success' && (needs.zone-filter.outputs.docs_only != 'true')
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
@@ -2520,7 +2520,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        split: [1, 2]
+        split: [1, 2, 3]
     services:
       postgres:
         image: postgres:16-alpine
@@ -2651,15 +2651,61 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv run --frozen pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov -p no:cacheprovider
 
+      # OMN-19681: the shards are planned by recorded duration, not cut by test
+      # count. The first rebalance (least_duration with no timings) still ran the
+      # two shards' "Run hooks tests" step 220-540 s on PR runs 37915819364 to
+      # 37940464442. config/hooks_test_file_durations.json holds seconds per test
+      # file, and this step deals the files of tests/hooks longest-first onto the
+      # lightest of 3 shards, so every runner derives the same plan from the same
+      # tree and record. A file missing from the record takes the record's median,
+      # so a new test file is assigned exactly once without a record edit. Three
+      # shards because the suite totals 586-749 s of test time on those runs: two
+      # perfectly balanced shards still sit at 293-375 s plus session overhead,
+      # around the 360 s bar. tests/ci/test_hooks_shard_omn19681.py runs this
+      # step's own script over the real tree and proves its files are exactly the
+      # files pytest collects.
+      - name: Plan this shard's hooks test files (OMN-19681)
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run python - "${{ matrix.split }}" 3 > .hooks_shard_files <<'PY'
+          import fnmatch
+          import json
+          import os
+          import statistics
+          import sys
+
+          group, splits = int(sys.argv[1]), int(sys.argv[2])
+          record = json.load(open("config/hooks_test_file_durations.json"))
+          skip_dirs = ("*.egg", ".*", "_darcs", "build", "CVS", "dist", "node_modules", "venv", "{arch}")
+          files = []
+          for directory, subdirs, names in os.walk("tests/hooks"):
+              subdirs[:] = sorted(d for d in subdirs if not any(fnmatch.fnmatchcase(d, p) for p in skip_dirs))
+              files += [
+                  os.path.join(directory, n)
+                  for n in names
+                  if fnmatch.fnmatchcase(n, "test_*.py") or fnmatch.fnmatchcase(n, "*_test.py")
+              ]
+          fallback = statistics.median(record.values())
+          weight = {f: record.get(f, fallback) for f in files}
+          loads = [0.0] * splits
+          shards = [[] for _ in range(splits)]
+          for f in sorted(weight, key=lambda f: (-weight[f], f)):
+              lightest = min(range(splits), key=lambda i: (loads[i], i))
+              shards[lightest].append(f)
+              loads[lightest] += weight[f]
+          if not shards[group - 1]:
+              sys.exit(f"hooks shard {group}/{splits} has no test files")
+          print(f"hooks shard {group}/{splits}: {len(shards[group - 1])} files, planned {loads[group - 1]:.0f} s of {sum(loads):.0f} s", file=sys.stderr)
+          print("\n".join(sorted(shards[group - 1])))
+          PY
+          cat .hooks_shard_files
+
       - name: Run hooks tests
         working-directory: ${{ github.workspace }}
         run: |
-          # OMN-19681: without timings, least_duration interleaves adjacent cases
-          # instead of concentrating the expensive first half on one shard.
-          uv run pytest tests/hooks/ -v \
-            --splits 2 \
-            --splitting-algorithm least_duration \
-            --group ${{ matrix.split }} \
+          mapfile -t shard_files < .hooks_shard_files
+          test "${#shard_files[@]}" -gt 0
+          uv run pytest "${shard_files[@]}" -v \
             --cov=src/omniclaude \
             --cov-report=term-missing \
             --junitxml=junit-hooks.xml
@@ -3608,8 +3654,8 @@ jobs:
           echo "Lowering the bar is an edit to config/skip_count_baseline.yaml."
           echo "================================================================"
           mapfile -t reports < <(find junit-reports -name 'junit-hooks.xml' -type f | sort)
-          if [ "${#reports[@]}" -ne 2 ]; then
-            echo "::error::Hooks System Tests requires both shard reports; found ${#reports[@]}."
+          if [ "${#reports[@]}" -ne 3 ]; then
+            echo "::error::Hooks System Tests requires all 3 shard reports; found ${#reports[@]}."
             echo "That is an uploader defect, not an empty result -- failing closed."
             exit 1
           fi
