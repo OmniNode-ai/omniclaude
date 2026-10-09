@@ -1052,6 +1052,19 @@ def test_no_vocabulary_and_no_env_refuses_even_with_omni_home(
     assert "OMNI_HYGIENE_VOCAB_PATH is not set" in capsys.readouterr().err
 
 
+def test_omni_hygiene_vocab_path_naming_no_file_refuses(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("OMNI_HYGIENE_VOCAB_PATH", str(tmp_path / "missing.yaml"))
+    root = _make_repo(tmp_path / "r", {"src/x.txt": "hello\n"})
+    assert gate.main(["--repo-root", str(root)]) == 2
+    assert "THE GATE DID NOT RUN" in capsys.readouterr().err
+    monkeypatch.setenv("OMNI_HYGIENE_VOCAB_PATH", str(tmp_path))
+    assert gate.main(["--repo-root", str(root)]) == 2
+
+
 def test_the_lab_vocabulary_defaults_beside_the_vocabulary(
     tmp_path: Path, vocab: Path
 ) -> None:

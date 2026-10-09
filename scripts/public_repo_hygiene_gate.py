@@ -1740,9 +1740,9 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help=(
-            "path to the PRIVATE denylist vocabulary. Defaults to "
-            "$OMNI_HYGIENE_VOCAB_PATH "
-            "locally; CI fetches it from the private repo and passes the path."
+            "path to the PRIVATE denylist vocabulary. When omitted, the path "
+            "is read from $OMNI_HYGIENE_VOCAB_PATH; with neither, the gate "
+            "refuses to run. CI fetches the vocabulary and passes the path."
         ),
     )
     parser.add_argument(
@@ -1818,6 +1818,15 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
         vocab_path = Path(vocabulary_env)
+        if not vocab_path.is_file():
+            print(
+                "::error::OMNI_HYGIENE_VOCAB_PATH does not name a readable "
+                "file, so the private denylist vocabulary cannot be loaded. "
+                "The gate fails closed rather than scanning with no "
+                "vocabulary. THE GATE DID NOT RUN.",
+                file=sys.stderr,
+            )
+            return 2
 
     if args.refresh_visibility:
         try:
