@@ -120,6 +120,16 @@ GATE_JOBS: tuple[str, ...] = (
     # needs, no if), so a skip is anomalous; it is ALSO a STRICT_SUCCESS_JOBS
     # member below and fails closed on anything but success.
     "Canonical File Shape (OMN-20304)",  # canonical-file-shape
+    # OMN-17427: `claude plugin validate` over every plugin and marketplace
+    # manifest, with the Claude Code release pinned to the one that defines the
+    # hook setting `onFailure: "block"`. THIS LINE IS HALF THE MECHANISM, on the
+    # identical reasoning as the entries above: the default-deny sweep fails this
+    # gate when the job FAILS, but an unregistered job that is `skipped` or ABSENT
+    # yields SUCCESS. Unconditional in ci.yml (`if: always()`, no needs), so a skip
+    # is anomalous; it is ALSO a STRICT_SUCCESS_JOBS member below. A raw required
+    # context was not added to branch protection: CI Summary is already required,
+    # so this registration is enforcement-equivalent.
+    "Plugin Validate (OMN-17427)",  # plugin-validate
     "Cross-Repo Boundary Parity",  # boundary-parity (OMN-16000) — DIRECTLY REQUIRED live; was previously mis-marked SOFT_ALLOWLIST "warn-only" while a `contains()` substring bug in its `if:` silently skipped it on any PR whose changed-file count contained the digit '0' (10/20/100/...). Fixed 2026-08-13: `if:` no longer branches on changed_files, and the job is now a completeness-anchor member so CI Summary WAITS for it and only accepts success/skipped (occ-preflight's own legitimate skip carve-out), never a false green from the old bug.
 )
 
@@ -159,6 +169,8 @@ STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
         "Hook System Tests (OMN-20109)",
         # OMN-20304: see the GATE_JOBS entry above.
         "Canonical File Shape (OMN-20304)",
+        # OMN-17427: see the GATE_JOBS entry above.
+        "Plugin Validate (OMN-17427)",
     }
 )
 

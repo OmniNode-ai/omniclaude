@@ -1329,6 +1329,25 @@ repos:
         files: ^(plugins/onex/hooks/|tests/hooks_system/|scripts/hook_process_canary\.py$|scripts/hook_canary_)
         stages: [pre-commit]
 
+      # OMN-17427: `claude plugin validate` is the harness's own loader schema
+      # applied to every plugin and marketplace manifest and to hooks.json (a
+      # misspelt `onFailure` value is a hard error). Needs Claude Code >= 2.1.295,
+      # the release that defines the hook setting `onFailure: "block"`; the CI
+      # job (Plugin Validate) pins that exact release. `claude plugin test` and
+      # `claude plugin eval` are deliberately not run: see ci.yml's note.
+      - id: claude-plugin-validate
+        name: claude plugin validate (plugins and marketplace manifests)
+        entry: >-
+          bash -c 'set -euo pipefail;
+          for target in plugins/onex plugins/onex-delegate
+          plugins/.claude-plugin/marketplace.json .claude-plugin/marketplace.json;
+          do claude plugin validate "$target"; done'
+        language: system
+        pass_filenames: false
+        require_serial: true
+        files: ^(plugins/(onex|onex-delegate)/|plugins/\.claude-plugin/|\.claude-plugin/)
+        stages: [pre-commit]
+
       # OMN-3777: Block cloud bus references in source code
       - id: no-cloud-bus
         name: Block cloud bus references
