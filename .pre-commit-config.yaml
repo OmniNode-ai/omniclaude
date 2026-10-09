@@ -338,6 +338,15 @@ repos:
         pass_filenames: false
         files: '^(plugins/onex/hooks/(lib/(ticket_creation_guard|hook_refusal_recorder|hook_refusal_lane)\.py|lib/hook_refusal\.sh|scripts/pre_tool_use_ticket_creation_gate\.sh)|tests/hooks/test_refusal_row_lane_omn19381\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
         stages: [pre-commit]
+      - id: git-command-segment-regression
+        name: Git command segment admission and diagnostics (OMN-18936)
+        entry: >-
+          uv run --frozen pytest tests/hooks/test_shared_tree_git_guard.py
+          -q --no-cov -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/nodes/node_git_effect/handlers/handler_(git_admission|shell_word|shell_words)\.py|plugins/onex/hooks/scripts/pre_tool_use_shared_tree_git_guard\.sh|tests/hooks/test_shared_tree_git_guard\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
+        stages: [pre-commit]
       - id: pr-close-preconditions
         name: PR close preconditions and refusal contract (OMN-19160)
         entry: >-

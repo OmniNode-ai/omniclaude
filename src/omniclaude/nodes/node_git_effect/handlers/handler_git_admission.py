@@ -450,7 +450,7 @@ def _str_pairs(raw: Mapping[str, object], key: str) -> tuple[tuple[str, str], ..
     return tuple(sorted(value.items()))
 
 
-def _segments(command: str) -> list[list[str]] | None:
+def _segments(command: str) -> list[list[str]]:
     """The simple commands of ``command``, each as its dequoted words.
 
     OMN-17427. This read the command with ``shlex``, which is not a shell
@@ -466,10 +466,7 @@ def _segments(command: str) -> list[list[str]] | None:
     A subshell parenthesis stays a word of its own, which ``_peel_grouping``
     reads.
     """
-    try:
-        tokens = tokenize(command)
-    except ShellSyntaxError:
-        return None
+    tokens = tokenize(command)
     segments: list[list[str]] = []
     current: list[str] = []
     for tok in tokens:
@@ -2313,14 +2310,19 @@ def evaluate_bash_command(
     worktree_roots: tuple[Path, ...] = (),
 ) -> Decision:
     notes: list[str] = []
-    segments = _segments(command)
-    if segments is None:
+    try:
+        segments = _segments(command)
+    except ShellSyntaxError as exc:
         if _plainly_names_refused_verb(command, policy):
+            prefix = command[: exc.segment_start or 0]
+            line = prefix.count("\n") + 1
+            column = len(prefix.rsplit("\n", 1)[-1]) + 1
             return Decision(
                 blocked=True,
                 reason=(
-                    "BLOCKED: this Bash command could not be tokenised (an "
-                    "unbalanced quote, most likely) and its raw text names "
+                    "BLOCKED: this Bash command could not be tokenised "
+                    f"in the segment starting at line {line}, column {column} "
+                    f"({exc}) and its raw text names "
                     "git together with one of the verbs refused in the "
                     f"shared registry clone ({policy.ticket}, "
                     f"{policy.rule}), so whether it moves the tree every "
@@ -2513,8 +2515,9 @@ def _block(reason: str) -> int:
 
 def _is_publish_command(command: str) -> bool:
     """Reuse the shell reader: quoted prose and here-doc bodies are not actions."""
-    segments = _segments(command)
-    if segments is None:
+    try:
+        segments = _segments(command)
+    except ShellSyntaxError:
         # An unverifiable publishing command must still reach the refusal boundary.
         return bool(re.search(r"\b(?:git|gh)\b.*\b(?:push|merge)\b", command))
     for segment in segments:

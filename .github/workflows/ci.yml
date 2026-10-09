@@ -2647,6 +2647,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv run --frozen pytest tests/hooks/test_refusal_row_lane_omn19381.py -q -p no:cacheprovider
 
+      - name: Verify git command segment admission and diagnostics (OMN-18936)
+        working-directory: ${{ github.workspace }}
+        run: uv run --frozen pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov -p no:cacheprovider
+
       - name: Run hooks tests
         working-directory: ${{ github.workspace }}
         run: |
