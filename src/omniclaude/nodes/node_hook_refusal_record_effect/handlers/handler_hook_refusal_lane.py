@@ -298,8 +298,8 @@ def _registry_lane(paths: Iterable[Path]) -> str:
     for path in paths:
         try:
             lane, source, _ticket = hook_lane_attribution.resolve_lane(path)
-        except Exception:  # noqa: BLE001
-            continue
+        except Exception:  # noqa: BLE001 - an unresolvable path attributes no lane
+            lane, source = "", ""
         if source == hook_lane_attribution.LANE_SOURCE_REGISTRY and lane:
             return str(lane)
     return ""
