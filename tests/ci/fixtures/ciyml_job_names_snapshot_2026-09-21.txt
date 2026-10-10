@@ -51,6 +51,7 @@ Mode Metadata Integrity
 OCC Companion Merged Gate (OMN-15214)
 ONEX Compliance
 PR Failure Citations (OMN-18782)
+Plugin Validate (OMN-17427)
 Pre-commit Suite (OMN-19612)
 Pyright Type Checking
 Python Security Scan

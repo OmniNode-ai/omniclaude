@@ -84,13 +84,15 @@ def _generate(repo_root: Path, lib: ModuleType) -> int:
     stamp = datetime.now(UTC).date().isoformat()
     print(f"# generated from {hooks_json.relative_to(repo_root)} on {stamp}")
     print(f"# paste into {inventory_path.relative_to(repo_root)} and author the")
-    print("# semantic fields (ticket, owner, purpose, enforcement, mask, canary).")
+    print("# semantic fields (ticket, owner, purpose, enforcement, on_failure, mask,")
+    print("# canary).")
     for reg in registrations:
         matcher = "null" if reg.matcher is None else f'"{reg.matcher}"'
         print(f'  - script: "{reg.script}"')
         print(f'    event: "{reg.event}"')
         print(f"    matcher: {matcher}")
         print(f"    order: {reg.order}")
+        print(f'    on_failure: "{"block" if reg.on_failure == "block" else "open"}"')
     return 0
 
 

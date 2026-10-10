@@ -648,6 +648,90 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     )
 
 
+# OMN-17427: the PreToolUse guards that refuse an unsafe action fail CLOSED.
+# Claude Code 2.1.295 added the handler setting ``onFailure: "block"``: a hook
+# that cannot start, times out or exits with an unexpected code blocks the
+# action instead of letting it through. Spelled out here as literals -- not
+# read back from hook_inventory.yaml -- so that a change which edits the
+# inventory and hooks.json together to drop a guard's setting still fails this
+# test. Every other registration (the lane-open recorder, the Skill-started
+# capture, the all-hooks capture, every PostToolUse/SubagentStop/Stop/Session*
+# hook) is an observer or runs after the action and stays fail-open: a broken
+# recorder must never stop work.
+_FAIL_CLOSED_GUARD_COMMANDS = (
+    _DONE_FLIP_GUARD_COMMAND,
+    _TICKET_CREATION_GATE_COMMAND,
+    _BASH_GUARDS_COMMAND,
+    _AGENT_MODEL_GUARD_COMMAND,
+    _LANE_LIVENESS_GUARD_COMMAND,
+    _OVERSEER_FOREGROUND_BLOCK_COMMAND,
+    _ACTOR_LINE_GUARD_COMMAND,
+)
+
+
+def _on_failure_violations(data: dict[str, object]) -> list[str]:
+    """Every registration whose ``onFailure`` is not what its class requires."""
+    violations: list[str] = []
+    hooks = data.get("hooks", {})
+    assert isinstance(hooks, dict)
+    for event, groups in hooks.items():
+        for group in groups:
+            for handler in group.get("hooks", []):
+                command = handler.get("command", "")
+                setting = handler.get("onFailure")
+                is_guard = (
+                    event == "PreToolUse" and command in _FAIL_CLOSED_GUARD_COMMANDS
+                )
+                if is_guard and setting != "block":
+                    violations.append(
+                        f"{event}: guard {command} must set onFailure=block, "
+                        f"found {setting!r}"
+                    )
+                if not is_guard and setting not in (None, "continue"):
+                    violations.append(
+                        f"{event}: {command} is not a PreToolUse guard and must "
+                        f"stay fail-open, found onFailure={setting!r}"
+                    )
+    return violations
+
+
+def test_every_pretooluse_guard_fails_closed_and_no_observer_does() -> None:
+    """OMN-17427: guards carry ``onFailure: "block"``, observers carry nothing."""
+    data = json.loads(_HOOKS_JSON.read_text())
+    assert not _on_failure_violations(data), _on_failure_violations(data)
+    # Positive control: the seven guards really are registered, so the check
+    # above looked at them rather than at an empty set.
+    registered = {
+        handler["command"]
+        for group in data["hooks"]["PreToolUse"]
+        for handler in group["hooks"]
+    }
+    assert set(_FAIL_CLOSED_GUARD_COMMANDS) <= registered
+
+
+@pytest.mark.parametrize("guard", _FAIL_CLOSED_GUARD_COMMANDS)
+def test_a_guard_without_on_failure_block_is_caught(guard: str) -> None:
+    """Negative control: dropping the setting from any one guard is a failure."""
+    data = json.loads(_HOOKS_JSON.read_text())
+    for group in data["hooks"]["PreToolUse"]:
+        for handler in group["hooks"]:
+            if handler["command"] == guard:
+                del handler["onFailure"]
+    violations = _on_failure_violations(data)
+    assert len(violations) == 1 and guard in violations[0], violations
+
+
+def test_an_observer_with_on_failure_block_is_caught() -> None:
+    """Negative control: a recorder must not be able to stop work."""
+    data = json.loads(_HOOKS_JSON.read_text())
+    for group in data["hooks"]["PreToolUse"]:
+        for handler in group["hooks"]:
+            if handler["command"] == _LANE_OPEN_COMMAND:
+                handler["onFailure"] = "block"
+    violations = _on_failure_violations(data)
+    assert len(violations) == 1 and _LANE_OPEN_COMMAND in violations[0], violations
+
+
 def test_hooks_json_retains_metadata_keys() -> None:
     """The baseline keeps the ``description`` metadata key.
 
