@@ -24,9 +24,11 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from types import ModuleType
 
 
@@ -44,17 +46,35 @@ def _resolve_session_id_fn() -> Callable[..., str | None]:
 
 
 def _import_lib() -> tuple[ModuleType, ModuleType]:
-    """Import the registry and ownership-guard modules, adding repo root if needed."""
+    """Import the registry and the lane-identity module, adding repo root if needed.
+
+    The lane resolver is the PR ownership node's standard-library-only
+    ``handler_pr_ownership_lane``, loaded by path: this CLI is the remedy every
+    refusal names and runs under whatever ``python3`` the lane has, which cannot be
+    assumed to import ``omniclaude``.
+    """
     try:
-        from plugins.onex.hooks.lib import pr_claim_registry, pr_ownership_guard
+        from plugins.onex.hooks.lib import pr_claim_registry
     except ImportError:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         sys.path.insert(0, repo_root)
         from plugins.onex.hooks.lib import (  # type: ignore[no-redef]
             pr_claim_registry,
-            pr_ownership_guard,
         )
-    return pr_claim_registry, pr_ownership_guard
+    lane_file = (
+        Path(__file__).resolve().parent.parent
+        / "src/omniclaude/nodes/node_pr_ownership_guard_effect/handlers"
+        / "handler_pr_ownership_lane.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "handler_pr_ownership_lane", lane_file
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load the lane resolver at {lane_file}")
+    lane_module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = lane_module
+    spec.loader.exec_module(lane_module)
+    return pr_claim_registry, lane_module
 
 
 def _cmd_list(registry: object) -> int:

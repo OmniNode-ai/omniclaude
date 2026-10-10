@@ -39,6 +39,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -145,6 +146,9 @@ def _run(
     env["HOME"] = str(home)
     env["ONEX_LANE_ID"] = lane_id
     env["ONEX_RUN_ID"] = "run-1"
+    # The decision core is the omniclaude node (OMN-20685): the staged cache tree
+    # carries no interpreter of its own, so name the one that can import it.
+    env["PLUGIN_PYTHON_BIN"] = sys.executable
     payload = {"tool_name": "Bash", "tool_input": {"command": command}}
     return subprocess.run(
         ["bash", str(plugin_root / _SCRIPT_RELPATH)],

@@ -1,0 +1,2223 @@
+{
+ "cases": {
+  "allowed_compound_records_the_exclusive_claim": {
+   "claims": {
+    "dispatch:omninode-ai--omniclaude--ci.yml@main.json": {
+     "action": "workflow-dispatch",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "dispatch:omninode-ai/omniclaude#ci.yml@main"
+    },
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@main; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@main",
+        "verb": "workflow-dispatch"
+       },
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "api_close_method_equals_form": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (api-pr-close) on OmniNode-ai/omniclaude#5 (via gh api).\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around.",
+        "reason_code": "UNCLAIMED",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "api-pr-close"
+       }
+      ],
+      "reason": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (api-pr-close) on OmniNode-ai/omniclaude#5 (via gh api).\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     }
+    }
+   ]
+  },
+  "api_close_owned": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "api-pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "api_close_unclaimed": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (api-pr-close) on OmniNode-ai/omniclaude#5 (via gh api).\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around.",
+        "reason_code": "UNCLAIMED",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "api-pr-close"
+       }
+      ],
+      "reason": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (api-pr-close) on OmniNode-ai/omniclaude#5 (via gh api).\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     }
+    }
+   ]
+  },
+  "api_close_with_variable_repo_and_default": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "api-pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "api_close_with_variable_repo_no_default": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (api-pr-close): repository in the API path is a shell variable. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id.",
+        "reason_code": "INDETERMINATE_TARGET",
+        "target_key": null,
+        "verb": "api-pr-close"
+       }
+      ],
+      "reason": "REFUSED (api-pr-close): repository in the API path is a shell variable. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id."
+     }
+    }
+   ]
+  },
+  "api_get_is_not_a_mutation": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "api_patch_title_is_not_a_close": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "api_post_without_pulls_path": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "assignment_and_nohup_prefix": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "backslash_newline_continuation": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "blocked_command_records_no_claims": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@main; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@main",
+        "verb": "workflow-dispatch"
+       },
+       {
+        "allowed": false,
+        "message": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#5.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around.",
+        "reason_code": "UNCLAIMED",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#5.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     }
+    }
+   ]
+  },
+  "close_by_url": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "close_claim_bad_timestamp": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: the ownership claim for 'omninode-ai/omniclaude#5' exists but is unreadable or malformed. An unreadable claim is INDETERMINATE, not absent, and fails closed. Inspect it with: python3 <repo>/scripts/pr_claim_registry_cli.py list",
+        "reason_code": "INDETERMINATE_CLAIM",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: the ownership claim for 'omninode-ai/omniclaude#5' exists but is unreadable or malformed. An unreadable claim is INDETERMINATE, not absent, and fails closed. Inspect it with: python3 <repo>/scripts/pr_claim_registry_cli.py list"
+     }
+    }
+   ]
+  },
+  "close_claim_blank_lane": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "   ",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: an active claim exists on 'omninode-ai/omniclaude#5' but it records no lane, so it cannot prove this lane owns the work. Re-claim it with: env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1",
+        "reason_code": "INDETERMINATE_CLAIM",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: an active claim exists on 'omninode-ai/omniclaude#5' but it records no lane, so it cannot prove this lane owns the work. Re-claim it with: env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1"
+     }
+    }
+   ]
+  },
+  "close_claim_blank_session": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": " ",
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: the ownership claim for 'omninode-ai/omniclaude#5' exists but is unreadable or malformed. An unreadable claim is INDETERMINATE, not absent, and fails closed. Inspect it with: python3 <repo>/scripts/pr_claim_registry_cli.py list",
+        "reason_code": "INDETERMINATE_CLAIM",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: the ownership claim for 'omninode-ai/omniclaude#5' exists but is unreadable or malformed. An unreadable claim is INDETERMINATE, not absent, and fails closed. Inspect it with: python3 <repo>/scripts/pr_claim_registry_cli.py list"
+     }
+    }
+   ]
+  },
+  "close_claim_json_garbage": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "raw": "{not json"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: the ownership claim for 'omninode-ai/omniclaude#5' exists but is unreadable or malformed. An unreadable claim is INDETERMINATE, not absent, and fails closed. Inspect it with: python3 <repo>/scripts/pr_claim_registry_cli.py list",
+        "reason_code": "INDETERMINATE_CLAIM",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: the ownership claim for 'omninode-ai/omniclaude#5' exists but is unreadable or malformed. An unreadable claim is INDETERMINATE, not absent, and fails closed. Inspect it with: python3 <repo>/scripts/pr_claim_registry_cli.py list"
+     }
+    }
+   ]
+  },
+  "close_claim_json_list": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "raw": [
+      1,
+      2
+     ]
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: the ownership claim for 'omninode-ai/omniclaude#5' exists but is unreadable or malformed. An unreadable claim is INDETERMINATE, not absent, and fails closed. Inspect it with: python3 <repo>/scripts/pr_claim_registry_cli.py list",
+        "reason_code": "INDETERMINATE_CLAIM",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: the ownership claim for 'omninode-ai/omniclaude#5' exists but is unreadable or malformed. An unreadable claim is INDETERMINATE, not absent, and fails closed. Inspect it with: python3 <repo>/scripts/pr_claim_registry_cli.py list"
+     }
+    }
+   ]
+  },
+  "close_claim_null_lane": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": null,
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: an active claim exists on 'omninode-ai/omniclaude#5' but it records no lane, so it cannot prove this lane owns the work. Re-claim it with: env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1",
+        "reason_code": "INDETERMINATE_CLAIM",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: an active claim exists on 'omninode-ai/omniclaude#5' but it records no lane, so it cannot prove this lane owns the work. Re-claim it with: env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1"
+     }
+    }
+   ]
+  },
+  "close_claim_run_not_a_string": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": 7,
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: the ownership claim for 'omninode-ai/omniclaude#5' exists but is unreadable or malformed. An unreadable claim is INDETERMINATE, not absent, and fails closed. Inspect it with: python3 <repo>/scripts/pr_claim_registry_cli.py list",
+        "reason_code": "INDETERMINATE_CLAIM",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: the ownership claim for 'omninode-ai/omniclaude#5' exists but is unreadable or malformed. An unreadable claim is INDETERMINATE, not absent, and fails closed. Inspect it with: python3 <repo>/scripts/pr_claim_registry_cli.py list"
+     }
+    }
+   ]
+  },
+  "close_claim_session_not_ours": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": "sess-claim-holder",
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'lane-alpha' in run 'run-1', session 'sess-claim-holder', and you are run 'run-1', session 'None'. A matching lane name cannot authorize another run or session. Coordinate with the holder in the rolling work ledger.",
+        "reason_code": "CROSS_RUN",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'lane-alpha' in run 'run-1', session 'sess-claim-holder', and you are run 'run-1', session 'None'. A matching lane name cannot authorize another run or session. Coordinate with the holder in the rolling work ledger."
+     }
+    }
+   ]
+  },
+  "close_claim_without_lane": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": null,
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: an active claim exists on 'omninode-ai/omniclaude#5' but it records no lane, so it cannot prove this lane owns the work. Re-claim it with: env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1",
+        "reason_code": "INDETERMINATE_CLAIM",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: an active claim exists on 'omninode-ai/omniclaude#5' but it records no lane, so it cannot prove this lane owns the work. Re-claim it with: env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1"
+     }
+    }
+   ]
+  },
+  "close_default_repo_from_url": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "close_default_repo_unparseable": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close): target repository is unresolvable \u2014 pass --repo <owner>/<repo>. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id.",
+        "reason_code": "INDETERMINATE_TARGET",
+        "target_key": null,
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close): target repository is unresolvable \u2014 pass --repo <owner>/<repo>. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id."
+     }
+    }
+   ]
+  },
+  "close_expired_claim": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#5.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around.",
+        "reason_code": "UNCLAIMED",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#5.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     }
+    }
+   ]
+  },
+  "close_expired_peer_claim_does_not_block_owner_rule": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-beta",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#5.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around.",
+        "reason_code": "UNCLAIMED",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#5.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     }
+    }
+   ]
+  },
+  "close_flag_value_is_not_the_number": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "close_owned_by_peer": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-beta",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'lane-beta', and you are lane 'lane-alpha'. A lane may not mutate a peer lane's work. Coordinate with that lane in the rolling work ledger; if it is finished, it releases the claim with: python3 <repo>/scripts/pr_claim_registry_cli.py release 'omninode-ai/omniclaude#5' <run-id>",
+        "reason_code": "CROSS_LANE",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'lane-beta', and you are lane 'lane-alpha'. A lane may not mutate a peer lane's work. Coordinate with that lane in the rolling work ledger; if it is finished, it releases the claim with: python3 <repo>/scripts/pr_claim_registry_cli.py release 'omninode-ai/omniclaude#5' <run-id>"
+     }
+    }
+   ]
+  },
+  "close_owned_by_self": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "close_same_lane_other_run": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-other",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'lane-alpha' in run 'run-other', session 'None', and you are run 'run-1', session 'None'. A matching lane name cannot authorize another run or session. Coordinate with the holder in the rolling work ledger.",
+        "reason_code": "CROSS_RUN",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'lane-alpha' in run 'run-other', session 'None', and you are run 'run-1', session 'None'. A matching lane name cannot authorize another run or session. Coordinate with the holder in the rolling work ledger."
+     }
+    }
+   ]
+  },
+  "close_short_flag_and_trailing_slash": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "close_unclaimed": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#5.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around.",
+        "reason_code": "UNCLAIMED",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#5.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     }
+    }
+   ]
+  },
+  "close_without_number": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close): PR number could not be parsed from the command. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id.",
+        "reason_code": "INDETERMINATE_TARGET",
+        "target_key": null,
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close): PR number could not be parsed from the command. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id."
+     }
+    }
+   ]
+  },
+  "close_without_repo": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close): target repository is unresolvable \u2014 pass --repo <owner>/<repo>. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id.",
+        "reason_code": "INDETERMINATE_TARGET",
+        "target_key": null,
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close): target repository is unresolvable \u2014 pass --repo <owner>/<repo>. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id."
+     }
+    }
+   ]
+  },
+  "commit_message_naming_a_close": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "compound_all_owned": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    },
+    "omninode-ai--omniclaude--6.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#6"
+    },
+    "omninode-ai--omniclaude--7.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#7"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       },
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#6",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#6",
+        "verb": "pr-close"
+       },
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#7",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#7",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "compound_one_owned_one_not": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       },
+       {
+        "allowed": false,
+        "message": "Missing PR claim: 'omninode-ai/omniclaude#6' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#6.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#6' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around.",
+        "reason_code": "UNCLAIMED",
+        "target_key": "omninode-ai/omniclaude#6",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "Missing PR claim: 'omninode-ai/omniclaude#6' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#6.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#6' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     }
+    }
+   ]
+  },
+  "double_quoted_escape": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "empty_command": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "env_prefix": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "lane_env_precedence": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "lane_from_agent_name_is_sanitised": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha-",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha-' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "lane_from_onex_lane": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "newline_separated": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       },
+       {
+        "allowed": false,
+        "message": "Missing PR claim: 'omninode-ai/omniclaude#6' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#6.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#6' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around.",
+        "reason_code": "UNCLAIMED",
+        "target_key": "omninode-ai/omniclaude#6",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "Missing PR claim: 'omninode-ai/omniclaude#6' has no active ownership claim. REFUSED (pr-close) on OmniNode-ai/omniclaude#6.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#6' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     }
+    }
+   ]
+  },
+  "no_identity_at_all": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry.",
+        "reason_code": "INDETERMINATE_LANE",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
+     }
+    }
+   ]
+  },
+  "pipe_separated": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "pr_view_is_not_a_mutation": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "quoted_head_is_not_gh": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "quoted_separator_stays_in_the_word": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "quoted_verb_is_not_a_command": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "reopen_is_governed": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (pr-reopen) on OmniNode-ai/omniclaude#5.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around.",
+        "reason_code": "UNCLAIMED",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-reopen"
+       }
+      ],
+      "reason": "Missing PR claim: 'omninode-ai/omniclaude#5' has no active ownership claim. REFUSED (pr-reopen) on OmniNode-ai/omniclaude#5.\n    env ONEX_LANE_ID=lane-alpha ONEX_RUN_ID=run-1 python3 <repo>/scripts/pr_claim_registry_cli.py claim 'omninode-ai/omniclaude#5' --action close --lane lane-alpha --run-id run-1\nRun the command above only if this work is yours, before closing. An unclaimed target is INDETERMINATE, not free \u2014 >=5 green PRs were closed unmerged this way in 48h under the shared gh identity (OMN-16485). Recording the claim IS the attribution record that is otherwise missing; it is not a formality to route around."
+     }
+    }
+   ]
+  },
+  "run_cancel_first_writer": {
+   "claims": {
+    "run:omninode-ai--omniclaude--777.json": {
+     "action": "run-cancel",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "run:omninode-ai/omniclaude#777"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' is the first writer for run:omninode-ai/omniclaude#777; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "run:omninode-ai/omniclaude#777",
+        "verb": "run-cancel"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "run_cancel_peer_holds": {
+   "claims": {
+    "run:omninode-ai--omniclaude--777.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-beta",
+     "pr_key": "run:omninode-ai/omniclaude#777"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (run-cancel) on run 777 in OmniNode-ai/omniclaude: owned by lane 'lane-beta', and you are lane 'lane-alpha'. A lane may not mutate a peer lane's work. Coordinate with that lane in the rolling work ledger; if it is finished, it releases the claim with: python3 <repo>/scripts/pr_claim_registry_cli.py release 'run:omninode-ai/omniclaude#777' <run-id>",
+        "reason_code": "CROSS_LANE",
+        "target_key": "run:omninode-ai/omniclaude#777",
+        "verb": "run-cancel"
+       }
+      ],
+      "reason": "REFUSED (run-cancel) on run 777 in OmniNode-ai/omniclaude: owned by lane 'lane-beta', and you are lane 'lane-alpha'. A lane may not mutate a peer lane's work. Coordinate with that lane in the rolling work ledger; if it is finished, it releases the claim with: python3 <repo>/scripts/pr_claim_registry_cli.py release 'run:omninode-ai/omniclaude#777' <run-id>"
+     }
+    }
+   ]
+  },
+  "run_cancel_unclaimed_by_session_identity": {
+   "claims": {
+    "run:omninode-ai--omniclaude--777.json": {
+     "action": "run-cancel",
+     "claimed_by_run": "run-s",
+     "claimed_by_session": "sess-aaaaaaaaaaaaaaaaaaaa",
+     "lane_id": "session:sess-aaaaaaaaaaa",
+     "pr_key": "run:omninode-ai/omniclaude#777"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'session:sess-aaaaaaaaaaa' is the first writer for run:omninode-ai/omniclaude#777; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "run:omninode-ai/omniclaude#777",
+        "verb": "run-cancel"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "run_cancel_without_id": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (run-cancel): run id or repository could not be resolved. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id.",
+        "reason_code": "INDETERMINATE_TARGET",
+        "target_key": null,
+        "verb": "run-cancel"
+       }
+      ],
+      "reason": "REFUSED (run-cancel): run id or repository could not be resolved. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id."
+     }
+    }
+   ]
+  },
+  "run_falls_back_to_session": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": "run-1",
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "session_fallback_claim_without_session": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-s",
+     "claimed_by_session": null,
+     "lane_id": "session:sess-aaaaaaaaaaa",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'session:sess-aaaaaaaaaaa' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "session_fallback_owns_its_claim": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-s",
+     "claimed_by_session": "sess-aaaaaaaaaaaaaaaaaaaa",
+     "lane_id": "session:sess-aaaaaaaaaaa",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'session:sess-aaaaaaaaaaa' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "session_fallback_resolves_a_named_claim": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-s",
+     "claimed_by_session": "sess-aaaaaaaaaaaaaaaaaaaa",
+     "lane_id": "lane-beta",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-beta' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "session_fallback_shared_prefix_other_session": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-s",
+     "claimed_by_session": "sess-aaaaaaaaaaaaaaaaaaaa-other",
+     "lane_id": "session:sess-aaaaaaaaaaa",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'session:sess-aaaaaaaaaaa' in run 'run-s', session 'sess-aaaaaaaaaaaaaaaaaaaa-other', and you are run 'run-s', session 'sess-aaaaaaaaaaaaaaaaaaaa'. A matching lane name cannot authorize another run or session. Coordinate with the holder in the rolling work ledger.",
+        "reason_code": "CROSS_RUN",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'session:sess-aaaaaaaaaaa' in run 'run-s', session 'sess-aaaaaaaaaaaaaaaaaaaa-other', and you are run 'run-s', session 'sess-aaaaaaaaaaaaaaaaaaaa'. A matching lane name cannot authorize another run or session. Coordinate with the holder in the rolling work ledger."
+     }
+    }
+   ]
+  },
+  "session_fallback_wrong_run": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-t",
+     "claimed_by_session": "sess-aaaaaaaaaaaaaaaaaaaa",
+     "lane_id": "session:sess-aaaaaaaaaaa",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'session:sess-aaaaaaaaaaa' in run 'run-t', session 'sess-aaaaaaaaaaaaaaaaaaaa', and you are run 'run-s', session 'sess-aaaaaaaaaaaaaaaaaaaa'. A matching lane name cannot authorize another run or session. Coordinate with the holder in the rolling work ledger.",
+        "reason_code": "CROSS_RUN",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'session:sess-aaaaaaaaaaa' in run 'run-t', session 'sess-aaaaaaaaaaaaaaaaaaaa', and you are run 'run-s', session 'sess-aaaaaaaaaaaaaaaaaaaa'. A matching lane name cannot authorize another run or session. Coordinate with the holder in the rolling work ledger."
+     }
+    }
+   ]
+  },
+  "too_few_words": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "unterminated_quote": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "workflow_default_repo": {
+   "claims": {
+    "dispatch:omninode-ai--omniclaude--ci.yml@default.json": {
+     "action": "workflow-dispatch",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "dispatch:omninode-ai/omniclaude#ci.yml@default"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@default; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@default",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "workflow_expired_peer_claim_is_reaped": {
+   "claims": {
+    "dispatch:omninode-ai--omniclaude--ci.yml@main.json": {
+     "action": "workflow-dispatch",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "dispatch:omninode-ai/omniclaude#ci.yml@main"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": "{\"blocked\": false, \"decisions\": [{\"allowed\": true, \"reason_code\": \"FIRST_WRITER\", \"verb\": \"workflow-dispatch\", \"target_key\": \"dispatch:omninode-ai/omniclaude#ci.yml@main\", \"message\": \"allowed: lane 'lane-alpha' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@main; claim recorded so a racing peer refuses\"}], \"reason\": \"\"}\n[claim-registry] Expired claim for dispatch:omninode-ai/omniclaude#ci.yml@main (run: run-1, heartbeat: <ts>). Proceeding to reap.\n"
+    }
+   ]
+  },
+  "workflow_first_writer_records_a_claim": {
+   "claims": {
+    "dispatch:omninode-ai--omniclaude--ci.yml@main.json": {
+     "action": "workflow-dispatch",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "dispatch:omninode-ai/omniclaude#ci.yml@main"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@main; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@main",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "workflow_no_identity": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (workflow-dispatch): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry.",
+        "reason_code": "INDETERMINATE_LANE",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@main",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": "REFUSED (workflow-dispatch): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
+     }
+    }
+   ]
+  },
+  "workflow_other_ref_is_another_key": {
+   "claims": {
+    "dispatch:omninode-ai--omniclaude--ci.yml@main.json": {
+     "action": "workflow-dispatch",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "dispatch:omninode-ai/omniclaude#ci.yml@main"
+    },
+    "dispatch:omninode-ai--omniclaude--ci.yml@mainx.json": {
+     "action": "workflow-dispatch",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-beta",
+     "pr_key": "dispatch:omninode-ai/omniclaude#ci.yml@mainx"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@main; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@main",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": ""
+     }
+    },
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-beta' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@mainx; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@mainx",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "workflow_ref_short_flag": {
+   "claims": {
+    "dispatch:omninode-ai--omniclaude--ci.yml@dev.json": {
+     "action": "workflow-dispatch",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "dispatch:omninode-ai/omniclaude#ci.yml@dev"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@dev; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@dev",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "workflow_same_lane_again_is_allowed": {
+   "claims": {
+    "dispatch:omninode-ai--omniclaude--ci.yml@main.json": {
+     "action": "workflow-dispatch",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "dispatch:omninode-ai/omniclaude#ci.yml@main"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@main; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@main",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": ""
+     }
+    },
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' holds an active claim on dispatch:omninode-ai/omniclaude#ci.yml@main",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@main",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "workflow_second_lane_is_refused": {
+   "claims": {
+    "dispatch:omninode-ai--omniclaude--ci.yml@main.json": {
+     "action": "workflow-dispatch",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "dispatch:omninode-ai/omniclaude#ci.yml@main"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@main; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@main",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": ""
+     }
+    },
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (workflow-dispatch) on ci.yml@main in OmniNode-ai/omniclaude: owned by lane 'lane-alpha', and you are lane 'lane-beta'. A lane may not mutate a peer lane's work. Coordinate with that lane in the rolling work ledger; if it is finished, it releases the claim with: python3 <repo>/scripts/pr_claim_registry_cli.py release 'dispatch:omninode-ai/omniclaude#ci.yml@main' <run-id>",
+        "reason_code": "CROSS_LANE",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@main",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": "REFUSED (workflow-dispatch) on ci.yml@main in OmniNode-ai/omniclaude: owned by lane 'lane-alpha', and you are lane 'lane-beta'. A lane may not mutate a peer lane's work. Coordinate with that lane in the rolling work ledger; if it is finished, it releases the claim with: python3 <repo>/scripts/pr_claim_registry_cli.py release 'dispatch:omninode-ai/omniclaude#ci.yml@main' <run-id>"
+     }
+    }
+   ]
+  },
+  "workflow_without_name": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (workflow-dispatch): workflow name or repository could not be resolved. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id.",
+        "reason_code": "INDETERMINATE_TARGET",
+        "target_key": null,
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": "REFUSED (workflow-dispatch): workflow name or repository could not be resolved. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id."
+     }
+    }
+   ]
+  },
+  "workflow_without_ref_uses_default": {
+   "claims": {
+    "dispatch:omninode-ai--omniclaude--ci.yml@default.json": {
+     "action": "workflow-dispatch",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "lane-alpha",
+     "pr_key": "dispatch:omninode-ai/omniclaude#ci.yml@default"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'lane-alpha' is the first writer for dispatch:omninode-ai/omniclaude#ci.yml@default; claim recorded so a racing peer refuses",
+        "reason_code": "FIRST_WRITER",
+        "target_key": "dispatch:omninode-ai/omniclaude#ci.yml@default",
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "workflow_without_repo": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (workflow-dispatch): workflow name or repository could not be resolved. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id.",
+        "reason_code": "INDETERMINATE_TARGET",
+        "target_key": null,
+        "verb": "workflow-dispatch"
+       }
+      ],
+      "reason": "REFUSED (workflow-dispatch): workflow name or repository could not be resolved. Ownership cannot be checked against an unresolved target, so this fails closed. Re-run with an explicit --repo <owner>/<repo> and an explicit id."
+     }
+    }
+   ]
+  },
+  "worktree_dir_override": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "wt:OMN-9/repo",
+     "claimed_by_session": null,
+     "lane_id": "wt:OMN-9/repo",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'wt:OMN-9/repo' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "worktree_lane_other_run": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "run-1",
+     "claimed_by_session": null,
+     "lane_id": "wt:OMN-9/repo",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'wt:OMN-9/repo' in run 'run-1', session 'None', and you are run 'wt:OMN-9/repo', session 'None'. A matching lane name cannot authorize another run or session. Coordinate with the holder in the rolling work ledger.",
+        "reason_code": "CROSS_RUN",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close) on OmniNode-ai/omniclaude#5: owned by lane 'wt:OMN-9/repo' in run 'run-1', session 'None', and you are run 'wt:OMN-9/repo', session 'None'. A matching lane name cannot authorize another run or session. Coordinate with the holder in the rolling work ledger."
+     }
+    }
+   ]
+  },
+  "worktree_lane_owned": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "wt:OMN-9/repo",
+     "claimed_by_session": null,
+     "lane_id": "wt:OMN-9/repo",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'wt:OMN-9/repo' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  },
+  "worktree_outside_roots": {
+   "claims": {},
+   "steps": [
+    {
+     "rc": 3,
+     "stderr": "",
+     "stdout": {
+      "blocked": true,
+      "decisions": [
+       {
+        "allowed": false,
+        "message": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry.",
+        "reason_code": "INDETERMINATE_LANE",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": "REFUSED (pr-close): this lane has no resolvable identity, so the mutation cannot be attributed. Attribution that cannot be established fails closed \u2014 it is never assumed. Export ONEX_LANE_ID=<your-lane-handle> or ONEX_LANE (the handle you registered in the rolling work ledger) and retry."
+     }
+    }
+   ]
+  },
+  "worktree_root_override_single_part": {
+   "claims": {
+    "omninode-ai--omniclaude--5.json": {
+     "action": "close",
+     "claimed_by_run": "wt:OMN-9",
+     "claimed_by_session": null,
+     "lane_id": "wt:OMN-9",
+     "pr_key": "omninode-ai/omniclaude#5"
+    }
+   },
+   "steps": [
+    {
+     "rc": 0,
+     "stderr": "",
+     "stdout": {
+      "blocked": false,
+      "decisions": [
+       {
+        "allowed": true,
+        "message": "allowed: lane 'wt:OMN-9' holds an active claim on omninode-ai/omniclaude#5",
+        "reason_code": "OWNED_BY_SELF",
+        "target_key": "omninode-ai/omniclaude#5",
+        "verb": "pr-close"
+       }
+      ],
+      "reason": ""
+     }
+    }
+   ]
+  }
+ },
+ "recorded_from": "plugins/onex/hooks/lib/pr_ownership_guard.py at omniclaude 05d66f702, with session_id.py, pr_claim_registry.py and onex_state.py beside it"
+}

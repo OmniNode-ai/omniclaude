@@ -367,7 +367,19 @@ repos:
           tests/hooks/test_pr_close_preconditions.py -q -p no:cacheprovider'
         language: system
         pass_filenames: false
-        files: '^(plugins/onex/hooks/(lib/pr_ownership_guard\.py|scripts/pre_tool_use_(pr_ownership_guard|bash_guards)\.sh)|scripts/pr_claim_registry_cli\.py|plugins/onex/skills/dep_cascade_dedup/SKILL\.md|plugins/onex/docs/pr-close-preconditions\.md|tests/hooks/test_pr_close_preconditions\.py|\.pre-commit-config\.yaml)$'
+        files: '^(plugins/onex/hooks/scripts/pre_tool_use_(pr_ownership_guard|bash_guards)\.sh|src/omniclaude/nodes/node_pr_ownership_guard_effect/handlers/handler_pr_ownership[a-z_]*\.py|scripts/pr_claim_registry_cli\.py|plugins/onex/skills/dep_cascade_dedup/SKILL\.md|plugins/onex/docs/pr-close-preconditions\.md|tests/hooks/test_pr_close_preconditions\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+      - id: pr-ownership-effect-parity
+        name: PR ownership node matches the recorded guard (OMN-20685)
+        entry: >-
+          bash -c 'PYTHONDONTWRITEBYTECODE=1 uv run pytest
+          tests/hooks/test_pr_ownership_effect_parity.py
+          tests/unit/hooks/test_pr_ownership_guard.py
+          tests/unit/hooks/test_pr_claim_session_identity.py
+          tests/hooks/test_pr_ownership_guard_cache_layout.py -q -p no:cacheprovider'
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/nodes/node_pr_ownership_guard_effect/.*|plugins/onex/hooks/scripts/pre_tool_use_pr_ownership_guard\.sh|scripts/pr_claim_registry_cli\.py|tests/fixtures/pr_ownership_effect_golden\.json|tests/hooks/test_pr_ownership_effect_parity\.py|tests/hooks/test_pr_ownership_guard_cache_layout\.py|tests/unit/hooks/test_pr_ownership_guard\.py|tests/unit/hooks/test_pr_claim_session_identity\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
         stages: [pre-commit]
       - id: reject-legacy-session-id-reads
         name: Reject legacy session-id env-var reads

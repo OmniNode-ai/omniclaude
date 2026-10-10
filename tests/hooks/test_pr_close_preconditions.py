@@ -17,7 +17,11 @@ pytestmark = pytest.mark.unit
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = ROOT / "plugins/onex/docs/pr-close-preconditions.md"
 CLI = ROOT / "scripts/pr_claim_registry_cli.py"
-GUARD = ROOT / "plugins/onex/hooks/lib/pr_ownership_guard.py"
+GUARD = [
+    sys.executable,
+    "-m",
+    "omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership_cli",
+]
 HOOK = ROOT / "plugins/onex/hooks/scripts/pre_tool_use_bash_guards.sh"
 KEY = "omninode-ai/omniclaude#19160"
 COMMAND = "gh pr close 19160 --repo OmniNode-ai/omniclaude"
@@ -184,10 +188,10 @@ def test_invalid_close_fixture_refuses_once_with_documented_reason(
     assert payload["reason"].count(reason) == 1
 
 
-@pytest.mark.parametrize("reader", [CLI, GUARD])
+@pytest.mark.parametrize("reader", [[sys.executable, str(CLI)], GUARD])
 def test_help_exposes_claim_before_close(reader, caller):
     result = subprocess.run(
-        [sys.executable, str(reader), "--help"],
+        [*reader, "--help"],
         env=caller,
         text=True,
         capture_output=True,
