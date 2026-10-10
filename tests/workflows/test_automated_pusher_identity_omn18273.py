@@ -75,8 +75,8 @@ BRANCH_PUSHERS: dict[str, tuple[str, ...]] = {
 }
 
 # Workflow file -> why it is out of scope. Every exemption is a stated reason, not a
-# blanket. Four of the five files here contain the literal ``git push`` without
-# running one; each reason says what the occurrence actually is.
+# blanket. Every file here contains the literal ``git push`` without running
+# one; each reason says what the occurrence actually is.
 EXEMPT: dict[str, str] = {
     "release.yml": (
         "runs no `git push`: the release/main-sync moves the ref through the REST "
@@ -84,15 +84,10 @@ EXEMPT: dict[str, str] = {
         "that choice. The release train is also a production-adjacent surface "
         "deliberately out of scope for OMN-18273"
     ),
-    "branch-claim-gate.yml": (
-        "runs no `git push`: the literal appears only in comments describing the "
-        "hook tests this job executes, which drive a push through the installed "
-        "hook inside their own temporary repositories"
-    ),
     "ci.yml": (
-        "runs no `git push`: the literal appears only in a comment describing the "
-        "lane-identity canary tests, which drive a real push inside their own "
-        "fixture repositories"
+        "runs no `git push`: the literal appears only in comments describing the "
+        "lane-identity canary and branch-claim hook tests, which drive a real push "
+        "inside their own fixture repositories"
     ),
     "omni-standards-compliance.yml": (
         "runs no `git push`: the literal is the grep pattern this gate scans skill "

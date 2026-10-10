@@ -2452,7 +2452,7 @@ jobs:
           #
           # OMN-18357: three files under tests/scripts/ are IGNORED here because
           # this job cannot provide what they need, not because they are
-          # optional. branch-claim-gate.yml already records that "the
+          # optional. The Branch Claim Gate job already records that "the
           # consolidated test job does not collect tests/scripts/ at all" -- that
           # was measured on the SELECTIVE path, and the full-suite path collects
           # the directory anyway. So the first shared-module change after those
@@ -2464,7 +2464,7 @@ jobs:
           # test_branch_claim.py, test_branch_claim_hook.py and
           # test_lane_identity_canary.py drive a real `git push` and a real
           # `git commit` through installed hooks, so they need a git identity
-          # and a default branch name, which branch-claim-gate.yml sets up; it
+          # and a default branch name, which the Branch Claim Gate job sets up; it
           # is their CI home and they lose nothing here. The claim index module
           # they exercise is vendored as scripts/claim_index.py (OMN-19722);
           # until then it was fetched from a different repository, and the
@@ -4955,6 +4955,1707 @@ jobs:
             uv run --no-project --with "$CANONICAL_FILE_SHAPE_CORE" \
               python -m omnibase_core.validators.canonical_file_shape --head HEAD
           fi
+
+  # ============================================================================
+  # PATH-FILTERED GATES (OMN-20074)
+  # ============================================================================
+  # Twenty-two gates used to be standalone workflow files whose `paths:` filter
+  # decided whether the file ran at all. The only required context in each of
+  # them was its nested `occ-preflight / eligibility`, so with the change-control
+  # preflight retired none of them would be read by any required context. They
+  # live here now. `changes` computes the change set once and answers, per gate,
+  # whether that gate's ORIGINAL trigger matched; each gate needs `changes` and
+  # runs only on `true`. A gate that did not apply concludes `skipped` in this
+  # run, which CI Summary's default-deny sweep reads as good; a gate that fails
+  # fails CI Summary, and one still running holds it PENDING. No context was
+  # added or renamed: every gate keeps the check-run name it had. Comments
+  # carried over from the old files that call a gate a "required status check"
+  # predate this fold; the required context that blocks on each one is
+  # CI Summary.
+  #
+  # Change set: the same base resolution canonical-file-shape uses (pull request
+  # base, merge-group base, push `before`) and the `git diff --name-only` listing
+  # detect-changes uses. When no change set can be computed, every gate that
+  # applies to the event runs: an unknown diff never reads as "nothing changed".
+  #
+  # Events, per filter, as the old file declared them: a pull request applies to
+  # every gate; a push only to the branches its old `push:` named (only main,
+  # dev and hotfix/** reach this workflow); workflow_dispatch only where the old
+  # file declared it, and then without a path match; merge_group to none, since
+  # none of the 22 ran there. A gate's own workflow file in its old filter now
+  # reads as ci.yml, where its definition lives.
+  #
+  # One entry is widened, never narrowed: plugin-compat-gate's dev-marketplace
+  # directory is written `plugins/onex-*-marketplace/**`, because the
+  # directory's literal name carries a lab lane token the public-repo hygiene
+  # gate refuses on any added line. The glob matches that directory and only
+  # adds matches.
+  #
+  # Globs are matched with GitHub's `paths:` meaning for the three tokens the
+  # filters use: `*` stays inside one directory, `**` crosses directories and
+  # `**/` also matches no directory at all. Any other glob syntax is refused
+  # rather than guessed at.
+  changes:
+    name: Path Changes (OMN-20074)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      branch-claim-gate: ${{ steps.filter.outputs.branch-claim-gate }}
+      check-deterministic-skills: ${{ steps.filter.outputs.check-deterministic-skills }}
+      check-instructional-skills: ${{ steps.filter.outputs.check-instructional-skills }}
+      daemon-venv-skew-gate: ${{ steps.filter.outputs.daemon-venv-skew-gate }}
+      defect-anchor: ${{ steps.filter.outputs.defect-anchor }}
+      distribution-classification-lint: ${{ steps.filter.outputs.distribution-classification-lint }}
+      check-infra-health-section: ${{ steps.filter.outputs.check-infra-health-section }}
+      hook-log-path-lint: ${{ steps.filter.outputs.hook-log-path-lint }}
+      omnimarket-dispatch-drift-gate: ${{ steps.filter.outputs.omnimarket-dispatch-drift-gate }}
+      plan-canonical-scripts-gate: ${{ steps.filter.outputs.plan-canonical-scripts-gate }}
+      plan-hard-fields-gate: ${{ steps.filter.outputs.plan-hard-fields-gate }}
+      plan-verified-state-gate: ${{ steps.filter.outputs.plan-verified-state-gate }}
+      plugin-compat-gate: ${{ steps.filter.outputs.plugin-compat-gate }}
+      precommit-fail-loud-gate: ${{ steps.filter.outputs.precommit-fail-loud-gate }}
+      scan-imperative-skills: ${{ steps.filter.outputs.scan-imperative-skills }}
+      session-id-canonical-lint: ${{ steps.filter.outputs.session-id-canonical-lint }}
+      skill-mcp-ref-lint: ${{ steps.filter.outputs.skill-mcp-ref-lint }}
+      skill-receipt-mode-gate: ${{ steps.filter.outputs.skill-receipt-mode-gate }}
+      validate-agent-configs: ${{ steps.filter.outputs.validate-agent-configs }}
+      validate-skill-aspiration: ${{ steps.filter.outputs.validate-skill-aspiration }}
+      validate-skill-backing-node: ${{ steps.filter.outputs.validate-skill-backing-node }}
+      verification-evidence-lint: ${{ steps.filter.outputs.verification-evidence-lint }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # PyYAML is the filter step's one third-party import; pinned so the
+      # verdict does not depend on what the runner image happens to carry.
+      - name: Install the filter dependency
+        run: python -m pip install --disable-pip-version-check --quiet 'PyYAML==6.0.2'
+
+      - name: List changed files
+        id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          MQ_BASE: ${{ github.event.merge_group.base_sha }}
+          MQ_HEAD: ${{ github.event.merge_group.head_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+          CHANGED_FILES_PATH: ${{ runner.temp }}/changed-files.txt
+        run: |
+          set -euo pipefail
+          range=""
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PR_BASE" ] && [ -n "$PR_HEAD" ]; then
+            range="${PR_BASE}...${PR_HEAD}"
+          elif [ "$EVENT_NAME" = "merge_group" ] && [ -n "$MQ_BASE" ] && [ -n "$MQ_HEAD" ]; then
+            range="${MQ_BASE}...${MQ_HEAD}"
+          elif [ "$EVENT_NAME" = "push" ] && [ -n "$PUSH_BEFORE" ] \
+              && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            range="${PUSH_BEFORE}..${PUSH_AFTER}"
+          fi
+          if [ -n "$range" ] && git diff --name-only "$range" > "$CHANGED_FILES_PATH"; then
+            echo "all=false" >> "$GITHUB_OUTPUT"
+            echo "Changed files (${range}):"
+            cat "$CHANGED_FILES_PATH"
+          else
+            : > "$CHANGED_FILES_PATH"
+            echo "::notice::no change set for event ${EVENT_NAME}; every gate that applies to it runs"
+            echo "all=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Match each gate's original filter
+        id: filter
+        shell: python
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          CHANGED_FILES_ALL: ${{ steps.diff.outputs.all }}
+          CHANGED_FILES_PATH: ${{ runner.temp }}/changed-files.txt
+          PATH_FILTERS: |
+            branch-claim-gate:
+              paths:
+                - 'scripts/branch_claim.py'
+                - 'scripts/claim_index.py'
+                - 'scripts/lane_identity.py'
+                - 'scripts/hooks/pre-push-branch-claim'
+                - 'tests/scripts/test_branch_claim.py'
+                - 'tests/scripts/test_branch_claim_hook.py'
+                - 'tests/scripts/test_lane_identity_canary.py'
+                - 'scripts/hooks/prepare-commit-msg-lane'
+                - '.github/workflows/ci.yml'
+                - '.github/workflows/branch-claim-check-reusable.yml'
+              push: ['main', 'dev', 'hotfix/**']
+            check-deterministic-skills:
+              paths:
+                - 'plugins/onex/skills/**/SKILL.md'
+                - 'scripts/validation/validate_deterministic_skill_routing.py'
+                - 'tests/validation/test_validate_deterministic_skill_routing.py'
+                - '.github/workflows/ci.yml'
+              workflow_dispatch: true
+            check-instructional-skills:
+              paths:
+                - 'plugins/onex/skills/**/SKILL.md'
+                - 'scripts/validation/validate_instructional_skill_routing.py'
+                - '.github/workflows/ci.yml'
+              workflow_dispatch: true
+            daemon-venv-skew-gate:
+              paths:
+                - 'uv.lock'
+                - 'scripts/check_daemon_venv_skew.py'
+                - '.pre-commit-hooks/check-daemon-venv-skew.sh'
+                - 'plugins/onex/hooks/scripts/ensure-plugin-venv.sh'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'dev', 'hotfix/**']
+            defect-anchor:
+              paths:
+                - 'docs/evidence/**/*.md'
+                - 'docs/evidence/*.md'
+                - '.pre-commit-hooks/check-defect-anchor.sh'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'hotfix/**']
+            distribution-classification-lint:
+              paths:
+                - 'plugins/onex/skills/**'
+                - 'plugins/onex/hooks/scripts/**'
+                - 'plugins/onex/agents/configs/**'
+                - 'plugins/distribution_manifest.yaml'
+                - 'scripts/validation/validate_distribution_classification.py'
+                - 'scripts/validation/validate_full_market_skill_inventory.py'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'hotfix/**']
+            check-infra-health-section:
+              paths:
+                - 'docs/handoffs/**/*.md'
+                - 'docs/**/*handoff*.md'
+                - 'docs/tracking/**/*handoff*.md'
+            hook-log-path-lint:
+              paths:
+                - 'plugins/onex/hooks/scripts/**'
+              push: ['main', 'hotfix/**']
+            omnimarket-dispatch-drift-gate:
+              paths:
+                - 'uv.lock'
+                - 'pyproject.toml'
+                - 'scripts/check_omnimarket_dispatch_drift.py'
+                - '.pre-commit-hooks/check-omnimarket-dispatch-drift.sh'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'dev', 'hotfix/**']
+            plan-canonical-scripts-gate:
+              paths:
+                - 'docs/plans/**/*.md'
+                - 'docs/tracking/**/*.md'
+                - 'tests/scripts/test_lint_plan_canonical_scripts.py'
+                - 'scripts/lint_plan_canonical_scripts.py'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'dev', 'hotfix/**']
+            plan-hard-fields-gate:
+              paths:
+                - 'docs/plans/**/*.md'
+                - 'docs/tracking/**/*.md'
+                - 'scripts/lint_plan_hard_fields.py'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'dev', 'hotfix/**']
+            plan-verified-state-gate:
+              paths:
+                - 'docs/plans/**/*.md'
+                - 'docs/tracking/**/*.md'
+                - 'tests/scripts/test_lint_plan_verified_state.py'
+                - 'scripts/lint_plan_verified_state.py'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'dev', 'hotfix/**']
+            plugin-compat-gate:
+              paths:
+                - 'plugins/onex/**'
+                - 'plugins/onex-delegate/**'
+                - 'plugins/onex-*-marketplace/**'
+                - '.claude-plugin/marketplace.json'
+                - 'plugins/.claude-plugin/marketplace.json'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'develop', 'hotfix/**']
+              workflow_dispatch: true
+            precommit-fail-loud-gate:
+              paths:
+                - '.pre-commit-config.yaml'
+                - '.github/workflows/ci.yml'
+                - 'scripts/validation/validate_precommit_fail_loud.py'
+                - 'scripts/validation/validate_precommit_pin_parity.py'
+              push: ['main', 'dev', 'hotfix/**']
+            scan-imperative-skills:
+              paths:
+                - 'plugins/onex/skills/**/SKILL.md'
+                - '.pre-commit-hooks/reject-imperative-skill-patterns.sh'
+                - '.github/workflows/ci.yml'
+              push: ['main']
+            session-id-canonical-lint:
+              paths:
+                - 'src/**'
+                - 'plugins/**'
+                - 'tests/**'
+                - '.pre-commit-hooks/**'
+                - '.github/workflows/ci.yml'
+            skill-mcp-ref-lint:
+              paths:
+                - 'plugins/onex/skills/**/*.md'
+                - 'scripts/lint_skill_mcp_refs.py'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'hotfix/**']
+            skill-receipt-mode-gate:
+              paths:
+                - 'plugins/onex/skills/**'
+                - '.onex_ratchets/skill_receipt_mode_allowlist.yaml'
+                - 'scripts/check_skill_dispatch_receipt_mode_wrapper.sh'
+                - '.github/workflows/ci.yml'
+            validate-agent-configs:
+              paths:
+                - 'plugins/onex/agents/configs/**/*.yaml'
+              workflow_dispatch: true
+            validate-skill-aspiration:
+              paths:
+                - 'plugins/onex/skills/**/*.md'
+                - 'plugins/onex/skills/_lib/validate_skill_aspiration.py'
+                - 'scripts/extract_skill_claims.py'
+                - 'scripts/validation/validate_skill_aspiration.py'
+                - 'tests/unit/skills/_lib/test_validate_skill_aspiration.py'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'hotfix/**']
+            validate-skill-backing-node:
+              paths:
+                - 'plugins/onex/skills/**/*.md'
+                - 'plugins/onex/skills/_lib/validate_skill_backing_node.py'
+                - 'plugins/onex/skills/_lib/skill_backing_node_allowlist.yaml'
+                - 'tests/unit/skills/_lib/test_validate_skill_backing_node.py'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'hotfix/**']
+            verification-evidence-lint:
+              paths:
+                - 'plugins/onex/skills/**/*.md'
+                - 'docs/handoffs/**'
+                - 'docs/receipts/**'
+                - 'docs/**/*receipt*.md'
+                - '.onex_state/evidence/**'
+                - 'scripts/lint_verification_evidence.py'
+                - '.github/workflows/ci.yml'
+              push: ['main', 'hotfix/**']
+        run: |
+          import os
+          import re
+          import sys
+
+          import yaml
+
+          GLOB_CHARS = re.compile(r"[A-Za-z0-9_./*-]+")
+          SPEC_KEYS = {"paths", "push", "workflow_dispatch"}
+
+
+          def compile_glob(pattern):
+              """GitHub `paths:` meaning of `**/`, `**` and `*`; nothing else."""
+              if not GLOB_CHARS.fullmatch(pattern):
+                  sys.exit(f"::error::unsupported glob syntax in {pattern!r}")
+              out, i = [], 0
+              while i < len(pattern):
+                  if pattern.startswith("**/", i):
+                      out.append("(?:.*/)?")
+                      i += 3
+                  elif pattern.startswith("**", i):
+                      out.append(".*")
+                      i += 2
+                  elif pattern[i] == "*":
+                      out.append("[^/]*")
+                      i += 1
+                  else:
+                      out.append(re.escape(pattern[i]))
+                      i += 1
+              return re.compile("".join(out))
+
+
+          filters = yaml.safe_load(os.environ["PATH_FILTERS"])
+          if not isinstance(filters, dict) or not filters:
+              sys.exit("::error::PATH_FILTERS is empty or not a mapping")
+          event = os.environ["EVENT_NAME"]
+          ref_name = os.environ["REF_NAME"]
+          changed_all = os.environ["CHANGED_FILES_ALL"] == "true"
+          with open(os.environ["CHANGED_FILES_PATH"], encoding="utf-8") as handle:
+              changed = [line for line in handle.read().splitlines() if line]
+
+          results = {}
+          for gate, spec in filters.items():
+              if not isinstance(spec, dict) or set(spec) - SPEC_KEYS or not spec.get("paths"):
+                  sys.exit(f"::error::filter {gate!r} is malformed: {spec!r}")
+              paths = [compile_glob(p) for p in spec["paths"]]
+              branches = [compile_glob(b) for b in spec.get("push", [])]
+              if event == "pull_request":
+                  applies = True
+              elif event == "push":
+                  applies = any(b.fullmatch(ref_name) for b in branches)
+              elif event == "workflow_dispatch":
+                  applies = spec.get("workflow_dispatch") is True
+              else:
+                  applies = False
+              if event == "workflow_dispatch" or changed_all:
+                  hit = applies
+              else:
+                  hit = applies and any(p.fullmatch(f) for f in changed for p in paths)
+              results[gate] = "true" if hit else "false"
+              print(f"{gate}: {'run' if hit else 'skip'}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              for gate, value in results.items():
+                  handle.write(f"{gate}={value}\n")
+
+  # Folded from .github/workflows/branch-claim-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-18263 -- the gate over the branch-claim RESOLUTION itself.
+  #
+  # Distinct from `branch-claim-check.yml`, which APPLIES the resolution to this
+  # repository's own pull requests. This one protects the resolution's behaviour:
+  # the four fixtures the phase turns on -- a branch held by the same lane, held by
+  # another lane with a release row, held by another lane without one, and
+  # unclaimed -- plus the cases that must not read as clean, which is where the
+  # real risk sits. A resolution that answered "clean" for an unreadable store, an
+  # unresolvable commit range or a commit with no lane trailer would report green
+  # over the entire corpus while proving nothing.
+  #
+  # The tests exercise omniclaude's own vendored claim index module and FAIL
+  # rather than skip when it cannot be found. That is the point: a skipped test is
+  # a green run, and a green run for a gate that could not execute is the exact
+  # failure mode this phase exists to remove.
+  #
+  # THIS IS THE ONLY CI HOME FOR THESE TESTS, verified rather than assumed. The
+  # consolidated test job does not collect `tests/scripts/` at all: a search of both
+  # split jobs' logs on a run that exercised this very directory returned zero
+  # mentions of the branch-claim tests AND zero of `test_lane_identity.py`, which is
+  # the positive control -- that suite is known to run only in its own gate, for the
+  # same reason. A test file added here and left out of this workflow therefore runs
+  # nowhere, which is why both files are named below rather than a directory.
+  branch-claim-gate:
+    name: Branch Claim Gate
+    needs: changes
+    if: needs.changes.outputs.branch-claim-gate == 'true'
+    permissions:
+      contents: read
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks / dev-base PRs default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      # uv sync, not a bare pytest install: this repo's tests/conftest.py imports
+      # project dependencies, so `pip install pytest` alone fails at collection
+      # with a ModuleNotFoundError -- a gate that cannot run, not one that passed.
+      # Measured on the first CI run of the lane-identity gate.
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          : "${UV_SYNC_ATTEMPTS:=3}" "${UV_SYNC_RETRY_DELAY_SECONDS:=20}"
+          attempt=1
+          until uv sync --frozen --group dev --python 3.13; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+            sleep_seconds=$((attempt * UV_SYNC_RETRY_DELAY_SECONDS))
+            echo "uv sync failed; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
+
+      - name: Branch-claim resolution and the pre-push hook
+        run: |
+          set -euo pipefail
+          # The hook tests drive a real `git push` through the installed hook, so
+          # they need an identity git will accept and a default branch name.
+          git config --global init.defaultBranch main
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          uv run pytest \
+            tests/scripts/test_branch_claim.py \
+            tests/scripts/test_branch_claim_hook.py \
+            tests/scripts/test_lane_identity_canary.py -q
+
+  # Folded from .github/workflows/check-deterministic-skills.yml (OMN-20074); runs when its original `paths:` change.
+  # Deterministic-Skill Routing Enforcement Gate (OMN-8749, wired under OMN-14808)
+  #
+  # Tier 1 counterpart to check-instructional-skills (OMN-8766). Verifies that
+  # every Tier 1 deterministic skill SKILL.md contains a node dispatch
+  # instruction, a `SkillRoutingError` reference (the live wire contract emitted
+  # as the `error_type` envelope by both dispatch CLIs), and no prose-fallback
+  # routing instruction. BLOCKING: the reconciled tree is green (0 violations),
+  # so any NEW drift fails this gate.
+  check-deterministic-skills:
+    name: check-deterministic-skills
+    needs: changes
+    if: needs.changes.outputs.check-deterministic-skills == 'true'
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Run deterministic-skill routing enforcement validator (OMN-8749)
+        # BLOCKING (no --report): exits non-zero on any violation.
+        working-directory: ${{ github.workspace }}
+        run: |
+          python scripts/validation/validate_deterministic_skill_routing.py \
+            --skills-root plugins/onex/skills
+
+      - name: Gate summary
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "## Deterministic Skill Routing Enforcement (OMN-8749)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Every Tier 1 deterministic skill SKILL.md must:" >> $GITHUB_STEP_SUMMARY
+          echo "- Contain a node dispatch instruction (\`onex node\`/\`onex run-node\`," >> $GITHUB_STEP_SUMMARY
+          echo "  or a receipt-mode \`onex skill\` publish to an \`onex.cmd.*\` start topic)" >> $GITHUB_STEP_SUMMARY
+          echo "- Reference \`SkillRoutingError\` (the live wire contract) with" >> $GITHUB_STEP_SUMMARY
+          echo "  \`do not produce prose\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Not contain prose-fallback routing instructions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Tier 1 counterpart to check-instructional-skills (OMN-8766)." >> $GITHUB_STEP_SUMMARY
+
+  # Folded from .github/workflows/check-instructional-skills.yml (OMN-20074); runs when its original `paths:` change.
+  # Instructional-Skill Enforcement Gate (OMN-8766, S19)
+  #
+  # Rejects partial-port of the deterministic dispatch contract into Tier 3
+  # instructional (pure-prose) skills. Forbids ``onex run`` / ``onex run-node``
+  # dispatch commands and ``rendered_output`` receipt assertions inside the 15
+  # instructional SKILL.md files. Dispatch belongs in Tier 1 (guarded by
+  # OMN-8749 / OMN-8765); rendered_output belongs in DoD evidence contracts.
+  check-instructional-skills:
+    name: check-instructional-skills
+    needs: changes
+    if: needs.changes.outputs.check-instructional-skills == 'true'
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Run instructional-skill enforcement validator (OMN-8766)
+        # Report-only on initial land: 3 pre-existing violations in
+        # authorize (1) and onboarding (2) remain. Flip to blocking once the
+        # follow-up ticket clears those so "all 15 skills pass gate green".
+        # Pre-commit hook is blocking for new/edited SKILL.md files, so the
+        # gate prevents NEW partial-ports immediately.
+        working-directory: ${{ github.workspace }}
+        run: |
+          python scripts/validation/validate_instructional_skill_routing.py \
+            --skills-root plugins/onex/skills \
+            --report
+
+      - name: Gate summary
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "## Instructional Skill Enforcement (OMN-8766)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Rejects partial-port of the deterministic dispatch contract into" >> $GITHUB_STEP_SUMMARY
+          echo "Tier 3 instructional (pure-prose) skills. Forbids:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`onex run\` / \`onex run-node\` dispatch commands" >> $GITHUB_STEP_SUMMARY
+          echo "- \`rendered_output\` receipt assertions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Dispatch belongs in Tier 1 (OMN-8749 / OMN-8765); rendered_output" >> $GITHUB_STEP_SUMMARY
+          echo "belongs in DoD evidence contracts of deterministic skills." >> $GITHUB_STEP_SUMMARY
+
+  # Folded from .github/workflows/daemon-venv-skew-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-13120: required status check. Detects shared-package pin drift between the
+  # live plugin daemon venv and the canonical uv.lock pins. CI runners have no live
+  # daemon venv, so this runs in lock-consistency mode: it parses the canonical
+  # uv.lock and proves the pin set resolves (a malformed lock fails the gate). The
+  # same wrapper runs locally as a pre-commit hook where, if a live daemon venv is
+  # present, it additionally compares the marker hash + installed versions against
+  # the lock and fails on drift. Enforcement, not detection (CLAUDE.md Rule #5).
+  daemon-venv-skew-gate:
+    name: Daemon Venv Skew Gate
+    needs: changes
+    if: needs.changes.outputs.daemon-venv-skew-gate == 'true'
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Validate canonical pins resolve (lock-consistency mode)
+        working-directory: ${{ github.workspace }}
+        run: |
+          # tomllib is stdlib (Python 3.11+); no install step needed.
+          # No live daemon venv exists on CI runners, so the gate proves the
+          # canonical lock is well-formed and the pin set resolves. The wrapper
+          # exits 1 on an unparseable lock — never a silent pass.
+          bash .pre-commit-hooks/check-daemon-venv-skew.sh
+
+  # Folded from .github/workflows/defect-anchor-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-13029 (retro A-11): Defect-anchor gate — reject evidence documents
+  # containing BLOCKER/UNFIXED/DEFECT/REGRESSION/BUG-CONFIRMED markers with no
+  # OMN-XXXX ticket reference. Root cause: PROCESS_FAILURE_RETRO.md §3.A.
+  # Workflows ordered ticket/PR-filing last; diagnosis stranded defects as
+  # unanchored prose with no queue presence, owner, or close signal.
+  #
+  # Hard fail — no warn-only mode (CLAUDE.md Rule #5, Rule #10).
+  # Escape (file-level): <!-- defect-anchor-ok: <reason> -->
+  defect-anchor:
+    name: gate / Defect Anchor
+    needs: changes
+    if: needs.changes.outputs.defect-anchor == 'true'
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check evidence docs for anchored defect markers
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          BASE_REF="${GITHUB_BASE_REF:-main}"
+          BASE_SHA="${GITHUB_BASE_SHA:-}"
+          HEAD_SHA="${GITHUB_HEAD_SHA:-HEAD}"
+          TICKET_REF="OMN-13029"
+          DEFECT_PATTERN='(BLOCKER|UNFIXED|DEFECT|REGRESSION|BUG-CONFIRMED)'
+          OMN_PATTERN='OMN-[0-9]+'
+          ESCAPE='defect-anchor-ok:'
+          VIOLATIONS=()
+
+          git fetch --no-tags --prune --depth=200 origin "${BASE_REF}" >/dev/null 2>&1 || true
+
+          if [[ -n "$BASE_SHA" ]] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            DIFF_BASE="$BASE_SHA"
+          elif git rev-parse --verify "origin/${BASE_REF}^{commit}" >/dev/null 2>&1; then
+            DIFF_BASE="$(git merge-base "origin/${BASE_REF}" "$HEAD_SHA")"
+          else
+            echo "::notice::Unable to resolve base ref '${BASE_REF}'; skipping evidence diff check."
+            DIFF_BASE=""
+          fi
+
+          if [[ -n "$DIFF_BASE" ]]; then
+            CHANGED_FILES=$(git diff --name-only "${DIFF_BASE}...${HEAD_SHA}")
+          else
+            CHANGED_FILES=""
+          fi
+
+          for file in $CHANGED_FILES; do
+            # Only markdown files
+            [[ "$file" == *.md ]] || continue
+
+            # Only evidence documents
+            case "$file" in
+              docs/evidence/*.md) ;;
+              *) continue ;;
+            esac
+
+            # File must exist in the working tree
+            [[ -f "$file" ]] || continue
+
+            content="$(cat "$file")"
+
+            # Skip if file-level escape hatch is present
+            if echo "$content" | grep -qE "$ESCAPE"; then
+              continue
+            fi
+
+            # Skip if no defect markers
+            if ! echo "$content" | grep -qiE "$DEFECT_PATTERN"; then
+              continue
+            fi
+
+            # Defect marker found — require OMN-XXXX reference
+            if ! echo "$content" | grep -qE "$OMN_PATTERN"; then
+              VIOLATIONS+=("$file")
+              echo "::error file=$file::DEFECT_ANCHOR_MISSING: $file — defect markers present but no OMN-XXXX reference found (${TICKET_REF})"
+            fi
+          done
+
+          if [[ "${#VIOLATIONS[@]}" -gt 0 ]]; then
+            echo ""
+            echo "::error::${#VIOLATIONS[@]} evidence document(s) contain unanchored defect markers."
+            echo "::error::Add an OMN-XXXX reference for each defect, or file a ticket first."
+            echo "::error::Escape hatch (file-level): <!-- defect-anchor-ok: <reason> -->"
+            echo "::error::Ticket: ${TICKET_REF} | Retro: PROCESS_FAILURE_RETRO.md §3.A"
+            exit 1
+          fi
+
+          echo "::notice::All changed evidence documents with defect markers carry OMN-XXXX references. OK."
+
+  # Folded from .github/workflows/distribution-classification-lint.yml (OMN-20074); runs when its original `paths:` change.
+  # TEMPORARY Phase-0 migration gate (OMN-14687, epic OMN-14686).
+  # Fails closed if any filesystem-discovered plugin component (skill, hook
+  # script, agent config) is NOT classified in plugins/distribution_manifest.yaml
+  # with a valid exposure (stable|beta|hidden|retired). Prevents an unclassified
+  # component from being added while the minimal-plugin migration is in flight.
+  # Phase 3 replaces this with the permanent typed distribution-contract
+  # validators and retires this workflow + validator.
+  distribution-classification-lint:
+    name: Distribution Classification Lint
+    needs: changes
+    if: needs.changes.outputs.distribution-classification-lint == 'true'
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+
+      - name: Every plugin component is classified in the distribution manifest
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/validation/validate_distribution_classification.py
+
+  # Folded from .github/workflows/handoff-infra-health-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-11271: enforce ## Infra Health section in handoff docs.
+  # Hard fail — no warn-only mode (CLAUDE.md Rule #5, Rule #10).
+  # Spec: OMN-8867 (mandatory ## Infra Health section format).
+  check-infra-health-section:
+    name: gate / Handoff Infra Health
+    needs: changes
+    if: needs.changes.outputs.check-infra-health-section == 'true'
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check handoff docs for ## Infra Health section
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          BASE_REF="${GITHUB_BASE_REF:-main}"
+          BASE_SHA="${GITHUB_BASE_SHA:-}"
+          HEAD_SHA="${GITHUB_HEAD_SHA:-HEAD}"
+          SECTION_PATTERN='^## Infra Health'
+          TICKET_REF="OMN-11271"
+          VIOLATIONS=()
+
+          git fetch --no-tags --prune --depth=200 origin "${BASE_REF}" >/dev/null 2>&1 || true
+
+          if [[ -n "$BASE_SHA" ]] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            DIFF_BASE="$BASE_SHA"
+          elif git rev-parse --verify "origin/${BASE_REF}^{commit}" >/dev/null 2>&1; then
+            DIFF_BASE="$(git merge-base "origin/${BASE_REF}" "$HEAD_SHA")"
+          else
+            echo "::notice::Unable to resolve base ref '${BASE_REF}'; skipping handoff diff check."
+            DIFF_BASE=""
+          fi
+
+          if [[ -n "$DIFF_BASE" ]]; then
+            CHANGED_FILES=$(git diff --name-only "${DIFF_BASE}...${HEAD_SHA}")
+          else
+            CHANGED_FILES=""
+          fi
+
+          for file in $CHANGED_FILES; do
+            # Only markdown files
+            [[ "$file" == *.md ]] || continue
+
+            # Only handoff documents
+            case "$file" in
+              docs/handoffs/*.md|\
+              docs/*handoff*.md|\
+              docs/tracking/*handoff*.md) ;;
+              *) continue ;;
+            esac
+
+            # File must exist in the working tree
+            [[ -f "$file" ]] || continue
+
+            if ! grep -qE "$SECTION_PATTERN" "$file"; then
+              VIOLATIONS+=("$file")
+              echo "::error file=$file::HANDOFF_MISSING_INFRA_HEALTH: $file — add ## Infra Health section (${TICKET_REF} / OMN-8867)"
+            fi
+          done
+
+          if [[ "${#VIOLATIONS[@]}" -gt 0 ]]; then
+            echo ""
+            echo "::error::${#VIOLATIONS[@]} handoff document(s) missing the mandatory '## Infra Health' section."
+            echo "::error::Add the section as specified in OMN-8867 before merging."
+            echo "::error::Ticket: ${TICKET_REF}"
+            exit 1
+          fi
+
+          echo "::notice::All changed handoff documents contain the required '## Infra Health' section. OK."
+
+  # Folded from .github/workflows/hook-log-path-lint.yml (OMN-20074); runs when its original `paths:` change.
+  # Layer 3 defense (OMN-8429 / plugin-runtime-architecture.md §11):
+  # Blocks any hook script that derives a state path from PLUGIN_ROOT, HOOKS_DIR, or SCRIPT_DIR.
+  # State must always resolve from ONEX_STATE_DIR. This lint is mandatory and blocking.
+  hook-log-path-lint:
+    name: Hook Log Path Lint
+    needs: changes
+    if: needs.changes.outputs.hook-log-path-lint == 'true'
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Check hook scripts do not derive state paths from plugin tree
+        working-directory: ${{ github.workspace }}
+        run: |
+          # All scripts must be fully migrated to ONEX_STATE_DIR. Zero violations allowed.
+          # Pattern matches any state/log path assignment or redirection targeting plugin source dirs.
+          TOTAL=$(grep -rEc '(=|>>|>)[[:space:]]*["'"'"']?\$\{?(PLUGIN_ROOT|HOOKS_DIR|SCRIPT_DIR)[^}]*\}?[/"].*\b(log|state|dedup|health)\b' \
+            plugins/onex/hooks/scripts/ 2>/dev/null | awk -F: '{sum+=$2} END{print sum+0}')
+          if [[ "$TOTAL" -gt 0 ]]; then
+            echo "ERROR: $TOTAL hook log path violation(s) found. All scripts must use ONEX_STATE_DIR."
+            grep -rEn '(=|>>|>)[[:space:]]*["'"'"']?\$\{?(PLUGIN_ROOT|HOOKS_DIR|SCRIPT_DIR)[^}]*\}?[/"].*\b(log|state|dedup|health)\b' \
+              plugins/onex/hooks/scripts/ 2>/dev/null || true
+            echo ""
+            echo "State paths must use ONEX_STATE_DIR / ONEX_HOOKS_STATE_DIR, never PLUGIN_ROOT/HOOKS_DIR/SCRIPT_DIR."
+            exit 1
+          fi
+
+          echo "Hook log path lint: PASS (0 violations)"
+
+  # Folded from .github/workflows/omnimarket-dispatch-drift-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-13536: required status check. Detects omnimarket version/commit drift
+  # in the dispatch venvs used by omniclaude skills. When the installed omnimarket
+  # commit differs from the approved release-lane baseline, skills may execute
+  # unreviewed or stale node bytes (old stubs, renamed/deleted handlers). This gate
+  # converts silent runtime drift into a caught regression.
+  #
+  # CI behaviour: the gate compares uv.lock against an explicit baseline SHA. The
+  # broader upgrade to canonical omnimarket@main is blocked by current transitive
+  # omniintelligence source constraints and should update this baseline separately.
+  omnimarket-dispatch-drift-gate:
+    name: Omnimarket Dispatch Drift Gate
+    needs: changes
+    if: needs.changes.outputs.omnimarket-dispatch-drift-gate == 'true'
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      # OMN-18752: the hand-maintained SHA literal that stood here is DELETED,
+      # not automated. It was the fourth touch point of an omnimarket bump --
+      # alongside the two pyproject references and uv.lock -- and the one most
+      # easily missed: the gate failed the PR on each of the two previous
+      # bumps (OMN-18622, OMN-18639) naming exactly this literal. Every
+      # historical entry it carried is preserved in git history; the running
+      # value is now derived, so it cannot go stale.
+      #
+      # With no literal and no injected sha, the gate resolves its own
+      # authority: the canonical clone's CHECKED-OUT head locally, and this
+      # repo's uv.lock pin in CI, where no clone exists. Both answer to the
+      # clone, because the lock follows it through sibling-lock-refresh.yml.
+      # The probe that used to sit here -- `git ls-remote` against omnimarket's
+      # `main` -- is gone: `main` is release-synced and lags the `dev` branch
+      # the canonical clone is checked out on, so it made this gate demand a
+      # different commit from the OMN-18675 venv guard at every moment except
+      # the instant main caught up, and this gate's printed remedy would have
+      # broken `onex delegate` for every lane on the host.
+      - name: Check omnimarket dispatch drift (lock-consistency mode)
+        working-directory: ${{ github.workspace }}
+        env:
+          UV_HTTP_TIMEOUT: '900'
+        run: |
+          # tomllib is stdlib (Python 3.11+); no install step needed.
+          # No live daemon venv on CI runners — gate runs in lock-consistency mode.
+          # Exits 1 if uv.lock pins omnimarket to a SHA != expected dispatch SHA.
+          bash .pre-commit-hooks/check-omnimarket-dispatch-drift.sh
+
+  # Folded from .github/workflows/plan-canonical-scripts-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-14476: block plans that propose a new scripts/** file without declaring
+  # its canonical form. Complements the code-time deny-new guard (OMN-14475) by
+  # catching non-canonical script proposals at planning time. Every plan under
+  # docs/plans/ or docs/tracking/ that proposes creating a scripts/**.{py,sh,bash}
+  # file must either design it as a CONTRACT+NODE+HANDLER or carry a
+  # 'canonical-form:' declaration. No exemptions: the grandfather allowlist
+  # burned down to zero and was deleted (OMN-20560).
+  # Epic: OMN-13674.
+  plan-canonical-scripts-gate:
+    name: Plan Canonical Scripts Gate
+    needs: changes
+    if: needs.changes.outputs.plan-canonical-scripts-gate == 'true'
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Scan docs/plans + docs/tracking for undeclared new-script proposals
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/lint_plan_canonical_scripts.py
+
+  # Folded from .github/workflows/plan-hard-fields-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-13051 (retro D-5): enforce three plan-template hard fields on all
+  # docs/plans/ and docs/tracking/ markdown files:
+  #
+  #   Rule 1 — P0/P1 items with runtime-dep keywords must cite a verified
+  #             precondition probe (timestamp + lane/surface).
+  #   Rule 2 — Plans that name deliverable artifact paths must end with a
+  #             machine-checkable ## Artifact Manifest section.
+  #   Rule 3 — Every item in ## Artifact Manifest must carry an explicit
+  #             status: [x], DONE, SKIPPED:, DEFERRED:, or BLOCKED-ON:.
+  #
+  # Parent epic: OMN-13013 (process enforcement ratchets — June 12 retro).
+  # Retro source: PROCESS_FAILURE_RETRO.md §3.D
+  # Pre-commit mirror: lint-plan-hard-fields hook in .pre-commit-config.yaml
+  plan-hard-fields-gate:
+    name: Plan Hard Fields Gate
+    needs: changes
+    if: needs.changes.outputs.plan-hard-fields-gate == 'true'
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Scan docs/plans + docs/tracking for D-5 hard fields (OMN-13051)
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/lint_plan_hard_fields.py
+
+  # Folded from .github/workflows/plan-verified-state-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-13336 (retro R1): block plan_to_tickets plans that assert state without a
+  # verified baseline. Every plan under docs/plans/ or docs/tracking/ must carry a
+  # '## Current Verified State' section with a 'verified: <date> via <command>'
+  # line dated within the freshness window. No exemptions: the grandfather
+  # allowlist burned down to zero and was deleted (OMN-20560). Parent: OMN-13325. Audit:
+  # docs/audits/2026-06-19-ratchet-enforcement-audit.md.
+  plan-verified-state-gate:
+    name: Plan Verified State Gate
+    needs: changes
+    if: needs.changes.outputs.plan-verified-state-gate == 'true'
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Scan docs/plans + docs/tracking for fresh verified-state sections
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/lint_plan_verified_state.py
+
+  # Folded from .github/workflows/plugin-compat-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # plugin-compat-gate.yml — CI gate: plugin ships only with plugin-compat.yaml
+  #
+  # DoD gate for OMN-8789 SD-02:
+  #   1. Fails if plugins/onex/plugin-compat.yaml is absent (hard fail, not advisory).
+  #   2. Validates YAML structure via pytest (schema tests in plugins/onex/tests/).
+  #
+  # When this fails:
+  #   - YAML absent: add plugins/onex/plugin-compat.yaml with full R-class node declarations.
+  #   - Schema test failure: fix plugin-compat.yaml schema — see test_plugin_compat_yaml.py.
+  #
+  # OMN-14688 addendum: also asserts plugins/onex-delegate/plugin-compat.yaml
+  # (the consumer-facing delegate-only plugin's own compat surface) and runs
+  # the delegate-only-surface + marketplace-pin tests in plugins/onex-delegate/tests/
+  # so the two marketplace.json copies cannot drift again (root vs plugins/ scoped
+  # copy had diverged to 1.0.0/1.1.0 before this ticket).
+  plugin-compat-gate:
+    name: Plugin compat.yaml presence + schema
+    needs: changes
+    if: needs.changes.outputs.plugin-compat-gate == 'true'
+    env:
+      PYTHON_VERSION: '3.12'
+      UV_CONCURRENT_DOWNLOADS: '1'
+      UV_HTTP_TIMEOUT: '600'
+      UV_SYNC_ATTEMPTS: '5'
+      UV_SYNC_RETRY_DELAY_SECONDS: '10'
+      UV_TORCH_BACKEND: cpu
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Assert plugin-compat.yaml exists
+        working-directory: ${{ github.workspace }}
+        run: |
+          for COMPAT_PATH in "plugins/onex/plugin-compat.yaml" "plugins/onex-delegate/plugin-compat.yaml"; do
+            if [ ! -f "$COMPAT_PATH" ]; then
+              echo "::error file=${COMPAT_PATH}::plugin-compat.yaml is required but not found."
+              echo "Every plugin release must ship with its own plugin-compat.yaml"
+              echo "declaring the runtime compatibility window (OMN-8789; OMN-14688 for onex-delegate)."
+              exit 1
+            fi
+            echo "OK: $COMPAT_PATH found"
+          done
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
+        uses: actions/cache/restore@v6
+        with:
+          path: .venv
+          key: uv-plugin-compat-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+
+          attempt=1
+          until uv sync --frozen --python "${PYTHON_VERSION}"; do
+            status=$?
+            if [ "$attempt" -ge "$UV_SYNC_ATTEMPTS" ]; then
+              echo "::error::uv sync failed after ${attempt} attempt(s)"
+              exit "$status"
+            fi
+
+            sleep_seconds=$((UV_SYNC_RETRY_DELAY_SECONDS * attempt))
+            echo "::warning::uv sync attempt ${attempt}/${UV_SYNC_ATTEMPTS} failed with exit ${status}; retrying in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
+
+      - name: Run plugin-compat.yaml schema tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run pytest plugins/onex/tests/test_plugin_compat_yaml.py -v \
+            --tb=short \
+            -p no:warnings
+
+      - name: Run delegate-only consumer surface + marketplace pin tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run pytest plugins/onex-delegate/tests/ -v \
+            --tb=short \
+            -p no:warnings
+
+  # Folded from .github/workflows/precommit-fail-loud-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-14655 (D5, §3d.7 / §3d.8): CI mirror of the two new local pre-commit
+  # meta-gates over .pre-commit-config.yaml:
+  #
+  #   1. Fail-loud meta-gate — hard-rejects the exit-0-on-missing-path /
+  #      WARN-SKIP-degrade shape that made `skill-contract-validation` and
+  #      `no-cloud-bus` false-green (a skipped gate must be indistinguishable
+  #      from a failing gate), plus any hook `stages:` value that
+  #      `default_install_hook_types` does not install.
+  #   2. Pin-parity check — fails closed if the pre-commit `rev:` pin for a
+  #      shared omnibase_core validator diverges from the SHA
+  #      .github/workflows/ci.yml pins for that same validator (DRIFT-3).
+  #
+  # Enforcement, not detection (CLAUDE.md Rule #5): this workflow is wired as
+  # a required status check in the SAME PR that adds the pre-commit hooks
+  # (precommit-fail-loud-meta-gate, precommit-pin-parity), so the checks it
+  # encodes cannot regress silently.
+  #
+  # Pre-commit mirror: precommit-fail-loud-meta-gate + precommit-pin-parity
+  # hooks in .pre-commit-config.yaml.
+  precommit-fail-loud-gate:
+    name: Precommit Fail-Loud Gate
+    needs: changes
+    if: needs.changes.outputs.precommit-fail-loud-gate == 'true'
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          github.event.pull_request.base.ref == 'dev'))
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Fail-loud meta-gate (exit-0-on-missing / stages coverage)
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run --no-project --with pyyaml \
+            python3 scripts/validation/validate_precommit_fail_loud.py
+
+      - name: Pin-parity check (pre-commit rev vs CI-pinned SHA)
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run --no-project --with pyyaml \
+            python3 scripts/validation/validate_precommit_pin_parity.py
+
+  # Folded from .github/workflows/reject-imperative-skills.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-12237 (Wave 7): CI gate — reject new imperative patterns in skills/*/SKILL.md.
+  #
+  # Detects inline business logic that should live in omnimarket nodes:
+  #   - Bare Agent( calls
+  #   - TeamCreate references
+  #   - curl / wget commands
+  #   - gh api / gh pr commands
+  #   - psql / pg_ commands
+  #   - ssh commands
+  #   - asyncio.run( calls
+  #   - http://localhost or http://192.168 direct endpoint calls
+  #
+  # Required status check. Hard fail — no warn-only mode.
+  # Escape hatch: an imperative-ok comment marker at the end of a line suppresses that line.
+  # CLAUDE.md Rule #5 (enforcement, not detection) + Rule #10 (no bypass).
+  scan-imperative-skills:
+    name: gate / reject-imperative-skill-patterns
+    needs: changes
+    if: needs.changes.outputs.scan-imperative-skills == 'true'
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan changed SKILL.md files for imperative patterns
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TICKET_REF: OMN-12237
+        run: |
+          set -euo pipefail
+
+          BASE_REF="${GITHUB_BASE_REF:-main}"
+          BASE_SHA="${GITHUB_BASE_SHA:-}"
+          HEAD_SHA="${GITHUB_HEAD_SHA:-HEAD}"
+
+          chmod +x .pre-commit-hooks/reject-imperative-skill-patterns.sh
+
+          git fetch --no-tags --prune --depth=200 origin "${BASE_REF}" >/dev/null 2>&1 || true
+
+          if [[ -n "$BASE_SHA" ]] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            DIFF_BASE="$BASE_SHA"
+          elif git rev-parse --verify "origin/${BASE_REF}^{commit}" >/dev/null 2>&1; then
+            DIFF_BASE="$(git merge-base "origin/${BASE_REF}" "$HEAD_SHA")"
+          else
+            echo "::notice::Unable to resolve base ref '${BASE_REF}'; scanning all SKILL.md files."
+            DIFF_BASE=""
+          fi
+
+          if [[ -n "$DIFF_BASE" ]]; then
+            mapfile -t CHANGED_FILES < <(
+              git diff --name-only --diff-filter=AM "${DIFF_BASE}...${HEAD_SHA}" \
+                -- 'plugins/onex/skills/*/SKILL.md' \
+                   'plugins/onex/skills/**/SKILL.md' \
+              2>/dev/null || true
+            )
+          else
+            mapfile -t CHANGED_FILES < <(find plugins/onex/skills -name 'SKILL.md' 2>/dev/null || true)
+          fi
+
+          # De-duplicate (glob expansion can produce duplicates)
+          readarray -t CHANGED_FILES < <(printf '%s\n' "${CHANGED_FILES[@]}" | sort -u)
+
+          if [[ ${#CHANGED_FILES[@]} -eq 0 ]]; then
+            echo "::notice::No SKILL.md files changed. Nothing to scan."
+            exit 0
+          fi
+
+          echo "::notice::Scanning ${#CHANGED_FILES[@]} SKILL.md file(s) for imperative patterns..."
+
+          VIOLATION_FILES=()
+          for skill_file in "${CHANGED_FILES[@]}"; do
+            [[ -f "$skill_file" ]] || continue
+            exit_code=0
+            # Pass file path directly; hook reads from working tree when not in index
+            .pre-commit-hooks/reject-imperative-skill-patterns.sh "$skill_file" 2>&1 \
+              | while IFS= read -r line; do echo "::error::$line"; done \
+              || exit_code=$?
+            if [[ "$exit_code" -ne 0 ]]; then
+              VIOLATION_FILES+=("$skill_file")
+            fi
+          done
+
+          if [[ ${#VIOLATION_FILES[@]} -gt 0 ]]; then
+            echo "::error::${#VIOLATION_FILES[@]} SKILL.md file(s) contain imperative patterns."
+            echo "::error::Move inline logic into omnimarket nodes and dispatch via 'onex run-node'."
+            echo "::error::Escape hatch: end a single line with an imperative-ok comment marker to suppress it."
+            echo "::error::Ticket: ${TICKET_REF}"
+            exit 1
+          fi
+
+          echo "::notice::All changed SKILL.md files pass the imperative pattern check. OK."
+
+  # Folded from .github/workflows/session-id-canonical-lint.yml (OMN-20074); runs when its original `paths:` change.
+  session-id-canonical-lint:
+    name: Reject legacy session-id env-var reads
+    needs: changes
+    if: needs.changes.outputs.session-id-canonical-lint == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run lint script over changed files
+        run: |
+          set -euo pipefail
+          chmod +x .pre-commit-hooks/reject-legacy-session-id-reads.sh
+          mapfile -t files < <(git diff --name-only --diff-filter=AM \
+              "${{ github.event.pull_request.base.sha }}" \
+              "${{ github.event.pull_request.head.sha }}" \
+              -- '*.py' '*.sh')
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No Python/shell files changed."
+            exit 0
+          fi
+          .pre-commit-hooks/reject-legacy-session-id-reads.sh "${files[@]}"
+
+  # Folded from .github/workflows/skill-mcp-ref-lint.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-8776: hard-block regression of hardcoded `mcp__linear-server__*` tool
+  # names in skill prompts. Skills must route ticketing operations through
+  # ProtocolProjectTracker (`uv run onex run node_*`), not a vendor-specific
+  # MCP handle. Parent epic OMN-8771.
+  skill-mcp-ref-lint:
+    name: Skill MCP Reference Lint
+    needs: changes
+    if: needs.changes.outputs.skill-mcp-ref-lint == 'true'
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Scan plugins/onex/skills/ for mcp__linear-server__ references
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/lint_skill_mcp_refs.py
+
+  # Folded from .github/workflows/skill-receipt-mode-gate.yml (OMN-20074); runs when its original `paths:` change.
+  # Skill Receipt-Mode Gate (OMN-13098).
+  #
+  # Runs the omnibase_core validator
+  # (`python -m omnibase_core.validators.skill_dispatch_receipt_mode`) against the
+  # whole plugins/onex/skills tree, tolerating the not-yet-migrated skills listed
+  # in .onex_ratchets/skill_receipt_mode_allowlist.yaml. The gate FAILS if:
+  #   - a non-allowlisted dispatch skill has a bare `onex run|node|run-node`
+  #     invocation, inline executable logic, a missing/invalid `skill_kind`, or a
+  #     `cat workflow_result.json` / "surface JSON verbatim" instruction;
+  #   - the allowlist grows, a listed skill is migrated (stale entry), or a listed
+  #     skill no longer exists.
+  #
+  # The allowlist shrinks to empty as Phase 4a migrations land; the file is then
+  # deleted and the gate becomes unconditional.
+  #
+  # Queue-safety: triggers on BOTH pull_request and merge_group so it cannot
+  # permanently wedge the merge queue once promoted to a required status check.
+  skill-receipt-mode-gate:
+    name: skill-receipt-mode-gate
+    needs: changes
+    if: needs.changes.outputs.skill-receipt-mode-gate == 'true'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Resolve the pinned omnibase-core version
+        id: core_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the version this repo's uv.lock pins, never its
+          # live branch (ruling 2026-10-01).
+          version="$(awk -v n=omnibase-core '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
+          [[ -n "$version" ]] || { echo "::error::omnibase-core not found in uv.lock"; exit 1; }
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout omnibase_core (provides the skill receipt-mode validator)
+        uses: actions/checkout@v7
+        with:
+          repository: OmniNode-ai/omnibase_core
+          # Read at the omnibase-core version uv.lock pins (ruling 2026-10-01),
+          # not core's live dev.
+          ref: ${{ steps.core_pin.outputs.tag }}
+          path: _omnibase_core
+          token: ${{ github.token }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Install omnibase_core (validator package) into a uv venv
+        run: |
+          set -euo pipefail
+          uv venv .skill-receipt-venv --python 3.12
+          # Build omnibase_core from the freshly-checked-out dev source
+          # (./_omnibase_core) into a wheel, then install THAT wheel by path. The
+          # validator (OMN-13098) lands on omnibase_core dev before any release bump,
+          # so a published index wheel does not yet contain it — installing the
+          # directly-built wheel is the only way to guarantee the dev source (with the
+          # validator) is what gets installed, never a stale registry version.
+          uv build --wheel --out-dir .skill-receipt-wheel ./_omnibase_core
+          wheel="$(ls .skill-receipt-wheel/omnibase_core-*.whl)"
+          echo "Installing locally-built wheel: ${wheel}"
+          # --no-config / --no-sources make uv ignore omniclaude's own pyproject.toml
+          # [tool.uv] + [tool.uv.sources] (which pin omnibase-core to a git rev / older
+          # release). Without them, running `uv pip install` from the repo root applies
+          # that pin and installs a stale omnibase-core (e.g. 0.44.0) that predates the
+          # validator, instead of the locally-built dev wheel passed on the command line.
+          # Transitive deps still resolve normally from the default index.
+          uv pip install --python .skill-receipt-venv/bin/python \
+            --no-config --no-sources --reinstall-package omnibase-core "${wheel}"
+          # Hard assertion: the validator module must be importable, else the wrong
+          # omnibase-core was installed and the gate result would be meaningless.
+          .skill-receipt-venv/bin/python -c \
+            'import omnibase_core.validators.skill_dispatch_receipt_mode'
+      - name: Run skill receipt-mode gate
+        run: |
+          set -euo pipefail
+          allowlist=".onex_ratchets/skill_receipt_mode_allowlist.yaml"
+          if [ ! -f "$allowlist" ]; then
+            echo "::notice::Ratchet allowlist absent — gate is unconditional (all dispatch skills must be receipt-mode)."
+          fi
+          .skill-receipt-venv/bin/python -m omnibase_core.validators.skill_dispatch_receipt_mode \
+            --skills-root plugins/onex/skills \
+            --allowlist "$allowlist"
+
+  # Folded from .github/workflows/validate-agent-configs.yml (OMN-20074); runs when its original `paths:` change.
+  # Agent Config Schema Validation (OMN-8910)
+  #
+  # Validates all agent configuration YAMLs against ModelAgentConfig from
+  # onex_change_control. Runs on PRs that touch agent config files and on
+  # merge_group events.
+  validate-agent-configs:
+    name: validate-agent-configs
+    needs: changes
+    if: needs.changes.outputs.validate-agent-configs == 'true'
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Resolve the pinned onex_change_control rev
+        id: occ_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the rev this repo's uv.lock pins, never its live
+          # branch (ruling 2026-10-01).
+          rev="$(grep -oE 'onex_change_control\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$rev" ]] || { echo "::error::onex_change_control rev not found in uv.lock"; exit 1; }
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout onex_change_control
+        uses: actions/checkout@v7
+        with:
+          repository: OmniNode-ai/onex_change_control
+          ref: ${{ steps.occ_pin.outputs.rev }}
+          path: _onex_change_control
+          token: ${{ github.token }}
+
+      - name: Install onex_change_control
+        working-directory: ${{ github.workspace }}
+        run: |
+          cd _onex_change_control
+          uv pip install --system .
+
+      - name: Validate agent configs
+        working-directory: ${{ github.workspace }}
+        run: |
+          validate-agent-yaml plugins/onex/agents/configs/*.yaml
+
+  # Folded from .github/workflows/validate-skill-aspiration.yml (OMN-20074); runs when its original `paths:` change.
+  validate-skill-aspiration:
+    name: validate
+    needs: changes
+    if: needs.changes.outputs.validate-skill-aspiration == 'true'
+    env:
+      PYTHON_VERSION: "3.12"
+      UV_VERSION: "0.6.1"
+      UV_HTTP_TIMEOUT: "600"
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v7
+
+      - name: Resolve the pinned omnimarket rev
+        id: om_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the rev this repo's uv.lock pins, never its live
+          # branch (ruling 2026-10-01).
+          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout omnimarket
+        uses: actions/checkout@v7
+        with:
+          repository: OmniNode-ai/omnimarket
+          ref: ${{ steps.om_pin.outputs.rev }}
+          path: _omnimarket
+          token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: |
+          for attempt in 1 2 3; do
+            if uv sync --all-extras --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep_seconds=$((attempt * 10))
+              echo "::warning::uv sync attempt ${attempt}/3 failed; retrying in ${sleep_seconds}s"
+              sleep "$sleep_seconds"
+            fi
+          done
+          exit 1
+
+      - name: Run skill aspiration unit tests
+        working-directory: ${{ github.workspace }}
+        run: uv run pytest tests/unit/skills/_lib/test_validate_skill_aspiration.py -v
+
+      - name: Validate SKILL.md claims against backing-node behavior
+        env:
+          OMNIMARKET_ROOT: _omnimarket
+        working-directory: ${{ github.workspace }}
+        run: uv run python scripts/validation/validate_skill_aspiration.py
+
+  # Folded from .github/workflows/validate-skill-backing-node.yml (OMN-20074); runs when its original `paths:` change.
+  # Skill Backing-Node Liveness — ValidateSkillBackingNode gate [OMN-10052]
+  #
+  # Canonical CI gate for validate_skill_backing_node.py.
+  #
+  # Incident reference: 2026-04-27 — /onex:merge_sweep pointed at gutted
+  # node_merge_sweep for hours; cron ticked every 5 min against non-existent
+  # entrypoint. This gate blocks that class of regression.
+  #
+  # Two-step job:
+  #   1. Unit pytest for the validator itself (regression guard for the gate).
+  #   2. Repo self-scan: walks all SKILL.md files, verifies each declared
+  #      backing node exists and has a live handler.  Checks out omnimarket
+  #      as a sibling repo so the resolver can find nodes.
+  #
+  # The job runs on PRs that touch SKILL.md files, the validator, or the
+  # allowlist, and on every merge_group event (required status check).
+  validate-skill-backing-node:
+    name: validate
+    needs: changes
+    if: needs.changes.outputs.validate-skill-backing-node == 'true'
+    env:
+      PYTHON_VERSION: "3.12"
+      UV_VERSION: "0.6.1"
+      UV_HTTP_TIMEOUT: "900"
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v7
+
+      - name: Resolve the pinned omnimarket rev
+        id: om_pin
+        run: |
+          set -euo pipefail
+          # A sibling is read at the rev this repo's uv.lock pins, never its live
+          # branch (ruling 2026-10-01).
+          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout omnimarket
+        uses: actions/checkout@v7
+        with:
+          repository: OmniNode-ai/omnimarket
+          ref: ${{ steps.om_pin.outputs.rev }}
+          path: _omnimarket
+          token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install native build toolchain
+        run: |
+          if command -v cc >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y build-essential
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update
+            apt-get install -y build-essential
+            exit 0
+          fi
+          echo "::warning::C compiler not found and this runner cannot install build-essential; continuing so uv can use wheels or report the actual build failure"
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if uv sync --frozen --python "${PYTHON_VERSION}"; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::uv sync failed after ${attempt} attempts"
+              exit "$status"
+            fi
+            echo "::warning::uv sync failed on attempt ${attempt}; retrying in $((attempt * 10)) seconds"
+            sleep $((attempt * 10))
+          done
+
+      - name: Run ValidateSkillBackingNode unit tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run pytest \
+            tests/unit/skills/_lib/test_validate_skill_backing_node.py \
+            -v
+
+      - name: Self-scan omniclaude skill backing nodes
+        # Pin OMNIMARKET_ROOT to the checked-out _omnimarket/ tree so an
+        # ambient $OMNI_HOME on self-hosted runners can never shadow it.
+        env:
+          OMNIMARKET_ROOT: _omnimarket
+        working-directory: ${{ github.workspace }}
+        run: uv run python plugins/onex/skills/_lib/validate_skill_backing_node.py .
+
+  # Folded from .github/workflows/verification-evidence-lint.yml (OMN-20074); runs when its original `paths:` change.
+  # OMN-13341 (R6, epic OMN-13325): hard-block worker prompts, receipts, and
+  # handoff/evidence docs that cite a local-clone path, ticket text, or a
+  # statusCheckRollup verdict AS proof of system state. Authoritative truth
+  # surfaces are origin/dev (existence), the live materialized projection (state),
+  # and `gh pr checks` (PR verdict). Doctrine: knowledge-base reference/omniclaude-verification-doctrine.md.
+  verification-evidence-lint:
+    name: Verification Evidence Lint
+    needs: changes
+    if: needs.changes.outputs.verification-evidence-lint == 'true'
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Self-test the verification-evidence lint
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/lint_verification_evidence.py --self-test
+
+      - name: Scan prompts/receipts/handoffs/evidence for non-authoritative proof
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/lint_verification_evidence.py
 
   ci-summary:
     name: CI Summary

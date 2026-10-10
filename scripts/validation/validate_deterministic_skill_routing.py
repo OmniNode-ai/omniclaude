@@ -37,8 +37,8 @@ Usage:
   python scripts/validation/validate_deterministic_skill_routing.py --skills-root plugins/onex/skills
 
 Wiring: this validator is enforced as a blocking pre-commit hook
-(``deterministic-skill-routing`` in ``.pre-commit-config.yaml``) and a required
-CI gate (``.github/workflows/check-deterministic-skills.yml``). It is the Tier 1
+(``deterministic-skill-routing`` in ``.pre-commit-config.yaml``) and a CI gate
+(the ``check-deterministic-skills`` job in ``.github/workflows/ci.yml``). It is the Tier 1
 counterpart to the Tier 3 ``validate_instructional_skill_routing.py`` gate
 (OMN-8766); wiring it closes the OMN-8749/8766 pair.
 

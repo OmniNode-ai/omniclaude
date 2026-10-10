@@ -20,6 +20,7 @@ Arch: omnidash_readonly role provisioning + CI (check 7)
 Arch: onex.* topic naming convention (check 6)
 Architecture Handshake
 Architecture Invariants
+Branch Claim Gate
 Build Docker Image
 CI Summary
 Canonical File Shape (OMN-20304)
@@ -29,10 +30,12 @@ Comment Render Delegation (OMN-18512)
 Contract Compliance
 Contract Compliance Check
 Cross-Repo Boundary Parity
+Daemon Venv Skew Gate
 Database Schema Validation
 Deploy to Production
 Deploy to Staging
 Detect Changes
+Distribution Classification Lint
 DoD Evidence Check
 Enum Governance
 Env Var Registry (OMN-6263)
@@ -40,6 +43,7 @@ Exports Validation
 F5.1 No compact cmd topic
 Golden Chain Integrity
 Golden Chain Live
+Hook Log Path Lint
 Hook System Tests (OMN-20109)
 Hooks System Tests (${{ matrix.split }}/3)
 Kafka Import Guard
@@ -50,14 +54,22 @@ Migration Freeze
 Mode Metadata Integrity
 OCC Companion Merged Gate (OMN-15214)
 ONEX Compliance
+Omnimarket Dispatch Drift Gate
 PR Failure Citations (OMN-18782)
+Path Changes (OMN-20074)
+Plan Canonical Scripts Gate
+Plan Hard Fields Gate
+Plan Verified State Gate
 Plugin Validate (OMN-17427)
+Plugin compat.yaml presence + schema
 Pre-commit Suite (OMN-19612)
+Precommit Fail-Loud Gate
 Pyright Type Checking
 Python Security Scan
 Quality Gate
 Refusal Surface (OMN-18983)
 Registry Consistency
+Reject legacy session-id env-var reads
 Runner Route (OMN-18031)
 Runtime Profiles
 Secret Detection
@@ -65,11 +77,21 @@ Security Gate
 Shape-Gate Independence (OMN-20298)
 Skill Contract Validation
 Skill Hygiene
+Skill MCP Reference Lint
 Skill Monorepo-Ref Gate
 Skip Count Ratchet (OMN-18776)
 Tests (Split ${{ matrix.split }}/${{ needs.detect-changes.outputs.split_count }})
 Tests Gate
+Verification Evidence Lint
 Version Pin Compliance
+check-deterministic-skills
+check-instructional-skills
+gate / Defect Anchor
+gate / Handoff Infra Health
+gate / reject-imperative-skill-patterns
 no-noncanonical-lifecycle-classes
 occ-preflight
+skill-receipt-mode-gate
+validate
+validate-agent-configs
 zone-filter

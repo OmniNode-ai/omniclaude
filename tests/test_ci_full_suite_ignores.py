@@ -3,7 +3,7 @@
 
 """The consolidated full-suite job's ignore list stays exactly three files (OMN-18357).
 
-``branch-claim-gate.yml`` records that "the consolidated test job does not
+The Branch Claim Gate job records that "the consolidated test job does not
 collect ``tests/scripts/`` at all". That was measured on the SELECTIVE path. The
 FULL-SUITE path runs ``pytest tests/`` and collects the directory, so the first
 shared-module change after those files landed failed Tests Gate on a diff that
@@ -16,7 +16,7 @@ worse than a red is a green over a selection that quietly grew.
 
 Each entry must be one of two things, and the test says which:
 
-- a file a dedicated gate workflow names explicitly, so it still runs somewhere;
+- a file a dedicated gate job names explicitly, so it still runs somewhere;
 - a file recorded as having no CI home at all, which must stay a short, named
   list rather than a habit.
 """
@@ -27,18 +27,20 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 
-# Ignored because a dedicated gate workflow runs them with the environment the
+# Ignored because a dedicated gate job runs them with the environment the
 # consolidated job does not provide (a git identity and default branch for the
-# real `git push` and `git commit` they drive). The value is that workflow.
+# real `git push` and `git commit` they drive). The value is that job's id in
+# ci.yml (folded there from its own workflow file by OMN-20074).
 IGNORED_WITH_A_GATE: dict[str, str] = {
-    "tests/scripts/test_branch_claim.py": "branch-claim-gate.yml",
-    "tests/scripts/test_branch_claim_hook.py": "branch-claim-gate.yml",
-    "tests/scripts/test_lane_identity_canary.py": "branch-claim-gate.yml",
+    "tests/scripts/test_branch_claim.py": "branch-claim-gate",
+    "tests/scripts/test_branch_claim_hook.py": "branch-claim-gate",
+    "tests/scripts/test_lane_identity_canary.py": "branch-claim-gate",
 }
 
 # Ignored because NO runner in this fleet can run them: they need brew
@@ -67,14 +69,21 @@ def test_the_ignore_list_is_exactly_the_declared_set() -> None:
     assert found == set(IGNORED_WITH_A_GATE) | IGNORED_WITH_NO_CI_HOME
 
 
+def _ci_job_text(job_id: str) -> str:
+    """The YAML of one ci.yml job, or an empty string when the job is absent."""
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    job = jobs.get(job_id)
+    return yaml.safe_dump(job, width=10_000) if job is not None else ""
+
+
 def test_every_gated_ignore_is_actually_named_by_its_gate() -> None:
     """An ignore justified by a gate that does not name the file is a green over nothing."""
-    for path, workflow in IGNORED_WITH_A_GATE.items():
-        gate = WORKFLOW_DIR / workflow
-        assert gate.is_file(), f"{path}: its declared gate {workflow} does not exist"
-        assert path in gate.read_text(encoding="utf-8"), (
+    for path, job_id in IGNORED_WITH_A_GATE.items():
+        gate = _ci_job_text(job_id)
+        assert gate, f"{path}: its declared gate job {job_id} does not exist in ci.yml"
+        assert path in gate, (
             f"{path} is ignored by the consolidated job on the grounds that "
-            f"{workflow} runs it, but that workflow does not name the file"
+            f"ci.yml job {job_id} runs it, but that job does not name the file"
         )
 
 
@@ -115,10 +124,12 @@ def test_the_claim_index_is_vendored_and_never_resolved_from_another_repository(
         "positive control: scripts/claim_index.py is missing, so the resolver, the "
         "pre-push hook and lane_identity have no claim index to load"
     )
-    gate = (WORKFLOW_DIR / "branch-claim-gate.yml").read_text(encoding="utf-8")
-    assert "scripts/claim_index.py" in gate, (
-        "branch-claim-gate.yml does not trigger on the vendored module, so a change "
-        "to the resolution would land without its gate running"
+    changes = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]["changes"]
+    trigger = next(s for s in changes["steps"] if s.get("id") == "filter")
+    filters = yaml.safe_load(trigger["env"]["PATH_FILTERS"])
+    assert "scripts/claim_index.py" in filters["branch-claim-gate"]["paths"], (
+        "the Branch Claim Gate filter does not trigger on the vendored module, so a "
+        "change to the resolution would land without its gate running"
     )
     candidates = [
         *sorted((REPO_ROOT / "tests").rglob("test_*.py")),

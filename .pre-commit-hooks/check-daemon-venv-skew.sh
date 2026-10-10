@@ -21,7 +21,7 @@
 # silently no-ops — an unparseable lock fails the gate.
 #
 # This wrapper is registered as BOTH a pre-commit hook (.pre-commit-config.yaml)
-# and a required CI status check (.github/workflows/daemon-venv-skew-gate.yml).
+# and a CI gate (the daemon-venv-skew-gate job in .github/workflows/ci.yml).
 
 set -euo pipefail
 

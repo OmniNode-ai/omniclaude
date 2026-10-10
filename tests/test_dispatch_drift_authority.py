@@ -36,11 +36,14 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "omnimarket-dispatch-drift-gate.yml"
+# OMN-20074: the gate is the `omnimarket-dispatch-drift-gate` job in ci.yml.
+_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
+_JOB_ID = "omnimarket-dispatch-drift-gate"
 
 _GIT_LOCATION_VARS = (
     "GIT_DIR",
@@ -182,7 +185,8 @@ def test_the_workflow_no_longer_carries_a_hand_held_sha_literal() -> None:
     of the two previous bumps naming exactly this literal. A derived value
     cannot go stale, so the way to keep it correct is for it not to exist.
     """
-    text = _WORKFLOW.read_text(encoding="utf-8")
+    job = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))["jobs"][_JOB_ID]
+    text = yaml.safe_dump(job, width=10_000)
     # A `uses:` line pins a reusable workflow to the commit it was validated at
     # (OMN-20001); it is not the omnimarket expected sha this test guards.
     body = "\n".join(
@@ -192,7 +196,8 @@ def test_the_workflow_no_longer_carries_a_hand_held_sha_literal() -> None:
     )
     stale = re.findall(r"\b[0-9a-f]{40}\b", body)
     assert not stale, (
-        f"a hand-held commit literal is back in {_WORKFLOW.name}: {stale}. "
+        f"a hand-held commit literal is back in {_WORKFLOW.name} job {_JOB_ID}: "
+        f"{stale}. "
         f"The expected sha is derived from uv.lock; reintroducing a literal "
         f"reintroduces the touch point that failed the last two bumps"
     )
