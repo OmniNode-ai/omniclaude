@@ -216,6 +216,9 @@ class PRStatus:
     merge_commit_sha: str = ""
     # The PR head commit, read by REST, where the repo-evidence check run ran.
     head_sha: str = ""
+    # When a MERGED PR merged (REST ``merged_at``, ISO 8601 UTC). It orders the
+    # merged PRs of one repository so the newest one's check run decides.
+    merged_at: str = ""
 
     @property
     def is_blocking(self) -> bool:
@@ -695,6 +698,7 @@ def fetch_pr_status(ref: PRRef, timeout: float = 15.0) -> PRStatus:
         head_sha=str(data["head"].get("sha") or "")
         if isinstance(data.get("head"), dict)
         else "",
+        merged_at=str(data.get("merged_at") or "") if state == "MERGED" else "",
     )
 
 

@@ -434,3 +434,163 @@ def test_rest_pr_head_is_populated_for_every_state(
     monkeypatch.setattr(ldv, "_gh_api_json", lambda *_args: (data, None))
     status = ldv.fetch_pr_status(ldv.PRRef(_NUMBER, _REPO))
     assert status.head_sha == (_HEAD if isinstance(head, dict) else "")
+
+
+# A ticket landed by several PRs in one repository: each later PR re-verifies the
+# whole contract on its own head, so the newest merged one decides (OMN-20071).
+_OLD_NUMBER = 3284
+_OLD_HEAD = "o" * 40
+_OLD_MERGE = "p" * 40
+_OLD_MERGED_AT = "2026-10-03T04:51:58Z"
+_NEW_MERGED_AT = "2026-10-08T01:36:06Z"
+_TWO_PR_DESCRIPTION = f"""Implemented in https://github.com/{_REPO}/pull/{_OLD_NUMBER} and {_PR_URL}
+
+## Acceptance criteria
+- AC1 -- the first check passes
+- AC2 -- the second check passes
+"""
+
+
+def _two_prs(*, old_merged_at: str = _OLD_MERGED_AT) -> Any:
+    def fetch(ref: Any) -> Any:
+        assert ref.repo == _REPO and ref.number in (_OLD_NUMBER, _NUMBER)
+        old = ref.number == _OLD_NUMBER
+        return ldv.PRStatus(
+            ref=ref,
+            state="MERGED",
+            merge_state="CLEAN",
+            merge_commit_sha=_OLD_MERGE if old else _MERGE,
+            head_sha=_OLD_HEAD if old else _HEAD,
+            merged_at=old_merged_at if old else _NEW_MERGED_AT,
+        )
+
+    return fetch
+
+
+def _two_pr_probe(
+    *, old_runs: Any, new_runs: Any, old_contract: str = "", new_contract: str = ""
+) -> Any:
+    contracts = {
+        _OLD_MERGE: old_contract or _contract("AC1", "AC2"),
+        _OLD_HEAD: old_contract or _contract("AC1", "AC2"),
+        _MERGE: new_contract or _contract("AC1", "AC2"),
+        _HEAD: new_contract or _contract("AC1", "AC2"),
+    }
+
+    def contract_reader(repo: str, ref: str, ticket_id: str) -> Any:
+        assert repo == _REPO and ticket_id == _TICKET
+        return repo_evidence.ContractRead(
+            repo_evidence.ContractReadStatus.FOUND, text=contracts[ref]
+        )
+
+    def check_reader(repo: str, sha: str) -> Any:
+        assert repo == _REPO
+        return {_OLD_HEAD: old_runs, _HEAD: new_runs}[sha]
+
+    return _probe(read_contract=contract_reader, read_check_runs=check_reader)
+
+
+def _two_pr_done(probe: Any, **kwargs: Any) -> Any:
+    return _done(
+        probe,
+        description=_TWO_PR_DESCRIPTION,
+        pr_fetcher=kwargs.pop("pr_fetcher", _two_prs()),
+        **kwargs,
+    )
+
+
+def test_red_run_on_a_superseded_merged_pr_does_not_refuse() -> None:
+    probe = _two_pr_probe(
+        old_runs=[_run(id=7000, conclusion="failure")], new_runs=[_run()]
+    )
+    decision = _two_pr_done(probe)
+    assert decision.allowed, decision.reason
+    assert decision.reason == "durable_evidence:repo_bound_checks:all_prs_merged"
+
+
+def test_red_run_on_the_newest_merged_pr_refuses_after_an_older_success() -> None:
+    probe = _two_pr_probe(
+        old_runs=[_run(id=7000)], new_runs=[_run(id=7101, conclusion="failure")]
+    )
+    decision = _two_pr_done(probe)
+    assert not decision.allowed
+    assert "run 7101" in decision.reason and _HEAD in decision.reason
+
+
+def test_newest_contract_leaving_a_criterion_unbound_refuses() -> None:
+    probe = _two_pr_probe(
+        old_runs=[_run(id=7000)],
+        new_runs=[_run()],
+        new_contract=_contract("AC1"),
+    )
+    decision = _two_pr_done(probe)
+    assert not decision.allowed
+    assert "AC2" in decision.reason
+
+
+def test_newest_pr_without_a_run_falls_back_to_occ_not_to_an_older_success() -> None:
+    probe = _two_pr_probe(old_runs=[_run(id=7000)], new_runs=[])
+    decision = _two_pr_done(probe, occ_probe=_occ(False))
+    assert not decision.allowed
+    assert "OCC probe detail" in decision.reason
+
+
+def test_merged_pr_without_a_merge_time_is_never_treated_as_superseded() -> None:
+    probe = _two_pr_probe(
+        old_runs=[_run(id=7000, conclusion="failure")], new_runs=[_run()]
+    )
+    decision = _two_pr_done(probe, pr_fetcher=_two_prs(old_merged_at=""))
+    assert not decision.allowed
+    assert "run 7000" in decision.reason and _OLD_HEAD in decision.reason
+
+
+@pytest.mark.parametrize(
+    ("merged", "merged_at", "expected"),
+    [(True, _NEW_MERGED_AT, _NEW_MERGED_AT), (False, None, "")],
+)
+def test_rest_pr_merge_time_is_populated(
+    monkeypatch: pytest.MonkeyPatch, merged: bool, merged_at: Any, expected: str
+) -> None:
+    data = {
+        "state": "closed",
+        "merged": merged,
+        "merged_at": merged_at,
+        "head": {"sha": _HEAD},
+    }
+    monkeypatch.setattr(ldv, "_gh_api_json", lambda *_args: (data, None))
+    status = ldv.fetch_pr_status(ldv.PRRef(_NUMBER, _REPO))
+    assert status.merged_at == expected
+
+
+def test_done_gate_adds_no_module_outside_its_baselined_files() -> None:
+    """The gate's sibling-import closure is its three baselined modules (AC6)."""
+    import ast
+
+    repo_root = _LIB_DIR.parents[3]
+    baseline = {
+        line.strip()
+        for line in (repo_root / ".onex_ratchets" / "canonical_file_shape_baseline.txt")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    closure: set[str] = set()
+    pending = ["done_flip_guard"]
+    while pending:
+        name = pending.pop()
+        if name in closure:
+            continue
+        closure.add(name)
+        tree = ast.parse((_LIB_DIR / f"{name}.py").read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            modules = (
+                [node.module or ""]
+                if isinstance(node, ast.ImportFrom)
+                else [alias.name for alias in node.names]
+                if isinstance(node, ast.Import)
+                else []
+            )
+            pending.extend(m for m in modules if (_LIB_DIR / f"{m}.py").is_file())
+    assert closure == {"done_flip_guard", "linear_done_verify", "no_pr_bound_evidence"}
+    for name in closure:
+        assert f"plugins/onex/hooks/lib/{name}.py" in baseline

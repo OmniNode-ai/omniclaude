@@ -1,0 +1,72 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20071"
+title: "OR.3 S4: the omniclaude Done gate reads the product repository's contract and verdict"
+summary: "The Done gate reads contracts/<ticket>.yaml from the repository each merged PR landed in and takes the verdict from the repo-evidence / dod-verify check run on the merged head; onex_change_control decides only for tickets whose contracts are there. Where several merged PRs of one repository carry the contract, the newest merged one decides, because its check re-verifies the whole contract, so a red run on a superseded pilot-era head no longer refuses a ticket whose latest head is green."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-done-gate-repo-first"
+    statement: |-
+      The Done gate must decide a ticket with a product-repository contract from that contract and the check run on the merged head, and decide an OCC-only ticket exactly as before.
+    acceptance:
+      - id: "AC4"
+        statement: |-
+          AC4: The omniclaude Done gate looks for a ticket's contract first in the repository its PR merged into and takes the verdict from the S3 check run on the merged head, and treats onex_change_control as the source only for tickets whose contracts are there -- falsifier: uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k "partial_repo_binding or unbound" or uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k "every_criterion or superseded" fails
+      - id: "AC5"
+        statement: |-
+          AC5: The gate still decides a ticket whose contract is only in onex_change_control exactly as it does today -- falsifier: uv run pytest tests/hooks/test_done_flip_guard_occ_only_replay_omn20071.py -q fails
+      - id: "AC6"
+        statement: |-
+          AC6: The change adds no new non-canonical file -- falsifier: uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k no_module fails
+evidence_requirements:
+  - kind: "tests"
+    description: "An omnimarket-shaped contract that leaves a criterion unbound is refused, including when the newest merged PR's contract drops a binding an older one had."
+    command: "uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k \"partial_repo_binding or unbound\""
+  - kind: "tests"
+    description: "Every criterion bound with a green check run on the merged head is admitted, and a red run on a superseded merged PR of the same repository does not refuse."
+    command: "uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k \"every_criterion or superseded\""
+  - kind: "tests"
+    description: "Fourteen OCC-only Done-gate inputs recorded at 2e7eeb076, before the repo-first change, replay to the same decisions."
+    command: "uv run pytest tests/hooks/test_done_flip_guard_occ_only_replay_omn20071.py -q"
+  - kind: "tests"
+    description: "The gate's sibling-import closure is its three modules already listed in the canonical-file-shape baseline."
+    command: "uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k no_module"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-repo-first-refuses-unbound"
+    description: "A product contract leaving one criterion unbound is refused without consulting OCC."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k \"partial_repo_binding or unbound\""
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC4"]
+  - id: "dod-repo-first-admits-bound-green-head"
+    description: "Every criterion bound and a green check run on the newest merged head is admitted without OCC."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k \"every_criterion or superseded\""
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC4"]
+  - id: "dod-occ-only-replay"
+    description: "Recorded OCC-only Done-gate inputs replay to the decisions recorded before the repo-first change."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_occ_only_replay_omn20071.py -q"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC5"]
+  - id: "dod-no-new-module"
+    description: "The gate's code stays in its three baselined modules; no module or baseline entry is added."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k no_module"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC6"]

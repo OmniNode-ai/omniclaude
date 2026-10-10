@@ -47,8 +47,10 @@ the bound-receipt bar, and every other path is a further condition):
 7. Repo evidence first (``no_pr_bound_evidence``): a merged product PR's
    ``contracts/<TICKET>.yaml`` binds every labelled criterion, and a green
    ``repo-evidence / dod-verify`` GitHub Actions check on its head verifies
-   the same contract that merged. Once engaged, this verdict is final and
-   OCC is not consulted. A contract without the check has not adopted it.
+   the same contract that merged. Of several merged PRs in one repository
+   that carry the contract, the newest merged one decides. Once engaged, this
+   verdict is final and OCC is not consulted. A contract without the check has
+   not adopted it.
 8. When repo evidence is not engaged, the bound-receipt bar
    (``no_pr_bound_evidence``), on ``origin/dev`` of the
    local onex_change_control clone: ``contracts/<TICKET>.yaml`` binds EVERY
@@ -681,7 +683,7 @@ def decide(
                 occ_repo_path(workspace_root), ticket_id
             )
 
-            def probe(tid: str, desc: str, merged_pr: bool = False) -> Any:
+            def _bound_probe(tid: str, desc: str, merged_pr: bool = False) -> Any:
                 return evaluate_bound_evidence(
                     tid,
                     desc,
@@ -694,6 +696,8 @@ def decide(
                         else ("target_identity", "working_dir")
                     ),
                 )
+
+            probe = _bound_probe
 
     def _repo_verdict(
         descriptions: list[str], statuses: list[PRStatus] | None
