@@ -132,6 +132,10 @@ VERIFICATION_COMMANDS = re.compile(
     re.IGNORECASE,
 )
 
+# The shape of an umbrella: the one required job whose own default-deny sweep
+# reads every job's conclusion in its file.
+SUMMARY_WORDS = re.compile(r"summary", re.IGNORECASE)
+
 # Only a job a PULL REQUEST can reach can be a required status check, so
 # refusing a scheduled or release-only job for being absent from one would be a
 # false refusal about a surface it was never eligible for.
@@ -571,28 +575,41 @@ def enforced_jobs(jobs: list[Job], contexts: list[str]) -> set[str]:
     it would have put roughly four hundred correctly-enforced jobs into the
     grandfather list, and a baseline that large is where a real finding hides.
     """
+    by_id = {job.job_id: job for job in jobs}
     direct = {job.job_id for job in jobs if enforced(contexts, job.contexts)}
     if not direct:
         return set()
 
-    # THE UMBRELLA IS PER FILE, not per edge. omnibase_infra's `CI Summary`
-    # carries NO `needs:` ON PURPOSE (ci.yml, the OMN-14127 comment): a
-    # needs-gated summary gets no check-run until its needs terminalize, so
-    # under fleet saturation the required context was ABSENT forever and the PR
-    # wedged BLOCKED with zero failing and zero pending checks. It polls the
-    # run's job conclusions instead, default-deny. A graph closure sees no edge
-    # there and would report every job in that file unenforced -- 111 of them,
-    # which is not a conservative reading but a useless one.
+    # A NEEDS-LESS SUMMARY OWNS ITS FILE; nothing else does. omnibase_infra's
+    # `CI Summary` carries NO `needs:` ON PURPOSE (ci.yml, the OMN-14127
+    # comment): a needs-gated summary gets no check-run until its needs
+    # terminalize, so under fleet saturation the required context was ABSENT
+    # forever and the PR wedged BLOCKED. It polls the run's job conclusions
+    # instead, default-deny, so a graph closure sees no edge there and would
+    # report every job in that file unenforced -- 111 of them.
     #
-    # So a required context ANYWHERE in a workflow file covers that file. The
-    # concession this makes is real and is stated: a job added to a
-    # needs-gated summary's file but NOT added to its `needs:` list reads as
-    # enforced here and is not. That residual belongs to the summary's own
-    # default-deny sweep, which is the surface that owns it; what this gate is
-    # for is the job in a file NOTHING required ever reads -- the
-    # fresh-deploy-fitness shape.
-    reached = {job.job_id for job in jobs}
-    return reached
+    # That concession is scoped to a summary-shaped job. Granting it to ANY
+    # required job (OMN-18796, P2) marked a whole file enforced when one job
+    # matched, and 56 of 90 files share a boilerplate eligibility job that is
+    # a required context: every other job beside it went unseen.
+    if any(
+        not by_id[job_id].needs
+        and any(
+            SUMMARY_WORDS.search(item) for item in (job_id, by_id[job_id].name or "")
+        )
+        for job_id in direct
+    ):
+        return {job.job_id for job in jobs}
+
+    covered: set[str] = set()
+    pending = list(direct)
+    while pending:
+        job_id = pending.pop()
+        if job_id in covered or job_id not in by_id:
+            continue
+        covered.add(job_id)
+        pending.extend(by_id[job_id].needs)
+    return covered
 
 
 def merge_gating_jobs(jobs: list[Job], contexts: list[str]) -> dict[str, str]:

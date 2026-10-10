@@ -1036,6 +1036,100 @@ class TestWiring:
         assert "advisory_job_gate.py" in REUSABLE_WORKFLOW.read_text(encoding="utf-8")
 
 
+class TestP2CensusScopesCoverageToTheJob:
+    """OMN-18796 / P2: one required job must not mark its whole workflow file
+    enforced. 56 of 90 files share a boilerplate eligibility job that is a
+    required context, and read file-wide it blinded the census to every other
+    job beside it."""
+
+    ELIGIBILITY_BESIDE_ADVISORY = """\
+name: Fitness
+on:
+  pull_request:
+jobs:
+  eligibility:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo eligible
+  fresh-deploy-fitness:
+    runs-on: ubuntu-latest
+    steps:
+      - run: python scripts/validate_fresh_deploy_fitness.py
+"""
+
+    def test_a_file_with_one_required_job_and_one_advisory_job_reports_the_advisory_job(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        root = _repo(tmp_path, {"fitness.yml": self.ELIGIBILITY_BESIDE_ADVISORY})
+        code = _run(
+            root,
+            baseline=_baseline(tmp_path, EMPTY_BASELINE),
+            contexts=_contexts(tmp_path, ["eligibility"]),
+        )
+        out = capsys.readouterr().out
+        assert code == 1
+        assert "UNENFORCED_VERIFICATION_JOB" in out
+        assert "fitness.yml::fresh-deploy-fitness" in out
+
+    def test_a_job_the_required_job_needs_is_still_enforced(
+        self, tmp_path: Path
+    ) -> None:
+        text = """\
+name: CI
+on:
+  pull_request:
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pytest -q
+  gate:
+    needs: [unit-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+"""
+        root = _repo(tmp_path, {"ci.yml": text})
+        assert (
+            _run(
+                root,
+                baseline=_baseline(tmp_path, EMPTY_BASELINE),
+                contexts=_contexts(tmp_path, ["gate"]),
+            )
+            == 0
+        )
+
+    def test_a_needsless_summary_still_covers_its_own_file(
+        self, tmp_path: Path
+    ) -> None:
+        """omnibase_infra's `CI Summary` carries no `needs:` on purpose and polls
+        the run's job conclusions, so it owns every job in its file."""
+        text = """\
+name: CI
+on:
+  pull_request:
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pytest -q
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo poll
+"""
+        root = _repo(tmp_path, {"ci.yml": text})
+        assert (
+            _run(
+                root,
+                baseline=_baseline(tmp_path, EMPTY_BASELINE),
+                contexts=_contexts(tmp_path, ["CI Summary"]),
+            )
+            == 0
+        )
+
+
 def test_runtime_profiles_is_required_not_grandfathered() -> None:
     payload = yaml.safe_load(BASELINE.read_text())
     entries = payload["repos"]["OmniNode-ai/omniclaude"]
