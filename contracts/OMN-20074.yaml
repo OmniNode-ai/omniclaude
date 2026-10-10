@@ -60,6 +60,7 @@ dod_evidence:
       - check_type: "test_passes"
         check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k another_repo"
         cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
   - id: "dod-omn-20074-monitor-host"
     description: "The focused monitor test proves the job moved out of the OCC heal workflow and keeps its schedule, grants and bus wiring."
     source: "manual"
@@ -67,12 +68,14 @@ dod_evidence:
       - check_type: "test_passes"
         check_value: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC-MON1"]
   - id: dod-omn20074-caller-contract-source
     description: "Workflow wiring and validator verdicts for the occ and caller contract sources"
     source: manual
     checks:
       - check_type: command
         check_value: "uv run pytest tests/workflows/test_deploy_gate_contract_source_omn20074.py tests/workflows/test_deploy_gate_reusable_workflow.py -q --no-cov -p no:randomly"
+    binds_ac: ["AC2"]
   - id: dod-omn20074-automation-declaration
     description: "advisory-job-gate checks an automation declaration instead of exempting it, and omniclaude's auto-merge job carries one"
     source: manual
