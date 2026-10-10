@@ -132,6 +132,7 @@ def _run(tmp_path: Path, *args: str, **seams: str) -> subprocess.CompletedProces
         "ONBOARD_TEST_CPUS": "10",
         "ONBOARD_TEST_VM": "0",
         "ONBOARD_TEST_ADMIN": "1",
+        "ONBOARD_TEST_NEEDS_ADMIN": "0",
         **seams,
     }
     (tmp_path / "run").mkdir(exist_ok=True)
@@ -468,13 +469,17 @@ def test_one_question_after_preflight_decides_docker(
         "ONBOARD_TEST_CPUS": "10",
         "ONBOARD_TEST_VM": "0",
         "ONBOARD_TEST_ADMIN": "1",
+        "ONBOARD_TEST_NEEDS_ADMIN": "0",
         "ONBOARD_TEST_NO_GUI": "1",
+        # Docker present, so a yes asks no licence question (CI runners have none).
+        "ONBOARD_TEST_DOCKER": "running",
     }
     out, returncode = _drive_tty(
         ["/bin/bash", str(phase0_only), "--provider", "gemini"],
         env,
         [
-            ("key (input is hidden)", "not-a-real-key"),
+            ("(input is hidden):", "AIza-not-a-real-key"),
+            ("Continue?", "y"),
             ("Set up the local stack in Docker too?", answer),
         ],
     )
@@ -612,24 +617,6 @@ def test_no_boot_floor_exceeds_what_preflight_already_admitted() -> None:
     assert BOOT_FREE_DISK_GB <= M2_DISK_GB_DOCKER_PRESENT
 
 
-def test_a_delegation_that_fell_through_to_another_route_does_not_pass_phase_4() -> (
-    None
-):
-    phase_4 = _function_body("phase4")
-    assert 'case "$served" in' in phase_4
-    assert '"byok-$MODEL_CHOICE"*' in phase_4
-    assert "not byok-$MODEL_CHOICE" in phase_4
-    assert "phase_fail" in phase_4.split('"byok-$MODEL_CHOICE"*', 1)[1]
-
-
-def test_the_stack_only_gets_a_tenant_when_a_key_was_chosen() -> None:
-    phase_4 = _function_body("phase4")
-    assert 'if uses_key "$MODEL_CHOICE"; then\n    step "give the stack a tenant' in (
-        phase_4
-    )
-    assert phase_4.index("ensure_stack_tenant") < phase_4.index("make up-local")
-
-
 def _phase0_env(tmp_path: Path, **extra: str) -> dict[str, str]:
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
@@ -649,6 +636,7 @@ def _phase0_env(tmp_path: Path, **extra: str) -> dict[str, str]:
         "ONBOARD_TEST_CPUS": "10",
         "ONBOARD_TEST_VM": "0",
         "ONBOARD_TEST_ADMIN": "1",
+        "ONBOARD_TEST_NEEDS_ADMIN": "0",
         **extra,
     }
 
@@ -681,26 +669,6 @@ def test_no_key_and_nobody_to_ask_stops_before_installing(tmp_path: Path) -> Non
     assert sorted((tmp_path / "home").rglob("*")) == []
 
 
-@pytest.mark.parametrize(
-    ("key", "outcome"),
-    [("", "no key was given"), ("not-a-real-key", "Model key: received")],
-)
-def test_the_key_is_settled_in_preflight(
-    tmp_path: Path, key: str, outcome: str
-) -> None:
-    """Provider then key, both before anything installs; an empty key stops the run."""
-    out, returncode = _drive_tty(
-        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
-        _phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
-        [("Choose 1, 2, 3 or 4:", "1"), ("key (input is hidden)", key)],
-    )
-    assert outcome in out
-    assert (
-        "not-a-real-key" not in out.split("key (input is hidden)")[-1]
-    )  # never echoed
-    assert sorted(p for p in (tmp_path / "home").rglob("*")) == []
-
-
 def _stored_keys(tmp_path: Path, *providers: str) -> None:
     """A fake `onex` whose `secret list` reports keys an earlier run stored."""
     bindir = tmp_path / "home" / ".local" / "bin"
@@ -709,117 +677,6 @@ def _stored_keys(tmp_path: Path, *providers: str) -> None:
     onex = bindir / "onex"
     onex.write_text(f'#!/bin/sh\n[ "$1" = secret ] || exit 1\ncat <<EOF\n{rows}EOF\n')
     onex.chmod(0o755)
-
-
-def test_a_stored_key_is_offered_and_not_assumed(tmp_path: Path) -> None:
-    """AC1 (OMN-20393): the run names the stored provider and offers to change it."""
-    _stored_keys(tmp_path, "openai")
-    out, _ = _drive_tty(
-        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
-        _phase0_env(tmp_path),
-        [("Use it?", "n"), ("Choose 1, 2, 3 or 4:", "q")],
-    )
-    assert "already has your OpenAI key stored" in out
-    assert "Choose 1, 2, 3 or 4:" in out, (
-        "declining the stored key reached no model menu"
-    )
-
-
-def test_keeping_the_stored_key_asks_nothing_further(tmp_path: Path) -> None:
-    """AC1 (OMN-20393): keeping it is one keystroke, and no key is re-typed."""
-    _stored_keys(tmp_path, "openai")
-    out, _ = _drive_tty(
-        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
-        _phase0_env(tmp_path),
-        [("Use it?", "y")],
-    )
-    assert "your openai key is already stored; it will be used" in out
-    assert "key (input is hidden)" not in out
-
-
-def test_an_unattended_run_still_uses_the_stored_key(tmp_path: Path) -> None:
-    """AC1 (OMN-20393): with nowhere to ask, the stored key is used and named."""
-    _stored_keys(tmp_path, "openai")
-    result = subprocess.run(
-        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
-        env=_phase0_env(tmp_path),
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
-    )
-    assert "No terminal or desktop to ask on" in result.stdout
-    assert "your openai key is already stored" in result.stdout
-
-
-def test_the_stored_providers_own_key_can_be_replaced(tmp_path: Path) -> None:
-    """AC2 (OMN-20393): --provider equal to the stored one reaches the key prompt."""
-    _stored_keys(tmp_path, "openai")
-    out, _ = _drive_tty(
-        [
-            "/bin/bash",
-            str(_phase0_only(tmp_path)),
-            "--no-containers",
-            "--provider",
-            "openai",
-        ],
-        _phase0_env(tmp_path),
-        [("key (input is hidden)", "replacement-key")],
-    )
-    assert "Model key: received" in out
-    assert "already stored; it will be used" not in out
-
-
-def test_two_stored_keys_let_the_developer_pick(tmp_path: Path) -> None:
-    """AC3 (OMN-20393): the developer's choice wins, not the scan order."""
-    _stored_keys(tmp_path, "openrouter", "gemini")
-    out, _ = _drive_tty(
-        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
-        _phase0_env(tmp_path),
-        [("Which one?", "2")],
-    )
-    assert "your gemini key is already stored; it will be used" in out
-    assert "your openrouter key is already stored" not in out
-
-
-def test_the_scan_order_is_documented_as_a_fallback_only() -> None:
-    """AC3 (OMN-20393): nothing picks a stored provider by scan order while a
-    developer can be asked."""
-    body = _function_body("stored_key_provider")
-    assert "stored_key_providers | head -n 1" in body
-    offer = _function_body("offer_stored_key")
-    assert "No terminal or desktop to ask on" in offer
-
-
-@pytest.mark.parametrize(
-    "answers",
-    [
-        [
-            ("Choose 1, 2, 3 or 4:", "4"),
-            ("Set up the local stack in Docker too?", "q"),
-        ],
-        [("Choose 1, 2, 3 or 4:", "q")],
-    ],
-    ids=["quit-at-docker", "quit-at-provider"],
-)
-def test_quit_setup_stops_before_anything_installs(
-    tmp_path: Path, answers: list[tuple[str, str]]
-) -> None:
-    """ "Quit setup" (q on a terminal) is offered only before any install, and says so."""
-    out, returncode = _drive_tty(
-        ["/bin/bash", str(_phase0_only(tmp_path))],
-        _phase0_env(
-            tmp_path,
-            ONBOARD_TEST_RAM_GB="32",
-            ONBOARD_TEST_CPUS="10",
-            ONBOARD_TEST_VM="0",
-        ),
-        answers,
-    )
-    assert "Nothing was installed. Run onboarding again when you're ready." in out
-    assert returncode == 4, out[-400:]
-    assert sorted((tmp_path / "home").rglob("*")) == []
 
 
 def _functions(*names: str) -> str:
@@ -884,16 +741,6 @@ def test_a_resumed_run_finds_the_tools_phase_1_installed(tmp_path: Path) -> None
 # ---------------------------------------------------------------------------
 # Ollama: a model on this Mac, no key.
 # ---------------------------------------------------------------------------
-
-
-def test_choosing_ollama_on_the_menu_skips_the_key(tmp_path: Path) -> None:
-    out, returncode = _drive_tty(
-        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
-        _phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
-        [("Choose 1, 2, 3 or 4:", "4")],
-    )
-    assert "Model: Ollama on this Mac, no key." in out
-    assert "key (input is hidden)" not in out
 
 
 def _shell(snippet: str, home: Path) -> subprocess.CompletedProcess[str]:
@@ -979,33 +826,6 @@ def test_the_run_ends_by_saying_to_sign_in_to_claude_code() -> None:
         "Open Claude Code (run 'claude') and sign in with your Anthropic account"
         in text
     )
-
-
-def test_every_dialog_activates_before_it_asks() -> None:
-    """A dialog that never activates cannot be typed into.
-
-    `osascript` shows the dialog but keyboard focus stays with the frontmost
-    app, so a `default answer` field reads as locked and the confirm button
-    returns an empty answer. Click-only dialogs still work, which is why this
-    surfaced on exactly the two that take typing: the model key and the
-    administrator password. Both are the developer's only way through the run
-    when there is no tty.
-    """
-    text = SCRIPT.read_text()
-    missing = []
-    for match in re.finditer(r"display dialog|choose from list", text):
-        window = text[max(0, match.start() - 900) : match.start()]
-        if "activate" not in window:
-            missing.append(text[match.start() : match.start() + 70])
-    assert not missing, (
-        "these dialogs never activate, so their fields cannot take keystrokes: "
-        f"{missing}"
-    )
-
-
-def test_the_key_dialog_is_not_indented_like_the_terminal_prompt() -> None:
-    body = _functions("read_secret")
-    assert "sed 's/^[[:space:]]*//'" in body
 
 
 def test_ollama_asks_for_no_key_and_chooses_the_model_later(tmp_path: Path) -> None:
@@ -1142,35 +962,6 @@ def test_ollama_routes_are_written_and_a_foreign_file_is_kept(tmp_path: Path) ->
     ).read_text() == "# mine\nbackends: []\n"
 
 
-def test_choosing_openai_on_the_menu_asks_for_an_openai_key(tmp_path: Path) -> None:
-    out, returncode = _drive_tty(
-        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
-        _phase0_env(tmp_path, ONBOARD_TEST_RAM_GB="32", ONBOARD_TEST_CPUS="10"),
-        [("Choose 1, 2, 3 or 4:", "3"), ("key (input is hidden)", "")],
-    )
-    assert "Paste your OpenAI API key (input is hidden):" in out
-    assert "it is only ever sent to OpenAI" in out
-
-
-def test_the_model_is_asked_before_docker(tmp_path: Path) -> None:
-    out, returncode = _drive_tty(
-        ["/bin/bash", str(_phase0_only(tmp_path))],
-        _phase0_env(
-            tmp_path,
-            ONBOARD_TEST_RAM_GB="32",
-            ONBOARD_TEST_CPUS="10",
-            ONBOARD_TEST_VM="0",
-        ),
-        [
-            ("Choose 1, 2, 3 or 4:", "4"),
-            ("Set up the local stack in Docker too?", "n"),
-        ],
-    )
-    assert out.index("Choose 1, 2, 3 or 4:") < out.index(
-        "Set up the local stack in Docker too?"
-    )
-
-
 def test_a_vm_is_told_before_any_question(tmp_path: Path) -> None:
     result = subprocess.run(
         ["/bin/bash", str(_phase0_only(tmp_path)), "--provider", "ollama"],
@@ -1201,26 +992,6 @@ def test_the_docker_question_leads_with_what_was_found() -> None:
         "Docker Desktop isn't installed on this Mac.",
     ):
         assert found in text
-    assert "set msg to (item 1 of argv)" in _functions("ask_docker")
-
-
-def test_questions_go_to_dialogs_whenever_there_is_a_desktop() -> None:
-    """The terminal shows progress; questions are dialogs unless there is no desktop."""
-    text = SCRIPT.read_text()
-    assert (
-        'if [ "$IS_TTY" -eq 1 ] && { [ "$GUI_SESSION" -eq 0 ] || [ "${ONBOARD_PROMPTS:-}" = "terminal" ]; }; then'
-        in text
-    )
-    for fn in (
-        "ask_provider",
-        "read_secret",
-        "ask_docker",
-        "ensure_sudo",
-        "accept_docker_terms",
-    ):
-        body = _functions(fn)
-        assert '"$IS_TTY"' not in body, fn
-        assert '"$PROMPT_TTY"' in body, fn
 
 
 def test_workspace_config_is_written_to_declared_owner(tmp_path: Path) -> None:
@@ -1252,3 +1023,361 @@ def test_workspace_config_is_written_to_declared_owner(tmp_path: Path) -> None:
     assert target.is_file()
     assert 'type: "inmemory"' in target.read_text()
     assert not (root / "config").exists()
+
+
+# ---------------------------------------------------------------------------
+# OMN-20818: several models in one pass, every question in the terminal and up
+# front. Any combination of Gemini, OpenRouter, OpenAI and Ollama, at least one;
+# each key asked for one at a time, naming its provider.
+# ---------------------------------------------------------------------------
+
+_MENU = "Choose one or more, e.g. 1,3,4:"
+_HIDDEN = "(input is hidden):"
+
+
+def _preflight(
+    tmp_path: Path, steps: list[tuple[str, str]], *args: str, **extra: str
+) -> tuple[str, int]:
+    return _drive_tty(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers", *args],
+        _phase0_env(tmp_path, **extra),
+        steps,
+    )
+
+
+def test_no_question_is_a_dialog() -> None:
+    """AC1: model choice, keys, Docker, its terms and the password are all asked
+    in the terminal; the only osascript left is the notification and quitting
+    Docker for a restart."""
+    text = SCRIPT.read_text()
+    assert not re.search(r"display dialog|choose from list|SUDO_ASKPASS", text)
+    assert "PROMPT_TTY=$IS_TTY" in text
+
+
+@pytest.mark.parametrize("answer", ["1,3,4", "1 3 4", "134", "4,1,3", "1,1,3,4"])
+def test_several_models_are_chosen_by_number(tmp_path: Path, answer: str) -> None:
+    """AC3: every spelling of the same picks chooses the same models, in menu order."""
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, answer),
+            (_HIDDEN, "AIza-g"),
+            (_HIDDEN, "sk-proj-o"),
+            ("Continue?", "q"),
+        ],
+    )
+    assert "You chose: Gemini, OpenAI, Ollama" in out
+
+
+@pytest.mark.parametrize("answer", ["", "5", "0", "x"])
+def test_an_empty_or_out_of_range_choice_asks_again(
+    tmp_path: Path, answer: str
+) -> None:
+    out, _ = _preflight(
+        tmp_path, [(_MENU, answer), ("Choose at least one, 1 to 4", "q")]
+    )
+    assert out.count(_MENU) == 2
+
+
+def test_each_key_is_asked_one_at_a_time_naming_its_provider(tmp_path: Path) -> None:
+    """AC4: one hidden prompt per keyed model, "n of m"; Ollama gets none."""
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "1,2,4"),
+            ("Gemini key (1 of 2)", "AIza-g"),
+            ("OpenRouter key (2 of 2)", "sk-or-v1-r"),
+            ("Continue?", "q"),
+        ],
+    )
+    assert "paste it from aistudio.google.com/apikey" in out
+    assert "paste it from openrouter.ai/keys" in out
+    assert "Ollama key" not in out
+    assert "AIza-g" not in out and "sk-or-v1-r" not in out  # never echoed
+
+
+@pytest.mark.parametrize(
+    ("chosen", "key", "named"),
+    [
+        ("3", "sk-or-v1-abc", "an OpenRouter key, not an OpenAI key"),
+        ("1", "sk-proj-abc", "an OpenAI key, not a Gemini key"),
+        ("2", "sk-ant-abc", "an Anthropic (Claude) key, not an OpenRouter key"),
+    ],
+)
+def test_a_key_for_another_provider_is_refused_and_asked_again(
+    tmp_path: Path, chosen: str, key: str, named: str
+) -> None:
+    """AC5."""
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, chosen),
+            (_HIDDEN, key),
+            (_HIDDEN, ""),
+            ("Skip", "y"),
+            ("Choose at least one", "q"),
+        ],
+    )
+    assert f"That looks like {named}." in out
+    assert out.count(_HIDDEN) == 2
+
+
+def test_an_empty_key_offers_to_skip_and_the_rest_carry_on(tmp_path: Path) -> None:
+    """AC6: chose three, has two."""
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "1,2,3"),
+            ("Gemini key", "AIza-g"),
+            ("OpenRouter key", ""),
+            ("Skip OpenRouter for now?", "y"),
+            ("OpenAI key", "sk-proj-o"),
+            ("Continue?", "q"),
+        ],
+    )
+    assert "Skipped OpenRouter. Add it any time: onex models add openrouter" in out
+    summary = out.split("Ready to set up:")[1]
+    assert "Gemini      key received" in summary
+    assert "OpenAI      key received" in summary
+    assert "OpenRouter  skipped (no key)" in summary
+
+
+def test_n_at_the_skip_question_asks_for_the_key_again(tmp_path: Path) -> None:
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "1"),
+            (_HIDDEN, ""),
+            ("Skip Gemini for now?", "n"),
+            (_HIDDEN, "AIza-g"),
+            ("Continue?", "q"),
+        ],
+    )
+    assert "Gemini key received." in out
+
+
+def test_skipping_every_model_asks_the_choice_again(tmp_path: Path) -> None:
+    """AC6: at least one model."""
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "1"),
+            (_HIDDEN, ""),
+            ("Skip", "y"),
+            (_MENU, "q"),
+        ],
+    )
+    assert "Every model was skipped. Choose at least one." in out
+    assert out.count(_MENU) == 2
+
+
+def test_a_stored_key_is_kept_with_enter_or_replaced(tmp_path: Path) -> None:
+    """AC7."""
+    _stored_keys(tmp_path, "openai")
+    out, _ = _preflight(
+        tmp_path,
+        [(_MENU, "3"), ("stored; press Enter to keep it", ""), ("Continue?", "q")],
+    )
+    assert (
+        "3) OpenAI      your key, from platform.openai.com/api-keys (needs credits)  (key stored)"
+        in out
+    )
+    assert "Keeping your stored OpenAI key." in out
+    assert "OpenAI      your stored key" in out.split("Ready to set up:")[1]
+
+
+def test_change_at_the_summary_keeps_keys_already_entered(tmp_path: Path) -> None:
+    """AC8: c goes back to the choice; a key already entered is not asked again."""
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "1"),
+            (_HIDDEN, "AIza-g"),
+            ("Continue?", "c"),
+            (_MENU, "1,3"),
+            ("OpenAI key (2 of 2)", "sk-proj-o"),
+            ("Continue?", "q"),
+        ],
+    )
+    assert "Gemini key (1 of 2): already entered." in out
+    assert out.count("Gemini key (1 of") == 2  # the second time only says it is entered
+
+
+def test_quit_at_the_summary_installs_nothing(tmp_path: Path) -> None:
+    out, returncode = _preflight(tmp_path, [(_MENU, "4"), ("Continue?", "q")])
+    assert returncode == 4
+    assert "Nothing was installed." in out
+    assert sorted((tmp_path / "home").rglob("*")) == []
+
+
+def test_every_question_comes_before_the_preflight_verdict(tmp_path: Path) -> None:
+    """AC2: models, keys, Docker and its terms are all answered before phase 0 passes."""
+    out, returncode = _drive_tty(
+        ["/bin/bash", str(_phase0_only(tmp_path))],
+        _phase0_env(
+            tmp_path, ONBOARD_TEST_DOCKER="not installed", ONBOARD_TEST_DISK_GB="100"
+        ),
+        [
+            (_MENU, "1"),
+            (_HIDDEN, "AIza-g"),
+            ("Continue?", "y"),
+            ("Set up the local stack in Docker too?", "y"),
+            ("Accept it now?", "y"),
+        ],
+    )
+    assert returncode == 0, out[-600:]
+    verdict = out.index("Phase 0/6 PASSED")
+    for question in (_MENU, "Continue?", "Docker too?", "Accept it now?"):
+        assert out.index(question) < verdict
+    assert "Everything from here runs without questions." in out
+
+
+def test_the_docker_terms_answer_is_used_in_phase_4_without_asking() -> None:
+    body = _function_body("accept_docker_terms")
+    assert "read" not in body
+    assert '"$DOCKER_TERMS"' in body
+
+
+def test_provider_takes_a_comma_separated_list(tmp_path: Path) -> None:
+    """AC11: --provider gemini,ollama skips the menu and still asks Gemini's key."""
+    out, _ = _preflight(
+        tmp_path,
+        [(_HIDDEN, "AIza-g"), ("Continue?", "q")],
+        "--provider",
+        "ollama,gemini",
+    )
+    assert _MENU not in out
+    assert "Your models (from --provider): Gemini, Ollama" in out
+    assert "Gemini key (1 of 1)" in out
+
+
+def test_an_unattended_run_uses_every_stored_key(tmp_path: Path) -> None:
+    _stored_keys(tmp_path, "gemini", "openai")
+    result = subprocess.run(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers"],
+        env=_phase0_env(tmp_path),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout
+    assert (
+        "No terminal to ask on, so these models are used: Gemini, OpenAI."
+        in result.stdout
+    )
+
+
+def test_an_unattended_run_refuses_a_named_model_with_no_stored_key(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(_phase0_only(tmp_path)),
+            "--no-containers",
+            "--provider",
+            "openai",
+        ],
+        env=_phase0_env(tmp_path),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "no key is stored for openai" in result.stdout
+    assert "Nothing was installed" in result.stdout
+
+
+def _phase3_harness(
+    tmp_path: Path, answers: dict[str, str], skipped: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Phase 3's model loop with `onex models` and the delegation faked.
+
+    ``answers`` maps a provider to the JSON line the fake `onex models` prints.
+    """
+    fake = tmp_path / "onex-models"
+    cases = "".join(f"  *' {p} '*) echo '{line}' ;;\n" for p, line in answers.items())
+    fake.write_text(f'#!/bin/bash\ncat >/dev/null\ncase " $* " in\n{cases}esac\n')
+    fake.chmod(0o755)
+    snippet = (
+        f'LOG=/dev/null; STATUS={tmp_path}/status; RUN_DIR={tmp_path}; MODELS="{" ".join(answers)}"; SKIPPED="{skipped}"\n'
+        "say() { printf '%s\\n' \"$*\"; }\n"
+        + _functions(
+            "pending_key",
+            "set_pending_key",
+            "uses_key",
+            "in_list",
+            "provider_label",
+            "receipt_field",
+            "set_result",
+            "result_of",
+            "passed_models",
+            "result_line",
+            "record_model_status",
+            "setup_model",
+            "count_words",
+            "labels",
+        )
+        + f'\nmodels_cmd() {{ "{fake}" "$@"; }}\n'
+        + 'KEY_GEMINI="AIza-g"\n'
+        + 'for p in $MODELS; do setup_model "$p"; say "$(result_line "$p")"; done\n'
+        + 'for p in $SKIPPED; do say "$(result_line "$p")"; done\n'
+        + 'for p in $MODELS $SKIPPED; do record_model_status "$p"; done\n'
+        + 'say "passed: $(passed_models)"\n'
+    )
+    return subprocess.run(
+        ["/bin/bash", "-c", snippet],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
+def test_phase_3_reports_one_line_per_model_and_keeps_the_ones_that_passed(
+    tmp_path: Path,
+) -> None:
+    """AC9: pass, fail with the provider's reason, or skipped, one line each."""
+    result = _phase3_harness(
+        tmp_path,
+        {
+            "gemini": '{"provider": "gemini", "status": "passed", "model": "gemini-3.5-flash-lite"}',
+            "openai": '{"provider": "openai", "status": "failed", "reason": "provider_error: insufficient_quota"}',
+        },
+        skipped="openrouter",
+    )
+    out = result.stdout
+    assert "Gemini      ✓ answered (gemini-3.5-flash-lite)" in out, result.stderr
+    assert "OpenAI      ✗ provider_error: insufficient_quota" in out
+    assert "OpenRouter  skipped (no key)" in out
+    assert "passed: gemini" in out
+    status = (tmp_path / "status").read_text()
+    assert 'model=gemini result=PASS detail="gemini-3.5-flash-lite"' in status
+    assert "model=openai result=FAIL" in status
+    assert "model=openrouter result=SKIPPED" in status
+
+
+def test_a_key_goes_to_onex_models_add_on_stdin_and_a_kept_one_is_tested() -> None:
+    body = _function_body("setup_model")
+    assert 'printf \'%s\' "$key" | models_cmd add "$p" --json' in body
+    assert 'models_cmd test "$p" --json' in body
+
+
+def test_phase_3_fails_only_when_no_model_passed() -> None:
+    body = _function_body("phase3")
+    assert 'if [ -z "$passed" ]; then' in body
+    assert body.index('if [ -z "$passed" ]; then') < body.index("delegate_hello")
+
+
+def test_phase_4_accepts_an_answer_from_any_key_that_passed_and_nothing_else() -> None:
+    body = _function_body("phase4")
+    assert (
+        'for p in $keyed; do case "$served" in "byok-$p"*) ok=1 ;; esac; done' in body
+    )
+    assert "phase_fail" in body.split('if [ "$ok" -eq 1 ]', 1)[1]
+    assert body.index("ensure_stack_tenant") < body.index("make up-local")
+    assert 'register_key_in_stack "$p"' in body
