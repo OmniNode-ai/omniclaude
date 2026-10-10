@@ -28,6 +28,13 @@ requirements:
       - id: "AC2"
         statement: |-
           AC2: with contract-source caller the reusable checks out the caller's pull request head contracts/ and the validator passes a runtime-path PR only when that contract carries a falsifiable deploy check; a change control contract carrying one does not count; the occ default is unchanged -- falsifier: uv run pytest tests/workflows/test_deploy_gate_contract_source_omn20074.py -q fails at the merge base
+  - id: "req-omn20074-automation-declaration"
+    statement: |-
+      advisory-job-gate must read an `# advisory-automation: OMN-nnnnn <what it automates>` declaration on a job and check it instead of exempting the job: a declared job that is a required context, is reached through `needs:` by a required job, or runs a test, lint, receipt or evidence step is a finding naming the job and the rule; omniclaude's auto-merge job carries the declaration.
+    acceptance:
+      - id: "AC-AUTO1"
+        statement: |-
+          AC-AUTO1: a correctly declared automation job passes; declared but in the CI Summary's needs fails; declared but running a pytest step fails; an undeclared job is still UNENFORCED_VERIFICATION_JOB; omniclaude's auto-merge.yml passes with no required context in the file and fails with the declaration removed -- falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k AutomationDeclaration
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -38,6 +45,9 @@ evidence_requirements:
   - kind: tests
     description: "The contract source input, the caller head checkout and the validator verdicts per source"
     command: "uv run pytest tests/workflows/test_deploy_gate_contract_source_omn20074.py tests/workflows/test_deploy_gate_reusable_workflow.py -q --no-cov -p no:randomly"
+  - kind: tests
+    description: "The automation declaration is parsed and checked: required context, needs closure of a required job, and verification steps"
+    command: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k AutomationDeclaration"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -63,3 +73,11 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/workflows/test_deploy_gate_contract_source_omn20074.py tests/workflows/test_deploy_gate_reusable_workflow.py -q --no-cov -p no:randomly"
+  - id: dod-omn20074-automation-declaration
+    description: "advisory-job-gate checks an automation declaration instead of exempting it, and omniclaude's auto-merge job carries one"
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k AutomationDeclaration"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC-AUTO1"]
