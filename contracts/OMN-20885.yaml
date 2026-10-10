@@ -1,0 +1,37 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20885
+title: "OCC retirement: rehome the pr-title / check-title decision from the change-control reusable into an omnimarket compute node"
+summary: >
+  The required context pr-title / check-title was produced by the check-title
+  bash step of onex_change_control's pr-title-check-reusable.yml. omnimarket's
+  node_pr_title_check_compute now makes that decision with parity to the step.
+  This contract covers the omniclaude half: the PR Title Check job runs that
+  node from a pinned omnimarket release under the same job id and context name,
+  so branch protection does not change, and the manifest row and the CI Summary
+  title mirror name the node as their source.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-pr-title-caller-runs-the-node"
+    statement: "omniclaude's PR Title Check job runs omnimarket's node_pr_title_check_compute from a pinned omnimarket release and keeps the pr-title / check-title context."
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: omniclaude's PR Title Check workflow produces the `pr-title / check-title` context by running the omnimarket node from a pinned omnimarket release and no longer references the change-control repository -- falsifier: uv run pytest tests/ci/test_pr_title_check_omnimarket_node.py -q fails when the workflow still uses the change-control reusable or renames the context"
+evidence_requirements:
+  - kind: tests
+    description: "The caller runs the node at a pinned release under the unchanged context; the manifest row and the CI Summary mirror name the node."
+    command: "uv run pytest tests/ci/test_pr_title_check_omnimarket_node.py tests/ci/test_ci_summary_gate_bot_skip_omn19167.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20885-ac2-pr-title-caller
+    description: "AC2: the PR Title Check job runs the omnimarket node at a pinned release and keeps the context name."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_pr_title_check_omnimarket_node.py tests/ci/test_ci_summary_gate_bot_skip_omn19167.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]

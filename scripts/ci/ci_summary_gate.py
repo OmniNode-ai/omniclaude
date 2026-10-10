@@ -315,6 +315,12 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     "Lane Identity Gate",  # lane-identity-gate.yml
     "advisory-job-gate / advisory-job-gate",  # advisory-job-gate.yml
     "kb-doc-gate / kb-doc-gate",  # kb-doc-gate.yml
+    # OMN-20885. Live-required on `dev` since 2026-09-26 (OMN-19655) with no
+    # L4 row; it surfaced when this change refreshed the required-context
+    # snapshot. pin-resolvability-gate.yml has no paths filter and no job-level
+    # `if:`. Admission: present on 30 of 30 open omniclaude PR heads in the PR
+    # watcher state of 2026-10-10T10:16:53Z (#2566..#2652), red on none.
+    "pypi-pin-resolvability",  # pin-resolvability-gate.yml
 )
 # NOTE: "Hostile Review Gate" (hostile-reviewer.yml) is intentionally absent
 # from EXPECTED_EXTERNAL_CONTEXTS. It is already directly required by branch
@@ -1049,21 +1055,18 @@ DEPENDENCY_BOT_AUTHORS: frozenset[str] = frozenset({"dependabot[bot]", "renovate
 # The ticket token both the title rule and the producers' `if:` look for.
 TICKET_REF_RE = re.compile(r"OMN-\d+")
 
-# A MIRROR, not a second policy. Source of truth, read live on 2026-09-22:
+# A MIRROR, not a second policy. Source of truth (OMN-20885): omnimarket's
+#   omnimarket.nodes.node_pr_title_check_compute
+# which .github/workflows/pr-title-check.yml runs from the omnimarket release
+# pinned in its OMNIMARKET_VERSION, omnimarket==0.4.310. That node is a parity port of the check-title
+# bash step these arms were first read from (2026-09-22):
 #   OmniNode-ai/onex_change_control
 #   .github/workflows/pr-title-check-reusable.yml
 #   @babdd13ce68f07df20f989f52ff1c4514d03d896
-# HONEST LIMIT, and it differs from omnibase_infra's copy of this mirror.
-# There the caller pins that reusable at a 40-hex sha, so a test compares the
-# mirror's pin against the caller's and reds when upstream moves. THIS repo's
-# .github/workflows/pr-title-check.yml tracks `@main`, so an edit to that
-# reusable changes the enforcer with NO file here changing and nothing local
-# can go red for it. The sha above is the revision these arms were read from,
-# which is provenance rather than a pin. The differential bash control in
-# tests/ci/test_ci_summary_gate_bot_skip_omn19167.py catches a TRANSCRIPTION
-# error; it cannot catch upstream drift, because it transcribes the same text.
-# Closing that means sha-pinning this caller, a separate change with its own
-# blast radius, deliberately not made here.
+# and its parity fixture replays that step's decisions. Moving the caller's pin
+# to a release that changes the arms is a consumer change: it has to move this
+# mirror with it, and tests/ci/test_ci_summary_gate_bot_skip_omn19167.py pins
+# the caller's version against this comment.
 #
 # Its shell tests, in order, are:
 #   1. PR_AUTHOR ends with the bot suffix                 -> exempt

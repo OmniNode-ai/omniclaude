@@ -28,7 +28,39 @@ jobs:
   pr-title:
     needs: occ-preflight
     if: always()
-    # self-gating-ok: cross-repo reusable workflow; PR Title Check is not a required status check on main (tracked in OMN-9039)
-    uses: OmniNode-ai/onex_change_control/.github/workflows/pr-title-check-reusable.yml@babdd13ce68f07df20f989f52ff1c4514d03d896
+    # OMN-20885: the decision moved out of the change-control repository's
+    # pr-title-check-reusable.yml into omnimarket's node_pr_title_check_compute,
+    # run here from a pinned omnimarket release. The job keeps the id `pr-title`
+    # and the name the reusable call produced, so the required context
+    # `pr-title / check-title` does not move. The node prints the same lines and
+    # exits 0 (admit) or 1 (refuse) as the old bash step; 2 is a malformed request.
+    # No checkout: the decision reads only the event's title and author.
+    name: pr-title / check-title
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
     permissions:
-      pull-requests: read
+      contents: read
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Check PR title for ticket reference
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          OMNIMARKET_VERSION: "0.4.310"
+        run: |
+          set -euo pipefail
+          venv="${RUNNER_TEMP}/pr-title-check"
+          uv venv --quiet --python 3.12 "${venv}"
+          # The node imports only pydantic, so omnimarket's own dependency tree is not installed.
+          uv pip install --quiet --python "${venv}/bin/python" --no-deps "omnimarket==${OMNIMARKET_VERSION}"
+          uv pip install --quiet --python "${venv}/bin/python" "pydantic>=2.11"
+          "${venv}/bin/python" -I -c 'import json, os; print(json.dumps({"title": os.environ["PR_TITLE"], "author": os.environ["PR_AUTHOR"]}))' \
+            | "${venv}/bin/python" -I -m omnimarket.nodes.node_pr_title_check_compute

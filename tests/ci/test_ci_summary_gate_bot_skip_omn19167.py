@@ -370,46 +370,50 @@ class TestTheRegistryBar:
 
 
 _TITLE_CHECK_CALLER = REPO_ROOT / ".github/workflows/pr-title-check.yml"
+_NODE_MODULE = "omnimarket.nodes.node_pr_title_check_compute"
 _UPSTREAM_SLUG = "OmniNode-ai/onex_change_control"
 _UPSTREAM_PATH = ".github/workflows/pr-title-check-reusable.yml"
 
 
-def _pinned_title_check_ref() -> str | None:
+def _pinned_omnimarket_version() -> str | None:
     if not _TITLE_CHECK_CALLER.is_file():
         return None
     match = re.search(
-        rf"{re.escape(_UPSTREAM_SLUG)}/{re.escape(_UPSTREAM_PATH)}@([0-9a-f]{{40}})",
+        r'OMNIMARKET_VERSION: "(\d+\.\d+\.\d+)"',
         _TITLE_CHECK_CALLER.read_text(encoding="utf-8"),
     )
     return match.group(1) if match else None
 
 
 class TestTheTitleRuleMirrorIsPinned:
-    def test_the_caller_is_pinned_to_the_sha_the_mirror_was_read_from(self) -> None:
-        """OMN-20001: the caller reads the PR-title reusable at the recorded pin.
+    def test_the_caller_is_pinned_to_the_release_the_mirror_names(self) -> None:
+        """OMN-20885: the caller runs the title node at the recorded release.
 
-        It used to track ``@main``, so an upstream edit changed the enforcer
-        with no file in this repository changing. The caller is now sha-pinned
-        to the commit ``title_rule_exempts_ticket`` was transcribed from, so the
-        mirror and the enforcer are one text, and moving the pin is a consumer
-        change that has to move the mirror with it.
+        The enforcer was the change-control reusable, sha-pinned to the commit
+        ``title_rule_exempts_ticket`` was transcribed from (OMN-20001). It is now
+        omnimarket's node_pr_title_check_compute, a parity port of that step,
+        run from a pinned omnimarket release. Moving the pin is a consumer
+        change that has to move the mirror's comment with it.
         """
 
         source = (REPO_ROOT / "scripts/ci/ci_summary_gate.py").read_text(
             encoding="utf-8"
         )
-        pin = _pinned_title_check_ref()
-        assert pin is not None, "the PR-title caller must be sha-pinned"
-        assert pin in source, (
-            "the caller's pin is not the sha ci_summary_gate.py records the "
-            "mirror as read from; move them together"
+        caller = _TITLE_CHECK_CALLER.read_text(encoding="utf-8")
+        version = _pinned_omnimarket_version()
+        assert version is not None, "the PR-title caller must pin an omnimarket release"
+        assert f"-m {_NODE_MODULE}" in caller
+        assert f"omnimarket=={version}" in source, (
+            "the caller's omnimarket release is not the one ci_summary_gate.py "
+            "records the mirror against; move them together"
         )
 
-    def test_the_module_comment_names_the_source_repo_path_and_pin(self) -> None:
+    def test_the_module_comment_names_the_node_and_the_ported_source(self) -> None:
         source = (REPO_ROOT / "scripts/ci/ci_summary_gate.py").read_text(
             encoding="utf-8"
         )
         for needle in (
+            _NODE_MODULE,
             _UPSTREAM_SLUG,
             _UPSTREAM_PATH,
             "babdd13ce68f07df20f989f52ff1c4514d03d896",
