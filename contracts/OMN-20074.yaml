@@ -35,6 +35,13 @@ requirements:
       - id: "AC4"
         statement: |-
           AC4: a correctly declared automation job passes; declared but in the CI Summary's needs fails; declared but running a pytest step fails; an undeclared job is still UNENFORCED_VERIFICATION_JOB; omniclaude's auto-merge.yml passes with no required context in the file and fails with the declaration removed -- falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k AutomationDeclaration
+  - id: "req-omn20074-precommit-hooks-from-core-s8"
+    statement: |-
+      omniclaude must consume the no-hardcoded-topics and no-untracked-todos pre-commit hooks from omnibase_core, where they moved from onex_change_control under the same hook ids.
+    acceptance:
+      - id: "AC5"
+        statement: |-
+          AC5: no-hardcoded-topics and no-untracked-todos are listed in .pre-commit-config.yaml only under an omnibase_core repo block pinned to a full commit sha or release tag, with their stages and the topic hook's exclude carried over byte for byte -- falsifier: uv run pytest tests/ci/test_precommit_hooks_core_omn20074.py -q --no-cov fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -48,6 +55,9 @@ evidence_requirements:
   - kind: tests
     description: "The automation declaration is parsed and checked: required context, needs closure of a required job, and verification steps"
     command: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k AutomationDeclaration"
+  - kind: tests
+    description: "The topic and TODO hooks are consumed from the omnibase_core hook block, pinned to a full sha."
+    command: "uv run pytest tests/ci/test_precommit_hooks_core_omn20074.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -84,3 +94,11 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k AutomationDeclaration"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC4"]
+  - id: dod-omn20074-precommit-hooks-from-core-s8
+    description: "The repository test proves no-hardcoded-topics and no-untracked-todos are taken from the omnibase_core block at a full sha and no longer from onex_change_control."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/ci/test_precommit_hooks_core_omn20074.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC5"]
