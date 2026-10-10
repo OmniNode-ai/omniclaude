@@ -1,0 +1,16 @@
+{
+  "_comment": [
+    "OMN-18836: add targets only after their push CI trigger exists."
+  ],
+  "linear": {
+    "team_key": "OMN",
+    "parent_issue": "OMN-18834"
+  },
+  "targets": [
+    {
+      "repo": "OmniNode-ai/omnibase_infra",
+      "workflow": "ci.yml",
+      "branch": "dev"
+    }
+  ]
+}

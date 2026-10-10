@@ -1578,6 +1578,16 @@ repos:
         files: ^(\.pre-commit-config\.yaml|scripts/validation/check_precommit_additional_dependencies\.sh|tests/test_precommit_additional_dependencies_omn19666\.sh|tests/fixtures/omn19666/.*)$
         stages: [pre-commit]
 
+  - repo: local
+    hooks:
+      - id: dev-head-monitor-acceptance
+        name: Native dev-head monitor acceptance (OMN-18836)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: ^(src/omniclaude/nodes/node_dev_head_monitor_effect/|tests/ci/test_dev_head_monitor_omn18836\.py|\.github/workflows/occ-companion-merge-heal\.yml|\.github/workflows/ci\.yml|\.pre-commit-config\.yaml|pyproject\.toml|uv\.lock)$
+        stages: [pre-commit]
+
 default_install_hook_types: [pre-commit, pre-push, commit-msg]
 default_stages: [pre-commit]
 fail_fast: false

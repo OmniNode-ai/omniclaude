@@ -123,7 +123,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python 3.13
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
 
@@ -142,3 +142,139 @@ jobs:
             args+=(--dry-run)
           fi
           python3 scripts/ci/occ_companion_merge_heal.py "${args[@]}"
+
+  # OMN-18836: native effect hosted by the existing ten-minute schedule.
+  # The contract executor carries tick/result data over Kafka. The scoped
+  # App token stays in this process and is never part of a bus payload.
+  dev-head-red-alert:
+    name: Record red dev heads
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    runs-on: >-
+      ${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - name: Resolve the locked CI bus source
+        id: bus_pin
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, tomllib
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          lock = tomllib.loads(Path("uv.lock").read_text())
+          package = next(item for item in lock["package"] if item["name"] == "omnimarket")
+          sha = urlsplit(package["source"]["git"]).fragment
+          if not re.fullmatch(r"[0-9a-f]{40}", sha):
+              raise SystemExit("CI bus source is not locked to a full commit sha")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"rev={sha}\n")
+          PY
+      - name: Fetch the existing CI bus policy and resolver
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OmniNode-ai/omnimarket
+          ref: ${{ steps.bus_pin.outputs.rev }}
+          path: .monitor-bus
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/publish_occ_autobind_command.py
+            config/ci_bus_lanes.yaml
+            src/omnimarket/events/topics.py
+          sparse-checkout-cone-mode: false
+      - name: Resolve watched repositories from data
+        id: watchlist
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          config = json.loads(Path("src/omniclaude/nodes/node_dev_head_monitor_effect/dev_head_watch.json").read_text())
+          names = sorted({target["repo"].split("/")[-1] for target in config["targets"]})
+          if not names:
+              raise SystemExit("watchlist resolved to no repositories")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("repositories<<EOF\n" + "\n".join(names) + "\nEOF\n")
+          PY
+      - name: Mint a scoped installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: ${{ steps.watchlist.outputs.repositories }}
+          permission-actions: read
+          permission-pull-requests: write
+      - name: Run the native monitor contract over the declared CI bus
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}
+          KAFKA_SASL_USERNAME: ${{ secrets.KAFKA_SASL_USERNAME }}
+          KAFKA_SASL_PASSWORD: ${{ secrets.KAFKA_SASL_PASSWORD }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run == true && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          # Resolve the platform versions from this checkout's existing lock.
+          mapfile -t packages < <(python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          lock = tomllib.loads(Path("uv.lock").read_text())
+          for name in ("omnibase-core", "omnibase-infra"):
+              package = next(item for item in lock["package"] if item["name"] == name)
+              print(f"{name}=={package['version']}")
+          PY
+          )
+          uv run --no-project --with "${packages[0]}" --with "${packages[1]}" --with click python - <<'PY'
+          import importlib.util, json, logging, os, sys, tempfile, uuid
+          from pathlib import Path
+          from omnibase_core.runtime.runtime_local import RuntimeLocal
+
+          logging.basicConfig(level=logging.INFO)
+          path = Path(".monitor-bus/scripts/publish_occ_autobind_command.py")
+          spec = importlib.util.spec_from_file_location("monitor_ci_bus_policy", path)
+          if spec is None or spec.loader is None:
+              raise SystemExit("CI bus resolver is unreadable")
+          policy = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = policy
+          spec.loader.exec_module(policy)
+          overlay = policy._load_lane_overlay(Path(".monitor-bus/config/ci_bus_lanes.yaml"))
+          mode, broker = policy._resolve_lane_broker(overlay, "dev")
+          if mode != "concrete" or not broker:
+              raise SystemExit("dev CI bus is not declared as a concrete broker")
+          injected = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "").strip()
+          if injected and injected != broker:
+              raise SystemExit("injected broker differs from the declared dev CI bus")
+          protocol, mechanism = policy._resolve_lane_security(overlay, "dev")
+          if protocol.startswith("SASL_") and not all(os.environ.get(name) for name in ("KAFKA_SASL_USERNAME", "KAFKA_SASL_PASSWORD")):
+              raise SystemExit("declared CI bus credentials are unavailable")
+          os.environ["KAFKA_BOOTSTRAP_SERVERS"] = broker
+          os.environ["KAFKA_SECURITY_PROTOCOL"] = protocol
+          os.environ["KAFKA_SASL_MECHANISM"] = mechanism
+          os.environ["KAFKA_ENVIRONMENT"] = "dev"
+          with tempfile.TemporaryDirectory(prefix="dev-head-monitor-") as state:
+              request = Path(state) / "request.json"
+              request.write_text(json.dumps({"correlation_id": str(uuid.uuid4()), "dry_run": os.environ["DRY_RUN"] == "true"}))
+              run_monitor_tick = RuntimeLocal(
+                  workflow_path=Path("src/omniclaude/nodes/node_dev_head_monitor_effect/contract.yaml"),
+                  state_root=Path(state),
+                  input_path=request,
+                  backend_overrides={"event_bus": "kafka"},
+                  timeout=300,
+                  host_handlers=True,
+              )
+              run_monitor_tick.run()
+              raise SystemExit(run_monitor_tick.exit_code)
+          PY

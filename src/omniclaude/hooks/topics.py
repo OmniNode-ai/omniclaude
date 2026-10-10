@@ -153,6 +153,10 @@ class TopicBase(StrEnum):
     # DLQ / error topic for the PR watcher node
     PR_WATCHER_FAILED = "onex.evt.omniclaude.pr-watcher-failed.v1"
 
+    # Scheduled dev-head monitor — governed by node_dev_head_monitor_effect.
+    DEV_HEAD_MONITOR = "onex.cmd.omniclaude.dev-head-monitor.v1"
+    DEV_HEAD_MONITOR_COMPLETED = "onex.evt.omniclaude.dev-head-monitor-completed.v1"
+
     # ==========================================================================
     # Git admission topics (OMN-20685)
     # Lifecycle: Integration (stable) — governed by node_git_effect/contract.yaml

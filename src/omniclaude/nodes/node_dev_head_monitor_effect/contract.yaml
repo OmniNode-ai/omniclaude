@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+name: node_dev_head_monitor_effect
+contract_name: node_dev_head_monitor_effect
+node_name: node_dev_head_monitor_effect
+version: "0.1.0"
+contract_version: {major: 1, minor: 0, patch: 0}
+node_version: {major: 0, minor: 1, patch: 0}
+node_type: EFFECT_GENERIC
+runtime_profiles: [main]
+description: >-
+  OMN-18836: read completed push CI conclusions, record one issue per red
+  repository and full sha, and comment on its merge PR. Hosted by the
+  ten-minute CI job with its scoped App token; no deployed duplicate consumer.
+execution:
+  backend: native
+  model_purpose: null
+input_model:
+  module: omniclaude.nodes.node_dev_head_monitor_effect.handlers.handler_dev_head_monitor
+  name: ModelDevHeadMonitorRequest
+output_model:
+  module: omniclaude.nodes.node_dev_head_monitor_effect.handlers.handler_dev_head_monitor
+  name: ModelDevHeadMonitorResult
+terminal_event: onex.evt.omniclaude.dev-head-monitor-completed.v1
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omniclaude.dev-head-monitor.v1
+  publish_topics:
+    - onex.evt.omniclaude.dev-head-monitor-completed.v1
+handler_routing:
+  routing_strategy: payload_type_match
+  handlers:
+    - event_model:
+        module: omniclaude.nodes.node_dev_head_monitor_effect.handlers.handler_dev_head_monitor
+        name: ModelDevHeadMonitorRequest
+      handler:
+        module: omniclaude.nodes.node_dev_head_monitor_effect.handlers.handler_dev_head_monitor
+        name: HandlerDevHeadMonitor
+        handler_type: http
+      subscribe_topic: onex.cmd.omniclaude.dev-head-monitor.v1
+capabilities:
+  - name: github.dev_head_monitor
+    version: "1.0.0"
+    description: Record and deduplicate red dev-head conclusions
+io_operations:
+  - operation: monitor_tick
+    handler_method: handle
+    idempotent: true
+metadata:
+  ticket: OMN-18836
+  license: MIT
+  maturity: beta
+  integrations:
+    linear:
+      graphql_endpoint: https://api.linear.app/graphql
