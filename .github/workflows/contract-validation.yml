@@ -3,8 +3,8 @@
 
 # Contract Validation Gate
 #
-# Validates ONEX ticket contracts for PRs in omniclaude using the
-# reusable composite action from onex_change_control.
+# Validates ONEX ticket contracts for PRs in omniclaude with the
+# onex_change_control validators, checked out at the sha pinned below.
 #
 # Required status check: "contract-validation"
 # Must pass (or skip) before merging to main.
@@ -105,13 +105,83 @@ jobs:
           echo "resolved_branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "::notice::Resolved branch name: $BRANCH"
 
+      - name: Check out calling repository
+        if: steps.resolve-branch.outputs.skip_validation != 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      # OMN-20071: the OCC composite action this job used to call reads OCC main,
+      # whose schema refused `binds_ac`, the field repo-evidence / dod-verify needs
+      # on every contract. The validators are read at this sha; bump it in this
+      # repo's own PR to move validator versions.
+      - name: Check out pinned contract validators
+        if: steps.resolve-branch.outputs.skip_validation != 'true'
+        run: |
+          set -euo pipefail
+          occ_sha=802b5f7101f4c49f8b30e8deda3d4c5d024c5710
+          git init -q .onex_change_control_validators
+          git -C .onex_change_control_validators fetch -q --depth 1 https://github.com/OmniNode-ai/onex_change_control.git "$occ_sha"
+          git -C .onex_change_control_validators checkout -q --detach FETCH_HEAD
+
+      - name: Set up uv
+        if: steps.resolve-branch.outputs.skip_validation != 'true'
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Install Python 3.12
+        if: steps.resolve-branch.outputs.skip_validation != 'true'
+        run: uv python install 3.12
+
       - name: Run contract validation
         id: validate-contract
         if: steps.resolve-branch.outputs.skip_validation != 'true'
-        uses: OmniNode-ai/onex_change_control/.github/actions/validate-contract@47342e562a516b0278e22a974f35cbf2a64b33eb
-        with:
-          branch-name: ${{ steps.resolve-branch.outputs.resolved_branch }}
-          contracts-path: contracts
+        env:
+          BRANCH: ${{ steps.resolve-branch.outputs.resolved_branch }}
+          UV_HTTP_TIMEOUT: "600"
+        run: |
+          set -euo pipefail
+
+          TICKET_ID=$(printf '%s\n' "$BRANCH" | grep -ioE 'OMN-[0-9]+' | head -n 1 | tr '[:lower:]' '[:upper:]' || true)
+          echo "ticket-id=$TICKET_ID" >> "$GITHUB_OUTPUT"
+
+          if [[ -z "$TICKET_ID" ]]; then
+            echo "validation-status=skipped" >> "$GITHUB_OUTPUT"
+            echo "::notice::No OMN-XXXX ticket ID found in branch name; contract validation skipped."
+            exit 0
+          fi
+
+          CONTRACT_PATH="contracts/$TICKET_ID.yaml"
+          if [[ ! -f "$CONTRACT_PATH" ]]; then
+            CONTRACT_PATH="contracts/${TICKET_ID,,}.yaml"
+          fi
+          if [[ ! -f "$CONTRACT_PATH" ]]; then
+            echo "validation-status=skipped" >> "$GITHUB_OUTPUT"
+            echo "::notice::No contract file found for $TICKET_ID in contracts/; contract validation skipped."
+            exit 0
+          fi
+
+          cd .onex_change_control_validators
+          for attempt in 1 2 3; do
+            if uv sync --no-group dev; then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "validation-status=failed" >> "$GITHUB_OUTPUT"
+              echo "::error::Failed to sync contract validators after 3 attempts."
+              exit 1
+            fi
+            sleep "$((10 * attempt))"
+          done
+
+          if uv run validate-yaml "../$CONTRACT_PATH"; then
+            echo "validation-status=passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "validation-status=failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
 
       - name: Install proof validation dependencies
         if: steps.validate-contract.outputs.validation-status == 'passed'
