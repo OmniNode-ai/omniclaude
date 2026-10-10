@@ -851,7 +851,10 @@ unset _prs_guarded _prs_ep _prs_class _prs_o _prs_r _prs_n _prs_why _rs_owner _r
 #     own scripts), and a DIRECT parent that is one of the sanctioned read scripts:
 #     pr-handoff/scripts/handoff.sh and handoff_row.sh (the handoff's PR-text read),
 #     release-cut/scripts/cut_facts.sh, lab-rebuild-triage/scripts/read_receipt.sh and
-#     trigger_for_sha.sh (lab-pass receipts live only in Actions artifacts).
+#     trigger_for_sha.sh (lab-pass receipts live only in Actions artifacts), and the
+#     advisory-job-gate pre-commit hook's scripts/advisory_job_gate.py (it reads the
+#     repository's branch protection, which no clone holds, and runs only when a commit
+#     touches a workflow file).
 # The canonical clone sync uses git, not the API, and `gh auth git-credential` is local.
 _lane_ctx_why=""
 _lane_context() {
@@ -925,6 +928,7 @@ _lane_sanctioned_script() {
     *"/skills/release-cut/scripts/cut_facts.sh "*) return 0 ;;
     *"/skills/lab-rebuild-triage/scripts/read_receipt.sh "*) return 0 ;;
     *"/skills/lab-rebuild-triage/scripts/trigger_for_sha.sh "*) return 0 ;;
+    *" scripts/advisory_job_gate.py "*|*"/scripts/advisory_job_gate.py "*) return 0 ;;
   esac
   return 1
 }

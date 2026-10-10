@@ -356,6 +356,59 @@ def test_sanctioned_read_scripts_read(
     assert _calls(env) == [["api", "repos/o/r/actions/artifacts?name=x"]]
 
 
+_GATE_BODY = (
+    "import subprocess, sys\n"
+    "r = subprocess.run(['gh', 'api', 'repos/o/r/branches/dev/protection'])\n"
+    "sys.exit(r.returncode)\n"
+)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("relative", [True, False])
+def test_the_advisory_job_gate_hook_reads_branch_protection(
+    env: dict[str, str], tmp_path: Path, relative: bool
+) -> None:
+    """The advisory-job-gate pre-commit hook runs inside a lane's commit and reads the
+    repository's branch protection, which no clone holds; refusing it would make every
+    lane commit that touches a workflow fail with THE GATE DID NOT RUN. pre-commit runs
+    it as `python3 scripts/advisory_job_gate.py` from the repository root."""
+    script = tmp_path / "scripts" / "advisory_job_gate.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(_GATE_BODY)
+    arg = "scripts/advisory_job_gate.py" if relative else str(script)
+    result = subprocess.run(
+        ["python3", arg, "--repo-root", "."],
+        env={**env, "CLAUDECODE": "1"},
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert _calls(env) == [["api", "repos/o/r/branches/dev/protection"]]
+
+
+@pytest.mark.unit
+def test_another_python_script_in_a_lane_is_refused(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """Negative twin: the same body under another script name is a lane read."""
+    script = tmp_path / "scripts" / "advisory_job_gate_copy.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(_GATE_BODY)
+    result = subprocess.run(
+        ["python3", "scripts/advisory_job_gate_copy.py", "--repo-root", "."],
+        env={**env, "CLAUDECODE": "1"},
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    _assert_lane_refused(env, result)
+
+
 @pytest.mark.unit
 def test_an_unsanctioned_script_in_a_lane_is_refused(
     env: dict[str, str], tmp_path: Path
