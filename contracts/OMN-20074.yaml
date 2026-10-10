@@ -14,10 +14,20 @@ requirements:
       - id: "AC1"
         statement: |-
           AC1: the caller pins receipt-gate.yml at fb0c6c2117d5868a398b0920cd0048d0824415b1 and sets verifier-version 0.4.305 or newer -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k another_repo
+  - id: "req-omn20074-dev-head-monitor-host"
+    statement: |-
+      The dev-head monitor must survive the deletion of occ-companion-merge-heal.yml by running from a non-OCC scheduled workflow with its own cadence and grants.
+    acceptance:
+      - id: "AC-MON1"
+        statement: |-
+          AC-MON1: the dev-head-red-alert job lives in auto-merge-stale-poller.yml and not in occ-companion-merge-heal.yml, runs only on its own ten-minute schedule entry while the poller runs only on its fifteen-minute entry, and each job holds only its own grants -- falsifier: uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
     command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k another_repo"
+  - kind: "tests"
+    description: "The monitor is hosted by the non-OCC poller workflow with its own schedule entry, grants and dry-run input, and its native bus wiring is unchanged."
+    command: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -29,4 +39,11 @@ dod_evidence:
     checks:
       - check_type: "test_passes"
         check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k another_repo"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn-20074-monitor-host"
+    description: "The focused monitor test proves the job moved out of the OCC heal workflow and keeps its schedule, grants and bus wiring."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"

@@ -1585,7 +1585,7 @@ repos:
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov
         language: system
         pass_filenames: false
-        files: ^(src/omniclaude/nodes/node_dev_head_monitor_effect/|tests/ci/test_dev_head_monitor_omn18836\.py|\.github/workflows/occ-companion-merge-heal\.yml|\.github/workflows/ci\.yml|\.pre-commit-config\.yaml|pyproject\.toml|uv\.lock)$
+        files: ^(src/omniclaude/nodes/node_dev_head_monitor_effect/|tests/ci/test_dev_head_monitor_omn18836\.py|\.github/workflows/auto-merge-stale-poller\.yml|\.github/workflows/ci\.yml|\.pre-commit-config\.yaml|pyproject\.toml|uv\.lock)$
         stages: [pre-commit]
 
 default_install_hook_types: [pre-commit, pre-push, commit-msg]
