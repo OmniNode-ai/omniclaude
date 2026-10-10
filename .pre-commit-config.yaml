@@ -107,10 +107,10 @@ repos:
       - id: no-untracked-todos
         stages: [pre-commit]
 
-  # no-bare-feature-flags stays on onex_change_control until omnibase_core#1936
-  # (its move into omnibase_core) merges (OMN-20074, OCC retirement S8).
-  - repo: https://github.com/OmniNode-ai/onex_change_control
-    rev: 8d7e85bc00e7f1b1306d1cb40949be1ab6e7e91a  # pragma: allowlist secret
+  # no-bare-feature-flags comes from omnibase_core (omnibase_core#1936, OMN-20920,
+  # OCC retirement S8). A separate block keeps the hooks above on v0.47.39.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: 9218fe703b08d329f76eecd37fabbbc7b0c2baad  # pragma: allowlist secret
     hooks:
       - id: no-bare-feature-flags
         stages: [pre-commit]
