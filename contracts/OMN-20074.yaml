@@ -19,9 +19,9 @@ requirements:
     statement: |-
       The dev-head monitor must survive the deletion of occ-companion-merge-heal.yml by running from a non-OCC scheduled workflow with its own cadence and grants.
     acceptance:
-      - id: "AC-MON1"
+      - id: "AC3"
         statement: |-
-          AC-MON1: the dev-head-red-alert job lives in auto-merge-stale-poller.yml and not in occ-companion-merge-heal.yml, runs only on its own ten-minute schedule entry while the poller runs only on its fifteen-minute entry, and each job holds only its own grants -- falsifier: uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov
+          AC3: the dev-head-red-alert job lives in auto-merge-stale-poller.yml and not in occ-companion-merge-heal.yml, runs only on its own ten-minute schedule entry while the poller runs only on its fifteen-minute entry, and each job holds only its own grants -- falsifier: uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov
   - id: "req-caller-contract-source"
     statement: "A cut-over caller's deploy gate reads the caller's own contracts/OMN-<n>.yaml at the pull request head."
     acceptance:
@@ -32,9 +32,9 @@ requirements:
     statement: |-
       advisory-job-gate must read an `# advisory-automation: OMN-nnnnn <what it automates>` declaration on a job and check it instead of exempting the job: a declared job that is a required context, is reached through `needs:` by a required job, or runs a test, lint, receipt or evidence step is a finding naming the job and the rule; omniclaude's auto-merge job carries the declaration.
     acceptance:
-      - id: "AC-AUTO1"
+      - id: "AC4"
         statement: |-
-          AC-AUTO1: a correctly declared automation job passes; declared but in the CI Summary's needs fails; declared but running a pytest step fails; an undeclared job is still UNENFORCED_VERIFICATION_JOB; omniclaude's auto-merge.yml passes with no required context in the file and fails with the declaration removed -- falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k AutomationDeclaration
+          AC4: a correctly declared automation job passes; declared but in the CI Summary's needs fails; declared but running a pytest step fails; an undeclared job is still UNENFORCED_VERIFICATION_JOB; omniclaude's auto-merge.yml passes with no required context in the file and fails with the declaration removed -- falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k AutomationDeclaration
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -68,7 +68,7 @@ dod_evidence:
       - check_type: "test_passes"
         check_value: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
-    binds_ac: ["AC-MON1"]
+    binds_ac: ["AC3"]
   - id: dod-omn20074-caller-contract-source
     description: "Workflow wiring and validator verdicts for the occ and caller contract sources"
     source: manual
@@ -83,4 +83,4 @@ dod_evidence:
       - check_type: "test_passes"
         check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k AutomationDeclaration"
         cwd: "${OMNI_HOME}/omniclaude"
-    binds_ac: ["AC-AUTO1"]
+    binds_ac: ["AC4"]
