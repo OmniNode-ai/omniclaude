@@ -1,0 +1,30 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-20923"
+title: "No lab or deployment configuration in a shipped repository: the Hostile Reviewer reads its voters from a private CI overlay"
+summary: "Operator RULING 2026-10-10T21:57:38Z. omniclaude's hostile-reviewer.yml no longer reads the voter roster from omnibase_infra docker/lane-overlays. It fetches it at run time from the node overlay of node_review_voters_overlay_compute in the private repository the org Actions variable OMNI_CI_OVERLAY_REPO names, placed outside the pull request checkout. With the variable unset (a fork or a customer) the neutral default is 'no review voters configured' and the gate fails closed saying so. The quorum rule is unchanged."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-private-ci-overlay"
+    statement: "The roster comes only from the private CI overlay named by an org variable; with none configured the gate fails closed naming the cause."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: REVIEW_VOTERS_OVERLAY points at the CI overlay outside the workspace, the repository comes from OMNI_CI_OVERLAY_REPO, an unset variable fails with 'no review voters configured', and a named one resolves -- falsifier: env -u PYTHONPATH uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
+evidence_requirements:
+  - kind: "tests"
+    description: "The workflow tests pass at the head."
+    command: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn20923-ac1-private-ci-overlay"
+    description: "The roster is read from the private CI overlay; a fork with none gets the neutral default."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]

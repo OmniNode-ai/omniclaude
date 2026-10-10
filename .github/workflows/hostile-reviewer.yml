@@ -6,13 +6,17 @@
 # Adversarial multi-model code review gate on every pull request.
 #
 # Invokes omniintelligence.review_pairing.cli_review with the voters declared
-# in the review voters contract overlay, omnibase_infra
-# docker/lane-overlays/hostile-review-voters.yaml, read from omnibase_infra
-# `dev` at run time (OMN-20910, operator RULING 2026-10-10T18:17:37Z: review-
-# voter models are declared in a contract overlay, never in repository
-# variables or workflow files). THIS FILE NAMES NO VOTER, ENDPOINT OR MODEL:
-# changing or adding a voter is an edit to that overlay, and the next run of
-# this gate uses it with no workflow, variable or pin change. Private diffs go
+# in a review voters overlay (review_voters_overlay.v1, OMN-20910) that no
+# shipped repository carries (OMN-20923, operator RULING 2026-10-10T21:57:38Z:
+# no lab or deployment configuration in a shipped repository; CI is configured
+# by an overlay supplied by whoever runs it). The org Actions variable
+# OMNI_CI_OVERLAY_REPO names a private repository of this owner; the node
+# overlay of node_review_voters_overlay_compute in it is fetched at run time.
+# Unset (a fork or a customer), the neutral default applies: no review voters
+# configured, and the gate fails closed saying so. THIS FILE NAMES NO VOTER,
+# ENDPOINT, MODEL OR NETWORK: changing or adding a voter is an edit to that
+# overlay, and the next run of this gate uses it with no workflow, variable or
+# pin change. Private diffs go
 # only to lab models, never to a third-party cloud reviewer. A required voter
 # that is unreachable or fails is named, one voter is no quorum, and the job
 # fails closed. Codex is not a voter (OMN-8524); a voter of any kind is added
@@ -186,7 +190,7 @@ jobs:
       # action resolves a relative path against the workspace.
       VERDICT_ARTIFACT: ${{ github.workspace }}/hostile-review-verdict.json
       # OMN-20910: the one place the voters come from. Fetched by the step below.
-      REVIEW_VOTERS_OVERLAY: ${{ github.workspace }}/../review-voters-overlay/docker/lane-overlays/hostile-review-voters.yaml
+      REVIEW_VOTERS_OVERLAY: ${{ github.workspace }}/../ci-overlay/config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml
 
     steps:
       - name: Checkout PR branch
@@ -249,35 +253,64 @@ jobs:
 
       - name: Clean stale dependency clones
         working-directory: ${{ github.workspace }}
-        run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat ../review-voters-overlay
+        run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat ../ci-overlay
 
-      # OMN-20910: the voters overlay is read from omnibase_infra `dev` at run
-      # time, deliberately unpinned. It is a deployment fact, not a code
-      # dependency: a pin would bring back the per-repository edit and per-PR
-      # branch update this overlay exists to remove. Only docker/lane-overlays
-      # is checked out, and the commit read is logged.
-      - name: Fetch review voters overlay
+      # OMN-20923: the roster is read from the CI overlay at its default
+      # branch, deliberately unpinned: it is DATA, validated by
+      # omniintelligence's resolver on every run, and nothing from it is
+      # executed. It is placed outside the workspace, so a pull request cannot
+      # supply the voters that review it.
+      - name: Resolve the CI overlay
+        id: ci-overlay
+        working-directory: ${{ github.workspace }}
+        env:
+          CI_OVERLAY_REPO: ${{ vars.OMNI_CI_OVERLAY_REPO }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CI_OVERLAY_REPO}" ]; then
+            echo "::error::no review voters configured: OMNI_CI_OVERLAY_REPO is unset, so no CI overlay supplies config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml (review_voters_overlay.v1). The gate fails closed. To run it, put your voters in a repository of your own and set OMNI_CI_OVERLAY_REPO to its name."
+            exit 1
+          fi
+          if [[ ! "${CI_OVERLAY_REPO}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::OMNI_CI_OVERLAY_REPO must be a bare repository name, got '${CI_OVERLAY_REPO}'"
+            exit 1
+          fi
+          echo "name=${CI_OVERLAY_REPO}" >> "$GITHUB_OUTPUT"
+
+      - name: Mint a read-only CI overlay token
+        id: ci-overlay-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.ci-overlay.outputs.name }}
+          permission-contents: read
+
+      # The CI overlay is data read at its default branch and validated by the
+      # resolver (OMN-20923).
+      - name: Fetch the CI overlay
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }}
+          token: ${{ steps.ci-overlay-token.outputs.token }}
+          path: .ci-overlay-checkout
+          persist-credentials: false
+          sparse-checkout: |
+            config/onex/overlays/node_review_voters_overlay_compute
+          sparse-checkout-cone-mode: false
+
+      - name: Place the CI overlay outside the workspace
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4; do
-            rm -rf ../review-voters-overlay
-            if timeout 240s git clone --quiet --depth=1 --filter=blob:none --sparse --branch dev \
-                https://github.com/OmniNode-ai/omnibase_infra.git ../review-voters-overlay \
-              && git -C ../review-voters-overlay sparse-checkout set docker/lane-overlays; then
-              OVERLAY_SHA="$(git -C ../review-voters-overlay rev-parse HEAD)"
-              echo "review voters overlay read from omnibase_infra dev at ${OVERLAY_SHA}"
-              if [ ! -s "$REVIEW_VOTERS_OVERLAY" ]; then
-                echo "::error::the review voters overlay docker/lane-overlays/hostile-review-voters.yaml is missing or empty on omnibase_infra dev at ${OVERLAY_SHA}; no voter can be resolved"
-                exit 1
-              fi
-              exit 0
-            fi
-            echo "::warning::fetch of the review voters overlay failed (attempt ${attempt}/4)"
-            sleep $((attempt * 5))
-          done
-          echo "::error::could not fetch the review voters overlay from omnibase_infra dev"
-          exit 1
+          rm -rf ../ci-overlay
+          mv .ci-overlay-checkout ../ci-overlay
+          echo "CI overlay read from ${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }} at $(git -C ../ci-overlay rev-parse HEAD)"
+          if [ ! -s "$REVIEW_VOTERS_OVERLAY" ]; then
+            echo "::error::the CI overlay carries no config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml; no voter can be resolved"
+            exit 1
+          fi
 
       - name: Clone omniintelligence
         working-directory: ${{ github.workspace }}
