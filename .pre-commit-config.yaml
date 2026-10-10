@@ -641,7 +641,7 @@ repos:
       # keywords need a precondition-probe: annotation; deliverable sections
       # with file paths need an ## Artifact Manifest section; each manifest
       # item must carry [x], DONE, SKIPPED:, DEFERRED:, or BLOCKED-ON:.
-      # CI mirror: .github/workflows/plan-hard-fields-gate.yml
+      # CI mirror: the plan-hard-fields-gate job in .github/workflows/ci.yml
       - id: lint-plan-hard-fields
         name: enforce plan hard fields (D-5 precondition probes + artifact manifest)
         entry: python3 scripts/lint_plan_hard_fields.py
@@ -653,7 +653,7 @@ repos:
       # OMN-14476: block plans proposing a new scripts/** file without a
       # 'canonical-form:' declaration (design as a node, or a reviewed
       # exception). Complements the code-time deny-new guard (OMN-14475).
-      # CI mirror: .github/workflows/plan-canonical-scripts-gate.yml
+      # CI mirror: the plan-canonical-scripts-gate job in .github/workflows/ci.yml
       - id: lint-plan-canonical-scripts
         name: enforce plans declare canonical-form for proposed scripts/** files
         entry: python3 scripts/lint_plan_canonical_scripts.py
@@ -1219,8 +1219,8 @@ repos:
       # contract emitted by both dispatch CLIs), and no prose-fallback routing
       # instruction. BLOCKING (no --report): the reconciled tree is green, so
       # any NEW drift fails at commit. Stdlib-only validator -> bare python3
-      # (matches the arch-* hooks). CI mirror:
-      # .github/workflows/check-deterministic-skills.yml.
+      # (matches the arch-* hooks). CI mirror: the check-deterministic-skills
+      # job in .github/workflows/ci.yml.
       - id: validate-deterministic-skill-routing
         name: ONEX Deterministic Skill Routing Enforcement (OMN-8749)
         language: system
@@ -1448,8 +1448,8 @@ repos:
       # that made `skill-contract-validation` and `no-cloud-bus` false-green,
       # any undocumented SKIP/BYPASS-env-var-gated exit 0, and any `stages:`
       # value default_install_hook_types does not install. Wired as BOTH a
-      # pre-commit hook (here) and a required CI gate
-      # (.github/workflows/precommit-fail-loud-gate.yml) in this same PR so
+      # pre-commit hook (here) and a CI gate (the precommit-fail-loud-gate
+      # job in .github/workflows/ci.yml, under CI Summary) in this same PR so
       # the class cannot regenerate on the next wrapper script.
       - id: precommit-fail-loud-meta-gate
         name: Pre-commit fail-loud meta-gate (OMN-14655)

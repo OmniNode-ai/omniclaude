@@ -12,7 +12,7 @@
 #      Runtime handshake enforcement is performed by the omnimarket runtime loader.
 #
 # Read by: omnimarket.runtime.version_handshake.load_compat_matrix()
-# CI gate:  .github/workflows/plugin-compat-gate.yml (omniclaude)
+# CI gate:  plugin-compat-gate job in .github/workflows/ci.yml (omniclaude)
 #           .github/workflows/plugin-compat-gate.yml (omnimarket)
 #
 # OMN-8789: SD-02

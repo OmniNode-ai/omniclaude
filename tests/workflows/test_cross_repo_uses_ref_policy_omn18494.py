@@ -192,7 +192,10 @@ def test_the_collector_sees_the_real_cross_repo_references() -> None:
     """
     cross_repo, _ = collect_references(WORKFLOWS_DIR)
 
-    assert len(cross_repo) >= 40, (
+    # 38 seen after OMN-20074 folded 22 standalone gate files (each with its
+    # own occ-preflight caller) into ci.yml; the floor is a positive control on
+    # the collector, not a count to keep.
+    assert len(cross_repo) >= 30, (
         "expected the collector to see the repository's cross-repo reusable "
         f"references; it saw {len(cross_repo)}"
     )

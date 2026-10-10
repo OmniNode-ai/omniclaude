@@ -19,7 +19,6 @@ INIT_DB_SCRIPT = REPO_ROOT / "scripts" / "init-db.sh"
 ONEX_SCHEMA_COMPAT_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "onex-schema-compat.yml"
 )
-PLUGIN_COMPAT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "plugin-compat-gate.yml"
 NO_FAKED_BOUNDARY_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "no-faked-boundary.yml"
 )
@@ -283,13 +282,9 @@ def test_no_faked_boundary_pins_uv_python() -> None:
     assert '--python "${PYTHON_VERSION}"' in install_step["run"]
 
 
-def test_plugin_compat_pins_uv_python() -> None:
-    loaded = yaml.safe_load(PLUGIN_COMPAT_WORKFLOW.read_text(encoding="utf-8"))
-    assert isinstance(loaded, dict)
-    jobs = loaded.get("jobs")
-    assert isinstance(jobs, dict)
-    job = jobs["plugin-compat-gate"]
-    assert isinstance(job, dict)
+def test_plugin_compat_pins_uv_python(ci_workflow: dict[str, Any]) -> None:
+    # OMN-20074: the plugin-compat gate is a ci.yml job now.
+    job = _job(ci_workflow, "plugin-compat-gate")
 
     install_step = _step(job, "Install dependencies")
     assert '--python "${PYTHON_VERSION}"' in install_step["run"]
@@ -325,7 +320,6 @@ def test_ci_uv_sync_steps_pin_python(ci_workflow: dict[str, Any]) -> None:
     [
         WORKFLOW_PATH,
         ONEX_SCHEMA_COMPAT_WORKFLOW,
-        PLUGIN_COMPAT_WORKFLOW,
     ],
 )
 def test_cache_restore_steps_are_opt_in_for_ci_timeout_resilience(
