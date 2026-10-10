@@ -1,0 +1,59 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20920
+title: "OCC retirement S8: omniclaude takes no-bare-feature-flags from omnibase_core, not onex_change_control"
+summary: The no-bare-feature-flags pre-commit hook moves from the onex_change_control repo block to a new omnibase_core repo block pinned at 9218fe703b08d329f76eecd37fabbbc7b0c2baad (omnibase_core#1936), with the hook id and stages unchanged. The onex_change_control block and its stale comment are deleted. The existing omnibase_core block that carries no-hardcoded-topics and no-untracked-todos keeps its release tag.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20920-nbff-from-core
+    statement: omniclaude must consume the no-bare-feature-flags pre-commit hook from omnibase_core, where it moved from onex_change_control under the same hook id, and must name no onex_change_control repository in its pre-commit config.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: omniclaude .pre-commit-config.yaml on the PR head names no onex_change_control repository -- falsifier: `grep -c ''OmniNode-ai/onex_change_control'' .pre-commit-config.yaml` in omniclaude returns 0'
+      - id: AC2
+        statement: 'AC2: the repointed hook runs from omnibase_core and passes on the whole tree -- falsifier: `pre-commit run no-bare-feature-flags --all-files` in omniclaude exits 0 at the PR head'
+      - id: AC3
+        statement: 'AC3: the repointed hook still refuses a bare flag read -- falsifier: a scratch file containing `os.getenv("ENABLE_X")` makes `pre-commit run no-bare-feature-flags --files <scratch>` exit non-zero, recorded in the PR body'
+evidence_requirements:
+  - kind: tests
+    description: The config lists no-bare-feature-flags only under an omnibase_core block pinned to the exporting full sha with its stages, names no onex_change_control repository, and leaves the other two omnibase_core hooks on their own pin.
+    command: uv run pytest tests/ci/test_precommit_no_bare_feature_flags_core_omn20920.py -q --no-cov
+  - kind: manual
+    description: The whole-tree run exits 0 and the planted os.getenv("ENABLE_X") scratch file exits non-zero; both runs are quoted on the Lab line of the PR body.
+    command: pre-commit run no-bare-feature-flags --all-files
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn-20920-ac1
+    description: The config names no onex_change_control repository and takes the hook from omnibase_core at the exporting sha.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_precommit_no_bare_feature_flags_core_omn20920.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+      - check_type: command
+        check_value: "! grep -q 'OmniNode-ai/onex_change_control' .pre-commit-config.yaml"
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC1
+  - id: dod-omn-20920-ac2
+    description: The hook run from omnibase_core passes over the whole tree.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: pre-commit run no-bare-feature-flags --all-files
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC2
+  - id: dod-omn-20920-ac3
+    description: A scratch file reading os.getenv("ENABLE_X") makes the hook exit non-zero; the scratch file is removed afterwards.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "bash -c 'printf \"import os\\n\\nFLAG = os.getenv(\\\"ENABLE_X\\\")\\n\" > scratch_nbff_probe.py; ! pre-commit run no-bare-feature-flags --files scratch_nbff_probe.py; rc=$?; rm -f scratch_nbff_probe.py; exit $rc'"
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC3
