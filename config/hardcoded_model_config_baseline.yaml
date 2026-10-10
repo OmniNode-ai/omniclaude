@@ -15,9 +15,6 @@
 
 schema_version: 1
 entries:
-  - path: .github/workflows/hostile-reviewer.yml
-    family: M
-    content_sha1: 07bdb8b424168bbff8e9c54cc543df232d39954d
   - path: .pre-commit-hooks/reject-imperative-skill-patterns.sh
     family: E-LAN
     content_sha1: f9ebf33e1686d8aa91292b6adf515956414d83e1
