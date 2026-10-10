@@ -798,6 +798,207 @@ class TestFixtureFlagsAreRefusedInsideActions:
         assert code == 2
 
 
+class TestAutomationDeclarationIsChecked:
+    """OMN-20074, RULING 2026-10-10T15:10:25Z: the auto-merge and propagate jobs
+    are declared automation in a form the gate reads, and the gate CHECKS the
+    declaration -- no failing automation step may block a merge -- instead of
+    treating it as an exemption the way the advisory-ok annotation is treated.
+
+    The fixture is the omniclaude/omnibase_core auto-merge shape: its hold-check
+    step runs `check_auto_merge_hold.py`, which the verification matcher reads
+    as verification, and no job in the file is a required context once the OCC
+    preflight caller is gone.
+    """
+
+    AUTOMATION = """\
+name: Auto-Merge
+on:
+  pull_request:
+jobs:
+  # advisory-automation: OMN-20074 arms auto-merge on a ready pull request
+  auto-merge:
+    name: Enable Auto-Merge
+    runs-on: ubuntu-latest
+    steps:
+      - run: python3 scripts/ci/check_auto_merge_hold.py hold
+      - run: gh pr merge "$PR" --auto --squash
+"""
+
+    SUMMARY = """\
+  ci-summary:
+    name: CI Summary
+    needs: [auto-merge]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo done
+"""
+
+    def _gate(self, tmp_path: Path, text: str, contexts: list[str]) -> int:
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        root = _repo(tmp_path, {"auto-merge.yml": text})
+        return _run(
+            root,
+            baseline=_baseline(tmp_path, EMPTY_BASELINE),
+            contexts=_contexts(tmp_path, contexts),
+        )
+
+    def test_a_correctly_declared_automation_job_passes(self, tmp_path: Path) -> None:
+        assert self._gate(tmp_path, self.AUTOMATION, ["CI Summary"]) == 0
+
+    def test_the_same_job_undeclared_is_still_flagged(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        text = self.AUTOMATION.replace(
+            "  # advisory-automation: OMN-20074 arms auto-merge on a ready pull request\n",
+            "",
+        )
+        assert self._gate(tmp_path, text, ["CI Summary"]) == 1
+        out = capsys.readouterr().out
+        assert "UNENFORCED_VERIFICATION_JOB" in out
+        assert "auto-merge.yml::auto-merge" in out
+
+    def test_declared_but_a_needs_of_the_ci_summary_fails(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The file holds a required job, so the per-file coverage reads every
+        job in it as enforced. The declaration is checked anyway: a failing
+        automation job under a required summary's `needs:` blocks the merge."""
+        assert self._gate(tmp_path, self.AUTOMATION + self.SUMMARY, ["CI Summary"]) == 1
+        out = capsys.readouterr().out
+        assert "AUTOMATION_DECLARATION_VIOLATED" in out
+        assert "`auto-merge`" in out
+        assert "not-needed-by-a-required-job" in out
+        assert "ci-summary" in out
+
+    def test_declared_but_reached_transitively_from_the_summary_fails(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        middle = """\
+  aggregate:
+    needs: auto-merge
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo aggregate
+"""
+        summary = self.SUMMARY.replace("needs: [auto-merge]", "needs: [aggregate]")
+        assert (
+            self._gate(tmp_path, self.AUTOMATION + middle + summary, ["CI Summary"])
+            == 1
+        )
+        assert "not-needed-by-a-required-job" in capsys.readouterr().out
+
+    def test_declared_but_itself_a_required_context_fails(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert self._gate(tmp_path, self.AUTOMATION, ["Enable Auto-Merge"]) == 1
+        out = capsys.readouterr().out
+        assert "AUTOMATION_DECLARATION_VIOLATED" in out
+        assert "not-a-required-context" in out
+
+    def test_declared_but_runs_a_pytest_step_fails(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        text = self.AUTOMATION + "      - run: uv run pytest tests/ -q\n"
+        assert self._gate(tmp_path, text, ["CI Summary"]) == 1
+        out = capsys.readouterr().out
+        assert "AUTOMATION_DECLARATION_VIOLATED" in out
+        assert "runs-no-verification" in out
+        assert "pytest" in out
+
+    @pytest.mark.parametrize(
+        "step",
+        [
+            "uv run ruff check src/",
+            "pre-commit run --all-files",
+            "python scripts/ci/dod_receipt_gate.py",
+            "python scripts/write_evidence.py",
+        ],
+    )
+    def test_declared_but_runs_a_lint_receipt_or_evidence_step_fails(
+        self, tmp_path: Path, step: str
+    ) -> None:
+        text = self.AUTOMATION + f"      - run: {step}\n"
+        assert self._gate(tmp_path, text, ["CI Summary"]) == 1
+
+    def test_a_comment_inside_a_run_block_is_not_a_step(self, tmp_path: Path) -> None:
+        """A comment naming a linter or citing a test file executes nothing;
+        omniclaude's own arming step carries such comments."""
+        text = self.AUTOMATION.replace(
+            '      - run: gh pr merge "$PR" --auto --squash\n',
+            "      - run: |\n"
+            "          # ruff and pytest run in ci.yml, not in this job\n"
+            "          # tests/ci/test_auto_merge_hold_omn18179.py pins this query\n"
+            '          gh pr merge "$PR" --auto --squash\n',
+        )
+        assert "pytest" in text
+        assert self._gate(tmp_path, text, ["CI Summary"]) == 0
+
+    def test_declared_but_calls_a_verification_reusable_fails(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        text = """\
+name: Auto-Merge
+on:
+  pull_request:
+jobs:
+  # advisory-automation: OMN-20074 resolves eligibility before arming
+  preflight:
+    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@abc
+"""
+        assert self._gate(tmp_path, text, []) == 1
+        assert "runs-no-verification" in capsys.readouterr().out
+
+    def test_a_declaration_with_no_reason_is_malformed(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        text = self.AUTOMATION.replace(
+            "OMN-20074 arms auto-merge on a ready pull request", "OMN-20074"
+        )
+        assert self._gate(tmp_path, text, []) == 1
+        out = capsys.readouterr().out
+        assert "MALFORMED_ANNOTATION" in out
+        assert "advisory-automation" in out
+
+    def test_a_declaration_attached_to_no_job_is_a_finding(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        text = self.AUTOMATION.replace(
+            "      - run: gh pr merge",
+            "      # advisory-automation: OMN-20074 stray marker on a step\n"
+            "      - run: gh pr merge",
+        )
+        assert self._gate(tmp_path, text, []) == 1
+        assert "ORPHANED_DECLARATION" in capsys.readouterr().out
+
+    def test_an_advisory_ok_annotation_is_still_an_exemption(
+        self, tmp_path: Path
+    ) -> None:
+        """Unchanged behaviour for the existing annotation: only the new
+        declaration is checked."""
+        text = (self.AUTOMATION + self.SUMMARY).replace(
+            "advisory-automation: OMN-20074 arms auto-merge on a ready pull request",
+            "advisory-ok: OMN-20074 automation, not a verdict",
+        )
+        assert self._gate(tmp_path, text, ["CI Summary"]) == 0
+
+    def test_omniclaude_auto_merge_job_is_declared_and_passes_without_occ(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """This repository's own auto-merge.yml, scanned with no required
+        context in the file (the state once the OCC preflight caller goes),
+        passes because of the declaration, and fails without it."""
+        text = (REPO_ROOT / ".github" / "workflows" / "auto-merge.yml").read_text(
+            encoding="utf-8"
+        )
+        assert "# advisory-automation: OMN-20074" in text
+        assert self._gate(tmp_path / "declared", text, []) == 0
+        stripped = "\n".join(
+            line for line in text.splitlines() if "# advisory-automation:" not in line
+        )
+        assert self._gate(tmp_path / "stripped", stripped + "\n", []) == 1
+        assert "UNENFORCED_VERIFICATION_JOB" in capsys.readouterr().out
+
+
 class TestWiring:
     """Rule 5: a detection tool that is not a pre-merge gate is advisory and
     gets ignored. Both surfaces run the same module."""

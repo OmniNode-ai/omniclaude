@@ -1,0 +1,62 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20924
+title: "OCC retirement B1: omniclaude's runner-IP reusable workflow runs no occ-preflight job (own contract file)"
+summary: >
+  omniclaude's ban-hardcoded-runner-ip.yml reusable workflow nested the central
+  occ-preflight job beside the scan, so every caller carried the extra context
+  "ban-hardcoded-runner-ip / occ-preflight / eligibility" and a checkout of the
+  change-control repository although the scan reads only the caller's own
+  .github/workflows/** and tests/**. The nested job is gone and the scan job keeps
+  its name. The criterion lives in this ticket's own contract file, so the shared
+  contracts/OMN-20074.yaml stays as dev has it (slice B1 of the OMN-20074 residual;
+  precedent OMN-20073 for the skip-token reusable).
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn20924-runnerip-no-preflight"
+    statement: |-
+      The runner-IP reusable scans a caller's workflows and tests without nesting the change-control preflight, and the scan itself still refuses a hardcoded runner IP.
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: omniclaude's `ban-hardcoded-runner-ip.yml` reusable workflow on the PR head defines no occ-preflight job and names no onex_change_control repository -- falsifier: the focused omniclaude test the PR adds for the workflow shape, run at the PR head, plus `grep -c onex_change_control .github/workflows/ban-hardcoded-runner-ip.yml` returning 0
+      - id: "AC2"
+        statement: |-
+          AC2: The runner-IP ban itself still refuses a hardcoded runner IP -- falsifier: the workflow's own check run against a planted file with a hardcoded runner IP exits non-zero, recorded in the PR body's Lab: line
+      - id: "AC3"
+        statement: |-
+          AC3: The PR leaves dev's `contracts/OMN-20074.yaml` unchanged -- falsifier: `git diff origin/dev...HEAD -- contracts/OMN-20074.yaml` in omniclaude is empty
+evidence_requirements:
+  - kind: tests
+    description: "The runner-IP reusable carries no preflight job, keeps the scan job's name and runs it unconditionally; its scan behaviour tests still pass"
+    command: "uv run pytest tests/ci/test_ban_runner_ip_workflow_occ_independence.py tests/workflows/test_ban_hardcoded_runner_ip_scope.py tests/workflows/test_ban_machine_pins_omn19895.py -q --no-cov -p no:randomly"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20924-no-preflight-job
+    description: "The workflow-shape test passes at the head and the workflow names no onex_change_control repository"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/ci/test_ban_runner_ip_workflow_occ_independence.py -q --no-cov -p no:randomly && ! grep -q onex_change_control .github/workflows/ban-hardcoded-runner-ip.yml"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: dod-omn20924-scan-still-refuses
+    description: "The scan's own tests reject a planted runner IP and a planted machine pin and pass on the clean tree"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/workflows/test_ban_hardcoded_runner_ip_scope.py tests/workflows/test_ban_machine_pins_omn19895.py -q --no-cov -p no:randomly"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
+  - id: dod-omn20924-shared-contract-untouched
+    description: "The PR's diff against dev's contracts/OMN-20074.yaml is empty"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -z \"$(git diff origin/dev...HEAD -- contracts/OMN-20074.yaml)\""
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
