@@ -765,6 +765,24 @@ _gw_check_run_endpoint() {
 }
 
 # Is the argv in "$@" a gateway shape (a failing-job log, one job's or check run's detail)?
+# The published-board reader (omninode_infra tools/beta_board/read_published_board.py) reads
+# two shapes no local source holds: the publish workflow's run list and one run's jobs. They
+# are gateway shapes of the "board" kind: a short TTL and their own hourly budget, so the
+# board read neither starves nor is starved by failing-job log reads. Any other workflow or
+# repo stays refused (OMN-20911 follow-up).
+_gw_board_endpoint() {
+  local p="$1" id
+  case "$p" in *..*|*\?*|*#*) return 1 ;; esac
+  case "$p" in
+    repos/OmniNode-ai/omninode_infra/actions/workflows/publish-beta-board.yml/runs) return 0 ;;
+    repos/OmniNode-ai/omninode_infra/actions/runs/*/jobs)
+      id="${p#*/actions/runs/}"; id="${id%/jobs}"
+      case "$id" in ""|*[!0-9]*) return 1 ;; esac
+      return 0 ;;
+  esac
+  return 1
+}
+_gw_kind=""
 _gw_shape() {
   local ep
   if [ "$_cls" = "api" ]; then
@@ -773,6 +791,7 @@ _gw_shape() {
     ep="${ep#/}"
     _prs_job_log_endpoint "$ep" && return 0
     _gw_check_run_endpoint "$ep" && return 0
+    _gw_board_endpoint "$ep" && { _gw_kind=board; return 0; }
     return 1
   fi
   [ "$_cls" = "run view" ] && _prs_job_log "$@" && return 0
@@ -790,7 +809,8 @@ if [ "$_cls" = "api" ]; then
       */check-runs/*) _gw_check_run_endpoint "$_prs_ep" || _prs_guarded=1 ;;
       */check-runs*|*/check-suites*|*/commits/*/status|*/statuses*) _prs_guarded=1 ;;
       */actions/runs*|*/actions/jobs*)
-        _prs_job_log_endpoint "$_prs_ep" || _gw_check_run_endpoint "$_prs_ep" || _prs_guarded=1 ;;
+        _prs_job_log_endpoint "$_prs_ep" || _gw_check_run_endpoint "$_prs_ep" \
+          || _gw_board_endpoint "$_prs_ep" || _prs_guarded=1 ;;
     esac
   fi
 else
@@ -1233,6 +1253,12 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
       esac
     done < "$_gw_conf"
   fi
+  _gw_hour_tag=""
+  if [ "$_gw_kind" = "board" ]; then
+    _gw_ttl=300
+    _gw_budget=60
+    _gw_hour_tag="-board"
+  fi
   _gw_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway"
   mkdir -p "$_gw_dir/budget" 2>/dev/null
   _gw_scope=""
@@ -1254,7 +1280,7 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
         fi ;;
     esac
   fi
-  _gw_hour_file="$_gw_dir/budget/$(date -u +%Y%m%d%H)"
+  _gw_hour_file="$_gw_dir/budget/$(date -u +%Y%m%d%H)$_gw_hour_tag"
   _gw_spent="$(wc -l < "$_gw_hour_file" 2>/dev/null | tr -d '[:space:]')"
   case "$_gw_spent" in ""|*[!0-9]*) _gw_spent=0 ;; esac
   if [ "$_gw_spent" -ge "$_gw_budget" ]; then

@@ -472,3 +472,66 @@ def test_gateway_budget_refuses_when_spent_and_ignores_the_environment(
     hit = _run(env, "api", "repos/o/r/actions/jobs/1/logs", extra=lane)
     assert hit.returncode == 0, hit.stderr
     assert len(_calls(env)) == 2
+
+
+BOARD_RUNS = [
+    "api",
+    "--allow-escape-sequences",
+    "repos/OmniNode-ai/omninode_infra/actions/workflows/publish-beta-board.yml/runs?per_page=20",
+]
+BOARD_JOBS = [
+    "api",
+    "--allow-escape-sequences",
+    "repos/OmniNode-ai/omninode_infra/actions/runs/777/jobs",
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("argv", [BOARD_RUNS, BOARD_JOBS], ids=["runs", "jobs"])
+def test_lane_reads_the_published_board_through_the_gateway(
+    env: dict[str, str], argv: list[str]
+) -> None:
+    lane = {"ONEX_LANE": "lane", "FAKE_GH_STDOUT": "board"}
+    first = _run(env, *argv, extra=lane)
+    second = _run(env, *argv, extra=lane)
+    assert (first.returncode, first.stdout) == (0, "board"), first.stderr
+    assert (second.returncode, second.stdout) == (0, "board"), second.stderr
+    assert _calls(env) == [argv], "the second board read is a cache hit"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "path",
+    [
+        "repos/OmniNode-ai/omninode_infra/actions/workflows/other.yml/runs?per_page=5",
+        "repos/OmniNode-ai/omnimarket/actions/workflows/publish-beta-board.yml/runs",
+        "repos/OmniNode-ai/omninode_infra/actions/runs/abc/jobs",
+        "repos/OmniNode-ai/omninode_infra/actions/runs/1/artifacts",
+    ],
+)
+def test_the_board_allowance_does_not_widen_to_other_reads(
+    env: dict[str, str], path: str
+) -> None:
+    result = _run(env, "api", path, extra={"ONEX_LANE": "lane"})
+    assert result.returncode == 1, result.stderr
+    assert result.stderr.startswith("REFUSED (OMN-"), result.stderr
+    assert _calls(env) == [], "a refused read must never reach the real gh"
+
+
+@pytest.mark.unit
+def test_the_board_budget_is_separate_and_spent_board_reads_refuse(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    lane = {"ONEX_LANE": "lane"}
+    hour = subprocess.run(
+        ["date", "-u", "+%Y%m%d%H"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    budget = tmp_path / "cache" / "omni" / "gh-shim" / "gateway" / "budget"
+    budget.mkdir(parents=True)
+    (budget / f"{hour}-board").write_text("1\n" * 60)
+    spent = _run(env, *BOARD_JOBS, extra=lane)
+    assert spent.returncode == 1
+    assert spent.stderr.startswith("REFUSED (OMN-20911): the cached read gateway")
+    # The job-log gateway budget is untouched by the spent board budget.
+    ok = _run(env, "api", "repos/o/r/actions/jobs/9/logs", extra=lane)
+    assert ok.returncode == 0, ok.stderr
