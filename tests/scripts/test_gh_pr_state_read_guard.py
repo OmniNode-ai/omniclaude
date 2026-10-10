@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.scripts.conftest import install_ancestry_ps
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIM = REPO_ROOT / "scripts" / "user-bin" / "gh"
 
@@ -124,14 +126,13 @@ GUARDED = [
     ["api", "-X", "GET", "repos/OmniNode-ai/omnimarket/pulls/9002"],
     ["api", "-X", "HEAD", "repos/OmniNode-ai/omnimarket/pulls/9002"],
     ["api", "repos/OmniNode-ai/omnimarket/commits/abc123/check-runs"],
-    ["api", "repos/OmniNode-ai/omnimarket/check-runs/77"],
     ["api", "repos/OmniNode-ai/omnimarket/commits/abc123/check-suites"],
     ["api", "repos/OmniNode-ai/omnimarket/commits/abc123/status"],
     ["api", "repos/OmniNode-ai/omnimarket/commits/abc123/statuses"],
     ["api", "repos/OmniNode-ai/omnimarket/statuses/abc123"],
     ["api", "repos/OmniNode-ai/omnimarket/actions/runs/123456"],
     ["api", "repos/OmniNode-ai/omnimarket/actions/runs?head_sha=abc"],
-    ["api", "repos/OmniNode-ai/omnimarket/actions/jobs/555"],
+    ["api", "repos/OmniNode-ai/omnimarket/actions/jobs/555/steps"],
 ]
 
 
@@ -188,6 +189,10 @@ JOB_LOGS = [
         "api",
         "https://api.github.com/repos/OmniNode-ai/omnimarket/actions/jobs/555/logs",
     ],
+    # One check run's detail goes through the cached read gateway (OMN-20911).
+    ["api", "repos/OmniNode-ai/omnimarket/check-runs/77"],
+    ["api", "repos/OmniNode-ai/omnimarket/check-runs/77/annotations"],
+    ["api", "repos/OmniNode-ai/omnimarket/actions/jobs/555"],
 ]
 
 
@@ -195,7 +200,8 @@ JOB_LOGS = [
 @pytest.mark.parametrize("argv", JOB_LOGS, ids=lambda a: " ".join(a)[:70])
 def test_job_log_read_passes_the_guard(env: dict[str, str], argv: list[str]) -> None:
     """A failing-job log is not PR state: the watcher does not hold it and a lane that
-    classifies a red must read it (OMN-20421 keeps that read in the landing worker brief)."""
+    classifies a red must read it (OMN-20421 keeps that read in the landing worker brief).
+    Since OMN-20911 it reaches GitHub through the cached read gateway, lane or not."""
     result = _run(env, *argv)
 
     assert result.returncode == 0, result.stderr
@@ -209,7 +215,9 @@ def test_job_log_read_passes_the_guard(env: dict[str, str], argv: list[str]) -> 
         ["run", "view", "123456", "--log-failed", "--json", "jobs"],
         ["run", "view", "123456", "--log-failed", "--jq", ".jobs"],
         ["api", "repos/OmniNode-ai/omnimarket/actions/jobs/555/logs/../../runs/9"],
-        ["api", "repos/OmniNode-ai/omnimarket/actions/jobs/555"],
+        ["api", "repos/OmniNode-ai/omnimarket/actions/jobs/555/../../runs/9"],
+        ["api", "repos/OmniNode-ai/omnimarket/check-runs/77/output"],
+        ["api", "repos/OmniNode-ai/omnimarket/actions/jobs/x55"],
     ],
     ids=lambda a: " ".join(a)[:70],
 )
@@ -367,7 +375,14 @@ def test_writes_pass_through_untouched(env: dict[str, str], argv: list[str]) -> 
     ],
     ids=" ".join,
 )
-def test_other_reads_are_unaffected(env: dict[str, str], argv: list[str]) -> None:
+def test_other_reads_pass_this_guard_outside_a_lane(
+    env: dict[str, str], tmp_path: Path, argv: list[str]
+) -> None:
+    """Not PR state, so not this guard's refusal. From a lane the OMN-20911 lane read
+    guard refuses every one of them (test_gh_lane_read_guard.py); outside a lane (no
+    agent marker, no agent ancestor) they pass."""
+    del env["ONEX_LANE"]
+    install_ancestry_ps(tmp_path / "realbin")
     result = _run(env, *argv)
 
     assert result.returncode == 0, result.stderr
