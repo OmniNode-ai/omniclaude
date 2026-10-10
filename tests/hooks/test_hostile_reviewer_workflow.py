@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import subprocess
 
 import pytest
 import yaml
@@ -240,29 +241,91 @@ def test_review_step_invokes_cli_review_with_the_voters_overlay(
     assert not [k for k in env if str(k).startswith("LLM_") and str(k).endswith("_URL")]
 
 
-def test_voters_overlay_is_read_live_from_omnibase_infra_dev(
+OVERLAY_ENV = (
+    "${{ github.workspace }}/../ci-overlay/config/onex/overlays/"
+    "node_review_voters_overlay_compute/overlay.yaml"
+)
+
+
+def _named_step(workflow: dict[object, object], name: str) -> dict[object, object]:
+    matches = [s for s in _review_job_steps(workflow) if s.get("name") == name]
+    assert len(matches) == 1, f"expected one step named {name!r}"
+    return matches[0]
+
+
+def test_voters_overlay_path_is_the_ci_overlay_outside_the_workspace(
     workflow: dict[object, object],
 ) -> None:
-    """Unpinned on purpose: the overlay is a deployment fact, and a pin would
-    bring back the per-repository edit the overlay exists to remove."""
+    """OMN-20923 (RULING 2026-10-10T21:57:38Z): the roster is a deployment fact
+    no shipped repository carries. It is read from the private CI overlay,
+    outside the checkout, so a pull request cannot supply its own voters."""
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
     review_job = jobs["hostile-review"]
     assert isinstance(review_job, dict)
     env = review_job.get("env")
     assert isinstance(env, dict)
-    assert str(env["REVIEW_VOTERS_OVERLAY"]).endswith(
-        "docker/lane-overlays/hostile-review-voters.yaml"
+    assert env["REVIEW_VOTERS_OVERLAY"] == OVERLAY_ENV
+    clean = _named_step(workflow, "Clean stale dependency clones")
+    assert "../ci-overlay" in str(clean.get("run", ""))
+
+
+def test_the_ci_overlay_repository_comes_from_an_org_variable(
+    workflow: dict[object, object],
+) -> None:
+    step = _named_step(workflow, "Resolve the CI overlay")
+    step_env = step.get("env")
+    assert isinstance(step_env, dict)
+    assert step_env["CI_OVERLAY_REPO"] == "${{ vars.OMNI_CI_OVERLAY_REPO }}"
+    fetch = _named_step(workflow, "Fetch the CI overlay")
+    with_ = fetch.get("with")
+    assert isinstance(with_, dict)
+    assert with_["repository"] == (
+        "${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }}"
     )
-    fetch = next(
-        s
-        for s in _review_job_steps(workflow)
-        if s.get("name") == "Fetch review voters overlay"
+    assert with_["persist-credentials"] is False
+    text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "lane-overlays" not in text
+    assert "github.com/OmniNode-ai/omnibase_infra.git" not in text
+
+
+def _run_resolve(
+    workflow: dict[object, object], repo_var: str, tmp_path: pathlib.Path
+) -> tuple[int, str, str]:
+    output = tmp_path / "github_output"
+    output.write_text("", encoding="utf-8")
+    proc = subprocess.run(
+        ["bash", "-c", str(_named_step(workflow, "Resolve the CI overlay")["run"])],
+        env={
+            "CI_OVERLAY_REPO": repo_var,
+            "GITHUB_OUTPUT": str(output),
+            "PATH": "/usr/bin:/bin",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    run = str(fetch.get("run", ""))
-    assert "github.com/OmniNode-ai/omnibase_infra.git" in run
-    assert "--branch dev" in run
-    assert "sparse-checkout set docker/lane-overlays" in run
+    return proc.returncode, output.read_text(encoding="utf-8"), proc.stdout
+
+
+def test_a_fork_with_no_ci_overlay_gets_the_neutral_default(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    """Unset variable: the gate fails closed, naming "no review voters configured"."""
+    rc, out, stdout = _run_resolve(workflow, "", tmp_path)
+    assert rc == 1
+    assert "no review voters configured" in stdout
+    assert "name=" not in out
+
+
+def test_our_ci_resolves_the_named_overlay_repository(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    rc, out, _ = _run_resolve(workflow, "deploy-config", tmp_path)
+    assert rc == 0
+    assert "name=deploy-config" in out
+    rc, _, _ = _run_resolve(workflow, "owner/repo", tmp_path)
+    assert rc == 1
 
 
 def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
@@ -276,14 +339,12 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
 
     steps = review_job.get("steps") or []
     assert isinstance(steps, list) and steps
-    # The voters overlay fetch reads omnibase_infra dev on purpose (OMN-20910);
-    # it is a deployment fact, not a sibling code dependency.
+    # The voters overlay is fetched from the private CI overlay (OMN-20923) by
+    # an actions/checkout step, not a run block; it is data, not a sibling.
     run_blocks = [
         step.get("run", "")
         for step in steps
-        if isinstance(step, dict)
-        and isinstance(step.get("run"), str)
-        and step.get("name") != "Fetch review voters overlay"
+        if isinstance(step, dict) and isinstance(step.get("run"), str)
     ]
     combined = "\n".join(run_blocks)
 
