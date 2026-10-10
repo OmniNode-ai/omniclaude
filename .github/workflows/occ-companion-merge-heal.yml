@@ -123,7 +123,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python 3.13
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
 
@@ -159,13 +159,13 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
       - name: Resolve the locked CI bus source
-        id: bus-source
+        id: bus_pin
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -178,13 +178,13 @@ jobs:
           if not re.fullmatch(r"[0-9a-f]{40}", sha):
               raise SystemExit("CI bus source is not locked to a full commit sha")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write(f"sha={sha}\n")
+              output.write(f"rev={sha}\n")
           PY
       - name: Fetch the existing CI bus policy and resolver
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omnimarket
-          ref: ${{ steps.bus-source.outputs.sha }}
+          ref: ${{ steps.bus_pin.outputs.rev }}
           path: .monitor-bus
           persist-credentials: false
           sparse-checkout: |

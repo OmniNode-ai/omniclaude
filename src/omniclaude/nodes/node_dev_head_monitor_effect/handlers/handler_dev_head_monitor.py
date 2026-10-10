@@ -440,7 +440,7 @@ class LinearApi:
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
-            raise RuntimeError(f"Linear request failed: {exc}") from exc
+            raise RuntimeError(f"Linear request failed: {type(exc).__name__}") from None
         if not isinstance(payload, dict):
             raise RuntimeError("Linear returned a non-object response")
         if payload.get("errors"):

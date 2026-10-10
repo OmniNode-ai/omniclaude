@@ -380,11 +380,11 @@ def test_ci_bus_checkout_uses_a_full_locked_sha(
         (ROOT / ".github/workflows/occ-companion-merge-heal.yml").read_text()
     )
     steps = workflow["jobs"]["dev-head-red-alert"]["steps"]
-    resolver = next(step for step in steps if step.get("id") == "bus-source")
+    resolver = next(step for step in steps if step.get("id") == "bus_pin")
     checkout = next(
         step for step in steps if step.get("with", {}).get("path") == ".monitor-bus"
     )
-    assert checkout["with"]["ref"] == "${{ steps.bus-source.outputs.sha }}"
+    assert checkout["with"]["ref"] == "${{ steps.bus_pin.outputs.rev }}"
     script = resolver["run"].split("python3 - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
     script_path = tmp_path / "resolve_bus_source.py"
     script_path.write_text(script)
@@ -401,7 +401,7 @@ def test_ci_bus_checkout_uses_a_full_locked_sha(
         assert not output.exists()
     else:
         runpy.run_path(str(script_path))
-        assert output.read_text() == f"sha={sha}\n"
+        assert output.read_text() == f"rev={sha}\n"
 
 
 @pytest.mark.asyncio

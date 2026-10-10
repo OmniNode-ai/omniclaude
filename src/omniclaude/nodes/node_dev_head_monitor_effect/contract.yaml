@@ -7,7 +7,7 @@ version: "0.1.0"
 contract_version: {major: 1, minor: 0, patch: 0}
 node_version: {major: 0, minor: 1, patch: 0}
 node_type: EFFECT_GENERIC
-runtime_profiles: [ci]
+runtime_profiles: [main]
 description: >-
   OMN-18836: read completed push CI conclusions, record one issue per red
   repository and full sha, and comment on its merge PR. Hosted by the
@@ -36,6 +36,7 @@ handler_routing:
       handler:
         module: omniclaude.nodes.node_dev_head_monitor_effect.handlers.handler_dev_head_monitor
         name: HandlerDevHeadMonitor
+        handler_type: http
       subscribe_topic: onex.cmd.omniclaude.dev-head-monitor.v1
 capabilities:
   - name: github.dev_head_monitor
