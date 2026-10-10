@@ -427,12 +427,11 @@ gates:
 
   - name: "pr-title / check-title"
     mode: REQUIRED
-    producer_kind: cross_repo
-    caller_workflow: pr-title-check.yml
-    caller_job: pr-title
-    cross_repo_ref: "OmniNode-ai/onex_change_control/.github/workflows/pr-title-check-reusable.yml@main"
+    producer_kind: local
+    workflow: pr-title-check.yml
+    job_path: ["pr-title"]
     skip_semantics: never
-    rationale: "PR title ticket-reference check (cross-repo reusable hosted in onex_change_control)."
+    rationale: "PR title ticket-reference check: the job runs omnimarket's node_pr_title_check_compute from a pinned omnimarket release (OMN-20885)."
 
   - name: "URL Authority Gate"
     mode: REQUIRED
