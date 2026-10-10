@@ -12,6 +12,27 @@ Two refusals, both about a check that runs and cannot fail:
      `required_status_checks`, or the repo's `EXPECTED_EXTERNAL_CONTEXTS`
      umbrella constant), is not in the baseline, and is not annotated.
 
+And one declaration that is CHECKED rather than trusted (OMN-20074, operator
+RULING 2026-10-10T15:10:25Z): `# advisory-automation: OMN-nnnnn <what it
+automates>` on a job key, or on the comment line directly above it, says the
+job is automation -- it arms a merge, propagates config -- and not a verdict.
+Unlike the advisory-ok annotation it is not an exemption. The gate holds the job to what
+the declaration claims, and each broken rule is an
+AUTOMATION_DECLARATION_VIOLATED finding naming the job and the rule:
+
+  not-a-required-context        the job is not itself a required context;
+  not-needed-by-a-required-job  no required job in its file reaches it through
+                                `needs:`, directly or transitively, so a failing
+                                automation step can never block a merge;
+  runs-no-verification          no step runs a test, a linter, a receipt or an
+                                evidence step, and the job calls no
+                                verification reusable.
+
+A declaration attached to no job is ORPHANED_DECLARATION; one without a ticket
+and a reason is MALFORMED_ANNOTATION. The second rule reads `needs:` edges
+only: a summary that polls job conclusions with no `needs:` (omnibase_infra's
+CI Summary, OMN-14127) is outside what this file can see.
+
 WHY. The OMN-18775 inventory counted 64 real `continue-on-error: true` settings
 across six repositories, 12 of them making a whole job advisory. Some are
 load-bearing: the omnimarket OCC publisher jobs are deliberately non-blocking,
@@ -70,6 +91,27 @@ ANNOTATION = re.compile(
 # "unannotated" verdict sees a gate that ignored what they wrote, which is a
 # correct verdict for an incomprehensible reason.
 ANNOTATION_MARKER = re.compile(r"#\s*advisory-ok:", re.IGNORECASE)
+
+# The automation declaration. Same shape as the annotation -- ticket first, then
+# what the job automates -- and a different consequence: the gate checks it.
+DECLARATION = re.compile(
+    r"#\s*advisory-automation:\s*(?P<ticket>OMN-\d+)\s+(?P<reason>\S.*?)\s*$",
+    re.IGNORECASE,
+)
+DECLARATION_MARKER = re.compile(r"#\s*advisory-automation:", re.IGNORECASE)
+
+# What a declared automation job may NOT run: a test, a linter, a receipt or an
+# evidence step, or a verification reusable. Narrower than
+# VERIFICATION_COMMANDS on purpose: that matcher reads `check_` as verification,
+# and the auto-merge hold check (`check_auto_merge_hold.py`) is the automation's
+# own safety interlock, not a verdict on the pull request.
+AUTOMATION_FORBIDDEN_COMMANDS = re.compile(
+    r"\bpytest\b|\bunittest\b|\btox\b|\bnox\b|\bmypy\b|\bpyright\b|\bruff\b|"
+    r"\bflake8\b|\bpylint\b|\btsc\b|\beslint\b|\bshellcheck\b|\bactionlint\b|"
+    r"\bnpm (run )?(test|lint)\b|\bpre-commit\b|receipt|evidence|\bdod[_-]|"
+    r"validate_|verify_|_gate\.py|-gate(-reusable)?\.ya?ml|occ-preflight",
+    re.IGNORECASE,
+)
 
 # Verification shape, from the job id and name. Deliberately broad and
 # deliberately substring-matched: the ticket's instruction is to accept false
@@ -135,6 +177,8 @@ class Job:
     contexts: tuple[str, ...]
     needs: tuple[str, ...]
     verification: bool
+    pr_reachable: bool
+    run_text: tuple[str, ...]
 
 
 def _fail(message: str) -> GateError:
@@ -192,7 +236,12 @@ def _plain(text: str) -> Any:
 # --------------------------------------------------------------------------
 
 
-def _annotation(lines: list[str], line: int) -> tuple[bool, bool]:
+def _annotation(
+    lines: list[str],
+    line: int,
+    pattern: re.Pattern[str] = ANNOTATION,
+    marker_pattern: re.Pattern[str] = ANNOTATION_MARKER,
+) -> tuple[bool, bool]:
     """Return (annotated, marker_without_annotation) for a 1-based line.
 
     Accepted on the line itself, or on the single comment-only line directly
@@ -207,8 +256,8 @@ def _annotation(lines: list[str], line: int) -> tuple[bool, bool]:
         above = lines[line - 2]
         if above.lstrip().startswith("#"):
             candidates.append(above)
-    annotated = any(ANNOTATION.search(text) for text in candidates)
-    marker = any(ANNOTATION_MARKER.search(text) for text in candidates)
+    annotated = any(pattern.search(text) for text in candidates)
+    marker = any(marker_pattern.search(text) for text in candidates)
     return annotated, marker and not annotated
 
 
@@ -346,19 +395,23 @@ def scan_workflow(path: Path, repo_root: Path) -> tuple[list[Occurrence], list[J
             or (name and VERIFICATION_WORDS.search(name))
             or any(VERIFICATION_COMMANDS.search(item) for item in run_text)
         )
-        if pr_reachable:
-            jobs.append(
-                Job(
-                    path=relative,
-                    line=job_key.start_mark.line + 1,
-                    key=f"{relative}::{job_id}",
-                    job_id=job_id,
-                    name=name,
-                    contexts=_job_contexts(job_id, name, has_uses),
-                    needs=needs,
-                    verification=verification,
-                )
+        # Every job is returned, PR-reachable or not: an automation declaration
+        # is checked wherever it sits, and one on a job this list dropped would
+        # read as attached to nothing.
+        jobs.append(
+            Job(
+                path=relative,
+                line=job_key.start_mark.line + 1,
+                key=f"{relative}::{job_id}",
+                job_id=job_id,
+                name=name,
+                contexts=_job_contexts(job_id, name, has_uses),
+                needs=needs,
+                verification=verification,
+                pr_reachable=pr_reachable,
+                run_text=tuple(run_text),
             )
+        )
 
     # Every occurrence needs its annotation read from the raw lines, which the
     # node tree has thrown away.
@@ -542,6 +595,71 @@ def enforced_jobs(jobs: list[Job], contexts: list[str]) -> set[str]:
     return reached
 
 
+def merge_gating_jobs(jobs: list[Job], contexts: list[str]) -> dict[str, str]:
+    """Job ids in ONE workflow a required job reaches through `needs:`.
+
+    Maps each reached job id to the required job that reaches it. Unlike
+    `enforced_jobs` this is the edge-by-edge closure, not the per-file
+    concession: it answers whether a failing job CAN block a merge, which is
+    exactly the question an automation declaration has to answer no to.
+    """
+    by_id = {job.job_id: job for job in jobs}
+    reached: dict[str, str] = {}
+    for root in jobs:
+        if not enforced(contexts, root.contexts):
+            continue
+        frontier = list(root.needs)
+        while frontier:
+            job_id = frontier.pop()
+            if job_id in reached or job_id == root.job_id:
+                continue
+            reached[job_id] = root.job_id
+            needed = by_id.get(job_id)
+            if needed is not None:
+                frontier.extend(needed.needs)
+    return reached
+
+
+def automation_violations(
+    job: Job, contexts: list[str], gating: dict[str, str]
+) -> list[str]:
+    """Each rule a declared automation job breaks, named, with its evidence."""
+    violations: list[str] = []
+    if enforced(contexts, job.contexts):
+        violations.append(
+            "not-a-required-context: it is itself a required status check, so "
+            "its failure blocks every merge"
+        )
+    if job.job_id in gating:
+        violations.append(
+            "not-needed-by-a-required-job: required job "
+            f"`{gating[job.job_id]}` reaches it through `needs:`, so its "
+            "failure blocks every merge"
+        )
+    # Full-line shell comments are dropped first: a linter directive or a
+    # comment citing a test file executes nothing.
+    executed = [
+        line
+        for text in job.run_text
+        for line in text.splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    hits = sorted(
+        {
+            match.group(0)
+            for line in executed
+            for match in AUTOMATION_FORBIDDEN_COMMANDS.finditer(line)
+        }
+    )
+    if hits:
+        violations.append(
+            "runs-no-verification: it runs a test, lint, receipt or evidence "
+            f"step ({', '.join(hits)}); verification is enforced, not declared "
+            "automation"
+        )
+    return violations
+
+
 # --------------------------------------------------------------------------
 # Baseline
 # --------------------------------------------------------------------------
@@ -594,6 +712,27 @@ def scan(
         occurrences, jobs = scan_workflow(path, repo_root)
         lines = path.read_text(encoding="utf-8").splitlines()
 
+        attached: set[int] = set()
+        for job in jobs:
+            attached.add(job.line)
+            if job.line >= 2 and lines[job.line - 2].lstrip().startswith("#"):
+                attached.add(job.line - 1)
+        for number, text in enumerate(lines, start=1):
+            if DECLARATION_MARKER.search(text) and number not in attached:
+                findings.append(
+                    Finding(
+                        kind="ORPHANED_DECLARATION",
+                        path=path.relative_to(repo_root).as_posix(),
+                        line=number,
+                        key=f"{path.relative_to(repo_root).as_posix()}::line{number}",
+                        detail=(
+                            "an `# advisory-automation:` declaration that sits on "
+                            "no job key and on no comment line directly above "
+                            "one, so it declares nothing"
+                        ),
+                    )
+                )
+
         for occurrence in occurrences:
             seen_advisory.add(occurrence.key)
             if occurrence.key in baseline_advisory:
@@ -621,11 +760,53 @@ def scan(
                 )
             )
 
-        covered = enforced_jobs(jobs, contexts)
+        gating = merge_gating_jobs(jobs, contexts)
+        declared: set[str] = set()
         for job in jobs:
+            is_declared, malformed = _annotation(
+                lines, job.line, DECLARATION, DECLARATION_MARKER
+            )
+            if malformed:
+                findings.append(
+                    Finding(
+                        kind="MALFORMED_ANNOTATION",
+                        path=job.path,
+                        line=job.line,
+                        key=job.key,
+                        detail=(
+                            "an `# advisory-automation:` marker is present but is "
+                            "not one line carrying a ticket AND what the job "
+                            "automates"
+                        ),
+                    )
+                )
+                declared.add(job.job_id)
+                continue
+            if not is_declared:
+                continue
+            declared.add(job.job_id)
+            for violation in automation_violations(job, contexts, gating):
+                findings.append(
+                    Finding(
+                        kind="AUTOMATION_DECLARATION_VIOLATED",
+                        path=job.path,
+                        line=job.line,
+                        key=job.key,
+                        detail=(
+                            f"job `{job.job_id}` is declared automation but "
+                            f"breaks {violation}."
+                        ),
+                    )
+                )
+
+        reachable = [job for job in jobs if job.pr_reachable]
+        covered = enforced_jobs(reachable, contexts)
+        for job in reachable:
             if not job.verification:
                 continue
             seen_jobs.add(job.key)
+            if job.job_id in declared:
+                continue
             if job.key in baseline_jobs or job.job_id in covered:
                 continue
             annotated, malformed = _annotation(lines, job.line)
@@ -646,9 +827,10 @@ def scan(
                         else f"job `{job.job_id}` runs on every pull request, looks "
                         "like verification, and is in neither "
                         "`required_status_checks` nor `EXPECTED_EXTERNAL_CONTEXTS`. "
-                        "It cannot fail anything. Enforce it, or annotate it "
-                        "`# advisory-ok: OMN-nnnnn <reason>` if it is notification "
-                        "or automation."
+                        "It cannot fail anything. Enforce it, or declare it "
+                        "`# advisory-automation: OMN-nnnnn <what it automates>` "
+                        "if it is automation (the gate then checks it cannot "
+                        "block a merge and runs no verification)."
                     ),
                 )
             )
@@ -675,8 +857,9 @@ def write_baseline(
                     "key": occurrence.key,
                 }
             )
-        covered = enforced_jobs(found, contexts)
-        for job in found:
+        reachable = [job for job in found if job.pr_reachable]
+        covered = enforced_jobs(reachable, contexts)
+        for job in reachable:
             if job.verification and job.job_id not in covered:
                 jobs.append({"path": job.path, "line": job.line, "key": job.key})
     payload = {
