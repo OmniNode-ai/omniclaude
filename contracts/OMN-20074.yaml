@@ -28,6 +28,12 @@ requirements:
       - id: "AC2"
         statement: |-
           AC2: with contract-source caller the reusable checks out the caller's pull request head contracts/ and the validator passes a runtime-path PR only when that contract carries a falsifiable deploy check; a change control contract carrying one does not count; the occ default is unchanged -- falsifier: uv run pytest tests/workflows/test_deploy_gate_contract_source_omn20074.py -q fails at the merge base
+  - id: "req-omn20074-runnerip-no-preflight"
+    statement: "The runner-IP reusable scans a caller's workflows and tests without nesting the change-control preflight."
+    acceptance:
+      - id: "AC3"
+        statement: |-
+          AC3: ban-hardcoded-runner-ip.yml has no job that uses occ-preflight and no step that references onex_change_control, while the scan job keeps its name `ban-hardcoded-runner-ip`, has no needs and no if, and still rejects a hard-coded runner IP and a machine pin -- falsifier: uv run pytest tests/ci/test_ban_runner_ip_workflow_occ_independence.py -q --no-cov -p no:randomly fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -38,6 +44,9 @@ evidence_requirements:
   - kind: tests
     description: "The contract source input, the caller head checkout and the validator verdicts per source"
     command: "uv run pytest tests/workflows/test_deploy_gate_contract_source_omn20074.py tests/workflows/test_deploy_gate_reusable_workflow.py -q --no-cov -p no:randomly"
+  - kind: tests
+    description: "The runner-IP reusable carries no preflight job, keeps the scan job's name and runs it unconditionally; its scan behaviour tests still pass"
+    command: "uv run pytest tests/ci/test_ban_runner_ip_workflow_occ_independence.py tests/workflows/test_ban_hardcoded_runner_ip_scope.py tests/workflows/test_ban_machine_pins_omn19895.py -q --no-cov -p no:randomly"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -63,3 +72,11 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/workflows/test_deploy_gate_contract_source_omn20074.py tests/workflows/test_deploy_gate_reusable_workflow.py -q --no-cov -p no:randomly"
+  - id: dod-omn20074-runnerip-no-preflight
+    description: "The runner-IP reusable has no preflight job and no change-control reference, and the scan job is unchanged in name and behaviour"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_ban_runner_ip_workflow_occ_independence.py tests/workflows/test_ban_hardcoded_runner_ip_scope.py tests/workflows/test_ban_machine_pins_omn19895.py -q --no-cov -p no:randomly"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
