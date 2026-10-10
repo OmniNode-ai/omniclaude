@@ -1,0 +1,29 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18836
+title: "Wire the scheduled dev-head CI monitor"
+summary: |
+  The native dev-head monitor reads completed push-triggered CI runs from its
+  data watchlist, files one Linear issue per red repository and full commit
+  sha, and comments on the merge PR with an idempotency marker. Unreadable
+  external ports fail the tick; green and non-verdict conclusions create no
+  issue. The existing ten-minute workflow hosts the node contract over the
+  declared CI bus while keeping the scoped GitHub App token in the process.
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - topics
+evidence_requirements:
+  - kind: tests
+    description: "Dev-head monitor behavior and native contract roundtrip tests pass"
+    command: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-dev-head-monitor-tests
+    description: "Hermetic tests exercise red and green decisions, full-sha deduplication, unreadable ports, scoped workflow wiring and the real contract executor"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov"
