@@ -30,3 +30,4 @@ dod_evidence:
       - check_type: "test_passes"
         check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k another_repo"
         cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: [AC1]
