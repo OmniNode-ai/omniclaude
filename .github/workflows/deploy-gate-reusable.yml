@@ -8,6 +8,9 @@
 # Canonical validator: OMN-9685 (omnibase_core PR #902, 2026-04-25).
 # Centralised: OMN-9734 (DGM-Phase6). Supersedes DGM-Phase2.
 # OCC contract resolution: OMN-11423 — contracts read from onex_change_control, not caller repo.
+# OMN-20074: a caller that is cut over passes contract-source: caller, and the
+# contract is read from its own contracts/OMN-<n>.yaml at the pull request head
+# (the file its repo-evidence / dod-verify reads). The default stays "occ".
 #
 # Usage in caller repos:
 #   jobs:
@@ -32,6 +35,16 @@ on:
         type: string
         required: false
         default: contracts
+      contract-source:
+        description: >
+          OMN-20074. "occ" (default): the cited ticket's contract is read from
+          onex_change_control, for callers not yet cut over. "caller": it is
+          read from the caller's own contracts/OMN-<n>.yaml at the pull request
+          head, and no change control tree is checked out. Any other value
+          fails the job. The validator and its strictness are the same in both.
+        type: string
+        required: false
+        default: occ
 
 jobs:
   # OMN-14260: the nested cross-repo occ-preflight job added by #1879 (OMN-14249)
@@ -99,6 +112,26 @@ jobs:
           fi
           echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve the deploy-gate contract source
+        env:
+          CONTRACT_SOURCE: ${{ inputs.contract-source }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          case "$CONTRACT_SOURCE" in
+            occ|caller) ;;
+            *)
+              echo "::error::contract-source is '$CONTRACT_SOURCE'; expected occ or caller. THE GATE DID NOT RUN."
+              exit 1
+              ;;
+          esac
+          if [ "$CONTRACT_SOURCE" = "caller" ] && [ "$EVENT_NAME" != "merge_group" ] && [[ ! "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::contract-source caller reads the pull request head's contracts, but this '$EVENT_NAME' event carries no pull request head sha. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "::notice::deploy-gate contract source: $CONTRACT_SOURCE"
+
       - name: Fetch deploy-gate support scripts (omniclaude)
         if: github.event_name != 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -137,7 +170,7 @@ jobs:
           fi
 
       - name: Resolve deploy-gate OCC evidence source
-        if: github.event_name != 'merge_group'
+        if: github.event_name != 'merge_group' && inputs.contract-source == 'occ'
         id: resolve_occ_evidence
         shell: bash
         env:
@@ -170,7 +203,7 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
 
       - name: Checkout onex_change_control contracts (canonical contract source)
-        if: github.event_name != 'merge_group' && steps.resolve_occ_evidence.outputs.deploy_gate_required == 'true'
+        if: github.event_name != 'merge_group' && inputs.contract-source == 'occ' && steps.resolve_occ_evidence.outputs.deploy_gate_required == 'true'
         shell: bash
         # OMN-12564: the OCC checkout is delegated to a standalone, unit-tested
         # script that bounds BOTH the fetch AND the checkout with a hard
@@ -198,6 +231,19 @@ jobs:
 
           bash "${GITHUB_WORKSPACE}/.omniclaude-deploy-gate/scripts/deploy-gate/checkout-occ-contracts.sh"
 
+      # OMN-20074: a cut-over caller's contract is its own, at the pull
+      # request head. No change control tree is checked out on this path, so
+      # a companion's evidence there does not count.
+      - name: Checkout the caller's pull request head contracts
+        if: github.event_name != 'merge_group' && inputs.contract-source == 'caller'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .pr-head
+          persist-credentials: false
+          sparse-checkout: /contracts/
+          sparse-checkout-cone-mode: false
+
       - name: Skip on merge_group
         if: github.event_name == 'merge_group'
         working-directory: ${{ github.workspace }}
@@ -210,7 +256,8 @@ jobs:
         with:
           pr-number: ${{ inputs.pr-number != 0 && inputs.pr-number || github.event.pull_request.number }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          contracts-dir: _occ/contracts
+          contracts-dir: ${{ inputs.contract-source == 'caller' && '.pr-head/contracts' || '_occ/contracts' }}
+          contract-source: ${{ inputs.contract-source }}
           # OMN-14505: composite actions cannot read `vars` directly, so the
           # org variable is resolved here (job scope, where `vars` is valid)
           # and threaded through as an input.

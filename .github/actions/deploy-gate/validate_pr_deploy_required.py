@@ -301,6 +301,24 @@ DEPLOY_EVIDENCE_GUIDANCE = (
     "Rejected: grep -q '^status: PASS$' drift/dod_receipts/OMN-XXXX/dod-deploy/command.yaml."
 )
 
+# OMN-20074: where the cited ticket's contract is read from. "occ" is the
+# change control repository (the default, for callers not yet cut over);
+# "caller" is the calling repository's own contracts/ at the pull request head,
+# the file its repo-evidence / dod-verify gate reads. Only the directory and the
+# wording that names it differ; the evidence rule is the same in both.
+CONTRACT_SOURCES = ("occ", "caller")
+CALLER_CONTRACT_PATH = "contracts/OMN-XXXX.yaml in this repository"
+
+
+def evidence_guidance(contract_source: str = "occ") -> str:
+    """Author guidance naming the contract file the gate actually reads."""
+    if contract_source == "caller":
+        return DEPLOY_EVIDENCE_GUIDANCE.replace(
+            "onex_change_control/contracts/OMN-XXXX.yaml", CALLER_CONTRACT_PATH, 1
+        )
+    return DEPLOY_EVIDENCE_GUIDANCE
+
+
 _CMD_SUBST_RE = re.compile(r"\$\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
 _BACKTICK_RE = re.compile(r"`([^`]*)`")
 _ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -1211,13 +1229,22 @@ def validate_pr_deploy_gate(
     contracts_dir: Path,
     repository: str | None = None,
     package_only_file: Path | None = None,
+    contract_source: str = "occ",
 ) -> DeployGateResult:
     """Check runtime-change PRs for deploy evidence in cited ticket contracts.
 
     `repository` (OMN-18156) enables the package-only exemption for a declared
     library repository whose tree corroborates the declaration. Omitting it
     grants no exemption; nothing in `pr_body` can grant one either.
+
+    `contract_source` (OMN-20074) names where `contracts_dir` came from, so
+    the failure text points the author at that file. It changes no verdict.
     """
+    if contract_source not in CONTRACT_SOURCES:
+        raise ValueError(
+            f"contract_source must be one of {CONTRACT_SOURCES}, got {contract_source!r}"
+        )
+    guidance = evidence_guidance(contract_source)
     runtime_hits = find_runtime_paths(
         changed_files,
         repository=repository,
@@ -1256,7 +1283,7 @@ def validate_pr_deploy_gate(
             message=(
                 "DEPLOY GATE FAILED: PR touches runtime paths but cites no OMN-XXXX ticket. "
                 f"Runtime paths: {runtime_hits}. "
-                f"{DEPLOY_EVIDENCE_GUIDANCE} "
+                f"{guidance} "
                 "See OMN-8912, OMN-9685, OMN-11423, and OMN-14505."
             ),
         )
@@ -1290,7 +1317,14 @@ def validate_pr_deploy_gate(
         "DEPLOY GATE FAILED: PR touches runtime paths but no cited ticket has deploy DoD evidence.",
         f"Runtime paths: {runtime_hits}.",
     ]
-    if missing:
+    if missing and contract_source == "caller":
+        parts.append(
+            "Tickets with no contract file in this repository's contracts/ at the "
+            f"pull request head: {missing}. Add "
+            + ", ".join(f"contracts/{t}.yaml" for t in missing)
+            + " to this pull request; a change control companion is not read."
+        )
+    elif missing:
         parts.append(
             f"Tickets with no contract file in onex_change_control/contracts/: {missing}. "
             "Create the contract YAML in the onex_change_control repo, not in the caller repo."
@@ -1308,7 +1342,7 @@ def validate_pr_deploy_gate(
                     parts.append(
                         f"  {ticket_id} [{item_id}] REJECTED — {verdict.reason}"
                     )
-    parts.append(DEPLOY_EVIDENCE_GUIDANCE)
+    parts.append(guidance)
     parts.append(
         "Root cause: OMN-8841 (deploy-agent inactive 2 days post-Dockerfile change). "
         "Gate: OMN-8912. Contract source fix: OMN-11423. "
@@ -1341,6 +1375,16 @@ def main(argv: list[str] | None = None) -> int:
         "--contracts-dir",
         default="contracts",
         help="Directory containing OMN-XXXX.yaml ticket contracts (default: contracts/)",
+    )
+    parser.add_argument(
+        "--contract-source",
+        choices=CONTRACT_SOURCES,
+        default="occ",
+        help=(
+            "Where --contracts-dir came from (OMN-20074): occ (change control, "
+            "the default) or caller (the calling repository's contracts/ at the "
+            "pull request head). Changes the failure wording only."
+        ),
     )
     parser.add_argument(
         "--resolve-occ-ref",
@@ -1401,6 +1445,7 @@ def main(argv: list[str] | None = None) -> int:
         pr_body=args.pr_body,
         contracts_dir=contracts_dir,
         repository=args.repository or None,
+        contract_source=args.contract_source,
     )
 
     if result.passed:

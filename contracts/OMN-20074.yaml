@@ -2,10 +2,11 @@
 schema_version: "1.0.0"
 ticket_id: "OMN-20074"
 title: "OCC retirement S7 for omniclaude: the S5 caller classifies a contract in another repository"
-summary: "omniclaude's repo-evidence caller pins the receipt-gate reusable the other callers of the fleet use (omnibase_core#1914, fb0c6c21) and verifier 0.4.305, so the S5 difference step names a ticket whose only other contract is in another repository as expected_difference contract_in_another_repo (plan section 10.1, rulings 2026-10-08T09:57:41Z and 2026-10-08T14:59:17Z) instead of printing unclassified_difference. The caller stays in shadow with compare-with-occ on."
+summary: "omniclaude's repo-evidence caller pins the receipt-gate reusable the other callers of the fleet use (omnibase_core#1914, fb0c6c21) and verifier 0.4.305, so the S5 difference step names a ticket whose only other contract is in another repository as expected_difference contract_in_another_repo (plan section 10.1, rulings 2026-10-08T09:57:41Z and 2026-10-08T14:59:17Z) instead of printing unclassified_difference. The caller stays in shadow with compare-with-occ on. The reusable deploy gate also takes contract-source: occ (default) keeps the change control contract source, caller checks out the caller's own contracts/ at the pull request head and hands that directory to the unchanged validator."
 is_seam_ticket: false
-interface_change: false
-interfaces_touched: []
+interface_change: true
+interfaces_touched:
+  - public_api
 requirements:
   - id: "req-omn20074-caller-repin"
     statement: |-
@@ -21,6 +22,12 @@ requirements:
       - id: "AC-MON1"
         statement: |-
           AC-MON1: the dev-head-red-alert job lives in auto-merge-stale-poller.yml and not in occ-companion-merge-heal.yml, runs only on its own ten-minute schedule entry while the poller runs only on its fifteen-minute entry, and each job holds only its own grants -- falsifier: uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov
+  - id: "req-caller-contract-source"
+    statement: "A cut-over caller's deploy gate reads the caller's own contracts/OMN-<n>.yaml at the pull request head."
+    acceptance:
+      - id: "AC2"
+        statement: |-
+          AC2: with contract-source caller the reusable checks out the caller's pull request head contracts/ and the validator passes a runtime-path PR only when that contract carries a falsifiable deploy check; a change control contract carrying one does not count; the occ default is unchanged -- falsifier: uv run pytest tests/workflows/test_deploy_gate_contract_source_omn20074.py -q fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -28,6 +35,9 @@ evidence_requirements:
   - kind: "tests"
     description: "The monitor is hosted by the non-OCC poller workflow with its own schedule entry, grants and dry-run input, and its native bus wiring is unchanged."
     command: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov"
+  - kind: tests
+    description: "The contract source input, the caller head checkout and the validator verdicts per source"
+    command: "uv run pytest tests/workflows/test_deploy_gate_contract_source_omn20074.py tests/workflows/test_deploy_gate_reusable_workflow.py -q --no-cov -p no:randomly"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -47,3 +57,9 @@ dod_evidence:
       - check_type: "test_passes"
         check_value: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20074-caller-contract-source
+    description: "Workflow wiring and validator verdicts for the occ and caller contract sources"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/workflows/test_deploy_gate_contract_source_omn20074.py tests/workflows/test_deploy_gate_reusable_workflow.py -q --no-cov -p no:randomly"

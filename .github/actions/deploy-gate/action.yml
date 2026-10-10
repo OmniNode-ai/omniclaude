@@ -24,6 +24,13 @@ inputs:
       workflow checks out OCC and passes _occ/contracts here.
     required: false
     default: _occ/contracts
+  contract-source:
+    description: >
+      Where contracts-dir came from (OMN-20074): "occ" (default) for
+      onex_change_control, "caller" for the calling repository's own
+      contracts/ at the pull request head. Changes the failure wording only.
+    required: false
+    default: occ
   falsifiability-mode:
     description: >
       OMN-14505 rollout knob: "report" (default) computes the falsifiability
@@ -58,6 +65,7 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         PR_NUMBER: ${{ inputs.pr-number }}
         CONTRACTS_DIR: ${{ inputs.contracts-dir }}
+        CONTRACT_SOURCE: ${{ inputs.contract-source }}
         ACTION_PATH: ${{ github.action_path }}
         # OMN-14505 rollout knob. "report" (the default) computes the falsifiability
         # verdict and logs a ::warning:: for every cited ticket whose deploy evidence
@@ -85,4 +93,5 @@ runs:
           --changed-files "$changed_files" \
           --pr-body "$(gh pr view "$PR_NUMBER" --json body -q '.body')" \
           --contracts-dir "$CONTRACTS_DIR" \
+          --contract-source "$CONTRACT_SOURCE" \
           --repository "$GITHUB_REPOSITORY"
