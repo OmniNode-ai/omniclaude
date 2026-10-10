@@ -1,0 +1,44 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20910"
+title: "Review-voter models are declared in a contract overlay, not repo variables or workflow files"
+summary: "omniclaude's Hostile Reviewer workflow reads every voter from the review voters overlay (omnibase_infra docker/lane-overlays/hostile-review-voters.yaml, fetched from omnibase_infra dev at run time) through omniintelligence's cli_review --voters-overlay, with omniintelligence pinned at 8782c050, the build that carries the overlay reader. The workflow names no voter endpoint, port, model flag or endpoint variable, and a ratchet with a known-bad positive control keeps it that way. The quorum rule and the fail-closed gate are unchanged."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-workflow-reads-overlay"
+    statement: "The hostile-review job resolves its voters only from the review voters overlay, read live from omnibase_infra dev."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the review step passes the overlay to cli_review and the overlay is fetched from omnibase_infra dev -- falsifier: env -u PYTHONPATH uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'voters_overlay'"
+  - id: "req-no-voter-endpoint-in-workflows"
+    statement: "The workflow file names no review voter endpoint, port, model flag or endpoint variable."
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: a ratchet over the workflow finds no voter endpoint, port, model flag or endpoint variable, and finds all four lines of a known-bad fixture -- falsifier: env -u PYTHONPATH uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'ratchet or names_no_voter'"
+evidence_requirements:
+  - kind: "tests"
+    description: "The workflow reads the overlay and names no voter."
+    command: "env -u PYTHONPATH uv run pytest tests/hooks/test_hostile_reviewer_workflow.py tests/workflows/test_hostile_reviewer_fleet_and_stderr.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn20910-ac1-workflow-reads-overlay"
+    description: "The review step reads the review voters overlay fetched from omnibase_infra dev."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'voters_overlay'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn20910-ac3-no-voter-endpoint"
+    description: "The workflow names no voter endpoint; the ratchet's positive control finds the known-bad lines."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'ratchet or names_no_voter'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]

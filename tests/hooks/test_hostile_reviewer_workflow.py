@@ -7,8 +7,8 @@ Asserts that ``.github/workflows/hostile-reviewer.yml`` is wired correctly:
 - Triggers on the expected ``pull_request`` event types.
 - Runs on the ``omnibase-ci`` self-hosted runner that exposes the local
   DeepSeek-R1 endpoint.
-- Invokes ``omniintelligence.review_pairing.cli_review`` with at least TWO
-  ``--model`` flags, naming both fleet-standard keys (OMN-18473).
+- Invokes ``omniintelligence.review_pairing.cli_review`` with the review
+  voters contract overlay and names no voter endpoint or model (OMN-20910).
 - Defines a ``hostile-review-gate`` job that depends on ``hostile-review``
   and exits non-zero when the review job reports ``failure``.
 - Posts a PR summary comment via ``actions/github-script``.
@@ -151,107 +151,118 @@ def test_same_repo_dev_prs_do_not_use_public_runner_branch(
     )
 
 
-def test_review_step_invokes_cli_review_with_model(
-    workflow: dict[object, object],
-) -> None:
-    """A step must invoke ``cli_review`` with AT LEAST TWO ``--model`` flags.
-
-    OMN-18473 pins the model COUNT, and both keys by name, mirroring
-    ``omnibase_infra`` ``tests/ci/test_hostile_reviewer_ci_gate.py``
-    (``test_hostile_review_job_uses_live_local_models``), which asserts its own
-    two keys the same way.
-
-    Why the count is load-bearing rather than a style preference: cli_review
-    returns 0 only when >= 2 models succeed and 2 ("DEGRADED -- a minimum of 2
-    models is required for a full pass") when exactly one does. From 2026-04-11
-    (71d816a99) to 2026-09-16 this workflow passed exactly one ``--model``, so
-    exit 0 was unreachable and every verdict it produced was DEGRADED by
-    construction. Nothing caught that, because the assertion this replaces
-    accepted "at least one ``--model``".
-
-    Both keys are named because the pair is a deliberate choice, not an
-    arbitrary one. ``deepseek-r1`` and ``qwen3-review`` are two registry keys
-    for ONE backend (same endpoint, same ``api_model_id``, OMN-16481), so
-    pairing THOSE two would satisfy a naive count while passing one backend
-    twice under two spellings -- exactly the defect a count-only assertion
-    cannot see.
-    """
+def _review_job_steps(workflow: dict[object, object]) -> list[dict[str, object]]:
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
     review_job = jobs["hostile-review"]
     assert isinstance(review_job, dict)
-
     steps = review_job.get("steps") or []
     assert isinstance(steps, list) and steps, "review job must have steps"
+    return [step for step in steps if isinstance(step, dict)]
 
-    run_blocks = [
-        step.get("run", "")
-        for step in steps
-        if isinstance(step, dict) and step.get("run")
+
+# OMN-20910: what a voter endpoint looks like when someone writes one into the
+# workflow -- a URL with an explicit port, an endpoint variable, or a --model
+# flag. Comment lines are skipped; the workflow keeps its history there.
+_VOTER_ENDPOINT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"https?://[A-Za-z0-9.\-]+:\d{2,5}"),
+    re.compile(r"\bLLM_[A-Z0-9_]+_URL\b"),
+    re.compile(r"vars\.LLM_"),
+    re.compile(r"--model[\s=]"),
+)
+
+# Positive control: the lines this workflow carried before the overlay.
+_KNOWN_BAD = """\
+          LLM_LOCAL_STUDIO_PLANNER_URL: ${{ vars.LLM_LOCAL_STUDIO_PLANNER_URL }}
+              --model qwen3-review \\
+              --model local-studio-planner \\
+          LLM_LOCAL_STUDIO_PLANNER_URL: "http://studio.lab.example:8131"
+"""
+
+
+def voter_endpoint_findings(text: str) -> list[str]:
+    """Every non-comment line of ``text`` that names a voter endpoint or model flag."""
+    return [
+        f"{number}: {line.strip()}"
+        for number, line in enumerate(text.splitlines(), start=1)
+        if not line.lstrip().startswith("#")
+        and any(p.search(line) for p in _VOTER_ENDPOINT_PATTERNS)
     ]
-    combined = "\n".join(run_blocks)
 
-    assert "omniintelligence.review_pairing.cli_review" in combined, (
-        "review job must invoke omniintelligence.review_pairing.cli_review"
+
+def test_the_voter_endpoint_ratchet_finds_every_known_bad_line() -> None:
+    """Positive control: the zero below is only evidence if this finds four."""
+    assert len(voter_endpoint_findings(_KNOWN_BAD)) == 4
+
+
+def test_workflow_names_no_voter_endpoint_or_model() -> None:
+    """OMN-20910, RULING 2026-10-10T18:17:37Z: voters live in the contract overlay only."""
+    findings = voter_endpoint_findings(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    assert findings == [], (
+        "hostile-reviewer.yml names a review voter endpoint, port or model; "
+        f"voters are declared only in the review voters overlay: {findings}"
     )
-    model_flag_count = combined.count("--model ")
-    assert model_flag_count >= 2, (
-        "review job must pass at least TWO --model flags to cli_review "
-        f"(found {model_flag_count}) -- cli_review returns 0 only when >= 2 "
-        "models succeed, so a single-model invocation is DEGRADED by "
-        "construction on every run (OMN-18473)"
+    assert "LLM_LOCAL_STUDIO_PLANNER_URL" not in WORKFLOW_PATH.read_text(
+        encoding="utf-8"
     )
-    # Only real flags: a key followed by a line continuation, never the word
-    # after "--model" in a comment inside the run block.
-    models = re.findall(r"--model\s+([A-Za-z0-9_.-]+)\s*\\\n", combined)
-    assert models == ["qwen3-review", "local-studio-planner"], (
-        "review job must pass exactly the two DIFFERENT lab models, "
-        f"qwen3-review and local-studio-planner, each on its own lab host; found {models}. "
-        "deepseek-r1, qwen3-review and qwen3-review-b were three keys for one "
-        "backend (OMN-16481), so the old pair reviewed with a single model "
-        "twice, and a cloud reviewer would send a private diff off the lab "
-        "(OMN-17492)"
+
+
+def test_review_step_invokes_cli_review_with_the_voters_overlay(
+    workflow: dict[object, object],
+) -> None:
+    """The review reads its voters from the overlay (OMN-20910).
+
+    The two-voter count that OMN-18473 pinned here is now a property of the
+    overlay and of cli_review: a required voter that does not vote exits 2,
+    named, and fewer than two distinct voters is a degraded quorum that this
+    gate fails closed on. The overlay is validated by omniintelligence's
+    node_review_voters_overlay_compute before any voter is called.
+    """
+    review_step = next(
+        s for s in _review_job_steps(workflow) if s.get("id") == "review"
     )
-    for not_a_voter in ("deepseek-r1", "qwen3-review-b", "glm-review"):
-        assert not_a_voter not in models
-    assert "--pr" in combined and "--repo" in combined, (
+    run = str(review_step.get("run", ""))
+    assert "omniintelligence.review_pairing.cli_review" in run
+    assert '--voters-overlay "$REVIEW_VOTERS_OVERLAY"' in run
+    assert "--pr" in run and "--repo" in run, (
         "review job must pass --pr and --repo to cli_review"
     )
-    assert "REVIEW_JSON=\"$REVIEW_JSON\" python3 - <<'PYEOF'" in combined, (
+    assert "REVIEW_JSON=\"$REVIEW_JSON\" python3 - <<'PYEOF'" in run, (
         "review JSON must be passed through the environment because the "
         "heredoc occupies Python stdin"
     )
-    assert "echo \"$REVIEW_JSON\" | python3 - <<'PYEOF'" not in combined, (
+    assert "echo \"$REVIEW_JSON\" | python3 - <<'PYEOF'" not in run, (
         "do not pipe review JSON into python3 - with a heredoc; Python reads "
         "the script from stdin and the JSON payload is lost"
     )
+    env = review_step.get("env") or {}
+    assert isinstance(env, dict)
+    assert not [k for k in env if str(k).startswith("LLM_") and str(k).endswith("_URL")]
 
 
-def test_review_step_resolves_second_voter_url_from_actions_variable(
+def test_voters_overlay_is_read_live_from_omnibase_infra_dev(
     workflow: dict[object, object],
 ) -> None:
-    """OMN-20422: the second voter's URL comes from the renamed Actions variable.
-
-    The registry key is ``local-studio-planner`` and its ``env_var`` is
-    ``LLM_LOCAL_STUDIO_PLANNER_URL``. A review step that still exported the
-    retired ``LLM_GPT_OSS_REVIEW_URL`` would leave the new key without a URL,
-    and the vote would fail as an unreachable reviewer. The address itself
-    lives in the repository Actions variable, not in this public file.
-    """
+    """Unpinned on purpose: the overlay is a deployment fact, and a pin would
+    bring back the per-repository edit the overlay exists to remove."""
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
     review_job = jobs["hostile-review"]
     assert isinstance(review_job, dict)
-    steps = review_job.get("steps") or []
-    review_step = next(
-        step for step in steps if isinstance(step, dict) and step.get("id") == "review"
+    env = review_job.get("env")
+    assert isinstance(env, dict)
+    assert str(env["REVIEW_VOTERS_OVERLAY"]).endswith(
+        "docker/lane-overlays/hostile-review-voters.yaml"
     )
-    env = review_step.get("env") or {}
-
-    assert env.get("LLM_LOCAL_STUDIO_PLANNER_URL") == (
-        "${{ vars.LLM_LOCAL_STUDIO_PLANNER_URL }}"
+    fetch = next(
+        s
+        for s in _review_job_steps(workflow)
+        if s.get("name") == "Fetch review voters overlay"
     )
-    assert "LLM_GPT_OSS_REVIEW_URL" not in env
+    run = str(fetch.get("run", ""))
+    assert "github.com/OmniNode-ai/omnibase_infra.git" in run
+    assert "--branch dev" in run
+    assert "sparse-checkout set docker/lane-overlays" in run
 
 
 def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
@@ -265,10 +276,14 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
 
     steps = review_job.get("steps") or []
     assert isinstance(steps, list) and steps
+    # The voters overlay fetch reads omnibase_infra dev on purpose (OMN-20910);
+    # it is a deployment fact, not a sibling code dependency.
     run_blocks = [
         step.get("run", "")
         for step in steps
-        if isinstance(step, dict) and isinstance(step.get("run"), str)
+        if isinstance(step, dict)
+        and isinstance(step.get("run"), str)
+        and step.get("name") != "Fetch review voters overlay"
     ]
     combined = "\n".join(run_blocks)
 

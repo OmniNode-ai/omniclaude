@@ -260,6 +260,8 @@ def _run_review_script(
         "VERDICT_ARTIFACT": str(artifact),
         "PR_NUMBER": "2181",
         "REPO": "OmniNode-ai/omniclaude",
+        # Job-level in the workflow (OMN-20910); the stubbed uv never reads it.
+        "REVIEW_VOTERS_OVERLAY": str(tmp_path / "hostile-review-voters.yaml"),
     }
     env.update(extra_env or {})
 

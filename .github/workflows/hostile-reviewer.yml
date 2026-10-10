@@ -5,16 +5,18 @@
 #
 # Adversarial multi-model code review gate on every pull request.
 #
-# Invokes omniintelligence.review_pairing.cli_review (node-based path via
-# HandlerLlmCliSubprocess / adapter_codex_reviewer) with
-# --model qwen3-review --model local-studio-planner: two DIFFERENT lab models
-# (OMN-17492, operator rulings 2026-09-25), Qwen3.8-27B and Qwen3.6-35B-A3B (the local-studio-planner key, OMN-20422),
-# each on its own lab host. Private diffs go only to lab models, never to a
-# third-party cloud reviewer. Both hosts are always on (operator,
-# 2026-09-25), so there is no single-model pass: a lost reviewer is a
-# degraded quorum, which fails closed.
-# Codex is excluded from the initial pilot — add --model codex once non-interactive
-# OAuth auth is confirmed on the omnibase-ci runner (OMN-8524).
+# Invokes omniintelligence.review_pairing.cli_review with the voters declared
+# in the review voters contract overlay, omnibase_infra
+# docker/lane-overlays/hostile-review-voters.yaml, read from omnibase_infra
+# `dev` at run time (OMN-20910, operator RULING 2026-10-10T18:17:37Z: review-
+# voter models are declared in a contract overlay, never in repository
+# variables or workflow files). THIS FILE NAMES NO VOTER, ENDPOINT OR MODEL:
+# changing or adding a voter is an edit to that overlay, and the next run of
+# this gate uses it with no workflow, variable or pin change. Private diffs go
+# only to lab models, never to a third-party cloud reviewer. A required voter
+# that is unreachable or fails is named, one voter is no quorum, and the job
+# fails closed. Codex is not a voter (OMN-8524); a voter of any kind is added
+# in the overlay.
 #
 # TWO MODELS, BECAUSE THE CLI's CONTRACT ASKS FOR TWO (OMN-18473). cli_review
 # returns 0 only when >=2 models succeed and 2 ("DEGRADED — a minimum of 2
@@ -44,8 +46,8 @@
 # same api_model_id (Qwen3.6-35B-A3B) since the 4090 RMA — that is OMN-16481,
 # still open. Pairing them would pass one backend twice under two spellings.
 # qwen3-review-b is the key omnimarket pairs, and it is honestly ALSO the same
-# endpoint and served model; it differs in its env var override
-# (LLM_QWEN3_REVIEW_B_URL) and max_retries. Two samples of one set of weights is
+# endpoint and served model; it differs in its env var override and
+# max_retries. Two samples of one set of weights is
 # what the fleet standard currently IS. The genuinely independent reviewer is
 # glm-review, which needs an LLM_GLM_API_KEY Actions secret that exists on
 # omnibase_infra and on neither this PUBLIC repo nor the org — provisioning a
@@ -183,6 +185,8 @@ jobs:
       # Absolute: the review step runs in ../omniintelligence, and the upload
       # action resolves a relative path against the workspace.
       VERDICT_ARTIFACT: ${{ github.workspace }}/hostile-review-verdict.json
+      # OMN-20910: the one place the voters come from. Fetched by the step below.
+      REVIEW_VOTERS_OVERLAY: ${{ github.workspace }}/../review-voters-overlay/docker/lane-overlays/hostile-review-voters.yaml
 
     steps:
       - name: Checkout PR branch
@@ -245,7 +249,31 @@ jobs:
 
       - name: Clean stale dependency clones
         working-directory: ${{ github.workspace }}
-        run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat
+        run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat ../review-voters-overlay
+
+      # OMN-20910: the voters overlay is read from omnibase_infra `dev` at run
+      # time, deliberately unpinned. It is a deployment fact, not a code
+      # dependency: a pin would bring back the per-repository edit and per-PR
+      # branch update this overlay exists to remove. Only docker/lane-overlays
+      # is checked out, and the commit read is logged.
+      - name: Fetch review voters overlay
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            rm -rf ../review-voters-overlay
+            if timeout 240s git clone --quiet --depth=1 --filter=blob:none --sparse --branch dev \
+                https://github.com/OmniNode-ai/omnibase_infra.git ../review-voters-overlay \
+              && git -C ../review-voters-overlay sparse-checkout set docker/lane-overlays; then
+              echo "review voters overlay read from omnibase_infra dev at $(git -C ../review-voters-overlay rev-parse HEAD)"
+              test -s "$REVIEW_VOTERS_OVERLAY"
+              exit 0
+            fi
+            echo "::warning::fetch of the review voters overlay failed (attempt ${attempt}/4)"
+            sleep $((attempt * 5))
+          done
+          echo "::error::could not fetch the review voters overlay from omnibase_infra dev"
+          exit 1
 
       - name: Clone omniintelligence
         working-directory: ${{ github.workspace }}
@@ -348,12 +376,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-          # OMN-20422 (RULING 2026-10-09T04:15:56Z): the local-studio-planner key resolves its URL from
-          # this variable, so the second voter is Qwen3.6-35B-A3B on a second port of the
-          # lab host that serves delegation. The address lives in this repository's Actions
-          # variable of the same name, not in the file: this is a public repository, and the
-          # hardcoded-lab-config and public-hygiene gates refuse a lab address in it.
-          LLM_LOCAL_STUDIO_PLANNER_URL: ${{ vars.LLM_LOCAL_STUDIO_PLANNER_URL }}
+          # OMN-20910: no voter endpoint is set here. Every voter, its endpoint,
+          # model, sampling and focus come from REVIEW_VOTERS_OVERLAY (job env).
           # LLM_DEEPSEEK_URL is read directly from the runner's environment (Infisical-injected
           # or set in the runner's shell profile on .201) — no GitHub secret needed
         working-directory: ../omniintelligence
@@ -389,7 +413,7 @@ jobs:
           # Exit 2 is NOT a verdict and is no longer read as one. This step
           # previously treated it as the expected steady state, which is
           # precisely what made a single model's opinion sufficient to block
-          # a merge. Since OMN-18473 this step passes TWO --model flags, so
+          # a merge. Since OMN-18473 this step reviews with TWO voters (since OMN-20910 the overlay's), so
           # the expected outcome of a healthy run is exit 0; exit 2 now means
           # one of the two returned and agreement could not be established.
           # That is a degraded quorum, not a verdict on a single opinion, and
@@ -415,8 +439,7 @@ jobs:
             REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
               --pr "$PR_NUMBER" \
               --repo "$REPO" \
-              --model qwen3-review \
-              --model local-studio-planner \
+              --voters-overlay "$REVIEW_VOTERS_OVERLAY" \
               2>"$ATTEMPT_ERR")
             REVIEW_EXIT=$?
             set -e
