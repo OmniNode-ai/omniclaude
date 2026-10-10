@@ -716,7 +716,9 @@ def load_ticket_occ_evidence(
 # labelled acceptance criterion. A successful GitHub Actions check named
 # ``repo-evidence / dod-verify`` attests that those checks passed at the PR head
 # and failed at the merge base, using a workflow the PR cannot edit. The contract
-# at that verified head must match what merged. Once engaged, this verdict is
+# at that verified head must match what merged. Where several merged PRs of one
+# repository carry the contract, the newest merged one decides, since its check
+# re-verifies the whole contract. Once engaged, this verdict is
 # final; only repositories without this evidence fall back to OCC. No database
 # is read, and importing this module performs no network I/O.
 
@@ -878,12 +880,26 @@ def evaluate_repo_evidence(
             RepoEvidenceOutcome.NOT_ENGAGED,
             f"no merged product PR carries {CONTRACT_DIR}/{ticket_id}.yaml",
         )
+    # The check verifies the whole contract at its PR head, so a later merged PR
+    # of the same repository re-verifies everything an earlier one did: only the
+    # newest decides there. A PR with no merge time is never proven superseded.
+    newest: dict[str, str] = {}
+    for pr, _contract in contracts:
+        assert pr.ref.repo is not None
+        repo = pr.ref.repo
+        if pr.merged_at:
+            newest[repo] = max(newest.get(repo, ""), pr.merged_at)
+    contracts = [
+        (pr, contract)
+        for pr, contract in contracts
+        if not pr.merged_at or pr.merged_at == newest[pr.ref.repo or ""]
+    ]
 
     engaged: list[tuple[PRStatus, dict[str, Any], list[dict[str, Any]]]] = []
     skipped: list[str] = []
     for pr, contract in contracts:
+        assert pr.ref.repo is not None
         repo = pr.ref.repo
-        assert repo is not None
         source = f"{repo}#{pr.ref.number}"
         runs = read_check_runs(repo, pr.head_sha)
         if runs is None:
@@ -912,8 +928,8 @@ def evaluate_repo_evidence(
     bindings: dict[str, list[str]] = {}
     sources: list[str] = []
     for pr, contract, kept in engaged:
+        assert pr.ref.repo is not None
         repo = pr.ref.repo
-        assert repo is not None
         source = f"{repo}#{pr.ref.number}"
         context = f"{source} at head {pr.head_sha} and merge {pr.merge_commit_sha}"
         sources.append(context)

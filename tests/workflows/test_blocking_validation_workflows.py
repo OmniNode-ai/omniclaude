@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, cast
 
@@ -75,3 +76,34 @@ def test_contract_proof_resolution_gate_is_blocking() -> None:
     assert "exit 1" in run
     assert "|| echo" not in run
     assert "Phase 1" not in step["name"]
+
+
+def test_contract_validation_reads_a_pinned_validator_that_accepts_binds_ac() -> None:
+    """The composite action reads OCC main, whose schema refused `binds_ac`.
+
+    A contract that binds its criteria (which repo-evidence / dod-verify requires)
+    was refused as `dod_evidence.N.binds_ac: Extra inputs are not permitted`. The
+    validators are fetched at a full sha instead, as omnimarket and
+    omnibase_infra do.
+    """
+    workflow = _load_workflow(CONTRACT_VALIDATION_WORKFLOW_PATH)
+    job = _job(workflow, "contract-validation")
+    steps = [item for item in job["steps"] if isinstance(item, dict)]
+
+    assert not [
+        item
+        for item in steps
+        if "onex_change_control/.github/actions/validate-contract"
+        in str(item.get("uses", ""))
+    ], "the OCC composite action resolves OCC main; fetch the validators at a sha"
+
+    fetch = _step(job, "Check out pinned contract validators")
+    run = str(fetch.get("run", ""))
+    match = re.search(r"^\s*occ_sha=([0-9a-f]{40})$", run, re.MULTILINE)
+    assert match, "the validators must be fetched at a full sha"
+    assert "https://github.com/OmniNode-ai/onex_change_control.git" in run
+    assert '"$occ_sha"' in run
+
+    validate = _step(job, "Run contract validation")
+    assert validate.get("id") == "validate-contract"
+    assert "validate-yaml" in str(validate.get("run", ""))
