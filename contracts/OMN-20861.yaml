@@ -1,0 +1,61 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20861"
+title: "A canonical clone refused for an hour fails the canonical-clone-sync run"
+summary: "canonical_clone_sync.py records first_refused_at per clone path under the clone lock, atomically in the state directory; a clone refused for the bound by wall clock (3600s, ONEX_CLONE_REFUSAL_BOUND_S lowers it) makes the timer run exit 3 and print the dirty paths; a converged clone clears the record and logs one resolved line."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn20861-refusal-age"
+    statement: |-
+      A canonical clone refused continuously for the bound must fail the timer sync run.
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: a clone refused for the bound exits 3 regardless of how many runs occurred -- falsifier: uv run pytest tests -q -k "refusal_age_exits_nonzero_few_runs or refusal_age_exits_nonzero_many_runs"
+      - id: "AC2"
+        statement: |-
+          AC2: concurrent merge and timer runs keep one consistent record, and a restart keeps the age -- falsifier: uv run pytest tests -q -k "refusal_age_concurrent_triggers or refusal_age_survives_restart"
+      - id: "AC3"
+        statement: |-
+          AC3: a converged clone resets the age -- falsifier: uv run pytest tests -q -k "refusal_age_resets"
+evidence_requirements:
+  - kind: "tests"
+    description: "a clone refused for the bound exits 3 regardless of how many runs occurred"
+    command: "uv run pytest tests -q -k \"refusal_age_exits_nonzero_few_runs or refusal_age_exits_nonzero_many_runs\""
+  - kind: "tests"
+    description: "concurrent merge and timer runs keep one consistent record, and a restart keeps the age"
+    command: "uv run pytest tests -q -k \"refusal_age_concurrent_triggers or refusal_age_survives_restart\""
+  - kind: "tests"
+    description: "a converged clone resets the age"
+    command: "uv run pytest tests -q -k \"refusal_age_resets\""
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-refused-bound-exits-3"
+    description: "a clone refused for the bound exits 3 regardless of how many runs occurred"
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests -q -k \"refusal_age_exits_nonzero_few_runs or refusal_age_exits_nonzero_many_runs\""
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-one-record-survives-restart"
+    description: "concurrent merge and timer runs keep one consistent record, and a restart keeps the age"
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests -q -k \"refusal_age_concurrent_triggers or refusal_age_survives_restart\""
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
+  - id: "dod-converged-resets-age"
+    description: "a converged clone resets the age"
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests -q -k \"refusal_age_resets\""
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
