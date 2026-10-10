@@ -265,8 +265,12 @@ jobs:
             if timeout 240s git clone --quiet --depth=1 --filter=blob:none --sparse --branch dev \
                 https://github.com/OmniNode-ai/omnibase_infra.git ../review-voters-overlay \
               && git -C ../review-voters-overlay sparse-checkout set docker/lane-overlays; then
-              echo "review voters overlay read from omnibase_infra dev at $(git -C ../review-voters-overlay rev-parse HEAD)"
-              test -s "$REVIEW_VOTERS_OVERLAY"
+              OVERLAY_SHA="$(git -C ../review-voters-overlay rev-parse HEAD)"
+              echo "review voters overlay read from omnibase_infra dev at ${OVERLAY_SHA}"
+              if [ ! -s "$REVIEW_VOTERS_OVERLAY" ]; then
+                echo "::error::the review voters overlay docker/lane-overlays/hostile-review-voters.yaml is missing or empty on omnibase_infra dev at ${OVERLAY_SHA}; no voter can be resolved"
+                exit 1
+              fi
               exit 0
             fi
             echo "::warning::fetch of the review voters overlay failed (attempt ${attempt}/4)"
