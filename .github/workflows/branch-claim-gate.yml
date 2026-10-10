@@ -36,6 +36,7 @@ on:
       - 'scripts/lane_identity.py'
       - 'scripts/hooks/pre-push-branch-claim'
       - 'tests/scripts/test_branch_claim.py'
+      - 'tests/scripts/test_branch_claim_check_workflow.py'
       - 'tests/scripts/test_branch_claim_hook.py'
       - 'tests/scripts/test_lane_identity_canary.py'
       - 'scripts/hooks/prepare-commit-msg-lane'
@@ -50,6 +51,7 @@ on:
       - 'scripts/lane_identity.py'
       - 'scripts/hooks/pre-push-branch-claim'
       - 'tests/scripts/test_branch_claim.py'
+      - 'tests/scripts/test_branch_claim_check_workflow.py'
       - 'tests/scripts/test_branch_claim_hook.py'
       - 'tests/scripts/test_lane_identity_canary.py'
       - 'scripts/hooks/prepare-commit-msg-lane'
@@ -116,5 +118,6 @@ jobs:
           git config --global user.name ci
           uv run pytest \
             tests/scripts/test_branch_claim.py \
+            tests/scripts/test_branch_claim_check_workflow.py \
             tests/scripts/test_branch_claim_hook.py \
             tests/scripts/test_lane_identity_canary.py -q

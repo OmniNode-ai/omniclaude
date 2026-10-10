@@ -24,14 +24,19 @@
 # half so arming it later is a one-word change in the caller, not a rewrite --
 # but nothing should pass `refuse` until that measurement exists.
 #
-# ONE RESOLUTION, NOT TWO. Everything this job decides is decided by
-# `scripts/branch_claim.py` in this repository, which is the same module the
-# pre-push hook runs. A second implementation of the comparison is a second
-# place for it to drift, and a local refusal that disagrees with a remote check
-# is invisible until they disagree about a real push.
+# TWO SOURCES. `work-ledger` reads the canonical lab node's GitHub check for the
+# PR head. The database work ledger is read by the lab node; this job opens no
+# database connection and only interprets the node's reported outcome.
+# `file` runs `scripts/branch_claim.py`, the same module the pre-push hook runs,
+# against the private ledger and its rolls. That path is retained only until
+# the follow-up removal. This job implements no claim comparison of its own on
+# either path. The lab node's resolution is a port of `scripts/claim_index.py`
+# and `scripts/branch_claim.py` over the database rows, so a change to the
+# resolution here has to land in the node as well until the pre-push hook asks
+# the same node.
 #
-# `secrets: inherit` IS REQUIRED. The claim store lives in a PRIVATE workspace
-# repository, and this job mints an installation token to read it. The claim
+# `secrets: inherit` IS REQUIRED FOR `file`. The claim store lives in a PRIVATE
+# workspace repository, and this job mints an installation token to read it. The claim
 # index module that resolves it does NOT: it is vendored in this repository as
 # `scripts/claim_index.py` beside the resolver (OMN-19722), and is fetched at the
 # same pin. Fetching it unpinned from the store's default branch let a wording
@@ -47,7 +52,7 @@
 #       uses: OmniNode-ai/omniclaude/.github/workflows/branch-claim-check-reusable.yml@<immutable-sha>
 #       secrets: inherit
 #
-# WHAT THIS CHECK CANNOT SEE, measured on its own first run. The store is read
+# WHAT `file` CANNOT SEE, measured on its own first run. The store is read
 # from the private repository's DEFAULT BRANCH, so a claim row that exists only in
 # a lane's working copy is invisible here until it is committed and merged. The
 # first run of this workflow resolved its own branch as `unclaimed` for exactly
@@ -64,6 +69,26 @@ name: Branch Claim Check (reusable)
 on:
   workflow_call:
     inputs:
+      claim_source:
+        description: "'file' reads the private ledger; 'work-ledger' reads the lab node's check."
+        type: string
+        required: false
+        default: file
+      lab_check_name:
+        description: Name of the canonical lab branch-claim check on the PR head.
+        type: string
+        required: false
+        default: branch-claim / work-ledger
+      lab_check_app_slug:
+        description: GitHub App slug trusted to publish the lab check.
+        type: string
+        required: false
+        default: onexbot-occ-writer
+      lab_check_wait_seconds:
+        description: Maximum seconds to wait for a completed lab check.
+        type: number
+        required: false
+        default: 900
       mode:
         description: >-
           'record' (default) reports findings and exits 0. 'refuse' fails the
@@ -116,6 +141,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 jobs:
   branch-claim-check:
@@ -140,13 +166,108 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    timeout-minutes: 15
+    # Leave room for the default 900-second lab wait and its final diagnostic.
+    timeout-minutes: 20
     steps:
+      - name: Validate the claim source
+        env:
+          CLAIM_SOURCE: ${{ inputs.claim_source }}
+        run: |
+          set -euo pipefail
+          case "$CLAIM_SOURCE" in
+            file|work-ledger) ;;
+            *)
+              echo "::error::Unknown claim_source '$CLAIM_SOURCE'. THE CHECK DID NOT RUN."
+              exit 1
+              ;;
+          esac
+
+      - name: Read the lab branch-claim check for this head
+        if: inputs.claim_source == 'work-ledger'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LAB_CHECK_NAME: ${{ inputs.lab_check_name }}
+          LAB_CHECK_APP_SLUG: ${{ inputs.lab_check_app_slug }}
+          LAB_CHECK_WAIT_SECONDS: ${{ inputs.lab_check_wait_seconds }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          encoded_name="$(jq -rn --arg name "$LAB_CHECK_NAME" '$name | @uri')"
+          endpoint="repos/$REPO/commits/$HEAD_SHA/check-runs?check_name=$encoded_name&filter=all&per_page=100"
+          wait_seconds="$(jq -en --argjson wait "$LAB_CHECK_WAIT_SECONDS" '$wait | select(. >= 0) | ceil')"
+          deadline=$((SECONDS + wait_seconds))
+          selected=""
+          # Always attempt once, including when the configured wait is zero.
+          while :; do
+            if response="$(gh api --paginate "$endpoint")"; then
+              ignored="$(jq -s --arg app "$LAB_CHECK_APP_SLUG" \
+                '[.[].check_runs[] | select(.app.slug != $app)] | length' <<< "$response")"
+              echo "Ignored $ignored check run(s) from other apps; trusted app: $LAB_CHECK_APP_SLUG."
+              selected="$(jq -sc --arg app "$LAB_CHECK_APP_SLUG" \
+                '[.[].check_runs[] | select(.app.slug == $app and .status == "completed")] | sort_by(.completed_at) | last // empty' \
+                <<< "$response")"
+              if [[ -n "$selected" ]]; then
+                break
+              fi
+            else
+              echo "Lab check API request failed; retrying within the $LAB_CHECK_WAIT_SECONDS second deadline."
+            fi
+            remaining=$((deadline - SECONDS))
+            if ((remaining <= 0)); then
+              break
+            fi
+            sleep_for=20
+            if ((remaining < sleep_for)); then
+              sleep_for=$remaining
+            fi
+            sleep "$sleep_for"
+            if ((SECONDS >= deadline)); then
+              break
+            fi
+          done
+          if [[ -z "$selected" ]]; then
+            echo "Lab check source: $LAB_CHECK_NAME; app=$LAB_CHECK_APP_SLUG; head=$HEAD_SHA; no completed outcome line or html_url available."
+            echo "::error::Check '$LAB_CHECK_NAME' from app '$LAB_CHECK_APP_SLUG' did not complete for head $HEAD_SHA within $LAB_CHECK_WAIT_SECONDS seconds. The lab node did not answer for this head. THE CHECK DID NOT RUN."
+            exit 1
+          fi
+
+          summary="$(jq -r '.output.summary // ""' <<< "$selected")"
+          html_url="$(jq -r '.html_url // ""' <<< "$selected")"
+          first_line="${summary%%$'\n'*}"
+          printf '%s\n%s\n' "$html_url" "$first_line"
+          if [[ ! "$first_line" =~ ^branch-claim-outcome:\ (held-elsewhere|fence-behind|unidentified|held-by-pusher|unclaimed|no-ticket|did-not-run)\  ]]; then
+            echo "::error::Check '$LAB_CHECK_NAME' from app '$LAB_CHECK_APP_SLUG' has an invalid outcome line for head $HEAD_SHA. THE CHECK DID NOT RUN."
+            exit 1
+          fi
+          outcome="${BASH_REMATCH[1]}"
+          case "$outcome" in
+            did-not-run)
+              printf '%s\n' "$summary"
+              cause="${summary#*$'\n'}"
+              cause="${cause%%$'\n'*}"
+              echo "::error::$cause THE CHECK DID NOT RUN."
+              exit 1
+              ;;
+            held-elsewhere|fence-behind|unidentified)
+              while IFS= read -r line; do
+                printf '::warning::%s\n' "$line"
+              done <<< "$summary"
+              if [[ "$outcome" != "unidentified" && "$MODE" == "refuse" ]]; then
+                exit 1
+              fi
+              ;;
+            held-by-pusher|unclaimed|no-ticket) ;;
+          esac
+
       # The HEAD commits, not the merge commit. The resolution reads the lane
       # trailers of the commits the branch actually carries; a merge commit git
       # synthesised carries none, and reading it would report every pull request
       # as unidentified.
       - name: Checkout the pull request head
+        if: inputs.claim_source == 'file'
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -158,6 +279,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python 3.13
+        if: inputs.claim_source == 'file'
         uses: actions/setup-python@v7
         with:
           python-version: '3.13'
@@ -167,6 +289,7 @@ jobs:
       # side path -- mirrors public-repo-hygiene-reusable.yml and
       # kb-doc-gate-reusable.yml.
       - name: Resolve the gate pin
+        if: inputs.claim_source == 'file'
         id: pin
         env:
           WORKFLOW_SHA: ${{ job.workflow_sha }}
@@ -187,7 +310,7 @@ jobs:
           echo "branch-claim pin: $resolved_pin"
 
       - name: Fetch the resolution (omniclaude canonical source)
-        if: github.repository != 'OmniNode-ai/omniclaude'
+        if: inputs.claim_source == 'file' && github.repository != 'OmniNode-ai/omniclaude'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omniclaude
@@ -201,7 +324,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Assert the branch-claim checkout is at the pin
-        if: github.repository != 'OmniNode-ai/omniclaude'
+        if: inputs.claim_source == 'file' && github.repository != 'OmniNode-ai/omniclaude'
         env:
           GATE_PIN: ${{ steps.pin.outputs.sha }}
         run: |
@@ -221,6 +344,7 @@ jobs:
       # request `owner/`, which fails in a way that reads like a transient
       # network problem rather than a missing configuration. Name the cause.
       - name: Resolve the private claim store repo
+        if: inputs.claim_source == 'file'
         id: store-repo
         env:
           EXPLICIT: ${{ inputs.store_repo_name }}
@@ -240,6 +364,7 @@ jobs:
           echo "name=${resolved}" >> "$GITHUB_OUTPUT"
 
       - name: Mint token for the private claim store repo
+        if: inputs.claim_source == 'file'
         id: store-token
         uses: actions/create-github-app-token@v3
         with:
@@ -259,6 +384,7 @@ jobs:
       # no code is fetched from it (the index module is vendored here, at the
       # pin, since OMN-19722). An unreadable store is a refusal.
       - name: Fetch the claim store and its rolls
+        if: inputs.claim_source == 'file'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.repository_owner }}/${{ steps.store-repo.outputs.name }}
@@ -271,6 +397,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Resolve this branch against the claim store
+        if: inputs.claim_source == 'file'
         env:
           MODE: ${{ inputs.mode }}
           BRANCH: ${{ github.head_ref }}
