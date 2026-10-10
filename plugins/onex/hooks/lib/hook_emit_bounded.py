@@ -380,13 +380,23 @@ def _ledger_paths() -> tuple[Path, Path] | None:
         ledger = str(home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md")
     if not ledger or not root:
         return None
+    project = ledger_writer_project(root)
+    if not project.is_absolute() or not (project / "pyproject.toml").is_file():
+        return None
+    return Path(ledger), project
+
+
+def ledger_writer_project(root: str | Path) -> Path:
+    """The packaged ledger writer project for the registry root *root*.
+
+    OMNIBASE_INTERNAL_HOME when set, else the canonical clone beside *root*.
+    Unchecked: a caller decides what a relative or missing project means.
+    """
     project = Path(
         os.environ.get("OMNIBASE_INTERNAL_HOME")
         or Path(root).parent / "omnibase_internal"
     )
-    if not project.is_absolute() or not (project / "pyproject.toml").is_file():
-        return None
-    return Path(ledger), project
+    return project
 
 
 def record_undelivered_alarm(category: str, text: str, why: str) -> bool:

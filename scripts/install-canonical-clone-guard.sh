@@ -58,7 +58,7 @@ src_sha="$(sha256_of "$SRC")"
 copy_pending=0
 echo "source: $SRC (sha256 ${src_sha:0:12})"
 for source in "$SRC" \
-  "$SCRIPT_DIR/../plugins/onex/hooks/lib/hook_refusal_lane.py" \
+  "$SCRIPT_DIR/../src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_lane.py" \
   "$SCRIPT_DIR/../plugins/onex/hooks/lib/hook_lane_attribution.py"; do
   [[ -f "$source" ]] || { echo "ERROR: tracked source missing: $source" >&2; exit 1; }
   name="$(basename "$source")"

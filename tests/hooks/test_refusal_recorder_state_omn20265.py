@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -15,14 +14,11 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-RECORDER = (
-    Path(__file__).resolve().parents[2]
-    / "plugins/onex/hooks/lib/hook_refusal_recorder.py"
+from omniclaude.nodes.node_hook_refusal_record_effect.handlers import (
+    handler_hook_refusal_record as recorder,
 )
-spec = importlib.util.spec_from_file_location("recorder_state_omn20265", RECORDER)
-assert spec and spec.loader
-recorder = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(recorder)
+
+RECORDER_MODULE = recorder.__name__
 
 ARGS = ["--guard", "test-guard", "--reason", "test-refusal"]
 NOW = 10_000.0
@@ -209,7 +205,15 @@ def test_recorder_cli_failed_append_is_loud_and_retryable(tmp_path: Path) -> Non
 
     def run() -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(RECORDER), *ARGS, "--ledger", str(ledger)],
+            [
+                sys.executable,
+                "-P",
+                "-m",
+                RECORDER_MODULE,
+                *ARGS,
+                "--ledger",
+                str(ledger),
+            ],
             env=env,
             capture_output=True,
             text=True,

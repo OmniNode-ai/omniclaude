@@ -141,7 +141,7 @@ def _count_pythons(tmp_path: Path, command: str) -> tuple[int, int, str]:
     # A refusal also starts the refusal recorder, backgrounded and disowned so
     # it is off the call's wall time (error-guard.sh hook_record_refusal); it is
     # not a decision core and is not counted.
-    starts = sum(1 for line in lines if "hook_refusal_recorder.py" not in line)
+    starts = sum(1 for line in lines if "handler_hook_refusal_record" not in line)
     return starts, rc, out
 
 

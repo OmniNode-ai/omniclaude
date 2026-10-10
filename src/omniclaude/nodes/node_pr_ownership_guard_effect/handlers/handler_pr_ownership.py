@@ -6,7 +6,7 @@ Every concurrent lane on a host drives GitHub through ONE shared ``gh`` identity
 ``timeline.actor.login`` is the same account for every lane and per-command
 attribution is structurally INDETERMINATE. Nothing mechanically stopped a lane from
 closing a peer lane's PR -- observed >=5 times in 48h (omniclaude#2019 was authored
-by ``andywu42`` and closed by ``jonahgabriel``), plus a duplicate concurrent
+by one account and closed by another), plus a duplicate concurrent
 ``workflow_dispatch`` fired ~19s after a peer's.
 
 ``HandlerPrOwnership.handle`` answers one question:

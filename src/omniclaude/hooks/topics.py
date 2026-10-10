@@ -154,6 +154,13 @@ class TopicBase(StrEnum):
     PR_WATCHER_FAILED = "onex.evt.omniclaude.pr-watcher-failed.v1"
 
     # ==========================================================================
+    # Git admission topics (OMN-20685)
+    # Lifecycle: Integration (stable) — governed by node_git_effect/contract.yaml
+    # ==========================================================================
+    GIT_ADMISSION_CHECK = "onex.cmd.omniclaude.git-admission-check.v1"
+    GIT_ADMISSION_EVALUATED = "onex.evt.omniclaude.git-admission-evaluated.v1"
+
+    # ==========================================================================
     # Epic status topics (OMN-3294)
     # Lifecycle: Integration (stable) — governed by node_agent_inbox_effect/contract.yaml
     # ==========================================================================
@@ -516,6 +523,16 @@ class TopicBase(StrEnum):
 
     TEAM_TASK_COMPLETED = "onex.evt.omniclaude.team-task-completed.v1"
     """Emitted when a task reaches a terminal state with a verification verdict."""
+
+    # ==========================================================================
+    # Hook refusal recording (OMN-20685)
+    # node_hook_refusal_record_effect command and terminal event.
+    # ==========================================================================
+    HOOK_REFUSAL_RECORD = "onex.cmd.omniclaude.hook-refusal-record.v1"
+    """Command: record one hook refusal on the rolling work ledger."""
+
+    HOOK_REFUSAL_RECORDED = "onex.evt.omniclaude.hook-refusal-recorded.v1"
+    """Terminal event: the refusal's recording outcome (row already redacted)."""
 
     # ==========================================================================
     # PR ownership guard (OMN-20685)

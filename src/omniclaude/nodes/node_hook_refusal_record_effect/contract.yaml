@@ -1,0 +1,94 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: NodeHookRefusalRecordEffect (OMN-20685)
+#
+# Gives one plugin hook refusal a durable, rate-limited row on the rolling work
+# ledger. The row itself (redaction, reason normalisation, dedupe key, layout)
+# is omnimarket's node_hook_refusal_row_compute; this node owns what is bound to
+# the plugin host: the per-key rate-limit state, the lane resolution and the
+# onex-ledger append. The guards' shell seam (lib/hook_refusal.sh) reaches it
+# through one process call, `python -m` the handler module.
+
+name: node_hook_refusal_record_effect
+version: "1.0.0"
+contract_name: node_hook_refusal_record_effect
+node_name: node_hook_refusal_record_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: EFFECT_GENERIC
+runtime_profiles: [main]
+
+description: >
+  Records one hook refusal: resolves the lane from honest operands, rate-limits
+  by (guard, reason, lane) per window, and appends one FRICTION row through
+  onex-ledger. A refusal whose row did not land leaves its dedupe state
+  untouched, so a retry stays eligible.
+
+input_model:
+  name: ModelHookRefusalRecordRequest
+  module: omniclaude.nodes.node_hook_refusal_record_effect.models
+
+output_model:
+  name: ModelHookRefusalRecordResult
+  module: omniclaude.nodes.node_hook_refusal_record_effect.models
+
+handler:
+  module: omniclaude.nodes.node_hook_refusal_record_effect.handlers.handler_hook_refusal_record
+  class: HandlerHookRefusalRecord
+  input_model: omniclaude.nodes.node_hook_refusal_record_effect.models.ModelHookRefusalRecordRequest
+
+handler_routing:
+  routing_strategy: payload_type_match
+  handlers:
+    - handler:
+        name: HandlerHookRefusalRecord
+        module: omniclaude.nodes.node_hook_refusal_record_effect.handlers.handler_hook_refusal_record
+      event_model:
+        name: ModelHookRefusalRecordRequest
+        module: omniclaude.nodes.node_hook_refusal_record_effect.models
+
+descriptor:
+  node_archetype: effect
+  purity: effectful
+  idempotent: true
+  timeout_ms: 180000
+
+capabilities:
+  - name: hook.refusal.record
+    description: Append one rate-limited friction row for a hook refusal
+    version: 1.0.0
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omniclaude.hook-refusal-record.v1
+  publish_topics:
+    - onex.evt.omniclaude.hook-refusal-recorded.v1
+
+runtime_dispatch:
+  command_topic: onex.cmd.omniclaude.hook-refusal-record.v1
+  terminal_events:
+    success: onex.evt.omniclaude.hook-refusal-recorded.v1
+
+terminal_event: onex.evt.omniclaude.hook-refusal-recorded.v1
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-20685
+  maturity: alpha
+  tags:
+    - effect
+    - hooks
+    - refusal
+    - ledger

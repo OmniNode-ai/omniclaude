@@ -29,12 +29,25 @@
 repos:
   - repo: local
     hooks:
+      - id: ci-summary-external-contexts
+        name: CI Summary external contexts and snapshot refresh (OMN-19055)
+        entry: >-
+          bash -c 'set -euo pipefail;
+          CI_SNAPSHOT_CHANGED_FILES="$(git diff --name-only HEAD --)";
+          export CI_SNAPSHOT_CHANGED_FILES;
+          bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_ci_summary_gate.py
+          -q --no-cov -k TestExternalContextCompleteness'
+        language: system
+        pass_filenames: false
+        files: '^(scripts/ci/ci_summary_gate\.py|tests/ci/(test_ci_summary_gate\.py|fixtures/.*)|\.github/(required-checks\.yaml|workflows/ci\.yml)|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: hooks-shard-coverage
         name: Hooks shard coverage and report admission (OMN-19681)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov
         language: system
         pass_filenames: false
-        files: '^(\.github/workflows/ci\.yml|tests/ci/test_hooks_shard_omn19681\.py|scripts/ci/skip_count_ratchet\.py|\.pre-commit-config\.yaml)$'
+        files: '^(\.github/workflows/ci\.yml|tests/ci/test_hooks_shard_omn19681\.py|scripts/ci/skip_count_ratchet\.py|config/hooks_test_file_durations\.json|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
       - id: comment-render-delegation
@@ -336,7 +349,7 @@ repos:
           -q -p no:cacheprovider
         language: system
         pass_filenames: false
-        files: '^(plugins/onex/hooks/(lib/(ticket_creation_guard|hook_refusal_recorder|hook_refusal_lane)\.py|lib/hook_refusal\.sh|scripts/pre_tool_use_ticket_creation_gate\.sh)|tests/hooks/test_refusal_row_lane_omn19381\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
+        files: '^(plugins/onex/hooks/(lib/ticket_creation_guard\.py|lib/hook_refusal\.sh|scripts/pre_tool_use_ticket_creation_gate\.sh)|src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_(record|lane)\.py|tests/hooks/test_refusal_row_lane_omn19381\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
         stages: [pre-commit]
       - id: git-command-segment-regression
         name: Git command segment admission and diagnostics (OMN-18936)

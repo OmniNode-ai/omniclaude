@@ -295,6 +295,14 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     # that test red and the manifest reconcile job red, which is the intended
     # behaviour of both and the reason this change is held as a draft.
     "Hook Inventory Gate",  # hook-inventory-gate.yml
+    # OMN-19055: assert the three previously exempt required contexts. All
+    # three reported success on omniclaude#2601, head 1b465f28b5b269a6444459eda4f9184f3daf2d0b,
+    # whose diff changes only plugin version metadata (2026-10-08). Their
+    # producers have no path filter. Missing names now hold L4 pending until
+    # the poller's deadline rather than disappearing from the L5 sweep.
+    "Lane Identity Gate",  # lane-identity-gate.yml
+    "advisory-job-gate / advisory-job-gate",  # advisory-job-gate.yml
+    "kb-doc-gate / kb-doc-gate",  # kb-doc-gate.yml
 )
 # NOTE: "Hostile Review Gate" (hostile-reviewer.yml) is intentionally absent
 # from EXPECTED_EXTERNAL_CONTEXTS. It is already directly required by branch
@@ -311,7 +319,7 @@ EXTERNAL_GOOD_CONCLUSIONS: frozenset[str] = frozenset({"success"})
 # commit leaves L4 pending until the poller's deadline. OCC remains required
 # independently through ALL_MUST_SUCCEED_EXTERNAL_NAMES on every event.
 PUSH_REPORTING_EXTERNAL_CONTEXTS: frozenset[str] = frozenset(
-    {"Hook Edge Lane Gate", "Hook Inventory Gate"}
+    {"Hook Edge Lane Gate", "Hook Inventory Gate", "Lane Identity Gate"}
 )
 
 # occ-preflight / eligibility is minted by the reusable

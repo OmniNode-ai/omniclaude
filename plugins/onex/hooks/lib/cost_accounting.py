@@ -17,24 +17,21 @@ even when the adapter hasn't landed yet (other tasks in the OMN-10604 wave).
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import sqlite3
 import time
+from importlib import metadata
 from pathlib import Path
 from typing import Any
 
-# Pricing manifest — all prices in USD per 1M tokens.
-# Labeled so every record carries the version it was computed from.
-PRICING_MANIFEST_VERSION = "2026-05-06-v1"
-PRICING_USD_PER_1M: dict[str, dict[str, float]] = {
-    "claude-opus-4-6": {"input": 15.00, "output": 75.00},
-    "claude-opus-4-5": {"input": 15.00, "output": 75.00},
-    "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
-    "claude-haiku-4-5": {"input": 0.80, "output": 4.00},
-    # Local models have zero marginal API cost
-    "local": {"input": 0.00, "output": 0.00},
-}
+# Prices come from the omnibase_infra pricing manifest, the one pricing
+# authority (OMN-20833); this module carries no price of its own. A model the
+# manifest does not carry is unpriced. If omnibase_infra cannot be imported in
+# the hook's interpreter, every cloud model is unpriced and no cost record is
+# written, rather than one priced from a stale copy.
+LOCAL_MODEL = "local"
 BASELINE_MODEL = "claude-opus-4-6"
 
 # Delegation result file written by PreToolUse model router hook.
@@ -80,16 +77,44 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def _cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
-    pricing = PRICING_USD_PER_1M.get(model, PRICING_USD_PER_1M[BASELINE_MODEL])
-    return (
-        input_tokens * pricing["input"] + output_tokens * pricing["output"]
-    ) / 1_000_000
+def _pricing_table() -> Any | None:
+    """Return the omnibase_infra pricing manifest, or None when it cannot load."""
+    try:
+        module = importlib.import_module(
+            "omnibase_infra.models.pricing.model_pricing_table"
+        )
+        return module.ModelPricingTable.from_yaml()
+    except Exception:
+        return None
+
+
+def _manifest_version() -> str:
+    """Label records with the manifest they were priced from."""
+    try:
+        return f"omnibase_infra-{metadata.version('omnibase-infra')}/pricing_manifest"
+    except Exception:
+        return "unavailable"
+
+
+def _cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    """Price a call from the pricing manifest, or return None when it has no price.
+
+    An unknown model is unpriced; it is never priced at another model's rate
+    (OMN-20387). Local models have zero marginal API cost.
+    """
+    if model == LOCAL_MODEL:
+        return 0.0
+    table = _pricing_table()
+    entry = table.get_entry(model) if table is not None else None
+    if entry is None:
+        return None
+    input_rate = float(entry.input_cost_per_1k)
+    output_rate = float(entry.output_cost_per_1k)
+    return (input_tokens * input_rate + output_tokens * output_rate) / 1_000
 
 
 def _savings_method(actual_model: str) -> str:
-    pricing = PRICING_USD_PER_1M.get(actual_model)
-    if pricing and pricing["input"] == 0.0 and pricing["output"] == 0.0:
+    if actual_model == LOCAL_MODEL:
         return "zero_marginal_api_cost"
     return "counterfactual_price_difference"
 
@@ -155,7 +180,9 @@ def record_tool_call(hook_event: dict[str, Any]) -> dict[str, Any] | None:
 
     is_delegated = delegation_result is not None
     actual_model = (
-        delegation_result.get("model", "local") if delegation_result else BASELINE_MODEL
+        delegation_result.get("model", LOCAL_MODEL)
+        if delegation_result
+        else BASELINE_MODEL
     )
 
     input_tokens, output_tokens, token_provenance = _extract_token_counts(
@@ -164,6 +191,10 @@ def record_tool_call(hook_event: dict[str, Any]) -> dict[str, Any] | None:
 
     actual_cost = _cost_usd(actual_model, input_tokens, output_tokens)
     baseline_cost = _cost_usd(BASELINE_MODEL, input_tokens, output_tokens)
+    if actual_cost is None or baseline_cost is None:
+        # Unpriced model: write no cost record rather than a saving computed
+        # against a rate that belongs to another model (OMN-20387).
+        return delegation_result if is_delegated else None
     savings = max(0.0, baseline_cost - actual_cost)
     savings_method = _savings_method(actual_model) if is_delegated else "baseline_self"
 
@@ -181,7 +212,7 @@ def record_tool_call(hook_event: dict[str, Any]) -> dict[str, Any] | None:
         "baseline_cost_usd": baseline_cost,
         "savings_usd": savings,
         "savings_method": savings_method,
-        "pricing_manifest_version": PRICING_MANIFEST_VERSION,
+        "pricing_manifest_version": _manifest_version(),
     }
 
     _write_record(record)

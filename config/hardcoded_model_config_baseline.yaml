@@ -71,19 +71,7 @@ entries:
     content_sha1: 7be3669c73a96f1fed76fdb843dd4f697c403cce
   - path: plugins/onex/hooks/lib/cost_accounting.py
     family: M
-    content_sha1: 23d7393ee23f127361a19cf33928be329fc0a70b
-  - path: plugins/onex/hooks/lib/cost_accounting.py
-    family: M
-    content_sha1: 3a52ddbb55c3a912677a52c83a38d5e0ae227468
-  - path: plugins/onex/hooks/lib/cost_accounting.py
-    family: M
     content_sha1: 43602e25a054e5ca657055204e7feee99bc587bc
-  - path: plugins/onex/hooks/lib/cost_accounting.py
-    family: M
-    content_sha1: 43e6186c9ddfbca38aec0160d9acc93fcc4a2634
-  - path: plugins/onex/hooks/lib/cost_accounting.py
-    family: M
-    content_sha1: e264ba52d7966147fdf486c35a891483b42b23d4
   - path: plugins/onex/hooks/lib/dispatch_claim_gate.py
     family: E-LAN
     content_sha1: 36310b47a1f29458fe3bf8a303016cf72d99b24d

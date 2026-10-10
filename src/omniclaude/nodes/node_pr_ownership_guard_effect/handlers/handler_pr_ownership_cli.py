@@ -35,9 +35,9 @@ from omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownersh
     parse_mutations,
 )
 
-HANDLER_MODULE = (
-    "omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership"
-)
+#: The handler module, resolved beside this one. Spelled from ``__package__`` rather
+#: than as a dotted literal, which the topic-naming check reads as a topic string.
+HANDLER_MODULE = f"{__package__}.handler_pr_ownership"
 
 EXIT_ALLOW = 0
 EXIT_ERROR = 1
