@@ -76,7 +76,11 @@ def test_reusable_deploy_gate_delegates_occ_checkout_to_bounded_script() -> None
     )
 
     resolve_step = _step(job, "Resolve deploy-gate OCC evidence source")
-    assert resolve_step["if"] == "github.event_name != 'merge_group'"
+    # OMN-20074: the OCC path runs only for the default "occ" contract source.
+    assert (
+        resolve_step["if"]
+        == "github.event_name != 'merge_group' && inputs.contract-source == 'occ'"
+    )
     assert resolve_step["id"] == "resolve_occ_evidence"
     assert "--resolve-occ-ref" in resolve_step["run"]
     assert '--github-output "$GITHUB_OUTPUT"' in resolve_step["run"]
@@ -86,7 +90,7 @@ def test_reusable_deploy_gate_delegates_occ_checkout_to_bounded_script() -> None
     )
     assert (
         step["if"]
-        == "github.event_name != 'merge_group' && steps.resolve_occ_evidence.outputs.deploy_gate_required == 'true'"
+        == "github.event_name != 'merge_group' && inputs.contract-source == 'occ' && steps.resolve_occ_evidence.outputs.deploy_gate_required == 'true'"
     )
     assert "uses" not in step
     # Step-level hard timeout (outer bound) is present.
