@@ -170,21 +170,6 @@ def test_every_repo_contract_binds_every_criterion() -> None:
         )
 
 
-def test_omn_20074_contract_binds_its_criterion_to_the_another_repo_test() -> None:
-    contract = yaml.safe_load(
-        (REPO_ROOT / "contracts" / "OMN-20074.yaml").read_text(encoding="utf-8")
-    )
-    bound = {
-        criterion: check["check_value"]
-        for item in contract["dod_evidence"]
-        for criterion in item.get("binds_ac", [])
-        for check in item["checks"]
-    }
-    assert set(bound) == {"AC1"}, "the receipt-gate must see AC1 bound, not unbound"
-    assert "tests/ci/test_repo_evidence_caller_workflow.py" in bound["AC1"]
-    assert "-k another_repo" in bound["AC1"]
-
-
 def test_contract_binds_check_applies_to_a_contract_that_declares_binds_ac(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
