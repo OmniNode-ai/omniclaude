@@ -117,7 +117,7 @@ def _assert_lane_refused(
 LANE_READS = [
     ["api", "repos/OmniNode-ai/onex_change_control/contents/contracts/OMN-1.yaml"],
     ["api", "repos/OmniNode-ai/omnimarket/actions/artifacts"],
-    ["api", "repos/OmniNode-ai/omninode_infra/actions/artifacts/9/zip"],
+    ["api", "repos/o/r/actions/artifacts/9/zip"],
     ["api", "repos/o/r/commits/abc"],
     ["api", "repos/o/r/issues/9/comments"],
     ["api", "user"],
