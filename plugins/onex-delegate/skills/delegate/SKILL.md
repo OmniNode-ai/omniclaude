@@ -56,7 +56,7 @@ below.
 ## Prerequisite: install the `onex` tool
 
 This is step 1 of the public OmniClaude Quickstart
-(`guides/onex-plugin-quickstart.md` in the `OmniNode-ai/knowledge-base` repository),
+(`guides/onex-plugin-quickstart.md` in the `OmniNode-ai/knowledge_base` repository),
 and the command is the same. Three packages, one environment (the pins are declared in
 `plugin-compat.yaml` → `onex_cli`):
 

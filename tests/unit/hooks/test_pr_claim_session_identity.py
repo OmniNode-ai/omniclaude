@@ -13,7 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from plugins.onex.hooks.lib.pr_ownership_guard import evaluate_command, resolve_lane_id
+from omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership import (
+    evaluate_command,
+    resolve_lane_id,
+)
 
 pytestmark = pytest.mark.unit
 CLI = Path(__file__).resolve().parents[3] / "scripts/pr_claim_registry_cli.py"

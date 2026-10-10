@@ -19,17 +19,23 @@ from pathlib import Path
 
 import pytest
 
-from plugins.onex.hooks.lib import pr_claim_registry
-from plugins.onex.hooks.lib.pr_ownership_guard import (
-    DISPATCH_KEY_PREFIX,
-    RUN_KEY_PREFIX,
-    Mutation,
+from omniclaude.nodes.node_pr_ownership_guard_effect.enums import (
+    EnumPrClaimStatus,
+    EnumPrMutationClass,
+)
+from omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership import (
     canonical_pr_key,
     decide,
     evaluate_command,
     parse_mutations,
     resolve_lane_id,
 )
+from omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership_parse import (
+    DISPATCH_KEY_PREFIX,
+    RUN_KEY_PREFIX,
+    PrMutation,
+)
+from plugins.onex.hooks.lib import pr_claim_registry
 
 pytestmark = pytest.mark.unit
 
@@ -76,16 +82,19 @@ def _write_claim(
     return path
 
 
-def _ownership_mutation(target: str = PR_KEY) -> Mutation:
-    return Mutation(
-        verb="pr-close", mutation_class="ownership", target_key=target, detail=target
+def _ownership_mutation(target: str = PR_KEY) -> PrMutation:
+    return PrMutation(
+        verb="pr-close",
+        mutation_class=EnumPrMutationClass.OWNERSHIP,
+        target_key=target,
+        detail=target,
     )
 
 
-def _exclusivity_mutation(target: str = f"{RUN_KEY_PREFIX}o/r#1") -> Mutation:
-    return Mutation(
+def _exclusivity_mutation(target: str = f"{RUN_KEY_PREFIX}o/r#1") -> PrMutation:
+    return PrMutation(
         verb="run-cancel",
-        mutation_class="exclusivity",
+        mutation_class=EnumPrMutationClass.EXCLUSIVITY,
         target_key=target,
         detail=target,
     )
@@ -100,7 +109,7 @@ def test_parses_pr_close_with_repo_flag() -> None:
     mutations = parse_mutations("gh pr close 2019 --repo OmniNode-ai/omniclaude")
     assert len(mutations) == 1
     assert mutations[0].verb == "pr-close"
-    assert mutations[0].mutation_class == "ownership"
+    assert mutations[0].mutation_class == EnumPrMutationClass.OWNERSHIP
     assert mutations[0].target_key == PR_KEY
 
 
@@ -160,7 +169,7 @@ def test_parses_workflow_dispatch() -> None:
         "gh workflow run build.yml --repo OmniNode-ai/omniclaude --ref dev"
     )
     assert mutations[0].verb == "workflow-dispatch"
-    assert mutations[0].mutation_class == "exclusivity"
+    assert mutations[0].mutation_class == EnumPrMutationClass.EXCLUSIVITY
     assert mutations[0].target_key == (
         f"{DISPATCH_KEY_PREFIX}omninode-ai/omniclaude#build.yml@dev"
     )
@@ -246,13 +255,13 @@ def test_lane_id_unresolvable_returns_none() -> None:
 
 
 def test_owner_may_close_its_own_pr() -> None:
-    decision = decide(_ownership_mutation(), LANE_A, "active", LANE_A)
+    decision = decide(_ownership_mutation(), LANE_A, EnumPrClaimStatus.ACTIVE, LANE_A)
     assert decision.allowed is True
     assert decision.reason_code == "OWNED_BY_SELF"
 
 
 def test_peer_lane_close_is_refused_and_names_the_owner() -> None:
-    decision = decide(_ownership_mutation(), LANE_B, "active", LANE_A)
+    decision = decide(_ownership_mutation(), LANE_B, EnumPrClaimStatus.ACTIVE, LANE_A)
     assert decision.allowed is False
     assert decision.reason_code == "CROSS_LANE"
     assert LANE_A in decision.message
@@ -260,46 +269,46 @@ def test_peer_lane_close_is_refused_and_names_the_owner() -> None:
 
 def test_unclaimed_close_fails_closed() -> None:
     """'Nobody claimed it' must never be read as 'therefore anyone may'."""
-    decision = decide(_ownership_mutation(), LANE_A, "absent", None)
+    decision = decide(_ownership_mutation(), LANE_A, EnumPrClaimStatus.ABSENT, None)
     assert decision.allowed is False
     assert decision.reason_code == "UNCLAIMED"
     assert "pr_claim_registry_cli.py claim" in decision.message
 
 
 def test_expired_claim_still_requires_a_fresh_claim() -> None:
-    decision = decide(_ownership_mutation(), LANE_A, "expired", LANE_A)
+    decision = decide(_ownership_mutation(), LANE_A, EnumPrClaimStatus.EXPIRED, LANE_A)
     assert decision.allowed is False
     assert decision.reason_code == "UNCLAIMED"
 
 
 def test_unreadable_claim_fails_closed() -> None:
-    decision = decide(_ownership_mutation(), LANE_A, "unreadable", None)
+    decision = decide(_ownership_mutation(), LANE_A, EnumPrClaimStatus.UNREADABLE, None)
     assert decision.allowed is False
     assert decision.reason_code == "INDETERMINATE_CLAIM"
 
 
 def test_laneless_claim_fails_closed() -> None:
     """A legacy claim with no lane proves someone holds it, not who."""
-    decision = decide(_ownership_mutation(), LANE_A, "active", None)
+    decision = decide(_ownership_mutation(), LANE_A, EnumPrClaimStatus.ACTIVE, None)
     assert decision.allowed is False
     assert decision.reason_code == "INDETERMINATE_CLAIM"
 
 
 def test_unresolvable_lane_fails_closed() -> None:
-    decision = decide(_ownership_mutation(), None, "active", LANE_A)
+    decision = decide(_ownership_mutation(), None, EnumPrClaimStatus.ACTIVE, LANE_A)
     assert decision.allowed is False
     assert decision.reason_code == "INDETERMINATE_LANE"
 
 
 def test_unresolvable_target_fails_closed() -> None:
-    mutation = Mutation(
+    mutation = PrMutation(
         verb="pr-close",
-        mutation_class="ownership",
+        mutation_class=EnumPrMutationClass.OWNERSHIP,
         target_key=None,
         detail="gh pr close",
         unresolved_reason="PR number could not be parsed from the command",
     )
-    decision = decide(mutation, LANE_A, "absent", None)
+    decision = decide(mutation, LANE_A, EnumPrClaimStatus.ABSENT, None)
     assert decision.allowed is False
     assert decision.reason_code == "INDETERMINATE_TARGET"
 
@@ -310,7 +319,7 @@ def test_unresolvable_target_fails_closed() -> None:
 
 
 def test_first_writer_is_allowed_and_records_a_claim() -> None:
-    decision = decide(_exclusivity_mutation(), LANE_A, "absent", None)
+    decision = decide(_exclusivity_mutation(), LANE_A, EnumPrClaimStatus.ABSENT, None)
     assert decision.allowed is True
     assert decision.reason_code == "FIRST_WRITER"
     assert decision.record_claim is True
@@ -318,18 +327,18 @@ def test_first_writer_is_allowed_and_records_a_claim() -> None:
 
 def test_racing_peer_dispatch_is_refused() -> None:
     """The 2026-08-20T00:52Z duplicate concurrent workflow_dispatch case."""
-    decision = decide(_exclusivity_mutation(), LANE_B, "active", LANE_A)
+    decision = decide(_exclusivity_mutation(), LANE_B, EnumPrClaimStatus.ACTIVE, LANE_A)
     assert decision.allowed is False
     assert decision.reason_code == "CROSS_LANE"
 
 
 def test_same_lane_redispatch_is_allowed() -> None:
-    decision = decide(_exclusivity_mutation(), LANE_A, "active", LANE_A)
+    decision = decide(_exclusivity_mutation(), LANE_A, EnumPrClaimStatus.ACTIVE, LANE_A)
     assert decision.allowed is True
 
 
 def test_exclusivity_with_unresolvable_lane_fails_closed() -> None:
-    decision = decide(_exclusivity_mutation(), None, "absent", None)
+    decision = decide(_exclusivity_mutation(), None, EnumPrClaimStatus.ABSENT, None)
     assert decision.allowed is False
     assert decision.reason_code == "INDETERMINATE_LANE"
 
@@ -485,7 +494,9 @@ def test_lane_id_prefers_onex_lane_id_over_onex_lane() -> None:
 
 
 def test_refusal_prints_absolute_existing_cli_path() -> None:
-    from plugins.onex.hooks.lib.pr_ownership_guard import _claim_command
+    from omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership import (
+        _claim_command,
+    )
 
     command = _claim_command("o/r#1")
     cli = command.split()[1]

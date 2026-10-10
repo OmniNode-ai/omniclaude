@@ -20,6 +20,7 @@ class ProtocolGitOperations(Protocol):
     The handler_key property identifies the backend type for routing.
 
     Operation mapping (from node contract io_operations):
+        - admission_check operation -> admission_check()
         - branch_create operation -> branch_create()
         - commit operation -> commit()
         - push operation -> push()
@@ -36,6 +37,10 @@ class ProtocolGitOperations(Protocol):
     @property
     def handler_key(self) -> str:
         """Backend identifier for handler routing (e.g., 'subprocess')."""
+        ...
+
+    async def admission_check(self, request: ModelGitRequest) -> ModelGitResult:
+        """Check a hook payload through the host-local contract and event bus."""
         ...
 
     async def branch_create(self, request: ModelGitRequest) -> ModelGitResult:

@@ -77,6 +77,20 @@ def test_checker_and_evidence_are_separate_checkouts() -> None:
     )
 
 
+def test_product_checkout_retains_history_for_commit_bound_probes() -> None:
+    checkouts = [
+        step
+        for step in _steps("contract-compliance")
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+        and not (step.get("with") or {}).get("repository")
+    ]
+    assert len(checkouts) == 1
+    assert (checkouts[0].get("with") or {}).get("fetch-depth") == 0, (
+        "DoD probes can read files at an evidence commit older than the PR merge "
+        "commit; a shallow product checkout omits those objects"
+    )
+
+
 def test_the_old_pin_that_lacked_every_new_contract_is_gone() -> None:
     assert OLD_PIN not in CI_YML.read_text(encoding="utf-8")
 

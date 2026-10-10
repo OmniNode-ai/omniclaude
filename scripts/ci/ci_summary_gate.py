@@ -295,6 +295,14 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     # that test red and the manifest reconcile job red, which is the intended
     # behaviour of both and the reason this change is held as a draft.
     "Hook Inventory Gate",  # hook-inventory-gate.yml
+    # OMN-19055: assert the three previously exempt required contexts. All
+    # three reported success on omniclaude#2601, head 1b465f28b5b269a6444459eda4f9184f3daf2d0b,
+    # whose diff changes only plugin version metadata (2026-10-08). Their
+    # producers have no path filter. Missing names now hold L4 pending until
+    # the poller's deadline rather than disappearing from the L5 sweep.
+    "Lane Identity Gate",  # lane-identity-gate.yml
+    "advisory-job-gate / advisory-job-gate",  # advisory-job-gate.yml
+    "kb-doc-gate / kb-doc-gate",  # kb-doc-gate.yml
 )
 # NOTE: "Hostile Review Gate" (hostile-reviewer.yml) is intentionally absent
 # from EXPECTED_EXTERNAL_CONTEXTS. It is already directly required by branch
@@ -311,7 +319,7 @@ EXTERNAL_GOOD_CONCLUSIONS: frozenset[str] = frozenset({"success"})
 # commit leaves L4 pending until the poller's deadline. OCC remains required
 # independently through ALL_MUST_SUCCEED_EXTERNAL_NAMES on every event.
 PUSH_REPORTING_EXTERNAL_CONTEXTS: frozenset[str] = frozenset(
-    {"Hook Edge Lane Gate", "Hook Inventory Gate"}
+    {"Hook Edge Lane Gate", "Hook Inventory Gate", "Lane Identity Gate"}
 )
 
 # occ-preflight / eligibility is minted by the reusable
@@ -1445,6 +1453,58 @@ def check_run_event_index(
     return index
 
 
+def current_run_id(jobs: list[dict[str, object]]) -> int | None:
+    """The workflow run the job rows belong to, or ``None`` when not exactly one."""
+
+    ids: set[int] = set()
+    for raw in jobs:
+        try:
+            run_id = int(str(raw.get("run_id") or 0))
+        except (TypeError, ValueError):
+            continue
+        if run_id:
+            ids.add(run_id)
+    return ids.pop() if len(ids) == 1 else None
+
+
+def own_workflow_run_ids(
+    workflow_runs: list[dict[str, object]] | None,
+    run_id: int | None,
+) -> frozenset[int]:
+    """Every run on the head of the SAME workflow as ``run_id`` (OMN-20768).
+
+    A check-run one of these produced is this workflow's own job: the current
+    run's in-run layer judges it, and an earlier run of the same workflow on
+    the same head is superseded by the current one. Measured on omniclaude#2642,
+    where a second ci.yml run's CI Summary swept 22 rows the first run wrote
+    as unregistered external check-runs. An unknown current run, or one missing
+    from ``workflow_runs``, resolves to the empty set and sweeps every row.
+    """
+
+    if run_id is None:
+        return frozenset()
+    workflow_of: dict[int, str] = {}
+    for raw in workflow_runs or []:
+        try:
+            rid = int(str(raw.get("id") or 0))
+        except (TypeError, ValueError):
+            continue
+        workflow = str(raw.get("workflow_id") or raw.get("path") or "")
+        if rid and workflow:
+            workflow_of[rid] = workflow
+    own = workflow_of.get(run_id)
+    if own is None:
+        return frozenset()
+    return frozenset(rid for rid, wf in workflow_of.items() if wf == own)
+
+
+def check_run_run_id(state: CheckRunState) -> int | None:
+    """The workflow run that wrote this check-run, from its run URL."""
+
+    match = _RUN_ID_RE.search(state.html_url or "")
+    return int(match.group(1)) if match else None
+
+
 def resolve_check_run_event(
     state: CheckRunState,
     events: dict[int, str],
@@ -1473,6 +1533,7 @@ def evaluate_external_sweep(
     conditional_exclusions: dict[str, ConditionalSweepExclusion] | None = None,
     pr_context: PullRequestContext | None = None,
     events: dict[int, str] | None = None,
+    own_run_ids: frozenset[int] = frozenset(),
     now: datetime | None = None,
 ) -> tuple[list[str], list[str], list[str], list[str]]:
     """L5 -- default-deny over every check-run nothing else accounts for.
@@ -1512,6 +1573,9 @@ def evaluate_external_sweep(
 
     by_name: dict[str, list[CheckRunState]] = {}
     for state in _check_run_states(check_runs):
+        # OMN-20768: a row this workflow's own runs wrote is not external.
+        if check_run_run_id(state) in own_run_ids:
+            continue
         by_name.setdefault(state.name, []).append(state)
 
     failures: list[str] = []
@@ -2082,7 +2146,16 @@ def main(argv: list[str] | None = None) -> int:
         # OMN-18970 L5. Subtracting this run's own job names is what keeps the
         # sweep from re-judging a job the in-run soft-allowlist already
         # admitted, from the other side of the same head.
+        # OMN-20768: the names come from EVERY attempt of this run, not only the
+        # current one. A re-run attempt polls before it holds rows for its
+        # downstream jobs, and the earlier attempt's skipped push-only deploy
+        # check-runs then read as unregistered external reds (measured on
+        # omniclaude#2633 and #2638: CI Summary failed in 13 to 22 seconds).
+        # The in-run layer still judges only the current attempt's rows. Rows an
+        # earlier RUN of this same workflow wrote on the head are dropped too
+        # (own_workflow_run_ids; measured on omniclaude#2642).
         sweep_ran = args.event_name == "pull_request"
+        workflow_runs = _load_workflow_runs(args.workflow_runs_file)
         sweep_findings = (
             validate_sweep_exclusions(EXTERNAL_SWEEP_EXCLUSIONS)
             + validate_conditional_sweep_exclusions(CONDITIONAL_SWEEP_EXCLUSIONS)
@@ -2113,12 +2186,9 @@ def main(argv: list[str] | None = None) -> int:
         sweep_failures, sweep_in_flight, sweep_names, sweep_excluded = (
             evaluate_external_sweep(
                 check_runs,
-                in_run_names=frozenset(
-                    dedup_latest(jobs, run_attempt=args.run_attempt)
-                ),
-                events=check_run_event_index(
-                    _load_workflow_runs(args.workflow_runs_file)
-                ),
+                in_run_names=frozenset(dedup_latest(jobs)),
+                events=check_run_event_index(workflow_runs),
+                own_run_ids=own_workflow_run_ids(workflow_runs, current_run_id(jobs)),
                 conditional_exclusions=CONDITIONAL_SWEEP_EXCLUSIONS,
                 pr_context=pr_context,
                 now=now,

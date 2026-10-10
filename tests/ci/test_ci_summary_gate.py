@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -463,6 +467,7 @@ class TestPushExternalContexts:
             for name in (
                 "Hook Edge Lane Gate",
                 "Hook Inventory Gate",
+                "Lane Identity Gate",
                 "occ-preflight / eligibility",
             )
         ]
@@ -502,12 +507,15 @@ class TestPushExternalContexts:
         assert set(pending) == set(EXPECTED_EXTERNAL_CONTEXTS) - {
             "Hook Edge Lane Gate",
             "Hook Inventory Gate",
+            "Lane Identity Gate",
         }
-        assert len(pending) == 13
+        assert len(pending) == len(EXPECTED_EXTERNAL_CONTEXTS) - 3
 
     def test_push_reporting_contexts_are_expected(self) -> None:
         assert (
-            frozenset({"Hook Edge Lane Gate", "Hook Inventory Gate"})
+            frozenset(
+                {"Hook Edge Lane Gate", "Hook Inventory Gate", "Lane Identity Gate"}
+            )
             == ci_summary_gate.PUSH_REPORTING_EXTERNAL_CONTEXTS
         )
         assert ci_summary_gate.PUSH_REPORTING_EXTERNAL_CONTEXTS.issubset(
@@ -959,7 +967,7 @@ class TestExternalContextCliWiring:
 @pytest.mark.unit
 class TestExternalContextCompleteness:
     """Data-driven completeness pin against a committed snapshot of dev's
-    live required-status-check contexts (recaptured 2026-08-30 via
+    live required-status-check contexts (recaptured 2026-09-21 via
     `gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/
     required_status_checks --jq '.contexts[]'`) and ci.yml's own job names
     at the same commit. Every required context that does NOT correspond to a
@@ -969,40 +977,137 @@ class TestExternalContextCompleteness:
     This is a SNAPSHOT pin, not a live check -- it goes red when the snapshot
     and the classification tuples drift apart, not when branch protection
     changes without a snapshot refresh; re-capture the fixture file (and
-    review the diff) when branch protection legitimately changes."""
+    review the diff) when branch protection legitimately changes. OMN-19055
+    requires a fixture refresh with each manifest or ci.yml change; the existing
+    privileged manifest reconcile detects live protection drift."""
 
-    # OMN-18530: re-cut from live on 2026-09-21 when the hook inventory gate
-    # became a required context (64 -> 65). Both fixtures were stale -- the
-    # protection snapshot by five contexts and the ci.yml job-name snapshot by
-    # two -- and re-cutting them truthfully surfaced three REQUIRED contexts
-    # that layer 4 has never asserted.
-    #
-    # They are exempted here rather than added to EXPECTED_EXTERNAL_CONTEXTS,
-    # on exactly the Hostile Review Gate rationale below: each is ALREADY
-    # enforced twice, directly by branch protection and by the layer-5
-    # default-deny sweep, which requires any check-run in neither registry to
-    # conclude `success`. Layer-4 membership would be a THIRD assertion, not
-    # first enforcement, and adding a name there makes CI Summary WAIT for it
-    # on every pull request -- a wedge if it ever stops reporting. That
-    # redundancy is a real decision and it belongs to someone, so it is
-    # ticketed rather than taken as a side effect of this change.
-    #
-    # The exemption is not a pass: the sweep still fails CI Summary if any of
-    # them goes red. What it gives up is layer 4's own purpose, catching a
-    # silent branch-protection DROP of that name -- the same thing the Hostile
-    # Review Gate exemption already gives up.
-    _EXEMPT_EXTERNAL_CONTEXTS = frozenset(
-        {
-            # already directly required; fixed at the source rather than
-            # duplicated here (see the note beside EXPECTED_EXTERNAL_CONTEXTS)
-            "Hostile Review Gate",
-            # OMN-19055: required on `dev` and swept by layer 5, never
-            # classified at layer 4. Decide the redundancy there, not here.
-            "Lane Identity Gate",
-            "advisory-job-gate / advisory-job-gate",
-            "kb-doc-gate / kb-doc-gate",
-        }
+    # OMN-19055: the three previously exempt contexts are classified by L4.
+    # Hostile Review Gate keeps its existing source-level rationale.
+    _EXEMPT_EXTERNAL_CONTEXTS = frozenset({"Hostile Review Gate"})
+
+    # OMN-19055: these names must assert presence as well as success.
+    _REQUIRED_LAYER_FOUR = (
+        "Lane Identity Gate",
+        "advisory-job-gate / advisory-job-gate",
+        "kb-doc-gate / kb-doc-gate",
     )
+
+    @pytest.mark.parametrize("name", _REQUIRED_LAYER_FOUR)
+    @pytest.mark.parametrize(
+        "conclusion", [None, "success", "failure", "skipped", "cancelled"]
+    )
+    def test_required_context_presence_and_verdict(
+        self, name: str, conclusion: str | None
+    ) -> None:
+        assert name in EXPECTED_EXTERNAL_CONTEXTS
+        assert name not in self._EXEMPT_EXTERNAL_CONTEXTS
+        rows = TestExternalContextLayer()._all_external_success()
+        rows = [row for row in rows if row["name"] != name]
+        if conclusion is not None:
+            rows.append(_job(name, conclusion))
+        verdict, failures, pending = evaluate_external(rows)
+        if conclusion is None:
+            assert (verdict, failures, pending) == ("PENDING", [], [name])
+        elif conclusion == "success":
+            assert (verdict, failures, pending) == ("SUCCESS", [], [])
+        else:
+            assert (verdict, failures, pending) == ("FAILURE", [name], [])
+
+    def test_push_missing_lane_identity_is_pending(self) -> None:
+        rows = [
+            row
+            for row in TestPushExternalContexts()._push_success()
+            if row["name"] != "Lane Identity Gate"
+        ]
+        assert evaluate_external(rows, event_name="push") == (
+            "PENDING",
+            [],
+            ["Lane Identity Gate"],
+        )
+
+    def test_ci_job_snapshot_matches_current_workflow(self) -> None:
+        workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+        actual = {job.get("name", key) for key, job in workflow["jobs"].items()}
+        snapshot = set(
+            (FIXTURES_DIR / "ciyml_job_names_snapshot_2026-09-21.txt")
+            .read_text()
+            .splitlines()
+        )
+        assert snapshot == actual, "Refresh the CI job-name snapshot from ci.yml"
+
+    @staticmethod
+    def _assert_snapshot_refresh(changed: set[str]) -> None:
+        pairs = (
+            (
+                ".github/required-checks.yaml",
+                "dev_required_contexts_snapshot_2026-09-21.txt",
+            ),
+            (".github/workflows/ci.yml", "ciyml_job_names_snapshot_2026-09-21.txt"),
+        )
+        for source, fixture in pairs:
+            if source in changed:
+                assert f"tests/ci/fixtures/{fixture}" in changed, (
+                    f"{source} changed; refresh and review {fixture} in the same change"
+                )
+
+    @pytest.mark.parametrize(
+        ("source", "fixture"),
+        [
+            (
+                ".github/required-checks.yaml",
+                "dev_required_contexts_snapshot_2026-09-21.txt",
+            ),
+            (".github/workflows/ci.yml", "ciyml_job_names_snapshot_2026-09-21.txt"),
+        ],
+    )
+    def test_snapshot_refresh_trigger_controls(self, source: str, fixture: str) -> None:
+        with pytest.raises(AssertionError, match="refresh and review"):
+            self._assert_snapshot_refresh({source})
+        self._assert_snapshot_refresh({source, f"tests/ci/fixtures/{fixture}"})
+        self._assert_snapshot_refresh({"README.md"})
+
+    def test_snapshot_diff_scrubs_git_location_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("CI_SNAPSHOT_CHANGED_FILES", raising=False)
+        location_keys = (
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_COMMON_DIR",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        )
+        for key in location_keys:
+            monkeypatch.setenv(key, "foreign-repository")
+
+        def diff_read(
+            argv: list[str], **kwargs: Any
+        ) -> subprocess.CompletedProcess[str]:
+            assert argv[:2] == ["git", "diff"]
+            assert kwargs["cwd"] == REPO_ROOT
+            assert not set(location_keys).intersection(kwargs["env"])
+            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(subprocess, "run", diff_read)
+        self.test_changed_sources_refresh_their_snapshots()
+
+    def test_changed_sources_refresh_their_snapshots(self) -> None:
+        # CI supplies the event's base SHA; pre-commit compares the complete
+        # staged/unstaged candidate to HEAD. No live protection token on PRs.
+        base = os.environ.get("CI_SNAPSHOT_BASE", "HEAD")
+        changed = os.environ.get("CI_SNAPSHOT_CHANGED_FILES")
+        if changed is None:
+            result = subprocess.run(
+                ["git", "diff", "--name-only", base, "--"],
+                cwd=REPO_ROOT,
+                env=scrub_git_location_env(os.environ),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            changed = result.stdout
+        self._assert_snapshot_refresh(set(changed.splitlines()))
 
     def test_every_snapshot_external_context_is_classified(self) -> None:
         required = {
@@ -2063,3 +2168,187 @@ class TestRuntimeProfilesRequired:
     def test_missing_validator_cannot_pass(self) -> None:
         jobs = [job for job in _all_gates() if job["name"] != "Runtime Profiles"]
         assert evaluate(jobs)[0] == EXIT_PENDING
+
+
+@pytest.mark.unit
+class TestRerunAttemptKeepsItsOwnJobsOutOfTheSweepOmn20768:
+    """A re-run attempt's own carried-over jobs are not external check-runs.
+
+    Measured on omniclaude#2638 (run 37980446525, attempt 3) and #2633 (run
+    37957885747, attempt 2): CI Summary polled seconds after the re-run started,
+    before the attempt held rows for the push-only deploy jobs. ``in_run_names``
+    was filtered to the current attempt, so the earlier attempts' skipped
+    ``Deploy to Staging`` / ``Deploy to Production`` check-runs fell into the L5
+    default-deny sweep, where ``skipped`` is red, and the umbrella failed in 13
+    to 22 seconds on a head whose every other check was green.
+    """
+
+    RUN_ID = 37980446525
+
+    def _sweep_kwargs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check_runs: list[dict]
+    ) -> dict[str, Any]:
+        captured: dict[str, Any] = {}
+
+        def _fake_combine(*args: Any, **kwargs: Any) -> tuple[int, str]:
+            captured.clear()
+            captured.update(kwargs)
+            return EXIT_PENDING, "stubbed"
+
+        monkeypatch.setattr(ci_summary_gate, "combine_verdicts", _fake_combine)
+        jobs = [
+            *(_job(g, "success", attempt=1) for g in GATE_JOBS),
+            _job("Deploy to Staging", "skipped", attempt=1),
+            _job("Deploy to Production", "skipped", attempt=1),
+            # Attempt 2 has started; its downstream deploy rows do not exist yet.
+            *(_job(g, None, status="in_progress", attempt=2) for g in GATE_JOBS),
+        ]
+        (tmp_path / "jobs.json").write_text(json.dumps(jobs), encoding="utf-8")
+        (tmp_path / "check_runs.json").write_text(
+            json.dumps(check_runs), encoding="utf-8"
+        )
+        (tmp_path / "runs.json").write_text(
+            json.dumps(
+                {"workflow_runs": [{"id": self.RUN_ID, "event": "pull_request"}]}
+            ),
+            encoding="utf-8",
+        )
+        ci_summary_gate.main(
+            [
+                "--jobs-file",
+                str(tmp_path / "jobs.json"),
+                "--check-runs-file",
+                str(tmp_path / "check_runs.json"),
+                "--workflow-runs-file",
+                str(tmp_path / "runs.json"),
+                "--run-attempt",
+                "2",
+                "--event-name",
+                "pull_request",
+            ]
+        )
+        return captured
+
+    def test_earlier_attempt_deploy_skips_are_not_swept(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured = self._sweep_kwargs(
+            tmp_path,
+            monkeypatch,
+            [
+                _sweep_row("Deploy to Staging", "skipped", run_id=self.RUN_ID),
+                _sweep_row("Deploy to Production", "skipped", run_id=self.RUN_ID),
+            ],
+        )
+        assert captured["sweep_ran"] is True
+        assert captured["sweep_failures"] == []
+
+    def test_a_genuinely_external_red_still_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured = self._sweep_kwargs(
+            tmp_path,
+            monkeypatch,
+            [
+                _sweep_row("Deploy to Staging", "skipped", run_id=self.RUN_ID),
+                _sweep_row("Gate X", "failure", run_id=self.RUN_ID),
+            ],
+        )
+        assert captured["sweep_failures"] == ["Gate X (failure)"]
+
+
+@pytest.mark.unit
+class TestAnEarlierRunOfThisWorkflowIsNotExternalOmn20768:
+    """A second ci.yml run on the same head does not sweep the first one's rows.
+
+    Measured on omniclaude#2642: runs 38000492383 (22:40Z) and 38005457836
+    (23:39Z) are both ``pull_request`` runs of ci.yml on one head. The second
+    run's CI Summary failed at attempt 1 with 41 sweep findings, mostly
+    ``skipped``; 22 were rows the first ci.yml run wrote, judged as
+    unregistered external check-runs.
+    Those rows are this workflow's own jobs; the in-run layer of the current
+    run judges that workflow's verdict.
+    """
+
+    OLD, NEW, OTHER = 38000492383, 38005457836, 38000000001
+
+    def _sweep_failures(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check_runs: list[dict]
+    ) -> list[str]:
+        captured: dict[str, Any] = {}
+
+        def _fake_combine(*args: Any, **kwargs: Any) -> tuple[int, str]:
+            captured.update(kwargs)
+            return EXIT_PENDING, "stubbed"
+
+        monkeypatch.setattr(ci_summary_gate, "combine_verdicts", _fake_combine)
+        jobs = [
+            {**_job(g, None, status="in_progress"), "run_id": self.NEW}
+            for g in GATE_JOBS
+        ]
+        runs = [
+            {"id": self.OLD, "event": "pull_request", "workflow_id": 11},
+            {"id": self.NEW, "event": "pull_request", "workflow_id": 11},
+            {"id": self.OTHER, "event": "pull_request", "workflow_id": 22},
+        ]
+        (tmp_path / "jobs.json").write_text(json.dumps(jobs), encoding="utf-8")
+        (tmp_path / "check_runs.json").write_text(
+            json.dumps(check_runs), encoding="utf-8"
+        )
+        (tmp_path / "runs.json").write_text(
+            json.dumps({"workflow_runs": runs}), encoding="utf-8"
+        )
+        ci_summary_gate.main(
+            [
+                "--jobs-file",
+                str(tmp_path / "jobs.json"),
+                "--check-runs-file",
+                str(tmp_path / "check_runs.json"),
+                "--workflow-runs-file",
+                str(tmp_path / "runs.json"),
+                "--run-attempt",
+                "1",
+                "--event-name",
+                "pull_request",
+            ]
+        )
+        return list(captured["sweep_failures"])
+
+    def test_the_earlier_run_rows_are_not_swept(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        failures = self._sweep_failures(
+            tmp_path,
+            monkeypatch,
+            [
+                _sweep_row("Detect Changes", "skipped", run_id=self.OLD),
+                _sweep_row("DoD Evidence Check", "failure", run_id=self.OLD),
+            ],
+        )
+        assert failures == []
+
+    def test_another_workflow_on_the_head_is_still_swept(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        failures = self._sweep_failures(
+            tmp_path,
+            monkeypatch,
+            [
+                _sweep_row("Detect Changes", "skipped", run_id=self.OLD),
+                _sweep_row("Other Gate", "skipped", run_id=self.OTHER),
+            ],
+        )
+        assert failures == ["Other Gate (skipped)"]
+
+    def test_unknown_current_run_sweeps_everything(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No run id on the job rows resolves no workflow: fail closed."""
+
+        assert ci_summary_gate.own_workflow_run_ids([], None) == frozenset()
+        assert (
+            ci_summary_gate.own_workflow_run_ids(
+                [{"id": self.OLD, "workflow_id": 11}], None
+            )
+            == frozenset()
+        )
