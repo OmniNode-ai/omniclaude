@@ -2255,3 +2255,100 @@ class TestRerunAttemptKeepsItsOwnJobsOutOfTheSweepOmn20768:
             ],
         )
         assert captured["sweep_failures"] == ["Gate X (failure)"]
+
+
+@pytest.mark.unit
+class TestAnEarlierRunOfThisWorkflowIsNotExternalOmn20768:
+    """A second ci.yml run on the same head does not sweep the first one's rows.
+
+    Measured on omniclaude#2642: runs 38000492383 (22:40Z) and 38005457836
+    (23:39Z) are both ``pull_request`` runs of ci.yml on one head. The second
+    run's CI Summary failed at attempt 1 with 41 sweep findings, mostly
+    ``skipped``; 22 were rows the first ci.yml run wrote, judged as
+    unregistered external check-runs.
+    Those rows are this workflow's own jobs; the in-run layer of the current
+    run judges that workflow's verdict.
+    """
+
+    OLD, NEW, OTHER = 38000492383, 38005457836, 38000000001
+
+    def _sweep_failures(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check_runs: list[dict]
+    ) -> list[str]:
+        captured: dict[str, Any] = {}
+
+        def _fake_combine(*args: Any, **kwargs: Any) -> tuple[int, str]:
+            captured.update(kwargs)
+            return EXIT_PENDING, "stubbed"
+
+        monkeypatch.setattr(ci_summary_gate, "combine_verdicts", _fake_combine)
+        jobs = [
+            {**_job(g, None, status="in_progress"), "run_id": self.NEW}
+            for g in GATE_JOBS
+        ]
+        runs = [
+            {"id": self.OLD, "event": "pull_request", "workflow_id": 11},
+            {"id": self.NEW, "event": "pull_request", "workflow_id": 11},
+            {"id": self.OTHER, "event": "pull_request", "workflow_id": 22},
+        ]
+        (tmp_path / "jobs.json").write_text(json.dumps(jobs), encoding="utf-8")
+        (tmp_path / "check_runs.json").write_text(
+            json.dumps(check_runs), encoding="utf-8"
+        )
+        (tmp_path / "runs.json").write_text(
+            json.dumps({"workflow_runs": runs}), encoding="utf-8"
+        )
+        ci_summary_gate.main(
+            [
+                "--jobs-file",
+                str(tmp_path / "jobs.json"),
+                "--check-runs-file",
+                str(tmp_path / "check_runs.json"),
+                "--workflow-runs-file",
+                str(tmp_path / "runs.json"),
+                "--run-attempt",
+                "1",
+                "--event-name",
+                "pull_request",
+            ]
+        )
+        return list(captured["sweep_failures"])
+
+    def test_the_earlier_run_rows_are_not_swept(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        failures = self._sweep_failures(
+            tmp_path,
+            monkeypatch,
+            [
+                _sweep_row("Detect Changes", "skipped", run_id=self.OLD),
+                _sweep_row("DoD Evidence Check", "failure", run_id=self.OLD),
+            ],
+        )
+        assert failures == []
+
+    def test_another_workflow_on_the_head_is_still_swept(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        failures = self._sweep_failures(
+            tmp_path,
+            monkeypatch,
+            [
+                _sweep_row("Detect Changes", "skipped", run_id=self.OLD),
+                _sweep_row("Other Gate", "skipped", run_id=self.OTHER),
+            ],
+        )
+        assert failures == ["Other Gate (skipped)"]
+
+    def test_unknown_current_run_sweeps_everything(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No run id on the job rows resolves no workflow: fail closed."""
+
+        assert ci_summary_gate.own_workflow_run_ids([], None) == frozenset()
+        assert (
+            ci_summary_gate.own_workflow_run_ids(
+                [{"id": self.OLD, "workflow_id": 11}], None
+            )
+            == frozenset()
+        )
