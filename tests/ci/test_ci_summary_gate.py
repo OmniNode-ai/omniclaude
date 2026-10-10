@@ -2168,3 +2168,90 @@ class TestRuntimeProfilesRequired:
     def test_missing_validator_cannot_pass(self) -> None:
         jobs = [job for job in _all_gates() if job["name"] != "Runtime Profiles"]
         assert evaluate(jobs)[0] == EXIT_PENDING
+
+
+@pytest.mark.unit
+class TestRerunAttemptKeepsItsOwnJobsOutOfTheSweepOmn20768:
+    """A re-run attempt's own carried-over jobs are not external check-runs.
+
+    Measured on omniclaude#2638 (run 37980446525, attempt 3) and #2633 (run
+    37957885747, attempt 2): CI Summary polled seconds after the re-run started,
+    before the attempt held rows for the push-only deploy jobs. ``in_run_names``
+    was filtered to the current attempt, so the earlier attempts' skipped
+    ``Deploy to Staging`` / ``Deploy to Production`` check-runs fell into the L5
+    default-deny sweep, where ``skipped`` is red, and the umbrella failed in 13
+    to 22 seconds on a head whose every other check was green.
+    """
+
+    RUN_ID = 37980446525
+
+    def _sweep_kwargs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check_runs: list[dict]
+    ) -> dict[str, Any]:
+        captured: dict[str, Any] = {}
+
+        def _fake_combine(*args: Any, **kwargs: Any) -> tuple[int, str]:
+            captured.clear()
+            captured.update(kwargs)
+            return EXIT_PENDING, "stubbed"
+
+        monkeypatch.setattr(ci_summary_gate, "combine_verdicts", _fake_combine)
+        jobs = [
+            *(_job(g, "success", attempt=1) for g in GATE_JOBS),
+            _job("Deploy to Staging", "skipped", attempt=1),
+            _job("Deploy to Production", "skipped", attempt=1),
+            # Attempt 2 has started; its downstream deploy rows do not exist yet.
+            *(_job(g, None, status="in_progress", attempt=2) for g in GATE_JOBS),
+        ]
+        (tmp_path / "jobs.json").write_text(json.dumps(jobs), encoding="utf-8")
+        (tmp_path / "check_runs.json").write_text(
+            json.dumps(check_runs), encoding="utf-8"
+        )
+        (tmp_path / "runs.json").write_text(
+            json.dumps(
+                {"workflow_runs": [{"id": self.RUN_ID, "event": "pull_request"}]}
+            ),
+            encoding="utf-8",
+        )
+        ci_summary_gate.main(
+            [
+                "--jobs-file",
+                str(tmp_path / "jobs.json"),
+                "--check-runs-file",
+                str(tmp_path / "check_runs.json"),
+                "--workflow-runs-file",
+                str(tmp_path / "runs.json"),
+                "--run-attempt",
+                "2",
+                "--event-name",
+                "pull_request",
+            ]
+        )
+        return captured
+
+    def test_earlier_attempt_deploy_skips_are_not_swept(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured = self._sweep_kwargs(
+            tmp_path,
+            monkeypatch,
+            [
+                _sweep_row("Deploy to Staging", "skipped", run_id=self.RUN_ID),
+                _sweep_row("Deploy to Production", "skipped", run_id=self.RUN_ID),
+            ],
+        )
+        assert captured["sweep_ran"] is True
+        assert captured["sweep_failures"] == []
+
+    def test_a_genuinely_external_red_still_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured = self._sweep_kwargs(
+            tmp_path,
+            monkeypatch,
+            [
+                _sweep_row("Deploy to Staging", "skipped", run_id=self.RUN_ID),
+                _sweep_row("Gate X", "failure", run_id=self.RUN_ID),
+            ],
+        )
+        assert captured["sweep_failures"] == ["Gate X (failure)"]

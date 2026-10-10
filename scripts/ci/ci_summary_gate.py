@@ -2090,6 +2090,12 @@ def main(argv: list[str] | None = None) -> int:
         # OMN-18970 L5. Subtracting this run's own job names is what keeps the
         # sweep from re-judging a job the in-run soft-allowlist already
         # admitted, from the other side of the same head.
+        # OMN-20768: the names come from EVERY attempt of this run, not only the
+        # current one. A re-run attempt polls before it holds rows for its
+        # downstream jobs, and the earlier attempt's skipped push-only deploy
+        # check-runs then read as unregistered external reds (measured on
+        # omniclaude#2633 and #2638: CI Summary failed in 13 to 22 seconds).
+        # The in-run layer still judges only the current attempt's rows.
         sweep_ran = args.event_name == "pull_request"
         sweep_findings = (
             validate_sweep_exclusions(EXTERNAL_SWEEP_EXCLUSIONS)
@@ -2121,9 +2127,7 @@ def main(argv: list[str] | None = None) -> int:
         sweep_failures, sweep_in_flight, sweep_names, sweep_excluded = (
             evaluate_external_sweep(
                 check_runs,
-                in_run_names=frozenset(
-                    dedup_latest(jobs, run_attempt=args.run_attempt)
-                ),
+                in_run_names=frozenset(dedup_latest(jobs)),
                 events=check_run_event_index(
                     _load_workflow_runs(args.workflow_runs_file)
                 ),
