@@ -5,7 +5,7 @@
 # Node: NodeLaneGithubReadGuardEffect (OMN-20916)
 #
 # RULING 2026-10-10T18:17:36Z: lanes must not be able to read GitHub at all, as
-# enforcement and not instruction. The gh shim (OMN-20911) refuses a lane's gh
+# enforcement and not instruction. The gh shim (scripts/user-bin/gh) refuses a lane's gh
 # reads; this node refuses the three read paths around it: a GitHub MCP read
 # tool, a direct call to api.github.com, and the real gh binary run by its path.
 # The PreToolUse Bash guards entrypoint reaches it through one process call,

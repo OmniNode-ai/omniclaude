@@ -269,7 +269,7 @@ def test_ac3_lane_real_gh_writes_and_local_verbs_are_allowed(
 def test_ac3_lane_shim_by_its_path_is_left_to_the_shim(tmp_path: Path) -> None:
     shim = tmp_path / ".local" / "bin" / "gh"
     shim.parent.mkdir(parents=True)
-    shim.write_text("#!/bin/bash\n# ONEX_GH_USER_SHIM (OMN-19479) -- fixture copy\n")
+    shim.write_text("#!/bin/bash\n# ONEX_GH_USER_SHIM -- fixture copy\n")
     _assert_allowed(_run(_bash("~/.local/bin/gh pr list"), _env(tmp_path, lane=True)))
 
 

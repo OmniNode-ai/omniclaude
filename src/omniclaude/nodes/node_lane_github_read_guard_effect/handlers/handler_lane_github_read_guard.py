@@ -3,7 +3,7 @@
 """Refuse a lane's GitHub reads that go around the gh shim (OMN-20916).
 
 RULING 2026-10-10T18:17:36Z: lanes must not be able to read GitHub at all, as
-enforcement and not instruction. The gh shim (``scripts/user-bin/gh``, OMN-20911)
+enforcement and not instruction. The gh shim (``scripts/user-bin/gh``)
 refuses every ``gh`` read from a lane. Three read paths do not pass through it, and
 this handler refuses each one from a lane:
 
