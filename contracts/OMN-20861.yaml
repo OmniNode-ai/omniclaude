@@ -13,23 +13,23 @@ requirements:
     acceptance:
       - id: "AC1"
         statement: |-
-          AC1: a clone refused for the bound exits 3 regardless of how many runs occurred -- falsifier: uv run pytest tests -q -k "refusal_age_exits_nonzero_few_runs or refusal_age_exits_nonzero_many_runs"
+          AC1: a clone refused for the bound exits 3 regardless of how many runs occurred -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync.py -q -k "refusal_age_exits_nonzero_few_runs or refusal_age_exits_nonzero_many_runs"
       - id: "AC2"
         statement: |-
-          AC2: concurrent merge and timer runs keep one consistent record, and a restart keeps the age -- falsifier: uv run pytest tests -q -k "refusal_age_concurrent_triggers or refusal_age_survives_restart"
+          AC2: concurrent merge and timer runs keep one consistent record, and a restart keeps the age -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync.py -q -k "refusal_age_concurrent_triggers or refusal_age_survives_restart"
       - id: "AC3"
         statement: |-
-          AC3: a converged clone resets the age -- falsifier: uv run pytest tests -q -k "refusal_age_resets"
+          AC3: a converged clone resets the age -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync.py -q -k "refusal_age_resets"
 evidence_requirements:
   - kind: "tests"
     description: "a clone refused for the bound exits 3 regardless of how many runs occurred"
-    command: "uv run pytest tests -q -k \"refusal_age_exits_nonzero_few_runs or refusal_age_exits_nonzero_many_runs\""
+    command: "uv run pytest tests/hooks/test_canonical_clone_sync.py -q -k \"refusal_age_exits_nonzero_few_runs or refusal_age_exits_nonzero_many_runs\""
   - kind: "tests"
     description: "concurrent merge and timer runs keep one consistent record, and a restart keeps the age"
-    command: "uv run pytest tests -q -k \"refusal_age_concurrent_triggers or refusal_age_survives_restart\""
+    command: "uv run pytest tests/hooks/test_canonical_clone_sync.py -q -k \"refusal_age_concurrent_triggers or refusal_age_survives_restart\""
   - kind: "tests"
     description: "a converged clone resets the age"
-    command: "uv run pytest tests -q -k \"refusal_age_resets\""
+    command: "uv run pytest tests/hooks/test_canonical_clone_sync.py -q -k \"refusal_age_resets\""
 emergency_bypass:
   enabled: false
   justification: ""
@@ -40,7 +40,7 @@ dod_evidence:
     source: "manual"
     checks:
       - check_type: "test_passes"
-        check_value: "uv run pytest tests -q -k \"refusal_age_exits_nonzero_few_runs or refusal_age_exits_nonzero_many_runs\""
+        check_value: "uv run pytest tests/hooks/test_canonical_clone_sync.py -q -k \"refusal_age_exits_nonzero_few_runs or refusal_age_exits_nonzero_many_runs\""
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC1"]
   - id: "dod-one-record-survives-restart"
@@ -48,7 +48,7 @@ dod_evidence:
     source: "manual"
     checks:
       - check_type: "test_passes"
-        check_value: "uv run pytest tests -q -k \"refusal_age_concurrent_triggers or refusal_age_survives_restart\""
+        check_value: "uv run pytest tests/hooks/test_canonical_clone_sync.py -q -k \"refusal_age_concurrent_triggers or refusal_age_survives_restart\""
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC2"]
   - id: "dod-converged-resets-age"
@@ -56,6 +56,6 @@ dod_evidence:
     source: "manual"
     checks:
       - check_type: "test_passes"
-        check_value: "uv run pytest tests -q -k \"refusal_age_resets\""
+        check_value: "uv run pytest tests/hooks/test_canonical_clone_sync.py -q -k \"refusal_age_resets\""
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC3"]
