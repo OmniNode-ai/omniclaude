@@ -28,6 +28,16 @@ CALLER_PATH = REPO_ROOT / ".github" / "workflows" / "call-repo-evidence-gate.yml
 # First release whose wheel ships node_dod_verify occ-difference, omnimarket#3277.
 _DIFFERENCE_CLASSIFIER_FLOOR = (0, 4, 294)
 
+# OMN-20074: the receipt-gate pin every other caller of the fleet uses, the
+# squash commit of omnibase_core#1914 on dev. It carries omnibase_core#1912,
+# whose head step writes the contract-home marker the difference step needs to
+# name a contract that lives in another repository.
+_FLEET_RECEIPT_GATE_PIN = "fb0c6c2117d5868a398b0920cd0048d0824415b1"
+
+# First release whose wheel reads that marker and reports
+# contract_in_another_repo, omnimarket#3563.
+_CONTRACT_HOME_CLASSIFIER_FLOOR = (0, 4, 305)
+
 
 def test_caller_workflow_shape() -> None:
     text = CALLER_PATH.read_text(encoding="utf-8")
@@ -84,6 +94,29 @@ def test_caller_compares_with_occ_for_the_s5_shadow_count() -> None:
     assert version >= _DIFFERENCE_CLASSIFIER_FLOOR, (
         "verifier-version must ship node_dod_verify occ-difference "
         f"(>= {'.'.join(map(str, _DIFFERENCE_CLASSIFIER_FLOOR))})"
+    )
+
+
+def test_caller_pins_the_reusable_that_classifies_a_contract_in_another_repo() -> None:
+    """OMN-20074: without the contract-home marker the S5 step prints unclassified.
+
+    Before this pin the caller ran omnibase_core#1901's reusable with verifier
+    0.4.294, so every omniclaude pull request whose ticket's contract lives in
+    another repository printed unclassified_difference instead of the
+    expected_difference contract_in_another_repo the 10.1 table names.
+    """
+    job = yaml.safe_load(CALLER_PATH.read_text(encoding="utf-8"))["jobs"][
+        "repo-evidence"
+    ]
+    pin = job["uses"].rsplit("@", 1)[1]
+    assert pin == _FLEET_RECEIPT_GATE_PIN, (
+        f"receipt-gate must be pinned at {_FLEET_RECEIPT_GATE_PIN} "
+        f"(omnibase_core#1914), the pin the other callers use; found {pin}"
+    )
+    version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
+    assert version >= _CONTRACT_HOME_CLASSIFIER_FLOOR, (
+        "verifier-version must read the contract-home marker "
+        f"(>= {'.'.join(map(str, _CONTRACT_HOME_CLASSIFIER_FLOOR))})"
     )
 
 

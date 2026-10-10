@@ -39,7 +39,13 @@
 # to "false".
 #
 # The reusable is pinned by full SHA. It must be a commit that carries the
-# shadow input; this is the squash commit of omnibase_core#1901 on dev.
+# shadow input and, for the S5 count, the contract-home marker of
+# omnibase_core#1912: with compare-with-occ "true" the head step names the
+# repository that holds a ticket's only other contract, and verifier 0.4.305
+# (omnimarket#3563) classifies that refusal as contract_in_another_repo instead
+# of unclassified (OMN-20074, rulings 2026-10-08T09:57:41Z and 14:59:17Z). The
+# pin is the squash commit of omnibase_core#1914 on dev, the one the
+# omnimarket, omnibase_core and omnibase_infra callers use.
 # omniclaude does not host receipt-gate.yml.
 
 name: Repo Evidence Gate
@@ -59,9 +65,9 @@ permissions:
 
 jobs:
   repo-evidence:
-    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@033db282217c224f8063b94966a7f3fdd26b7894 # OMN-20073: the squash commit of omnibase_core#1901 on dev (receipt-gate shadow input)
+    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@fb0c6c2117d5868a398b0920cd0048d0824415b1 # OMN-20074: the squash commit of omnibase_core#1914 on dev (shadow input, #1912 contract-home marker, writer app exemption derived in the job)
     with:
       evidence-source: caller
-      verifier-version: 0.4.294
+      verifier-version: 0.4.305
       compare-with-occ: "true"
       shadow: "true"

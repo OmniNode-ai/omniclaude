@@ -1,0 +1,32 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20074"
+title: "OCC retirement S7 for omniclaude: the S5 caller classifies a contract in another repository"
+summary: "omniclaude's repo-evidence caller pins the receipt-gate reusable the other callers of the fleet use (omnibase_core#1914, fb0c6c21) and verifier 0.4.305, so the S5 difference step names a ticket whose only other contract is in another repository as expected_difference contract_in_another_repo (plan section 10.1, rulings 2026-10-08T09:57:41Z and 2026-10-08T14:59:17Z) instead of printing unclassified_difference. The caller stays in shadow with compare-with-occ on."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn20074-caller-repin"
+    statement: |-
+      omniclaude's repo-evidence caller must run the receipt-gate reusable and verifier that classify a contract in another repository.
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: the caller pins receipt-gate.yml at fb0c6c2117d5868a398b0920cd0048d0824415b1 and sets verifier-version 0.4.305 or newer -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k another_repo
+evidence_requirements:
+  - kind: "tests"
+    description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k another_repo"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn-20074-ac1"
+    description: "The focused caller test proves the receipt-gate pin and the verifier floor."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k another_repo"
+        cwd: "${OMNI_HOME}/omniclaude"
