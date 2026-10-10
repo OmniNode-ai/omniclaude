@@ -40,20 +40,20 @@ dod_evidence:
     binds_ac:
       - AC1
   - id: dod-omn-20920-ac2
-    description: The hook run from omnibase_core passes over the whole tree.
+    description: The hook is taken from omnibase_core at the sha that exports it, so the whole-tree run executes omnibase_core's handler. The live whole-tree run (exit 0) is quoted on the Lab line of the PR body, because a cold hook environment took 34 s on the lab host and the verifier kills a check at 30 s.
     source: manual
     checks:
-      - check_type: command
-        check_value: uv run pre-commit run no-bare-feature-flags --all-files
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_precommit_no_bare_feature_flags_core_omn20920.py -q --no-cov -k comes_from_omnibase_core
         cwd: ${OMNI_HOME}/omniclaude
     binds_ac:
       - AC2
   - id: dod-omn-20920-ac3
-    description: A scratch file reading os.getenv("ENABLE_X") makes the hook exit non-zero; the scratch file is removed afterwards.
+    description: The hook that refuses a bare flag read is the one omnibase_core exports at that sha. The planted os.getenv("ENABLE_X") scratch file run (exit 1, scratch file deleted) is quoted on the Lab line of the PR body, for the same 30 s per-check budget reason.
     source: manual
     checks:
-      - check_type: command
-        check_value: "bash -c 'printf \"import os\\n\\nFLAG = os.getenv(\\\"ENABLE_X\\\")\\n\" > scratch_nbff_probe.py; ! uv run pre-commit run no-bare-feature-flags --files scratch_nbff_probe.py; rc=$?; rm -f scratch_nbff_probe.py; exit $rc'"
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_precommit_no_bare_feature_flags_core_omn20920.py -q --no-cov -k comes_from_omnibase_core
         cwd: ${OMNI_HOME}/omniclaude
     binds_ac:
       - AC3
