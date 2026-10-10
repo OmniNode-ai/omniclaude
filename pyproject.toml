@@ -267,7 +267,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@1b1041574e98645068fab28d6f5ca4fd9328674b",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@23cd6e8d1f793c96a0305d9cabcb3810898c0a8b",
 ]
 
 [tool.uv.sources]
@@ -290,7 +290,7 @@ override-dependencies = [
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "47342e562a516b0278e22a974f35cbf2a64b33eb" }  # pragma: allowlist secret  # OMN-14458: pinned to merged onex_change_control#4106 commit; never pin a branch head.
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
-omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "33a29cdfba6f14be6f94c3c77a05e29f345c692b" }  # pragma: allowlist secret
+omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "8782c0507035e2cec20ccacbc404d32f894161b5" }  # pragma: allowlist secret
 # OMN-16979: pin an approved dispatch commit; never substitute a PyPI source,
 # because the dispatch-drift guard verifies direct VCS provenance.
 # OMN-18622 recorded that `sibling-lock-refresh.yml` could never move this
@@ -313,7 +313,7 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 #
 # So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
 # on workflow_dispatch and review the bot PR.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "1b1041574e98645068fab28d6f5ca4fd9328674b" }  # pragma: allowlist secret
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "23cd6e8d1f793c96a0305d9cabcb3810898c0a8b" }  # pragma: allowlist secret
 
 # OMN-18752: which surface decides the commit a git-sourced sibling must carry.
 # `clone` is claimed only where something enforces it. omnimarket's in-process
