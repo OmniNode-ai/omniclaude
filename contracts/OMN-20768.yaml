@@ -1,0 +1,30 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20768
+title: "CI Summary's default-deny sweep subtracts every attempt's own jobs on a re-run"
+summary: >
+  On a re-run attempt CI Summary polled before the attempt held rows for its
+  push-only deploy jobs. The L5 default-deny sweep subtracted only the current
+  attempt's job names, so the earlier attempt's skipped Deploy to Staging and
+  Deploy to Production check-runs read as unregistered external reds and the
+  umbrella failed. The sweep now subtracts the job names of every attempt of
+  the run; the in-run layer still judges only the current attempt's rows.
+  It also drops rows that an earlier run of the same workflow wrote on the
+  head, which a second ci.yml run's CI Summary swept as external.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "CI Summary gate tests pass, including the re-run attempt sweep cases"
+    command: "uv run pytest tests/ci/test_ci_summary_gate.py tests/ci/test_ci_summary_gate_bot_skip_omn19167.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-ci-summary-rerun-sweep-tests
+    description: "Rows of an earlier attempt or an earlier run of this workflow are not swept, and another workflow's red still fails"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov -k Omn20768"

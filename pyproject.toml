@@ -136,8 +136,10 @@ node_channel_sms_adapter = "omniclaude.nodes.node_channel_sms_adapter"
 node_channel_telegram_adapter = "omniclaude.nodes.node_channel_telegram_adapter"
 node_friction_observer_compute = "omniclaude.nodes.node_friction_observer_compute"
 node_git_effect = "omniclaude.nodes.node_git_effect"
+node_hook_refusal_record_effect = "omniclaude.nodes.node_hook_refusal_record_effect"
 node_github_pr_watcher_effect = "omniclaude.nodes.node_github_pr_watcher_effect"
 node_linear_effect = "omniclaude.nodes.node_linear_effect"
+node_pr_ownership_guard_effect = "omniclaude.nodes.node_pr_ownership_guard_effect"
 node_local_coding_orchestrator = "omniclaude.nodes.node_local_coding_orchestrator"
 node_local_llm_inference_effect = "omniclaude.nodes.node_local_llm_inference_effect"
 node_pattern_persistence_effect = "omniclaude.nodes.node_pattern_persistence_effect"
@@ -265,7 +267,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@f9c3bb1d9cfe7b45c5e26e53ca9bf7226af5710f",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@5a73a5accfa44dfbfd47778d8605615706b70dda",
 ]
 
 [tool.uv.sources]
@@ -311,7 +313,7 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 #
 # So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
 # on workflow_dispatch and review the bot PR.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "f9c3bb1d9cfe7b45c5e26e53ca9bf7226af5710f" }  # pragma: allowlist secret
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "5a73a5accfa44dfbfd47778d8605615706b70dda" }  # pragma: allowlist secret
 
 # OMN-18752: which surface decides the commit a git-sourced sibling must carry.
 # `clone` is claimed only where something enforces it. omnimarket's in-process

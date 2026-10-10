@@ -23,12 +23,14 @@ import json
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
 
 from omniclaude.nodes.node_git_effect.handlers import handler_git_admission as guard
+from omniclaude.nodes.node_git_effect.models.model_git_admission import (
+    ModelGitAdmissionRequest,
+)
 from tests.hooks.test_dirty_path_restore_guard import _git, _init
 
 pytestmark = pytest.mark.unit
@@ -79,7 +81,7 @@ PAYLOADS = [
 
 
 def observe_cases(
-    module: ModuleType,
+    module: Any,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     engine_label: str = "<ENGINE>",
@@ -116,6 +118,7 @@ def observe_cases(
                 for name in (
                     *policy.fetch_lane_envs,
                     *policy.worktree_root_envs,
+                    *policy.registry_root_envs,
                     "CLAUDE_PROJECT_DIR",
                     "OMNI_HOME",
                 ):
@@ -199,11 +202,9 @@ def test_golden_names_its_source() -> None:
     assert len(golden["cases"]) >= 35
 
 
-def test_relocated_guard_matches_pre_relocation_golden(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    observed = observe_cases(guard, tmp_path, monkeypatch)
-    expected = json.loads(GOLDEN.read_text())["cases"]
+def _golden_cases() -> dict[str, Any]:
+    """The recorded verdicts, with the one wording that moved after the recording."""
+    expected: dict[str, Any] = json.loads(GOLDEN.read_text())["cases"]
     # OMN-18936: a tokeniser refusal names the failed segment and its syntax
     # error. The golden stays the pre-relocation record; only this wording moved.
     expected["registry:16"]["reason"] = expected["registry:16"]["reason"].replace(
@@ -211,6 +212,60 @@ def test_relocated_guard_matches_pre_relocation_golden(
         "could not be tokenised in the segment starting at line 1, column 1 "
         "(unterminated single quote)",
     )
+    return expected
+
+
+def test_relocated_guard_matches_pre_relocation_golden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed = observe_cases(guard, tmp_path, monkeypatch)
+    expected = _golden_cases()
+    assert set(observed) == set(expected)
+    for case_id in observed:
+        assert observed[case_id] == expected[case_id], case_id
+
+
+class _ThroughHandler:
+    """The guard module's API, with every verdict produced by the typed handler.
+
+    ``HandlerGitAdmission.handle`` resolves the registry and worktree roots from
+    the environment, which ``observe_cases`` sets per scenario, so the explicit
+    roots it passes are not forwarded.
+    """
+
+    Policy = guard.Policy
+    load_policy = staticmethod(guard.load_policy)
+    main = staticmethod(guard.main)
+
+    @staticmethod
+    def evaluate_bash_command(
+        command: str,
+        policy: guard.Policy,
+        cwd: Path,
+        _registry_root: Path | None,
+        _worktree_roots: tuple[Path, ...],
+    ) -> guard.Decision:
+        result = guard.HandlerGitAdmission().handle(
+            ModelGitAdmissionRequest(
+                raw_payload=json.dumps(
+                    {"tool_input": {"command": command}, "cwd": str(cwd)}
+                ),
+                clone_sync_engine=policy.clone_sync_engine,
+            )
+        )
+        return guard.Decision(
+            blocked=result.blocked, reason=result.reason, notes=tuple(result.notes)
+        )
+
+
+def test_typed_handler_matches_pre_relocation_golden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The definition-B handler and the runtime-routed hook entry point both
+    return the recorded verdict for every case (payload cases run ``main``,
+    which dispatches through the contract-declared in-memory runtime)."""
+    observed = observe_cases(_ThroughHandler, tmp_path, monkeypatch)
+    expected = _golden_cases()
     assert set(observed) == set(expected)
     for case_id in observed:
         assert observed[case_id] == expected[case_id], case_id

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """Give a hook refusal a durable, readable home (OMN-18946).
 
@@ -24,6 +24,12 @@ and keeps only what is bound to this host: the rate-limit state, the lane
 resolution and the ledger append. The handler import adds about 50 ms to a
 refusal and pulls in no ``omnibase_core``; it is paid only on a refusal, never
 on a tool call a guard allows.
+
+WHERE THIS LIVES. ``node_hook_refusal_record_effect`` (OMN-20685): the
+contract declares the command and terminal topics, ``HandlerHookRefusalRecord``
+is the definition-B handler, and ``main`` is the one process entry the guards'
+shell seam calls (``python -m`` this module). It replaced the standalone
+recorder and lane-resolver scripts.
 
 WHAT THIS DOES. One ``FRICTION``-class row per refusal, appended to the
 rolling work ledger through ``onex-ledger`` — the same locked
@@ -55,7 +61,7 @@ on stderr, without advancing the emission state. The calling hook already
 refused the tool; the recorder reports its own failure without changing that
 guard's verdict. A retry remains eligible until the row has landed.
 
-ISOLATION. Called from ``hook_record_refusal`` in ``error-guard.sh``, which
+ISOLATION. Called from ``hook_record_refusal`` in ``lib/hook_refusal.sh``, which
 backgrounds and disowns it exactly as ``emit_to_journal`` does, so the
 operator's refusal message is never delayed by a lock wait. The dedupe
 decision is made BEFORE the ledger lock is taken, never after: that lock is
@@ -82,15 +88,24 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import importlib
 import json
 import os
 import re
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TextIO
+
+from omniclaude.nodes.node_hook_refusal_record_effect.models import (
+    DEFAULT_WINDOW_SECONDS,
+    EnumHookRefusalRecordStatus,
+    ModelHookRefusalRecordRequest,
+    ModelHookRefusalRecordResult,
+)
 
 try:
     from omnimarket.nodes.node_hook_refusal_row_compute.handlers.handler_hook_refusal_row import (
@@ -109,10 +124,10 @@ except ImportError as exc:
         "venv (PLUGIN_PYTHON_BIN)"
     ) from exc
 
-#: One row per (guard, reason, lane) per hour. An hour is the window the
-#: ticket names, and it is also the cadence the morning sweep reads at, so a
-#: finer window would add rows no reader distinguishes.
-DEFAULT_WINDOW_SECONDS = 3600
+# DEFAULT_WINDOW_SECONDS (one row per (guard, reason, lane) per hour) is the
+# request model's default. An hour is the window the ticket names, and it is
+# also the cadence the morning sweep reads at, so a finer window would add rows
+# no reader distinguishes.
 # OMN-20343: SubagentStop retries are actionable immediately after the third
 # refusal. This exception applies only to the secret guard, keyed by session.
 SECRET_REPEAT_THRESHOLD = 3
@@ -314,7 +329,7 @@ def resolve_lane_fields(
     """``(lane, lane_source)`` from honest operands, never a guess (OMN-19381).
 
     The chain -- sidecar, lane env, registry, open CLAIM, worktree label --
-    lives in ``hook_refusal_lane``; the payload's own fields win over the
+    lives in ``handler_hook_refusal_lane``; the payload's own fields win over the
     environment-derived arguments, which stay as fallbacks.
 
     Imported lazily and defensively: this module must still write a row when
@@ -324,11 +339,9 @@ def resolve_lane_fields(
     it would attribute one lane's friction to a neighbour.
     """
     try:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        # Resolved at runtime from this file's own directory, so it is
-        # invisible to a type checker that does not have the hooks lib on
-        # its path. Imported this way on purpose: see the docstring.
-        import hook_refusal_lane  # type: ignore[import-not-found,unused-ignore] # noqa: PLC0415
+        from omniclaude.nodes.node_hook_refusal_record_effect.handlers import (  # noqa: PLC0415
+            handler_hook_refusal_lane as hook_refusal_lane,
+        )
 
         lane, lane_source = hook_refusal_lane.resolve_refusal_lane(
             payload,
@@ -351,16 +364,16 @@ def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
     dedupe-on-retry behaviour this caller would otherwise need itself.
     """
     if not project.is_absolute() or not (project / "pyproject.toml").is_file():
-        print(
+        _say(
             "hook refusal recorder: ledger writer project is unavailable: "
             + redact(str(project)),
-            file=sys.stderr,
+            err=True,
         )
         return False
     if not ledger.is_file():
-        print(
+        _say(
             "hook refusal recorder: ledger is unavailable: " + redact(str(ledger)),
-            file=sys.stderr,
+            err=True,
         )
         return False
     try:
@@ -384,19 +397,23 @@ def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
             check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        print(
-            "hook refusal recorder: ledger writer failed: " + redact(str(exc)),
-            file=sys.stderr,
+        _say(
+            "hook refusal recorder: ledger writer failed: " + redact(str(exc)), err=True
         )
         return False
     if completed.returncode != 0:
-        print(
+        _say(
             f"hook refusal recorder: ledger writer exited {completed.returncode}: "
             + redact(completed.stderr or "no stderr reason")[:MAX_DETAIL_CHARS],
-            file=sys.stderr,
+            err=True,
         )
         return False
     return True
+
+
+def _say(text: str, *, err: bool = False) -> None:
+    """One line to stdout, or to stderr when *err*; the entry's only output path."""
+    (sys.stderr if err else sys.stdout).write(text + "\n")
 
 
 def _resolve_registry_root() -> Path | None:
@@ -429,7 +446,10 @@ def extract_detail(raw: str) -> str:
     Other guards can cite user text, so apply both shared redactors BEFORE
     truncation. No raw payload, command or final message is a fallback.
     """
-    from secret_redactor import redact_secrets
+    # A plugin hook-library sibling, on sys.path through --hooks-lib.
+    redact_secrets: Callable[[str], str] = importlib.import_module(
+        "secret_redactor"
+    ).redact_secrets
 
     try:
         verdict = json.loads(raw)
@@ -458,7 +478,133 @@ def extract_detail(raw: str) -> str:
     return redact(redact_secrets(detail))[:MAX_DETAIL_CHARS]
 
 
+class HandlerHookRefusalRecord:
+    """Record one refusal: decide the row, rate-limit it, append it."""
+
+    def handle(
+        self, request: ModelHookRefusalRecordRequest
+    ) -> ModelHookRefusalRecordResult:
+        payload = request.payload
+        lane, lane_source = resolve_lane_fields(
+            request.cwd,
+            request.transcript_path,
+            request.session_id,
+            request.agent_id,
+            payload=payload,
+            ledger=request.ledger,
+        )
+        # Lane attribution is a separate concern. The secret guard's retry budget
+        # must not be shared by unrelated sessions, even when both have an
+        # unresolved lane, so the node keys that guard by session as well.
+        session = (
+            request.session_id
+            or (payload or {}).get("session_id")
+            or request.transcript_path
+            or (payload or {}).get("agent_transcript_path")
+        )
+
+        def decide(suppressed: int, timestamp: str) -> ModelHookRefusalRowResult:
+            return decide_row(
+                guard=request.guard,
+                reason=request.reason,
+                lane=lane,
+                lane_source=lane_source,
+                detail=request.detail,
+                session=str(session) if session else "",
+                suppressed=suppressed,
+                timestamp=timestamp,
+            )
+
+        def failed(*messages: str) -> ModelHookRefusalRecordResult:
+            return ModelHookRefusalRecordResult(
+                status=EnumHookRefusalRecordStatus.FAILED,
+                exit_code=1,
+                key=key,
+                messages=messages,
+            )
+
+        registry_root = None
+        project = None
+        timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        first = decide(0, timestamp)
+        key = first.key
+        repeated_secret = first.repeated_secret
+        if not request.print_row:
+            registry_root = _resolve_registry_root()
+            # An explicit state root can retain the refusal even if the registry
+            # needed by the aggregate writer is unavailable. Never lose both.
+            try:
+                append_refusal_log(first.row, registry_root)
+            except (OSError, ValueError) as exc:
+                return failed(
+                    "hook refusal recorder: "
+                    + redact(str(exc))
+                    + "; dedupe state unchanged"
+                )
+            if registry_root is None:
+                return failed(
+                    "hook refusal recorder: OMNI_HOME must name an absolute registry "
+                    "root; dedupe state unchanged"
+                )
+            # The default lives in a plugin hook-library sibling, on sys.path
+            # through --hooks-lib; a declared project does not need it.
+            project = Path(
+                os.environ.get("OMNIBASE_INTERNAL_HOME")
+                or importlib.import_module("hook_emit_bounded").ledger_writer_project(
+                    registry_root
+                )
+            )
+            if not project.is_absolute():
+                return failed(
+                    "hook refusal recorder: OMNIBASE_INTERNAL_HOME must be absolute; "
+                    "dedupe state unchanged"
+                )
+
+        directory = state_dir()
+        now = time.time()
+        emit, suppressed = should_emit(
+            key,
+            now=now,
+            window_seconds=request.window_seconds,
+            directory=directory,
+            surface_after=SECRET_REPEAT_THRESHOLD if repeated_secret else None,
+        )
+        if not emit:
+            return ModelHookRefusalRecordResult(
+                status=EnumHookRefusalRecordStatus.SUPPRESSED, exit_code=0, key=key
+            )
+
+        row = decide(suppressed, timestamp).row
+        if request.print_row:
+            if repeated_secret:
+                # Inspecting the secret guard exercises its retry budget, which
+                # only advances when an emitted row is committed.
+                _commit_emitted(directory / f"{key}.json", now, True)
+            return ModelHookRefusalRecordResult(
+                status=EnumHookRefusalRecordStatus.PRINTED,
+                exit_code=0,
+                row=row,
+                key=key,
+            )
+        if registry_root is None or project is None:
+            return failed()
+        ledger = (
+            Path(request.ledger)
+            if request.ledger
+            else registry_root / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
+        )
+        if not append_row(row, ledger=ledger, project=project, timeout=request.timeout):
+            return failed(
+                "hook refusal recorder: ledger append failed; dedupe state unchanged"
+            )
+        _commit_emitted(directory / f"{key}.json", now, repeated_secret)
+        return ModelHookRefusalRecordResult(
+            status=EnumHookRefusalRecordStatus.EMITTED, exit_code=0, row=row, key=key
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
+    """The guards' process entry: parse argv and stdin into a request, run it."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--extract-detail", action="store_true")
     parser.add_argument("--guard", help="the refusing guard's id")
@@ -480,127 +626,55 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ledger", default=None)
     parser.add_argument("--timeout", default="120s")
     parser.add_argument(
+        "--hooks-lib",
+        default=None,
+        help="the plugin hook library directory (its siblings are imported)",
+    )
+    parser.add_argument(
         "--print-row",
         action="store_true",
         help="print the row instead of appending it; for tests and inspection",
     )
     args = parser.parse_args(argv)
+    if args.hooks_lib:
+        sys.path.insert(0, args.hooks_lib)
+        from omniclaude.nodes.node_hook_refusal_record_effect.handlers import (  # noqa: PLC0415
+            handler_hook_refusal_lane,
+        )
+
+        handler_hook_refusal_lane.use_hooks_lib(args.hooks_lib)
     if args.extract_detail:
-        print(extract_detail(sys.stdin.read()))
+        _say(extract_detail(sys.stdin.read()))
         return 0
     if not args.guard or not args.reason:
         parser.error("--guard and --reason are required for recording")
 
-    payload = read_payload(sys.stdin) if args.payload_stdin else None
-    lane, lane_source = resolve_lane_fields(
-        args.cwd,
-        args.transcript_path,
-        args.session_id,
-        args.agent_id,
-        payload=payload,
-        ledger=args.ledger,
-    )
-    # Lane attribution is a separate concern. The secret guard's retry budget
-    # must not be shared by unrelated sessions, even when both have an
-    # unresolved lane, so the node keys that guard by session as well.
-    session = (
-        args.session_id
-        or (payload or {}).get("session_id")
-        or args.transcript_path
-        or (payload or {}).get("agent_transcript_path")
-    )
-
-    def decide(suppressed: int, timestamp: str) -> ModelHookRefusalRowResult:
-        return decide_row(
+    result = HandlerHookRefusalRecord().handle(
+        ModelHookRefusalRecordRequest(
             guard=args.guard,
             reason=args.reason,
-            lane=lane,
-            lane_source=lane_source,
             detail=args.detail,
-            session=str(session) if session else "",
-            suppressed=suppressed,
-            timestamp=timestamp,
+            cwd=args.cwd,
+            transcript_path=args.transcript_path,
+            session_id=args.session_id,
+            agent_id=args.agent_id,
+            payload=read_payload(sys.stdin) if args.payload_stdin else None,
+            window_seconds=args.window_seconds,
+            ledger=args.ledger,
+            timeout=args.timeout,
+            print_row=args.print_row,
         )
-
-    registry_root = None
-    project = None
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    first = decide(0, timestamp)
-    key = first.key
-    repeated_secret = first.repeated_secret
-    if not args.print_row:
-        registry_root = _resolve_registry_root()
-        # An explicit state root can retain the refusal even if the registry
-        # needed by the aggregate writer is unavailable. Never lose both.
-        try:
-            append_refusal_log(first.row, registry_root)
-        except (OSError, ValueError) as exc:
-            print(
-                "hook refusal recorder: "
-                + redact(str(exc))
-                + "; dedupe state unchanged",
-                file=sys.stderr,
-            )
-            return 1
-        if registry_root is None:
-            print(
-                "hook refusal recorder: OMNI_HOME must name an absolute registry root; "
-                "dedupe state unchanged",
-                file=sys.stderr,
-            )
-            return 1
-        project = Path(
-            os.environ.get("OMNIBASE_INTERNAL_HOME")
-            or registry_root.parent / "omnibase_internal"
-        )
-        if not project.is_absolute():
-            print(
-                "hook refusal recorder: OMNIBASE_INTERNAL_HOME must be absolute; "
-                "dedupe state unchanged",
-                file=sys.stderr,
-            )
-            return 1
-
-    directory = state_dir()
-    now = time.time()
-    emit, suppressed = should_emit(
-        key,
-        now=now,
-        window_seconds=args.window_seconds,
-        directory=directory,
-        surface_after=SECRET_REPEAT_THRESHOLD if repeated_secret else None,
     )
-    if not emit:
-        return 0
-
-    row = decide(suppressed, timestamp).row
-    if args.print_row:
-        print(row)
-        if repeated_secret:
-            # Inspecting the secret guard exercises its retry budget, which
-            # only advances when an emitted row is committed.
-            _commit_emitted(directory / f"{key}.json", now, True)
-        return 0
-    if registry_root is None or project is None:
-        return 1
-    ledger = (
-        Path(args.ledger)
-        if args.ledger
-        else registry_root / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
-    )
-    if not append_row(row, ledger=ledger, project=project, timeout=args.timeout):
-        print(
-            "hook refusal recorder: ledger append failed; dedupe state unchanged",
-            file=sys.stderr,
-        )
-        return 1
-    _commit_emitted(directory / f"{key}.json", now, repeated_secret)
-    return 0
+    for message in result.messages:
+        _say(message, err=True)
+    if result.status is EnumHookRefusalRecordStatus.PRINTED:
+        _say(result.row)
+    return result.exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - process entry
     try:
         sys.exit(main())
     except Exception as exc:  # noqa: BLE001 - report failure at the process boundary
-        print("hook refusal recorder: " + redact(str(exc)), file=sys.stderr)
+        _say("hook refusal recorder: " + redact(str(exc)), err=True)
         sys.exit(1)

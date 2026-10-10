@@ -1,0 +1,98 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: NodePrOwnershipGuardEffect (OMN-20685)
+#
+# The lane-ownership gate for destructive `gh` verbs (OMN-16485). Every lane on a
+# host drives GitHub through one shared identity, so GitHub cannot say which lane
+# closed a PR; this node judges the command instead, against the claims directory
+# and a locally resolved lane identity. The claim registry itself stays a plugin
+# hook-library sibling until it has its own node (omnimarket
+# node_pr_claim_registry_effect); the process entry takes that directory as
+# --hooks-lib. The guard's shell wrapper reaches the node through one process
+# call, `python -m` the handler module.
+
+name: node_pr_ownership_guard_effect
+version: "1.0.0"
+contract_name: node_pr_ownership_guard_effect
+node_name: node_pr_ownership_guard_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: EFFECT_GENERIC
+runtime_profiles: [main]
+
+description: >
+  Judges one Bash command's guarded GitHub mutations (pr close and reopen,
+  api pr close, run cancel, workflow run) by lane ownership. Ownership-class
+  verbs fail closed on an absent, expired, unreadable or lane-less claim;
+  exclusivity-class verbs are first-writer-wins and record the claim when
+  allowed. A command holding no guarded mutation is decided before any claim
+  surface is touched.
+
+input_model:
+  name: ModelPrOwnershipRequest
+  module: omniclaude.nodes.node_pr_ownership_guard_effect.models
+
+output_model:
+  name: ModelPrOwnershipResult
+  module: omniclaude.nodes.node_pr_ownership_guard_effect.models
+
+handler:
+  module: omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership
+  class: HandlerPrOwnership
+  input_model: omniclaude.nodes.node_pr_ownership_guard_effect.models.ModelPrOwnershipRequest
+
+handler_routing:
+  routing_strategy: payload_type_match
+  handlers:
+    - handler:
+        name: HandlerPrOwnership
+        module: omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership
+      event_model:
+        name: ModelPrOwnershipRequest
+        module: omniclaude.nodes.node_pr_ownership_guard_effect.models
+
+descriptor:
+  node_archetype: effect
+  purity: effectful
+  idempotent: false
+  timeout_ms: 30000
+
+capabilities:
+  - name: hook.pr_ownership.check
+    description: Judge a Bash command's guarded GitHub mutations by lane ownership
+    version: 1.0.0
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omniclaude.pr-ownership-check.v1
+  publish_topics:
+    - onex.evt.omniclaude.pr-ownership-checked.v1
+
+runtime_dispatch:
+  command_topic: onex.cmd.omniclaude.pr-ownership-check.v1
+  terminal_events:
+    success: onex.evt.omniclaude.pr-ownership-checked.v1
+
+terminal_event: onex.evt.omniclaude.pr-ownership-checked.v1
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-20685
+  maturity: alpha
+  tags:
+    - effect
+    - hooks
+    - ownership
+    - github

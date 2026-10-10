@@ -260,6 +260,11 @@ class ClaimRegistry:
         self._instance_id: str | None = None
         self._hostname: str | None = None
 
+    @property
+    def claims_dir(self) -> Path:
+        """The directory this registry's claim files live in."""
+        return self._claims_dir
+
     def _ensure_dir(self) -> None:
         """Create the claims directory if it doesn't exist."""
         self._claims_dir.mkdir(parents=True, exist_ok=True)

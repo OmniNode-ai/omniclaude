@@ -426,7 +426,7 @@ activation_patterns:
     - "designing HTTP endpoints"
 ```
 
-See [knowledge-base: guides/adding-an-agent.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-an-agent.md) for the full guide.
+See [knowledge-base: guides/adding-an-agent.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/guides/adding-an-agent.md) for the full guide.
 
 ## Usage
 
@@ -465,7 +465,7 @@ Skills are invoked automatically by the agent framework when domain expertise is
 3. Update `hooks/hooks.json` configuration
 4. Deploy via the marketplace: `claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools`
 
-See [knowledge-base: guides/adding-a-hook-handler.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-hook-handler.md) for the step-by-step guide.
+See [knowledge-base: guides/adding-a-hook-handler.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/guides/adding-a-hook-handler.md) for the step-by-step guide.
 
 ### Adding New Agents
 
@@ -474,7 +474,7 @@ See [knowledge-base: guides/adding-a-hook-handler.md](https://github.com/OmniNod
 3. Test with routing framework: `python hooks/lib/route_via_events_wrapper.py "test prompt"`
 4. Deploy via the marketplace: `claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools`
 
-See [knowledge-base: guides/adding-an-agent.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-an-agent.md) for the step-by-step guide.
+See [knowledge-base: guides/adding-an-agent.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/guides/adding-an-agent.md) for the step-by-step guide.
 
 ### Adding New Skills
 
@@ -483,7 +483,7 @@ See [knowledge-base: guides/adding-an-agent.md](https://github.com/OmniNode-ai/k
 3. Optionally add `prompt.md` for orchestration logic and scripts
 4. Deploy via the marketplace (`claude plugin marketplace update omninode-tools && claude plugin install onex@omninode-tools`); invoke with `/my-skill`
 
-See [knowledge-base: guides/adding-a-skill.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-skill.md) for the step-by-step guide.
+See [knowledge-base: guides/adding-a-skill.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/guides/adding-a-skill.md) for the step-by-step guide.
 
 ### Adding New Commands
 
@@ -491,7 +491,7 @@ There is no `commands/` directory (retired — see
 [Migration from Legacy Plugin Structure](#migration-from-legacy-plugin-structure)).
 A new user-facing workflow entrypoint is added as a skill instead — follow
 [Adding New Skills](#adding-new-skills) above and
-[knowledge-base: guides/adding-a-skill.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-skill.md).
+[knowledge-base: guides/adding-a-skill.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/guides/adding-a-skill.md).
 
 ## Troubleshooting
 
@@ -569,7 +569,7 @@ Routing returns `None` on timeout (5s). With no-fallback
 mode enabled, prompts that match no agent below a confidence
 threshold are rejected rather than silently downgraded.
 
-See [knowledge-base: architecture/agent-routing-architecture.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/agent-routing-architecture.md) for architecture
+See [knowledge-base: architecture/agent-routing-architecture.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/architecture/agent-routing-architecture.md) for architecture
 details. (`event-driven-routing-proposal.md` and
 `routing-architecture-comparison.md` are historical/deprecated — see the knowledge base architecture index.)
 
@@ -598,7 +598,7 @@ Compliance results are published to Kafka for downstream consumers
 (e.g., `compliance_result_subscriber.py` transforms violations into
 `PatternAdvisory` events).
 
-See [knowledge-base: architecture/service-boundaries.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/service-boundaries.md) for service boundary details.
+See [knowledge-base: architecture/service-boundaries.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/architecture/service-boundaries.md) for service boundary details.
 
 ### Local LLM Delegation
 
@@ -611,7 +611,7 @@ The delegation orchestrator (`delegation_orchestrator.py`) coordinates the
 request, validates the response, and injects the result into
 `additionalContext`.
 
-See [knowledge-base: adrs/ADR-0048-delegation-orchestrator-quality-gate.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/adrs/ADR-0048-delegation-orchestrator-quality-gate.md) for the decision
+See [knowledge-base: adrs/ADR-0048-delegation-orchestrator-quality-gate.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/adrs/ADR-0048-delegation-orchestrator-quality-gate.md) for the decision
 record.
 
 ---
@@ -620,9 +620,9 @@ record.
 
 - **Shared Infrastructure**: `~/.claude/CLAUDE.md`
 - **Repository Documentation**: `${PROJECT_ROOT}/CLAUDE.md`
-- **Hook Data Flow**: [knowledge-base: architecture/hook-data-flow.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/hook-data-flow.md)
-- **Routing Architecture**: [knowledge-base: architecture/agent-routing-architecture.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/agent-routing-architecture.md)
-- **Service Boundaries**: [knowledge-base: architecture/service-boundaries.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/service-boundaries.md)
+- **Hook Data Flow**: [knowledge-base: architecture/hook-data-flow.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/architecture/hook-data-flow.md)
+- **Routing Architecture**: [knowledge-base: architecture/agent-routing-architecture.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/architecture/agent-routing-architecture.md)
+- **Service Boundaries**: [knowledge-base: architecture/service-boundaries.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/architecture/service-boundaries.md)
 - **Guides**: `docs/guides/` (hook handlers, agents, skills, testing)
 - **ADRs**: `docs/decisions/`
 

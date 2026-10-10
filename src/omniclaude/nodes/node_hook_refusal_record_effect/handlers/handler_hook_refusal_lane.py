@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """Name the lane a hook refusal belongs to, from honest operands only (OMN-19381).
 
@@ -35,7 +35,10 @@ ambiguity and names neither. An operand that cannot be read is skipped, never
 filled in.
 
 Standard library only, never raises: this runs in a process a refusing guard
-backgrounded, under a bare interpreter with ``env -u PYTHONPATH``.
+backgrounded, under a bare interpreter with ``env -u PYTHONPATH``. It imports
+nothing from its own package: the user-level canonical-clone guard copies this
+one file beside itself (OMN-20685; it was ``hook_refusal_lane.py`` before the
+move into ``node_hook_refusal_record_effect``).
 """
 
 from __future__ import annotations
@@ -62,6 +65,7 @@ __all__ = [
     "claim_lane",
     "resolve_refusal_lane",
     "sidecar_lane",
+    "use_hooks_lib",
     "worktree_of",
 ]
 
@@ -257,11 +261,24 @@ def candidate_paths(
     return unique[:_MAX_CANDIDATES]
 
 
+def use_hooks_lib(directory: str | None) -> None:
+    """Put the plugin's hook library on ``sys.path`` so its siblings import.
+
+    Inside the node package this file no longer sits beside
+    ``hook_lane_attribution``; the shell caller names the library directory.
+    A copy installed beside the plugin's modules needs no call.
+    """
+    if directory and directory not in sys.path:
+        sys.path.insert(0, directory)
+
+
 def _attribution() -> ModuleType | None:
     """The sibling ``hook_lane_attribution`` module, or ``None``.
 
-    Imported from this file's own directory at call time: hooks run under a
-    bare interpreter with ``env -u PYTHONPATH``, where only a sibling resolves.
+    Imported at call time from the plugin hook library (``use_hooks_lib``) or
+    from this file's own directory when the file is copied beside it: hooks
+    run under a bare interpreter with ``env -u PYTHONPATH``, where only a
+    sibling resolves.
     """
     try:
         here = str(Path(__file__).resolve().parent)
@@ -281,8 +298,8 @@ def _registry_lane(paths: Iterable[Path]) -> str:
     for path in paths:
         try:
             lane, source, _ticket = hook_lane_attribution.resolve_lane(path)
-        except Exception:  # noqa: BLE001
-            continue
+        except Exception:  # noqa: BLE001 - an unresolvable path attributes no lane
+            lane, source = "", ""
         if source == hook_lane_attribution.LANE_SOURCE_REGISTRY and lane:
             return str(lane)
     return ""

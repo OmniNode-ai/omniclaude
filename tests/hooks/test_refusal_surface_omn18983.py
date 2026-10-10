@@ -209,7 +209,11 @@ def test_unresolved_retries_are_counted_even_when_ledger_deduplicates(surface):
     box, plugin, env = surface
     command = [
         sys.executable,
-        str(plugin / "hooks/lib/hook_refusal_recorder.py"),
+        "-P",
+        "-m",
+        "omniclaude.nodes.node_hook_refusal_record_effect.handlers.handler_hook_refusal_record",
+        "--hooks-lib",
+        str(plugin / "hooks/lib"),
         "--guard",
         GUARDS[0],
         "--reason",
