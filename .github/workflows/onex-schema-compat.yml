@@ -3,21 +3,25 @@
 
 name: ONEX Schema Compatibility
 
-# Verifies omniclaude compatibility with the current ONEX Change Control schema.
+# Verifies that omniclaude's ticket contracts are compatible with the schema
+# owner. The ticket-contract model is omnibase_core's ModelTicketContract
+# (OMN-20885: the change-control repository re-exports it and is no longer read).
 # Part of OMN-2452 (per-repo slice of OMN-2380 M4 completion).
 #
 # This gate:
-#   1. Checks out onex_change_control (the upstream schema authority)
-#   2. Validates any YAML schema artifacts in this repo against the current schema
-#   3. Runs is_compatible() from omnibase_spi to verify major version compatibility
+#   1. Installs omniclaude at its locked omnibase_core and omnibase_spi versions
+#   2. Reads the schema_version every contracts/OMN-*.yaml declares
+#   3. Runs is_compatible() from omnibase_spi against the schema_version of the
+#      installed ModelTicketContract; a major mismatch fails
 #
-# Graceful behavior: If no schema artifacts are found, the gate passes.
-# This is expected -- omniclaude has no contract YAML files in the initial phase.
+# A contracts/ directory with no OMN-*.yaml fails. A repository with no
+# contracts/ directory reads no ticket contract, so there is nothing to check.
 #
 # When this gate fails:
-#   - Schema artifact invalid: Fix the YAML against ModelTicketContract / ModelDayClose
-#   - Major version mismatch: Review breaking changes in onex_change_control and update
-#     reader_version in the "Check schema version compatibility" step below.
+#   - A contract declares a schema_version major that omnibase_core cannot read,
+#     or an unparseable one: fix that contract.
+#   - omnibase_core released a breaking ticket-contract schema change: migrate
+#     the contracts before moving the omnibase-core pin in uv.lock.
 
 on:
   push:
@@ -65,29 +69,12 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     timeout-minutes: 20
-    # Only run on PRs from the same repo -- forks lack access to private onex_change_control
+    # Only run on PRs from the same repo
     if: needs.occ-preflight.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-
-      - name: Resolve the pinned onex_change_control rev
-        id: occ_pin
-        run: |
-          set -euo pipefail
-          # A sibling is read at the rev this repo's uv.lock pins, never its live
-          # branch (ruling 2026-10-01).
-          rev="$(grep -oE 'onex_change_control\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
-          [[ -n "$rev" ]] || { echo "::error::onex_change_control rev not found in uv.lock"; exit 1; }
-          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout onex_change_control
-        uses: actions/checkout@v7
-        with:
-          repository: OmniNode-ai/onex_change_control
-          ref: ${{ steps.occ_pin.outputs.rev }}
-          path: onex_change_control
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -140,110 +127,50 @@ jobs:
             attempt=$((attempt + 1))
           done
 
-      - name: Install onex_change_control schema validator
+      - name: Check ticket-contract schema compatibility
         working-directory: ${{ github.workspace }}
         run: |
-          # Install from local checkout to get validate-yaml CLI and schema models.
-          # uv handles the poetry-core PEP 517 build automatically.
-          uv pip install ./onex_change_control
+          uv run python3 - <<'PY'
+          import sys
+          from pathlib import Path
 
-      - name: Find schema artifact files
-        id: find-artifacts
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -e
-          # Search only in directories explicitly reserved for schema artifacts.
-          # Using an allowlist (not a blocklist) prevents false positives from
-          # source files, agent configs, hook contracts, or any other YAML that
-          # happens to contain "contract" or "day_close" in its name.
-          #
-          # Reserved schema artifact directories (none exist yet -- gate skips gracefully):
-          #   contracts/  -> ModelTicketContract YAMLs (e.g., contracts/OMN-1234.yaml)
-          #   schemas/    -> schema definitions
-          #   artifacts/  -> general schema artifacts
-          #   drift/      -> ModelDayClose YAMLs (e.g., drift/day_close/2026-02-21.yaml)
-          FILES=""
-          for dir in contracts schemas artifacts drift; do
-            if [ -d "$dir" ]; then
-              FOUND=$(find "$dir" \
-                \( -name '*contract*.yaml' -o -name '*contract*.yml' \
-                   -o -name '*day_close*.yaml' -o -name '*day_close*.yml' \) \
-                2>/dev/null | sort || true)
-              if [ -n "$FOUND" ]; then
-                FILES="${FILES}${FILES:+$'\n'}${FOUND}"
-              fi
-            fi
-          done
-
-          if [ -n "$FILES" ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "files<<EOF"
-              echo "$FILES"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-            echo "Schema artifacts found:"
-            echo "$FILES"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-            echo "No schema artifacts found -- skipping artifact validation"
-            echo "(Expected: omniclaude has no contract YAML files in the initial phase)"
-          fi
-
-      - name: Validate schema artifacts
-        if: steps.find-artifacts.outputs.found == 'true'
-        working-directory: ${{ github.workspace }}
-        run: |
-          # Validate each artifact against the current onex_change_control Pydantic models.
-          # validate-yaml auto-detects ModelTicketContract vs ModelDayClose by path/content.
-          while IFS= read -r file; do
-            [ -n "$file" ] || continue
-            echo "Validating: $file"
-            uv run validate-yaml "$file"
-          done <<< "${{ steps.find-artifacts.outputs.files }}"
-
-      - name: Check schema version compatibility
-        working-directory: ${{ github.workspace }}
-        run: |
-          # Extract the onex_change_control package version (canonical schema version).
-          OCC_VERSION=$(uv run python3 -c "
-          import tomllib
-          with open('onex_change_control/pyproject.toml', 'rb') as f:
-              d = tomllib.load(f)
-          if 'project' in d:
-              print(d['project']['version'])
-          else:
-              print(d['tool']['poetry']['version'])
-          ")
-          echo "onex_change_control upstream version: $OCC_VERSION"
-
-          # Verify major version compatibility using omnibase_spi is_compatible().
-          #
-          # READER_VERSION tracks the onex_change_control major version this repo was
-          # last validated against. When onex_change_control releases a new major version:
-          #   1. Review the breaking changes in onex_change_control
-          #   2. Update any schema artifacts in omniclaude to comply
-          #   3. Update reader_version here and open a PR
-          OCC_VERSION="$OCC_VERSION" uv run python3 -c "
-          import os, sys
+          import yaml
+          from omnibase_core.models.ticket.model_ticket_contract import ModelTicketContract
           from omnibase_spi.contracts.pipeline.contract_schema_compat import is_compatible
 
-          wire_version = os.environ['OCC_VERSION']
-          reader_version = '0.1.0'  # Update on major version bump in onex_change_control
-
-          print(f'Compatibility check: upstream={wire_version}, reader={reader_version}')
-
-          if not is_compatible(wire_version=wire_version, reader_version=reader_version):
-              print('ERROR: Schema compatibility broken!')
-              print(f'  onex_change_control upstream version: {wire_version}')
-              print(f'  omniclaude reader version:            {reader_version}')
-              print()
-              print('  Major version mismatch. onex_change_control released a breaking')
-              print('  schema change. To resolve:')
-              print('  1. Review breaking changes in onex_change_control CHANGELOG')
-              print('  2. Update schema artifacts in omniclaude to comply')
-              print('  3. Update reader_version in .github/workflows/onex-schema-compat.yml')
+          reader_version = str(ModelTicketContract.model_fields["schema_version"].default)
+          contracts_dir = Path("contracts")
+          if not contracts_dir.is_dir():
+              print("No contracts/ directory: this repository reads no ticket contract.")
+              sys.exit(0)
+          paths = sorted(contracts_dir.glob("OMN-*.yaml"))
+          if not paths:
+              print("::error::contracts/ holds no OMN-*.yaml ticket contract")
               sys.exit(1)
 
-          print(f'OK: Schema compatible (upstream={wire_version}, reader={reader_version})')
-          "
+          print(f"omnibase_core ModelTicketContract schema_version (reader): {reader_version}")
+          broken = []
+          for path in paths:
+              data = yaml.safe_load(path.read_text(encoding="utf-8"))
+              if not isinstance(data, dict):
+                  broken.append((path, "not a mapping"))
+                  continue
+              wire_version = str(data.get("schema_version", reader_version))
+              try:
+                  compatible = is_compatible(wire_version=wire_version, reader_version=reader_version)
+              except ValueError as exc:
+                  broken.append((path, str(exc)))
+                  continue
+              if not compatible:
+                  broken.append((path, f"schema_version {wire_version} vs reader {reader_version}"))
+
+          for path, reason in broken:
+              print(f"::error file={path.as_posix()}::{path.as_posix()}: {reason}")
+          if broken:
+              print(f"ERROR: {len(broken)} of {len(paths)} ticket contract(s) are incompatible with omnibase_core's ModelTicketContract.")
+              print("  A major mismatch means omnibase_core released a breaking ticket-contract")
+              print("  schema change, or a contract declares a major this core cannot read.")
+              sys.exit(1)
+          print(f"OK: {len(paths)} ticket contract(s) compatible with omnibase_core schema_version {reader_version}")
+          PY
+
