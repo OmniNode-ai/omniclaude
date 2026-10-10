@@ -21,7 +21,7 @@ evidence_requirements:
     command: uv run pytest tests/ci/test_precommit_no_bare_feature_flags_core_omn20920.py -q --no-cov
   - kind: manual
     description: The whole-tree run exits 0 and the planted os.getenv("ENABLE_X") scratch file exits non-zero; both runs are quoted on the Lab line of the PR body.
-    command: pre-commit run no-bare-feature-flags --all-files
+    command: uv run pre-commit run no-bare-feature-flags --all-files
 emergency_bypass:
   enabled: false
   justification: ''
@@ -44,7 +44,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: command
-        check_value: pre-commit run no-bare-feature-flags --all-files
+        check_value: uv run pre-commit run no-bare-feature-flags --all-files
         cwd: ${OMNI_HOME}/omniclaude
     binds_ac:
       - AC2
@@ -53,7 +53,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: command
-        check_value: "bash -c 'printf \"import os\\n\\nFLAG = os.getenv(\\\"ENABLE_X\\\")\\n\" > scratch_nbff_probe.py; ! pre-commit run no-bare-feature-flags --files scratch_nbff_probe.py; rc=$?; rm -f scratch_nbff_probe.py; exit $rc'"
+        check_value: "bash -c 'printf \"import os\\n\\nFLAG = os.getenv(\\\"ENABLE_X\\\")\\n\" > scratch_nbff_probe.py; ! uv run pre-commit run no-bare-feature-flags --files scratch_nbff_probe.py; rc=$?; rm -f scratch_nbff_probe.py; exit $rc'"
         cwd: ${OMNI_HOME}/omniclaude
     binds_ac:
       - AC3
