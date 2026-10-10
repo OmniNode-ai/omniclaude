@@ -4370,6 +4370,10 @@ jobs:
     if: needs.occ-preflight.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')
     steps:
       - uses: actions/checkout@v7
+        with:
+          # OMN-20837: DoD probes may use git show at an evidence-bound head
+          # older than this run's merge commit. Keep those product objects.
+          fetch-depth: 0
       # OMN-20138 (port of omnibase_infra OMN-20135, which mirrors omnibase_core
       # OMN-18157 and OMN-20130). This job used to run `validate-yaml` over the
       # whole change-control corpus at its default branch: it never resolved

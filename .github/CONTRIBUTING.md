@@ -25,8 +25,8 @@ omniclaude is the Claude Code agent plugin for the ONEX platform. It contains ho
 ### First Steps
 
 1. Read [CLAUDE.md](../CLAUDE.md) for operating rules, architectural constraints, and agent behavioral guidelines.
-2. Browse [docs/](../docs/) — especially the [knowledge base README](https://github.com/OmniNode-ai/knowledge-base/blob/main/README.md) for the full doc map.
-3. Review [knowledge-base: guides/onex-plugin-quickstart.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/onex-plugin-quickstart.md) for initial setup.
+2. Browse [docs/](../docs/) — especially the [knowledge base README](https://github.com/OmniNode-ai/knowledge_base/blob/main/README.md) for the full doc map.
+3. Review [knowledge-base: guides/onex-plugin-quickstart.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/guides/onex-plugin-quickstart.md) for initial setup.
 
 ## Development Setup
 
@@ -95,11 +95,11 @@ Skills use kebab-case directories matching the slash command: `/onex:my_skill` �
 ### Authoring a Skill
 
 1. Create `plugins/onex/skills/<name>/SKILL.md` and `prompt.md`.
-2. Follow the authoring guide: [knowledge-base: guides/authoring-an-onex-skill.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/authoring-an-onex-skill.md).
+2. Follow the authoring guide: [knowledge-base: guides/authoring-an-onex-skill.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/guides/authoring-an-onex-skill.md).
 3. Skills must be thin: extract node logic to `omnimarket`, not inline in `prompt.md`.
 4. Add an entry to `plugins/onex/skills/README.md` (if it exists) and the knowledge base docs index.
 
-See [knowledge-base: guides/adding-a-skill.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-skill.md) for the step-by-step guide.
+See [knowledge-base: guides/adding-a-skill.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/guides/adding-a-skill.md) for the step-by-step guide.
 
 ## Hook Conventions
 
@@ -110,11 +110,11 @@ Hooks implement `PreToolUse`, `PostToolUse`, or `Stop` interfaces. Key rules:
 - Hooks must be idempotent and must not block the tool call path for >500ms.
 - Hook logic that spans >50 lines belongs in an `omnimarket` node, not inline.
 
-See [knowledge-base: architecture/hook-data-flow.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/architecture/hook-data-flow.md) for the data flow diagram.
+See [knowledge-base: architecture/hook-data-flow.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/architecture/hook-data-flow.md) for the data flow diagram.
 
 ### Adding a Hook Handler
 
-Follow [knowledge-base: guides/adding-a-hook-handler.md](https://github.com/OmniNode-ai/knowledge-base/blob/main/guides/adding-a-hook-handler.md).
+Follow [knowledge-base: guides/adding-a-hook-handler.md](https://github.com/OmniNode-ai/knowledge_base/blob/main/guides/adding-a-hook-handler.md).
 
 ## Testing Requirements
 
