@@ -8,6 +8,7 @@ import ast
 import json
 import runpy
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -337,17 +338,29 @@ def test_malformed_paginated_github_read_has_no_effects(
     assert fake.comments == []
 
 
+# OMN-20074: the monitor's host is the non-OCC scheduled poller, so retiring
+# occ-companion-merge-heal.yml with the rest of OCC does not delete it.
+HOST_WORKFLOW = ROOT / ".github/workflows/auto-merge-stale-poller.yml"
+OCC_HEAL_WORKFLOW = ROOT / ".github/workflows/occ-companion-merge-heal.yml"
+MONITOR_CRON = "*/10 * * * *"
+POLLER_CRON = "*/15 * * * *"
+
+
+def _host_workflow() -> dict[str, Any]:
+    document = yaml.safe_load(HOST_WORKFLOW.read_text())
+    assert isinstance(document, dict)
+    return document
+
+
 def test_contract_and_schedule_wire_the_native_bus_worker() -> None:
     contract = yaml.safe_load(
         (
             ROOT / "src/omniclaude/nodes/node_dev_head_monitor_effect/contract.yaml"
         ).read_text()
     )
-    workflow = yaml.safe_load(
-        (ROOT / ".github/workflows/occ-companion-merge-heal.yml").read_text()
-    )
+    workflow = _host_workflow()
     triggers = workflow.get("on", workflow.get(True))
-    assert {entry["cron"] for entry in triggers["schedule"]} == {"*/10 * * * *"}
+    assert MONITOR_CRON in {entry["cron"] for entry in triggers["schedule"]}
     job = workflow["jobs"]["dev-head-red-alert"]
     assert "continue-on-error" not in job
     runs = "\n".join(step.get("run", "") for step in job["steps"])
@@ -370,15 +383,60 @@ def test_contract_and_schedule_wire_the_native_bus_worker() -> None:
     assert mint["with"]["permission-pull-requests"] == "write"
 
 
+def test_monitor_is_not_hosted_by_the_occ_heal_workflow() -> None:
+    occ_heal = yaml.safe_load(OCC_HEAL_WORKFLOW.read_text())
+    assert "dev-head-red-alert" not in occ_heal["jobs"], (
+        "the dev-head monitor must not live in the OCC heal workflow, which the "
+        "OCC retirement deletes (OMN-20074)"
+    )
+    assert "dev-head-red-alert" in _host_workflow()["jobs"]
+
+
+def test_each_job_runs_only_on_its_own_schedule() -> None:
+    workflow = _host_workflow()
+    triggers = workflow.get("on", workflow.get(True))
+    assert {entry["cron"] for entry in triggers["schedule"]} == {
+        MONITOR_CRON,
+        POLLER_CRON,
+    }
+    jobs = workflow["jobs"]
+    monitor_if = jobs["dev-head-red-alert"]["if"]
+    poller_if = jobs["poll-and-enqueue"]["if"]
+    assert f"github.event.schedule == '{MONITOR_CRON}'" in monitor_if
+    assert f"github.event.schedule == '{POLLER_CRON}'" in poller_if
+    assert POLLER_CRON not in monitor_if
+    assert MONITOR_CRON not in poller_if
+
+
+def test_host_grants_write_only_where_each_job_needs_it() -> None:
+    workflow = _host_workflow()
+    assert workflow["permissions"] == {"contents": "read"}
+    jobs = workflow["jobs"]
+    assert jobs["dev-head-red-alert"]["permissions"] == {"contents": "read"}
+    assert jobs["poll-and-enqueue"]["permissions"] == {
+        "contents": "read",
+        "pull-requests": "write",
+    }
+
+
+def test_monitor_dry_run_is_its_own_dispatch_input() -> None:
+    workflow = _host_workflow()
+    triggers = workflow.get("on", workflow.get(True))
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    assert inputs["dev-head-monitor-dry-run"]["type"] == "boolean"
+    assert inputs["dev-head-monitor-dry-run"]["default"] is False
+    steps = workflow["jobs"]["dev-head-red-alert"]["steps"]
+    env = next(step["env"] for step in steps if "DRY_RUN" in step.get("env", {}))
+    assert "inputs.dev-head-monitor-dry-run == true" in env["DRY_RUN"]
+
+
 @pytest.mark.parametrize("sha", ["b" * 40, "dev"])
 def test_ci_bus_checkout_uses_a_full_locked_sha(
     sha: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workflow = yaml.safe_load(
-        (ROOT / ".github/workflows/occ-companion-merge-heal.yml").read_text()
-    )
+    workflow = _host_workflow()
     steps = workflow["jobs"]["dev-head-red-alert"]["steps"]
     resolver = next(step for step in steps if step.get("id") == "bus_pin")
     checkout = next(
