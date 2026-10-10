@@ -12,103 +12,35 @@ from __future__ import annotations
 import json
 import logging
 import os
-import subprocess
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
-from typing import Any, Final, Literal, Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
-import httpx
-import yaml
 from pydantic import BaseModel, ConfigDict
 
+from omniclaude.nodes.node_dev_head_monitor_effect.handlers.handler_gh_cli import (
+    GhCli,
+)
+from omniclaude.nodes.node_dev_head_monitor_effect.handlers.handler_linear_api import (
+    LinearApi,
+)
+from omniclaude.nodes.node_dev_head_monitor_effect.models.model_dev_head_types import (
+    COMMENT_MARKER_PREFIX,
+    DEFAULT_CONFIG_PATH,
+    EXIT_ERROR,
+    EXIT_OK,
+    GREEN_CONCLUSIONS,
+    NON_VERDICT_CONCLUSIONS,
+    RED_CONCLUSIONS,
+    DevHeadDecision,
+    EnumDevHeadOutcome,
+    EnumHeadVerdict,
+    RunObservation,
+    WatchTarget,
+)
+
 logger = logging.getLogger(__name__)
-
-EXIT_OK: Final[int] = 0
-EXIT_ERROR: Final[int] = 1
-RED_CONCLUSIONS: Final[frozenset[str]] = frozenset(
-    {"failure", "timed_out", "startup_failure", "action_required"}
-)
-GREEN_CONCLUSIONS: Final[frozenset[str]] = frozenset({"success"})
-NON_VERDICT_CONCLUSIONS: Final[frozenset[str]] = frozenset(
-    {"cancelled", "neutral", "skipped", "stale"}
-)
-KNOWN_CONCLUSIONS: Final[frozenset[str]] = (
-    RED_CONCLUSIONS | GREEN_CONCLUSIONS | NON_VERDICT_CONCLUSIONS
-)
-COMMENT_MARKER_PREFIX: Final[str] = "<!-- onex:dev-head-red-alert:"
-DEFAULT_CONFIG_PATH: Final[Path] = (
-    Path(__file__).resolve().parents[1] / "dev_head_watch.json"
-)
-LINEAR_TIMEOUT_S: Final[int] = 30
-
-
-class EnumDevHeadOutcome(StrEnum):
-    """One value per branch. Every tick records one of these per target.
-
-    A single "nothing to do" covering both "the head is fine" and "I could not
-    tell" is the failure mode this enum exists to prevent.
-    """
-
-    TICKET_FILED = "ticket_filed"
-    ALREADY_FILED = "already_filed"
-    HEAD_GREEN = "head_green"
-    NO_VERDICT = "no_verdict"
-    NO_COMPLETED_RUN = "no_completed_run"
-    UNREADABLE = "unreadable"
-    FILING_UNAVAILABLE = "filing_unavailable"
-
-
-class EnumHeadVerdict(StrEnum):
-    """What a run's conclusion says about the head, if anything."""
-
-    RED = "red"
-    GREEN = "green"
-    UNDECIDED = "undecided"
-
-
-@dataclass(frozen=True)
-class WatchTarget:
-    """One repository's ``dev`` head, and the workflow that proves it."""
-
-    repo: str
-    workflow: str
-    branch: str
-
-
-@dataclass(frozen=True)
-class RunObservation:
-    """The fields of an Actions run this module reasons about."""
-
-    run_id: int
-    head_sha: str
-    conclusion: str
-    html_url: str = ""
-
-
-@dataclass(frozen=True)
-class DevHeadDecision:
-    """One target's verdict for one tick."""
-
-    outcome: EnumDevHeadOutcome
-    repo: str
-    head_sha: str
-    detail: str
-    failing_jobs: tuple[str, ...] = ()
-
-    @property
-    def is_error(self) -> bool:
-        """Whether this outcome must make the job go red.
-
-        Both members are cases where the module KNOWS something is wrong and
-        could not record it. Neither is "the head is broken" — a red head that
-        was filed successfully is this module working, not failing.
-        """
-        return self.outcome in {
-            EnumDevHeadOutcome.UNREADABLE,
-            EnumDevHeadOutcome.FILING_UNAVAILABLE,
-        }
 
 
 class ModelDevHeadMonitorRequest(BaseModel):
@@ -235,300 +167,6 @@ class LinearPort(Protocol):
     def create_issue(
         self, *, title: str, description: str, team_key: str, parent: str
     ) -> str: ...
-
-
-class GhCli:
-    """:class:`GhPort` over the ``gh`` binary. Fixed argv, never a shell."""
-
-    def __init__(self, token: str = "") -> None:
-        self._token = token
-
-    def _json(self, args: list[str]) -> Any:
-        if not self._token:
-            raise RuntimeError("scoped GitHub App token is unavailable")
-        try:
-            completed = subprocess.run(
-                ["gh", *args],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=30,
-                env={**os.environ, "GH_TOKEN": self._token},
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise RuntimeError("GitHub request could not complete") from exc
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"gh {' '.join(args)} exited {completed.returncode}: {completed.stderr.strip()}"
-            )
-        try:
-            return json.loads(completed.stdout or "null")
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"gh {' '.join(args)} returned non-JSON: {exc}") from exc
-
-    def latest_completed_push_run(
-        self, *, repo: str, workflow: str, branch: str
-    ) -> RunObservation | None:
-        payload = self._json(
-            [
-                "api",
-                f"repos/{repo}/actions/workflows/{workflow}/runs?event=push&branch={branch}&status=completed&per_page=1",
-            ]
-        )
-        if not isinstance(payload, dict):
-            raise RuntimeError(f"unreadable run list for {repo}@{branch}")
-        runs = payload.get("workflow_runs")
-        if not isinstance(runs, list):
-            raise RuntimeError(f"run list for {repo}@{branch} carries no workflow_runs")
-        if not runs:
-            return None
-        entry = runs[0]
-        if not isinstance(entry, dict):
-            raise RuntimeError(f"unreadable run entry for {repo}@{branch}")
-        run_id = entry.get("id")
-        head_sha = entry.get("head_sha")
-        if not isinstance(run_id, int) or not isinstance(head_sha, str) or not head_sha:
-            raise RuntimeError(f"run entry for {repo}@{branch} carries no id/head_sha")
-        conclusion = entry.get("conclusion")
-        if not isinstance(conclusion, str) or conclusion not in KNOWN_CONCLUSIONS:
-            raise RuntimeError("run entry carries an unreadable conclusion")
-        html_url = entry.get("html_url")
-        return RunObservation(
-            run_id=run_id,
-            head_sha=head_sha,
-            conclusion=conclusion,
-            html_url=html_url if isinstance(html_url, str) else "",
-        )
-
-    def failing_job_names(self, *, repo: str, run_id: int) -> tuple[str, ...]:
-        pages = self._json(
-            [
-                "api",
-                "--paginate",
-                "--slurp",
-                f"repos/{repo}/actions/runs/{run_id}/jobs?per_page=100",
-            ]
-        )
-        if not isinstance(pages, list) or not pages:
-            raise RuntimeError(f"unreadable job list for {repo} run {run_id}")
-        return tuple(
-            name for page in pages for name in failing_job_names_in_payload(page)
-        )
-
-    def merge_pull_request(self, *, repo: str, head_sha: str) -> int | None:
-        payload = self._json(
-            ["api", "--paginate", "--slurp", f"repos/{repo}/commits/{head_sha}/pulls"]
-        )
-        if not isinstance(payload, list) or not payload:
-            raise RuntimeError(f"unreadable pull list for {repo} sha {head_sha[:8]}")
-        for page in payload:
-            if not isinstance(page, list):
-                raise RuntimeError("pull list carries an unreadable page")
-            for entry in page:
-                if not isinstance(entry, dict) or not isinstance(
-                    entry.get("number"), int
-                ):
-                    raise RuntimeError("pull list carries a malformed pull request")
-                if "merged_at" not in entry or "merge_commit_sha" not in entry:
-                    raise RuntimeError("pull list carries no merge attribution")
-                if entry.get("merged_at") and entry.get("merge_commit_sha") == head_sha:
-                    number = entry["number"]
-                    assert isinstance(number, int)
-                    return number
-        return None
-
-    def comment_exists(self, *, repo: str, number: int, marker: str) -> bool:
-        payload = self._json(
-            [
-                "api",
-                "--paginate",
-                "--slurp",
-                f"repos/{repo}/issues/{number}/comments?per_page=100",
-            ]
-        )
-        if not isinstance(payload, list) or not payload:
-            raise RuntimeError(f"unreadable comments for {repo}#{number}")
-        found = False
-        for page in payload:
-            if not isinstance(page, list):
-                raise RuntimeError("comment list carries an unreadable page")
-            for entry in page:
-                if not isinstance(entry, dict) or not isinstance(
-                    entry.get("body"), str
-                ):
-                    raise RuntimeError("comment list carries an unreadable comment")
-                found = found or marker in entry["body"]
-        return found
-
-    def add_comment(self, *, repo: str, number: int, body: str) -> None:
-        self._json(
-            [
-                "api",
-                f"repos/{repo}/issues/{number}/comments",
-                "-X",
-                "POST",
-                "-f",
-                f"body={body}",
-            ]
-        )
-
-
-def failing_job_names_in_payload(payload: object) -> tuple[str, ...]:
-    """The names of the jobs that actually failed, in run order.
-
-    A skipped or cancelled job is not a failing job. Naming one in the comment
-    would point the reader at the cascade rather than at its cause.
-    """
-    if not isinstance(payload, dict):
-        raise RuntimeError("job list carries an unreadable page")
-    jobs = payload.get("jobs")
-    if not isinstance(jobs, list):
-        raise RuntimeError("job list carries no jobs")
-    out: list[str] = []
-    for entry in jobs:
-        if not isinstance(entry, dict):
-            raise RuntimeError("job list carries a malformed job")
-        name = entry.get("name")
-        conclusion = entry.get("conclusion")
-        if not isinstance(conclusion, str) or conclusion not in KNOWN_CONCLUSIONS:
-            raise RuntimeError("job list carries an unreadable conclusion")
-        if not isinstance(name, str) or not name:
-            raise RuntimeError("job list carries an unreadable job name")
-        if conclusion.strip().lower() in RED_CONCLUSIONS:
-            out.append(name)
-    return tuple(out)
-
-
-class LinearApi:
-    """:class:`LinearPort` over Linear's GraphQL API.
-
-    :attr:`available` is False when no key is configured. That is a
-    configuration fact, not an error, and the caller decides what it means —
-    see the module docstring for why it is inert on a green head and red on a
-    red one.
-    """
-
-    def __init__(self, api_key: str = "") -> None:
-        self._api_key = api_key
-        try:
-            contract = yaml.safe_load(
-                (DEFAULT_CONFIG_PATH.parent / "contract.yaml").read_text()
-            )
-            endpoint = contract["metadata"]["integrations"]["linear"][
-                "graphql_endpoint"
-            ]
-        except (OSError, yaml.YAMLError, KeyError, TypeError) as exc:
-            raise RuntimeError("Linear integration contract is unreadable") from exc
-        if not isinstance(endpoint, str) or not endpoint:
-            raise RuntimeError("Linear integration contract carries no endpoint")
-        self._endpoint = endpoint
-
-    @property
-    def available(self) -> bool:
-        return bool(self._api_key)
-
-    def _query(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
-        if not self.available:
-            raise RuntimeError("no LINEAR_API_KEY configured")
-        try:
-            response = httpx.post(
-                self._endpoint,
-                json={"query": query, "variables": variables},
-                headers={"Authorization": self._api_key},
-                timeout=LINEAR_TIMEOUT_S,
-            )
-            response.raise_for_status()
-            payload = response.json()
-        except (httpx.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
-            raise RuntimeError(f"Linear request failed: {type(exc).__name__}") from None
-        if not isinstance(payload, dict):
-            raise RuntimeError("Linear returned a non-object response")
-        if payload.get("errors"):
-            raise RuntimeError(f"Linear returned errors: {payload['errors']}")
-        data = payload.get("data")
-        if not isinstance(data, dict):
-            raise RuntimeError("Linear response carries no data object")
-        return data
-
-    def find_issue(self, *, title: str) -> str | None:
-        data = self._query(
-            "\n            query($title: String!) {\n              issues(filter: { title: { eq: $title } }, first: 1, includeArchived: true) {\n                nodes { identifier }\n              }\n            }\n            ",
-            {"title": title},
-        )
-        issues = data.get("issues")
-        if not isinstance(issues, dict):
-            raise RuntimeError("Linear search response carries no issues object")
-        nodes = issues.get("nodes")
-        if not isinstance(nodes, list):
-            raise RuntimeError("Linear search response carries no nodes list")
-        for node in nodes:
-            if (
-                not isinstance(node, dict)
-                or not isinstance(node.get("identifier"), str)
-                or not node["identifier"]
-            ):
-                raise RuntimeError("Linear search carries a malformed issue row")
-            if isinstance(node, dict) and isinstance(node.get("identifier"), str):
-                identifier = node["identifier"]
-                assert isinstance(identifier, str)
-                return identifier
-        return None
-
-    def create_issue(
-        self, *, title: str, description: str, team_key: str, parent: str
-    ) -> str:
-        teams = self._query(
-            "\n            query($key: String!) {\n              teams(filter: { key: { eq: $key } }, first: 1) { nodes { id } }\n            }\n            ",
-            {"key": team_key},
-        )
-        team_id = _first_id(teams.get("teams"), what=f"team {team_key!r}")
-        parent_data = self._query(
-            "query($id: String!) { issue(id: $id) { id } }", {"id": parent}
-        )
-        issue = parent_data.get("issue")
-        if not isinstance(issue, dict) or not isinstance(issue.get("id"), str):
-            raise RuntimeError(f"Linear parent issue {parent!r} did not resolve")
-        parent_id = issue["id"]
-        created = self._query(
-            "\n            mutation($input: IssueCreateInput!) {\n              issueCreate(input: $input) { success issue { identifier } }\n            }\n            ",
-            {
-                "input": {
-                    "teamId": team_id,
-                    "title": title,
-                    "description": description,
-                    "parentId": parent_id,
-                }
-            },
-        )
-        result = created.get("issueCreate")
-        if not isinstance(result, dict) or not result.get("success"):
-            raise RuntimeError(f"Linear issueCreate did not succeed: {result!r}")
-        issue_node = result.get("issue")
-        if not isinstance(issue_node, dict) or not isinstance(
-            issue_node.get("identifier"), str
-        ):
-            raise RuntimeError("Linear issueCreate returned no identifier")
-        identifier = issue_node["identifier"]
-        assert isinstance(identifier, str)
-        if not identifier:
-            raise RuntimeError("Linear issueCreate returned an empty identifier")
-        return identifier
-
-
-def _first_id(container: object, *, what: str) -> str:
-    if not isinstance(container, dict):
-        raise RuntimeError(f"Linear response for {what} is not an object")
-    nodes = container.get("nodes")
-    if not isinstance(nodes, list) or not nodes:
-        raise RuntimeError(f"Linear returned no {what}")
-    node = nodes[0]
-    if not isinstance(node, dict) or not isinstance(node.get("id"), str):
-        raise RuntimeError(f"Linear returned no id for {what}")
-    identifier = node["id"]
-    assert isinstance(identifier, str)
-    if not identifier:
-        raise RuntimeError(f"Linear returned an empty id for {what}")
-    return identifier
 
 
 @dataclass(frozen=True)
