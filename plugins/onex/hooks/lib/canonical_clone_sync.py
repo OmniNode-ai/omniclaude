@@ -139,6 +139,7 @@ import argparse
 import contextlib
 import errno
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -169,6 +170,13 @@ LOCK_POLL_SECONDS = 0.25
 COMMIT_LOCK_WAIT_SECONDS = 60
 ARMED_DELAY_SECONDS = 30
 MAX_WORKERS = 8
+
+# OMN-20861: a clone refused continuously for this long, by wall clock, fails
+# the timer run (exit 3). The env var lowers it for the lab step.
+REFUSAL_BOUND_SECONDS = 3600
+REFUSAL_BOUND_ENV = "ONEX_CLONE_REFUSAL_BOUND_S"
+REFUSAL_RECORD_WAIT_SECONDS = 30
+EXIT_REFUSAL_BOUND = 3
 
 # The one sanctioned door through the canonical-clone ref guard for a HEAD
 # symref move (pull-all.sh uses the same one). Set for the switch call alone.
@@ -789,6 +797,10 @@ class CloneResult:
     reason: str | None = None
     carried_dirty_paths: int = 0
     switched_from: str | None = None
+    first_refused_at: float | None = None
+    refused_for_seconds: int | None = None
+    refusal_bound_exceeded: bool = False
+    refusal_resolved: bool = False
 
 
 def _dirty_entries(clone: Path) -> tuple[list[str], list[str]] | None:
@@ -1181,6 +1193,102 @@ def sync_clone(clone: Path) -> CloneResult:
 
 
 # --------------------------------------------------------------------------- #
+# Refusal age (OMN-20861)
+# --------------------------------------------------------------------------- #
+def _wall_clock() -> float:
+    return time.time()
+
+
+def refusal_bound_seconds(env: Mapping[str, str]) -> float:
+    try:
+        bound = float(env.get(REFUSAL_BOUND_ENV, ""))
+    except ValueError:
+        return float(REFUSAL_BOUND_SECONDS)
+    return bound if bound > 0 else float(REFUSAL_BOUND_SECONDS)
+
+
+def refusal_record_path(env: Mapping[str, str], clone: Path) -> Path:
+    """One record per clone instance (its path), not per repository."""
+    key = hashlib.sha256(str(clone).encode()).hexdigest()[:24]
+    return state_dir(env) / "clone-sync" / f"refusal-{key}.json"
+
+
+def _read_first_refused_at(path: Path) -> float | None:
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    value = record.get("first_refused_at") if isinstance(record, dict) else None
+    return float(value) if isinstance(value, int | float) else None
+
+
+def _write_record_atomic(path: Path, record: Mapping[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(record, sort_keys=True))
+        tmp.replace(path)
+    finally:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+
+
+def track_refusal(env: Mapping[str, str], result: CloneResult) -> None:
+    """Fold one run's verdict into the clone's refusal record, under its lock.
+
+    REFUSED keeps (or starts) ``first_refused_at``; ADVANCED and UP_TO_DATE
+    clear it; FAILED and an unobtainable lock leave it alone. Merge-triggered
+    and timer-triggered runs share the one record because both go through the
+    clone lock and the record sits beside the other state, written atomically.
+    """
+    if result.result not in (REFUSED, ADVANCED, UP_TO_DATE):
+        return
+    clone = Path(result.clone)
+    git_dir_out = run_git(clone, "rev-parse", "--absolute-git-dir")
+    if git_dir_out.code != 0 or not git_dir_out.out:
+        return
+    record_path = refusal_record_path(env, clone)
+    with clone_lock(
+        Path(git_dir_out.out), REFUSAL_RECORD_WAIT_SECONDS, "refusal-age"
+    ) as lock:
+        if not lock.acquired:
+            return
+        now = _wall_clock()
+        first = _read_first_refused_at(record_path)
+        if result.result == REFUSED:
+            if first is None:
+                first = now
+                _write_record_atomic(
+                    record_path,
+                    {"clone": str(clone), "first_refused_at": first},
+                )
+            age = max(0.0, now - first)
+            result.first_refused_at = first
+            result.refused_for_seconds = int(age)
+            result.refusal_bound_exceeded = age >= refusal_bound_seconds(env)
+        elif first is not None:
+            with contextlib.suppress(OSError):
+                record_path.unlink()
+            result.refusal_resolved = True
+            result.refused_for_seconds = int(max(0.0, now - first))
+
+
+def refusal_breaches(results: Iterable[CloneResult]) -> list[CloneResult]:
+    return [r for r in results if r.refusal_bound_exceeded]
+
+
+def breach_lines(result: CloneResult) -> list[str]:
+    dirty = _dirty_entries(Path(result.clone))
+    paths = sorted(set(dirty[0] + dirty[1])) if dirty else []
+    lines = [
+        f"REFUSED_TOO_LONG {result.clone} refused for "
+        f"{result.refused_for_seconds}s: {result.reason or ''}".rstrip()
+    ]
+    lines += [f"  dirty: {p}" for p in paths]
+    return lines
+
+
+# --------------------------------------------------------------------------- #
 # Logging
 # --------------------------------------------------------------------------- #
 def state_dir(env: Mapping[str, str]) -> Path:
@@ -1234,6 +1342,7 @@ def run_sync(
                 if (slug or "").casefold() in wanted
             ]
         results = list(pool.map(sync_clone, clones))
+        list(pool.map(lambda r: track_refusal(env, r), results))
 
     path = log_path(env)
     ts = utc_now()
@@ -1248,6 +1357,20 @@ def run_sync(
         if verb:
             record["verb"] = verb
         append_log(path, record)
+        if res.refusal_resolved:
+            append_log(
+                path,
+                {
+                    "ts": ts,
+                    "trigger": trigger,
+                    "verb": verb,
+                    "result": "REFUSAL_RESOLVED",
+                    "ref": res.branch,
+                    "path": res.clone,
+                    "repo": res.repo,
+                    "refused_for_seconds": res.refused_for_seconds,
+                },
+            )
     if wanted is not None:
         found = {(r.repo or "").casefold() for r in results}
         for repo in sorted(wanted - found):
@@ -1746,6 +1869,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(
             f"{res.result:10} {res.clone} {res.branch or '-'} {sha} {res.reason or ''}".rstrip()
         )
+        if res.refusal_resolved:
+            print(
+                f"RESOLVED   {res.clone} converged after "
+                f"{res.refused_for_seconds}s refused"
+            )
+    if args.trigger == "timer":
+        breached = refusal_breaches(results)
+        for res in breached:
+            for line in breach_lines(res):
+                print(line)
+        if breached:
+            return EXIT_REFUSAL_BOUND
     return 1 if any(r.result == FAILED for r in results) else 0
 
 

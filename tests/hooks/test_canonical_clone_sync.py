@@ -1360,3 +1360,135 @@ def test_lan_source_sync_does_not_ask_the_source_checkout_for_the_default_branch
     _git("remote", "set-head", "origin", "main", cwd=lab)
     assert ccs._refresh_remote_head(lab, "origin").code == 0
     assert ccs._remote_default_branch(lab, "origin") == "main"
+
+
+# --------------------------------------------------------------------------- #
+# Refusal age (OMN-20861)
+# --------------------------------------------------------------------------- #
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 1_000_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def refusal_clock(monkeypatch: pytest.MonkeyPatch) -> _Clock:
+    clock = _Clock()
+    monkeypatch.setattr(ccs, "_wall_clock", clock)
+    return clock
+
+
+def _dirty_registry(
+    reg: Registry, monkeypatch: pytest.MonkeyPatch, bound: str = "600"
+) -> Path:
+    clone = reg.make("svc")
+    (clone / "b.txt").write_text("uncommitted\n")
+    reg.advance("svc")
+    for key, value in reg.env(**{ccs.REFUSAL_BOUND_ENV: bound}).items():
+        monkeypatch.setenv(key, value)
+    return clone
+
+
+def _timer_run() -> int:
+    return ccs.main(["sync", "--trigger", "timer"])
+
+
+def test_refusal_age_exits_nonzero_few_runs(
+    reg: Registry,
+    monkeypatch: pytest.MonkeyPatch,
+    refusal_clock: _Clock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    clone = _dirty_registry(reg, monkeypatch)
+    assert _timer_run() == 0
+    refusal_clock.now += 601
+    assert _timer_run() == ccs.EXIT_REFUSAL_BOUND
+    out = capsys.readouterr().out
+    assert "REFUSED_TOO_LONG" in out
+    assert "  dirty: b.txt" in out
+    assert str(clone) in out
+
+
+def test_refusal_age_exits_nonzero_many_runs(
+    reg: Registry, monkeypatch: pytest.MonkeyPatch, refusal_clock: _Clock
+) -> None:
+    _dirty_registry(reg, monkeypatch)
+    for _ in range(10):
+        assert _timer_run() == 0
+        refusal_clock.now += 59
+    # 590s after the first refusal: under the bound however many runs happened.
+    assert _timer_run() == 0
+    refusal_clock.now += 11
+    assert _timer_run() == ccs.EXIT_REFUSAL_BOUND
+
+
+def test_refusal_age_concurrent_triggers(
+    reg: Registry, monkeypatch: pytest.MonkeyPatch, refusal_clock: _Clock
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    clone = _dirty_registry(reg, monkeypatch)
+    env = reg.env(**{ccs.REFUSAL_BOUND_ENV: "600"})
+    triggers = ["hook", "timer"] * 4
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        runs = list(pool.map(lambda t: ccs.run_sync(env, None, t), triggers))
+    assert all(r[0].result == ccs.REFUSED for r in runs)
+    record = ccs.refusal_record_path(env, clone)
+    assert json.loads(record.read_text())["first_refused_at"] == refusal_clock.now
+    assert {r[0].first_refused_at for r in runs} == {refusal_clock.now}
+    assert list(record.parent.glob("*.tmp")) == []
+    refusal_clock.now += 601
+    assert ccs.run_sync(env, None, "hook")[0].refusal_bound_exceeded
+    assert _timer_run() == ccs.EXIT_REFUSAL_BOUND
+
+
+def test_refusal_age_survives_restart(
+    reg: Registry, monkeypatch: pytest.MonkeyPatch, refusal_clock: _Clock
+) -> None:
+    _dirty_registry(reg, monkeypatch)
+    assert _timer_run() == 0
+    # A restart is a fresh process: only the state directory carries the age.
+    code = (
+        f"import sys; sys.path.insert(0, {str(_ENGINE_PATH.parent)!r}); "
+        "import canonical_clone_sync as c; "
+        "sys.exit(c.main(['sync', '--trigger', 'timer']))"
+    )
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    env.update(reg.env(**{ccs.REFUSAL_BOUND_ENV: "0.001"}))
+    time.sleep(0.01)
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    # Real wall clock in the child: the record written under the fake clock
+    # (year 1970) makes the age enormous, so the bound is exceeded.
+    assert proc.returncode == ccs.EXIT_REFUSAL_BOUND, proc.stdout + proc.stderr
+
+
+def test_refusal_age_resets(
+    reg: Registry,
+    monkeypatch: pytest.MonkeyPatch,
+    refusal_clock: _Clock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    clone = _dirty_registry(reg, monkeypatch)
+    assert _timer_run() == 0
+    refusal_clock.now += 601
+    assert _timer_run() == ccs.EXIT_REFUSAL_BOUND
+    _git("checkout", "--", "b.txt", cwd=clone)
+    capsys.readouterr()
+    assert _timer_run() == 0
+    assert "RESOLVED" in capsys.readouterr().out
+    resolved = [r for r in reg.log() if r["result"] == "REFUSAL_RESOLVED"]
+    assert len(resolved) == 1
+    assert not ccs.refusal_record_path(reg.env(), clone).exists()
+    # Refused again later: the age starts over, not from the old record.
+    (clone / "b.txt").write_text("again\n")
+    reg.advance("svc", path="a.txt", text="three\n")
+    refusal_clock.now += 601
+    assert _timer_run() == 0
