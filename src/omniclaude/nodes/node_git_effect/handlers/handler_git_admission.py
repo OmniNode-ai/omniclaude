@@ -185,6 +185,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import re
 import subprocess
@@ -197,6 +198,15 @@ from pathlib import Path
 from typing import Final
 
 from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
+from omniclaude.nodes.node_git_effect.models import (
+    GitOperation,
+    ModelGitRequest,
+    ModelGitResult,
+)
+from omniclaude.nodes.node_git_effect.models.model_git_admission import (
+    ModelGitAdmissionRequest,
+    ModelGitAdmissionResult,
+)
 
 from .handler_shell_words import (
     Operator,
@@ -229,6 +239,8 @@ class _ShellWord(str):
 def _word(token: str) -> Word:
     return token.word if isinstance(token, _ShellWord) else unquoted(token)
 
+
+logger = logging.getLogger(__name__)
 
 #: What a path token may expand from: the hook's environment, with every
 #: name the command itself sets marked unresolvable.
@@ -2508,9 +2520,114 @@ def evaluate_bash_command(
     return Decision(blocked=False, notes=tuple(notes))
 
 
-def _block(reason: str) -> int:
-    sys.stdout.write(json.dumps({"decision": "block", "reason": reason}) + "\n")
-    return 2
+class HandlerGitAdmission:
+    """Definition-B effect handler: typed request in, typed verdict out."""
+
+    def handle(self, request: ModelGitAdmissionRequest) -> ModelGitAdmissionResult:
+        def verdict(
+            blocked: bool, reason: str = "", notes: tuple[str, ...] = ()
+        ) -> ModelGitAdmissionResult:
+            return ModelGitAdmissionResult(
+                blocked=blocked,
+                reason=reason,
+                notes=notes,
+                correlation_id=request.correlation_id,
+            )
+
+        try:
+            payload = json.loads(request.raw_payload)
+        except json.JSONDecodeError as exc:
+            return verdict(
+                True,
+                "BLOCKED: the PreToolUse payload for this Bash call is not readable JSON, so it cannot be checked for a shared-tree git mutation ("
+                + str(exc)
+                + ").",
+            )
+        if not isinstance(payload, dict):
+            return verdict(
+                True,
+                "BLOCKED: the PreToolUse payload for this Bash call is not a JSON object, so it cannot be checked for a shared-tree git mutation.",
+            )
+        tool_input = payload.get("tool_input")
+        command = tool_input.get("command") if isinstance(tool_input, dict) else None
+        if not isinstance(command, str) or not command:
+            return verdict(False)
+        try:
+            policy = replace(
+                load_policy(request.policy_path),
+                clone_sync_engine=str(Path(request.clone_sync_engine).resolve())
+                if "/" in request.clone_sync_engine
+                else request.clone_sync_engine,
+            )
+        except PolicyError as exc:
+            return verdict(
+                True,
+                "BLOCKED: the OMN-18798 shared-tree git admission gate's policy could not be loaded, so this command cannot be checked ("
+                + str(exc)
+                + ").",
+            )
+        try:
+            cwd = Path(
+                payload.get("cwd")
+                or os.environ.get("CLAUDE_PROJECT_DIR")
+                or os.getcwd()
+            )
+            decision = evaluate_bash_command(
+                command,
+                policy,
+                cwd,
+                resolve_registry_root(policy),
+                resolve_worktree_roots(policy),
+            )
+        except Exception as exc:
+            logger.exception("Git admission evaluation failed")
+            return verdict(
+                True,
+                "BLOCKED: the OMN-18798 shared-tree git admission gate could not evaluate this command ("
+                + str(exc)
+                + "); an unverifiable shared-tree mutation is refused rather than assumed safe.",
+            )
+        if decision.blocked:
+            _log_fetch_refusal(decision, policy, cwd, os.environ)
+        return verdict(decision.blocked, decision.reason, decision.notes)
+
+
+def dispatch(
+    request: ModelGitAdmissionRequest, state_root: Path
+) -> ModelGitAdmissionResult:
+    """Use the canonical runtime and its contract-declared in-memory bus.
+
+    Git index, HEAD and dirty-file reads must occur on the hook's host. A remote
+    broker consumer would inspect a different filesystem. This is an explicit
+    in-process deployment, never a fallback from a failed remote dispatch.
+    """
+    from omnibase_core.enums.enum_workflow_result import EnumWorkflowResult
+    from omnibase_core.runtime.runtime_local import RuntimeLocal
+
+    state_root.mkdir(parents=True, exist_ok=True)
+    input_path = state_root / "input.json"
+    input_path.write_text(
+        ModelGitRequest(
+            operation=GitOperation.ADMISSION_CHECK,
+            admission=request,
+            correlation_id=request.correlation_id,
+        ).model_dump_json()
+    )
+    runtime = RuntimeLocal(
+        workflow_path=Path(__file__).resolve().parent.parent / "contract.yaml",
+        state_root=state_root,
+        input_path=input_path,
+        backend_overrides={"event_bus": "inmemory"},
+        timeout=30,
+    )
+    if runtime.run() is not EnumWorkflowResult.COMPLETED:
+        raise RuntimeError(
+            runtime.last_error or "git admission runtime did not complete"
+        )
+    result = runtime.handler_result
+    if not isinstance(result, ModelGitResult) or result.admission is None:
+        raise RuntimeError("git admission runtime returned no typed verdict")
+    return result.admission
 
 
 def _is_publish_command(command: str) -> bool:
@@ -2669,90 +2786,66 @@ def ruling_reread_refusal(
     return None
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="OMN-18798 shared-tree git guard")
-    parser.add_argument(
-        "--policy",
-        type=Path,
-        default=None,
-        help="override the policy JSON path (defaults to the co-located config)",
-    )
-    parser.add_argument("--clone-sync-engine", default="canonical_clone_sync.py")
-    args = parser.parse_args(argv)
-
+def _publish_ruling_refusal(raw_payload: str) -> str | None:
+    """OMN-18645: the hook refuses a publishing command before any dispatch."""
     try:
-        raw = sys.stdin.read()
-    except OSError as exc:
-        return _block(
-            "BLOCKED: could not read the PreToolUse payload for this Bash "
-            f"call, so it cannot be checked for a shared-tree git mutation ({exc})."
-        )
-
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        return _block(
-            "BLOCKED: the PreToolUse payload for this Bash call is not "
-            "readable JSON, so it cannot be checked for a shared-tree git "
-            f"mutation ({exc})."
-        )
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        return None  # the admission handler refuses an unreadable payload itself
     if not isinstance(payload, dict):
-        return _block(
-            "BLOCKED: the PreToolUse payload for this Bash call is not a "
-            "JSON object, so it cannot be checked for a shared-tree git mutation."
-        )
-
+        return None
     tool_input = payload.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    if not isinstance(command, str) or not command:
-        # No command to evaluate -- nothing for this guard to do.
-        return 0
+    if not isinstance(command, str) or not _is_publish_command(command):
+        return None
+    return ruling_reread_refusal(os.environ, payload.get("cwd"))
 
-    if _is_publish_command(command):
-        ruling_refusal = ruling_reread_refusal(os.environ, payload.get("cwd"))
+
+def main(argv: list[str] | None = None) -> int:
+    """Hook transport adapter; all admission decisions go through the bus."""
+    import tempfile
+
+    parser = argparse.ArgumentParser(description="Canonical host-local Git admission")
+    parser.add_argument("--policy", type=Path, default=None)
+    parser.add_argument("--clone-sync-engine", default="canonical_clone_sync.py")
+    args = parser.parse_args(argv)
+    try:
+        raw_payload = sys.stdin.read()
+        ruling_refusal = _publish_ruling_refusal(raw_payload)
         if ruling_refusal is not None:
-            return _block(ruling_refusal)
-
-    try:
-        policy = load_policy(args.policy)
-    except PolicyError as exc:
-        return _block(
-            "BLOCKED: the OMN-18798 shared-tree git admission gate's policy "
-            f"could not be loaded, so this command cannot be checked ({exc})."
+            sys.stdout.write(
+                json.dumps({"decision": "block", "reason": ruling_refusal}) + "\n"
+            )
+            return 2
+        request = ModelGitAdmissionRequest(
+            raw_payload=raw_payload,
+            policy_path=args.policy,
+            clone_sync_engine=args.clone_sync_engine,
         )
-
-    policy = replace(
-        policy,
-        clone_sync_engine=str(Path(args.clone_sync_engine).resolve())
-        if "/" in args.clone_sync_engine
-        else args.clone_sync_engine,
-    )
-
-    cwd_raw = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
-    cwd = Path(cwd_raw)
-    registry_root = resolve_registry_root(policy)
-    worktree_roots = resolve_worktree_roots(policy)
-
-    try:
-        decision = evaluate_bash_command(
-            command, policy, cwd, registry_root, worktree_roots
-        )
-    except Exception as exc:  # noqa: BLE001 - fail-closed boundary, deliberate
-        return _block(
-            "BLOCKED: the OMN-18798 shared-tree git admission gate could not "
-            f"evaluate this command ({exc}); an unverifiable shared-tree "
-            "mutation is refused rather than assumed safe."
-        )
-
-    if decision.blocked:
-        _log_fetch_refusal(decision, policy, cwd, os.environ)
-        return _block(decision.reason)
-
-    if decision.notes:
+        with tempfile.TemporaryDirectory(prefix="git-admission-") as temporary:
+            result = dispatch(request, Path(temporary))
+        if result.blocked:
+            sys.stdout.write(
+                json.dumps({"decision": "block", "reason": result.reason}) + "\n"
+            )
+            return 2
+        if result.notes:
+            sys.stdout.write(
+                json.dumps({"decision": "allow", "notes": list(result.notes)}) + "\n"
+            )
+        return 0
+    except Exception as exc:
+        logger.exception("Canonical Git admission dispatch failed")
         sys.stdout.write(
-            json.dumps({"decision": "allow", "notes": list(decision.notes)}) + "\n"
+            json.dumps(
+                {
+                    "decision": "block",
+                    "reason": f"BLOCKED: canonical Git admission dispatch failed ({exc}).",
+                }
+            )
+            + "\n"
         )
-    return 0
+        return 2
 
 
 if __name__ == "__main__":

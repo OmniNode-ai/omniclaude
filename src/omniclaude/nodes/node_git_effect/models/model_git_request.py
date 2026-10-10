@@ -13,6 +13,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .model_git_admission import ModelGitAdmissionRequest
+
 _TICKET_RE = re.compile(r"OMN-\d+")
 # SYNC: exempt prefixes must match the lists in:
 #   - onex_change_control/.github/workflows/pr-title-check-reusable.yml
@@ -31,6 +33,7 @@ class GitOperation(StrEnum):
     """Supported git operations."""
 
     # Existing 6
+    ADMISSION_CHECK = "admission_check"
     BRANCH_CREATE = "branch_create"
     COMMIT = "commit"
     PUSH = "push"
@@ -112,6 +115,7 @@ class ModelGitRequest(BaseModel):
         ...,
         description="The git operation to perform",
     )
+    admission: ModelGitAdmissionRequest | None = None
     # Targeting (OMN-2817 1a)
     working_directory: str | None = Field(
         default=None,

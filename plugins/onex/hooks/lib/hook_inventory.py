@@ -83,6 +83,22 @@ __all__ = [
 #: ``pass_through`` = an observer proving it never refuses.
 CANARY_KINDS: Final = frozenset({"block", "redact", "pass_through"})
 
+#: How a hook's own failure (cannot start, times out, exits with a code the
+#: harness does not read as a verdict) resolves (OMN-17427). ``block`` is the
+#: Claude Code handler setting ``onFailure: "block"`` (shipped in 2.1.295): the
+#: action is blocked instead of let through. ``open`` is the harness default —
+#: the setting is absent and the action proceeds.
+ON_FAILURE_VALUES: Final = frozenset({"block", "open"})
+
+#: The harness spellings of ``onFailure``. ``claude plugin validate`` reports the
+#: accepted set as ``"continue"|"block"``; ``continue`` is the default, so an
+#: absent setting and an explicit ``continue`` both mean ``open``.
+ON_FAILURE_BLOCK: Final = "block"
+ON_FAILURE_CONTINUE: Final = "continue"
+
+#: The event on which a guard's failure can still prevent the action it guards.
+GUARD_FAILURE_EVENT: Final = "PreToolUse"
+
 #: Restoration kinds. ``re_register`` additionally requires the script to still
 #: be on disk, so "put it back" is a config add rather than a rewrite.
 #:
@@ -150,6 +166,7 @@ class Registration:
     order: int
     command: str
     script: str
+    on_failure: str | None = None
 
 
 @dataclass(frozen=True)
@@ -209,6 +226,8 @@ class ExpectedHook:
     mask: MaskDeclaration
     canary: CanarySpec | None
     no_canary_reason: str | None
+    on_failure: str
+    on_failure_reason: str | None
 
 
 @dataclass(frozen=True)
@@ -394,6 +413,11 @@ def _parse_expected(raw: Any, index: int) -> ExpectedHook:
         and raw["no_canary_reason"].strip()
         else None
     )
+    on_failure = _require_str(raw, "on_failure", where)
+    if on_failure not in ON_FAILURE_VALUES:
+        raise HookInventoryError(
+            f"{where}: on_failure {on_failure!r} not one of {sorted(ON_FAILURE_VALUES)}"
+        )
     return ExpectedHook(
         script=script,
         event=_require_str(raw, "event", where),
@@ -410,6 +434,13 @@ def _parse_expected(raw: Any, index: int) -> ExpectedHook:
         ),
         canary=canary,
         no_canary_reason=no_canary_reason,
+        on_failure=on_failure,
+        on_failure_reason=(
+            raw["on_failure_reason"].strip()
+            if isinstance(raw.get("on_failure_reason"), str)
+            and raw["on_failure_reason"].strip()
+            else None
+        ),
     )
 
 
@@ -560,6 +591,12 @@ def load_registrations(hooks_json_path: Path) -> tuple[Registration, ...]:
                     raise HookInventoryError(
                         f"{hooks_json_path}: {event!r} hook entry has no command"
                     )
+                on_failure = entry.get("onFailure")
+                if on_failure is not None and not isinstance(on_failure, str):
+                    raise HookInventoryError(
+                        f"{hooks_json_path}: {event!r} onFailure must be a string "
+                        "or absent"
+                    )
                 out.append(
                     Registration(
                         event=event,
@@ -567,6 +604,7 @@ def load_registrations(hooks_json_path: Path) -> tuple[Registration, ...]:
                         order=order,
                         command=command,
                         script=command.rsplit("/", 1)[-1],
+                        on_failure=on_failure,
                     )
                 )
                 order += 1
@@ -1090,6 +1128,78 @@ def check_parity(
                     "declared enforcement: false with neither a pass_through canary "
                     "nor a no_canary_reason. 'It only observes' is a claim; it needs "
                     "either a proof or a stated reason one cannot be run.",
+                )
+            )
+
+    # 3b. Failure posture (OMN-17427). A PreToolUse guard that refuses an unsafe
+    #     action must fail CLOSED: a guard that crashes or times out and lets
+    #     the call through is a guard that is off exactly when it is needed. An
+    #     observer must fail OPEN: a broken recorder never stops work. What
+    #     hooks.json registers must equal what the inventory declares.
+    for hook in inventory.expected:
+        guard_event = hook.event == GUARD_FAILURE_EVENT
+        if hook.enforcement and guard_event and hook.on_failure != "block":
+            findings.append(
+                Finding(
+                    "GUARD_FAILS_OPEN",
+                    hook.script,
+                    "declared enforcement: true on PreToolUse with on_failure: "
+                    f"{hook.on_failure!r}. A guard that refuses unsafe actions "
+                    "must declare on_failure: block, so a crash or timeout "
+                    "blocks the action instead of letting it through.",
+                )
+            )
+        if not hook.enforcement and hook.on_failure != "open":
+            findings.append(
+                Finding(
+                    "OBSERVER_FAILS_CLOSED",
+                    hook.script,
+                    "declared enforcement: false with on_failure: "
+                    f"{hook.on_failure!r}. An observer must fail open: a broken "
+                    "recorder never stops work.",
+                )
+            )
+        if (
+            hook.enforcement
+            and not guard_event
+            and hook.on_failure != "block"
+            and hook.on_failure_reason is None
+        ):
+            findings.append(
+                Finding(
+                    "ON_FAILURE_OPEN_WITHOUT_REASON",
+                    hook.script,
+                    f"declared enforcement: true on {hook.event} and fails open "
+                    "with no on_failure_reason. Say why a failure of this guard "
+                    "may let the action through.",
+                )
+            )
+        matches = registered_by_script.get(hook.script, [])
+        if len(declared_events[hook.script]) > 1:
+            matches = [m for m in matches if m.event == hook.event]
+        if len(matches) != 1:
+            continue  # already reported as UNREGISTERED_EXPECTED / DUPLICATE
+        registered_closed = matches[0].on_failure
+        if registered_closed not in (None, ON_FAILURE_CONTINUE, ON_FAILURE_BLOCK):
+            findings.append(
+                Finding(
+                    "ON_FAILURE_UNKNOWN_VALUE",
+                    hook.script,
+                    f"{inventory.hooks_json} sets onFailure {registered_closed!r}; "
+                    f"Claude Code defines {ON_FAILURE_CONTINUE!r} and "
+                    f"{ON_FAILURE_BLOCK!r}.",
+                )
+            )
+        elif (registered_closed == ON_FAILURE_BLOCK) != (hook.on_failure == "block"):
+            findings.append(
+                Finding(
+                    "ON_FAILURE_MISMATCH",
+                    hook.script,
+                    f"declared on_failure: {hook.on_failure!r}, registered "
+                    f"onFailure {registered_closed!r}. A guard registered without "
+                    'onFailure: "block" lets the action through when it crashes; '
+                    "an observer registered with it can stop work when a "
+                    "recorder breaks.",
                 )
             )
 

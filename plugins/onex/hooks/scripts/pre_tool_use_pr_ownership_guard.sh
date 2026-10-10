@@ -10,7 +10,7 @@
 # peer lane's on 2026-08-20T00:52Z for the same reason: neither lane could see
 # the other.
 #
-# Guarded verbs and their verdicts (full table in pr_ownership_guard.py):
+# Guarded verbs and their verdicts (full table in the node's handler_pr_ownership.py):
 #   gh pr close | gh pr reopen | gh api -X PATCH .../pulls/<n> state=closed
 #       -> ownership class, FAIL-CLOSED. Absent/expired/unreadable/lane-less
 #          claim refuses. "Unclaimed" is never read as "free to take."
@@ -24,7 +24,7 @@
 #   * this script's grep pre-filter is a cheap over-matcher — it fires on a
 #     bare `gh api` regardless of HTTP method, and on quoted text that merely
 #     names a verb (`printf 'gh api ...'`). It decides nothing.
-#   * pr_ownership_guard.py parses the command and is the authority. It treats
+#   * the node's handler parses the command and is the authority. It treats
 #     a `gh api` with no `-X/--method PATCH|POST|PUT|DELETE` as no mutation at
 #     all and returns ALLOW before touching any ownership surface, and it does
 #     not read quoted text as a command (OMN-16983).
@@ -161,14 +161,14 @@ cleanup() { rm -f "$CMD_FILE"; }
 trap cleanup EXIT
 printf '%s' "$CMD" > "$CMD_FILE"
 
-GUARD_PY="${PLUGIN_ROOT}/hooks/lib/pr_ownership_guard.py"
-if [[ ! -f "$GUARD_PY" ]]; then
-    _log "ERROR: guard module missing at $GUARD_PY — failing closed"
-    _block "guard module missing" \
-        "BLOCKED: the OMN-16485 lane-ownership guard module is missing at ${GUARD_PY}, so ownership of this GitHub mutation cannot be checked. Unverifiable ownership fails closed. Repair the plugin install, or disable the guard deliberately: onex hooks disable BASH_GUARD"
-fi
+# OMN-20685: the decision core is omniclaude's node_pr_ownership_guard_effect, run
+# through its handler module (`python -m`). The module imports the claim registry
+# and the session resolver, which stay hook-library siblings, from the directory
+# named by --hooks-lib. An interpreter that cannot import the module fails the
+# evaluation below, and a failed evaluation of a real mutation verb is refused.
+GUARD_MODULE="omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership_cli"
 
-# OMN-16983: run the decision core as a plain script from its own directory.
+# OMN-16983: run the decision core without a source-tree layout assumption.
 # The previous form did `cd "$PLUGIN_ROOT/../.."` with a matching PYTHONPATH so
 # the module could `import plugins.onex.hooks.lib.*` — an assumption that only
 # holds in the SOURCE tree (<omniclaude>/plugins/onex). Claude Code loads hooks
@@ -176,8 +176,8 @@ fi
 # is the marketplace dir and no `plugins` package exists: the import raised
 # ModuleNotFoundError, the core exited 1, and the fail-closed branch below
 # refused every matching command — read-only `gh api` GETs included. The core
-# now resolves its siblings from its own lib/ directory, so no PYTHONPATH or cwd
-# contract is needed. PYTHONPATH is cleared so an ambient value cannot shadow a
+# now resolves its siblings from the lib/ directory it is handed, so no PYTHONPATH
+# or cwd contract is needed. PYTHONPATH is cleared so an ambient value cannot shadow a
 # sibling module with a same-named one from another tree.
 # OMN-20118: the decision core runs through onex_guard_core, which runs it in its
 # own interpreter when this script runs on its own, and in the one shared
@@ -186,12 +186,13 @@ fi
 source "${HOOK_SCRIPT_DIR}/../lib/bash_guard_core.sh" 2>/dev/null || true
 if ! declare -F onex_guard_core >/dev/null 2>&1; then
     _block "decision core runner missing" \
-        "BLOCKED: the OMN-16485 lane-ownership guard cannot run its decision core: lib/bash_guard_core.sh is missing beside ${GUARD_PY}. Repair the plugin install, or disable the guard deliberately: onex hooks disable BASH_GUARD"
+        "BLOCKED: the OMN-16485 lane-ownership guard cannot run its decision core: lib/bash_guard_core.sh is missing from ${HOOKS_DIR}/lib. Repair the plugin install, or disable the guard deliberately: onex hooks disable BASH_GUARD"
 fi
 _CORE_CWD="$PLUGIN_ROOT"
 [[ -d "$_CORE_CWD" ]] || _CORE_CWD="$HOME"
 onex_guard_core --stderr merge --cwd "$_CORE_CWD" --unset PYTHONPATH -- \
-    "${PYTHON_CMD:-python3}" "$GUARD_PY" \
+    "${PYTHON_CMD:-python3}" -m "$GUARD_MODULE" \
+    --hooks-lib "${HOOKS_DIR}/lib" \
     --command-file "$CMD_FILE" \
     --cwd "$HOOK_ORIGINAL_CWD" \
     --default-repo "$DEFAULT_REPO"

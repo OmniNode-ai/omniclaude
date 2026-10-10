@@ -43,6 +43,7 @@ import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -464,6 +465,99 @@ def test_reordering_session_start_fails_the_gate(mirror: Path) -> None:
 
     _edit_hooks_json(mirror, swap)
     assert "ORDER_MISMATCH" in _codes(mirror)
+
+
+# ---------------------------------------------------------------------------
+# OMN-17427 — failure posture: guards fail closed, observers fail open
+# ---------------------------------------------------------------------------
+
+
+def _set_on_failure(mirror: Path, script: str, value: str | None) -> None:
+    def edit(data: dict[str, Any]) -> None:
+        for groups in data["hooks"].values():
+            for group in groups:
+                for handler in group["hooks"]:
+                    if handler["command"].endswith("/" + script):
+                        if value is None:
+                            handler.pop("onFailure", None)
+                        else:
+                            handler["onFailure"] = value
+
+    _edit_hooks_json(mirror, edit)
+
+
+def test_a_guard_registered_without_on_failure_block_fails_the_gate(
+    mirror: Path,
+) -> None:
+    """The guard lets the call through when it crashes: the inventory refuses."""
+    assert "ON_FAILURE_MISMATCH" not in _codes(mirror)  # positive control
+    _set_on_failure(mirror, "pre_tool_use_bash_guards.sh", None)
+    findings = [f for f in _findings(mirror) if f.code == "ON_FAILURE_MISMATCH"]
+    assert [f.subject for f in findings] == ["pre_tool_use_bash_guards.sh"]
+    assert _run_gate(mirror).returncode == 1
+
+
+def test_an_observer_registered_with_on_failure_block_fails_the_gate(
+    mirror: Path,
+) -> None:
+    """A broken recorder must never stop work."""
+    _set_on_failure(mirror, "pre_tool_use_lane_open.sh", "block")
+    findings = [f for f in _findings(mirror) if f.code == "ON_FAILURE_MISMATCH"]
+    assert [f.subject for f in findings] == ["pre_tool_use_lane_open.sh"]
+
+
+def test_the_explicit_continue_spelling_is_fail_open(mirror: Path) -> None:
+    """``continue`` is the harness default, spelt out: an observer may carry it."""
+    _set_on_failure(mirror, "pre_tool_use_lane_open.sh", "continue")
+    assert "ON_FAILURE_MISMATCH" not in _codes(mirror)
+    assert "ON_FAILURE_UNKNOWN_VALUE" not in _codes(mirror)
+    # ...and a guard spelt `continue` is still refused.
+    _set_on_failure(mirror, "pre_tool_use_bash_guards.sh", "continue")
+    assert "ON_FAILURE_MISMATCH" in _codes(mirror)
+
+
+def test_an_unknown_on_failure_value_fails_the_gate(mirror: Path) -> None:
+    _set_on_failure(mirror, "pre_tool_use_bash_guards.sh", "ignore")
+    assert "ON_FAILURE_UNKNOWN_VALUE" in _codes(mirror)
+
+
+def test_a_pretooluse_guard_cannot_be_declared_to_fail_open(mirror: Path) -> None:
+    """Editing the inventory and hooks.json together cannot drop the posture."""
+    path = mirror / _INVENTORY_REL
+    text = path.read_text(encoding="utf-8")
+    start = text.index('script: "pre_tool_use_bash_guards.sh"')
+    end = text.index('on_failure: "block"', start)
+    path.write_text(
+        text[:end] + 'on_failure: "open"' + text[end + len('on_failure: "block"') :],
+        encoding="utf-8",
+    )
+    _set_on_failure(mirror, "pre_tool_use_bash_guards.sh", None)
+    codes = _codes(mirror)
+    assert "GUARD_FAILS_OPEN" in codes
+    assert "ON_FAILURE_MISMATCH" not in codes  # hooks.json and inventory now agree
+
+
+def test_an_observer_cannot_be_declared_to_fail_closed(mirror: Path) -> None:
+    path = mirror / _INVENTORY_REL
+    text = path.read_text(encoding="utf-8")
+    start = text.index('script: "pre_tool_use_lane_open.sh"')
+    end = text.index('on_failure: "open"', start)
+    path.write_text(
+        text[:end] + 'on_failure: "block"' + text[end + len('on_failure: "open"') :],
+        encoding="utf-8",
+    )
+    _set_on_failure(mirror, "pre_tool_use_lane_open.sh", "block")
+    assert "OBSERVER_FAILS_CLOSED" in _codes(mirror)
+
+
+def test_every_declared_pretooluse_enforcement_hook_fails_closed() -> None:
+    inventory = _LIB.load_inventory(_REPO_ROOT / _INVENTORY_REL)
+    guards = [
+        h for h in inventory.expected if h.enforcement and h.event == "PreToolUse"
+    ]
+    assert len(guards) == 7  # positive control: the set is not empty
+    assert {h.on_failure for h in guards} == {"block"}
+    assert {h.on_failure for h in inventory.expected if not h.enforcement} == {"open"}
 
 
 # ---------------------------------------------------------------------------

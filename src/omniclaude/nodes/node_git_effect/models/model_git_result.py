@@ -13,6 +13,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .model_git_admission import ModelGitAdmissionResult
+
 
 class GitResultStatus(StrEnum):
     """Possible outcomes of a git operation."""
@@ -40,6 +42,8 @@ class ModelGitResult(BaseModel):
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+    admission: ModelGitAdmissionResult | None = None
 
     operation: str = Field(
         ...,

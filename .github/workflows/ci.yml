@@ -20,6 +20,11 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   PYTHON_VERSION: '3.12'
+  # OMN-17427: the Claude Code release the plugin gates run `claude plugin
+  # validate` with. 2.1.295 is the first release that defines the hook handler
+  # setting `onFailure: "block"`, so an older CLI would not read the guards'
+  # fail-closed posture. Bump deliberately; never loosen to a range.
+  CLAUDE_CODE_VERSION: '2.1.295'
   # OMN-14127: CI gates were failing mechanically while downloading/extracting
   # large transitive CUDA/PyTorch wheels under fleet/network pressure. Keep the
   # validators fail-closed, but make dependency installation tolerant enough to
@@ -79,6 +84,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.6.1"
@@ -98,6 +105,15 @@ jobs:
             sleep "$sleep_seconds"
             attempt=$((attempt + 1))
           done
+      # OMN-19055: classifications and snapshot refresh triggers fail closed.
+      - name: Verify CI Summary external-context classification and snapshots
+        env:
+          CI_SNAPSHOT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: |
+          set -euo pipefail
+          CI_SNAPSHOT_CHANGED_FILES="$(git diff --name-only "$CI_SNAPSHOT_BASE" --)"
+          export CI_SNAPSHOT_CHANGED_FILES
+          uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov
       - name: Verify registered guard refusal surface
         run: uv run pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
       - name: Verify ledger ruling re-read before publishing (OMN-18645)
@@ -584,6 +600,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # A hand-flip proof names a base_ref the ratchet reads the legacy handler
+          # from (git show), and the in-PR baseline-removal check reads origin/dev;
+          # neither resolves in a depth-1 checkout (omnimarket's ratchet job: same).
+          fetch-depth: 0
 
       - name: Resolve the pinned omnibase-core version
         id: core_pin
@@ -2815,6 +2836,78 @@ jobs:
           name: hook-system-test-results
           path: junit-hook-system.xml
 
+  # ============================================================================
+  # Plugin Validate (OMN-17427)
+  # ----------------------------------------------------------------------------
+  # `claude plugin validate` is the harness's own loader schema applied to this
+  # repo's plugin manifests, hooks.json and marketplace manifests. It catches
+  # what no repo-local check can see: a hook handler field the harness will not
+  # load (a misspelt `onFailure` value is a hard error -- the guard it was meant
+  # to make fail closed would not load at all), an unknown manifest field, a
+  # marketplace entry that disagrees with its plugin.json.
+  #
+  # `claude plugin test` and `claude plugin eval` are deliberately NOT wired
+  # here: `test` runs a hooks module's `*.test.ts` files and exits 1 ("no hooks
+  # module to load") for a plugin whose hooks.json names no module, as this
+  # one's does not; `eval` needs an `evals/` suite this repo does not have.
+  # Wiring either would be a permanent red or a vacuous green. Revisit the day a
+  # plugin here ships a hooks module or an eval suite.
+  #
+  # CI Summary waits for this job (scripts/ci/ci_summary_gate.py GATE_JOBS and
+  # STRICT_SUCCESS_JOBS), so it is enforcement-equivalent to a required context
+  # without a branch-protection change. Unconditional and `if: always()`: a
+  # skipped job renders no check run. Pinned by
+  # tests/ci/test_plugin_validate_gate_omn17427.py.
+  # ============================================================================
+  plugin-validate:
+    name: "Plugin Validate (OMN-17427)"
+    if: always()
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.base.ref == 'dev')))
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node for the Claude Code CLI
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install the pinned Claude Code CLI (OMN-17427)
+        run: |
+          set -euo pipefail
+          npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          installed="$(claude --version)"
+          echo "installed: ${installed}"
+          case "${installed}" in
+            "${CLAUDE_CODE_VERSION} "*) ;;
+            *) echo "::error::expected Claude Code ${CLAUDE_CODE_VERSION}, got ${installed}"; exit 1 ;;
+          esac
+
+      - name: Validate every plugin and marketplace manifest
+        run: |
+          set -euo pipefail
+          for target in \
+            plugins/onex \
+            plugins/onex-delegate \
+            plugins/.claude-plugin/marketplace.json \
+            .claude-plugin/marketplace.json; do
+            echo "::group::claude plugin validate ${target}"
+            claude plugin validate "${target}"
+            echo "::endgroup::"
+          done
+
   agent-framework-tests:
     name: Agent Framework Tests
     needs: [occ-preflight, zone-filter]
@@ -4354,6 +4447,10 @@ jobs:
     if: needs.occ-preflight.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')
     steps:
       - uses: actions/checkout@v7
+        with:
+          # OMN-20837: DoD probes may use git show at an evidence-bound head
+          # older than this run's merge commit. Keep those product objects.
+          fetch-depth: 0
       # OMN-20138 (port of omnibase_infra OMN-20135, which mirrors omnibase_core
       # OMN-18157 and OMN-20130). This job used to run `validate-yaml` over the
       # whole change-control corpus at its default branch: it never resolved
@@ -4621,6 +4718,22 @@ jobs:
           git -C "$OMNI_HOME/omnimarket" sparse-checkout set src/omnimarket/nodes
           git -C "$OMNI_HOME/omnimarket" fetch --quiet --depth 1 --filter=blob:none https://github.com/OmniNode-ai/omnimarket.git "$om_rev"
           git -C "$OMNI_HOME/omnimarket" checkout --quiet FETCH_HEAD
+      - name: Set up Node for the Claude Code CLI
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install the pinned Claude Code CLI (OMN-17427)
+        run: |
+          set -euo pipefail
+          npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          installed="$(claude --version)"
+          echo "installed: ${installed}"
+          case "${installed}" in
+            "${CLAUDE_CODE_VERSION} "*) ;;
+            *) echo "::error::expected Claude Code ${CLAUDE_CODE_VERSION}, got ${installed}"; exit 1 ;;
+          esac
+
       - name: Pin the whole-tree backstop's own shape (OMN-19612)
         run: uv run pytest -o addopts="" tests/ci/test_precommit_suite_job_omn19612.py -v -p no:cacheprovider
       # The advisory-job-gate hook reads branch protection's

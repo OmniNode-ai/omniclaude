@@ -150,6 +150,7 @@ expected_hooks:
       conditions, never substitutes. Fail-closed: it runs in every cwd and in
       lite mode, has no mask bit, and refuses when it cannot decide.
     enforcement: true
+    on_failure: "block"
     lite_mode_exit: false
     mask:
       # No gate (OMN-20368): a Done is global state, so no per-machine switch
@@ -226,6 +227,7 @@ expected_hooks:
       and the falsifier is inside the hash; both choices and their reasons are
       recorded in the policy file's hashing-unit comment.
     enforcement: true
+    on_failure: "block"
     lite_mode_exit: false
     mask:
       # BORROWED BIT, recorded rather than left for a reader to infer. This
@@ -292,6 +294,7 @@ expected_hooks:
       tests/hooks_system/test_bash_guards_differential.py proves every
       decision identical to the seven separate registrations.
     enforcement: true
+    on_failure: "block"
     lite_mode_exit: false
     mask:
       # No gate of its own: each sourced guard calls its own onex_hook_gate.
@@ -328,6 +331,7 @@ expected_hooks:
       pre_tool_use_lane_open.sh so a refused dispatch does not first write a
       phantom OPEN lane record.
     enforcement: true
+    on_failure: "block"
     lite_mode_exit: false
     mask:
       # BORROWED BIT, recorded rather than left for a reader to infer. This
@@ -373,6 +377,7 @@ expected_hooks:
       always exits 0, always silent, so it can never refuse or delay a
       dispatch.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: false
     mask:
       gate_call: null
@@ -402,6 +407,7 @@ expected_hooks:
       takeover of its work without an independent filesystem probe, and
       refuses a bare harness ref used as an address.
     enforcement: true
+    on_failure: "block"
     lite_mode_exit: true
     mask:
       gate_call: null
@@ -434,6 +440,7 @@ expected_hooks:
       driving. This is the hook RC-B left dark; it is the reason this
       inventory exists.
     enforcement: true
+    on_failure: "block"
     lite_mode_exit: false
     mask:
       gate_call: "OVERSEER_FOREGROUND_BLOCK"
@@ -469,6 +476,9 @@ expected_hooks:
       Masks secret-shaped patterns in raw Bash tool_response text via
       hookSpecificOutput.updatedToolOutput before they land in the transcript.
     enforcement: true
+    on_failure: "open"
+    on_failure_reason: >
+      The tool call has already executed when this hook runs, so a block cannot prevent the action; onFailure block is adopted for PreToolUse guards only (OMN-17427) and this hook's failure behaviour is unchanged.
     lite_mode_exit: true
     mask:
       gate_call: null
@@ -504,6 +514,7 @@ expected_hooks:
       as content.captured records scrubbed by the capture-redaction contract
       (OMN-19551). Backgrounded and fail-open.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: "POST_TOOL_USE_BUS_MIRROR"
@@ -530,6 +541,7 @@ expected_hooks:
       silent and fail-open. The first registration in a Stop group; the
       triaged Stop gates below (OMN-18531) are unaffected by it.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: "STOP_CONTENT_CAPTURE"
@@ -554,6 +566,7 @@ expected_hooks:
       venvs. Runs detached, exits 0 on every path, never pulls into a dirty
       clone.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: null
@@ -581,6 +594,7 @@ expected_hooks:
       refusal and never forced. Exits 0 on every path, prints nothing, spends
       no GitHub API quota.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: null
@@ -605,6 +619,7 @@ expected_hooks:
       state. Durable LOCAL capture only: writes to disk, emits nothing on
       stdout.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: false
     mask:
       gate_call: "AUTO_CHECKPOINT"
@@ -641,6 +656,7 @@ expected_hooks:
       when a commit exceeds 15 files. Side-write only: its pre-baseline
       advisory context injection was deliberately not revived.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: false
     mask:
       gate_call: "CHANGESET_GUARD_POST"
@@ -673,6 +689,9 @@ expected_hooks:
       secret pattern. Fail-SAFE: blocks rather than passes when the guard
       itself cannot run.
     enforcement: true
+    on_failure: "open"
+    on_failure_reason: >
+      A SubagentStop block forces the lane to continue; a crashing guard would turn into a forced-continuation loop (OMN-15213, OMN-16471 record that every non-zero-work verdict here deliberately allows). onFailure block is adopted for PreToolUse guards only (OMN-17427) and this hook's failure behaviour is unchanged.
     lite_mode_exit: false
     mask:
       gate_call: null
@@ -708,6 +727,9 @@ expected_hooks:
       Fails a lane RED when its final return is bare-Done-class rather than
       the report the golden-chain contract requires.
     enforcement: true
+    on_failure: "open"
+    on_failure_reason: >
+      A SubagentStop block forces the lane to continue; a crashing guard would turn into a forced-continuation loop (OMN-15213, OMN-16471 record that every non-zero-work verdict here deliberately allows). onFailure block is adopted for PreToolUse guards only (OMN-17427) and this hook's failure behaviour is unchanged.
     lite_mode_exit: false
     mask:
       gate_call: null
@@ -744,6 +766,9 @@ expected_hooks:
       terminal record, and blocks once on a zero-work death so a lane that
       never ran cannot be scored as a completed stage.
     enforcement: true
+    on_failure: "open"
+    on_failure_reason: >
+      A SubagentStop block forces the lane to continue; a crashing guard would turn into a forced-continuation loop (OMN-15213, OMN-16471 record that every non-zero-work verdict here deliberately allows). onFailure block is adopted for PreToolUse guards only (OMN-17427) and this hook's failure behaviour is unchanged.
     lite_mode_exit: false
     mask:
       gate_call: null
@@ -789,6 +814,7 @@ expected_hooks:
       Direct-dispatches a session-started event to the local bus.
       Backgrounded and fail-open.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: "SESSION_START"
@@ -815,6 +841,7 @@ expected_hooks:
       reset (OMN-18961). Print-only: pure bash, no interpreter, no network, no
       writes.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: null
@@ -849,6 +876,7 @@ expected_hooks:
       older than 35 minutes or unknown age is an ALERT because the drift check
       itself has stopped reporting. Both verdicts respect quiet/tick intent.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: null
@@ -876,6 +904,7 @@ expected_hooks:
       and mask darkness at session start. Warn-only by construction — it
       always exits 0.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: false
     mask:
       gate_call: null
@@ -905,6 +934,7 @@ expected_hooks:
       Direct-dispatches a session-ended event to the local bus. Backgrounded
       and fail-open.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: "SESSION_END"
@@ -927,6 +957,7 @@ expected_hooks:
       contract, on the restricted cmd family (OMN-19551). Backgrounded and
       fail-open.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: "USER_PROMPT_SUBMIT"
@@ -947,6 +978,7 @@ expected_hooks:
       semantic event registry, using Claude's tool_use_id as the shared
       lifecycle key. It captures no skill arguments, prompt, or body.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: false
     mask:
       gate_call: "PRE_TOOL_USE_QUALITY"
@@ -973,6 +1005,7 @@ expected_hooks:
       unattributed Codex subagents. Shape check only, not a truth check --
       same posture as the rule-18 OPERATOR-CONSENT ledger-row guard.
     enforcement: true
+    on_failure: "block"
     lite_mode_exit: true
     mask:
       gate_call: null
@@ -1003,6 +1036,7 @@ expected_hooks:
       Emits skill-completed only after the real PostToolUse result, reusing the
       PreToolUse tool_use_id and emitting status without result content.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: "POST_TOOL_USE_QUALITY"
@@ -1042,6 +1076,7 @@ expected_hooks:
       Emits only output size, line count, classification, and identifiers
       through the semantic daemon; it never returns updatedToolOutput or bytes.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: "POST_TOOL_OUTPUT_SUPPRESSOR"
@@ -1076,6 +1111,7 @@ expected_hooks:
       Backgrounded, silent and fail-open; journals nothing unless the
       drainer lists hook.event.
     enforcement: false
+    on_failure: "open"
     lite_mode_exit: true
     mask:
       gate_call: "CLAUDE_HOOK_CAPTURE"

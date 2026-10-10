@@ -59,6 +59,7 @@ TICKET_STAMP_TEMPLATE = """{start}
 
 # Per-operation timeouts (OMN-2817 1e) - env-configurable
 OPERATION_TIMEOUTS: dict[GitOperation, float] = {
+    GitOperation.ADMISSION_CHECK: 30.0,
     GitOperation.BRANCH_CREATE: float(
         os.getenv("OMNICLAUDE_GIT_TIMEOUT_BRANCH_CREATE", "30")
     ),
@@ -78,6 +79,7 @@ OPERATION_TIMEOUTS: dict[GitOperation, float] = {
 
 # Per-operation required fields (OMN-2817 1d)
 REQUIRED_FIELDS: dict[GitOperation, list[str]] = {
+    GitOperation.ADMISSION_CHECK: ["admission"],
     GitOperation.BRANCH_CREATE: ["branch_name"],
     GitOperation.COMMIT: ["commit_message"],
     GitOperation.PUSH: ["branch_name"],
@@ -221,6 +223,31 @@ class HandlerGitSubprocess:
                 raw_max,
             )
         self._semaphore: asyncio.Semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def admission_check(self, request: ModelGitRequest) -> ModelGitResult:
+        """Run host-local admission through this node's canonical bus route."""
+        from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (
+            dispatch,
+        )
+
+        validation = self._validate_request(request)
+        if validation is not None:
+            return validation
+        if request.admission is None:
+            raise ValueError("admission payload is required")
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory(prefix="git-admission-") as temporary:
+            result = await asyncio.to_thread(
+                dispatch, request.admission, Path(temporary)
+            )
+        return ModelGitResult(
+            operation=request.operation.value,
+            status=GitResultStatus.SUCCESS,
+            admission=result,
+            correlation_id=request.correlation_id,
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle

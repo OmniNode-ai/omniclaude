@@ -14,6 +14,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from omnibase_infra.models.pricing.model_pricing_table import ModelPricingTable
 
 
 def _import_module() -> Any:
@@ -52,8 +53,13 @@ def agent_event() -> dict[str, Any]:
 @pytest.mark.unit
 class TestCostCalculation:
     def test_opus_baseline_cost(self, mod: Any) -> None:
+        # OMN-20833: the rate is the omnibase_infra pricing manifest's.
+        entry = ModelPricingTable.from_yaml().get_entry("claude-opus-4-6")
+        assert entry is not None
         cost = mod._cost_usd("claude-opus-4-6", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(15.00 + 75.00)
+        assert cost == pytest.approx(
+            (entry.input_cost_per_1k + entry.output_cost_per_1k) * 1_000
+        )
 
     def test_sonnet_cost_lower_than_opus(self, mod: Any) -> None:
         sonnet = mod._cost_usd("claude-sonnet-4-6", 100_000, 100_000)
@@ -63,10 +69,9 @@ class TestCostCalculation:
     def test_local_model_zero_cost(self, mod: Any) -> None:
         assert mod._cost_usd("local", 100_000, 100_000) == 0.0
 
-    def test_unknown_model_falls_back_to_opus(self, mod: Any) -> None:
-        known = mod._cost_usd("claude-opus-4-6", 50_000, 50_000)
-        unknown = mod._cost_usd("totally-unknown-model-xyz", 50_000, 50_000)
-        assert known == unknown
+    def test_unknown_model_is_unpriced(self, mod: Any) -> None:
+        # OMN-20387: an unknown model is never priced at the baseline model's rate.
+        assert mod._cost_usd("totally-unknown-model-xyz", 50_000, 50_000) is None
 
     def test_savings_method_local(self, mod: Any) -> None:
         assert mod._savings_method("local") == "zero_marginal_api_cost"
@@ -144,7 +149,8 @@ class TestRecordToolCall:
         assert record["is_delegated"] == 0
         assert record["actual_model"] == mod.BASELINE_MODEL
         assert record["savings_method"] == "baseline_self"
-        assert record["pricing_manifest_version"] == mod.PRICING_MANIFEST_VERSION
+        assert record["pricing_manifest_version"] == mod._manifest_version()
+        assert record["pricing_manifest_version"].startswith("omnibase_infra-")
 
     def test_delegation_result_consumed_and_returned(
         self, mod: Any, state_dir: Path, agent_event: dict[str, Any]
@@ -186,6 +192,33 @@ class TestRecordToolCall:
             "counterfactual_price_difference",
             "zero_marginal_api_cost",
         )
+
+    def test_unpriced_delegated_model_writes_no_cost_record(
+        self, mod: Any, state_dir: Path, agent_event: dict[str, Any]
+    ) -> None:
+        # OMN-20387: a delegated model with no price yields no priced record, so
+        # no saving is computed against a rate that belongs to another model.
+        delegation_dir = state_dir / "delegation"
+        delegation_dir.mkdir(parents=True)
+        delegation_data = {
+            "model": "totally-unknown-model-xyz",
+            "usage": {"input_tokens": 400, "output_tokens": 150},
+            "context": "unpriced result",
+        }
+        (delegation_dir / "pending_result.json").write_text(
+            json.dumps(delegation_data), encoding="utf-8"
+        )
+
+        with patch.dict(os.environ, {"ONEX_STATE_DIR": str(state_dir)}):
+            result = mod.record_tool_call(agent_event)
+
+        assert result is not None
+        assert result["model"] == "totally-unknown-model-xyz"
+        db = state_dir / "hooks" / "cost_accounting.db"
+        if db.exists():
+            with sqlite3.connect(str(db)) as conn:
+                rows = conn.execute("SELECT * FROM cost_records").fetchall()
+            assert rows == []
 
     def test_local_model_saves_vs_opus(
         self, mod: Any, state_dir: Path, agent_event: dict[str, Any]
