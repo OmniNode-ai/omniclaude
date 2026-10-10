@@ -64,6 +64,7 @@ Contract Compliance Check
 no-noncanonical-lifecycle-classes
 Shape-Gate Independence (OMN-20298)
 Pre-commit Suite (OMN-19612)
+Plugin Validate (OMN-17427)
 OCC Companion Merged Gate (OMN-15214)
 Runtime Profiles
 Canonical File Shape (OMN-20304)
