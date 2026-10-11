@@ -1175,3 +1175,29 @@ def _no_real_operator_alarm(
     monkeypatch.setenv("OMNICLAUDE_EMIT_SOCKET", str(scratch / "emit.sock"))
     monkeypatch.setenv("ONEX_LEDGER_PATH", str(scratch / "no-ledger.md"))
     monkeypatch.setenv("ONEX_LEDGER_APPEND_TOOL", str(scratch / "no-ledger-append.py"))
+
+
+#: Brokers of the synthetic hook-edge lane overlay, one per lane the shipped
+#: contract declares. Test-only names: the shipped contract carries no broker, so
+#: a test supplies an overlay instead of a lab address.
+HOOK_LANE_TEST_BROKERS = {
+    "dev": "broker.example.test:19092",
+    "stability-test": "broker.example.test:39092",
+    "prod": "broker.example.test:49092",
+}
+
+
+@pytest.fixture
+def hook_lane_overlay(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, str]:
+    """Point ``ONEX_WORKSPACE_CONFIG_ROOT`` at a synthetic hook-edge lane overlay."""
+    root = tmp_path_factory.mktemp("hook-lane-overlay")
+    overlay = root / "config" / "lab" / "hook_edge_lane.yaml"
+    overlay.parent.mkdir(parents=True)
+    lines = ["known_lanes:"]
+    for lane, broker in HOOK_LANE_TEST_BROKERS.items():
+        lines += [f"  {lane}:", f'    bootstrap_servers: "{broker}"']
+    overlay.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    monkeypatch.setenv("ONEX_WORKSPACE_CONFIG_ROOT", str(root))
+    return dict(HOOK_LANE_TEST_BROKERS)

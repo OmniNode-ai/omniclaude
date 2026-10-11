@@ -24,7 +24,7 @@ def _write_claim(claims_dir: Path, blocker_id: str, claimant: str) -> None:
     claim = {
         "blocker_id": blocker_id,
         "kind": "fix_containers",
-        "host": "192.168.86.201",  # onex-allow-internal-ip
+        "host": "claimhost.example.test",
         "resource": "docker_containers",
         "claimant": claimant,
         "claimed_at": datetime.now(tz=UTC).isoformat(),
@@ -32,6 +32,9 @@ def _write_claim(claims_dir: Path, blocker_id: str, claimant: str) -> None:
         "tool_name": "Agent",
     }
     (claims_dir / f"{blocker_id}.json").write_text(json.dumps(claim))
+
+
+pytestmark = pytest.mark.usefixtures("claim_host_overlay")
 
 
 @pytest.mark.unit
@@ -43,7 +46,7 @@ def test_release_no_match_returns_no_match(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_release_not_found_when_no_claim_file(tmp_path: Path) -> None:
     result = release_claim(
-        "fix containers on 192.168.86.201",  # onex-allow-internal-ip
+        "fix containers on claimhost.example.test",
         "agent-alpha",
         tmp_path,
     )
@@ -53,9 +56,7 @@ def test_release_not_found_when_no_claim_file(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_release_not_owner_when_different_claimant(tmp_path: Path) -> None:
-    info = extract_blocker_info(
-        "fix containers on 192.168.86.201"  # onex-allow-internal-ip
-    )
+    info = extract_blocker_info("fix containers on claimhost.example.test")
     assert info is not None
     import hashlib
 
@@ -66,7 +67,7 @@ def test_release_not_owner_when_different_claimant(tmp_path: Path) -> None:
     _write_claim(tmp_path, bid, "agent-alpha")
 
     result = release_claim(
-        "fix containers on 192.168.86.201",  # onex-allow-internal-ip
+        "fix containers on claimhost.example.test",
         "agent-beta",
         tmp_path,
     )
@@ -77,9 +78,7 @@ def test_release_not_owner_when_different_claimant(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_release_owner_deletes_claim_file(tmp_path: Path) -> None:
-    info = extract_blocker_info(
-        "fix containers on 192.168.86.201"  # onex-allow-internal-ip
-    )
+    info = extract_blocker_info("fix containers on claimhost.example.test")
     assert info is not None
     import hashlib
 
@@ -90,7 +89,7 @@ def test_release_owner_deletes_claim_file(tmp_path: Path) -> None:
     _write_claim(tmp_path, bid, "agent-alpha")
 
     result = release_claim(
-        "fix containers on 192.168.86.201",  # onex-allow-internal-ip
+        "fix containers on claimhost.example.test",
         "agent-alpha",
         tmp_path,
     )
@@ -101,9 +100,7 @@ def test_release_owner_deletes_claim_file(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_release_after_release_returns_not_found(tmp_path: Path) -> None:
-    info = extract_blocker_info(
-        "fix containers on 192.168.86.201"  # onex-allow-internal-ip
-    )
+    info = extract_blocker_info("fix containers on claimhost.example.test")
     assert info is not None
     import hashlib
 
@@ -114,12 +111,12 @@ def test_release_after_release_returns_not_found(tmp_path: Path) -> None:
     _write_claim(tmp_path, bid, "agent-alpha")
 
     r1 = release_claim(
-        "fix containers on 192.168.86.201",  # onex-allow-internal-ip
+        "fix containers on claimhost.example.test",
         "agent-alpha",
         tmp_path,
     )
     r2 = release_claim(
-        "fix containers on 192.168.86.201",  # onex-allow-internal-ip
+        "fix containers on claimhost.example.test",
         "agent-alpha",
         tmp_path,
     )
@@ -129,13 +126,11 @@ def test_release_after_release_returns_not_found(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_extract_ssh_201() -> None:
-    info = extract_blocker_info(
-        "ssh jonah@192.168.86.201 'docker ps'"  # onex-allow-internal-ip
-    )
+    info = extract_blocker_info("ssh jonah@claimhost.example.test 'docker ps'")
     assert info is not None
     kind, host, _ = info
     assert kind == "ssh_201"
-    assert host == "192.168.86.201"  # onex-allow-internal-ip
+    assert host == "claimhost.example.test"
 
 
 @pytest.mark.unit
@@ -153,7 +148,7 @@ def test_e2e_acquire_then_release_then_reacquire(tmp_path: Path) -> None:
     sys.path.insert(0, _lib_path)
     from dispatch_claim_gate import check_and_acquire
 
-    prompt = "fix containers on 192.168.86.201"  # onex-allow-internal-ip
+    prompt = "fix containers on claimhost.example.test"
 
     r1 = check_and_acquire(prompt, "agent-alpha", tmp_path)
     assert r1["action"] == "acquired"

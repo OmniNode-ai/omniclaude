@@ -17,16 +17,16 @@ if _lib_path not in sys.path:
 
 from dispatch_claim_gate import check_and_acquire, extract_blocker_info
 
+pytestmark = pytest.mark.usefixtures("claim_host_overlay")
+
 
 @pytest.mark.unit
 def test_extract_ssh_201() -> None:
-    info = extract_blocker_info(
-        "ssh jonah@192.168.86.201 'docker ps'"  # onex-allow-internal-ip
-    )
+    info = extract_blocker_info("ssh jonah@claimhost.example.test 'docker ps'")
     assert info is not None
     kind, host, resource = info
     assert kind == "ssh_201"
-    assert host == "192.168.86.201"  # onex-allow-internal-ip
+    assert host == "claimhost.example.test"
 
 
 @pytest.mark.unit
@@ -41,13 +41,11 @@ def test_extract_rpk_rebuild() -> None:
 
 @pytest.mark.unit
 def test_extract_fix_containers() -> None:
-    info = extract_blocker_info(
-        "fix containers on 192.168.86.201"  # onex-allow-internal-ip
-    )
+    info = extract_blocker_info("fix containers on claimhost.example.test")
     assert info is not None
     kind, host, _ = info
     assert kind == "fix_containers"
-    assert host == "192.168.86.201"  # onex-allow-internal-ip
+    assert host == "claimhost.example.test"
 
 
 @pytest.mark.unit
@@ -91,7 +89,7 @@ def test_no_match_returns_none() -> None:
 def test_e2e_two_agents_same_prompt_first_acquired_second_blocked(
     tmp_path: Path,
 ) -> None:
-    prompt = "fix containers on 192.168.86.201"  # onex-allow-internal-ip
+    prompt = "fix containers on claimhost.example.test"
     result1 = check_and_acquire(prompt, "agent-alpha", tmp_path)
     result2 = check_and_acquire(prompt, "agent-beta", tmp_path)
 

@@ -4,7 +4,7 @@
 
 Context (OMN-16682 constraint 8). ``occ-autobind`` and ``occ-companion-effect``
 publish to the TAILNET-ONLY dev-lane broker
-``omninode-pc.tail75df5e.ts.net:19092``. Only the self-hosted ``omnibase-ci``
+named in the bus lane declaration. Only the self-hosted ``omnibase-ci``
 fleet on .201 is on that tailnet. Until 2026-08-26 these jobs selected their
 runner from the SHARED ``OMNI_TRUSTED_CI_RUNS_ON_JSON`` seam — the same variable
 that governs every lint/test/build job in the org and that the OMN-16682
@@ -111,7 +111,7 @@ def test_broker_publisher_is_not_governed_by_the_shared_seam(
         f"{workflow_file}::{job_id} must NOT read `{SHARED_SEAM_VAR}`. That "
         "variable governs ~475 unrelated lint/test/build jobs and exists to be "
         "flipped to ubuntu-latest by the OMN-16682 migration. A hosted runner "
-        "cannot resolve omninode-pc.tail75df5e.ts.net:19092, so binding this "
+        "cannot resolve the tailnet-only dev-lane broker, so binding this "
         "publisher to that seam makes a CI migration a merge-wide outage "
         "(incident OMN-16691, 2026-08-26 22:46:41Z-23:32:03Z)."
     )
@@ -179,7 +179,7 @@ def test_carveout_rationale_is_documented_inline(
         f"{workflow_file} must cite OMN-16691 inline so the carve-out is not "
         "read as an arbitrary variable rename"
     )
-    assert "tail75df5e.ts.net" in raw or "TAILNET" in raw, (
+    assert "TAILNET" in raw, (
         f"{workflow_file} must name the tailnet broker dependency inline — it "
         "is the entire reason this job cannot follow the shared seam"
     )

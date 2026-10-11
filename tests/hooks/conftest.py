@@ -330,3 +330,22 @@ def _contain_outbound_alerts(
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv(HOOK_TEST_MODE_ENV, "1")
     monkeypatch.setenv("SLACK_API_BASE_URL", UNREACHABLE_SLACK_API_BASE)
+
+
+#: The claim host the dispatch-claim tests run against. The shipped code names no
+#: host: it reads the hosts list from the workspace config overlay, so a test
+#: supplies a synthetic overlay instead of carrying a lab address.
+CLAIM_TEST_HOST = "claimhost.example.test"
+
+
+@pytest.fixture
+def claim_host_overlay(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> str:
+    """Point ``ONEX_WORKSPACE_CONFIG_ROOT`` at an overlay listing :data:`CLAIM_TEST_HOST`."""
+    root = tmp_path_factory.mktemp("claim-host-overlay")
+    overlay = root / "config" / "lab" / "dispatch_claim_hosts.yaml"
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text(f'hosts:\n  - "{CLAIM_TEST_HOST}"\n', encoding="utf-8")
+    monkeypatch.setenv("ONEX_WORKSPACE_CONFIG_ROOT", str(root))
+    return CLAIM_TEST_HOST

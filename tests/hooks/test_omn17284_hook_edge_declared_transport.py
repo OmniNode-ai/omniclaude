@@ -65,7 +65,7 @@ from types import ModuleType
 
 import pytest
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("hook_lane_overlay")]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _HOOKS_DIR = _REPO_ROOT / "plugins" / "onex" / "hooks"

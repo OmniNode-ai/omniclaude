@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("hook_lane_overlay")]
 _ROOT = Path(__file__).parents[3]
 _HOOKS_LIB = _ROOT / "plugins/onex/hooks/lib"
 if str(_HOOKS_LIB) not in sys.path:
