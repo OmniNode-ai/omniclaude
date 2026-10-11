@@ -27,6 +27,9 @@ import subprocess
 
 import pytest
 import yaml
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -248,9 +251,10 @@ OVERLAY_ENV = (
     "${{ github.workspace }}/../ci-overlay/config/onex/overlays/"
     "node_review_voters_overlay_compute/overlay.yaml"
 )
+PINNED_REF = "0123456789abcdef0123456789abcdef01234567"
 
 
-def _named_step(workflow: dict[object, object], name: str) -> dict[object, object]:
+def _named_step(workflow: dict[object, object], name: str) -> dict[str, object]:
     matches = [s for s in _review_job_steps(workflow) if s.get("name") == name]
     assert len(matches) == 1, f"expected one step named {name!r}"
     return matches[0]
@@ -280,6 +284,7 @@ def test_the_ci_overlay_repository_comes_from_an_org_variable(
     step_env = step.get("env")
     assert isinstance(step_env, dict)
     assert step_env["CI_OVERLAY_REPO"] == "${{ vars.OMNI_CI_OVERLAY_REPO }}"
+    assert step_env["CI_OVERLAY_REF"] == "${{ vars.OMNI_CI_OVERLAY_REF }}"
     fetch = _named_step(workflow, "Fetch the CI overlay")
     with_ = fetch.get("with")
     assert isinstance(with_, dict)
@@ -287,13 +292,17 @@ def test_the_ci_overlay_repository_comes_from_an_org_variable(
         "${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }}"
     )
     assert with_["persist-credentials"] is False
+    assert with_["ref"] == "${{ steps.ci-overlay.outputs.ref }}"
     text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "lane-overlays" not in text
     assert "github.com/OmniNode-ai/omnibase_infra.git" not in text
 
 
 def _run_resolve(
-    workflow: dict[object, object], repo_var: str, tmp_path: pathlib.Path
+    workflow: dict[object, object],
+    repo_var: str,
+    tmp_path: pathlib.Path,
+    ref_var: str = PINNED_REF,
 ) -> tuple[int, str, str]:
     output = tmp_path / "github_output"
     output.write_text("", encoding="utf-8")
@@ -301,6 +310,7 @@ def _run_resolve(
         ["bash", "-c", str(_named_step(workflow, "Resolve the CI overlay")["run"])],
         env={
             "CI_OVERLAY_REPO": repo_var,
+            "CI_OVERLAY_REF": ref_var,
             "GITHUB_OUTPUT": str(output),
             "PATH": "/usr/bin:/bin",
         },
@@ -327,8 +337,156 @@ def test_our_ci_resolves_the_named_overlay_repository(
     rc, out, _ = _run_resolve(workflow, "deploy-config", tmp_path)
     assert rc == 0
     assert "name=deploy-config" in out
+    assert f"ref={PINNED_REF}" in out
     rc, _, _ = _run_resolve(workflow, "owner/repo", tmp_path)
     assert rc == 1
+
+
+def test_the_fork_default_does_not_ask_for_a_pin(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    """The no-overlay reason takes precedence over a missing pin."""
+    rc, out, stdout = _run_resolve(workflow, "", tmp_path, ref_var="")
+    assert rc == 1
+    assert "no review voters configured" in stdout
+    assert "OMNI_CI_OVERLAY_REF" not in stdout
+    assert out == ""
+
+
+def test_an_unset_overlay_ref_fails_closed_naming_the_variable(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    """A configured overlay requires an explicit commit pin."""
+    rc, out, stdout = _run_resolve(workflow, "deploy-config", tmp_path, ref_var="")
+    assert rc == 1
+    assert "OMNI_CI_OVERLAY_REF is unset" in stdout
+    assert "name=" not in out
+    assert "ref=" not in out
+
+
+@pytest.mark.parametrize(
+    "ref_var",
+    [
+        "main",
+        "refs/heads/main",
+        PINNED_REF[:8],
+        PINNED_REF.upper(),
+        PINNED_REF + "0",
+        PINNED_REF[:-1] + "g",
+        f"{PINNED_REF}\nmain",
+        " " + PINNED_REF,
+    ],
+)
+def test_an_overlay_ref_that_is_not_a_full_sha_fails_closed(
+    workflow: dict[object, object], tmp_path: pathlib.Path, ref_var: str
+) -> None:
+    """Branches, tags, short shas and malformed pins are refused."""
+    rc, out, stdout = _run_resolve(workflow, "deploy-config", tmp_path, ref_var=ref_var)
+    assert rc == 1
+    assert "must be a full 40-hex" in stdout
+    assert "name=" not in out
+    assert "ref=" not in out
+
+
+def _run_place(
+    workflow: dict[object, object],
+    tmp_path: pathlib.Path,
+    expected_ref: str | None,
+) -> tuple[int, str, str]:
+    """Run the placement script against a real local overlay commit."""
+    workspace = tmp_path / "ws"
+    checkout = workspace / ".ci-overlay-checkout"
+    checkout.mkdir(parents=True)
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "GIT_AUTHOR_NAME": "Overlay test",
+        "GIT_AUTHOR_EMAIL": "overlay@example.invalid",
+        "GIT_COMMITTER_NAME": "Overlay test",
+        "GIT_COMMITTER_EMAIL": "overlay@example.invalid",
+    }
+    subprocess.run(
+        ["git", "init"],
+        cwd=checkout,
+        env=scrub_git_location_env(env),
+        capture_output=True,
+        check=True,
+    )
+    overlay_path = pathlib.Path(
+        "config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml"
+    )
+    overlay = checkout / overlay_path
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text("schema: review_voters_overlay.v1\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", str(overlay_path)],
+        cwd=checkout,
+        env=scrub_git_location_env(env),
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "Add voters overlay"],
+        cwd=checkout,
+        env=scrub_git_location_env(env),
+        capture_output=True,
+        check=True,
+    )
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=checkout,
+        env=scrub_git_location_env(env),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    proc = subprocess.run(
+        [
+            "bash",
+            "-c",
+            str(
+                _named_step(workflow, "Place the CI overlay outside the workspace")[
+                    "run"
+                ]
+            ),
+        ],
+        cwd=workspace,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(tmp_path),
+            "OVERLAY_SOURCE": "OmniNode-ai/overlay",
+            "EXPECTED_OVERLAY_REF": sha if expected_ref is None else expected_ref,
+            "REVIEW_VOTERS_OVERLAY": str(
+                workspace / ".." / "ci-overlay" / overlay_path
+            ),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.returncode, proc.stdout, sha
+
+
+def test_the_overlay_is_read_only_at_the_pinned_commit(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    """The fetched HEAD must match the pin before voters can be read."""
+    rc, stdout, sha = _run_place(workflow, tmp_path / "matching", expected_ref=None)
+    assert rc == 0
+    assert sha in stdout
+    rc, stdout, _ = _run_place(
+        workflow, tmp_path / "mismatching", expected_ref="0" * 40
+    )
+    assert rc == 1
+    assert "not the pinned OMNI_CI_OVERLAY_REF" in stdout
+
+
+def test_the_place_step_has_no_expression_interpolation(
+    workflow: dict[object, object],
+) -> None:
+    """The placement script runs as plain bash with environment inputs."""
+    step = _named_step(workflow, "Place the CI overlay outside the workspace")
+    assert "${{" not in str(step["run"])
 
 
 def test_dependency_clones_are_pinned_and_review_install_excludes_rl(

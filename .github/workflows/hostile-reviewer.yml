@@ -11,12 +11,17 @@
 # no lab or deployment configuration in a shipped repository; CI is configured
 # by an overlay supplied by whoever runs it). The org Actions variable
 # OMNI_CI_OVERLAY_REPO names a private repository of this owner; the node
-# overlay of node_review_voters_overlay_compute in it is fetched at run time.
-# Unset (a fork or a customer), the neutral default applies: no review voters
-# configured, and the gate fails closed saying so. THIS FILE NAMES NO VOTER,
-# ENDPOINT, MODEL OR NETWORK: changing or adding a voter is an edit to that
-# overlay, and the next run of this gate uses it with no workflow, variable or
-# pin change. Private diffs go only to the voters the overlay declares. A
+# overlay of node_review_voters_overlay_compute in it is fetched at the exact
+# commit OMNI_CI_OVERLAY_REF names (OMN-20910). If that variable is unset or
+# not a full 40-hex lowercase sha, the gate fails closed naming the variable.
+# OMNI_CI_OVERLAY_REPO unset (a fork or a customer): the neutral default applies,
+# no review voters configured, and the gate fails closed saying so. THIS FILE
+# NAMES NO VOTER, ENDPOINT, MODEL OR NETWORK: changing or adding a voter is a
+# commit to that overlay plus an update of OMNI_CI_OVERLAY_REF, with no
+# workflow PR in any repo. An unpinned default-branch read would let anyone
+# who can push there change the voters a private diff is sent to with no
+# reviewed change here. Private diffs go only to the voters the pinned
+# overlay declares. A
 # required voter that is unreachable or fails is named, one voter is no quorum,
 # and the job fails closed. Codex is not a voter (OMN-8524); a voter of any kind is
 # added in the overlay.
@@ -236,16 +241,21 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat ../ci-overlay
 
-      # OMN-20923: the roster is read from the CI overlay at its default
-      # branch, deliberately unpinned: it is DATA, validated by
-      # omniintelligence's resolver on every run, and nothing from it is
-      # executed. It is placed outside the workspace, so a pull request cannot
+      # OMN-20910: the roster is read at the exact commit OMNI_CI_OVERLAY_REF
+      # names. Unset or not a full lowercase sha, the gate fails closed naming
+      # the variable. An unpinned default-branch read would let anyone who can
+      # push to the overlay repository's default branch change the voters a
+      # private diff is sent to with no reviewed change here. Changing or
+      # adding a voter is an overlay commit plus an OMNI_CI_OVERLAY_REF update,
+      # with no workflow PR in any repo. The data is validated by the resolver
+      # and placed outside the workspace (OMN-20923), so a pull request cannot
       # supply the voters that review it.
       - name: Resolve the CI overlay
         id: ci-overlay
         working-directory: ${{ github.workspace }}
         env:
           CI_OVERLAY_REPO: ${{ vars.OMNI_CI_OVERLAY_REPO }}
+          CI_OVERLAY_REF: ${{ vars.OMNI_CI_OVERLAY_REF }}
         run: |
           set -euo pipefail
           if [ -z "${CI_OVERLAY_REPO}" ]; then
@@ -256,7 +266,18 @@ jobs:
             echo "::error::OMNI_CI_OVERLAY_REPO must be a bare repository name, got '${CI_OVERLAY_REPO}'"
             exit 1
           fi
-          echo "name=${CI_OVERLAY_REPO}" >> "$GITHUB_OUTPUT"
+          if [ -z "${CI_OVERLAY_REF}" ]; then
+            echo "::error::OMNI_CI_OVERLAY_REF is unset: the CI overlay ${CI_OVERLAY_REPO} is read only at a pinned commit, so set the org Actions variable OMNI_CI_OVERLAY_REF to the full 40-hex commit sha of ${CI_OVERLAY_REPO} that carries config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml. The gate fails closed."
+            exit 1
+          fi
+          if [[ ! "${CI_OVERLAY_REF}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::OMNI_CI_OVERLAY_REF must be a full 40-hex lowercase commit sha, got '${CI_OVERLAY_REF}'; a branch, tag or short sha is refused because the voters could change without the pin changing"
+            exit 1
+          fi
+          {
+            echo "name=${CI_OVERLAY_REPO}"
+            echo "ref=${CI_OVERLAY_REF}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Mint a read-only CI overlay token
         id: ci-overlay-token
@@ -268,12 +289,13 @@ jobs:
           repositories: ${{ steps.ci-overlay.outputs.name }}
           permission-contents: read
 
-      # The CI overlay is data read at its default branch and validated by the
-      # resolver (OMN-20923).
+      # Read only the exact commit OMNI_CI_OVERLAY_REF names (OMN-20910).
+      # The resolver validates the pinned overlay data (OMN-20923).
       - name: Fetch the CI overlay
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }}
+          ref: ${{ steps.ci-overlay.outputs.ref }}
           token: ${{ steps.ci-overlay-token.outputs.token }}
           path: .ci-overlay-checkout
           persist-credentials: false
@@ -283,11 +305,19 @@ jobs:
 
       - name: Place the CI overlay outside the workspace
         working-directory: ${{ github.workspace }}
+        env:
+          OVERLAY_SOURCE: ${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }}
+          EXPECTED_OVERLAY_REF: ${{ steps.ci-overlay.outputs.ref }}
         run: |
           set -euo pipefail
           rm -rf ../ci-overlay
           mv .ci-overlay-checkout ../ci-overlay
-          echo "CI overlay read from ${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }} at $(git -C ../ci-overlay rev-parse HEAD)"
+          FETCHED_REF="$(git -C ../ci-overlay rev-parse HEAD)"
+          echo "CI overlay read from ${OVERLAY_SOURCE} at ${FETCHED_REF}"
+          if [ "${FETCHED_REF}" != "${EXPECTED_OVERLAY_REF}" ]; then
+            echo "::error::the CI overlay checkout is at ${FETCHED_REF}, not the pinned OMNI_CI_OVERLAY_REF ${EXPECTED_OVERLAY_REF}; refusing to read voters from it"
+            exit 1
+          fi
           if [ ! -s "$REVIEW_VOTERS_OVERLAY" ]; then
             echo "::error::the CI overlay carries no config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml; no voter can be resolved"
             exit 1
