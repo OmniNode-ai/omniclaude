@@ -634,7 +634,7 @@ def capture(
     # span the store did not take crosses as the marker.
     sink = (
         None
-        if resolver.load_contract().secret_reference is None
+        if resolver.load_contract().reference is None
         else StoreSink(session_id=session)
     )
 

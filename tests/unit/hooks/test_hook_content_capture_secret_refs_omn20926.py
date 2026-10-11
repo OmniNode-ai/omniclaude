@@ -48,7 +48,7 @@ REFERENCE_KEY = b"FAKE-reference-key"
 
 
 def _reference() -> Any:
-    reference = load_contract().secret_reference
+    reference = load_contract().reference
     assert reference is not None
     return reference
 

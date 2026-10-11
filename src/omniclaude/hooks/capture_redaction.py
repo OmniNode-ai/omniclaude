@@ -249,9 +249,10 @@ class RedactionContract:
     redaction_state_field: str
     #: Replacement text for one scrubbed span; ``{name}`` is the pattern name.
     scrub_marker: str | None = None
-    #: OMN-20926. ``None`` in a contract that declares no reference, in which
+    #: OMN-20926: the contract's ``secret_reference`` block. ``None`` in a
+    #: contract that declares no reference, in which
     #: case every scrub behaves exactly as it did before references existed.
-    secret_reference: SecretReference | None = None
+    reference: SecretReference | None = None
 
 
 def default_contract_path() -> Path:
@@ -595,9 +596,7 @@ def _parse(raw: object, *, source: Path) -> RedactionContract:
 
     return RedactionContract(
         scrub_marker=scrub_marker,
-        secret_reference=_parse_secret_reference(
-            raw.get("secret_reference"), source=source
-        ),
+        reference=_parse_secret_reference(raw.get("secret_reference"), source=source),
         default_field_class=_capture_class(
             _require(raw, "default_field_class", source),
             source=source,
@@ -713,18 +712,14 @@ def _matches_secret(value: object, contract: RedactionContract) -> str | None:
 
 def reference_spans(text: str, contract: RedactionContract) -> list[tuple[int, int]]:
     """The spans of every secret reference in ``text`` (OMN-20926)."""
-    if contract.secret_reference is None:
+    if contract.reference is None:
         return []
-    return [m.span() for m in contract.secret_reference.pattern.finditer(text)]
+    return [m.span() for m in contract.reference.pattern.finditer(text)]
 
 
 def value_span(match: re.Match[str], contract: RedactionContract) -> tuple[int, int]:
     """The span of the secret inside one match: its value group, else all of it."""
-    group = (
-        None
-        if contract.secret_reference is None
-        else contract.secret_reference.value_group
-    )
+    group = None if contract.reference is None else contract.reference.value_group
     if group is not None and group in match.re.groupindex:
         start, end = match.span(group)
         if start >= 0:
@@ -791,7 +786,7 @@ def _scrub_str(
     tally: _StoreTally | None = None,
 ) -> str:
     marker = contract.scrub_marker or ""
-    reference = contract.secret_reference
+    reference = contract.reference
     for name, pattern in contract.secret_patterns:
         # The marker is contract text, inserted literally: a function
         # replacement never reads it as a regex back-reference.

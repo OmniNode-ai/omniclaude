@@ -290,12 +290,12 @@ def _resolved_posture(contract_path: Path) -> dict[str, Any]:
         # one side scrub what the other side minted.
         "secret_reference": (
             None
-            if contract.secret_reference is None
+            if contract.reference is None
             else (
-                contract.secret_reference.pattern.pattern,
-                contract.secret_reference.template,
-                contract.secret_reference.store_key_template,
-                contract.secret_reference.value_group,
+                contract.reference.pattern.pattern,
+                contract.reference.template,
+                contract.reference.store_key_template,
+                contract.reference.value_group,
             )
         ),
     }
