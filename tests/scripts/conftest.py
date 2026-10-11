@@ -58,3 +58,27 @@ def lane_registry_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv(li.WORKSPACE_ENV, str(root))
     assert os.environ[li.WORKSPACE_ENV] == str(root)
     return root
+
+
+# The gh shim's lane read guard (OMN-20911) walks the caller's ancestors with
+# `ps -o ppid= -o comm=`, and a suite run from a Claude Code session has Claude
+# Code among its real ancestors while the same suite in CI does not. A suite
+# that means "not a lane" or "a lane by ancestry" says so by putting this fake
+# ps ahead of the real one: it answers that ancestry query with one parent and
+# init, and hands every other ps query to the real ps unchanged.
+def install_ancestry_ps(bin_dir: Path, ancestor_comm: str = "/usr/sbin/cron") -> Path:
+    ps = bin_dir / "ps"
+    ps.write_text(
+        "#!/bin/bash\n"
+        'case " $* " in\n'
+        f"  *\" comm= \"*) printf '1 %s\\n' {_sh_quote(ancestor_comm)}; exit 0 ;;\n"
+        "esac\n"
+        'for _p in /bin/ps /usr/bin/ps; do [ -x "$_p" ] && exec "$_p" "$@"; done\n'
+        "exit 1\n"
+    )
+    ps.chmod(0o755)
+    return ps
+
+
+def _sh_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\"'\"'") + "'"
