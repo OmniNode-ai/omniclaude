@@ -593,7 +593,10 @@ def test_a_write_with_no_onex_scm_operation_stays_allowed(
 @pytest.mark.unit
 def test_reads_are_untouched(env: dict[str, str]) -> None:
     listed = ["pr", "list", "--repo", ENFORCED]
-    _assert_passed(env, _run(env, *listed), listed)
+    listed_result = _run(env, *listed)
+    assert listed_result.returncode == 1
+    assert listed_result.stderr.startswith("REFUSED (OMN-20911): ")
+    assert _calls(env) == [], "a refused lane read must never reach the real gh"
 
     state = _run(env, "pr", "view", "9", "--repo", ENFORCED)
     assert state.returncode == 1
