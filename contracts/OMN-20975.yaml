@@ -1,0 +1,45 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20975
+title: "OCC retirement S6 (omniclaude): end the repo-evidence OCC comparison on dev"
+summary: >-
+  End the completed S5 comparison before the S6 cut-over removes its OCC result
+  producer. The base-branch caller changes only compare-with-occ and its S5
+  comment; shadow, the verifier version and reusable pin stay unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20975-comparison-precursor
+    statement: The dev base-branch caller must stop comparing with OCC before S6.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: dev caller passes compare-with-occ "false"; falsifier: a tests/ci pytest file parsing the caller fails at the merge base.'
+      - id: AC2
+        statement: 'AC2: every other caller input, shadow and uses pin stay equal to the merge base; only compare-with-occ and its S5 comment change; falsifier: the same pytest file compares every other input, the uses pin and remaining workflow to the merge base.'
+evidence_requirements:
+  - kind: tests
+    description: The caller stops comparing; every other line outside the S5 comment matches the captured dev merge base.
+    command: uv run --no-project --with pytest --with pyyaml --with pytest-cov --with python-dotenv python -m pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20975-ac1
+    description: The parsed caller passes the false string and fails this test at the merge base.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py
+        command: uv run --no-project --with pytest --with pyyaml --with pytest-cov --with python-dotenv python -m pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn20975-ac2
+    description: The test compares every other input and the uses pin to the captured merge base and checks every other byte outside the S5 comment.
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py
+        command: uv run --no-project --with pytest --with pyyaml --with pytest-cov --with python-dotenv python -m pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
