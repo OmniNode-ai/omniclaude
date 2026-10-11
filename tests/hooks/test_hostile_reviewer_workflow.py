@@ -194,6 +194,11 @@ def voter_endpoint_findings(text: str) -> list[str]:
 def test_the_voter_endpoint_ratchet_finds_every_known_bad_line() -> None:
     """Positive control: the zero below is only evidence if this finds four."""
     assert len(voter_endpoint_findings(_KNOWN_BAD)) == 4
+    # Each pattern needs its own control: a count alone survives a broken pattern
+    # whenever another pattern matches the same line.
+    lines = _KNOWN_BAD.splitlines()
+    for pattern in _VOTER_ENDPOINT_PATTERNS:
+        assert any(pattern.search(line) for line in lines), pattern.pattern
 
 
 def test_workflow_names_no_voter_endpoint_or_model() -> None:
