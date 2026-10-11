@@ -4339,7 +4339,7 @@ jobs:
       }}
     if: needs.occ-preflight.result == 'success'
     steps:
-      - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@47342e562a516b0278e22a974f35cbf2a64b33eb
+      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@de3398d1fcf7a6f48451f680b74b1a6c6c383b8a # omnibase_core dev (OMN-20964)
         with:
           checks: "boundary-parity"
           warn-only: "false"
