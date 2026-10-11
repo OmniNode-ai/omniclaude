@@ -491,7 +491,9 @@ def test_hooks_json_is_narrowed_option_a_baseline() -> None:
     matchers = [group.get("matcher", "") for group in hooks["PreToolUse"]]
     assert matchers == [
         "^mcp__linear-server__(save_issue|update_issue)$",
-        "Bash",
+        # OMN-20916: the Bash guards entrypoint also runs the lane GitHub read
+        # check on the GitHub MCP tools, and only that check there.
+        "^(Bash|mcp__.*[Gg]it[Hh]ub.*)$",
         "^(Workflow|Agent)$",
         "^(Task|Agent|Workflow)$",
         "^SendMessage$",

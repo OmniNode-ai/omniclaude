@@ -49,6 +49,7 @@ non-dev-base-guard
 Omni Standards Gate
 ONEX Compliance
 pr-title / check-title
+pypi-pin-resolvability
 Quality Gate
 reason-graph
 receipt-honesty

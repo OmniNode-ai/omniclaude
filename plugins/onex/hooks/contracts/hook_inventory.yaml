@@ -272,7 +272,7 @@ expected_hooks:
 
   - script: "pre_tool_use_bash_guards.sh"
     event: "PreToolUse"
-    matcher: "Bash"
+    matcher: "^(Bash|mcp__.*[Gg]it[Hh]ub.*)$"
     order: 2
     ticket: "OMN-20118"
     owner: "omniclaude hooks lane"
@@ -292,7 +292,14 @@ expected_hooks:
       one interpreter per guard. The per-guard scripts stay on disk, reached
       from this one, and each still runs on its own.
       tests/hooks_system/test_bash_guards_differential.py proves every
-      decision identical to the seven separate registrations.
+      decision identical to the seven separate registrations. Ahead of the
+      seven, the lane GitHub read check (OMN-20916, RULING
+      2026-10-10T18:17:36Z) hands a call that could be a GitHub read around
+      the gh shim -- a GitHub MCP tool, a command naming api.github.com, a gh
+      run by its path -- to node_lane_github_read_guard_effect, which refuses
+      it from a lane and names the local reader. The matcher covers the GitHub
+      MCP tools for that check alone; such a call never reaches the seven.
+      tests/hooks/test_lane_github_read_guard_hook.py.
     enforcement: true
     on_failure: "block"
     lite_mode_exit: false

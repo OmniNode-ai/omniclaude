@@ -310,6 +310,12 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     "Lane Identity Gate",  # lane-identity-gate.yml
     "advisory-job-gate / advisory-job-gate",  # advisory-job-gate.yml
     "kb-doc-gate / kb-doc-gate",  # kb-doc-gate.yml
+    # OMN-20958. Live-required on `dev` since 2026-09-26 (OMN-19655) with no
+    # L4 row; it surfaced when this change refreshed the required-context
+    # snapshot. pin-resolvability-gate.yml has no paths filter and no job-level
+    # `if:`. Admission: present on 30 of 30 open omniclaude PR heads in the PR
+    # watcher state of 2026-10-10T10:16:53Z (#2566..#2652), red on none.
+    "pypi-pin-resolvability",  # pin-resolvability-gate.yml
 )
 # NOTE: "Hostile Review Gate" (hostile-reviewer.yml) is intentionally absent
 # from EXPECTED_EXTERNAL_CONTEXTS. It is already directly required by branch

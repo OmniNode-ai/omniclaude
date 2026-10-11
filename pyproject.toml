@@ -140,6 +140,7 @@ node_hook_refusal_record_effect = "omniclaude.nodes.node_hook_refusal_record_eff
 node_github_pr_watcher_effect = "omniclaude.nodes.node_github_pr_watcher_effect"
 node_linear_effect = "omniclaude.nodes.node_linear_effect"
 node_pr_ownership_guard_effect = "omniclaude.nodes.node_pr_ownership_guard_effect"
+node_lane_github_read_guard_effect = "omniclaude.nodes.node_lane_github_read_guard_effect"
 node_local_coding_orchestrator = "omniclaude.nodes.node_local_coding_orchestrator"
 node_local_llm_inference_effect = "omniclaude.nodes.node_local_llm_inference_effect"
 node_pattern_persistence_effect = "omniclaude.nodes.node_pattern_persistence_effect"
@@ -267,7 +268,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@1b1041574e98645068fab28d6f5ca4fd9328674b",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@cf8c00038078ffae481a4c4bf6431ca2e7f3053a",
 ]
 
 [tool.uv.sources]
@@ -313,7 +314,7 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 #
 # So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
 # on workflow_dispatch and review the bot PR.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "1b1041574e98645068fab28d6f5ca4fd9328674b" }  # pragma: allowlist secret
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "cf8c00038078ffae481a4c4bf6431ca2e7f3053a" }  # pragma: allowlist secret
 
 # OMN-18752: which surface decides the commit a git-sourced sibling must carry.
 # `clone` is claimed only where something enforces it. omnimarket's in-process
