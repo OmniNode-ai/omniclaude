@@ -529,6 +529,44 @@ def test_gateway_budget_holds_under_concurrent_misses(
 
 
 @pytest.mark.unit
+def test_gateway_never_serves_a_placeholder_endpoint(env: dict[str, str]) -> None:
+    """repos/{owner}/{repo}/... resolves from GH_REPO or the working directory, which the
+    cache key cannot see, so it is not a gateway shape: a lane is refused, not served
+    another repository's cached commit."""
+    argv = ["api", f"repos/{{owner}}/{{repo}}/commits/{FULL_SHA}"]
+    result = _run(
+        env, *argv, extra={"ONEX_LANE": "lane", "GH_REPO": "OmniNode-ai/omniclaude"}
+    )
+    _assert_lane_refused(env, result)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("argv", "refetched"),
+    [
+        (["run", "view", "123", "--repo", "o/r", "--log-failed"], True),
+        (
+            ["run", "view", "123", "--repo", "o/r", "--log-failed", "--attempt", "1"],
+            False,
+        ),
+        (["run", "view", "--job", "555", "--repo", "o/r", "--log-failed"], False),
+    ],
+    ids=["latest-attempt", "explicit-attempt", "job"],
+)
+def test_gateway_latest_attempt_log_expires_after_a_rerun_window(
+    env: dict[str, str], tmp_path: Path, argv: list[str], refetched: bool
+) -> None:
+    """A run log with no --attempt or --job is the latest attempt, which a rerun replaces,
+    so it is held five minutes; a named attempt or job keeps the full TTL."""
+    lane = {"ONEX_LANE": "lane", "FAKE_GH_STDOUT": "the log"}
+    assert _run(env, *argv, extra=lane).returncode == 0
+    for meta in (tmp_path / "cache" / "omni" / "gh-shim" / "gateway").glob("*.meta"):
+        meta.write_text(f"{int(meta.read_text().strip()) - 400}\n")
+    assert _run(env, *argv, extra=lane).returncode == 0
+    assert len(_calls(env)) == (2 if refetched else 1)
+
+
+@pytest.mark.unit
 def test_gateway_refuses_when_it_cannot_count_the_read(
     env: dict[str, str], tmp_path: Path
 ) -> None:
