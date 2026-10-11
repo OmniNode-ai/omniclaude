@@ -14,8 +14,9 @@ Two layers, because CI runs on Linux and cannot run bash 3.2:
 
 * a static scan, run everywhere, that refuses any quote character (``'``,
   ``"`` or a backtick) in a comment that sits inside an open ``$(``;
-* ``/bin/bash -n`` over every script when the runner is macOS, which is the
-  ground truth the static scan approximates.
+* ``bash -n`` over every script, which is ``/bin/bash`` 3.2 when the runner is
+  macOS (the ground truth the static scan approximates) and the PATH bash
+  elsewhere. Neither leg is skipped on any platform.
 
 The positive controls prove the scan fires on the exact pre-image that
 caused the outage, so a zero-finding run is evidence and not a broken scan.
@@ -24,6 +25,7 @@ caused the outage, so a zero-finding run is evidence and not a broken scan.
 from __future__ import annotations
 
 import platform
+import shutil
 import subprocess
 from pathlib import Path
 from typing import NamedTuple
@@ -272,15 +274,29 @@ def test_no_hook_script_has_a_quote_in_a_comment_inside_command_substitution() -
     )
 
 
-@pytest.mark.skipif(
-    platform.system() != "Darwin" or not MAC_BASH.exists(),
-    reason="/bin/bash 3.2 exists only on macOS; the static scan covers Linux",
-)
-def test_every_hook_script_parses_under_mac_bin_bash() -> None:
+def _parse_bash() -> Path:
+    """The bash that parses the scripts: /bin/bash 3.2 on macOS, else the PATH bash.
+
+    The legs below used to be ``skipif`` off macOS. A test that is collected and
+    never executed on the Linux runner proves nothing and grows the skip-count
+    baseline, so each leg now runs everywhere and states what it proves on the
+    platform it runs on.
+    """
+    if platform.system() == "Darwin" and MAC_BASH.exists():
+        return MAC_BASH
+    found = shutil.which("bash")
+    assert found, "no bash on PATH: the hook scripts cannot be parsed at all"
+    return Path(found)
+
+
+def test_every_hook_script_parses_under_the_platform_bash() -> None:
+    # macOS: /bin/bash 3.2, the ground truth the static scan approximates.
+    # Elsewhere: the PATH bash, which still refuses a script with a real syntax error.
+    bash = _parse_bash()
     failures: list[str] = []
     for path in hook_shell_scripts():
         proc = subprocess.run(
-            [str(MAC_BASH), "-n", str(path)],
+            [str(bash), "-n", str(path)],
             capture_output=True,
             text=True,
             check=False,
@@ -291,19 +307,24 @@ def test_every_hook_script_parses_under_mac_bin_bash() -> None:
     assert not failures, "\n".join(failures)
 
 
-@pytest.mark.skipif(
-    platform.system() != "Darwin" or not MAC_BASH.exists(),
-    reason="/bin/bash 3.2 exists only on macOS",
-)
-def test_mac_bin_bash_refuses_the_outage_preimage(tmp_path: Path) -> None:
-    # Positive control for the macOS leg: the pre-image must fail to parse.
+def test_the_outage_preimage_is_refused_by_mac_bash_and_accepted_elsewhere(
+    tmp_path: Path,
+) -> None:
+    # Positive control for the parse leg. On macOS the pre-image must fail under
+    # /bin/bash 3.2. On any other bash it parses, which is the whole reason CI
+    # cannot see this outage and the static scan above exists; the scan firing on
+    # the same text is asserted in test_scan_fires_on_the_outage_preimage.
+    bash = _parse_bash()
     script = tmp_path / "preimage.sh"
     script.write_text(OUTAGE_PREIMAGE, encoding="utf-8")
     proc = subprocess.run(
-        [str(MAC_BASH), "-n", str(script)],
+        [str(bash), "-n", str(script)],
         capture_output=True,
         text=True,
         check=False,
         timeout=30,
     )
-    assert proc.returncode != 0, proc.stderr
+    if bash == MAC_BASH:
+        assert proc.returncode != 0, proc.stderr
+    else:
+        assert proc.returncode == 0, proc.stderr
