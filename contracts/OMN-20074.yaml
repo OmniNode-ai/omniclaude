@@ -14,7 +14,7 @@ requirements:
     acceptance:
       - id: "AC1"
         statement: |-
-          AC1: the caller pins receipt-gate.yml at fb0c6c2117d5868a398b0920cd0048d0824415b1 and sets verifier-version 0.4.305 or newer -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k another_repo
+          AC1: the caller pins receipt-gate.yml at 4e4f5e0404d364e296c5d37db6aa3ab9e07f8ffa (omnibase_core#1932, a descendant of #1914) and sets verifier-version 0.4.305 or newer -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k another_repo
   - id: "req-omn20074-dev-head-monitor-host"
     statement: |-
       The dev-head monitor must survive the deletion of occ-companion-merge-heal.yml by running from a non-OCC scheduled workflow with its own cadence and grants.
@@ -42,6 +42,13 @@ requirements:
       - id: "AC5"
         statement: |-
           AC5: no-hardcoded-topics and no-untracked-todos are listed in .pre-commit-config.yaml only under an omnibase_core repo block pinned to a full commit sha or release tag, with their stages and the topic hook's exclude carried over byte for byte -- falsifier: uv run pytest tests/ci/test_precommit_hooks_core_omn20074.py -q --no-cov fails at the merge base
+  - id: "req-omn20074-writer-app-classifiers"
+    statement: |-
+      omniclaude's repo-evidence caller must run the reusable and verifier that hand a writer app plugin version bump and an omnibase_core checkout pin bump to their classifiers, and every repo contract must load under that verifier's strict YAML loader.
+    acceptance:
+      - id: "AC6"
+        statement: |-
+          AC6: the caller pins receipt-gate.yml at 4e4f5e0404d364e296c5d37db6aa3ab9e07f8ffa and sets verifier-version 0.4.310 or newer, and no contracts/*.yaml repeats a mapping key -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q --no-cov -k "writer_app or duplicate_key" fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -58,6 +65,9 @@ evidence_requirements:
   - kind: tests
     description: "The topic and TODO hooks are consumed from the omnibase_core hook block, pinned to a full sha."
     command: "uv run pytest tests/ci/test_precommit_hooks_core_omn20074.py -q --no-cov"
+  - kind: tests
+    description: "The caller pins the reusable and verifier carrying the writer app classifiers, and every repo contract loads with no duplicate mapping key."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q --no-cov -k \"writer_app or duplicate_key\""
 emergency_bypass:
   enabled: false
   justification: ""
@@ -102,3 +112,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_precommit_hooks_core_omn20074.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC5"]
+  - id: dod-omn20074-writer-app-classifiers
+    description: "The focused caller test proves the omnibase_core#1932 pin, the verifier 0.4.310 floor and a contracts directory with no duplicate mapping key."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q --no-cov -k \"writer_app or duplicate_key\""
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC6"]

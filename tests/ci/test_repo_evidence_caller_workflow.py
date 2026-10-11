@@ -28,15 +28,23 @@ CALLER_PATH = REPO_ROOT / ".github" / "workflows" / "call-repo-evidence-gate.yml
 # First release whose wheel ships node_dod_verify occ-difference, omnimarket#3277.
 _DIFFERENCE_CLASSIFIER_FLOOR = (0, 4, 294)
 
-# OMN-20074: the receipt-gate pin every other caller of the fleet uses, the
-# squash commit of omnibase_core#1914 on dev. It carries omnibase_core#1912,
-# whose head step writes the contract-home marker the difference step needs to
-# name a contract that lives in another repository.
-_FLEET_RECEIPT_GATE_PIN = "fb0c6c2117d5868a398b0920cd0048d0824415b1"
+# OMN-20074: the receipt-gate pin omnimarket's caller uses, the squash commit of
+# omnibase_core#1932 on dev. It descends from omnibase_core#1914 and #1912, whose
+# head step writes the contract-home marker the difference step needs to name a
+# contract that lives in another repository, and it adds the writer app's
+# workflow-pin (#1927) and plugin version bump (#1931) classification.
+_FLEET_RECEIPT_GATE_PIN = "4e4f5e0404d364e296c5d37db6aa3ab9e07f8ffa"
 
 # First release whose wheel reads that marker and reports
 # contract_in_another_repo, omnimarket#3563.
 _CONTRACT_HOME_CLASSIFIER_FLOOR = (0, 4, 305)
+
+# First release whose wheel ships classify_plugin_manifest_version_only and
+# classify_workflow_core_pin_only (omnimarket#3694), the classifiers the pinned
+# reusable hands a writer app plugin version bump and an omnibase_core checkout
+# pin bump to. It also ships omnimarket#3751: node_dod_verify refuses a contract
+# YAML that repeats a mapping key.
+_WRITER_APP_CLASSIFIER_FLOOR = (0, 4, 310)
 
 
 def test_caller_workflow_shape() -> None:
@@ -111,13 +119,70 @@ def test_caller_pins_the_reusable_that_classifies_a_contract_in_another_repo() -
     pin = job["uses"].rsplit("@", 1)[1]
     assert pin == _FLEET_RECEIPT_GATE_PIN, (
         f"receipt-gate must be pinned at {_FLEET_RECEIPT_GATE_PIN} "
-        f"(omnibase_core#1914), the pin the other callers use; found {pin}"
+        f"(omnibase_core#1932, a descendant of #1914); found {pin}"
     )
     version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
     assert version >= _CONTRACT_HOME_CLASSIFIER_FLOOR, (
         "verifier-version must read the contract-home marker "
         f"(>= {'.'.join(map(str, _CONTRACT_HOME_CLASSIFIER_FLOOR))})"
     )
+
+
+def test_caller_runs_the_writer_app_classifiers_of_verifier_0_4_310() -> None:
+    """OMN-20074: writer app plugin bumps and core pin bumps must classify.
+
+    At omnibase_core#1914 with verifier 0.4.305 the reusable hands neither a
+    .claude-plugin manifest version bump nor an omnibase_core checkout pin bump
+    to a classifier, so the S5 count printed those writer app pull requests as
+    differences instead of the expected_difference the plan names.
+    """
+    job = yaml.safe_load(CALLER_PATH.read_text(encoding="utf-8"))["jobs"][
+        "repo-evidence"
+    ]
+    pin = job["uses"].rsplit("@", 1)[1]
+    assert pin == _FLEET_RECEIPT_GATE_PIN, (
+        f"receipt-gate must be pinned at {_FLEET_RECEIPT_GATE_PIN} "
+        f"(omnibase_core#1932, the writer app classifier hand-off); found {pin}"
+    )
+    version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
+    assert version >= _WRITER_APP_CLASSIFIER_FLOOR, (
+        "verifier-version must ship the writer app plugin manifest and workflow "
+        f"pin classifiers (>= {'.'.join(map(str, _WRITER_APP_CLASSIFIER_FLOOR))})"
+    )
+
+
+def _duplicate_key_refusals(root: Path) -> list[str]:
+    from omnibase_core.utils.util_safe_yaml_loader import (
+        load_yaml_mapping_no_duplicates,
+    )
+
+    refusals: list[str] = []
+    for path in sorted((root / "contracts").glob("*.yaml")):
+        try:
+            load_yaml_mapping_no_duplicates(
+                path.read_text(encoding="utf-8"), source=str(path.relative_to(root))
+            )
+        except Exception as exc:
+            refusals.append(str(exc))
+    return refusals
+
+
+def test_every_repo_contract_loads_without_a_duplicate_key() -> None:
+    """The pinned verifier loads contracts with the strict loader (omnimarket#3751)."""
+    assert _duplicate_key_refusals(REPO_ROOT) == []
+
+
+def test_duplicate_key_scan_names_a_planted_duplicate(tmp_path: Path) -> None:
+    contracts = tmp_path / "contracts"
+    contracts.mkdir()
+    (contracts / "OMN-1.yaml").write_text(
+        "ticket_id: OMN-1\ndod_evidence: []\nticket_id: OMN-2\n", encoding="utf-8"
+    )
+    (contracts / "OMN-2.yaml").write_text("ticket_id: OMN-2\n", encoding="utf-8")
+    refusals = _duplicate_key_refusals(tmp_path)
+    assert len(refusals) == 1
+    assert "contracts/OMN-1.yaml:3" in refusals[0]
+    assert "ticket_id" in refusals[0]
 
 
 def test_every_repo_contract_binds_every_criterion() -> None:
