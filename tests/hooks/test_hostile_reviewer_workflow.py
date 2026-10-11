@@ -5,8 +5,8 @@
 Asserts that ``.github/workflows/hostile-reviewer.yml`` is wired correctly:
 
 - Triggers on the expected ``pull_request`` event types.
-- Runs on the ``omnibase-ci`` self-hosted runner that exposes the local
-  DeepSeek-R1 endpoint.
+- Runs on the ``omnibase-ci`` self-hosted runner that reaches the voters'
+  private network.
 - Invokes ``omniintelligence.review_pairing.cli_review`` with the review
   voters contract overlay and names no voter endpoint or model (OMN-20910).
 - Defines a ``hostile-review-gate`` job that depends on ``hostile-review``
@@ -82,9 +82,9 @@ def test_workflow_triggers_on_pull_request(workflow: dict[object, object]) -> No
 def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -> None:
     """The review job must run on the self-hosted ``omnibase-ci`` runner.
 
-    The DeepSeek-R1 endpoint at .201:8001 is LAN-only — GitHub-hosted
-    runners cannot reach it. This is the fundamental constraint that drove
-    OMN-8603 (runner toolchain) and pins the gate to .201.
+    The review voters sit on a private network and are LAN-only — GitHub-hosted
+    runners cannot reach them. This is the fundamental constraint that drove
+    OMN-8603 (runner toolchain) and pins the gate to the self-hosted fleet.
     """
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict), "workflow must define jobs"
@@ -97,8 +97,8 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
         labels = set(runs_on)
         assert "self-hosted" in labels, "runner must be self-hosted"
         assert "omnibase-ci" in labels, (
-            "runner label must include 'omnibase-ci' so the .201 LAN endpoints "
-            "(LLM_DEEPSEEK_URL) are reachable"
+            "runner label must include 'omnibase-ci' so the private-network voter "
+            "endpoints are reachable"
         )
         return
 
@@ -118,7 +118,7 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
         """'["self-hosted","omnibase-ci"]'""" in runs_on
     ), (
         "same-repo review runs must resolve to the self-hosted omnibase-ci "
-        "labels so the LAN-only DeepSeek endpoint is reachable, through the "
+        "labels so the LAN-only voter endpoints are reachable, through the "
         "dedicated OMNI_HOSTILE_REVIEW_RUNS_ON_JSON knob"
     )
 
@@ -126,7 +126,7 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
 def test_same_repo_dev_prs_do_not_use_public_runner_branch(
     workflow: dict[object, object],
 ) -> None:
-    """Same-repo dev PRs need the LAN-only DeepSeek endpoint on the trusted runner.
+    """Same-repo dev PRs need the LAN-only voter endpoints on the trusted runner.
 
     Forks may still take the public-runner branch, but a same-repo PR targeting
     dev must not. That exact shape ran on ``ubuntu-latest`` for omniclaude#2181
@@ -174,10 +174,10 @@ _VOTER_ENDPOINT_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 # Positive control: the lines this workflow carried before the overlay.
 _KNOWN_BAD = """\
-          LLM_LOCAL_STUDIO_PLANNER_URL: ${{ vars.LLM_LOCAL_STUDIO_PLANNER_URL }}
-              --model qwen3-review \\
-              --model local-studio-planner \\
-          LLM_LOCAL_STUDIO_PLANNER_URL: "http://studio.lab.example:8131"
+          LLM_EXAMPLE_VOTER_B_URL: ${{ vars.LLM_EXAMPLE_VOTER_B_URL }}
+              --model example-voter-a \\
+              --model example-voter-b \\
+          LLM_EXAMPLE_VOTER_B_URL: "http://voter-b.example.invalid:9002"
 """
 
 
@@ -203,9 +203,7 @@ def test_workflow_names_no_voter_endpoint_or_model() -> None:
         "hostile-reviewer.yml names a review voter endpoint, port or model; "
         f"voters are declared only in the review voters overlay: {findings}"
     )
-    assert "LLM_LOCAL_STUDIO_PLANNER_URL" not in WORKFLOW_PATH.read_text(
-        encoding="utf-8"
-    )
+    assert "LLM_EXAMPLE_VOTER_B_URL" not in WORKFLOW_PATH.read_text(encoding="utf-8")
 
 
 def test_review_step_invokes_cli_review_with_the_voters_overlay(
@@ -712,7 +710,7 @@ def test_verdict_parser_behaviour_on_quorum_payloads(
     mentioning it. These fixtures exercise the four cases that matter, and
     each zero has its positive control beside it.
     """
-    two_models = ["qwen3-review", "local-studio-planner"]
+    two_models = ["example-voter-a", "example-voter-b"]
 
     # One model raised a finding, the other did not: reported, not blocking.
     below = _run_verdict_snippet(
@@ -745,7 +743,7 @@ def test_verdict_parser_behaviour_on_quorum_payloads(
     degraded = _run_verdict_snippet(
         workflow,
         {
-            "models_succeeded": ["qwen3-review"],
+            "models_succeeded": ["example-voter-a"],
             "total_findings": 1,
             "results": [],
             "quorum": {
