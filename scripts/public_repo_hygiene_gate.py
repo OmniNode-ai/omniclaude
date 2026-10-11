@@ -65,6 +65,7 @@ protects against.
 | ``internal-kb-prose``     | content | **never**  |
 | ``public-doc-private-repo`` | content | **never** |
 | ``lab-config``            | content | **never**  |
+| ``deployment-config``     | both    | **never**  |
 | ``person-name``           | content | registry   |
 | ``tracker-url``           | content | registry   |
 | ``secret-shaped``         | content | registry   |
@@ -94,6 +95,38 @@ report line) and every other class runs; a run that requests ``lab-config``
 with ``--only-classes``, or a repo that enforces it, still refuses (exit 2).
 Measured 2026-09-26 on onex_change_control#11491 and #11528, whose required
 CI Summary went red on exit 2 after omniclaude#2373.
+
+``deployment-config`` (OMN-20923) refuses committed deployment configuration
+in a shipped repository. Operator RULING 2026-10-10T21:57:38Z, re-affirming
+2026-09-26, 2026-09-30 and 2026-10-09: "Why are any configuration files,
+including overlays, in the repository? That means all of our consumers,
+everybody who is using our system is now forced to use that." Deployment
+facts come from overlays supplied by whoever runs the system; a shipped
+repository carries the schema, the resolver and a neutral default. Amended
+2026-10-10T22:07:49Z: "This should be in ci." Two halves, both by SHAPE, so
+the class needs no vocabulary, no token and no repo config, and runs on a fork
+pull request with no secrets:
+
+- path: a deployment overlay file (anything under a ``lane-overlays/``
+  directory, any ``*.bifrost.yaml``), unless it is a ``*.example`` file. The
+  Hostile Reviewer roster omnibase_infra#4817 added at
+  ``docker/lane-overlays/hostile-review-voters.yaml`` named no address at all
+  (its voters resolved through ``backend_overlay: dev.bifrost.yaml``), so no
+  content class could see it; this half does.
+- content: in a configuration file (YAML, JSON, TOML, TSV, env, systemd and
+  launchd units, compose files, Dockerfiles, workflow files, examples
+  included), a value that names a private host: an RFC 1918 or CGNAT host
+  address, a private network narrower than /16, or a tailnet name. Comment
+  lines are not values. Tests, fixtures and docs are out of its scope; the
+  other classes still read them.
+
+It runs only as its own targeted check, ``--only-classes deployment-config``,
+never mixed with the vocabulary classes, and a repo config cannot list it in
+``enforce_classes`` (a class the full run does not evaluate would read as
+enforced while enforcing nothing). ``--enforce-scope added-lines`` with a diff
+source fails only what a change adds (a new overlay file, an added line), so a
+pull request is refused for adding deployment configuration while the
+residue it did not add is reported and moved out by its own pull requests.
 
 Bare ``OMN-<digits>`` ticket ids are **not** a class. Operator ruling P3,
 2026-09-06: internal ticket ids in public source are an accepted convention.
@@ -237,6 +270,7 @@ NEVER_EXEMPTABLE: frozenset[str] = frozenset(
         "internal-kb-prose",
         "public-doc-private-repo",
         "lab-config",
+        "deployment-config",
     }
 )
 
@@ -276,6 +310,73 @@ SELECTABLE_CLASSES: frozenset[str] = PATH_CLASSES | CONTENT_CLASSES
 LAB_VOCABULARY_BASENAME = "public_repo_hygiene_lab_vocabulary.yaml"
 
 INFORMATIONAL: frozenset[str] = frozenset({"self-granted-annotation"})
+
+#: OMN-20923: the deployment-config class. Shape only (see the module
+#: docstring), so it runs with no vocabulary and no token, on a fork too.
+DEPLOYMENT_CONFIG_CLASS = "deployment-config"
+#: The classes ``--only-classes`` accepts: every repo-config class plus the
+#: targeted-only deployment-config class.
+ONLY_CLASSES_SELECTABLE: frozenset[str] = SELECTABLE_CLASSES | {DEPLOYMENT_CONFIG_CLASS}
+#: A deployment overlay by path: a ``lane-overlays/`` directory, a
+#: ``*.bifrost.yaml``.
+DEPLOYMENT_OVERLAY_PATH_RE = re.compile(
+    r"(?:^|/)lane-overlays/|\.bifrost\.ya?ml$", re.IGNORECASE
+)
+#: An example file: ``x.example``, ``x.example.yaml``. Exempt from the path
+#: half only; its content is still read, because an example carrying our lab
+#: address is our lab address.
+DEPLOYMENT_EXAMPLE_RE = re.compile(r"\.example(?:\.[A-Za-z0-9]+)?$", re.IGNORECASE)
+#: Where the content half does not look: tests, fixtures and docs, and the
+#: root record trees (ticket contracts with their evidence, drift receipts,
+#: evidence, migration receipts), which record what ran rather than configure
+#: what runs. All of them are still read by the other classes. A node's own
+#: ``contracts/`` directory under ``src/`` is configuration and is read.
+DEPLOYMENT_CONFIG_EXEMPT_RE = re.compile(
+    r"(?:^|/)(?:tests?|fixtures?|testdata|docs?)/|(?:^|/)test_[^/]*$"
+    r"|(?:^|/)conftest\.py$|\.md$|\.rst$"
+    r"|^(?:contracts|drift|evidence)/|(?:^|/)_ledger/receipts/",
+    re.IGNORECASE,
+)
+#: A configuration file, by suffix or by name.
+DEPLOYMENT_CONFIG_SUFFIXES: frozenset[str] = frozenset(
+    {
+        ".yaml",
+        ".yml",
+        ".json",
+        ".toml",
+        ".tsv",
+        ".env",
+        ".conf",
+        ".cfg",
+        ".ini",
+        ".properties",
+        ".service",
+        ".timer",
+        ".socket",
+        ".plist",
+        ".template",
+        ".example",
+    }
+)
+DEPLOYMENT_CONFIG_NAME_RE = re.compile(
+    r"^(?:\.env(?:\..*)?|Dockerfile(?:\..*)?|docker-compose[^/]*)$"
+)
+#: A private host, by shape: an RFC 1918 or CGNAT IPv4 address with an
+#: optional prefix length, or a tailnet name.
+DEPLOYMENT_PRIVATE_ADDRESS_RE = re.compile(
+    r"(?<![\d.])(?P<addr>"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+    r"|192\.168\.\d{1,3}\.\d{1,3}"
+    r"|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+    r"|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}"
+    r")(?:/(?P<prefix>\d{1,2}))?(?![\d.])"
+    r"|\b[a-z0-9-]+\.[a-z0-9-]+\.ts\.net\b",
+    re.IGNORECASE,
+)
+#: A network no wider than this prefix names no host of anyone's lab (a
+#: compose bridge network, a whole RFC 1918 block): not a finding.
+DEPLOYMENT_GENERIC_NETWORK_MAX_PREFIX = 16
+_DEPLOYMENT_COMMENT_PREFIXES = ("#", ";", "//", "<!--", "*")
 
 #: ``enforce_scope`` values (OMN-19835). ``whole-tree`` is the default and the
 #: behaviour every repository had before the key existed.
@@ -1539,6 +1640,104 @@ def resolve_private_repos(owner: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _is_deployment_config_file(rel_path: str) -> bool:
+    if DEPLOYMENT_CONFIG_EXEMPT_RE.search(rel_path):
+        return False
+    name = rel_path.rsplit("/", 1)[-1]
+    if DEPLOYMENT_CONFIG_NAME_RE.match(name):
+        return True
+    if rel_path.startswith(".github/workflows/"):
+        return True
+    suffix = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    return suffix in DEPLOYMENT_CONFIG_SUFFIXES
+
+
+def _deployment_value_text(line: str) -> str:
+    """The part of a configuration line that is a value, not a comment."""
+    stripped = line.strip()
+    if not stripped or stripped.startswith(_DEPLOYMENT_COMMENT_PREFIXES):
+        return ""
+    cut = stripped.find(" #")
+    return stripped if cut < 0 else stripped[:cut]
+
+
+def _names_private_host(text: str) -> bool:
+    for match in DEPLOYMENT_PRIVATE_ADDRESS_RE.finditer(text):
+        prefix = match.group("prefix")
+        if (
+            match.group("addr")
+            and prefix is not None
+            and int(prefix) <= DEPLOYMENT_GENERIC_NETWORK_MAX_PREFIX
+        ):
+            continue
+        return True
+    return False
+
+
+def scan_deployment_config(rel_path: str, lines: list[str]) -> list[Finding]:
+    """The deployment-config class (OMN-20923) for one tracked file.
+
+    Path half: a deployment overlay file that is not an example (line 0).
+    Content half: a configuration-file value line naming a private host.
+    """
+    findings: list[Finding] = []
+    if DEPLOYMENT_OVERLAY_PATH_RE.search(rel_path) and not DEPLOYMENT_EXAMPLE_RE.search(
+        rel_path
+    ):
+        findings.append(
+            Finding(
+                rel_path,
+                0,
+                DEPLOYMENT_CONFIG_CLASS,
+                "a deployment overlay file; it belongs to whoever runs the system, "
+                "supplied as a private overlay, never shipped in this repository",
+            )
+        )
+    if not _is_deployment_config_file(rel_path):
+        return findings
+    for line_no, line in enumerate(lines, start=1):
+        value = _deployment_value_text(line)
+        if value and _names_private_host(value):
+            findings.append(
+                Finding(rel_path, line_no, DEPLOYMENT_CONFIG_CLASS, line.strip()[:200])
+            )
+    return findings
+
+
+def run_deployment_config(
+    repo_root: Path,
+    mode: str,
+    only_paths: list[str] | None,
+    *,
+    enforce_scope: str,
+    added_lines: AddedLines | None,
+) -> tuple[int, list[Finding], list[Finding]]:
+    """The targeted deployment-config run: no vocabulary, no repo config.
+
+    Returns ``(exit_code, findings, failing)``. In ``enforce`` mode every
+    finding fails, or, under ``added-lines``, every finding the change adds.
+    ``added-lines`` with no diff source is refused rather than enforcing
+    nothing or the whole residue.
+    """
+    if enforce_scope == ADDED_LINES_SCOPE and added_lines is None:
+        raise ConfigError(
+            "--enforce-scope added-lines was given with no diff source "
+            "(--diff-base <ref> or --diff-staged). THE GATE DID NOT RUN."
+        )
+    paths = only_paths if only_paths is not None else tracked_files(repo_root)
+    findings: list[Finding] = []
+    for rel_path in sorted(paths):
+        lines = _read_lines(repo_root / rel_path) or []
+        findings.extend(scan_deployment_config(rel_path, lines))
+    if mode != "enforce":
+        failing: list[Finding] = []
+    elif enforce_scope == ADDED_LINES_SCOPE and added_lines is not None:
+        failing = [f for f in findings if added_lines.covers(f)]
+    else:
+        failing = list(findings)
+    return (1 if failing else 0), findings, failing
+
+
 def run(
     repo_root: Path,
     vocab_path: Path,
@@ -1725,6 +1924,49 @@ def _print_report(
             )
 
 
+def _main_deployment_config(args: argparse.Namespace, repo_root: Path) -> int:
+    """``--only-classes deployment-config``: report, then the verdict."""
+    scope = args.enforce_scope or WHOLE_TREE_SCOPE
+    try:
+        added_lines: AddedLines | None = None
+        if args.diff_base is not None:
+            added_lines = added_lines_from_base(repo_root, args.diff_base)
+        elif args.diff_staged:
+            added_lines = added_lines_staged(repo_root)
+        exit_code, findings, failing = run_deployment_config(
+            repo_root,
+            args.mode,
+            args.paths if args.staged else None,
+            enforce_scope=scope,
+            added_lines=added_lines,
+        )
+    except ConfigError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 2
+    except subprocess.CalledProcessError as exc:
+        print(f"::error::git failed: {exc}. THE GATE DID NOT RUN.", file=sys.stderr)
+        return 2
+    _print_report(findings, [], args.mode)
+    print(f"\n  restricted to: {DEPLOYMENT_CONFIG_CLASS}")
+    source = added_lines.source if added_lines is not None else "none"
+    print(
+        f"\n  ENFORCE SCOPE: {scope} (diff source: {source}, mode={args.mode}). "
+        f"{len(failing)} finding(s) fail the run; "
+        f"{len(findings) - len(failing)} other finding(s) are reported only."
+    )
+    for f in failing:
+        loc = f"{f.path}:{f.line_no}" if f.line_no else f.path
+        print(f"    REFUSED {loc}: {f.class_name}")
+    if failing:
+        print(
+            "\n  Deployment configuration belongs to whoever runs the system "
+            "(operator RULING 2026-10-10T21:57:38Z, OMN-20923): keep the schema, "
+            "the resolver and a neutral default here, and supply the values "
+            "from a private overlay."
+        )
+    return exit_code
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -1796,11 +2038,56 @@ def main(argv: list[str] | None = None) -> int:
             "HEAD (and over every MERGE_HEAD during a merge)."
         ),
     )
+    parser.add_argument(
+        "--enforce-scope",
+        choices=ENFORCE_SCOPES,
+        default=None,
+        help=(
+            "deployment-config only (OMN-20923): which findings fail an "
+            "enforce run, every one (whole-tree, the default) or the ones the "
+            "diff source adds (added-lines). Refused with any other class: "
+            "their scope is the repo config's."
+        ),
+    )
     parser.add_argument("--owner", default="OmniNode-ai")
     parser.add_argument("paths", nargs="*")
     args = parser.parse_args(argv)
 
     repo_root = args.repo_root.resolve()
+
+    only_classes: frozenset[str] | None = None
+    if args.only_classes is not None:
+        only_classes = frozenset(
+            c.strip() for c in args.only_classes.split(",") if c.strip()
+        )
+        unknown = sorted(only_classes - ONLY_CLASSES_SELECTABLE)
+        if not only_classes or unknown:
+            print(
+                f"::error::--only-classes names unknown or no class(es) {unknown}. "
+                f"Known classes: {sorted(ONLY_CLASSES_SELECTABLE)}. "
+                "THE GATE DID NOT RUN.",
+                file=sys.stderr,
+            )
+            return 2
+
+    if only_classes is not None and DEPLOYMENT_CONFIG_CLASS in only_classes:
+        if only_classes != {DEPLOYMENT_CONFIG_CLASS}:
+            print(
+                f"::error::{DEPLOYMENT_CONFIG_CLASS} runs alone (it needs no "
+                "vocabulary, so it runs on a fork); run the other classes "
+                "separately. THE GATE DID NOT RUN.",
+                file=sys.stderr,
+            )
+            return 2
+        return _main_deployment_config(args, repo_root)
+    if args.enforce_scope is not None:
+        print(
+            f"::error::--enforce-scope applies to --only-classes "
+            f"{DEPLOYMENT_CONFIG_CLASS} only; every other class takes its scope "
+            f"from {CONFIG_BASENAME}. THE GATE DID NOT RUN.",
+            file=sys.stderr,
+        )
+        return 2
 
     vocab_path = args.vocabulary
     if vocab_path is None:
@@ -1845,21 +2132,6 @@ def main(argv: list[str] | None = None) -> int:
     if lab_vocab_path is None:
         beside = vocab_path.parent / LAB_VOCABULARY_BASENAME
         lab_vocab_path = beside if beside.is_file() else None
-
-    only_classes: frozenset[str] | None = None
-    if args.only_classes is not None:
-        only_classes = frozenset(
-            c.strip() for c in args.only_classes.split(",") if c.strip()
-        )
-        unknown = sorted(only_classes - SELECTABLE_CLASSES)
-        if not only_classes or unknown:
-            print(
-                f"::error::--only-classes names unknown or no class(es) {unknown}. "
-                f"Known classes: {sorted(SELECTABLE_CLASSES)}. "
-                "THE GATE DID NOT RUN.",
-                file=sys.stderr,
-            )
-            return 2
 
     try:
         added_lines: AddedLines | None = None

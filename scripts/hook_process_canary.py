@@ -27,6 +27,15 @@ per episode and kind through the operator notifier and as a ledger STATUS row
 with ``state=ALERT``; one that reached neither channel is retried every cycle
 and never marked delivered. ``ALERT.json`` is always written first.
 
+The process listing is bounded (OMN-20873). One ``ps`` over every process of every
+user with its command line timed out after 30 s on the loaded operator Mac, so every
+run raised ``canary-error`` with every count NA. The canary now lists only the user's
+own processes without the command column, asks ``pgrep`` which of them are hook
+processes, and reads the command of exactly those pids; one 30 s deadline covers the
+calls together. A listing that still times out is a typed ``ListingTimeout`` (class
+``canary-error`` and the timeout in seconds): the ledger row is
+``state=CANARY-ERROR`` stating the timeout, never ``state=ALERT`` with NA counts.
+
 Exit codes of ``--once``: 0 healthy, 3 alarm delivered, 4 alarm undelivered,
 5 the canary itself failed.
 """
@@ -68,6 +77,27 @@ class ProcRow:
 
 
 @dataclass(frozen=True)
+class ListingTimeout:
+    """A process listing that did not finish: its class and the timeout it hit."""
+
+    error_class: str
+    timeout_seconds: int
+    command: str
+
+    def describe(self) -> str:
+        return (
+            f"{self.command} listing timed out after {self.timeout_seconds} seconds "
+            f"(class={self.error_class})"
+        )
+
+
+class ListingTimeoutError(Exception):
+    def __init__(self, result: ListingTimeout) -> None:
+        super().__init__(result.describe())
+        self.result = result
+
+
+@dataclass(frozen=True)
 class Reading:
     hook_processes: int
     hook_pythons: int
@@ -94,6 +124,7 @@ class CycleResult:
     alarms: list[Alarm] = field(default_factory=list)
     delivered: bool = False
     reading: Reading | None = None
+    listing_timeout: ListingTimeout | None = None
 
 
 Sampler = Callable[[], tuple[list[ProcRow], int | None]]
@@ -220,10 +251,14 @@ class Canary:
             )
 
         reading: Reading | None = None
+        timeout: ListingTimeout | None = None
         try:
             rows, limit = self.sampler()
             reading = measure(rows, self.uid, limit, self.self_pid)
             alarms.extend(evaluate(reading, self.thresholds))
+        except ListingTimeoutError as exc:
+            timeout = exc.result
+            alarms.append(Alarm(timeout.error_class, timeout.describe()))
         except OSError as exc:
             alarms.append(Alarm("cannot-measure", f"cannot run ps: {exc}"))
         except (
@@ -246,6 +281,7 @@ class Canary:
                 "kinds": sorted(a.kind for a in alarms),
                 "alarms": [asdict(a) for a in alarms],
                 "reading": asdict(reading) if reading else None,
+                "listing_timeout": asdict(timeout) if timeout else None,
             },
         )
         episode = _read_json(episode_path) or {}
@@ -255,16 +291,22 @@ class Canary:
         )
         new = [a for a in alarms if a.kind not in done]
         if not new:
-            return CycleResult(alarms, True, reading)
+            return CycleResult(alarms, True, reading, timeout)
 
-        delivered = self._deliver(new, reading, now)
+        delivered = self._deliver(new, reading, timeout, now)
         if delivered:
             _atomic_write(
                 episode_path, {"delivered": sorted(done | {a.kind for a in new})}
             )
-        return CycleResult(alarms, delivered, reading)
+        return CycleResult(alarms, delivered, reading, timeout)
 
-    def _deliver(self, new: list[Alarm], reading: Reading | None, now: float) -> bool:
+    def _deliver(
+        self,
+        new: list[Alarm],
+        reading: Reading | None,
+        timeout: ListingTimeout | None,
+        now: float,
+    ) -> bool:
         kinds = ",".join(a.kind for a in new)
         detail = "; ".join(a.detail for a in new)
         title = f"HOOK CANARY {self.host}: {kinds}"
@@ -277,10 +319,20 @@ class Canary:
             else "orphans=NA hook_procs=NA hook_pythons=NA user_procs=NA limit=NA"
         )
         ts = datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        row = (
-            f"{ts} | STATUS | lane={LANE} | state=ALERT | host={_cell(self.host)} | "
-            f"kinds={kinds} | {counts} | detail={_cell(detail)}"
-        )
+        if timeout is not None:
+            # No measurement ran, so no count is reported: this is the canary failing
+            # to measure, stated with its timeout, not a threshold ALERT with NA counts.
+            body = (
+                f"state=CANARY-ERROR | host={_cell(self.host)} | kinds={kinds} | "
+                f"class={timeout.error_class} timeout_s={timeout.timeout_seconds} "
+                f"command={_cell(timeout.command)} | detail={_cell(detail)}"
+            )
+        else:
+            body = (
+                f"state=ALERT | host={_cell(self.host)} | "
+                f"kinds={kinds} | {counts} | detail={_cell(detail)}"
+            )
+        row = f"{ts} | STATUS | lane={LANE} | {body}"
         notify_ok = self._safely(
             lambda: self.notify(_cell(title), _cell(message)), "notify"
         )
@@ -323,16 +375,55 @@ def _read_limit() -> int | None:
         return None
 
 
+def _listing(argv: list[str], deadline: float, ok_codes: tuple[int, ...]) -> str:
+    """Run one listing command inside the shared deadline; a miss is a typed timeout."""
+    remaining = deadline - time.monotonic()
+    timeout = ListingTimeout("canary-error", _SUBPROCESS_TIMEOUT_S, argv[0])
+    if remaining <= 0:
+        raise ListingTimeoutError(timeout)
+    try:
+        out = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=remaining,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ListingTimeoutError(timeout) from exc
+    if out.returncode not in ok_codes:
+        raise subprocess.CalledProcessError(
+            out.returncode, argv, out.stdout, out.stderr
+        )
+    return out.stdout
+
+
 def default_sampler() -> tuple[list[ProcRow], int | None]:
     # A fork failure raises OSError and propagates: the caller alarms on it.
-    out = subprocess.run(
-        ["ps", "-axwwo", "pid=,ppid=,uid=,command="],
-        capture_output=True,
-        text=True,
-        timeout=_SUBPROCESS_TIMEOUT_S,
-        check=True,
-    )
-    return parse_ps(out.stdout), _read_limit()
+    # Bounded listing (OMN-20873): the user's own processes without the command
+    # column, then the command of only the pids pgrep says are hook processes.
+    # pgrep and ps exit 1 when nothing matches, which is a clean zero.
+    uid = os.getuid()
+    deadline = time.monotonic() + _SUBPROCESS_TIMEOUT_S
+    rows = {
+        r.pid: r
+        for r in parse_ps(
+            _listing(
+                ["ps", "-x", "-U", str(uid), "-o", "pid=,ppid=,uid="], deadline, (0,)
+            )
+        )
+    }
+    hook_pids = _listing(
+        ["pgrep", "-U", str(uid), "-f", _HOOK_PATH.pattern], deadline, (0, 1)
+    ).split()
+    if hook_pids:
+        listed = _listing(
+            ["ps", "-ww", "-p", ",".join(hook_pids), "-o", "pid=,ppid=,uid=,command="],
+            deadline,
+            (0, 1),
+        )
+        rows.update({r.pid: r for r in parse_ps(listed)})
+    return list(rows.values()), _read_limit()
 
 
 def _forced_error_sampler() -> tuple[list[ProcRow], int | None]:

@@ -1,30 +1,56 @@
 schema_version: "1.0.0"
 ticket_id: "OMN-20923"
-title: "No lab or deployment configuration in a shipped repository: the Hostile Reviewer reads its voters from a private CI overlay"
-summary: "Operator RULING 2026-10-10T21:57:38Z. omniclaude's hostile-reviewer.yml no longer reads the voter roster from omnibase_infra docker/lane-overlays. It fetches it at run time from the node overlay of node_review_voters_overlay_compute in the private repository the org Actions variable OMNI_CI_OVERLAY_REPO names, placed outside the pull request checkout. With the variable unset (a fork or a customer) the neutral default is 'no review voters configured' and the gate fails closed saying so. The quorum rule is unchanged."
+title: "The public-repo hygiene gate refuses deployment and lab configuration in shipped repositories (deployment-config class)"
+summary: "Operator RULING 2026-10-10T21:57:38Z, amended 2026-10-10T22:07:49Z ('This should be in ci.'). A new never-exemptable deployment-config class of scripts/public_repo_hygiene_gate.py refuses a lane-overlay file and a configuration value naming a private host, by shape, with no vocabulary, so it runs on a fork. It runs as its own job, public-repo-hygiene / deployment-config, in the reusable workflow (no secrets) and as the exported deployment-config pre-commit hook, enforcing on added lines."
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
-  - id: "req-private-ci-overlay"
-    statement: "The roster comes only from the private CI overlay named by an org variable; with none configured the gate fails closed naming the cause."
+  - id: "req-deployment-config-class"
+    statement: "A change that adds deployment or lab configuration to a shipped repository fails the gate; a neutral default and an unrelated change pass."
     acceptance:
       - id: "AC1"
-        statement: "AC1: REVIEW_VOTERS_OVERLAY points at the CI overlay outside the workspace, the repository comes from OMNI_CI_OVERLAY_REPO, an unset variable fails with 'no review voters configured', and a named one resolves -- falsifier: env -u PYTHONPATH uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
+        statement: "AC1: a change that adds a file under a lane-overlays path, or any config file carrying an internal address or a lab endpoint, fails the gate on added lines -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py -k overlay_with_lab_values asserts exit 1 on a fixture that adds such a file"
+      - id: "AC2"
+        statement: "AC2: an unrelated change, and a file carrying the neutral public default, pass the gate -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py -k neutral_default_passes asserts exit 0"
+  - id: "req-private-ci-overlay"
+    statement: "omniclaude's Hostile Reviewer reads its voters only from the private CI overlay named by an org variable; with none configured the gate fails closed naming the cause."
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: REVIEW_VOTERS_OVERLAY points at the CI overlay outside the workspace, the repository comes from OMNI_CI_OVERLAY_REPO, an unset variable fails with 'no review voters configured', and a named one resolves -- falsifier: env -u PYTHONPATH uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
 evidence_requirements:
   - kind: "tests"
-    description: "The workflow tests pass at the head."
+    description: "The deployment-config tests pass at the head."
+    command: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py tests/scripts/test_deployment_config_class_omn20923.py -q -k 'overlay_with_lab_values or neutral_default_passes or deployment_config or 4817 or bifrost or private_host'"
+  - kind: "tests"
+    description: "The Hostile Reviewer workflow tests pass at the head."
     command: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
 emergency_bypass:
   enabled: false
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
-  - id: "dod-omn20923-ac1-private-ci-overlay"
+  - id: "dod-omn20923-ac1-overlay-refused"
+    description: "An added lane-overlay file or lab address in a config file fails the gate on added lines."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py -q -k overlay_with_lab_values"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn20923-ac2-neutral-default-passes"
+    description: "A neutral example overlay and an unrelated change pass."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py -q -k neutral_default_passes"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
+  - id: "dod-omn20923-ac3-private-ci-overlay"
     description: "The roster is read from the private CI overlay; a fork with none gets the neutral default."
     source: "manual"
     checks:
       - check_type: "test_passes"
         check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
         cwd: "${OMNI_HOME}/omniclaude"
-    binds_ac: ["AC1"]
+    binds_ac: ["AC3"]
