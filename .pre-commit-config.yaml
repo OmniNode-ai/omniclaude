@@ -326,8 +326,7 @@ repos:
         stages: [pre-commit]
 
       # OMN-9730: DGM-Phase4 — mechanical block on skip-deploy-gate bypass tokens.
-      # Rejects any staged file containing [skip-deploy-gate:] without an explicit
-      # approval receipt (# skip-token-allowed: <receipt-id>).
+      # Rejects any staged file containing a [skip-*] token. There is no escape hatch (OMN-20074).
       # CLAUDE.md Rule #10: never bypass local gates. Fix the underlying issue.
       - id: reject-deploy-gate-skip-token
         name: Reject skip-deploy-gate bypass tokens (OMN-9730)

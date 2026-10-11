@@ -2,10 +2,9 @@
 # SPDX-License-Identifier: MIT
 """Tests for reject-deploy-gate-skip-token.sh — OMN-10414.
 
-Advisory-only hook: verifies that [skip-receipt-gate:] is rejected alongside
-[skip-deploy-gate:] unless paired with # skip-token-allowed: <id>.
-Receipt-gate (omnibase_core/src/omnibase_core/validation/receipt_gate.py) is
-the sole enforcement authority.
+Verifies that [skip-receipt-gate:] is rejected alongside [skip-deploy-gate:],
+and that no receipt-id comment rescues either (OMN-20074: the approvals
+registry is retired and there is no escape hatch).
 """
 
 import subprocess
@@ -39,12 +38,32 @@ def test_rejects_skip_receipt_gate_free_text() -> None:
 
 
 @pytest.mark.unit
-def test_accepts_skip_receipt_gate_with_allowlist() -> None:
-    """[skip-receipt-gate:] paired with # skip-token-allowed: <id> must be accepted."""
-    rc = run_hook(FIXTURES / "accept_skip_receipt_gate_with_allowlist.md")
-    assert rc == 0, (
-        "Expected hook to accept skip-receipt-gate paired with allowlist receipt"
+def test_rejects_skip_receipt_gate_even_with_a_receipt_comment() -> None:
+    """A skip token is rejected whatever receipt-id comment accompanies it."""
+    rc = run_hook(FIXTURES / "reject_skip_receipt_gate_with_receipt_comment.md")
+    assert rc == 1, "Expected hook to reject a skip token with a receipt-id comment"
+
+
+@pytest.mark.unit
+def test_rejects_every_case_variant_of_the_receipt_comment(tmp_path: Path) -> None:
+    for comment in (
+        "# skip-token-allowed: R-1",
+        "#   SKIP-TOKEN-ALLOWED: R-2",
+        "# Skip-Token-Allowed: R-3",
+    ):
+        body = tmp_path / "body.md"
+        body.write_text(f"[skip-deploy-gate: x]\n{comment}\n", encoding="utf-8")
+        assert run_hook(body) == 1, comment
+
+
+@pytest.mark.unit
+def test_commit_message_with_receipt_comment_is_rejected(tmp_path: Path) -> None:
+    msg = tmp_path / "COMMIT_EDITMSG"
+    msg.write_text(
+        "fix: x [skip-receipt-gate: y]\n\n# skip-token-allowed: R-9\n",
+        encoding="utf-8",
     )
+    assert run_hook(msg) == 1
 
 
 @pytest.mark.unit

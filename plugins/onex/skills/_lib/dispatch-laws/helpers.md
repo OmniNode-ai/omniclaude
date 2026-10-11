@@ -112,8 +112,7 @@ refactor, and needs operator sign-off.
      required check — self-judgement is not evidence (<TICKET>). Alternative:
      **STOP and report back — any bracketed skip-token hard-fails your PR.** Remove
      the token and fix the real gate input (missing dod_evidence / Evidence-Source
-     line / contract). The only escape hatch is a real user-issued
-     `# skip-token-allowed: <receipt-id>` handle.
+     line / contract). There is no escape hatch.
    - **Target `dev`, not `main`.** Failure mode: an OCC/code PR with base=main whose
      head is not the dev→main promotion branch is hard-FAILED by main-target-guard
      (dev-only promotion). Alternative: branch off `origin/dev` and target `dev`
