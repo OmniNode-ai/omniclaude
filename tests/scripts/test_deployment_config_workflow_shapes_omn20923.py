@@ -119,9 +119,10 @@ def _commit(root: Path, files: dict[str, str]) -> None:
     _git(root, "commit", "-q", "-m", "change")
 
 
-def _cli(root: Path, *extra: str) -> tuple[int, str]:
-    env = scrub_git_location_env()
-    env.pop("OMNI_HYGIENE_VOCAB_PATH", None)
+def _cli(root: Path, *extra: str, env: dict[str, str] | None = None) -> tuple[int, str]:
+    run_env = scrub_git_location_env()
+    run_env.pop("OMNI_HYGIENE_VOCAB_PATH", None)
+    run_env.update(env or {})
     proc = subprocess.run(
         [
             sys.executable,
@@ -136,7 +137,7 @@ def _cli(root: Path, *extra: str) -> tuple[int, str]:
         ],
         capture_output=True,
         text=True,
-        env=env,
+        env=run_env,
         check=False,
     )
     return proc.returncode, proc.stdout + proc.stderr
@@ -158,6 +159,11 @@ def _cli(root: Path, *extra: str) -> tuple[int, str]:
         "# the endpoint is http://box.home.arpa/v1",
         "        run: rsync -a out/ runner@box.lab:/srv",
         "# reached at box.internal:8130",
+        "      HOST: studio.lab",
+        "        run: ssh studio.lab",
+        "      URL: http://user:token@studio.lab/v1",
+        "# the port is studio.lab:9",
+        "      URL: http://private-voter.docker.internal:8000",
         "      URL: http://studio.local:8131",
     ],
 )
@@ -171,6 +177,8 @@ def test_a_workflow_line_naming_a_private_host_is_found_comments_included(
     "line",
     [
         "      URL: http://host.docker.internal:8000",
+        "      run: cp config.example config.local",
+        "      URL: http://box.local.example/",
         "      URL: http://db.svc.cluster.local:5432",
         "      URL: http://metadata.google.internal/",
         "      run: cp .env.example .env.local",
@@ -357,14 +365,28 @@ def test_the_model_vocabulary_beside_the_vocabulary_is_found(tmp_path: Path) -> 
     assert "NOT EVALUATED: our model ids" not in out
 
 
-def test_without_a_model_vocabulary_beside_it_the_model_rule_is_not_evaluated(
+def test_an_explicit_vocabulary_with_no_model_vocabulary_is_exit_2(
     tmp_path: Path,
 ) -> None:
+    """The CI form holds the token: a missing model vocabulary is a failed fetch."""
     main, _ = _vocab(tmp_path, model=False)
     root, base = _repo(tmp_path, {WF: "name: review\n"})
     _commit(root, {WF: "name: review\n# example-voter-b\n"})
     code, out = _cli(root, "--vocabulary", str(main), *_added_args(base))
-    assert code == 0, out
+    assert code == 2, out
+    assert "THE GATE DID NOT RUN" in out
+
+
+def test_a_vocabulary_from_the_environment_alone_leaves_the_model_rule_unevaluated(
+    tmp_path: Path,
+) -> None:
+    main, _ = _vocab(tmp_path, model=False)
+    root, base = _repo(tmp_path, {WF: "name: review\n"})
+    _commit(root, {WF: "name: review\n# example-voter-b on labbox-2\n"})
+    code, out = _cli(
+        root, *_added_args(base), env={"OMNI_HYGIENE_VOCAB_PATH": str(main)}
+    )
+    assert code == 1, out  # the host nickname rule ran and found the line
     assert "NOT EVALUATED: our model ids in workflow files" in out
 
 
@@ -414,20 +436,74 @@ def test_residue_the_change_does_not_add_is_reported_not_failed(
 # ---------------------------------------------------------------------------
 
 
-def test_the_token_job_runs_the_vocabulary_half_and_refuses_when_a_file_is_absent() -> (
+def _token_job_steps() -> list[dict[str, object]]:
+    import yaml
+
+    doc = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = doc["jobs"]["public-repo-hygiene"]["steps"]
+    assert isinstance(steps, list)
+    return steps
+
+
+def test_the_token_job_runs_the_vocabulary_half_unconditionally_after_the_full_gate() -> (
     None
 ):
-    text = WORKFLOW.read_text(encoding="utf-8")
-    start = text.index("- name: Deployment configuration in workflow files")
-    block = text[start : text.index("\n  # OMN-20923: the deployment-config class,")]
-    assert "--only-classes deployment-config" in block
-    assert "--mode enforce" in block
-    assert '--vocabulary "${VOCAB_PATH}"' in block
-    assert '--model-vocabulary "${MODEL_VOCAB_PATH}"' in block
-    assert "--enforce-scope added-lines" in block
-    assert '--diff-base "${DIFF_BASE}"' in block
-    assert "THE GATE DID NOT RUN" in block
-    assert "exit 1" in block
+    steps = _token_job_steps()
+    names = [str(step.get("name")) for step in steps]
+    full = names.index("Run the public-repo hygiene gate")
+    half = names.index(
+        "Deployment configuration in workflow files (private vocabularies)"
+    )
+    assert half > full
+    step = steps[half]
+    # Nothing that can skip it or let it fail quietly.
+    assert "if" not in step
+    assert "continue-on-error" not in step
+    run = str(step["run"])
+    assert run.startswith("set -euo pipefail")
+    assert "--only-classes deployment-config" in run
+    assert "--mode enforce" in run
+    assert '--vocabulary "${VOCAB_PATH}"' in run
+    assert '--model-vocabulary "${MODEL_VOCAB_PATH}"' in run
+    assert "--enforce-scope added-lines" in run
+    assert '--diff-base "${DIFF_BASE}"' in run
+    assert "|| true" not in run
+    assert "2>/dev/null" not in run
+    # The refusal: each required file is tested, and absence is exit 1.
+    assert (
+        'for required in "${SCRIPT_PATH}" "${VOCAB_PATH}" "${MODEL_VOCAB_PATH}"' in run
+    )
+    assert '[ ! -f "${required}" ]' in run
+    assert "THE GATE DID NOT RUN" in run
+    assert "exit 1" in run
+
+
+def test_the_refusal_branch_of_the_vocabulary_step_runs_and_exits_1(
+    tmp_path: Path,
+) -> None:
+    """Execute the step's own shell with a missing model vocabulary."""
+    steps = {str(step.get("name")): step for step in _token_job_steps()}
+    step = steps["Deployment configuration in workflow files (private vocabularies)"]
+    script = tmp_path / "gate.py"
+    script.write_text("print('would run')\n", encoding="utf-8")
+    vocab = tmp_path / "v.yaml"
+    vocab.write_text(VOCAB_YAML, encoding="utf-8")
+    proc = subprocess.run(
+        ["bash", "-c", str(step["run"])],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "SCRIPT_PATH": str(script),
+            "VOCAB_PATH": str(vocab),
+            "MODEL_VOCAB_PATH": str(tmp_path / "absent.yaml"),
+            "DIFF_BASE": "",
+        },
+    )
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "THE GATE DID NOT RUN" in proc.stdout + proc.stderr
+    assert "would run" not in proc.stdout
 
 
 def test_the_model_vocabulary_is_fetched_with_the_lab_vocabulary() -> None:

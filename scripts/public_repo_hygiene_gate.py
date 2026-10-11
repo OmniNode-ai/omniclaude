@@ -408,18 +408,29 @@ DEPLOYMENT_WORKFLOW_RE = re.compile(r"^\.github/workflows/[^/]+\.ya?ml$")
 #: ``://`` or ``@``, or before ``:<port>``. A bare ``settings.local.json`` or
 #: ``.env.local`` is a file name, not a host, and is not matched.
 DEPLOYMENT_PRIVATE_ZONE_RE = re.compile(
+    # in a URL authority or an ssh target, any of the zones
     r"(?:(?<=://)|(?<=@))(?:[a-z0-9-]+\.)+(?:lan|lab|local|internal|home\.arpa)"
     r"(?![a-z0-9-]|\.[a-z0-9])"
+    # before a port, any of the zones
     r"|(?<![a-z0-9._/-])(?:[a-z0-9-]+\.)+(?:lan|lab|local|internal|home\.arpa)"
-    r"(?=:\d{2,5}\b)",
+    r"(?=:\d{1,5}\b)"
+    # bare, every zone but ``.local``, which is also a file-name suffix
+    r"|(?<![a-z0-9._/@-])(?:[a-z0-9-]+\.)+(?:lan|lab|internal|home\.arpa)"
+    r"(?![a-z0-9_-]|\.[a-z0-9])",
     re.IGNORECASE,
 )
-#: Names every runner or cluster resolves, which name no one's lab.
-DEPLOYMENT_GENERIC_ZONE_RE = re.compile(
-    r"(?:^|\.)(?:cluster\.local|docker\.internal|containers\.internal"
-    r"|google\.internal)$",
-    re.IGNORECASE,
+#: Names every runner or cluster resolves, which name no one's lab: exact
+#: names, and anything inside a Kubernetes ``cluster.local`` domain.
+DEPLOYMENT_GENERIC_HOSTS: frozenset[str] = frozenset(
+    {
+        "host.docker.internal",
+        "gateway.docker.internal",
+        "kubernetes.docker.internal",
+        "host.containers.internal",
+        "metadata.google.internal",
+    }
 )
+DEPLOYMENT_GENERIC_ZONE_RE = re.compile(r"\.cluster\.local$", re.IGNORECASE)
 #: The private MODEL vocabulary: OUR model ids (registry keys, served ids). A
 #: file of its own, beside the lab vocabulary, for the reason the lab
 #: vocabulary is one: an older gate pinned between OMN-19766 and now reads the
@@ -1790,7 +1801,8 @@ def _names_private_host(text: str) -> bool:
 
 def _names_private_zone(text: str) -> bool:
     for match in DEPLOYMENT_PRIVATE_ZONE_RE.finditer(text):
-        if DEPLOYMENT_GENERIC_ZONE_RE.search(match.group(0)):
+        host = match.group(0).lower()
+        if host in DEPLOYMENT_GENERIC_HOSTS or DEPLOYMENT_GENERIC_ZONE_RE.search(host):
             continue
         return True
     return False
@@ -2138,7 +2150,17 @@ def _deployment_vocabulary_paths(
     model_vocab_path: Path | None = args.model_vocabulary
     if model_vocab_path is None and vocab_path is not None:
         beside = vocab_path.parent / MODEL_VOCABULARY_BASENAME
-        model_vocab_path = beside if beside.is_file() else None
+        if beside.is_file():
+            model_vocab_path = beside
+        elif args.vocabulary is not None:
+            # An explicit --vocabulary is the CI form: it holds the token, so a
+            # missing model vocabulary is a fetch that failed, never a pass.
+            raise ConfigError(
+                f"--vocabulary was given but {MODEL_VOCABULARY_BASENAME} is "
+                "neither given (--model-vocabulary) nor beside it. The model "
+                "rule cannot run and the gate refuses rather than reporting "
+                "green. THE GATE DID NOT RUN."
+            )
     return vocab_path, model_vocab_path
 
 
@@ -2240,8 +2262,11 @@ def main(argv: list[str] | None = None) -> int:
             "path to the PRIVATE model vocabulary (lab_model_ids) for the "
             "deployment-config class's workflow rule (OMN-20923). Defaults to "
             f"{MODEL_VOCABULARY_BASENAME} beside the vocabulary when that file "
-            "exists. A given path that is absent is exit 2. With none, the "
-            "rule is reported as not evaluated. Used by --only-classes "
+            "exists. A given path that is absent is exit 2, and so is an "
+            "explicit --vocabulary with no model vocabulary given or beside it "
+            "(the CI form holds the token, so that is a failed fetch). With "
+            "the vocabulary from OMNI_HYGIENE_VOCAB_PATH only, the rule is "
+            "reported as not evaluated. Used by --only-classes "
             "deployment-config only."
         ),
     )
