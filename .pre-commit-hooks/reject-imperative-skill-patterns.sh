@@ -197,7 +197,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
 
     run_test "http://192.168 rejected" \
         "plugins/onex/skills/my_skill/SKILL.md" \
-        "Call http://192.168.86.201:8000/v1" \
+        "Call http://192.168.x.y:8000/v1" \
         1
 
     run_test "imperative-ok suppresses finding" \

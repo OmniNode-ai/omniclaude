@@ -83,7 +83,6 @@ Skip Count Ratchet (OMN-18776)
 Tests (Split ${{ matrix.split }}/${{ needs.detect-changes.outputs.split_count }})
 Tests Gate
 Verification Evidence Lint
-Version Pin Compliance
 check-deterministic-skills
 check-instructional-skills
 gate / Defect Anchor

@@ -84,6 +84,33 @@ Fail-open / fail-closed boundary, stated deliberately
     list``, a bare ``gh api`` read, ``gh pr comment --body`` and ``gh pr edit
     --add-label`` match nothing.
 
+The second source of the live description (OMN-20911)
+-----------------------------------------------------
+A lane's gh shim refuses every GitHub read, so the ``gh pr view --json body``
+above always fails there and, read alone, the guard answers "the live
+description could not be read" to every body edit -- no lane could edit any PR
+body (four measured occurrences, two of them forcing a superseding PR). The PR
+watcher already holds each open PR's live body in its state file. Only when the
+gh read is refused or fails, the guard reads that record instead, and runs the
+unchanged stamp-line comparison on it. The record is accepted only while ALL of
+these hold, and otherwise the refusal is exactly the one above:
+
+  * the state file parses, carries the schema the policy names, and holds the
+    PR under ``prs['<repo>#<n>']`` as an OPEN pull request with a string body;
+  * its ``last_tick`` is no older than the watcher's own freshness window
+    (``watcher_record.max_age_seconds`` in the policy -- a mirror of the
+    watcher's bound, not a new number; see the policy for why it is carried
+    here);
+  * its recorded head is not behind the newest push this checkout can see,
+    ``origin/<head_ref>``: equal, or an ancestor of the recorded head. A push
+    this checkout has never seen cannot make the record look old, so a
+    checkout with no such ref admits the record.
+
+Every message names the source it used. What this does not close: a body edit
+made by someone else after the watcher's last tick, up to the freshness
+window, is invisible to the record -- the same window every other reader of the
+watcher's state accepts.
+
 What this cannot do, stated rather than implied
 -----------------------------------------------
 It sees one seam: a Bash command in this session. An edit made in the web
@@ -124,8 +151,9 @@ import re
 import subprocess
 import sys
 from collections import ChainMap
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 _HOOKS_LIB = Path(__file__).parent
@@ -152,6 +180,7 @@ __all__ = [
     "Policy",
     "PolicyError",
     "PrBodyEdit",
+    "WatcherBody",
     "check_bash_command",
     "gh_companion_merged_reader",
     "load_policy",
@@ -160,6 +189,7 @@ __all__ = [
     "render_block_reason",
     "stamp_lines",
     "strip_noncanonical_regions",
+    "watcher_record_reader",
 ]
 
 #: The hook-activation bit this guard is gated on. Borrowed; see the module
@@ -209,12 +239,23 @@ class _GhApiPatchShape:
 
 
 @dataclass(frozen=True)
+class _WatcherRecordShape:
+    organization: str
+    schema: int
+    state_env: str
+    omni_home_env: str
+    state_default_path: tuple[str, ...]
+    max_age_seconds: int
+
+
+@dataclass(frozen=True)
 class Policy:
     """The stamp vocabulary and the two body-replacing command shapes."""
 
     stamp_line: re.Pattern[str]
     gh_pr_edit: _GhPrEditShape
     gh_api_patch: _GhApiPatchShape
+    watcher_record: _WatcherRecordShape
     source: Path
 
 
@@ -240,6 +281,8 @@ class Finding:
     detail: str
     dropped_lines: tuple[str, ...] = ()
     edit: PrBodyEdit | None = None
+    #: Where the live description came from (OMN-20911), for the refusal text.
+    body_source: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +306,20 @@ def _str_frozenset(raw: object, key: str, source: Path) -> frozenset[str]:
             raise PolicyError(f"{source}: {key!r} must contain non-empty strings")
         out.append(item)
     return frozenset(out)
+
+
+def _str_value(raw: object, key: str, source: Path) -> str:
+    value = _require(raw, key, source)
+    if not isinstance(value, str) or not value:
+        raise PolicyError(f"{source}: {key!r} must be a non-empty string")
+    return value
+
+
+def _int_value(raw: object, key: str, source: Path) -> int:
+    value = _require(raw, key, source)
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise PolicyError(f"{source}: {key!r} must be a positive integer")
+    return value
 
 
 def load_policy(path: Path | None = None) -> Policy:
@@ -352,10 +409,31 @@ def load_policy(path: Path | None = None) -> Policy:
         input_flags=_str_frozenset(api_raw, "input_flags", source),
     )
 
+    watcher_raw = _require(raw, "watcher_record", source)
+    default_path = _require(watcher_raw, "state_default_path", source)
+    if (
+        not isinstance(default_path, list)
+        or not default_path
+        or not all(isinstance(t, str) and t for t in default_path)
+    ):
+        raise PolicyError(
+            f"{source}: 'watcher_record.state_default_path' must be a non-empty "
+            "list of strings"
+        )
+    watcher_record = _WatcherRecordShape(
+        organization=_str_value(watcher_raw, "organization", source),
+        schema=_int_value(watcher_raw, "schema", source),
+        state_env=_str_value(watcher_raw, "state_env", source),
+        omni_home_env=_str_value(watcher_raw, "omni_home_env", source),
+        state_default_path=tuple(default_path),
+        max_age_seconds=_int_value(watcher_raw, "max_age_seconds", source),
+    )
+
     return Policy(
         stamp_line=stamp_line,
         gh_pr_edit=gh_pr_edit,
         gh_api_patch=gh_api_patch,
+        watcher_record=watcher_record,
         source=source,
     )
 
@@ -842,6 +920,250 @@ def gh_live_body_reader(cwd: str | None = None, timeout: int = 45) -> LiveBodyRe
     return _read
 
 
+# ---------------------------------------------------------------------------
+# The PR watcher's record as the second source (OMN-20911)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WatcherBody:
+    """What the watcher's record gave: the body, or why it could not be used.
+
+    ``note`` names the source when ``body`` is set (it ends up in the refusal
+    text) and the reason the record was refused when it is ``None``.
+    """
+
+    body: str | None
+    note: str
+
+
+#: Reads the live description from the PR watcher's record.
+WatcherBodyReader = Callable[[PrBodyEdit], WatcherBody]
+
+_PULL_URL = re.compile(r"^https?://[^/]+/([^/]+)/([^/]+)/pull/(\d+)(?:[/?#].*)?$")
+_ORIGIN_REPO = re.compile(r"[:/]([^/:]+)/([^/]+?)(?:\.git)?/?$")
+_GIT_TIMEOUT_S = 10
+_GIT_LOCATION_ENV = frozenset(
+    {
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    }
+)
+
+
+def _git_output(cwd: str | None, *args: str) -> tuple[int, str]:
+    """``(returncode, stdout)`` of a read-only git command in ``cwd``; ``(-1, "")`` on failure."""
+    if not cwd or not Path(cwd).is_dir():
+        return -1, ""
+    # GIT_DIR and friends override ``-C``; the checkout asked about is ``cwd``.
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_LOCATION_ENV}
+    try:
+        result = subprocess.run(  # fixed argv, no shell
+            ["git", "-C", cwd, *args],
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT_S,
+            check=False,
+            env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return -1, ""
+    return result.returncode, result.stdout.strip()
+
+
+def _checkout_repo(cwd: str | None) -> tuple[str, str] | None:
+    """``(owner, name)`` of the checkout's ``origin``, or ``None``."""
+    code, url = _git_output(cwd, "remote", "get-url", "origin")
+    match = _ORIGIN_REPO.search(url) if code == 0 else None
+    return (match.group(1), match.group(2)) if match else None
+
+
+class _RecordRefused(Exception):
+    """The watcher's record cannot stand in for the live description."""
+
+
+def _watcher_state_path(shape: _WatcherRecordShape, environ: Mapping[str, str]) -> Path:
+    override = environ.get(shape.state_env)
+    if override:
+        return Path(override)
+    home = environ.get(shape.omni_home_env)
+    if not home:
+        raise _RecordRefused(
+            f"neither {shape.state_env} nor {shape.omni_home_env} is set, so the "
+            "PR watcher's state file cannot be located"
+        )
+    return Path(home).joinpath(*shape.state_default_path)
+
+
+def _record_target(
+    edit: PrBodyEdit, shape: _WatcherRecordShape, cwd: str | None
+) -> tuple[str, str | None, str | None]:
+    """``(repo name, number, branch)`` the edit's pull request is known by."""
+    owner: str | None = None
+    name: str | None = None
+    number: str | None = None
+    branch: str | None = None
+    if edit.repo and "/" in edit.repo:
+        owner, _, name = edit.repo.partition("/")
+    selector = edit.selector
+    if selector:
+        url = _PULL_URL.match(selector)
+        if url:
+            owner, name, number = url.group(1), url.group(2), url.group(3)
+        elif selector.isdigit():
+            number = selector
+        else:
+            branch = selector
+    else:
+        code, current = _git_output(cwd, "branch", "--show-current")
+        if code == 0 and current:
+            branch = current
+    if name is None:
+        checkout = _checkout_repo(cwd)
+        if checkout is not None:
+            owner, name = checkout
+    if name is None:
+        raise _RecordRefused(
+            "the repository of the pull request cannot be told from the edit or "
+            "the checkout"
+        )
+    if owner != shape.organization:
+        raise _RecordRefused(
+            f"{owner}/{name} is not in {shape.organization}, the only organisation "
+            "the PR watcher records"
+        )
+    if number is None and branch is None:
+        raise _RecordRefused(
+            "the edit names no pull request the record can be matched to"
+        )
+    return name, number, branch
+
+
+def _pushed_tip_note(
+    cwd: str | None, repo: str, head_ref: str, record_head: str
+) -> str | None:
+    """Why the record is behind the newest push this checkout can see, or ``None``."""
+    checkout = _checkout_repo(cwd)
+    if checkout is None or checkout[1] != repo:
+        return None
+    code, tip = _git_output(
+        cwd, "rev-parse", "--verify", "-q", f"refs/remotes/origin/{head_ref}^{{commit}}"
+    )
+    if code != 0 or not tip or tip == record_head:
+        return None
+    code, _ = _git_output(cwd, "merge-base", "--is-ancestor", tip, record_head)
+    if code == 0:
+        return None
+    return (
+        f"the record's head {record_head[:12]} is not known to contain the newest "
+        f"push this checkout can see, origin/{head_ref} at {tip[:12]}"
+    )
+
+
+def watcher_record_reader(
+    policy: Policy,
+    cwd: str | None = None,
+    environ: Mapping[str, str] | None = None,
+    now: Callable[[], datetime] | None = None,
+) -> WatcherBodyReader:
+    """A reader that takes the description from the PR watcher's state file.
+
+    Used only when the live ``gh`` read failed (OMN-20911). Read-only: the file
+    is parsed, nothing is executed and no network is touched. Every refusal
+    returns the reason rather than raising, so the caller can print it.
+    """
+    shape = policy.watcher_record
+    env: Mapping[str, str] = os.environ if environ is None else environ
+    clock = now or (lambda: datetime.now(UTC))
+
+    def _read(edit: PrBodyEdit) -> WatcherBody:
+        try:
+            return _read_record(edit)
+        except _RecordRefused as exc:
+            return WatcherBody(None, str(exc))
+
+    def _read_record(edit: PrBodyEdit) -> WatcherBody:
+        path = _watcher_state_path(shape, env)
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise _RecordRefused(f"no PR watcher state file at {path}") from exc
+        except (OSError, ValueError) as exc:
+            raise _RecordRefused(
+                f"the PR watcher state file {path} is unreadable: {str(exc)[:120]}"
+            ) from exc
+        if not isinstance(raw, dict) or raw.get("schema") != shape.schema:
+            raise _RecordRefused(
+                f"the PR watcher state file {path} is not schema {shape.schema}"
+            )
+        try:
+            tick = datetime.strptime(
+                str(raw.get("last_tick") or ""), "%Y-%m-%dT%H:%M:%SZ"
+            ).replace(tzinfo=UTC)
+        except ValueError as exc:
+            raise _RecordRefused(
+                f"the PR watcher state file {path} has no complete tick"
+            ) from exc
+        age = int((clock() - tick).total_seconds())
+        if age < 0 or age > shape.max_age_seconds:
+            raise _RecordRefused(
+                f"the PR watcher state is stale: last_tick {raw['last_tick']} is "
+                f"{age}s old (max {shape.max_age_seconds}s)"
+            )
+
+        repo, number, branch = _record_target(edit, shape, cwd)
+        prs = raw.get("prs")
+        if not isinstance(prs, dict):
+            raise _RecordRefused("the PR watcher state holds no pull requests")
+        label = f"{repo}#{number}" if number else f"{repo} branch {branch}"
+        matches: list[tuple[str, dict[str, object]]] = []
+        for key, record in prs.items():
+            facts = record.get("facts") if isinstance(record, dict) else None
+            if not isinstance(facts, dict):
+                continue
+            if number is not None:
+                if key == f"{repo}#{number}":
+                    matches.append((key, facts))
+            elif facts.get("repo") == repo and facts.get("head_ref") == branch:
+                if facts.get("state") == "OPEN":
+                    matches.append((key, facts))
+        if len(matches) != 1:
+            raise _RecordRefused(
+                f"the PR watcher state has {len(matches)} records for {label}, "
+                "and exactly one is needed"
+            )
+        key, facts = matches[0]
+        if facts.get("state") != "OPEN":
+            raise _RecordRefused(
+                f"the PR watcher record {key} is {facts.get('state')}, not OPEN, "
+                "so its body is not kept current"
+            )
+        body = facts.get("body")
+        if not isinstance(body, str):
+            raise _RecordRefused(f"the PR watcher record {key} carries no body")
+        head = facts.get("head_sha")
+        head_ref = facts.get("head_ref")
+        if not isinstance(head, str) or not head:
+            raise _RecordRefused(f"the PR watcher record {key} carries no head")
+        if isinstance(head_ref, str) and head_ref:
+            behind = _pushed_tip_note(cwd, repo, head_ref, head)
+            if behind is not None:
+                raise _RecordRefused(
+                    f"the PR watcher record {key} is out of date: {behind}"
+                )
+        return WatcherBody(
+            body,
+            f"PR watcher record {key} (last_tick {raw['last_tick']}, {age}s old, "
+            f"head {head[:12]})",
+        )
+
+    return _read
+
+
 #: The repository every ``OCC#<n>`` evidence-source value names. Mirror of
 #: ``check_occ_companion_merged.OCC_REPO_DEFAULT`` (copied, not imported: this
 #: module runs under any resolved interpreter with no project path).
@@ -934,11 +1256,14 @@ def check_bash_command(
     live_body: LiveBodyReader,
     cwd: str | None = None,
     companion_merged: CompanionMergedReader | None = None,
+    watcher_body: WatcherBodyReader | None = None,
 ) -> list[Finding]:
     """Findings for one Bash command. Empty means admit.
 
     ``companion_merged`` answers whether an ``OCC#<n>`` companion is MERGED; it
     is what lets an edit drop a stale stamp and keep the one merged stamp.
+    ``watcher_body`` is the second source of the live description, consulted
+    only when ``live_body`` returned ``None`` (OMN-20911).
     """
     if command is None or not isinstance(command, str):
         return [
@@ -984,17 +1309,27 @@ def check_bash_command(
             )
             continue
         live = live_body(edit)
+        source = _SOURCE_GH
+        watcher_note = ""
+        if live is None and watcher_body is not None:
+            from_record = watcher_body(edit)
+            if from_record.body is not None:
+                live, source = from_record.body, from_record.note
+            else:
+                watcher_note = from_record.note
         if live is None:
-            findings.append(
-                Finding(
-                    kind="unreadable_live_body",
-                    detail=(
-                        "the live description could not be read, so whether "
-                        "this edit drops a change-control evidence line is "
-                        "unknown. A read that failed is evidence of nothing"
-                    ),
-                    edit=edit,
+            detail = (
+                "the live description could not be read, so whether "
+                "this edit drops a change-control evidence line is "
+                "unknown. A read that failed is evidence of nothing"
+            )
+            if watcher_note:
+                detail += (
+                    ". The PR watcher's record was tried next and refused: "
+                    f"{watcher_note}"
                 )
+            findings.append(
+                Finding(kind="unreadable_live_body", detail=detail, edit=edit)
             )
             continue
         present = stamp_lines(live, policy)
@@ -1015,9 +1350,14 @@ def check_bash_command(
                     ),
                     dropped_lines=dropped,
                     edit=edit,
+                    body_source=source,
                 )
             )
     return findings
+
+
+#: The name of the primary source of the live description.
+_SOURCE_GH = "the live gh read"
 
 
 def _target_of(edit: PrBodyEdit | None) -> str:
@@ -1047,7 +1387,8 @@ def render_block_reason(findings: list[Finding]) -> str:
                 "each on a line of its own:\n\n"
                 f"{lines}\n\n"
                 "Then re-run the edit. Nothing else about the command needs to "
-                "change. The one edit that may drop a stamp line keeps exactly "
+                "change. The live description was read from "
+                f"{finding.body_source or _SOURCE_GH}. The one edit that may drop a stamp line keeps exactly "
                 "one canonical evidence-source line, written OCC#<number>, "
                 "whose onex_change_control pull request is MERGED (OMN-17427)."
             )
@@ -1121,6 +1462,7 @@ def main(argv: list[str] | None = None) -> int:
         reader,
         session_cwd,
         gh_companion_merged_reader(session_cwd),
+        watcher_record_reader(policy, session_cwd),
     )
     if findings:
         return _block(render_block_reason(findings))

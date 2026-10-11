@@ -1,0 +1,49 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20937
+title: "omniclaude lab hosts leave the shipped repository: hook lane broker table, dispatch-claim hosts, embedding default, install examples and the gap lab pattern move to the workspace config overlay"
+summary: >
+  The hook edge lane contract, the dispatch claim gate and release hooks, the code graph query,
+  the gap skill's legacy denylist, the install-delegation examples, .env.example and the
+  imperative-skill hook fixture carried a lab host or endpoint. The values now live in the
+  workspace config overlay (config/lab/ under ONEX_WORKSPACE_CONFIG_ROOT), byte-identical to
+  what the lab ran. The shipped readers keep the schema, the loader and a neutral behaviour:
+  with no overlay they refuse or degrade and name the missing overlay file. Comments naming
+  the lab tailnet in three workflow files are neutral wording.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20937-no-lab-host-shipped
+    statement: Shipped omniclaude configuration, defaults and examples carry no lab host, and each repointed hook reads its lab value from the overlay and degrades to a neutral behaviour that names the missing overlay.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: omniclaude and omnidash at dev carry no lab host in configuration or as a default value -- falsifier: pytest over the gate''s deployment-config class reports zero findings in both repos'
+      - id: AC2
+        statement: 'AC2: each repointed hook resolves today''s host from the private overlay and degrades to a neutral behaviour naming the missing overlay without it -- falsifier: pytest focused hook tests with and without ONEX_WORKSPACE_CONFIG_ROOT'
+evidence_requirements:
+  - kind: tests
+    description: The overlay readers resolve the overlay value and refuse or degrade by naming the missing overlay; the shipped files carry no lab host; the existing hook edge lane and dispatch claim suites pass against a synthetic overlay.
+    command: uv run pytest tests/hooks/test_lab_overlay_readers_omn20937.py tests/hooks/test_hook_edge_lane.py tests/hooks/test_dispatch_claim_pretool.py tests/hooks/test_dispatch_claim_posttool.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn-20937-ac1
+    description: The shipped files that carried a lab host (hook edge lane contract and loader, dispatch claim gate and release, code graph query, gap legacy denylist, install-delegation, .env.example, the imperative-skill hook fixture) hold no 192.168 address and no tailnet name.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_lab_overlay_readers_omn20937.py -q --no-cov -k shipped_file_carries_no_lab_host
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC1
+  - id: dod-omn-20937-ac2
+    description: Each reader resolves the overlay value when ONEX_WORKSPACE_CONFIG_ROOT holds the overlay, and without it refuses or degrades with a message naming the overlay file.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_lab_overlay_readers_omn20937.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC2

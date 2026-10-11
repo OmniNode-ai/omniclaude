@@ -26,6 +26,10 @@
 #                              log line can say which lane it meant instead of
 #                              re-deriving it from a host:port
 #
+# The lane's broker is NOT in the contract: it comes from the overlay
+# config/lab/hook_edge_lane.yaml under the workspace config root (see
+# _onex_hook_edge_lane_overlay_path), or from an inline declaration in the contract.
+#
 # Deliberately pure shell — no python3, no PyYAML, no yq. A hook must never
 # lose its lane because an interpreter is missing or slow. The parse is a
 # narrow, single-purpose reader of two fields from a file this repo owns and
@@ -38,30 +42,12 @@
 # CI gate is what guarantees a malformed contract never reaches a machine.
 # =============================================================================
 
-_onex_hook_edge_lane_apply() {
-    # OMN-20109: parsed with bash builtins only. The sed|head and awk this
-    # replaced were four execs and four forks on every hook invocation; the
-    # reads below are the same two reads, with the same anchors.
-    local self="${BASH_SOURCE[0]}" dir contract
-    dir="${self%/*}"; [[ "$self" == */* ]] || dir=.
-    contract="${dir}/../contracts/hook_edge_lane.yaml"
-    [[ -r "$contract" ]] || return 0
-
-    local lane="" line
-    # Top-level `lane:` only — anchored to column 0 so a nested key of the same
-    # name inside known_lanes/relay can never be mistaken for the declaration.
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" =~ ^lane:[[:space:]]*\"?([^\"#]*)\"?[[:space:]]*$ ]]; then
-            lane="${BASH_REMATCH[1]}"
-            break
-        fi
-    done < "$contract"
-    lane="${lane%"${lane##*[![:space:]]}"}"
-    [[ -n "$lane" ]] || return 0
-
-    local brokers="" in_lanes=0 in_want=0 key
-    # Walk into known_lanes, stop at the named lane's block, take its
-    # bootstrap_servers. Bounded to the block by the two-space indent level.
+# Walk into known_lanes of FILE, stop at LANE's block, set _ONEX_EDGE_BROKER to its
+# bootstrap_servers (empty when the block has none). Bounded to the block by the
+# two-space indent level.
+_onex_hook_edge_lane_broker() {
+    local file="$1" lane="$2" line key in_lanes=0 in_want=0
+    _ONEX_EDGE_BROKER=""
     while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" =~ ^known_lanes:[[:space:]]*$ ]]; then
             in_lanes=1
@@ -84,11 +70,83 @@ _onex_hook_edge_lane_apply() {
                 line="${line%%#*}"
                 line="${line%"${line##*[![:space:]]}"}"
             fi
-            brokers="${line//\"/}"
+            _ONEX_EDGE_BROKER="${line//\"/}"
+            return 0
+        fi
+    done < "$file"
+    return 0
+}
+
+# The overlay path under the workspace config root: ONEX_WORKSPACE_CONFIG_ROOT when
+# non-blank, otherwise the sibling config repository of the workspace root
+# (OMNIBASE_PATH, then OMNI_HOME), otherwise the workspace's .onex/workspace-config.
+# Sets _ONEX_EDGE_OVERLAY, empty when no root resolves (no command substitution:
+# the hook path stays fork-free, OMN-20109).
+_onex_hook_edge_lane_overlay_path() {
+    local root="${ONEX_WORKSPACE_CONFIG_ROOT:-}" base
+    _ONEX_EDGE_OVERLAY=""
+    root="${root#"${root%%[![:space:]]*}"}"
+    root="${root%"${root##*[![:space:]]}"}"
+    if [[ -z "$root" ]]; then
+        base="${OMNIBASE_PATH:-${OMNI_HOME:-}}"
+        [[ -n "$base" ]] || return 0
+        # Name assembled from parts: the sibling repository is private and must
+        # not appear as a literal in this shipped file (public-repo-hygiene).
+        local sibling="omnibase""_internal"
+        if [[ -d "$base/../$sibling" ]]; then
+            root="$base/../$sibling"
+        elif [[ -d "$base/.onex/workspace-config" ]]; then
+            root="$base/.onex/workspace-config"
+        else
+            return 0
+        fi
+    fi
+    _ONEX_EDGE_OVERLAY="$root/config/lab/hook_edge_lane.yaml"
+}
+
+_onex_hook_edge_lane_apply() {
+    # OMN-20109: parsed with bash builtins only. The sed|head and awk this
+    # replaced were four execs and four forks on every hook invocation; the
+    # reads below are the same two reads, with the same anchors.
+    local self="${BASH_SOURCE[0]}" dir contract
+    dir="${self%/*}"; [[ "$self" == */* ]] || dir=.
+    contract="${dir}/../contracts/hook_edge_lane.yaml"
+    [[ -r "$contract" ]] || return 0
+
+    local lane="" line
+    # Top-level `lane:` only — anchored to column 0 so a nested key of the same
+    # name inside known_lanes/relay can never be mistaken for the declaration.
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^lane:[[:space:]]*\"?([^\"#]*)\"?[[:space:]]*$ ]]; then
+            lane="${BASH_REMATCH[1]}"
             break
         fi
     done < "$contract"
-    [[ -n "$brokers" ]] || return 0
+    lane="${lane%"${lane##*[![:space:]]}"}"
+    [[ -n "$lane" ]] || return 0
+
+    # The lane's broker is a deployment fact: declared inline in the contract
+    # by whoever runs the system, otherwise supplied by the overlay at
+    # config/lab/hook_edge_lane.yaml under the workspace config root. The
+    # shipped contract carries none, so a fork with no overlay publishes
+    # nowhere and is told which file is missing.
+    local brokers=""
+    _onex_hook_edge_lane_broker "$contract" "$lane"
+    brokers="$_ONEX_EDGE_BROKER"
+    if [[ -z "$brokers" ]]; then
+        local overlay
+        _onex_hook_edge_lane_overlay_path
+        overlay="$_ONEX_EDGE_OVERLAY"
+        if [[ -n "$overlay" && -r "$overlay" ]]; then
+            _onex_hook_edge_lane_broker "$overlay" "$lane"
+            brokers="$_ONEX_EDGE_BROKER"
+        fi
+        if [[ -z "$brokers" ]]; then
+            printf 'hook_edge_lane: lane %s has no broker: no overlay config/lab/hook_edge_lane.yaml (%s). Set ONEX_WORKSPACE_CONFIG_ROOT to a directory that holds it; the environment is left untouched.\n' \
+                "$lane" "${overlay:-no workspace config root resolved from ONEX_WORKSPACE_CONFIG_ROOT or OMNI_HOME}" >&2
+            return 0
+        fi
+    fi
 
     export ONEX_HOOK_EDGE_LANE="$lane"
     export KAFKA_BOOTSTRAP_SERVERS="$brokers"
@@ -100,4 +158,5 @@ _onex_hook_edge_lane_apply() {
 }
 
 _onex_hook_edge_lane_apply || true
-unset -f _onex_hook_edge_lane_apply
+unset -f _onex_hook_edge_lane_apply _onex_hook_edge_lane_broker _onex_hook_edge_lane_overlay_path
+unset _ONEX_EDGE_BROKER _ONEX_EDGE_OVERLAY

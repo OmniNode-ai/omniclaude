@@ -15,9 +15,6 @@
 
 schema_version: 1
 entries:
-  - path: .pre-commit-hooks/reject-imperative-skill-patterns.sh
-    family: E-LAN
-    content_sha1: f9ebf33e1686d8aa91292b6adf515956414d83e1
   - path: plugins/onex/agents/configs/omniagent-smart-responder.yaml
     family: M
     content_sha1: 199be5452e8aeac55ca0916cf142ee1e2d829974
@@ -33,21 +30,6 @@ entries:
   - path: plugins/onex/hooks/config/model_router_hook.yaml
     family: M
     content_sha1: 1e0041e12656d3c8946c84be778adfd0f4bd89e2
-  - path: plugins/onex/hooks/contracts/hook_dispatch_claim_pretool.yaml
-    family: E-LAN
-    content_sha1: 739744895d8dc2d349376a3063268d6f44d2552d
-  - path: plugins/onex/hooks/contracts/hook_edge_lane.yaml
-    family: E-LAN
-    content_sha1: 052b6250e1c012eaf50c0ce050d12d687731a315
-  - path: plugins/onex/hooks/contracts/hook_edge_lane.yaml
-    family: E-LAN
-    content_sha1: 0738299e1e02893fe923f31d0eaeb835e5c94593
-  - path: plugins/onex/hooks/contracts/hook_edge_lane.yaml
-    family: E-LAN
-    content_sha1: 4c7ce22563374b02c5faab7401cf0003db77724a
-  - path: plugins/onex/hooks/contracts/hook_edge_lane.yaml
-    family: E-LAN
-    content_sha1: a61e5b6e754cd4e1ad8d9738e66e8e57d16cb944
   - path: plugins/onex/hooks/lib/actor_line_guard.py
     family: M
     content_sha1: 9e171b55fa0ee38eecdbf43fc183a8ba9849544b
@@ -56,58 +38,13 @@ entries:
     content_sha1: 4132b525ea353f73adb513c3e2f13c0cda83a84c
   - path: plugins/onex/hooks/lib/code_graph_query.py
     family: E
-    content_sha1: 92b8c618a3aa45d905cad5e933a888d8863115d4
-  - path: plugins/onex/hooks/lib/code_graph_query.py
-    family: E
     content_sha1: db19f422ef378b02cfe421c6b61bbde2e750dd16
-  - path: plugins/onex/hooks/lib/code_graph_query.py
-    family: E-LAN
-    content_sha1: 92b8c618a3aa45d905cad5e933a888d8863115d4
   - path: plugins/onex/hooks/lib/context_injection_wrapper.py
     family: E
     content_sha1: 7be3669c73a96f1fed76fdb843dd4f697c403cce
   - path: plugins/onex/hooks/lib/cost_accounting.py
     family: M
     content_sha1: 43602e25a054e5ca657055204e7feee99bc587bc
-  - path: plugins/onex/hooks/lib/dispatch_claim_gate.py
-    family: E-LAN
-    content_sha1: 36310b47a1f29458fe3bf8a303016cf72d99b24d
-  - path: plugins/onex/hooks/lib/dispatch_claim_gate.py
-    family: E-LAN
-    content_sha1: 36310b47a1f29458fe3bf8a303016cf72d99b24d
-  - path: plugins/onex/hooks/lib/dispatch_claim_gate.py
-    family: E-LAN
-    content_sha1: 73c1b7025e969700b258987c8e7b915ddad33bd8
-  - path: plugins/onex/hooks/lib/dispatch_claim_gate.py
-    family: E-LAN
-    content_sha1: 73c1b7025e969700b258987c8e7b915ddad33bd8
-  - path: plugins/onex/hooks/lib/dispatch_claim_gate.py
-    family: E-LAN
-    content_sha1: d51591ff9a3571c4819b02d9cdf588ecb8cc0c7c
-  - path: plugins/onex/hooks/lib/dispatch_claim_release.py
-    family: E-LAN
-    content_sha1: 27f3cf0c020678c04b8b3e34bd022e0886aebb24
-  - path: plugins/onex/hooks/lib/dispatch_claim_release.py
-    family: E-LAN
-    content_sha1: 36310b47a1f29458fe3bf8a303016cf72d99b24d
-  - path: plugins/onex/hooks/lib/dispatch_claim_release.py
-    family: E-LAN
-    content_sha1: 36310b47a1f29458fe3bf8a303016cf72d99b24d
-  - path: plugins/onex/hooks/lib/dispatch_claim_release.py
-    family: E-LAN
-    content_sha1: 36310b47a1f29458fe3bf8a303016cf72d99b24d
-  - path: plugins/onex/hooks/lib/dispatch_claim_release.py
-    family: E-LAN
-    content_sha1: 626c6c9e6660b5cd51d3d7478928c371487d0777
-  - path: plugins/onex/hooks/lib/dispatch_claim_release.py
-    family: E-LAN
-    content_sha1: 73c1b7025e969700b258987c8e7b915ddad33bd8
-  - path: plugins/onex/hooks/lib/dispatch_claim_release.py
-    family: E-LAN
-    content_sha1: 73c1b7025e969700b258987c8e7b915ddad33bd8
-  - path: plugins/onex/hooks/lib/dispatch_claim_release.py
-    family: E-LAN
-    content_sha1: 73c1b7025e969700b258987c8e7b915ddad33bd8
   - path: plugins/onex/hooks/lib/model_router_hook.py
     family: M
     content_sha1: c72c25a71abafdd25699c1580c2fbc05d1e0ebea
@@ -165,9 +102,6 @@ entries:
   - path: plugins/onex/skills/demo/_lib/dispatch.py
     family: M
     content_sha1: e7a425178dd97912e46744f277c8601c2e98096f
-  - path: plugins/onex/skills/gap/legacy-denylist.yaml
-    family: E-LAN
-    content_sha1: f76160cb0fa8705794c5587ad6701f3a008c6b6c
   - path: scripts/cron-201-baseline.sh
     family: M
     content_sha1: 6fa661b24679f1af58e19eccdd0102cb3450a620
@@ -186,15 +120,6 @@ entries:
   - path: scripts/headless-emit-wrapper.sh
     family: M
     content_sha1: fa8169259c7ba1048ed25ea540785ce184eddad1
-  - path: scripts/install-delegation.sh
-    family: E-LAN
-    content_sha1: 347357191969d5ba40c083ffa6a84f5c06e6b4b9
-  - path: scripts/install-delegation.sh
-    family: E-LAN
-    content_sha1: 9f152b37003b3bf1b2d1eae22a74d7784e8b6bad
-  - path: scripts/install-delegation.sh
-    family: E-LAN
-    content_sha1: bc1897f23b67f0e57c984aaa0848aef12c860d2b
   - path: scripts/publish_provider_selection.py
     family: M
     content_sha1: 22c84ec3c967af86622c19b28b2b6fe31a826a98
@@ -294,66 +219,12 @@ entries:
   - path: tests/delegation/test_runner.py
     family: E-LAN
     content_sha1: ac1b6ef974cf6c535edd31f1ca51cbfc99cadc4a
-  - path: tests/e2e/test_dispatch_claim_cascade.py
-    family: E-LAN
-    content_sha1: a22647942c7a0fa2aadefc139ced4479ca3806c6
   - path: tests/hooks/test_context_config.py
     family: E-LAN
     content_sha1: a7fec91da1e160147ab6b9f2a47a1b66f34199c4
   - path: tests/hooks/test_context_config.py
     family: E-LAN
     content_sha1: b625daffa4103f06c3c9ab20d7aeffc6132a44e1
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 175440e20dfb314e50ab694ad7af2701db1c16e5
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 271c728c6931d0199e8c3f4da12ec750bbd8b4be
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 27f3cf0c020678c04b8b3e34bd022e0886aebb24
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 73c1b7025e969700b258987c8e7b915ddad33bd8
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 73c1b7025e969700b258987c8e7b915ddad33bd8
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 73c1b7025e969700b258987c8e7b915ddad33bd8
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 73c1b7025e969700b258987c8e7b915ddad33bd8
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 73c1b7025e969700b258987c8e7b915ddad33bd8
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 9841dc75ac446e7bf104f542b966435e565ae150
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 9841dc75ac446e7bf104f542b966435e565ae150
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: 9841dc75ac446e7bf104f542b966435e565ae150
-  - path: tests/hooks/test_dispatch_claim_posttool.py
-    family: E-LAN
-    content_sha1: f7c4c51d4da67fe8d3fb0a84b16252f3928d5a17
-  - path: tests/hooks/test_dispatch_claim_pretool.py
-    family: E-LAN
-    content_sha1: 175440e20dfb314e50ab694ad7af2701db1c16e5
-  - path: tests/hooks/test_dispatch_claim_pretool.py
-    family: E-LAN
-    content_sha1: 271c728c6931d0199e8c3f4da12ec750bbd8b4be
-  - path: tests/hooks/test_dispatch_claim_pretool.py
-    family: E-LAN
-    content_sha1: 9841dc75ac446e7bf104f542b966435e565ae150
-  - path: tests/hooks/test_dispatch_claim_pretool.py
-    family: E-LAN
-    content_sha1: f7c4c51d4da67fe8d3fb0a84b16252f3928d5a17
-  - path: tests/hooks/test_dispatch_claim_pretool.py
-    family: E-LAN
-    content_sha1: f7c4c51d4da67fe8d3fb0a84b16252f3928d5a17
   - path: tests/integration/test_skill_orchestrator_proof_of_life.py
     family: E-LAN
     content_sha1: f6ee9f2ae6747c653e6ba27f8319f024950c1c7f

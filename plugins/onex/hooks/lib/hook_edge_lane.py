@@ -19,6 +19,13 @@ single authority — and exposes:
 
 * :func:`load_contract` — parse and structurally validate the declaration.
 * :func:`resolve_bootstrap_servers` — the publisher's answer.
+
+The contract names each lane's compose project, network and transport; the
+lane's host-side broker is a deployment fact, so it is supplied by an overlay
+(``config/lab/hook_edge_lane.yaml`` under the workspace config root,
+``ONEX_WORKSPACE_CONFIG_ROOT``) or declared inline in the contract by whoever
+runs the system. With neither, the broker is unconfigured:
+:class:`HookEdgeLaneOverlayMissing` names the overlay that would supply it.
 * :func:`audit_surfaces` — which demoted host surfaces disagree, so a
   disagreement is *legible* rather than *decisive* (AC3).
 
@@ -44,6 +51,8 @@ __all__ = [
     "DEFAULT_OPERATOR_ENV_FILE",
     "HookEdgeLaneContract",
     "HookEdgeLaneCredentialError",
+    "HookEdgeLaneOverlayMissing",
+    "LANE_OVERLAY_RELATIVE",
     "LaneEndpoint",
     "SurfaceFinding",
     "audit_surfaces",
@@ -133,6 +142,15 @@ class HookEdgeLaneError(ValueError):
     """
 
 
+class HookEdgeLaneOverlayMissing(HookEdgeLaneError):
+    """The declared lane has no broker: no overlay and no inline declaration.
+
+    The neutral behaviour of a fork or customer with no private overlay. It is
+    loud and typed rather than a silent default, and its message names the
+    overlay file and how to supply it.
+    """
+
+
 class HookEdgeLaneCredentialError(HookEdgeLaneError):
     """The declared lane needs a credential this host does not hold.
 
@@ -174,7 +192,7 @@ class LaneEndpoint:
     name: str
     compose_project: str
     network: str
-    bootstrap_servers: str
+    bootstrap_servers: str | None
     security_protocol: str
     sasl_mechanism: str | None = None
     sasl_env_prefix: str | None = None
@@ -205,10 +223,36 @@ class HookEdgeLaneContract:
     # yet. A producer that consults this journals none of them: an ungranted
     # topic at the journal head stops the drain for every record behind it.
     produce_grant_pending: tuple[str, ...] = ()
+    # An overlay named explicitly at load time; None means "ask the workspace
+    # config root", which is what every hook-path caller wants.
+    overlay_path: Path | None = None
+
+    def configured_brokers(self) -> dict[str, str]:
+        """Lane name -> host-side broker, for every lane that has one.
+
+        A broker declared inline in the contract wins; otherwise the overlay
+        (read now, not at load time, so a hook that never publishes pays
+        nothing for it) supplies it. A lane with neither is absent.
+        """
+        overlay = _read_lane_overlay(self.overlay_path)
+        brokers: dict[str, str] = {}
+        for name, endpoint in self.known_lanes.items():
+            broker = endpoint.bootstrap_servers or overlay.get(name)
+            if broker is not None:
+                brokers[name] = broker
+        return brokers
 
     @property
     def bootstrap_servers(self) -> str:
-        return self.known_lanes[self.lane].bootstrap_servers
+        brokers = self.configured_brokers().get(self.lane)
+        if brokers is None:
+            raise HookEdgeLaneOverlayMissing(
+                f"{self.path}: lane {self.lane!r} declares no broker. "
+                + _missing_overlay_message(
+                    f"the hook edge has no host-side broker for lane {self.lane!r}"
+                )
+            )
+        return brokers
 
     @property
     def network(self) -> str:
@@ -694,7 +738,63 @@ def resolve_transport_env(
     return resolved
 
 
-def load_contract(path: Path) -> HookEdgeLaneContract:
+LANE_OVERLAY_RELATIVE = "config/lab/hook_edge_lane.yaml"
+
+
+def _onex_state() -> Any:
+    """The sibling ``onex_state`` module, importable however this file was loaded."""
+    try:
+        import onex_state
+    except ImportError:
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import onex_state
+    return onex_state
+
+
+def _missing_overlay_message(what: str) -> str:
+    return str(
+        _onex_state().missing_workspace_config_message(LANE_OVERLAY_RELATIVE, what)
+    )
+
+
+def _read_lane_overlay(overlay_path: Path | None) -> dict[str, str]:
+    """Lane name -> host-side broker, from the overlay; ``{}`` when none is present.
+
+    An explicit ``overlay_path`` that is not a file is an error (a run told to
+    use one overlay is never handed none). Without one, the workspace config
+    root decides, and an absent overlay is simply "no overlay": the lane's
+    broker stays unconfigured and says so when it is asked for.
+    """
+    import yaml
+
+    if overlay_path is None:
+        overlay_path = _onex_state().workspace_config_file(LANE_OVERLAY_RELATIVE)
+        if overlay_path is None:
+            return {}
+    elif not overlay_path.is_file():
+        raise HookEdgeLaneError(f"no hook-edge lane overlay at {overlay_path}")
+    raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
+    lanes = raw.get("known_lanes") if isinstance(raw, dict) else None
+    if not isinstance(lanes, dict):
+        raise HookEdgeLaneError(
+            f"{overlay_path}: overlay must hold a known_lanes mapping"
+        )
+    brokers: dict[str, str] = {}
+    for name, entry in lanes.items():
+        servers = entry.get("bootstrap_servers") if isinstance(entry, dict) else None
+        if not isinstance(servers, str) or not servers.strip():
+            raise HookEdgeLaneError(
+                f"{overlay_path}: known_lanes.{name} must declare bootstrap_servers"
+            )
+        brokers[str(name)] = servers.strip()
+    return brokers
+
+
+def load_contract(
+    path: Path, *, overlay_path: Path | None = None
+) -> HookEdgeLaneContract:
     """Parse and structurally validate the hook-edge lane declaration."""
     import yaml
 
@@ -723,7 +823,11 @@ def load_contract(path: Path) -> HookEdgeLaneContract:
             name=str(name),
             compose_project=str(_require(entry, "compose_project", scope)),
             network=str(_require(entry, "network", scope)),
-            bootstrap_servers=str(_require(entry, "bootstrap_servers", scope)),
+            bootstrap_servers=(
+                str(entry["bootstrap_servers"])
+                if entry.get("bootstrap_servers") is not None
+                else None
+            ),
             security_protocol=protocol,
             sasl_mechanism=mechanism,
             sasl_env_prefix=prefix,
@@ -796,11 +900,12 @@ def load_contract(path: Path) -> HookEdgeLaneContract:
         governed_event_classes=tuple(str(name) for name in classes),
         non_authoritative_surfaces=tuple(str(s) for s in demoted),
         produce_grant_pending=pending,
+        overlay_path=overlay_path,
     )
 
 
 def resolve_bootstrap_servers(contract: HookEdgeLaneContract) -> str:
-    """The publisher's broker, from the contract and nothing else.
+    """The publisher's broker, from the contract and its overlay and nothing else.
 
     Note what this function does NOT do: consult the environment. That is the
     whole point — an env var that disagrees is a finding (see

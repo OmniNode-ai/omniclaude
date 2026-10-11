@@ -40,6 +40,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 _HERE = Path(__file__).resolve()
 _DEFAULT_REPO_ROOT = _HERE.parents[2]
@@ -446,10 +447,7 @@ def _check_static(repo_root: Path) -> list[str]:
         # The ports to look for are DERIVED from the contract's own known_lanes,
         # not a second hardcoded list -- a list here would be one more place a
         # lane endpoint is spelled, which is the defect this gate exists to close.
-        lane_ports = {
-            f":{endpoint.bootstrap_servers.rsplit(':', 1)[-1]}"
-            for endpoint in contract.known_lanes.values()
-        }
+        lane_ports = _lane_ports(contract)
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if line.lstrip().startswith("#"):
                 continue
@@ -464,6 +462,20 @@ def _check_static(repo_root: Path) -> list[str]:
     violations.extend(_check_drainer(repo_root, contract))
 
     return violations
+
+
+def _lane_ports(contract: Any) -> set[str]:
+    """The broker ports of every lane that has a broker, as ``:<port>`` strings.
+
+    Brokers are deployment facts supplied by an overlay or declared inline, so a
+    checkout with neither has no ports to look for and the pinned-port scans
+    below have nothing to find; the structural checks above still run. The
+    scans bite wherever the overlay is present (the lab host, the operator Mac).
+    """
+    return {
+        f":{broker.rsplit(':', 1)[-1]}"
+        for broker in contract.configured_brokers().values()
+    }
 
 
 def _check_drainer(repo_root: Path, contract) -> list[str]:  # type: ignore[no-untyped-def]
@@ -495,10 +507,7 @@ def _check_drainer(repo_root: Path, contract) -> list[str]:  # type: ignore[no-u
     plist = repo_root / _DRAINER_PLIST_REL
     if not plist.is_file():
         return [*violations, f"{plist}: drainer launchd plist missing"]
-    lane_ports = {
-        f":{endpoint.bootstrap_servers.rsplit(':', 1)[-1]}"
-        for endpoint in contract.known_lanes.values()
-    }
+    lane_ports = _lane_ports(contract)
     in_comment = False
     for lineno, line in enumerate(plist.read_text(encoding="utf-8").splitlines(), 1):
         if "<!--" in line:
