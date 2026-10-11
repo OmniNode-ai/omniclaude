@@ -67,6 +67,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from typing import Protocol
 
 JsonDict = dict[str, object]
 
@@ -199,6 +200,42 @@ class TopicPolicy:
 
 
 @dataclass(frozen=True)
+class SecretReference:
+    """How a stored secret is named on the bus (OMN-20926).
+
+    ``pattern`` matches exactly one reference and nothing that could carry a
+    credential; every scrub keeps a span it matches. ``template`` and
+    ``store_key_template`` take ``{digest}``. ``value_group`` names the regex
+    group that holds the secret inside a label-style pattern's match.
+    """
+
+    pattern: re.Pattern[str]
+    template: str
+    store_key_template: str
+    value_group: str
+
+    def reference_for(self, digest: str) -> str:
+        return self.template.format(digest=digest)
+
+    def store_key_for(self, digest: str) -> str:
+        return self.store_key_template.format(digest=digest)
+
+
+class SecretSink(Protocol):
+    """Where the producer puts a detected secret (OMN-20926).
+
+    Called with one secret value; returns the reference that now names it, or
+    ``None`` when the store did not take it, in which case the span crosses as
+    the scrub marker exactly as before references existed. ``refusal`` is a
+    short reason code for the last ``None`` (never a value, never a path).
+    """
+
+    refusal: str | None
+
+    def __call__(self, value: str) -> str | None: ...
+
+
+@dataclass(frozen=True)
 class RedactionContract:
     """The whole resolved contract."""
 
@@ -212,6 +249,9 @@ class RedactionContract:
     redaction_state_field: str
     #: Replacement text for one scrubbed span; ``{name}`` is the pattern name.
     scrub_marker: str | None = None
+    #: OMN-20926. ``None`` in a contract that declares no reference, in which
+    #: case every scrub behaves exactly as it did before references existed.
+    secret_reference: SecretReference | None = None
 
 
 def default_contract_path() -> Path:
@@ -478,6 +518,50 @@ def _parse_topics(raw: JsonDict, *, source: Path) -> dict[str, TopicPolicy]:
     return topics
 
 
+def _parse_secret_reference(raw: object, *, source: Path) -> SecretReference | None:
+    """Parse the optional ``secret_reference`` block, fail-closed on any defect.
+
+    The template filled with a sample digest must be matched IN FULL by the
+    pattern; otherwise a producer could mint a reference the scrubs would not
+    keep, and the one they keep would not be the one it minted.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise MalformedRedactionContractError(
+            source=str(source), detail="secret_reference must be a mapping"
+        )
+    pattern = _compile(
+        _require(raw, "pattern", source), source=source, where="secret_reference"
+    )
+    texts: dict[str, str] = {}
+    for key in ("template", "store_key_template", "value_group"):
+        value = _require(raw, key, source)
+        if not isinstance(value, str) or not value:
+            raise MalformedRedactionContractError(
+                source=str(source),
+                detail=f"secret_reference.{key} must be a non-empty string",
+            )
+        texts[key] = value
+    for key in ("template", "store_key_template"):
+        if "{digest}" not in texts[key]:
+            raise MalformedRedactionContractError(
+                source=str(source),
+                detail=f"secret_reference.{key} must contain '{{digest}}'",
+            )
+    if pattern.fullmatch(texts["template"].format(digest="0" * 64)) is None:
+        raise MalformedRedactionContractError(
+            source=str(source),
+            detail="secret_reference.pattern does not match its own template",
+        )
+    return SecretReference(
+        pattern=pattern,
+        template=texts["template"],
+        store_key_template=texts["store_key_template"],
+        value_group=texts["value_group"],
+    )
+
+
 def _parse(raw: object, *, source: Path) -> RedactionContract:
     if not isinstance(raw, dict):
         raise MalformedRedactionContractError(
@@ -511,6 +595,9 @@ def _parse(raw: object, *, source: Path) -> RedactionContract:
 
     return RedactionContract(
         scrub_marker=scrub_marker,
+        secret_reference=_parse_secret_reference(
+            raw.get("secret_reference"), source=source
+        ),
         default_field_class=_capture_class(
             _require(raw, "default_field_class", source),
             source=source,
@@ -624,27 +711,127 @@ def _matches_secret(value: object, contract: RedactionContract) -> str | None:
     return None
 
 
-def _scrub_str(text: str, contract: RedactionContract, hits: dict[str, int]) -> str:
+def reference_spans(text: str, contract: RedactionContract) -> list[tuple[int, int]]:
+    """The spans of every secret reference in ``text`` (OMN-20926)."""
+    if contract.secret_reference is None:
+        return []
+    return [m.span() for m in contract.secret_reference.pattern.finditer(text)]
+
+
+def value_span(match: re.Match[str], contract: RedactionContract) -> tuple[int, int]:
+    """The span of the secret inside one match: its value group, else all of it."""
+    group = (
+        None
+        if contract.secret_reference is None
+        else contract.secret_reference.value_group
+    )
+    if group is not None and group in match.re.groupindex:
+        start, end = match.span(group)
+        if start >= 0:
+            return start, end
+    return match.span()
+
+
+def sub_keeping_references(
+    pattern: re.Pattern[str],
+    text: str,
+    contract: RedactionContract,
+    replace: Callable[[re.Match[str]], str],
+) -> str:
+    """``pattern.sub(replace, text)``, except that secret references stand.
+
+    Two matches are references, not secrets, and are left as they are: a
+    match that STARTS inside a reference span (the text is copied to the end
+    of that reference and the search resumes there, so whatever follows is
+    still scanned), and a match whose value (its value group, else the whole
+    match) IS a reference span. Any other match is replaced, including one
+    that merely overlaps a reference: keeping a reference never keeps a
+    credential next to it. Mirrors omnimarket's resolver exactly.
+    """
+    spans = reference_spans(text, contract)
+    if not spans:
+        return pattern.sub(replace, text)
+    out: list[str] = []
+    pos = 0
+    while pos <= len(text):
+        match = pattern.search(text, pos)
+        if match is None:
+            break
+        start, end = match.span()
+        inside = next((r for r in spans if r[0] <= start < r[1]), None)
+        if inside is not None:
+            out.append(text[pos : inside[1]])
+            pos = inside[1]
+            continue
+        if value_span(match, contract) in spans:
+            out.append(text[pos:end])
+        else:
+            out.append(text[pos:start])
+            out.append(replace(match))
+        if end == start:
+            out.append(text[end : end + 1])
+            end += 1
+        pos = end
+    out.append(text[pos:])
+    return "".join(out)
+
+
+@dataclass
+class _StoreTally:
+    """What one producer pass did with the secrets it found (OMN-20926)."""
+
+    sink: SecretSink | None
+    stored: int = 0
+
+
+def _scrub_str(
+    text: str,
+    contract: RedactionContract,
+    hits: dict[str, int],
+    tally: _StoreTally | None = None,
+) -> str:
     marker = contract.scrub_marker or ""
+    reference = contract.secret_reference
     for name, pattern in contract.secret_patterns:
-        # A literal replacement: the marker is contract text, never a template.
-        replacement = marker.format(name=name).replace("\\", "\\\\")
-        text, count = pattern.subn(replacement, text)
+        # The marker is contract text, inserted literally: a function
+        # replacement never reads it as a regex back-reference.
+        replacement = marker.format(name=name)
+        count = 0
+
+        def _replace(match: re.Match[str], replacement: str = replacement) -> str:
+            nonlocal count
+            count += 1
+            if tally is None or tally.sink is None or reference is None:
+                return replacement
+            start, end = value_span(match, contract)
+            minted = tally.sink(match.string[start:end])
+            if minted is None or reference.pattern.fullmatch(minted) is None:
+                return replacement
+            tally.stored += 1
+            # Only the value is replaced; a label in front of it and a closing
+            # quote after it stay, so the reference reads in place.
+            m_start, m_end = match.span()
+            return match.string[m_start:start] + minted + match.string[end:m_end]
+
+        text = sub_keeping_references(pattern, text, contract, _replace)
         if count:
             hits[name] = hits.get(name, 0) + count
     return text
 
 
 def _scrub_value(
-    value: object, contract: RedactionContract, hits: dict[str, int]
+    value: object,
+    contract: RedactionContract,
+    hits: dict[str, int],
+    tally: _StoreTally | None = None,
 ) -> object:
     """Scrub every string leaf of ``value`` in place of its matched spans."""
     if isinstance(value, str):
-        return _scrub_str(value, contract, hits)
+        return _scrub_str(value, contract, hits, tally)
     if isinstance(value, dict):
-        return {k: _scrub_value(v, contract, hits) for k, v in value.items()}
+        return {k: _scrub_value(v, contract, hits, tally) for k, v in value.items()}
     if isinstance(value, list | tuple):
-        return [_scrub_value(v, contract, hits) for v in value]
+        return [_scrub_value(v, contract, hits, tally) for v in value]
     return value
 
 
@@ -663,6 +850,36 @@ def scrub_text(
     return _scrub_str(text, contract, hits), hits
 
 
+def _cut_outside_references(cut: int, spans: list[tuple[int, int]]) -> int:
+    """Move a cut that falls inside a reference back to that reference's start.
+
+    OMN-20926: a reference cut in two is two strings no scrub keeps and no
+    reader can resolve; the fan-out would scrub its first half as a label.
+    """
+    for start, end in spans:
+        if start < cut < end:
+            return start
+    return cut
+
+
+def _chunks_keeping_references(
+    kept: str, step: int, spans: list[tuple[int, int]]
+) -> tuple[str, ...]:
+    """Split ``kept`` into chunks of at most ``step``, never inside a reference."""
+    chunks: list[str] = []
+    pos = 0
+    while pos < len(kept):
+        cut = min(pos + step, len(kept))
+        if cut < len(kept):
+            moved = _cut_outside_references(cut, spans)
+            # A reference is far shorter than a chunk, so this only fails for a
+            # degenerate step; then cut where the step says rather than loop.
+            cut = moved if moved > pos else cut
+        chunks.append(kept[pos:cut])
+        pos = cut
+    return tuple(chunks) or ("",)
+
+
 def plan_content_chunks(
     text: str, topic: str, *, contract_path: Path | None = None
 ) -> ContentPlan:
@@ -677,9 +894,9 @@ def plan_content_chunks(
     if policy is None or policy.content_policy is None:
         raise ValueError(f"topic {topic!r} declares no content_policy")
     bound = policy.content_policy
-    kept = text[: bound.max_content_chars]
-    step = bound.chunk_chars
-    chunks = tuple(kept[i : i + step] for i in range(0, len(kept), step)) or ("",)
+    spans = reference_spans(text, contract)
+    kept = text[: _cut_outside_references(bound.max_content_chars, spans)]
+    chunks = _chunks_keeping_references(kept, bound.chunk_chars, spans)
     return ContentPlan(
         chunks=chunks,
         original_chars=len(text),
@@ -698,6 +915,8 @@ def prepare_content_records(
     chunk_count_field: str,
     digest_field: str,
     contract_path: Path | None = None,
+    secret_sink: SecretSink | None = None,
+    stored_refs_field: str | None = None,
 ) -> list[JsonDict]:
     """The PRODUCER half: redact one whole content item, then chunk it.
 
@@ -734,10 +953,21 @@ def prepare_content_records(
         return [base]
 
     hits: dict[str, int] = {}
+    # OMN-20926: with a sink, each detected secret is offered to the secret
+    # store and a reference replaces it; a span the store did not take crosses
+    # as the scrub marker. Without one, every span is the marker, as before.
+    tally = _StoreTally(sink=secret_sink)
     for field, capture_class in policy.fields.items():
         if capture_class is EnumCaptureClass.CAPTURE_SCRUBBED and field in base:
-            base[field] = _scrub_value(base[field], contract, hits)
+            base[field] = _scrub_value(base[field], contract, hits, tally)
     base[redaction_field] = hits
+    if stored_refs_field is not None and hits:
+        # Counts and one reason code: never a value, a digest or a path.
+        base[stored_refs_field] = {
+            "stored": tally.stored,
+            "fallback": sum(hits.values()) - tally.stored,
+            "reason": None if secret_sink is None else secret_sink.refusal,
+        }
 
     text = base.get(content_field)
     plan = plan_content_chunks(
@@ -984,6 +1214,8 @@ __all__: list[str] = [
     "MalformedRedactionContractError",
     "OutputClass",
     "RedactionContract",
+    "SecretReference",
+    "SecretSink",
     "TopicPolicy",
     "UngovernedTopicError",
     "default_contract_path",
@@ -992,6 +1224,9 @@ __all__: list[str] = [
     "plan_content_chunks",
     "prepare_content_records",
     "redact_capture",
+    "reference_spans",
     "scrub_text",
     "shape_of",
+    "sub_keeping_references",
+    "value_span",
 ]

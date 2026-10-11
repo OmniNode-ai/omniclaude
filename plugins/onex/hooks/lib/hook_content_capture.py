@@ -79,6 +79,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
@@ -118,6 +119,25 @@ OPERATOR_LOOKBACK_SECONDS = 3600
 OPERATOR_MARKER_KEEP = 512
 
 _RESOLVER_MODULE_NAME = "omniclaude_capture_redaction_by_path"
+
+#: OMN-20926: the record field carrying the producer's store-then-reference
+#: outcome, ``{stored, fallback, reason}``. Declared on the content topic.
+STORE_OUTCOME_FIELD = "stored_refs"
+
+#: OMN-20926: omnimarket's captured secret store effect, imported only when a
+#: capture actually finds a secret, so a clean capture pays nothing for it.
+_STORE_HANDLER_MODULE = (
+    "omnimarket.nodes.node_captured_secret_store_effect.handlers."
+    "handler_captured_secret_store"
+)
+_STORE_REQUEST_MODULE = (
+    "omnimarket.nodes.node_captured_secret_store_effect.models."
+    "model_captured_secret_store_request"
+)
+#: The effect is not installed in this interpreter yet (an older omnimarket).
+WRITER_UNAVAILABLE = "writer_unavailable"
+#: Reasons that mean this machine does not take part, so nothing is alarmed.
+QUIET_STORE_REFUSALS = frozenset({"not_configured", WRITER_UNAVAILABLE})
 _REPLY_MARKER_SUFFIX = ".reply"
 _OPERATOR_MARKER_SUFFIX = ".operator"
 
@@ -478,6 +498,68 @@ def record_operator_marker(turn_dir: Path, session_id: str, ids: list[str]) -> N
 
 
 # ---------------------------------------------------------------------------
+# the secret store (OMN-20926)
+# ---------------------------------------------------------------------------
+
+
+def onex_home() -> Path:
+    """This machine's ``~/.onex``: its private overlay and credential file."""
+    return Path("~/.onex").expanduser()
+
+
+def build_store_handler(home: Path) -> tuple[Any, Any]:
+    """omnimarket's captured secret store effect, and its request model.
+
+    Raises ``ImportError`` when this interpreter's omnimarket predates the
+    effect; :class:`StoreSink` turns that into ``writer_unavailable``.
+    """
+    handler_module = importlib.import_module(_STORE_HANDLER_MODULE)
+    request_module = importlib.import_module(_STORE_REQUEST_MODULE)
+    return (
+        handler_module.HandlerCapturedSecretStore(onex_home=home),
+        request_module.ModelCapturedSecretStoreRequest,
+    )
+
+
+class StoreSink:
+    """The resolver's ``SecretSink``, over the captured secret store effect.
+
+    Called with each secret the scrub finds; returns the reference the effect
+    minted, or ``None`` so the span crosses as the marker. ``refusal`` is the
+    effect's outcome code for the first failure, which also stops every later
+    call in this capture.
+    """
+
+    def __init__(self, *, session_id: str) -> None:
+        self.session_id = session_id
+        self.refusal: str | None = None
+        self.detail: str | None = None
+        self._handler: Any = None
+        self._request: Any = None
+
+    def __call__(self, value: str) -> str | None:
+        if self.refusal is not None:
+            return None
+        if self._handler is None:
+            try:
+                self._handler, self._request = build_store_handler(onex_home())
+            except ImportError as exc:
+                self.refusal = WRITER_UNAVAILABLE
+                self.detail = type(exc).__name__
+                return None
+        result = self._handler.handle(
+            self._request(
+                value=value, session_id=self.session_id, captured_at=datetime.now(UTC)
+            )
+        )
+        if result.reference is None:
+            self.refusal = str(result.outcome.value)
+            self.detail = result.detail
+            return None
+        return str(result.reference)
+
+
+# ---------------------------------------------------------------------------
 # entrypoint
 # ---------------------------------------------------------------------------
 
@@ -547,10 +629,20 @@ def capture(
             )
             items = [*items, *operator_items]
 
+    # OMN-20926: a detected secret is stored in the secret store and a
+    # reference replaces it. The writer loads only when a secret is found; a
+    # span the store did not take crosses as the marker.
+    sink = (
+        None
+        if resolver.load_contract().secret_reference is None
+        else StoreSink(session_id=session)
+    )
+
     written = 0
+    fallback = 0
     for item in items:
         record = {"session_id": session, "hook_source": _HOOK_SOURCE[kind], **item}
-        for chunk in resolver.prepare_content_records(
+        chunks = resolver.prepare_content_records(
             record,
             topic=topic,
             content_field="content",
@@ -558,7 +650,13 @@ def capture(
             chunk_index_field="chunk_index",
             chunk_count_field="chunk_count",
             digest_field="content_sha256",
-        ):
+            secret_sink=sink,
+            stored_refs_field=STORE_OUTCOME_FIELD,
+        )
+        outcome = chunks[0].get(STORE_OUTCOME_FIELD) if chunks else None
+        if isinstance(outcome, dict):
+            fallback += int(outcome.get("fallback") or 0)
+        for chunk in chunks:
             appender.append_event(
                 # A literal, not CONTENT_EVENT_TYPE, on purpose (OMN-19913):
                 # validate_hook_edge_lane.py resolves only literal classes at
@@ -577,9 +675,78 @@ def capture(
                 journal_dir=str(journal_dir),
             )
             written += 1
+    if sink is not None and fallback and sink.refusal not in QUIET_STORE_REFUSALS:
+        _report_store_fallback(
+            sink,
+            fallback=fallback,
+            session=session,
+            journal_dir=journal_dir,
+            correlation_id=correlation_id,
+            cwd=cwd,
+            actor=actor,
+            host_turn_id=host_turn_id,
+            agent_id=agent_id,
+            transcript_path=transcript_path,
+        )
     if operator_ids:
         record_operator_marker(turn_dir, session, operator_ids)
     return written
+
+
+def _report_store_fallback(
+    sink: StoreSink,
+    *,
+    fallback: int,
+    session: str,
+    journal_dir: Path,
+    correlation_id: str | None,
+    cwd: str | None,
+    actor: str | None,
+    host_turn_id: str | None,
+    agent_id: str | None,
+    transcript_path: str | None,
+) -> None:
+    """Say loudly that secrets crossed as the marker because the store failed.
+
+    The hook log always; a ``hook.health.error`` record too when the local
+    drainer can publish one. Reason code and count only: never a value, a
+    digest, a store address or a path.
+    """
+    message = (
+        f"captured-secret store fallback: {fallback} secret span(s) crossed as "
+        f"the redaction marker, reason={sink.refusal}"
+    )
+    _log(message + (f" ({sink.detail})" if sink.detail else ""))
+    status = health.read_status(status_path_for(journal_dir))
+    publishable = None if status is None else status.publishable_event_types
+    if publishable is None or "hook.health.error" not in publishable:
+        return
+    emitted_at = datetime.now(UTC).isoformat()
+    appender.append_event(
+        # A literal, not a constant (OMN-19913): validate_hook_edge_lane.py
+        # resolves only literal classes at an emit call.
+        event_type="hook.health.error",
+        payload={
+            "event_id": str(uuid.uuid4()),
+            "hook_name": "hook_content_capture",
+            "error_tier": "degraded",
+            "error_category": "functional_degradation",
+            "error_message": message,
+            "session_id": session,
+            "fingerprint": hashlib.sha256(
+                f"hook_content_capture:secret_store:{sink.refusal}".encode()
+            ).hexdigest()[:16],
+            "emitted_at": emitted_at,
+        },
+        correlation_id=correlation_id or session,
+        cwd=cwd,
+        actor=actor,
+        host_turn_id=host_turn_id,
+        agent_id=agent_id,
+        transcript_path=transcript_path,
+        session_id=session,
+        journal_dir=str(journal_dir),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

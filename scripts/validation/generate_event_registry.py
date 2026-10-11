@@ -285,6 +285,19 @@ def _resolved_posture(contract_path: Path) -> dict[str, Any]:
             )
             for topic, policy in contract.topics.items()
         },
+        # OMN-20926: the reference a stored secret is named by, the store key it
+        # maps to and the value group are posture: a drifted pattern would let
+        # one side scrub what the other side minted.
+        "secret_reference": (
+            None
+            if contract.secret_reference is None
+            else (
+                contract.secret_reference.pattern.pattern,
+                contract.secret_reference.template,
+                contract.secret_reference.store_key_template,
+                contract.secret_reference.value_group,
+            )
+        ),
     }
 
 
