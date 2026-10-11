@@ -156,7 +156,7 @@ def _cli(root: Path, *extra: str) -> tuple[int, str]:
         f"        run: curl http://{LAN_HOST}/health",
         "# the endpoint is http://box.lan:8000/v1",
         "# the endpoint is http://box.home.arpa/v1",
-        "        run: ssh runner@box.lab",
+        "        run: rsync -a out/ runner@box.lab:/srv",
         "# reached at box.internal:8130",
         "      URL: http://studio.local:8131",
     ],
