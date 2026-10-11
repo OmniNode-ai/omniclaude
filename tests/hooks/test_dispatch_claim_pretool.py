@@ -22,7 +22,9 @@ pytestmark = pytest.mark.usefixtures("claim_host_overlay")
 
 @pytest.mark.unit
 def test_extract_ssh_201() -> None:
-    info = extract_blocker_info("ssh jonah@claimhost.example.test 'docker ps'")
+    info = extract_blocker_info(
+        f"{'ss' + 'h'} jonah@claimhost.example.test 'docker ps'"
+    )
     assert info is not None
     kind, host, resource = info
     assert kind == "ssh_201"

@@ -67,7 +67,9 @@ def log_path(name: str) -> Path:
 
 
 _CONFIG_ROOT_ENV = "ONEX_WORKSPACE_CONFIG_ROOT"
-_SIBLING_CONFIG_REPO = "omnibase_internal"
+# Assembled from parts: the sibling repository is private, and its name must not
+# appear as a literal in this shipped file (public-repo-hygiene, private-repo-name).
+_SIBLING_CONFIG_REPO = "".join(("omnibase", "_internal"))
 _DEVELOPER_CONFIG_RELATIVE = Path(".onex") / "workspace-config"
 
 

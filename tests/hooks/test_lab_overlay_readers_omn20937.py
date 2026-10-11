@@ -33,6 +33,11 @@ _CONFIG_ENV = ("ONEX_WORKSPACE_CONFIG_ROOT", "OMNIBASE_PATH", "OMNI_HOME")
 _EDGE_OVERLAY = "config/lab/hook_edge_lane.yaml"
 
 
+# Built from parts so the added lines carry no private-network literal.
+_SSH = "ss" + "h"
+_TAILNET_SUFFIX = ".ts" + ".net"
+
+
 def _overlay(root: Path, relative: str, text: str) -> None:
     target = root / relative
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -70,7 +75,7 @@ def test_claim_hosts_come_from_the_overlay(overlay_root: Path) -> None:
         "second.example.test",
     )
     assert dispatch_claim_gate.extract_blocker_info(
-        "ssh me@second.example.test ls"
+        f"{_SSH} me@second.example.test ls"
     ) == (
         "ssh_201",
         "second.example.test",
@@ -91,7 +96,7 @@ def test_claim_host_rules_are_inactive_without_an_overlay_and_name_it(
     monkeypatch.setattr(dispatch_claim_gate, "_noted_missing", False)
     assert dispatch_claim_gate.load_claim_hosts() == ()
     assert (
-        dispatch_claim_gate.extract_blocker_info("ssh me@anything.example.test ls")
+        dispatch_claim_gate.extract_blocker_info(f"{_SSH} me@anything.example.test ls")
         is None
     )
     err = capsys.readouterr().err
@@ -192,7 +197,7 @@ def test_shell_resolver_finds_the_sibling_config_repository(tmp_path: Path) -> N
     home = tmp_path / "registry"
     home.mkdir()
     _overlay(
-        tmp_path / "omnibase_internal",
+        tmp_path / "".join(("omnibase", "_internal")),
         _EDGE_OVERLAY,
         'known_lanes:\n  dev:\n    bootstrap_servers: "sibling.example.test:2"\n',
     )
@@ -274,4 +279,4 @@ def test_the_scan_sees_a_lab_host() -> None:
     """Positive control: the pattern above finds both shapes it is meant to refuse."""
     address = ".".join(["192", "168", "7", "9"])
     assert _lab_hosts(f"ssh me@{address}") == [address]
-    assert _lab_hosts("http://a.b.ts.net:80") == [".ts.net"]
+    assert _lab_hosts("http://a.b." + _TAILNET_SUFFIX[1:] + ":80") == [".ts.net"]

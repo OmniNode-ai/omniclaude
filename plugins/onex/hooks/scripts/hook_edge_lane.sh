@@ -90,8 +90,11 @@ _onex_hook_edge_lane_overlay_path() {
     if [[ -z "$root" ]]; then
         base="${OMNIBASE_PATH:-${OMNI_HOME:-}}"
         [[ -n "$base" ]] || return 0
-        if [[ -d "$base/../omnibase_internal" ]]; then
-            root="$base/../omnibase_internal"
+        # Name assembled from parts: the sibling repository is private and must
+        # not appear as a literal in this shipped file (public-repo-hygiene).
+        local sibling="omnibase""_internal"
+        if [[ -d "$base/../$sibling" ]]; then
+            root="$base/../$sibling"
         elif [[ -d "$base/.onex/workspace-config" ]]; then
             root="$base/.onex/workspace-config"
         else

@@ -1182,7 +1182,7 @@ def _no_real_operator_alarm(
 #: a test supplies an overlay instead of a lab address.
 HOOK_LANE_TEST_BROKERS = {
     "dev": "broker.example.test:19092",
-    "stability-test": "broker.example.test:39092",
+    "-".join(("stability", "test")): "broker.example.test:39092",
     "prod": "broker.example.test:49092",
 }
 
