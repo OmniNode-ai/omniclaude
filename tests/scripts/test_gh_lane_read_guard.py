@@ -582,16 +582,23 @@ def test_gateway_never_serves_a_placeholder_endpoint(env: dict[str, str]) -> Non
     _assert_lane_refused(env, result)
 
 
+BOARD_REPO = "o/board"
 BOARD_RUNS = [
     "api",
     "--allow-escape-sequences",
-    "repos/OmniNode-ai/omninode_infra/actions/workflows/publish-beta-board.yml/runs?per_page=20",
+    f"repos/{BOARD_REPO}/actions/workflows/publish-beta-board.yml/runs?per_page=20",
 ]
 BOARD_JOBS = [
     "api",
     "--allow-escape-sequences",
-    "repos/OmniNode-ai/omninode_infra/actions/runs/777/jobs",
+    f"repos/{BOARD_REPO}/actions/runs/777/jobs",
 ]
+
+
+def _configure_board_repo(env: dict[str, str], repo: str = BOARD_REPO) -> None:
+    conf = Path(env["XDG_CONFIG_HOME"]) / "omni" / "gh-gateway.env"
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    conf.write_text(f"ONEX_GH_BOARD_REPO={repo}\n")
 
 
 @pytest.mark.unit
@@ -599,6 +606,7 @@ BOARD_JOBS = [
 def test_lane_reads_the_published_board_through_the_gateway(
     env: dict[str, str], argv: list[str]
 ) -> None:
+    _configure_board_repo(env)
     lane = {"ONEX_LANE": "lane", "FAKE_GH_STDOUT": "board"}
     first = _run(env, *argv, extra=lane)
     second = _run(env, *argv, extra=lane)
@@ -794,15 +802,16 @@ def test_commit_object_negative_still_refused_from_a_lane(
 @pytest.mark.parametrize(
     "path",
     [
-        "repos/OmniNode-ai/omninode_infra/actions/workflows/other.yml/runs?per_page=5",
-        "repos/OmniNode-ai/omnimarket/actions/workflows/publish-beta-board.yml/runs",
-        "repos/OmniNode-ai/omninode_infra/actions/runs/abc/jobs",
-        "repos/OmniNode-ai/omninode_infra/actions/runs/1/artifacts",
+        f"repos/{BOARD_REPO}/actions/workflows/other.yml/runs?per_page=5",
+        "repos/o/other/actions/workflows/publish-beta-board.yml/runs",
+        f"repos/{BOARD_REPO}/actions/runs/abc/jobs",
+        f"repos/{BOARD_REPO}/actions/runs/1/artifacts",
     ],
 )
 def test_the_board_allowance_does_not_widen_to_other_reads(
     env: dict[str, str], path: str
 ) -> None:
+    _configure_board_repo(env)
     result = _run(env, "api", path, extra={"ONEX_LANE": "lane"})
     assert result.returncode == 1, result.stderr
     assert result.stderr.startswith("REFUSED (OMN-"), result.stderr
@@ -813,6 +822,7 @@ def test_the_board_allowance_does_not_widen_to_other_reads(
 def test_the_board_budget_is_separate_and_spent_board_reads_refuse(
     env: dict[str, str], tmp_path: Path
 ) -> None:
+    _configure_board_repo(env)
     lane = {"ONEX_LANE": "lane"}
     hour = subprocess.run(
         ["date", "-u", "+%Y%m%d%H"], capture_output=True, text=True, check=True
@@ -826,3 +836,18 @@ def test_the_board_budget_is_separate_and_spent_board_reads_refuse(
     # The job-log gateway budget is untouched by the spent board budget.
     ok = _run(env, "api", "repos/o/r/actions/jobs/9/logs", extra=lane)
     assert ok.returncode == 0, ok.stderr
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("argv", [BOARD_RUNS, BOARD_JOBS], ids=["runs", "jobs"])
+def test_board_reads_refuse_without_a_configured_board_repo(
+    env: dict[str, str], argv: list[str]
+) -> None:
+    # The board repository comes only from the gateway config file: unset there, and
+    # named only in the environment, the board shapes are refused like any other read.
+    result = _run(
+        env, *argv, extra={"ONEX_LANE": "lane", "ONEX_GH_BOARD_REPO": BOARD_REPO}
+    )
+    assert result.returncode == 1, result.stderr
+    assert result.stderr.startswith("REFUSED (OMN-"), result.stderr
+    assert _calls(env) == [], "a refused read must never reach the real gh"
