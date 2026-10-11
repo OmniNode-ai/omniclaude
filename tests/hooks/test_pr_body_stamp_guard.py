@@ -23,7 +23,10 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -55,6 +58,7 @@ from pr_body_stamp_guard import (  # noqa: E402
     render_block_reason,
     stamp_lines,
     strip_noncanonical_regions,
+    watcher_record_reader,
 )
 
 pytestmark = pytest.mark.unit
@@ -771,3 +775,453 @@ def test_guard_never_spells_a_gate_trigger_in_its_own_prose() -> None:
         text = path.read_text(encoding="utf-8")
         assert not re.search(r"\[skip-[a-z]", text, re.IGNORECASE), path
         assert not re.search(r"do[ -]not[ -]merge", text, re.IGNORECASE), path
+
+
+# --------------------------------------------------------------------------
+# OMN-20911 -- the PR watcher's record is the second source of the live body
+# --------------------------------------------------------------------------
+#
+# A lane's gh shim refuses every GitHub read, so the guard's own `gh pr view
+# --json body` always fails there and, read alone, refuses every body edit. The
+# watcher's state file holds each open PR's live body; the guard reads it only
+# when the gh read fails, and only while the record can be trusted.
+
+WATCHER_NOW = datetime(2026, 10, 11, 3, 0, 0, tzinfo=UTC)
+WATCHER_PR = "omniclaude#42"
+WATCHER_HEAD_REF = "lane/omn-20911-fixture"
+
+
+def _stamp_time(moment: datetime) -> str:
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _write_watcher_state(
+    path: Path,
+    *,
+    body: str | None = LIVE_BODY,
+    tick_age_s: int = 60,
+    head_sha: str = "a" * 40,
+    state: str = "OPEN",
+    key: str = WATCHER_PR,
+    schema: int = 1,
+) -> Path:
+    facts: dict[str, object] = {
+        "repo": "omniclaude",
+        "number": 42,
+        "state": state,
+        "head_ref": WATCHER_HEAD_REF,
+        "head_sha": head_sha,
+        "updated_at": _stamp_time(WATCHER_NOW - timedelta(seconds=tick_age_s)),
+    }
+    if body is not None:
+        facts["body"] = body
+    path.write_text(
+        json.dumps(
+            {
+                "schema": schema,
+                "last_tick": _stamp_time(WATCHER_NOW - timedelta(seconds=tick_age_s)),
+                "prs": {key: {"facts": facts}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _watcher(policy: Policy, state: Path, cwd: str | None = None):
+    return watcher_record_reader(
+        policy,
+        cwd=cwd,
+        environ={"ONEX_PR_WATCHER_STATE": str(state)},
+        now=lambda: WATCHER_NOW,
+    )
+
+
+def _edit_command(body: str) -> str:
+    return f"gh pr edit 42 --repo OmniNode-ai/omniclaude --body {_shq(body)}"
+
+
+def _refused_gh_read(edit) -> None:
+    return None
+
+
+def test_refused_gh_read_and_fresh_record_drops_stamp_is_refused(
+    policy: Policy, tmp_path: Path
+) -> None:
+    state = _write_watcher_state(tmp_path / "state.json")
+    findings = check_bash_command(
+        _edit_command(LOSSY_BODY),
+        policy,
+        _refused_gh_read,
+        watcher_body=_watcher(policy, state),
+    )
+    assert [f.kind for f in findings] == ["dropped_stamp"]
+    assert findings[0].dropped_lines == (STAMP,)
+    reason = render_block_reason(findings)
+    assert STAMP in reason
+    assert "PR watcher record omniclaude#42" in reason, (
+        "the refusal must name the source it compared against"
+    )
+
+
+def test_refused_gh_read_and_fresh_record_keeping_stamp_is_admitted(
+    policy: Policy, tmp_path: Path
+) -> None:
+    state = _write_watcher_state(tmp_path / "state.json")
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        watcher_body=_watcher(policy, state),
+    )
+    assert findings == []
+
+
+def test_refused_gh_read_and_record_without_a_stamp_admits_any_body(
+    policy: Policy, tmp_path: Path
+) -> None:
+    state = _write_watcher_state(tmp_path / "state.json", body=NO_STAMP_BODY)
+    findings = check_bash_command(
+        _edit_command(LOSSY_BODY),
+        policy,
+        _refused_gh_read,
+        watcher_body=_watcher(policy, state),
+    )
+    assert findings == []
+
+
+def test_stale_record_is_refused_as_before(policy: Policy, tmp_path: Path) -> None:
+    # One second past the watcher's freshness window.
+    state = _write_watcher_state(tmp_path / "state.json", tick_age_s=481)
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        watcher_body=_watcher(policy, state),
+    )
+    assert [f.kind for f in findings] == ["unreadable_live_body"]
+    assert "481" in findings[0].detail and "480" in findings[0].detail
+
+
+def test_record_at_the_edge_of_the_window_is_still_fresh(
+    policy: Policy, tmp_path: Path
+) -> None:
+    state = _write_watcher_state(tmp_path / "state.json", tick_age_s=480)
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        watcher_body=_watcher(policy, state),
+    )
+    assert findings == []
+
+
+def test_missing_state_file_is_refused_as_before(
+    policy: Policy, tmp_path: Path
+) -> None:
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        watcher_body=_watcher(policy, tmp_path / "absent.json"),
+    )
+    assert [f.kind for f in findings] == ["unreadable_live_body"]
+    assert "absent.json" in findings[0].detail
+
+
+def test_pr_absent_from_the_state_is_refused_as_before(
+    policy: Policy, tmp_path: Path
+) -> None:
+    state = _write_watcher_state(tmp_path / "state.json", key="omniclaude#7")
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        watcher_body=_watcher(policy, state),
+    )
+    assert [f.kind for f in findings] == ["unreadable_live_body"]
+    assert "omniclaude#42" in findings[0].detail
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"body": None},
+        {"state": "MERGED"},
+        {"state": "CLOSED"},
+        {"schema": 2},
+    ],
+    ids=["no-body", "merged", "closed", "schema"],
+)
+def test_untrustworthy_record_is_refused_as_before(
+    policy: Policy, tmp_path: Path, overrides: dict[str, Any]
+) -> None:
+    state = _write_watcher_state(tmp_path / "state.json", **overrides)
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        watcher_body=_watcher(policy, state),
+    )
+    assert [f.kind for f in findings] == ["unreadable_live_body"]
+
+
+def test_unparseable_state_is_refused_as_before(policy: Policy, tmp_path: Path) -> None:
+    state = tmp_path / "state.json"
+    state.write_text("{not json", encoding="utf-8")
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        watcher_body=_watcher(policy, state),
+    )
+    assert [f.kind for f in findings] == ["unreadable_live_body"]
+
+
+def test_working_gh_read_never_consults_the_record(
+    policy: Policy, tmp_path: Path
+) -> None:
+    """A working live read decides alone: behaviour is unchanged (AC4)."""
+
+    def _must_not_be_called(edit):
+        raise AssertionError("the watcher record was read although gh answered")
+
+    bodies = {"OmniNode-ai/omniclaude#42": LIVE_BODY}
+    lossy = check_bash_command(
+        _edit_command(LOSSY_BODY),
+        policy,
+        reader_for(bodies),
+        watcher_body=_must_not_be_called,
+    )
+    assert [f.kind for f in lossy] == ["dropped_stamp"]
+    assert "live gh read" in render_block_reason(lossy)
+    kept = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        reader_for(bodies),
+        watcher_body=_must_not_be_called,
+    )
+    assert kept == []
+
+
+def test_no_watcher_reader_wired_is_refused_as_before(policy: Policy) -> None:
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY), policy, _refused_gh_read
+    )
+    assert [f.kind for f in findings] == ["unreadable_live_body"]
+
+
+def test_record_is_found_from_a_pull_request_url(
+    policy: Policy, tmp_path: Path
+) -> None:
+    state = _write_watcher_state(tmp_path / "state.json")
+    command = (
+        "gh pr edit https://github.com/OmniNode-ai/omniclaude/pull/42 "
+        f"--body {_shq(LOSSY_BODY)}"
+    )
+    findings = check_bash_command(
+        command, policy, _refused_gh_read, watcher_body=_watcher(policy, state)
+    )
+    assert [f.kind for f in findings] == ["dropped_stamp"]
+
+
+def test_record_is_not_used_for_another_organisation(
+    policy: Policy, tmp_path: Path
+) -> None:
+    state = _write_watcher_state(tmp_path / "state.json")
+    command = f"gh pr edit 42 --repo someone-else/omniclaude --body {_shq(LOSSY_BODY)}"
+    findings = check_bash_command(
+        command, policy, _refused_gh_read, watcher_body=_watcher(policy, state)
+    )
+    assert [f.kind for f in findings] == ["unreadable_live_body"]
+
+
+# -- the newest push the guard can see ---------------------------------------
+
+
+def scrub_git_location_env(env: Mapping[str, str]) -> dict[str, str]:
+    scrubbed = dict(env)
+    for key in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    ):
+        scrubbed.pop(key, None)
+    return scrubbed
+
+
+def _git(repo: Path, *args: str) -> str:
+    identity = {
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.invalid",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.invalid",
+    }
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=scrub_git_location_env({**os.environ, **identity}),
+    ).stdout.strip()
+
+
+@pytest.fixture
+def pushed_repo(tmp_path: Path) -> tuple[Path, str, str]:
+    """A checkout of omniclaude with two commits; returns (path, first, second)."""
+    repo = tmp_path / "checkout"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "remote", "add", "origin", "git@github.com:OmniNode-ai/omniclaude.git")
+    (repo / "f").write_text("1", encoding="utf-8")
+    _git(repo, "add", "f")
+    _git(repo, "commit", "-q", "-m", "one")
+    first = _git(repo, "rev-parse", "HEAD")
+    (repo / "f").write_text("2", encoding="utf-8")
+    _git(repo, "commit", "-q", "-am", "two")
+    second = _git(repo, "rev-parse", "HEAD")
+    return repo, first, second
+
+
+def test_record_behind_a_visible_push_is_refused(
+    policy: Policy, tmp_path: Path, pushed_repo: tuple[Path, str, str]
+) -> None:
+    repo, first, second = pushed_repo
+    _git(repo, "update-ref", f"refs/remotes/origin/{WATCHER_HEAD_REF}", second)
+    state = _write_watcher_state(tmp_path / "state.json", head_sha=first)
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        cwd=str(repo),
+        watcher_body=_watcher(policy, state, cwd=str(repo)),
+    )
+    assert [f.kind for f in findings] == ["unreadable_live_body"]
+    assert first[:12] in findings[0].detail and second[:12] in findings[0].detail
+
+
+def test_record_at_the_visible_push_is_admitted(
+    policy: Policy, tmp_path: Path, pushed_repo: tuple[Path, str, str]
+) -> None:
+    repo, _first, second = pushed_repo
+    _git(repo, "update-ref", f"refs/remotes/origin/{WATCHER_HEAD_REF}", second)
+    state = _write_watcher_state(tmp_path / "state.json", head_sha=second)
+    findings = check_bash_command(
+        _edit_command(LOSSY_BODY),
+        policy,
+        _refused_gh_read,
+        cwd=str(repo),
+        watcher_body=_watcher(policy, state, cwd=str(repo)),
+    )
+    assert [f.kind for f in findings] == ["dropped_stamp"]
+
+
+def test_record_ahead_of_the_visible_push_is_admitted(
+    policy: Policy, tmp_path: Path, pushed_repo: tuple[Path, str, str]
+) -> None:
+    repo, first, second = pushed_repo
+    _git(repo, "update-ref", f"refs/remotes/origin/{WATCHER_HEAD_REF}", first)
+    state = _write_watcher_state(tmp_path / "state.json", head_sha=second)
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        cwd=str(repo),
+        watcher_body=_watcher(policy, state, cwd=str(repo)),
+    )
+    assert findings == []
+
+
+def test_record_head_unknown_to_the_checkout_is_refused(
+    policy: Policy, tmp_path: Path, pushed_repo: tuple[Path, str, str]
+) -> None:
+    repo, _first, second = pushed_repo
+    _git(repo, "update-ref", f"refs/remotes/origin/{WATCHER_HEAD_REF}", second)
+    state = _write_watcher_state(tmp_path / "state.json", head_sha="b" * 40)
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        cwd=str(repo),
+        watcher_body=_watcher(policy, state, cwd=str(repo)),
+    )
+    assert [f.kind for f in findings] == ["unreadable_live_body"]
+
+
+def test_checkout_that_has_seen_no_push_does_not_block_the_record(
+    policy: Policy, tmp_path: Path, pushed_repo: tuple[Path, str, str]
+) -> None:
+    repo, first, _second = pushed_repo
+    state = _write_watcher_state(tmp_path / "state.json", head_sha=first)
+    findings = check_bash_command(
+        _edit_command(RETAINING_BODY),
+        policy,
+        _refused_gh_read,
+        cwd=str(repo),
+        watcher_body=_watcher(policy, state, cwd=str(repo)),
+    )
+    assert findings == []
+
+
+# -- the hook as wired -------------------------------------------------------
+
+
+@pytest.fixture
+def refusing_gh(tmp_path: Path) -> Path:
+    """A `gh` that refuses every read, as a lane's shim does (OMN-20911)."""
+    bindir = tmp_path / "refusing-bin"
+    bindir.mkdir()
+    gh = bindir / "gh"
+    gh.write_text(
+        "#!/bin/bash\necho 'gh: reads are refused from a lane' >&2\nexit 1\n",
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+    return bindir
+
+
+def test_hook_script_verifies_an_edit_from_the_watcher_record(
+    tmp_path: Path, refusing_gh: Path
+) -> None:
+    now = datetime.now(UTC)
+    state = tmp_path / "state.json"
+    state.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "last_tick": _stamp_time(now - timedelta(seconds=30)),
+                "prs": {
+                    WATCHER_PR: {
+                        "facts": {
+                            "repo": "omniclaude",
+                            "state": "OPEN",
+                            "head_ref": WATCHER_HEAD_REF,
+                            "head_sha": "a" * 40,
+                            "body": LIVE_BODY,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {
+        "PATH": f"{refusing_gh}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+        "CLAUDE_PROJECT_DIR": str(REPO_ROOT),
+        "ONEX_HOOK_LOG": str(tmp_path / "hooks.log"),
+        "ONEX_PR_WATCHER_STATE": str(state),
+    }
+
+    def payload(body: str) -> dict[str, object]:
+        return {"tool_name": "Bash", "tool_input": {"command": _edit_command(body)}}
+
+    blocked = _run_hook(payload(LOSSY_BODY), env)
+    assert blocked.returncode == 2, blocked.stdout + blocked.stderr
+    reason = json.loads(blocked.stdout)["reason"]
+    assert STAMP in reason and "PR watcher record omniclaude#42" in reason
+
+    allowed = _run_hook(payload(RETAINING_BODY), env)
+    assert allowed.returncode == 0, allowed.stdout + allowed.stderr

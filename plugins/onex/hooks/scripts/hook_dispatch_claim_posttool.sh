@@ -10,9 +10,9 @@
 #
 # Extraction rules (precedence):
 #   1. Explicit blocker_id: <sha1> frontmatter
-#   2. ssh ... 192.168.86.201  -> kind=ssh_201  # onex-allow-internal-ip
+#   2. ssh ... <claim host>  -> kind=ssh_201  (hosts: overlay config/lab/dispatch_claim_hosts.yaml)
 #   3. rpk topic produce ... rebuild  -> kind=deploy_rebuild
-#   4. fix containers on 192.168.86.201  -> kind=fix_containers  # onex-allow-internal-ip
+#   4. fix containers on <claim host>  -> kind=fix_containers
 #   5. OMN-XXXX in prompt  -> kind=ticket_dispatch
 #   6. gh pr merge --repo OmniNode-ai/... N  -> kind=pr_merge
 #

@@ -978,7 +978,9 @@ class TestExternalContextCompleteness:
     and the classification tuples drift apart, not when branch protection
     changes without a snapshot refresh; re-capture the fixture file (and
     review the diff) when branch protection legitimately changes. OMN-19055
-    requires a fixture refresh with each manifest or ci.yml change; the existing
+    requires a fixture refresh with each manifest change and with each ci.yml
+    change that alters the job-name set (OMN-20964: a ci.yml change that keeps
+    the set equal to the snapshot has nothing to refresh); the existing
     privileged manifest reconcile detects live protection drift."""
 
     # OMN-19055: the three previously exempt contexts are classified by L4.
@@ -1025,18 +1027,28 @@ class TestExternalContextCompleteness:
             ["Lane Identity Gate"],
         )
 
-    def test_ci_job_snapshot_matches_current_workflow(self) -> None:
+    @staticmethod
+    def _workflow_job_names() -> set[str]:
         workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
-        actual = {job.get("name", key) for key, job in workflow["jobs"].items()}
-        snapshot = set(
+        return {job.get("name", key) for key, job in workflow["jobs"].items()}
+
+    @staticmethod
+    def _job_name_snapshot() -> set[str]:
+        return set(
             (FIXTURES_DIR / "ciyml_job_names_snapshot_2026-09-21.txt")
             .read_text()
             .splitlines()
         )
+
+    def test_ci_job_snapshot_matches_current_workflow(self) -> None:
+        actual = self._workflow_job_names()
+        snapshot = self._job_name_snapshot()
         assert snapshot == actual, "Refresh the CI job-name snapshot from ci.yml"
 
-    @staticmethod
-    def _assert_snapshot_refresh(changed: set[str]) -> None:
+    @classmethod
+    def _assert_snapshot_refresh(
+        cls, changed: set[str], job_names: set[str] | None = None
+    ) -> None:
         pairs = (
             (
                 ".github/required-checks.yaml",
@@ -1045,10 +1057,19 @@ class TestExternalContextCompleteness:
             (".github/workflows/ci.yml", "ciyml_job_names_snapshot_2026-09-21.txt"),
         )
         for source, fixture in pairs:
-            if source in changed:
-                assert f"tests/ci/fixtures/{fixture}" in changed, (
-                    f"{source} changed; refresh and review {fixture} in the same change"
-                )
+            if source not in changed:
+                continue
+            # OMN-20964: the job-name snapshot records ci.yml's job names and
+            # nothing else, so a ci.yml change that leaves that set equal to
+            # the snapshot has nothing to refresh. Any added, removed or
+            # renamed job still demands the fixture in the same change.
+            if source == ".github/workflows/ci.yml":
+                current = cls._workflow_job_names() if job_names is None else job_names
+                if current == cls._job_name_snapshot():
+                    continue
+            assert f"tests/ci/fixtures/{fixture}" in changed, (
+                f"{source} changed; refresh and review {fixture} in the same change"
+            )
 
     @pytest.mark.parametrize(
         ("source", "fixture"),
@@ -1061,10 +1082,55 @@ class TestExternalContextCompleteness:
         ],
     )
     def test_snapshot_refresh_trigger_controls(self, source: str, fixture: str) -> None:
+        # A drifted job-name set, so the ci.yml pair's trigger is live (OMN-20964).
+        drifted = self._job_name_snapshot() | {"OMN-20964 Added Job"}
         with pytest.raises(AssertionError, match="refresh and review"):
-            self._assert_snapshot_refresh({source})
-        self._assert_snapshot_refresh({source, f"tests/ci/fixtures/{fixture}"})
-        self._assert_snapshot_refresh({"README.md"})
+            self._assert_snapshot_refresh({source}, job_names=drifted)
+        self._assert_snapshot_refresh(
+            {source, f"tests/ci/fixtures/{fixture}"}, job_names=drifted
+        )
+        self._assert_snapshot_refresh({"README.md"}, job_names=drifted)
+
+    def test_ci_change_with_unchanged_job_names_needs_no_job_name_refresh(
+        self,
+    ) -> None:
+        # OMN-20964: a ci.yml edit that leaves the job-name set equal to the
+        # snapshot (a step's `uses:` line, say) has no snapshot diff to show.
+        self._assert_snapshot_refresh(
+            {".github/workflows/ci.yml"}, job_names=self._job_name_snapshot()
+        )
+
+    @pytest.mark.parametrize("drift", ["added", "renamed"])
+    def test_ci_change_with_job_name_drift_still_needs_the_refresh(
+        self, drift: str
+    ) -> None:
+        snapshot = self._job_name_snapshot()
+        renamed = sorted(snapshot)[0]
+        job_names = (
+            snapshot | {"OMN-20964 Added Job"}
+            if drift == "added"
+            else (snapshot - {renamed}) | {f"{renamed} (renamed)"}
+        )
+        with pytest.raises(AssertionError, match="refresh and review"):
+            self._assert_snapshot_refresh(
+                {".github/workflows/ci.yml"}, job_names=job_names
+            )
+        self._assert_snapshot_refresh(
+            {
+                ".github/workflows/ci.yml",
+                "tests/ci/fixtures/ciyml_job_names_snapshot_2026-09-21.txt",
+            },
+            job_names=job_names,
+        )
+
+    def test_required_checks_change_needs_its_refresh_whatever_the_job_names(
+        self,
+    ) -> None:
+        with pytest.raises(AssertionError, match="refresh and review"):
+            self._assert_snapshot_refresh(
+                {".github/required-checks.yaml", ".github/workflows/ci.yml"},
+                job_names=self._job_name_snapshot(),
+            )
 
     def test_snapshot_diff_scrubs_git_location_env(
         self, monkeypatch: pytest.MonkeyPatch

@@ -183,6 +183,12 @@ jobs:
       contracts-dir: contracts
       receipts-dir: drift/dod_receipts
 
+  # OMN-20074 (RULING 2026-10-10T15:10:25Z): declared automation, which
+  # advisory-job-gate CHECKS rather than exempts -- this job must stay out of
+  # required_status_checks, out of any required job's `needs:`, and free of
+  # test, lint, receipt and evidence steps, so a failing arming step can never
+  # block a merge.
+  # advisory-automation: OMN-20074 arms auto-merge and enqueues a ready pull request
   auto-merge:
     needs: occ-preflight
     name: Enable Auto-Merge

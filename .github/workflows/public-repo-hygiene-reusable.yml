@@ -391,3 +391,126 @@ jobs:
             --lab-vocabulary "${LAB_VOCAB_PATH}" \
             --mode "${MODE}" \
             ${diff_args[@]+"${diff_args[@]}"}
+
+  # OMN-20923: the deployment-config class, as its own job. Operator RULING
+  # 2026-10-10T21:57:38Z: no deployment or lab configuration, overlays
+  # included, in a shipped repository; amended 2026-10-10T22:07:49Z, "This
+  # should be in ci." The class matches by SHAPE (a lane-overlay file, a
+  # private host in a configuration value), so this job reads no private
+  # vocabulary and uses NO secret: it runs on a fork pull request, where the
+  # job above has no token and fails closed. Surfaced in the caller as
+  # `public-repo-hygiene / deployment-config`, a required context on every
+  # shipped repository. It enforces on what the pull request ADDS; the residue
+  # already on `dev` is reported on every run and moved out by its own pull
+  # requests.
+  deployment-config:
+    name: deployment-config
+    # OMNI_RUNNER_SELECTOR_V1 - the same fork test as the job above.
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout caller repo
+        uses: actions/checkout@v7
+        with:
+          # Depth 2: the merge ref and its first parent, the diff base.
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Resolve the diff base
+        id: diff-base
+        if: github.event_name == 'pull_request'
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          read -r -a commit_and_parents <<< "$(git rev-list --parents -n 1 HEAD)"
+          if [ "${#commit_and_parents[@]}" -ne 3 ]; then
+            echo "::error::the pull_request checkout is not a two-parent merge" \
+                 "ref, so the diff base cannot be resolved. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "${commit_and_parents[2]}" != "${PR_HEAD_SHA}" ]; then
+            echo "::error::the merge ref's second parent is" \
+                 "${commit_and_parents[2]}, not the pull request head" \
+                 "${PR_HEAD_SHA}. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=${commit_and_parents[1]}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the gate pin
+        id: pin
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          REF_OVERRIDE: ${{ inputs.validator_ref }}
+        run: |
+          set -euo pipefail
+          resolved_pin="${REF_OVERRIDE:-$WORKFLOW_SHA}"
+          if [[ ! "$resolved_pin" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::deployment-config pin is empty or is not a lowercase 40-hex commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$WORKFLOW_REPOSITORY" != "OmniNode-ai/omniclaude" ]; then
+            echo "::error::workflow repository is '$WORKFLOW_REPOSITORY', not OmniNode-ai/omniclaude. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          echo "sha=$resolved_pin" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the gate (omniclaude canonical source)
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: ${{ steps.pin.outputs.sha }}
+          path: .omniclaude-deployment-config
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/public_repo_hygiene_gate.py
+          sparse-checkout-cone-mode: false
+
+      - name: Assert the gate checkout is at the pin
+        if: github.repository != 'OmniNode-ai/omniclaude'
+        env:
+          GATE_PIN: ${{ steps.pin.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! checked_out_sha="$(git -C .omniclaude-deployment-config rev-parse HEAD)"; then
+            echo "::error::could not resolve the fetched gate commit. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$checked_out_sha" != "$GATE_PIN" ]; then
+            echo "::error::gate checkout is at $checked_out_sha, expected $GATE_PIN. THE GATE DID NOT RUN."
+            exit 1
+          fi
+
+      - name: Run the deployment-config class
+        env:
+          SCRIPT_PATH: >-
+            ${{ github.repository != 'OmniNode-ai/omniclaude'
+                && '.omniclaude-deployment-config/scripts/public_repo_hygiene_gate.py'
+                || 'scripts/public_repo_hygiene_gate.py' }}
+          DIFF_BASE: ${{ steps.diff-base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "${SCRIPT_PATH}" ]; then
+            echo "::error::gate not found at ${SCRIPT_PATH}; pin the caller's" \
+                 "'uses:' to an omniclaude commit that carries the" \
+                 "deployment-config class. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          # A pull request is refused for the deployment configuration it
+          # ADDS. Any other event has no base and gets the whole-tree verdict.
+          if [ -n "${DIFF_BASE}" ]; then
+            python3 "${SCRIPT_PATH}" --repo-root . \
+              --only-classes deployment-config --mode enforce \
+              --enforce-scope added-lines --diff-base "${DIFF_BASE}"
+          else
+            python3 "${SCRIPT_PATH}" --repo-root . \
+              --only-classes deployment-config --mode enforce
+          fi

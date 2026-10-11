@@ -56,6 +56,11 @@
 # with a per-hour budget instead (RULING 2026-10-10T18:17:36Z). Full contract at the
 # guard, below the PR-state guard.
 #
+# Lane write guard (OMN-20914): from a lane, a gh write that `onex scm` serves (read from
+# the operations table of node_github_repo_write_effect's contract in the omnimarket the
+# `onex` command runs) is refused, naming the `onex scm` verb that replaces it. A write with
+# no onex scm operation stays allowed. Full contract at the guard, below the PR-state guard.
+#
 # Shared call log (OMN-19852): every allowed or refused call appends one
 # tab-separated line to ONEX_GH_CALLS_LOG, else ONEX_STATE_DIR/gh-calls.log
 # (no log is written when neither is set).
@@ -792,13 +797,19 @@ _gw_commit_endpoint() {
 }
 
 # Is the argv in "$@" a gateway shape (a failing-job log, one job's or check run's detail,
-# one commit object)?
+# or one commit object by its full sha)? Every gateway shape names its owner and
+# repository literally: a {owner}/{repo} placeholder resolves from GH_REPO or the working
+# directory, which the cache key cannot see, so one cached answer could be served for
+# another repository. A placeholder endpoint is therefore not a gateway shape.
 _gw_shape() {
   local ep
   if [ "$_cls" = "api" ]; then
-    [ "$_method" = "GET" ] || [ "$_method" = "HEAD" ] || return 1
+    # GET only: a HEAD answer has no body, so it must never share a cache entry with a GET
+    # (and no gateway consumer sends one).
+    [ "$_method" = "GET" ] || return 1
     ep="${_endpoint#https://api.github.com/}"
     ep="${ep#/}"
+    case "$ep" in *\{*|*\}*) return 1 ;; esac
     _prs_job_log_endpoint "$ep" && return 0
     _gw_check_run_endpoint "$ep" && return 0
     _gw_commit_endpoint "$ep" "$@" && return 0
@@ -860,13 +871,13 @@ unset _prs_guarded _prs_ep _prs_class _prs_o _prs_r _prs_n _prs_why _rs_owner _r
 # status, run list|download|watch, repo view, issue view|list, release list|view, workflow
 # list|view, pr checkout, variable get, gh status, ...). No off switch, no warning mode.
 #
-# A lane context is a call made by an agent, decided by either:
-#   (a) an agent environment marker: CLAUDECODE, CLAUDE_CODE_SESSION_ID,
+# A lane context is a call made by an agent, decided by either, in this order:
+#   (a) an ancestor process (up to 12 up) that is Claude Code, the Claude desktop app,
+#       the Codex CLI or the ChatGPT/Codex app, or a process table ps cannot read; or
+#   (b) an agent environment marker: CLAUDECODE, CLAUDE_CODE_SESSION_ID,
 #       CLAUDE_CODE_ENTRYPOINT, ONEX_LANE, ONEX_LANE_ID, ONEX_AGENT_NAME, CLAUDE_AGENT_NAME,
 #       CLAUDE_SUBAGENT_NAME, CODEX_THREAD_ID, CODEX_SANDBOX, CODEX_SANDBOX_NETWORK_DISABLED
-#       or CODEX_MANAGED_BY_NPM; or
-#   (b) an ancestor process (up to 12 up) that is Claude Code, the Claude desktop app,
-#       the Codex CLI or the ChatGPT/Codex app.
+#       or CODEX_MANAGED_BY_NPM (a marker only adds lane context; unsetting one removes none).
 # Not a lane: launchd/cron automation and an operator terminal with neither.
 #
 # Still allowed in a lane context:
@@ -874,7 +885,7 @@ unset _prs_guarded _prs_ep _prs_class _prs_o _prs_r _prs_n _prs_why _rs_owner _r
 #     review|ready|merge|close, workflow run, run rerun|cancel, ...);
 #   - the two cached harness PR-link shapes (_cacheable) and the declared exact-head check;
 #   - `gh api rate_limit`, which GitHub does not count against any bucket;
-#   - the gateway shapes (failing-job logs, one check run's detail, one commit object by
+#   - the gateway shapes (failing-job logs, one check run's detail, one commit object by its
 #     full sha), served by the cached, per-hour-budgeted read gateway below;
 #   - the allowed callers of the PR-state guard (the PR watcher, the landing controller's
 #     own scripts), and a DIRECT parent that is one of the sanctioned read scripts:
@@ -889,14 +900,20 @@ _lane_ctx_why=""
 _lane_context() {
   _lane_ctx_why=""
   local v pid="$PPID" steps=0 info next comm
-  for v in CLAUDECODE CLAUDE_CODE_SESSION_ID CLAUDE_CODE_ENTRYPOINT ONEX_LANE ONEX_LANE_ID \
-           ONEX_AGENT_NAME CLAUDE_AGENT_NAME CLAUDE_SUBAGENT_NAME CODEX_THREAD_ID CODEX_SANDBOX \
-           CODEX_SANDBOX_NETWORK_DISABLED CODEX_MANAGED_BY_NPM; do
-    if [ -n "${!v:-}" ]; then
-      _lane_ctx_why="environment $v"
-      return 0
-    fi
-  done
+  # The process ancestry decides first, and the environment cannot change it: an agent
+  # that unsets or blanks every marker below is still refused here, because the walk reads
+  # the process table, not the environment (PPID is read-only in bash). The markers only
+  # ever ADD lane context afterwards; no value of any variable removes it. The walk is
+  # only as good as ps, so a process table this process cannot read about itself (a
+  # sandbox that hides it, a missing or broken ps) counts as a lane: an unverifiable caller
+  # fails closed. Threat model: this routes cooperative agents off the shared GitHub read
+  # quota. A local process that bypasses the shim entirely (real gh by absolute path, a
+  # token in its environment) is out of its reach and is tracked as OMN-20916.
+  info="$(ps -o ppid= -o comm= -p "$$" 2>/dev/null)"
+  if [ -z "${info//[[:space:]]/}" ]; then
+    _lane_ctx_why="unreadable process ancestry"
+    return 0
+  fi
   while [ "$steps" -lt 12 ]; do
     case "$pid" in ""|*[!0-9]*) break ;; esac
     [ "$pid" -gt 1 ] || break
@@ -913,6 +930,14 @@ _lane_context() {
     esac
     pid="$next"
     steps=$((steps + 1))
+  done
+  for v in CLAUDECODE CLAUDE_CODE_SESSION_ID CLAUDE_CODE_ENTRYPOINT ONEX_LANE ONEX_LANE_ID \
+           ONEX_AGENT_NAME CLAUDE_AGENT_NAME CLAUDE_SUBAGENT_NAME CODEX_THREAD_ID CODEX_SANDBOX \
+           CODEX_SANDBOX_NETWORK_DISABLED CODEX_MANAGED_BY_NPM; do
+    if [ -n "${!v:-}" ]; then
+      _lane_ctx_why="environment $v"
+      return 0
+    fi
   done
   return 1
 }
@@ -976,7 +1001,7 @@ if [ "$_gw" -eq 0 ] && _lane_is_read "$@" && ! _cacheable "$@" \
     'Read it locally instead:' \
     "  PR state, checks, reviews, mergeability: python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr ${_rs_owner:-OmniNode-ai}/$_lr_r#<n>   (--status for the state file's age; the same records are on the bus as onex.evt.omnimarket.pr-state-observed.v1)" \
     "  files, contents, diffs, commits, tags, history: git -C \$OMNI_HOME/$_lr_r show|log|diff origin/dev...   (the canonical clones, kept fetched by canonical-clone-sync)" \
-    '  a failing-job log, one job'"'"'s run id and steps, one check run'"'"'s output: gh api repos/<o>/<r>/actions/jobs/<id>/logs, gh api repos/<o>/<r>/actions/jobs/<id>, gh api repos/<o>/<r>/check-runs/<id>[/annotations], gh run view <run> --log-failed; the job id is in the watcher record (ci.detail) and these are served by the cached read gateway with a per-hour budget' \
+    '  a failing-job log, one job'"'"'s run id and steps, one check run'"'"'s output: gh api repos/<o>/<r>/actions/jobs/<id>/logs, gh api repos/<o>/<r>/actions/jobs/<id>, gh api repos/<o>/<r>/check-runs/<id>[/annotations], gh run view <run> --log-failed; the job id is in the watcher record (ci.detail) and these are served by the cached read gateway with a per-hour budget; so is one commit object by its full 40-hex sha, gh api repos/<o>/<r>/commits/<sha> (the receipt-hardening hook proves a receipt commit_sha with it)' \
     'Writes (pr create|edit|comment|review, workflow run, run rerun, api POST/PATCH/PUT/DELETE, graphql mutation) are unaffected.' >&2
   _call_log 1 refused
   exit 1
@@ -1162,6 +1187,241 @@ fi
 unset _mq_a _mq_prev _mq_shape _mq_reason _mq_why _mq_rules _mq_log_dir
 
 
+# --- cached read gateway (OMN-20911) ---------------------------------------------
+# The gateway shapes (_gw_shape: a failing-job log, one check run's detail, one commit object) reach GitHub
+# only through here, for every caller but the PR-state guard's allowed callers. A hit is
+# served from ${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway (a finished job's log
+# and a completed check run do not change); a miss spends one unit of this host's hourly
+# budget, and a spent budget refuses until the next UTC hour. TTL and budget come only
+# from ${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env (ONEX_GH_GATEWAY_TTL, default
+# 21600 s; ONEX_GH_GATEWAY_BUDGET, default 60 misses an hour), never from the environment,
+# so a lane cannot raise its own budget. Only a successful answer is cached.
+# The bus gateway (OMN-17427 plan) replaces this host-local cache.
+if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
+  _gw_ttl=21600
+  _gw_budget=60
+  _gw_conf="${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env"
+  if [ -f "$_gw_conf" ]; then
+    while IFS= read -r _line || [ -n "$_line" ]; do
+      _conf_v="$(_conf_strip_comment "${_line#*=}")"
+      case "$_conf_v" in ""|*[!0-9]*) continue ;; esac
+      case "$_line" in
+        ONEX_GH_GATEWAY_TTL=*) _gw_ttl="$_conf_v" ;;
+        ONEX_GH_GATEWAY_BUDGET=*) _gw_budget="$_conf_v" ;;
+      esac
+    done < "$_gw_conf"
+  fi
+  _gw_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway"
+  if ! mkdir -p "$_gw_dir/budget" 2>/dev/null; then
+    printf '%s\n' \
+      "REFUSED (OMN-20911): the cached read gateway cannot create its cache and budget directory $_gw_dir/budget, so it cannot count this read against the hourly budget; fix the directory rather than read uncounted." >&2
+    _call_log 1 refused
+    exit 1
+  fi
+  _gw_scope="${GH_HOST:-github.com}|${_method:-GET}"
+  [ "$_cls" = "run view" ] && _gw_scope="$_gw_scope|$(_origin_repo)"
+  # `gh run view <run> --log-failed` with no --attempt or --job reads the latest attempt,
+  # which a rerun replaces, so that answer is held for at most five minutes. A job id and
+  # an explicit attempt name one finished attempt and keep the full TTL.
+  if [ "$_cls" = "run view" ] && [ "$_gw_ttl" -gt 300 ]; then
+    _gw_pinned=0
+    for _gw_a in "$@"; do
+      case "$_gw_a" in --attempt|--attempt=*|-a|--job|--job=*|-j) _gw_pinned=1 ;; esac
+    done
+    [ "$_gw_pinned" -eq 1 ] || _gw_ttl=300
+  fi
+  _gw_entry="$_gw_dir/$(_sha "$_gw_scope|$(printf '%s\037' "$@")")"
+  _now="$(date +%s)"
+  if [ $(( $$ % 50 )) -eq 0 ]; then
+    find "$_gw_dir" -type f -mmin +2880 -delete 2>/dev/null
+  fi
+  if [ -f "$_gw_entry.meta" ]; then
+    read -r _gw_at < "$_gw_entry.meta"
+    case "$_gw_at" in
+      ""|*[!0-9]*) ;;
+      *)
+        if [ $((_now - _gw_at)) -lt "$_gw_ttl" ]; then
+          cat "$_gw_entry.out" 2>/dev/null
+          _log 0 hit
+          exit 0
+        fi ;;
+    esac
+  fi
+  # Claim the unit first, then count: each claim is one short O_APPEND line, so two
+  # concurrent misses can never both read a count below the budget and both proceed (no
+  # check-then-act window). A refused claim stays counted, which only over-counts the hour.
+  _gw_hour_file="$_gw_dir/budget/$(date -u +%Y%m%d%H)"
+  if ! printf '%s\n' "$$" >> "$_gw_hour_file" 2>/dev/null; then
+    printf '%s\n' \
+      "REFUSED (OMN-20911): the cached read gateway cannot record this read in its budget file $_gw_hour_file; fix the file rather than read uncounted." >&2
+    _call_log 1 refused
+    exit 1
+  fi
+  _gw_spent="$({ wc -l < "$_gw_hour_file"; } 2>/dev/null | tr -d '[:space:]')"
+  case "$_gw_spent" in ""|*[!0-9]*) _gw_spent="$((_gw_budget + 1))" ;; esac
+  if [ "$_gw_spent" -gt "$_gw_budget" ]; then
+    printf '%s\n' \
+      "REFUSED (OMN-20911): the cached read gateway has spent this host's budget of $_gw_budget GitHub reads for this UTC hour ($_gw_budget used); it refills at the next hour." \
+      'Read what you can locally meanwhile: the PR watcher state (pr_state_local.py --pr <owner>/<repo>#<n>) names every check run and its conclusion; answers already fetched this hour are served from the cache.' >&2
+    _call_log 1 refused
+    exit 1
+  fi
+  _gw_tmp="$_gw_entry.tmp.$$"
+  _run_gh "$@" > "$_gw_tmp.out" 2> "$_gw_tmp.err"
+  _rc=$?
+  cat "$_gw_tmp.out"
+  cat "$_gw_tmp.err" >&2
+  if [ "$_rc" -eq 0 ]; then
+    mv -f "$_gw_tmp.out" "$_gw_entry.out" 2>/dev/null
+    printf '%s\n' "$_now" > "$_gw_tmp.meta" 2>/dev/null \
+      && mv -f "$_gw_tmp.meta" "$_gw_entry.meta" 2>/dev/null
+  fi
+  rm -f "$_gw_tmp.out" "$_gw_tmp.err" "$_gw_tmp.meta" 2>/dev/null
+  _log "$_rc" miss
+  exit "$_rc"
+fi
+
+# --- lane write guard (OMN-20914) -----------------------------------------------
+# RULING 2026-10-10T18:32:46Z: GitHub access moves onto the source-control nodes and gh
+# CLI access is turned off for sub-agents, so lanes drive everything through the node
+# and remember nothing. From a lane, a gh write that `onex scm` serves is refused (exit 1,
+# the real gh never runs) and the refusal names the `onex scm` verb that replaces it.
+#
+# Coverage table: the `operations` block of node_github_repo_write_effect's contract.yaml
+# in the omnimarket the `onex` command runs, the first
+# ${ONEX_DISPATCH_VENV:-$OMNI_HOME/.onex-dispatch-venv}/lib/python*/site-packages/omnimarket
+# (scripts/onex in omnibase_infra resolves the same venv). `onex scm` reads that block too
+# (contract_operations), and omnimarket's own test binds every operation to exactly one
+# verb. A call is covered only when all of these hold; otherwise it passes unchanged:
+#   - an operation's description says "replaces gh <group> <sub>." and the call is that verb;
+#   - the same install's onex scm table (handlers/scm/handler_scm_dispatch.py) serves
+#     verb="<group>-<sub>" replacing "gh <group> <sub>" (an install from before the command
+#     has the contract and no command, and refuses nothing);
+#   - write_config puts the call's repository (--repo, a PR URL, else the origin remote) in
+#     enforce mode: in dry_run the node plans the write and sends nothing.
+# So `gh pr merge`, `gh run rerun|cancel` and `gh api` with a non-GET method stay allowed:
+# onex scm has no operation for them (it refuses merge, arm, rerun and update-branch,
+# naming the landing controller).
+#
+# A lane is a call carrying a lane marker of node_lane_github_read_guard_effect (ONEX_LANE,
+# ONEX_LANE_ID, ONEX_AGENT_NAME, CLAUDE_AGENT_NAME, CLAUDE_SUBAGENT_NAME and the CODEX_*
+# markers) or a headless Claude Code entrypoint (CLAUDE_CODE_ENTRYPOINT=sdk-*). The
+# operator's foreground shell and interactive session carry neither and pass.
+# Allowed whatever the environment, decided on the direct parent only (as the PR-state
+# guard's allowed callers are): ONEX_PR_WATCHER=1, the PR watcher module and the landing
+# controller's own scripts (_prs_caller_allowed), the node effect runner (`onex run-node`,
+# onex-runtime, omnibase_infra.runtime.kernel) and the release-cut tick
+# (any package's omnimarket_release_cut_tick module).
+# The refusal is a call-log row: class = the gh verb, endpoint = the onex scm verb.
+_lw_why=""
+_lw_lane() {
+  _lw_why=""
+  local v
+  for v in ONEX_LANE ONEX_LANE_ID ONEX_AGENT_NAME CLAUDE_AGENT_NAME CLAUDE_SUBAGENT_NAME \
+           CODEX_THREAD_ID CODEX_SANDBOX CODEX_SANDBOX_NETWORK_DISABLED CODEX_MANAGED_BY_NPM; do
+    if [ -n "${!v:-}" ]; then
+      _lw_why="environment $v"
+      return 0
+    fi
+  done
+  case "${CLAUDE_CODE_ENTRYPOINT:-}" in
+    sdk-*) _lw_why="headless entrypoint $(_clean "$CLAUDE_CODE_ENTRYPOINT")"; return 0 ;;
+  esac
+  return 1
+}
+
+_lw_allowed_identity() {
+  _prs_caller_allowed && return 0
+  local args
+  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  [ -n "$args" ] || return 1
+  case " $args " in
+    *"/onex run-node "*|*" onex run-node "*) return 0 ;;
+    *"/onex-runtime "*|*" onex-runtime "*|*" omnibase_infra.runtime.kernel "*) return 0 ;;
+    *".omnimarket_release_cut_tick "*) return 0 ;;
+  esac
+  return 1
+}
+
+# Sets _lw_scm (the onex scm verb) and _lw_op (the node operation) when the call is a
+# covered write; returns 1 otherwise. Reads files only for a non-api write verb.
+_lw_covered() {
+  _lw_scm=""; _lw_op=""
+  [ "$_method" = "WRITE" ] || return 1
+  case "$_cls" in *" "*) ;; *) return 1 ;; esac
+  local venv="${ONEX_DISPATCH_VENV:-}" pkg="" d contract dispatch table kind k v
+  local op="" mode="" repo_mode="" target=""
+  if [ -z "$venv" ]; then
+    [ -n "${OMNI_HOME:-}" ] || return 1
+    venv="$OMNI_HOME/.onex-dispatch-venv"
+  fi
+  for d in "$venv"/lib/python*/site-packages/omnimarket; do
+    [ -d "$d" ] && { pkg="$d"; break; }
+  done
+  [ -n "$pkg" ] || return 1
+  contract="$pkg/nodes/node_github_repo_write_effect/contract.yaml"
+  dispatch="$pkg/handlers/scm/handler_scm_dispatch.py"
+  [ -r "$contract" ] && [ -r "$dispatch" ] || return 1
+  # One line per operation ("op<TAB><name><TAB><group sub>") and per mode ("default<TAB>
+  # <mode>", "repo<TAB><owner/repo><TAB><mode>"), from the two top-level blocks only.
+  table="$(awk '
+    /^[^[:space:]#]/ { sect = $1 }
+    sect == "operations:" && /^[[:space:]]*-[[:space:]]*name:/ {
+      op = $0; sub(/^[^:]*:[[:space:]]*/, "", op); gsub(/["[:space:]]/, "", op); next
+    }
+    sect == "operations:" && /^[[:space:]]*description:/ && op != "" {
+      if (match($0, /replaces gh [a-z]+ [a-z]+\./)) {
+        printf "op\t%s\t%s\n", op, substr($0, RSTART + 12, RLENGTH - 13)
+      }
+      op = ""; next
+    }
+    sect == "write_config:" && /^[[:space:]]+github_mode:/ {
+      m = $0; sub(/^[^:]*:[[:space:]]*/, "", m); gsub(/["[:space:]]/, "", m)
+      printf "default\t%s\n", m; next
+    }
+    sect == "write_config:" && /^[[:space:]]+[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+:/ {
+      k = $0; sub(/^[[:space:]]+/, "", k); m = k; sub(/:.*/, "", k)
+      sub(/^[^:]*:[[:space:]]*/, "", m); gsub(/["[:space:]]/, "", m)
+      printf "repo\t%s\t%s\n", k, m; next
+    }
+  ' "$contract" 2>/dev/null)"
+  [ -n "$table" ] || return 1
+  _prs_resolve "$@"
+  [ -n "$_rs_owner" ] && [ -n "$_rs_repo" ] && \
+    target="$(printf '%s/%s' "$_rs_owner" "$_rs_repo" | tr '[:upper:]' '[:lower:]')"
+  while IFS="$(printf '\t')" read -r kind k v; do
+    case "$kind" in
+      op) [ "$v" = "$_cls" ] && op="$k" ;;
+      default) mode="$k" ;;
+      repo)
+        if [ -n "$target" ] && \
+           [ "$(printf '%s' "$k" | tr '[:upper:]' '[:lower:]')" = "$target" ]; then
+          repo_mode="$v"
+        fi ;;
+    esac
+  done <<EOF_LW
+$table
+EOF_LW
+  [ -n "$op" ] || return 1
+  [ "${repo_mode:-$mode}" = "enforce" ] || return 1
+  v="${_cls% *}-${_cls#* }"
+  grep -qF "verb=\"$v\"" "$dispatch" 2>/dev/null || return 1
+  grep -qF "replaces=\"gh $_cls\"" "$dispatch" 2>/dev/null || return 1
+  _lw_scm="$v"; _lw_op="$op"
+  return 0
+}
+
+if [ "$_method" = "WRITE" ] && _lw_lane && _lw_covered "$@" && ! _lw_allowed_identity; then
+  printf '%s\n' \
+    "REFUSED (OMN-20914): gh $_cls from a lane ($_lw_why); lanes do GitHub writes through the source-control node, not gh (RULING 2026-10-10T18:32:46Z)." \
+    "Use instead: onex scm $_lw_scm   (node_github_repo_write_effect operation $_lw_op; onex scm $_lw_scm --help for its options, onex scm verbs for the whole table)" \
+    "The verb is refused because onex scm serves it for $_rs_owner/$_rs_repo; gh pr merge, gh run rerun and gh api writes have no onex scm operation and are unaffected." >&2
+  _endpoint="onex scm $_lw_scm"
+  _call_log 1 refused
+  exit 1
+fi
+unset _lw_why _lw_scm _lw_op _rs_owner _rs_repo _rs_n
+
 # A PR mutation can change the cached answers for its repository: drop that
 # repository's entries before it runs (every entry when the repository is
 # unknown). Entries are named <repo hash>.<key>, so lookups in other
@@ -1236,77 +1496,6 @@ if _cacheable "$@"; then
     _log "$_rc" miss
     exit "$_rc"
   fi
-fi
-
-# --- cached read gateway (OMN-20911) ---------------------------------------------
-# The gateway shapes (_gw_shape: a failing-job log, one check run's detail, one commit
-# object by full sha) reach GitHub only through here, for every caller but the PR-state guard's allowed callers. A hit is
-# served from ${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway (a finished job's log,
-# a completed check run and a commit addressed by its full sha do not change); a miss spends one unit of this host's hourly
-# budget, and a spent budget refuses until the next UTC hour. TTL and budget come only
-# from ${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env (ONEX_GH_GATEWAY_TTL, default
-# 21600 s; ONEX_GH_GATEWAY_BUDGET, default 60 misses an hour), never from the environment,
-# so a lane cannot raise its own budget. Only a successful answer is cached.
-# The bus gateway (OMN-17427 plan) replaces this host-local cache.
-if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
-  _gw_ttl=21600
-  _gw_budget=60
-  _gw_conf="${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env"
-  if [ -f "$_gw_conf" ]; then
-    while IFS= read -r _line || [ -n "$_line" ]; do
-      _conf_v="$(_conf_strip_comment "${_line#*=}")"
-      case "$_conf_v" in ""|*[!0-9]*) continue ;; esac
-      case "$_line" in
-        ONEX_GH_GATEWAY_TTL=*) _gw_ttl="$_conf_v" ;;
-        ONEX_GH_GATEWAY_BUDGET=*) _gw_budget="$_conf_v" ;;
-      esac
-    done < "$_gw_conf"
-  fi
-  _gw_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway"
-  mkdir -p "$_gw_dir/budget" 2>/dev/null
-  _gw_scope=""
-  [ "$_cls" = "run view" ] && _gw_scope="$(_origin_repo)"
-  _gw_entry="$_gw_dir/$(_sha "$_gw_scope|$(printf '%s\037' "$@")")"
-  _now="$(date +%s)"
-  if [ $(( $$ % 50 )) -eq 0 ]; then
-    find "$_gw_dir" -type f -mmin +2880 -delete 2>/dev/null
-  fi
-  if [ -f "$_gw_entry.meta" ]; then
-    read -r _gw_at < "$_gw_entry.meta"
-    case "$_gw_at" in
-      ""|*[!0-9]*) ;;
-      *)
-        if [ $((_now - _gw_at)) -lt "$_gw_ttl" ]; then
-          cat "$_gw_entry.out" 2>/dev/null
-          _log 0 hit
-          exit 0
-        fi ;;
-    esac
-  fi
-  _gw_hour_file="$_gw_dir/budget/$(date -u +%Y%m%d%H)"
-  _gw_spent="$({ wc -l < "$_gw_hour_file"; } 2>/dev/null | tr -d '[:space:]')"
-  case "$_gw_spent" in ""|*[!0-9]*) _gw_spent=0 ;; esac
-  if [ "$_gw_spent" -ge "$_gw_budget" ]; then
-    printf '%s\n' \
-      "REFUSED (OMN-20911): the cached read gateway has spent this host's budget of $_gw_budget GitHub reads for this UTC hour ($_gw_spent used); it refills at the next hour." \
-      'Read what you can locally meanwhile: the PR watcher state (pr_state_local.py --pr <owner>/<repo>#<n>) names every check run and its conclusion; answers already fetched this hour are served from the cache.' >&2
-    _call_log 1 refused
-    exit 1
-  fi
-  printf '%s\n' "$$" >> "$_gw_hour_file" 2>/dev/null
-  _gw_tmp="$_gw_entry.tmp.$$"
-  _run_gh "$@" > "$_gw_tmp.out" 2> "$_gw_tmp.err"
-  _rc=$?
-  cat "$_gw_tmp.out"
-  cat "$_gw_tmp.err" >&2
-  if [ "$_rc" -eq 0 ]; then
-    mv -f "$_gw_tmp.out" "$_gw_entry.out" 2>/dev/null
-    printf '%s\n' "$_now" > "$_gw_tmp.meta" 2>/dev/null \
-      && mv -f "$_gw_tmp.meta" "$_gw_entry.meta" 2>/dev/null
-  fi
-  rm -f "$_gw_tmp.out" "$_gw_tmp.err" "$_gw_tmp.meta" 2>/dev/null
-  _log "$_rc" miss
-  exit "$_rc"
 fi
 
 # Pass-through. Run rather than exec, so the exit code can be logged; stdin,

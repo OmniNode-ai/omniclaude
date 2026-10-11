@@ -14,9 +14,8 @@
 # so the install tracks the clones and this tick is what closes the gap.
 #
 # What it does, at most once every ONEX_RECONCILE_TICK_SECONDS (default 600):
-#   1. bootstrap the omnibase_infra clone IF neither reconciler path is available
+#   1. bootstrap the omnibase_infra clone IF the reconciler is not installed
 #   2. run onex-host-reconcile from the omnibase_internal clone's .venv
-#      (legacy reconcile-host.sh is a transitional fallback)
 #   3. write a receipt line and the one-line status the SessionStart hook reads
 #
 # This hook owns THROTTLING, DETACHMENT and the STATUS LINE. It owns no repair
@@ -35,7 +34,7 @@
 #
 # There is now ONE reconciler, `onex-host-reconcile`, run identically here and
 # from `.201`'s cron unit. It proves every surface moved by reading it back.
-# The legacy `omnibase_infra/scripts/reconcile-host.sh` is a transitional fallback.
+# The legacy `omnibase_infra/scripts/reconcile-host.sh` is deleted and never run (OMN-20670).
 #
 # Why a PostToolUse tick and not a scheduler
 # ------------------------------------------
@@ -204,25 +203,24 @@ _resolve_host_reconcile() {
 }
 
 _run_tick() {
-    local ts canonical legacy bootstrap_note="" verdict rc
+    local ts canonical bootstrap_note="" verdict rc
     if (( _ONEX_PRINTF_T )); then TZ=UTC printf -v ts '%(%Y-%m-%dT%H:%M:%SZ)T' -1; else ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; fi
 
     _resolve_host_reconcile || true
     canonical="$_RECONCILER"
-    legacy="$OMNI_HOME/omnibase_infra/scripts/reconcile-host.sh"
 
     # ---- bootstrap: how the reconciler itself gets here --------------------
     # The tick no longer pulls the clones. That leaves exactly one ordering
     # problem: on a host whose omnibase_infra clone predates OMN-17307, the
     # reconciler does not exist yet, and nothing else advances the clone that
     # would deliver it. So the ONE repo the tick still advances by itself is
-    # omnibase_infra, and only while both reconciler paths are absent.
+    # omnibase_infra, and only while the reconciler is absent.
     #
     # It is verified by content like everything else -- HEAD is re-read after
     # the pull and compared to origin/dev. A bootstrap that reports success on
     # `git pull`'s exit status would be the OMN-17307 defect reintroduced in the
     # one place nobody would look for it.
-    if [[ -z "$canonical" && ! -f "$legacy" ]]; then
+    if [[ -z "$canonical" ]]; then
         local infra="$OMNI_HOME/omnibase_infra" head_before head_after target
         if [[ -d "$infra/.git" ]]; then
             head_before="$(git -C "$infra" rev-parse HEAD 2>/dev/null)"
@@ -251,10 +249,6 @@ _run_tick() {
     # checkout fails (OMN-17291), because nothing here ever re-read HEAD.
     if [[ -n "$canonical" ]]; then
         "$canonical" --omni-home "$OMNI_HOME" >>"$_RECEIPTS" 2>&1
-    elif [[ -f "$legacy" ]]; then
-        # Drop this fallback once omnibase_infra deletes the script and every
-        # host has the command.
-        bash "$legacy" --omni-home "$OMNI_HOME" >>"$_RECEIPTS" 2>&1
     else
         printf '%s tick=complete reconciler=ABSENT tried=%s %s\n' \
             "$ts" "$_RECONCILER_TRIED" "$bootstrap_note" >> "$_RECEIPTS"

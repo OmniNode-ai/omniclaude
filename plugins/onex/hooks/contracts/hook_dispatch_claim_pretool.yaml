@@ -13,10 +13,11 @@ script: hook_dispatch_claim_pretool.sh
 lib: dispatch_claim_gate.py
 kill_switch: DISPATCH_CLAIM_GATE_DISABLED
 golden_path:
-  - Agent tool fires with prompt containing "fix containers on 192.168.86.201"  # onex-allow-internal-ip
+  - Agent tool fires with prompt containing "fix containers on <host>", where <host> is a host of the overlay config/lab/dispatch_claim_hosts.yaml under the workspace config root (ONEX_WORKSPACE_CONFIG_ROOT)
   - First agent acquires claim (action=acquired)
   - Second agent with identical prompt receives permissionDenied (action=blocked)
   - After TTL expires, claim is auto-reaped and next agent acquires freely
+  - With no overlay the host rules are inactive, a command shaped like one logs the missing overlay to the hook log, and every other rule (ticket, PR merge, explicit blocker_id, rebuild request) is unchanged
 dod_evidence:
   - kind: tests
     description: "8 unit tests pass (extraction rules + E2E race)"

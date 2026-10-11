@@ -113,12 +113,19 @@ def _assert_lane_refused(
     assert (rows[-1][6], rows[-1][7]) == ("1", "refused")
 
 
+FULL_SHA = "0123456789abcdef0123456789abcdef01234567"
+
 # Reads the PR-state guard (OMN-19856) never covered: the lane guard must refuse each.
 LANE_READS = [
     ["api", "repos/OmniNode-ai/onex_change_control/contents/contracts/OMN-1.yaml"],
     ["api", "repos/OmniNode-ai/omnimarket/actions/artifacts"],
     ["api", "repos/o/r/actions/artifacts/9/zip"],
     ["api", "repos/o/r/commits/abc"],
+    ["api", "repos/o/r/commits"],
+    ["api", f"repos/o/r/commits/{FULL_SHA[:39]}"],
+    ["api", f"repos/o/r/commits/{FULL_SHA}1"],
+    ["api", f"repos/o/r/commits/{FULL_SHA[:39]}g"],
+    ["api", f"repos/o/r/commits/{FULL_SHA}/comments"],
     ["api", "repos/o/r/issues/9/comments"],
     ["api", "user"],
     ["api", "-X", "GET", "repos/o/r/releases", "-f", "per_page=5"],
@@ -201,6 +208,49 @@ def test_positive_control_the_same_read_passes_outside_a_lane(
     result = _run(env, *argv)
     assert result.returncode == 0, result.stderr
     assert _calls(env) == [argv]
+
+
+ALL_MARKERS = [
+    "CLAUDECODE",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "ONEX_LANE",
+    "ONEX_LANE_ID",
+    "ONEX_AGENT_NAME",
+    "CLAUDE_AGENT_NAME",
+    "CLAUDE_SUBAGENT_NAME",
+    "CODEX_THREAD_ID",
+    "CODEX_SANDBOX",
+    "CODEX_SANDBOX_NETWORK_DISABLED",
+    "CODEX_MANAGED_BY_NPM",
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("comm", ["claude", "/opt/homebrew/bin/codex"])
+def test_blanking_every_marker_does_not_unmake_a_lane(
+    env: dict[str, str], tmp_path: Path, comm: str
+) -> None:
+    """The environment cannot remove lane context: an agent-spawned call with every marker
+    set to the empty string (and none set at all, in the fixture) is still refused, by the
+    ancestry walk that runs before any marker is read."""
+    install_ancestry_ps(tmp_path / "realbin", comm)
+    result = _run(env, "api", "user", extra=dict.fromkeys(ALL_MARKERS, ""))
+    _assert_lane_refused(env, result)
+    assert "(ancestor process " in result.stderr.splitlines()[0]
+
+
+@pytest.mark.unit
+def test_unreadable_process_ancestry_fails_closed(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """An agent that strips every environment marker is still caught by the ancestry walk,
+    and a ps that cannot read the process table (a sandbox, a broken ps) does not turn the
+    walk into a pass: the caller cannot be verified, so it is refused as a lane."""
+    _write_exec(tmp_path / "realbin" / "ps", "#!/bin/bash\nexit 1\n")
+    result = _run(env, "api", "user")
+    _assert_lane_refused(env, result)
+    assert "(unreadable process ancestry)" in result.stderr.splitlines()[0]
 
 
 @pytest.mark.unit
@@ -429,6 +479,9 @@ GATEWAY = [
     ["api", "repos/o/r/check-runs/77"],
     ["api", "repos/o/r/check-runs/77/annotations"],
     ["api", "repos/o/r/actions/jobs/555"],
+    # The receipt-hardening hook's exact call (OMN-20911): one commit object, full sha.
+    ["api", "--include", f"repos/OmniNode-ai/onex_change_control/commits/{FULL_SHA}"],
+    ["api", f"repos/OmniNode-ai/onex_change_control/commits/{FULL_SHA}"],
 ]
 
 
@@ -472,6 +525,102 @@ def test_gateway_budget_refuses_when_spent_and_ignores_the_environment(
     hit = _run(env, "api", "repos/o/r/actions/jobs/1/logs", extra=lane)
     assert hit.returncode == 0, hit.stderr
     assert len(_calls(env)) == 2
+
+
+@pytest.mark.unit
+def test_gateway_budget_holds_under_concurrent_misses(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """Twelve lanes miss at once against a budget of three: the claim is appended before
+    the count is read, so no two callers can both see room and both reach GitHub."""
+    conf = tmp_path / "config" / "omni" / "gh-gateway.env"
+    conf.parent.mkdir(parents=True)
+    conf.write_text("ONEX_GH_GATEWAY_BUDGET=3\n")
+    run_env = dict(env)
+    run_env["ONEX_LANE"] = "lane"
+    procs = [
+        subprocess.Popen(
+            ["gh", "api", f"repos/o/r/actions/jobs/{job}/logs"],
+            env=run_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for job in range(12)
+    ]
+    codes = [proc.wait(timeout=60) for proc in procs]
+    for proc in procs:
+        assert proc.stdout is not None and proc.stderr is not None
+        proc.stdout.close()
+        proc.stderr.close()
+    assert len(_calls(env)) <= 3
+    assert codes.count(0) == len(_calls(env))
+    assert codes.count(1) == 12 - len(_calls(env))
+
+
+@pytest.mark.unit
+def test_gateway_serves_get_only_and_keys_on_the_method(env: dict[str, str]) -> None:
+    """A HEAD answer has no body, so HEAD is not a gateway shape: a lane HEAD is refused
+    and can never seed the cache entry a later GET of the same endpoint is served from."""
+    lane = {"ONEX_LANE": "lane", "FAKE_GH_STDOUT": "the detail"}
+    head = _run(env, "api", "-X", "HEAD", "repos/o/r/check-runs/77", extra=lane)
+    _assert_lane_refused(env, head)
+    get = _run(env, "api", "repos/o/r/check-runs/77", extra=lane)
+    assert (get.returncode, get.stdout) == (0, "the detail"), get.stderr
+    assert _calls(env) == [["api", "repos/o/r/check-runs/77"]]
+
+
+@pytest.mark.unit
+def test_gateway_never_serves_a_placeholder_endpoint(env: dict[str, str]) -> None:
+    """repos/{owner}/{repo}/... resolves from GH_REPO or the working directory, which the
+    cache key cannot see, so it is not a gateway shape: a lane is refused, not served
+    another repository's cached commit."""
+    argv = ["api", f"repos/{{owner}}/{{repo}}/commits/{FULL_SHA}"]
+    result = _run(
+        env, *argv, extra={"ONEX_LANE": "lane", "GH_REPO": "OmniNode-ai/omniclaude"}
+    )
+    _assert_lane_refused(env, result)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("argv", "refetched"),
+    [
+        (["run", "view", "123", "--repo", "o/r", "--log-failed"], True),
+        (
+            ["run", "view", "123", "--repo", "o/r", "--log-failed", "--attempt", "1"],
+            False,
+        ),
+        (["run", "view", "--job", "555", "--repo", "o/r", "--log-failed"], False),
+    ],
+    ids=["latest-attempt", "explicit-attempt", "job"],
+)
+def test_gateway_latest_attempt_log_expires_after_a_rerun_window(
+    env: dict[str, str], tmp_path: Path, argv: list[str], refetched: bool
+) -> None:
+    """A run log with no --attempt or --job is the latest attempt, which a rerun replaces,
+    so it is held five minutes; a named attempt or job keeps the full TTL."""
+    lane = {"ONEX_LANE": "lane", "FAKE_GH_STDOUT": "the log"}
+    assert _run(env, *argv, extra=lane).returncode == 0
+    for meta in (tmp_path / "cache" / "omni" / "gh-shim" / "gateway").glob("*.meta"):
+        meta.write_text(f"{int(meta.read_text().strip()) - 400}\n")
+    assert _run(env, *argv, extra=lane).returncode == 0
+    assert len(_calls(env)) == (2 if refetched else 1)
+
+
+@pytest.mark.unit
+def test_gateway_refuses_when_it_cannot_count_the_read(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """A budget directory that cannot be created means the read cannot be counted, so it
+    is refused rather than sent to GitHub uncounted."""
+    (tmp_path / "cache").write_text("not a directory\n")
+    result = _run(
+        env, "api", "repos/o/r/actions/jobs/1/logs", extra={"ONEX_LANE": "lane"}
+    )
+    assert result.returncode == 1
+    assert result.stderr.startswith("REFUSED (OMN-20911): the cached read gateway")
+    assert _calls(env) == []
 
 
 # --- the commit object through the gateway (OMN-20960) -----------------------------

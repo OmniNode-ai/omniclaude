@@ -1,0 +1,56 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-20941"
+title: "OCC retirement K2: omniclaude retires the onex_change_control-backed Version Pin Compliance job; pypi-pin-resolvability carries pin integrity"
+summary: "The version-pin-check job in ci.yml (context Version Pin Compliance) checked out onex_change_control standards and ran check_version_pins.py against a version matrix whose omnibase-core row is stale; its continue-on-error meant it could never fail Quality Gate. The job, its app-token mint and its OCC checkout are deleted, together with its Quality Gate need and gate input, and its manifest row is set to RETIRED. Pin integrity is carried by the REQUIRED pypi-pin-resolvability context (OMN-19655), which the tests prove is live and required before the retired context stops being required."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn20941"
+    statement: "omniclaude's ci.yml must not check out onex_change_control for version pins, and the retired Version Pin Compliance context must stop being REQUIRED only while the pypi-pin-resolvability replacement is REQUIRED."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: The replacement pin check is live and required in omniclaude before the OCC-backed job goes: pypi-pin-resolvability reports on every pull request with no paths filter and no job-level if, and is listed REQUIRED in the manifest -- falsifier: uv run pytest tests/ci/test_pin_resolvability_gate_workflow.py -q passes on the PR head, and the PR body cites the check run of pypi-pin-resolvability on the PR head"
+      - id: "AC2"
+        statement: "AC2: No job in omniclaude's ci.yml checks out onex_change_control for version pins, and Version Pin Compliance is gone from ci.yml, from CI Summary's needs and from the required-checks manifest's REQUIRED entries -- falsifier: a test in tests/ci added by the PR asserts the absence and a consistent needs list, and fails at the merge base (uv run pytest on that file)"
+      - id: "AC3"
+        statement: "AC3: CI Summary still refuses a needs entry that names no job after the change -- falsifier: the same test file carries a planted broken-needs positive control that the needs check rejects (uv run pytest on that file)"
+evidence_requirements:
+  - kind: "tests"
+    description: "The replacement is REQUIRED and reports on every pull request, and the retired context is not REQUIRED."
+    command: "uv run pytest tests/ci/test_pin_resolvability_gate_workflow.py tests/ci/test_version_pin_check_retired_omn20941.py -q -p no:randomly -k 'gate or manifest'"
+  - kind: "tests"
+    description: "ci.yml carries no version-pin-check job, no onex_change_control standards checkout and no need on the retired job."
+    command: "uv run pytest tests/ci/test_version_pin_check_retired_omn20941.py -q -p no:randomly -k 'runs_no_version_pin_script or checks_out_no_onex_change_control or version_pin_check_job_is_gone or no_job_needs_the_retired or manifest_requires_replacement'"
+  - kind: "tests"
+    description: "version-pin-check is absent, every needs entry resolves to a job, and the broken-needs positive controls are rejected."
+    command: "uv run pytest tests/ci/test_version_pin_check_retired_omn20941.py -q -p no:randomly -k 'needs or unlisted_result_read or version_pin_check_job_is_gone'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn20941-ac1-replacement-required"
+    description: "pypi-pin-resolvability reports on every pull request and is REQUIRED in the manifest; Version Pin Compliance is not REQUIRED."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_pin_resolvability_gate_workflow.py tests/ci/test_version_pin_check_retired_omn20941.py -q -p no:randomly -k 'gate or manifest'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn20941-ac2-job-gone"
+    description: "ci.yml has no version-pin-check job, no onex_change_control standards checkout and no need on the retired job; the manifest lists no REQUIRED Version Pin Compliance."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_version_pin_check_retired_omn20941.py -q -p no:randomly -k 'runs_no_version_pin_script or checks_out_no_onex_change_control or version_pin_check_job_is_gone or no_job_needs_the_retired or manifest_requires_replacement'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
+  - id: "dod-omn20941-ac3-needs-consistent"
+    description: "Every needs entry resolves to a job, the gate reads only listed needs, the retired job is absent, and both planted positive controls are rejected."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_version_pin_check_retired_omn20941.py -q -p no:randomly -k 'needs or unlisted_result_read or version_pin_check_job_is_gone'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
