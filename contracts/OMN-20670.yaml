@@ -1,0 +1,37 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20670
+title: "The workspace reconcile tick no longer falls back to the deleted reconcile-host.sh"
+summary: >
+  omnibase_infra deleted scripts/reconcile-host.sh. The workspace reconcile tick
+  still ran it when onex-host-reconcile was not installed, which left the tick as
+  the last caller of the old entry point. The fallback is removed: the tick runs
+  only onex-host-reconcile from the omnibase_internal clone's .venv, and with it
+  absent it reports reconciler=ABSENT and drift, as before. This PR covers AC2
+  for reconcile-host.sh; the movement verifier script is later work.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20670-no-legacy-reconciler-caller
+    statement: No caller invokes the deleted scripts/reconcile-host.sh; the workspace reconcile tick runs only onex-host-reconcile.
+    acceptance:
+      - id: AC2
+        statement: 'AC2: the old script, workflow or module entry point is deleted and no caller still invokes it -- falsifier: a repository grep for the old entry point name outside the node returns a caller'
+evidence_requirements:
+  - kind: tests
+    description: The tick never runs a stale reconcile-host.sh left on a host, reports drift when onex-host-reconcile is absent, and runs onex-host-reconcile when it is installed.
+    command: uv run pytest tests/hooks/test_workspace_reconcile.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn-20670-ac2
+    description: With a stale reconcile-host.sh in the infra clone and no onex-host-reconcile installed, the tick does not run the script and writes reconciler=ABSENT and the DRIFT status line.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_workspace_reconcile.py -q --no-cov -k "leftover_legacy_script or canonical_command"
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC2
