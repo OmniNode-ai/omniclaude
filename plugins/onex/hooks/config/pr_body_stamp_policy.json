@@ -43,7 +43,29 @@
     "",
     "  gh_api_patch exists because `gh pr edit` refuses a MERGED pull request,",
     "  so the REST PATCH is the shape a lane actually uses on the surface where",
-    "  the plan of record measured two of its four losses."
+    "  the plan of record measured two of its four losses.",
+    "",
+    "watcher_record -- the second source of the live description (OMN-20911).",
+    "  A lane's gh shim refuses every GitHub read, so the guard's own `gh pr",
+    "  view --json body` always fails there and, read alone, would refuse every",
+    "  body edit. Only when that read is refused or fails, the guard reads the",
+    "  PR watcher's state file instead: prs['<repo>#<n>'].facts.body, accepted",
+    "  only while the record is OPEN, last_tick is no older than",
+    "  max_age_seconds, and the head recorded is not behind the newest push the",
+    "  guard can see locally (origin/<head_ref>). Anything else is the same",
+    "  refusal as before: a record that cannot be trusted is evidence of nothing.",
+    "",
+    "  state_env / state_default_path -- where the file is: ONEX_PR_WATCHER_STATE",
+    "  when set, else <OMNI_HOME>/<state_default_path>, the resolution the",
+    "  watcher's own reader (pr_state_local.state_path) uses.",
+    "",
+    "  max_age_seconds -- mirror, not a new number: the watcher's freshness",
+    "  window, DEFAULT_MAX_AGE (8 minutes) of merge-drain/scripts/pr_state_local.py",
+    "  and CLONE_MAX_AGE (480 s) of the PR watcher module. Both live",
+    "  in other repositories, and this module is standard library only and runs",
+    "  under any resolved interpreter, so it cannot import either; it carries the",
+    "  value here, in one place, beside the stamp pattern it mirrors the same way.",
+    "  Change it only when the watcher's window changes."
   ],
 
   "stamp_line_pattern": "^Evidence-Source:\\s+(\\S.*)$",
@@ -55,6 +77,15 @@
     "body_flags": ["--body", "-b"],
     "body_file_flags": ["--body-file", "-F"],
     "repo_flags": ["--repo", "-R"]
+  },
+
+  "watcher_record": {
+    "organization": "OmniNode-ai",
+    "schema": 1,
+    "state_env": "ONEX_PR_WATCHER_STATE",
+    "omni_home_env": "OMNI_HOME",
+    "state_default_path": [".claude_scratch", "pr-watcher", "state.json"],
+    "max_age_seconds": 480
   },
 
   "gh_api_patch": {
