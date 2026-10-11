@@ -326,8 +326,7 @@ repos:
         stages: [pre-commit]
 
       # OMN-9730: DGM-Phase4 — mechanical block on skip-deploy-gate bypass tokens.
-      # Rejects any staged file containing [skip-deploy-gate:] without an explicit
-      # approval receipt (# skip-token-allowed: <receipt-id>).
+      # Rejects any staged file containing a [skip-*] token. There is no escape hatch (OMN-20074).
       # CLAUDE.md Rule #10: never bypass local gates. Fix the underlying issue.
       - id: reject-deploy-gate-skip-token
         name: Reject skip-deploy-gate bypass tokens (OMN-9730)
@@ -366,6 +365,20 @@ repos:
         language: system
         pass_filenames: false
         files: '^(src/omniclaude/nodes/node_git_effect/handlers/handler_(git_admission|shell_word|shell_words)\.py|plugins/onex/hooks/scripts/pre_tool_use_shared_tree_git_guard\.sh|tests/hooks/test_shared_tree_git_guard\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
+        stages: [pre-commit]
+      # OMN-20961: an apostrophe in a comment inside a $( ) block parses under
+      # bash 5 and is refused by macOS /bin/bash 3.2, which runs every hook on
+      # the Mac. On 2026-10-11 one such comment reached the Mac by a clone
+      # fast-forward and refused every Bash call for about two hours. The test
+      # runs a static scan everywhere and /bin/bash -n on macOS.
+      - id: hook-scripts-bash32-parse
+        name: Hook scripts parse under macOS bash 3.2 (OMN-20961)
+        entry: >-
+          bash -c 'PYTHONDONTWRITEBYTECODE=1 uv run pytest
+          tests/hooks/test_hook_scripts_bash32_parse.py -q -p no:cacheprovider'
+        language: system
+        pass_filenames: false
+        files: '^(plugins/onex/hooks/(scripts|lib)/.*|tests/hooks/test_hook_scripts_bash32_parse\.py|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
       - id: pr-close-preconditions
         name: PR close preconditions and refusal contract (OMN-19160)
@@ -642,6 +655,22 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+        stages: [pre-commit]
+
+      # OMN-20940: deployment and lab configuration never lives in a shipped
+      # repository, and this repository ships the gate that refuses it. This is the
+      # local twin of the exported `deployment-config` hook in .pre-commit-hooks.yaml
+      # (the same script, class and arguments) and of the required CI context
+      # `public-repo-hygiene / deployment-config`, which the caller workflow gets from
+      # the reusable in this checkout. It matches by shape: no vocabulary, no token,
+      # no OMNI_HOME, and it runs on a fork.
+      - id: deployment-config
+        name: Deployment configuration stays out of shipped repositories (OMN-20923, OMN-20940)
+        entry: python3 scripts/public_repo_hygiene_gate.py --repo-root . --only-classes deployment-config --mode enforce --enforce-scope added-lines --diff-staged
+        language: system
+        always_run: true
+        pass_filenames: false
+        require_serial: true
         stages: [pre-commit]
 
       # OMN-13051 (retro D-5): plan hard fields — P0/P1 items with runtime-dep

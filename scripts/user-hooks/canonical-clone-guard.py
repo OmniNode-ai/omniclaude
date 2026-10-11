@@ -864,11 +864,8 @@ _DENY_SKIP_MARKER = (
     "self-judgement, not evidence (omni_home/CLAUDE.md rule #10; two workers "
     "did exactly this on 2026-04-25, which is why the gate is mechanical now).\n\n"
     "DO THIS INSTEAD: fix what the gate is complaining about — add the missing "
-    "dod_evidence, or narrow an over-broad matcher. The ONE sanctioned escape "
-    "is a staged-content comment carrying a real user-issued approval handle:\n"
-    "  # skip-token-allowed: <user-approval-receipt-id>\n"
-    "That escape lives in the STAGED CONTENT, not in the commit message, so it "
-    "does not require the token you are being blocked for here."
+    "dod_evidence, or narrow an over-broad matcher. There is no escape hatch: "
+    "no approvals registry and no receipt-id comment rescues a skip token."
 )
 
 _DENY_PREPUSH_FULL_SUITE = (
