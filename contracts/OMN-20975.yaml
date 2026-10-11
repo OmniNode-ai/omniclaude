@@ -31,15 +31,11 @@ dod_evidence:
     binds_ac: [AC1]
     checks:
       - check_type: test_passes
-        check_value: tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py
-        command: uv run --no-project --with pytest --with pyyaml --with pytest-cov --with python-dotenv python -m pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov
-        cwd: ${OMNI_HOME}/omniclaude
+        check_value: uv run --no-project --with pytest --with pyyaml --with pytest-cov --with python-dotenv python -m pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov
   - id: dod-omn20975-ac2
     description: The test compares every other input and the uses pin to the captured merge base and checks every other byte outside the S5 comment.
     source: manual
     binds_ac: [AC2]
     checks:
       - check_type: test_passes
-        check_value: tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py
-        command: uv run --no-project --with pytest --with pyyaml --with pytest-cov --with python-dotenv python -m pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov
-        cwd: ${OMNI_HOME}/omniclaude
+        check_value: uv run --no-project --with pytest --with pyyaml --with pytest-cov --with python-dotenv python -m pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov
