@@ -1,0 +1,39 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20864
+title: "test_test_offloader puts src/omniclaude/hooks/lib on sys.path for its own tests only"
+summary: >
+  tests/unit/hooks/test_test_offloader.py inserted src/omniclaude/hooks/lib at sys.path[0] at
+  collection time and never removed it. That directory holds a second onex_state.py without
+  workspace_config_file, which shadowed plugins/onex/hooks/lib/onex_state.py for every test
+  collected after it and failed two tests in test_hook_emit_drainer.py. The path is now added
+  by an autouse monkeypatch fixture, so it is on sys.path for one test and removed after it.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20864-offloader-syspath-scoped
+    statement: The test offloader tests add src/omniclaude/hooks/lib to sys.path per test and leave sys.path unchanged afterwards, so the drainer tests see the plugin onex_state module in either file order.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: test_test_offloader.py leaves no sys.path entry behind -- falsifier: pytest of test_hook_emit_drainer.py with test_test_offloader.py reports a failure'
+evidence_requirements:
+  - kind: tests
+    description: The drainer and offloader test files pass together in either order.
+    command: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py tests/unit/hooks/test_test_offloader.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn-20864-ac1
+    description: The drainer tests pass when collected together with the offloader tests, in both file orders.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py tests/unit/hooks/test_test_offloader.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_test_offloader.py tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC1
