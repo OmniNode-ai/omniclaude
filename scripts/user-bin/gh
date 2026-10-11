@@ -891,6 +891,15 @@ _lane_context() {
       return 0
     fi
   done
+  # The environment markers are a fast path, not the decision: an agent that unsets them
+  # is still caught by the ancestry walk below. That walk is only as good as ps, so a
+  # process table this process cannot read about itself (a sandbox that hides it, a
+  # missing or broken ps) counts as a lane: an unverifiable caller fails closed.
+  info="$(ps -o ppid= -o comm= -p "$$" 2>/dev/null)"
+  if [ -z "${info//[[:space:]]/}" ]; then
+    _lane_ctx_why="unreadable process ancestry"
+    return 0
+  fi
   while [ "$steps" -lt 12 ]; do
     case "$pid" in ""|*[!0-9]*) break ;; esac
     [ "$pid" -gt 1 ] || break
@@ -1257,7 +1266,12 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
     done < "$_gw_conf"
   fi
   _gw_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway"
-  mkdir -p "$_gw_dir/budget" 2>/dev/null
+  if ! mkdir -p "$_gw_dir/budget" 2>/dev/null; then
+    printf '%s\n' \
+      "REFUSED (OMN-20911): the cached read gateway cannot create its cache and budget directory $_gw_dir/budget, so it cannot count this read against the hourly budget; fix the directory rather than read uncounted." >&2
+    _call_log 1 refused
+    exit 1
+  fi
   _gw_scope=""
   [ "$_cls" = "run view" ] && _gw_scope="$(_origin_repo)"
   _gw_entry="$_gw_dir/$(_sha "$_gw_scope|$(printf '%s\037' "$@")")"
@@ -1277,17 +1291,25 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
         fi ;;
     esac
   fi
+  # Claim the unit first, then count: each claim is one short O_APPEND line, so two
+  # concurrent misses can never both read a count below the budget and both proceed (no
+  # check-then-act window). A refused claim stays counted, which only over-counts the hour.
   _gw_hour_file="$_gw_dir/budget/$(date -u +%Y%m%d%H)"
-  _gw_spent="$(wc -l < "$_gw_hour_file" 2>/dev/null | tr -d '[:space:]')"
-  case "$_gw_spent" in ""|*[!0-9]*) _gw_spent=0 ;; esac
-  if [ "$_gw_spent" -ge "$_gw_budget" ]; then
+  if ! printf '%s\n' "$$" >> "$_gw_hour_file" 2>/dev/null; then
     printf '%s\n' \
-      "REFUSED (OMN-20911): the cached read gateway has spent this host's budget of $_gw_budget GitHub reads for this UTC hour ($_gw_spent used); it refills at the next hour." \
+      "REFUSED (OMN-20911): the cached read gateway cannot record this read in its budget file $_gw_hour_file; fix the file rather than read uncounted." >&2
+    _call_log 1 refused
+    exit 1
+  fi
+  _gw_spent="$(wc -l < "$_gw_hour_file" 2>/dev/null | tr -d '[:space:]')"
+  case "$_gw_spent" in ""|*[!0-9]*) _gw_spent="$((_gw_budget + 1))" ;; esac
+  if [ "$_gw_spent" -gt "$_gw_budget" ]; then
+    printf '%s\n' \
+      "REFUSED (OMN-20911): the cached read gateway has spent this host's budget of $_gw_budget GitHub reads for this UTC hour ($_gw_budget used); it refills at the next hour." \
       'Read what you can locally meanwhile: the PR watcher state (pr_state_local.py --pr <owner>/<repo>#<n>) names every check run and its conclusion; answers already fetched this hour are served from the cache.' >&2
     _call_log 1 refused
     exit 1
   fi
-  printf '%s\n' "$$" >> "$_gw_hour_file" 2>/dev/null
   _gw_tmp="$_gw_entry.tmp.$$"
   _run_gh "$@" > "$_gw_tmp.out" 2> "$_gw_tmp.err"
   _rc=$?

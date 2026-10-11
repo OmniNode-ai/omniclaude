@@ -211,6 +211,19 @@ def test_positive_control_the_same_read_passes_outside_a_lane(
 
 
 @pytest.mark.unit
+def test_unreadable_process_ancestry_fails_closed(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """An agent that strips every environment marker is still caught by the ancestry walk,
+    and a ps that cannot read the process table (a sandbox, a broken ps) does not turn the
+    walk into a pass: the caller cannot be verified, so it is refused as a lane."""
+    _write_exec(tmp_path / "realbin" / "ps", "#!/bin/bash\nexit 1\n")
+    result = _run(env, "api", "user")
+    _assert_lane_refused(env, result)
+    assert "(unreadable process ancestry)" in result.stderr.splitlines()[0]
+
+
+@pytest.mark.unit
 def test_positive_control_refusal_path_really_runs(
     env: dict[str, str], tmp_path: Path
 ) -> None:
@@ -482,3 +495,49 @@ def test_gateway_budget_refuses_when_spent_and_ignores_the_environment(
     hit = _run(env, "api", "repos/o/r/actions/jobs/1/logs", extra=lane)
     assert hit.returncode == 0, hit.stderr
     assert len(_calls(env)) == 2
+
+
+@pytest.mark.unit
+def test_gateway_budget_holds_under_concurrent_misses(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """Twelve lanes miss at once against a budget of three: the claim is appended before
+    the count is read, so no two callers can both see room and both reach GitHub."""
+    conf = tmp_path / "config" / "omni" / "gh-gateway.env"
+    conf.parent.mkdir(parents=True)
+    conf.write_text("ONEX_GH_GATEWAY_BUDGET=3\n")
+    run_env = dict(env)
+    run_env["ONEX_LANE"] = "lane"
+    procs = [
+        subprocess.Popen(
+            ["gh", "api", f"repos/o/r/actions/jobs/{job}/logs"],
+            env=run_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for job in range(12)
+    ]
+    codes = [proc.wait(timeout=60) for proc in procs]
+    for proc in procs:
+        assert proc.stdout is not None and proc.stderr is not None
+        proc.stdout.close()
+        proc.stderr.close()
+    assert len(_calls(env)) <= 3
+    assert codes.count(0) == len(_calls(env))
+    assert codes.count(1) == 12 - len(_calls(env))
+
+
+@pytest.mark.unit
+def test_gateway_refuses_when_it_cannot_count_the_read(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """A budget directory that cannot be created means the read cannot be counted, so it
+    is refused rather than sent to GitHub uncounted."""
+    (tmp_path / "cache").write_text("not a directory\n")
+    result = _run(
+        env, "api", "repos/o/r/actions/jobs/1/logs", extra={"ONEX_LANE": "lane"}
+    )
+    assert result.returncode == 1
+    assert result.stderr.startswith("REFUSED (OMN-20911): the cached read gateway")
+    assert _calls(env) == []
