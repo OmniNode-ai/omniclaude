@@ -414,10 +414,39 @@ DEPLOYMENT_PRIVATE_ZONE_RE = re.compile(
     # before a port, any of the zones
     r"|(?<![a-z0-9._/-])(?:[a-z0-9-]+\.)+(?:lan|lab|local|internal|home\.arpa)"
     r"(?=:\d{1,5}\b)"
-    # bare, every zone but ``.local``, which is also a file-name suffix
-    r"|(?<![a-z0-9._/@-])(?:[a-z0-9-]+\.)+(?:lan|lab|internal|home\.arpa)"
+    # bare, any of the zones; ``.local`` is also a file-name suffix and
+    # ``.internal`` and ``.lab`` end dotted identifiers, so a bare match is
+    # screened by DEPLOYMENT_NOT_A_HOST_LABELS below
+    r"|(?<![a-z0-9._/@-])(?:[a-z0-9-]+\.)+(?:lan|lab|local|internal|home\.arpa)"
     r"(?![a-z0-9_-]|\.[a-z0-9])",
     re.IGNORECASE,
+)
+#: First labels that make a bare ``X.<zone>`` a file name or an expression, not
+#: a host: GitHub Actions contexts (``${{ matrix.lab }}``) and the file stems
+#: every project has (``config.local``, ``settings.local``).
+DEPLOYMENT_NOT_A_HOST_LABELS: frozenset[str] = frozenset(
+    {
+        "github",
+        "env",
+        "vars",
+        "secrets",
+        "inputs",
+        "matrix",
+        "steps",
+        "needs",
+        "job",
+        "jobs",
+        "runner",
+        "strategy",
+        "config",
+        "settings",
+        "application",
+        "docker-compose",
+        "compose",
+        "override",
+        "values",
+        "local",
+    }
 )
 #: Names every runner or cluster resolves, which name no one's lab: exact
 #: names, and anything inside a Kubernetes ``cluster.local`` domain.
@@ -1803,6 +1832,8 @@ def _names_private_zone(text: str) -> bool:
     for match in DEPLOYMENT_PRIVATE_ZONE_RE.finditer(text):
         host = match.group(0).lower()
         if host in DEPLOYMENT_GENERIC_HOSTS or DEPLOYMENT_GENERIC_ZONE_RE.search(host):
+            continue
+        if host.split(".", 1)[0] in DEPLOYMENT_NOT_A_HOST_LABELS:
             continue
         return True
     return False

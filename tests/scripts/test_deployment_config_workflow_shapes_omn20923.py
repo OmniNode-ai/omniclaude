@@ -158,13 +158,16 @@ def _cli(root: Path, *extra: str, env: dict[str, str] | None = None) -> tuple[in
         "# the endpoint is http://box.lan:8000/v1",
         "# the endpoint is http://box.home.arpa/v1",
         "        run: rsync -a out/ runner@box.lab:/srv",
-        "# reached at box.internal:8130",
-        "      HOST: studio.lab",
-        "        run: ssh studio.lab",
-        "      URL: http://user:token@studio.lab/v1",
-        "# the port is studio.lab:9",
+        "# reached at box.internal:9002",
+        "      HOST: voterhost.lab",
+        "        run: ssh voterhost.local",
+        "      HOST: voterhost.local",
+        "# the voter runs on voterhost.local",
+        "        run: ssh voterhost.lab",
+        "      URL: http://user:token@voterhost.lab/v1",
+        "# the port is voterhost.lab:9",
         "      URL: http://private-voter.docker.internal:8000",
-        "      URL: http://studio.local:8131",
+        "      URL: http://voterhost.local:9001",
     ],
 )
 def test_a_workflow_line_naming_a_private_host_is_found_comments_included(
@@ -178,13 +181,15 @@ def test_a_workflow_line_naming_a_private_host_is_found_comments_included(
     [
         "      URL: http://host.docker.internal:8000",
         "      run: cp config.example config.local",
+        "      run: echo ${{ matrix.lab }} ${{ inputs.internal }} ${{ env.lan }}",
+        "      run: python -m omnibase_core.internal",
         "      URL: http://box.local.example/",
         "      URL: http://db.svc.cluster.local:5432",
         "      URL: http://metadata.google.internal/",
         "      run: cp .env.example .env.local",
         "      run: cat .claude/settings.local.json",
         "# the voter lives in a private overlay, never in this file",
-        "      URL: http://studio.lab.example:8131",
+        "      URL: http://voterhost.lab.example:8131",
         "      URL: http://localhost:8000",
         "# bump to 1.2.3 before release",
     ],
@@ -507,12 +512,13 @@ def test_the_refusal_branch_of_the_vocabulary_step_runs_and_exits_1(
 
 
 def test_the_model_vocabulary_is_fetched_with_the_lab_vocabulary() -> None:
-    text = WORKFLOW.read_text(encoding="utf-8")
-    assert "vocabularies/public_repo_hygiene_model_vocabulary.yaml" in text
-    start = text.index("- name: Deployment configuration in workflow files")
-    block = text[start : text.index("\n  # OMN-20923: the deployment-config class,")]
-    assert "|| true" not in block
-    assert "2>/dev/null" not in block
+    steps = {str(step.get("name")): step for step in _token_job_steps()}
+    fetch = steps["Fetch the private lab vocabulary"]
+    with_block = fetch["with"]
+    assert isinstance(with_block, dict)
+    sparse = str(with_block["sparse-checkout"])
+    assert "vocabularies/public_repo_hygiene_lab_vocabulary.yaml" in sparse
+    assert "vocabularies/public_repo_hygiene_model_vocabulary.yaml" in sparse
 
 
 def test_the_secretless_job_does_not_read_the_private_vocabularies() -> None:
