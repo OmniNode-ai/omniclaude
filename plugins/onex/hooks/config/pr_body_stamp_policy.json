@@ -61,7 +61,7 @@
     "",
     "  max_age_seconds -- mirror, not a new number: the watcher's freshness",
     "  window, DEFAULT_MAX_AGE (8 minutes) of merge-drain/scripts/pr_state_local.py",
-    "  and CLONE_MAX_AGE (480 s) of omnibase_internal's pr_watcher.py. Both live",
+    "  and CLONE_MAX_AGE (480 s) of the PR watcher module. Both live",
     "  in other repositories, and this module is standard library only and runs",
     "  under any resolved interpreter, so it cannot import either; it carries the",
     "  value here, in one place, beside the stamp pattern it mirrors the same way.",
