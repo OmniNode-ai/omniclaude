@@ -342,6 +342,43 @@ def test_our_ci_resolves_the_named_overlay_repository(
     assert rc == 1
 
 
+def test_the_resolve_step_never_interpolates_a_variable_into_echo(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-20910 (blocking Hostile Reviewer finding): OMNI_CI_OVERLAY_REPO is an
+    org-level variable. The step passes it through ``env:`` and must only ever
+    reference it as a quoted shell variable handed to ``printf '%s'`` as data,
+    never as text in an ``echo`` program line, and must write its outputs with
+    ``printf '%s\\n'`` so a value can never be read as an echo option or format."""
+    run = str(_named_step(workflow, "Resolve the CI overlay")["run"])
+    assert "${{" not in run, "inputs reach the script through env:, not expressions"
+    echoes = [line.strip() for line in run.splitlines() if re.match(r"\s*echo\b", line)]
+    assert echoes == [], f"the resolve step must write with printf, not echo: {echoes}"
+    assert "printf '%s\\n' \"name=${CI_OVERLAY_REPO}\"" in run
+    assert "printf '%s\\n' \"ref=${CI_OVERLAY_REF}\"" in run
+
+
+@pytest.mark.parametrize("variable", ["CI_OVERLAY_REPO", "CI_OVERLAY_REF"])
+def test_a_rejected_value_cannot_inject_a_workflow_command_into_the_log(
+    workflow: dict[object, object], tmp_path: pathlib.Path, variable: str
+) -> None:
+    """A rejected value is never echoed back: a newline in it would start a line
+    of its own in the job log, and a line beginning ``::`` is a workflow command."""
+    hostile = "x\n::add-mask::injected\n::set-output name=ref::deadbeef"
+    if variable == "CI_OVERLAY_REPO":
+        rc, out, stdout = _run_resolve(workflow, hostile, tmp_path)
+    else:
+        rc, out, stdout = _run_resolve(
+            workflow, "deploy-config", tmp_path, ref_var=hostile
+        )
+    assert rc == 1
+    assert out == ""
+    assert "injected" not in stdout
+    assert "deadbeef" not in stdout
+    # Positive control: the rejection itself is still reported, as an error line.
+    assert any(line.startswith("::error::") for line in stdout.splitlines())
+
+
 def test_the_fork_default_does_not_ask_for_a_pin(
     workflow: dict[object, object], tmp_path: pathlib.Path
 ) -> None:

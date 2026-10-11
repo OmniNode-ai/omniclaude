@@ -258,25 +258,30 @@ jobs:
           CI_OVERLAY_REF: ${{ vars.OMNI_CI_OVERLAY_REF }}
         run: |
           set -euo pipefail
+          # Both variables arrive through env: and are only ever expanded as quoted
+          # shell variables. Messages and outputs are written with printf, the
+          # value as an argument and never as the format. A value that fails
+          # validation is not echoed back: a newline in it would start a log line
+          # of its own, and a line beginning with two colons is a workflow command.
           if [ -z "${CI_OVERLAY_REPO}" ]; then
-            echo "::error::no review voters configured: OMNI_CI_OVERLAY_REPO is unset, so no CI overlay supplies config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml (review_voters_overlay.v1). The gate fails closed. To run it, put your voters in a repository of your own and set OMNI_CI_OVERLAY_REPO to its name."
+            printf '%s\n' "::error::no review voters configured: OMNI_CI_OVERLAY_REPO is unset, so no CI overlay supplies config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml (review_voters_overlay.v1). The gate fails closed. To run it, put your voters in a repository of your own and set OMNI_CI_OVERLAY_REPO to its name."
             exit 1
           fi
           if [[ ! "${CI_OVERLAY_REPO}" =~ ^[A-Za-z0-9._-]+$ ]]; then
-            echo "::error::OMNI_CI_OVERLAY_REPO must be a bare repository name, got '${CI_OVERLAY_REPO}'"
+            printf '%s\n' "::error::OMNI_CI_OVERLAY_REPO must be a bare repository name (letters, digits, dot, underscore and hyphen only); the rejected value is not echoed"
             exit 1
           fi
           if [ -z "${CI_OVERLAY_REF}" ]; then
-            echo "::error::OMNI_CI_OVERLAY_REF is unset: the CI overlay ${CI_OVERLAY_REPO} is read only at a pinned commit, so set the org Actions variable OMNI_CI_OVERLAY_REF to the full 40-hex commit sha of ${CI_OVERLAY_REPO} that carries config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml. The gate fails closed."
+            printf '::error::OMNI_CI_OVERLAY_REF is unset: the CI overlay %s is read only at a pinned commit, so set the org Actions variable OMNI_CI_OVERLAY_REF to the full 40-hex commit sha of %s that carries config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml. The gate fails closed.\n' "${CI_OVERLAY_REPO}" "${CI_OVERLAY_REPO}"
             exit 1
           fi
           if [[ ! "${CI_OVERLAY_REF}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::OMNI_CI_OVERLAY_REF must be a full 40-hex lowercase commit sha, got '${CI_OVERLAY_REF}'; a branch, tag or short sha is refused because the voters could change without the pin changing"
+            printf '%s\n' "::error::OMNI_CI_OVERLAY_REF must be a full 40-hex lowercase commit sha; a branch, tag or short sha is refused because the voters could change without the pin changing. The rejected value is not echoed"
             exit 1
           fi
           {
-            echo "name=${CI_OVERLAY_REPO}"
-            echo "ref=${CI_OVERLAY_REF}"
+            printf '%s\n' "name=${CI_OVERLAY_REPO}"
+            printf '%s\n' "ref=${CI_OVERLAY_REF}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Mint a read-only CI overlay token
