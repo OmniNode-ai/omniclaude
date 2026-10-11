@@ -30,14 +30,13 @@
 # fleet standard.
 #
 # WHAT A SECOND VOTER HERE DOES AND DOES NOT BUY, stated so nobody re-derives
-# it wrongly. It does NOT damp a spurious finding. run_multi_model_review
-# CONCATENATES per-model results — there is no dedup, no agreement weighting
-# and no union anywhere on this path — and the verdict step below sums blocking
-# findings across every succeeded model, so ONE critical/error finding from
-# EITHER voter blocks. Adding a voter can only RAISE the blocking count. What
-# it buys is a second independent sample and conformance to the CLI's contract,
-# at the cost of a strictly stricter gate. Whether the two voters are
-# genuinely independent models is a property of the overlay, not of this file.
+# it wrongly. It does NOT damp a spurious finding by averaging: run_multi_model_review
+# CONCATENATES per-model results, with no dedup and no weighting. What it buys
+# is cross-model agreement (OMN-18479): a critical/error finding blocks only when
+# at least two distinct succeeded voters raised it, and a finding only one voter
+# raised is reported as a warning. A second voter also conforms to the CLI's
+# contract. Whether the voters are genuinely independent models is a property of
+# the overlay, not of this file.
 #
 # Gate semantics (pilot phase):
 #   blocked     — critical/error findings raised by AT LEAST TWO distinct
