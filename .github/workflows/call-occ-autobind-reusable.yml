@@ -133,9 +133,9 @@ jobs:
     # reads a DEDICATED variable, `OMNI_OCC_AUTOBIND_RUNS_ON_JSON`, and NOT the
     # shared `OMNI_TRUSTED_CI_RUNS_ON_JSON` seam that governs lint/test/build.
     #
-    # WHY: this job publishes to the TAILNET-ONLY dev-lane broker
-    # `omninode-pc.tail75df5e.ts.net:19092` (omnimarket config/ci_bus_lanes.yaml).
-    # Only the self-hosted `omnibase-ci` fleet on .201 is on that tailnet; a
+    # WHY: this job publishes to the TAILNET-ONLY dev-lane broker named in the
+    # bus lane declaration (omnimarket config/ci_bus_lanes.yaml, OMN-20937).
+    # Only the self-hosted `omnibase-ci` fleet is on that tailnet; a
     # GitHub-hosted runner cannot resolve the name at all. The OMN-14451/OMN-14639
     # fail-loud contract below then correctly refuses to exit 0, so NO OCC
     # companion is minted, so no `Evidence-Source: OCC#<n>` is stamped, so the

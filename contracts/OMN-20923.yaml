@@ -1,0 +1,40 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-20923"
+title: "The public-repo hygiene gate refuses deployment and lab configuration in shipped repositories (deployment-config class)"
+summary: "Operator RULING 2026-10-10T21:57:38Z, amended 2026-10-10T22:07:49Z ('This should be in ci.'). A new never-exemptable deployment-config class of scripts/public_repo_hygiene_gate.py refuses a lane-overlay file and a configuration value naming a private host, by shape, with no vocabulary, so it runs on a fork. It runs as its own job, public-repo-hygiene / deployment-config, in the reusable workflow (no secrets) and as the exported deployment-config pre-commit hook, enforcing on added lines."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-deployment-config-class"
+    statement: "A change that adds deployment or lab configuration to a shipped repository fails the gate; a neutral default and an unrelated change pass."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: a change that adds a file under a lane-overlays path, or any config file carrying an internal address or a lab endpoint, fails the gate on added lines -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py -k overlay_with_lab_values asserts exit 1 on a fixture that adds such a file"
+      - id: "AC2"
+        statement: "AC2: an unrelated change, and a file carrying the neutral public default, pass the gate -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py -k neutral_default_passes asserts exit 0"
+evidence_requirements:
+  - kind: "tests"
+    description: "The deployment-config tests pass at the head."
+    command: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py tests/scripts/test_deployment_config_class_omn20923.py -q -k 'overlay_with_lab_values or neutral_default_passes or deployment_config or 4817 or bifrost or private_host'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn20923-ac1-overlay-refused"
+    description: "An added lane-overlay file or lab address in a config file fails the gate on added lines."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py -q -k overlay_with_lab_values"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn20923-ac2-neutral-default-passes"
+    description: "A neutral example overlay and an unrelated change pass."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py -q -k neutral_default_passes"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]

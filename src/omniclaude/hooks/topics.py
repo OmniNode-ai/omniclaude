@@ -549,6 +549,16 @@ class TopicBase(StrEnum):
     """Terminal event: the ownership verdict for the command."""
 
     # ==========================================================================
+    # Lane GitHub read guard (OMN-20916)
+    # node_lane_github_read_guard_effect command and terminal event.
+    # ==========================================================================
+    LANE_GITHUB_READ_CHECK = "onex.cmd.omniclaude.lane-github-read-check.v1"
+    """Command: judge one PreToolUse call against the GitHub read paths around the gh shim."""
+
+    LANE_GITHUB_READ_CHECKED = "onex.evt.omniclaude.lane-github-read-checked.v1"
+    """Terminal event: the allow or refuse verdict for the call."""
+
+    # ==========================================================================
     # Delegation pipeline topics (OMN-7103)
     # Node-based delegation orchestrator command/event bus topics.
     # ==========================================================================

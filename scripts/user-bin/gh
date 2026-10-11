@@ -55,6 +55,11 @@
 # detail go through a cached read gateway with a per-hour budget instead (RULING
 # 2026-10-10T18:17:36Z). Full contract at the guard, below the PR-state guard.
 #
+# Lane write guard (OMN-20914): from a lane, a gh write that `onex scm` serves (read from
+# the operations table of node_github_repo_write_effect's contract in the omnimarket the
+# `onex` command runs) is refused, naming the `onex scm` verb that replaces it. A write with
+# no onex scm operation stays allowed. Full contract at the guard, below the PR-state guard.
+#
 # Shared call log (OMN-19852): every allowed or refused call appends one
 # tab-separated line to ONEX_GH_CALLS_LOG, else ONEX_STATE_DIR/gh-calls.log
 # (no log is written when neither is set).
@@ -1176,82 +1181,6 @@ fi
 unset _mq_a _mq_prev _mq_shape _mq_reason _mq_why _mq_rules _mq_log_dir
 
 
-# A PR mutation can change the cached answers for its repository: drop that
-# repository's entries before it runs (every entry when the repository is
-# unknown). Entries are named <repo hash>.<key>, so lookups in other
-# repositories stay cached.
-if [ "${1:-}" = "pr" ]; then
-  case "${2:-}" in
-    create|ready|close|reopen|merge)
-      _mut_repo=""
-      _prev=""
-      for _a in "$@"; do
-        case "$_prev" in -R|--repo) _mut_repo="$_a" ;; esac
-        case "$_a" in --repo=*) _mut_repo="${_a#--repo=}" ;; esac
-        _prev="$_a"
-      done
-      [ -n "$_mut_repo" ] || _mut_repo="$(_origin_repo)"
-      if [ -n "$_mut_repo" ]; then
-        rm -f "$_cache_root/$(_sha "$_mut_repo" | cut -c1-16)".* 2>/dev/null
-      else
-        rm -f "$_cache_root"/* 2>/dev/null
-      fi
-      ;;
-  esac
-fi
-
-if _cacheable "$@"; then
-  _top="$(git rev-parse --show-toplevel 2>/dev/null)"
-  _branch="$_branch_arg"
-  if [ -z "$_branch" ] && [ -n "$_top" ]; then
-    _branch="$(git symbolic-ref --short -q HEAD 2>/dev/null)"
-  fi
-  if [ -n "$_top" ] && [ -n "$_branch" ]; then
-    _repo_id="$(_origin_repo)"
-    [ -n "$_repo_id" ] || _repo_id="$_top"
-    _key="$(_sha "$_repo_id" | cut -c1-16).$(_sha "$_top|$_branch|$_fields")"
-    _entry="$_cache_root/$_key"
-    _now="$(date +%s)"
-    if [ -f "$_entry.meta" ]; then
-      read -r _rc _at < "$_entry.meta"
-      case "$_rc$_at" in
-        *[!0-9]*|"") ;;
-        *)
-          if [ $((_now - _at)) -lt "$ONEX_GH_SHIM_TTL" ]; then
-            cat "$_entry.out" 2>/dev/null
-            cat "$_entry.err" >&2 2>/dev/null
-            _log "$_rc" hit
-            exit "$_rc"
-          fi
-          ;;
-      esac
-    fi
-    mkdir -p "$_cache_root" 2>/dev/null
-    _tmp="$_entry.tmp.$$"
-    _run_gh "$@" > "$_tmp.out" 2> "$_tmp.err"
-    _rc=$?
-    cat "$_tmp.out"
-    cat "$_tmp.err" >&2
-    _keep=0
-    if [ "$_rc" -eq 0 ]; then
-      _keep=1
-    elif grep -qi 'no pull requests found' "$_tmp.err" 2>/dev/null; then
-      _keep=1
-    fi
-    if [ "$_keep" -eq 1 ]; then
-      # .meta is written last and read first, so a reader never sees a
-      # half-written entry as fresh.
-      mv -f "$_tmp.out" "$_entry.out" 2>/dev/null
-      mv -f "$_tmp.err" "$_entry.err" 2>/dev/null
-      printf '%s %s\n' "$_rc" "$_now" > "$_tmp.meta" 2>/dev/null \
-        && mv -f "$_tmp.meta" "$_entry.meta" 2>/dev/null
-    fi
-    rm -f "$_tmp.out" "$_tmp.err" "$_tmp.meta" 2>/dev/null
-    _log "$_rc" miss
-    exit "$_rc"
-  fi
-fi
-
 # --- cached read gateway (OMN-20911) ---------------------------------------------
 # The gateway shapes (_gw_shape: a failing-job log, one check run's detail, one commit object) reach GitHub
 # only through here, for every caller but the PR-state guard's allowed callers. A hit is
@@ -1344,6 +1273,223 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
   rm -f "$_gw_tmp.out" "$_gw_tmp.err" "$_gw_tmp.meta" 2>/dev/null
   _log "$_rc" miss
   exit "$_rc"
+fi
+
+# --- lane write guard (OMN-20914) -----------------------------------------------
+# RULING 2026-10-10T18:32:46Z: GitHub access moves onto the source-control nodes and gh
+# CLI access is turned off for sub-agents, so lanes drive everything through the node
+# and remember nothing. From a lane, a gh write that `onex scm` serves is refused (exit 1,
+# the real gh never runs) and the refusal names the `onex scm` verb that replaces it.
+#
+# Coverage table: the `operations` block of node_github_repo_write_effect's contract.yaml
+# in the omnimarket the `onex` command runs, the first
+# ${ONEX_DISPATCH_VENV:-$OMNI_HOME/.onex-dispatch-venv}/lib/python*/site-packages/omnimarket
+# (scripts/onex in omnibase_infra resolves the same venv). `onex scm` reads that block too
+# (contract_operations), and omnimarket's own test binds every operation to exactly one
+# verb. A call is covered only when all of these hold; otherwise it passes unchanged:
+#   - an operation's description says "replaces gh <group> <sub>." and the call is that verb;
+#   - the same install's onex scm table (handlers/scm/handler_scm_dispatch.py) serves
+#     verb="<group>-<sub>" replacing "gh <group> <sub>" (an install from before the command
+#     has the contract and no command, and refuses nothing);
+#   - write_config puts the call's repository (--repo, a PR URL, else the origin remote) in
+#     enforce mode: in dry_run the node plans the write and sends nothing.
+# So `gh pr merge`, `gh run rerun|cancel` and `gh api` with a non-GET method stay allowed:
+# onex scm has no operation for them (it refuses merge, arm, rerun and update-branch,
+# naming the landing controller).
+#
+# A lane is a call carrying a lane marker of node_lane_github_read_guard_effect (ONEX_LANE,
+# ONEX_LANE_ID, ONEX_AGENT_NAME, CLAUDE_AGENT_NAME, CLAUDE_SUBAGENT_NAME and the CODEX_*
+# markers) or a headless Claude Code entrypoint (CLAUDE_CODE_ENTRYPOINT=sdk-*). The
+# operator's foreground shell and interactive session carry neither and pass.
+# Allowed whatever the environment, decided on the direct parent only (as the PR-state
+# guard's allowed callers are): ONEX_PR_WATCHER=1, the PR watcher module and the landing
+# controller's own scripts (_prs_caller_allowed), the node effect runner (`onex run-node`,
+# onex-runtime, omnibase_infra.runtime.kernel) and the release-cut tick
+# (any package's omnimarket_release_cut_tick module).
+# The refusal is a call-log row: class = the gh verb, endpoint = the onex scm verb.
+_lw_why=""
+_lw_lane() {
+  _lw_why=""
+  local v
+  for v in ONEX_LANE ONEX_LANE_ID ONEX_AGENT_NAME CLAUDE_AGENT_NAME CLAUDE_SUBAGENT_NAME \
+           CODEX_THREAD_ID CODEX_SANDBOX CODEX_SANDBOX_NETWORK_DISABLED CODEX_MANAGED_BY_NPM; do
+    if [ -n "${!v:-}" ]; then
+      _lw_why="environment $v"
+      return 0
+    fi
+  done
+  case "${CLAUDE_CODE_ENTRYPOINT:-}" in
+    sdk-*) _lw_why="headless entrypoint $(_clean "$CLAUDE_CODE_ENTRYPOINT")"; return 0 ;;
+  esac
+  return 1
+}
+
+_lw_allowed_identity() {
+  _prs_caller_allowed && return 0
+  local args
+  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  [ -n "$args" ] || return 1
+  case " $args " in
+    *"/onex run-node "*|*" onex run-node "*) return 0 ;;
+    *"/onex-runtime "*|*" onex-runtime "*|*" omnibase_infra.runtime.kernel "*) return 0 ;;
+    *".omnimarket_release_cut_tick "*) return 0 ;;
+  esac
+  return 1
+}
+
+# Sets _lw_scm (the onex scm verb) and _lw_op (the node operation) when the call is a
+# covered write; returns 1 otherwise. Reads files only for a non-api write verb.
+_lw_covered() {
+  _lw_scm=""; _lw_op=""
+  [ "$_method" = "WRITE" ] || return 1
+  case "$_cls" in *" "*) ;; *) return 1 ;; esac
+  local venv="${ONEX_DISPATCH_VENV:-}" pkg="" d contract dispatch table kind k v
+  local op="" mode="" repo_mode="" target=""
+  if [ -z "$venv" ]; then
+    [ -n "${OMNI_HOME:-}" ] || return 1
+    venv="$OMNI_HOME/.onex-dispatch-venv"
+  fi
+  for d in "$venv"/lib/python*/site-packages/omnimarket; do
+    [ -d "$d" ] && { pkg="$d"; break; }
+  done
+  [ -n "$pkg" ] || return 1
+  contract="$pkg/nodes/node_github_repo_write_effect/contract.yaml"
+  dispatch="$pkg/handlers/scm/handler_scm_dispatch.py"
+  [ -r "$contract" ] && [ -r "$dispatch" ] || return 1
+  # One line per operation ("op<TAB><name><TAB><group sub>") and per mode ("default<TAB>
+  # <mode>", "repo<TAB><owner/repo><TAB><mode>"), from the two top-level blocks only.
+  table="$(awk '
+    /^[^[:space:]#]/ { sect = $1 }
+    sect == "operations:" && /^[[:space:]]*-[[:space:]]*name:/ {
+      op = $0; sub(/^[^:]*:[[:space:]]*/, "", op); gsub(/["[:space:]]/, "", op); next
+    }
+    sect == "operations:" && /^[[:space:]]*description:/ && op != "" {
+      if (match($0, /replaces gh [a-z]+ [a-z]+\./)) {
+        printf "op\t%s\t%s\n", op, substr($0, RSTART + 12, RLENGTH - 13)
+      }
+      op = ""; next
+    }
+    sect == "write_config:" && /^[[:space:]]+github_mode:/ {
+      m = $0; sub(/^[^:]*:[[:space:]]*/, "", m); gsub(/["[:space:]]/, "", m)
+      printf "default\t%s\n", m; next
+    }
+    sect == "write_config:" && /^[[:space:]]+[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+:/ {
+      k = $0; sub(/^[[:space:]]+/, "", k); m = k; sub(/:.*/, "", k)
+      sub(/^[^:]*:[[:space:]]*/, "", m); gsub(/["[:space:]]/, "", m)
+      printf "repo\t%s\t%s\n", k, m; next
+    }
+  ' "$contract" 2>/dev/null)"
+  [ -n "$table" ] || return 1
+  _prs_resolve "$@"
+  [ -n "$_rs_owner" ] && [ -n "$_rs_repo" ] && \
+    target="$(printf '%s/%s' "$_rs_owner" "$_rs_repo" | tr '[:upper:]' '[:lower:]')"
+  while IFS="$(printf '\t')" read -r kind k v; do
+    case "$kind" in
+      op) [ "$v" = "$_cls" ] && op="$k" ;;
+      default) mode="$k" ;;
+      repo)
+        if [ -n "$target" ] && \
+           [ "$(printf '%s' "$k" | tr '[:upper:]' '[:lower:]')" = "$target" ]; then
+          repo_mode="$v"
+        fi ;;
+    esac
+  done <<EOF_LW
+$table
+EOF_LW
+  [ -n "$op" ] || return 1
+  [ "${repo_mode:-$mode}" = "enforce" ] || return 1
+  v="${_cls% *}-${_cls#* }"
+  grep -qF "verb=\"$v\"" "$dispatch" 2>/dev/null || return 1
+  grep -qF "replaces=\"gh $_cls\"" "$dispatch" 2>/dev/null || return 1
+  _lw_scm="$v"; _lw_op="$op"
+  return 0
+}
+
+if [ "$_method" = "WRITE" ] && _lw_lane && _lw_covered "$@" && ! _lw_allowed_identity; then
+  printf '%s\n' \
+    "REFUSED (OMN-20914): gh $_cls from a lane ($_lw_why); lanes do GitHub writes through the source-control node, not gh (RULING 2026-10-10T18:32:46Z)." \
+    "Use instead: onex scm $_lw_scm   (node_github_repo_write_effect operation $_lw_op; onex scm $_lw_scm --help for its options, onex scm verbs for the whole table)" \
+    "The verb is refused because onex scm serves it for $_rs_owner/$_rs_repo; gh pr merge, gh run rerun and gh api writes have no onex scm operation and are unaffected." >&2
+  _endpoint="onex scm $_lw_scm"
+  _call_log 1 refused
+  exit 1
+fi
+unset _lw_why _lw_scm _lw_op _rs_owner _rs_repo _rs_n
+
+# A PR mutation can change the cached answers for its repository: drop that
+# repository's entries before it runs (every entry when the repository is
+# unknown). Entries are named <repo hash>.<key>, so lookups in other
+# repositories stay cached.
+if [ "${1:-}" = "pr" ]; then
+  case "${2:-}" in
+    create|ready|close|reopen|merge)
+      _mut_repo=""
+      _prev=""
+      for _a in "$@"; do
+        case "$_prev" in -R|--repo) _mut_repo="$_a" ;; esac
+        case "$_a" in --repo=*) _mut_repo="${_a#--repo=}" ;; esac
+        _prev="$_a"
+      done
+      [ -n "$_mut_repo" ] || _mut_repo="$(_origin_repo)"
+      if [ -n "$_mut_repo" ]; then
+        rm -f "$_cache_root/$(_sha "$_mut_repo" | cut -c1-16)".* 2>/dev/null
+      else
+        rm -f "$_cache_root"/* 2>/dev/null
+      fi
+      ;;
+  esac
+fi
+
+if _cacheable "$@"; then
+  _top="$(git rev-parse --show-toplevel 2>/dev/null)"
+  _branch="$_branch_arg"
+  if [ -z "$_branch" ] && [ -n "$_top" ]; then
+    _branch="$(git symbolic-ref --short -q HEAD 2>/dev/null)"
+  fi
+  if [ -n "$_top" ] && [ -n "$_branch" ]; then
+    _repo_id="$(_origin_repo)"
+    [ -n "$_repo_id" ] || _repo_id="$_top"
+    _key="$(_sha "$_repo_id" | cut -c1-16).$(_sha "$_top|$_branch|$_fields")"
+    _entry="$_cache_root/$_key"
+    _now="$(date +%s)"
+    if [ -f "$_entry.meta" ]; then
+      read -r _rc _at < "$_entry.meta"
+      case "$_rc$_at" in
+        *[!0-9]*|"") ;;
+        *)
+          if [ $((_now - _at)) -lt "$ONEX_GH_SHIM_TTL" ]; then
+            cat "$_entry.out" 2>/dev/null
+            cat "$_entry.err" >&2 2>/dev/null
+            _log "$_rc" hit
+            exit "$_rc"
+          fi
+          ;;
+      esac
+    fi
+    mkdir -p "$_cache_root" 2>/dev/null
+    _tmp="$_entry.tmp.$$"
+    _run_gh "$@" > "$_tmp.out" 2> "$_tmp.err"
+    _rc=$?
+    cat "$_tmp.out"
+    cat "$_tmp.err" >&2
+    _keep=0
+    if [ "$_rc" -eq 0 ]; then
+      _keep=1
+    elif grep -qi 'no pull requests found' "$_tmp.err" 2>/dev/null; then
+      _keep=1
+    fi
+    if [ "$_keep" -eq 1 ]; then
+      # .meta is written last and read first, so a reader never sees a
+      # half-written entry as fresh.
+      mv -f "$_tmp.out" "$_entry.out" 2>/dev/null
+      mv -f "$_tmp.err" "$_entry.err" 2>/dev/null
+      printf '%s %s\n' "$_rc" "$_now" > "$_tmp.meta" 2>/dev/null \
+        && mv -f "$_tmp.meta" "$_entry.meta" 2>/dev/null
+    fi
+    rm -f "$_tmp.out" "$_tmp.err" "$_tmp.meta" 2>/dev/null
+    _log "$_rc" miss
+    exit "$_rc"
+  fi
 fi
 
 # Pass-through. Run rather than exec, so the exit code can be logged; stdin,

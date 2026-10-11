@@ -1460,3 +1460,62 @@ def test_the_repo_enforces_the_five_classes_on_added_lines() -> None:
         "person-name",
         "private-network",
     } <= config.enforce_classes
+
+
+# ---------------------------------------------------------------------------
+# deployment-config (OMN-20923 AC1, AC2). The full class is pinned in
+# tests/scripts/test_deployment_config_class_omn20923.py; these two are the
+# ticket's named falsifiers.
+# ---------------------------------------------------------------------------
+
+
+def _deployment_config_cli(root: Path, base: str) -> int:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(GATE_PATH),
+            "--repo-root",
+            str(root),
+            "--only-classes",
+            "deployment-config",
+            "--mode",
+            "enforce",
+            "--enforce-scope",
+            "added-lines",
+            "--diff-base",
+            base,
+        ],
+        capture_output=True,
+        text=True,
+        env=scrub_git_location_env(),
+        check=False,
+    ).returncode
+
+
+def _deployment_config_repo(tmp_path: Path) -> tuple[Path, str]:
+    root = tmp_path / "dc"
+    (root / "config").mkdir(parents=True)
+    (root / "config" / "app.yaml").write_text("a: 1\n", encoding="utf-8")
+    _git_in(root, "init", "-q")
+    return root, _commit(root, "base")
+
+
+def test_deployment_config_overlay_with_lab_values_fails(tmp_path: Path) -> None:
+    root, base = _deployment_config_repo(tmp_path)
+    overlay = root / "docker" / "lane-overlays" / "lab.bifrost.yaml"
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text(
+        f'endpoint_url: "http://{RFC1918_10}:8000/v1"\n', encoding="utf-8"
+    )
+    _commit(root, "adds a lab overlay")
+    assert _deployment_config_cli(root, base) == 1
+
+
+def test_deployment_config_neutral_default_passes(tmp_path: Path) -> None:
+    root, base = _deployment_config_repo(tmp_path)
+    example = root / "docker" / "lane-overlays" / "local.bifrost.example.yaml"
+    example.parent.mkdir(parents=True)
+    example.write_text('endpoint_url: "http://localhost:8000/v1"\n', encoding="utf-8")
+    (root / "src.py").write_text("print('unrelated')\n", encoding="utf-8")
+    _commit(root, "adds a neutral example and an unrelated file")
+    assert _deployment_config_cli(root, base) == 0

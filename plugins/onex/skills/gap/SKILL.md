@@ -603,7 +603,7 @@ If broker is unreachable, exits non-zero with error message.
 - `systematic-debugging` skill (debugging a single known failure; see Phase 1 Backward Tracing)
 - `create-ticket` skill (ticket creation patterns)
 - `skills/gap/suppressions.yaml` (suppression registry)
-- `skills/gap/legacy-denylist.yaml` (legacy config patterns for probe 2.11)
+- `skills/gap/legacy-denylist.yaml` (legacy config patterns for probe 2.11); plus `config/lab/gap_legacy_denylist.yaml` under the workspace config root (`ONEX_WORKSPACE_CONFIG_ROOT`) when present, which carries deployment-specific patterns in the same shape
 - `skills/gap/models/` (local Pydantic models)
 - `skills/gap/docs/FAILURE_TAXONOMY.md` (11 failure class reference)
 - `skills/gap/docs/POST_MERGE_STABILIZATION.md` (6-step post-merge workflow)

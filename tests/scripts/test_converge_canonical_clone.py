@@ -1011,3 +1011,76 @@ def test_script_never_appends_to_a_ledger_file_directly() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert "ROLLING_WORK_LEDGER.md" not in text.split("append_ledger_row() {")[1]
     assert '>> "$ledger"' not in text
+
+
+# --------------------------------------------------------------------------- #
+# --to-sha: the rollback the canonical-clone sync's hook parse guard uses
+# (OMN-20961)
+# --------------------------------------------------------------------------- #
+def _fast_forward_to_upstream(scratch: Scratch) -> str:
+    git(scratch.env, scratch.clone, "pull", "-q", "--ff-only")
+    head = git(scratch.env, scratch.clone, "rev-parse", "HEAD")
+    assert head == scratch.upstream_head
+    return head
+
+
+@pytest.mark.unit
+def test_to_sha_rolls_back_along_the_upstream_and_records_it(
+    scratch: Scratch,
+) -> None:
+    _fast_forward_to_upstream(scratch)
+    proc = scratch.run(
+        "omnimarket",
+        "--execute",
+        "--to-sha",
+        scratch.old_head,
+        "--ticket",
+        "OMN-20961",
+        "--lane",
+        "canonical-clone-sync",
+    )
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+    env, clone = scratch.env, scratch.clone
+    assert git(env, clone, "rev-parse", "HEAD") == scratch.old_head
+    assert git(env, clone, "symbolic-ref", "--short", "HEAD") == "dev"
+    assert git(env, clone, "status", "--porcelain", "--untracked-files=no") == ""
+    assert (clone / "README.md").read_text(encoding="utf-8") == "v0\n"
+    assert proc.stdout.startswith("ROLLED_BACK: omnimarket")
+    rows = scratch.ledger.read_text(encoding="utf-8")
+    assert "event=ROLLED_BACK" in rows and "ticket=OMN-20961" in rows
+    assert "HEAD==--to-sha, an ancestor of @{u}" in rows
+    manifest = next(scratch.evidence_root.iterdir()) / "MANIFEST.txt"
+    assert "rollback=1" in manifest.read_text(encoding="utf-8")
+
+
+@pytest.mark.unit
+def test_to_sha_dry_run_moves_nothing(scratch: Scratch) -> None:
+    _fast_forward_to_upstream(scratch)
+    proc = scratch.run("omnimarket", "--to-sha", scratch.old_head)
+    assert proc.returncode == 0, proc.stderr
+    assert "DRY-RUN" in proc.stdout and scratch.old_head in proc.stdout
+    assert git(scratch.env, scratch.clone, "rev-parse", "HEAD") == scratch.upstream_head
+    assert not scratch.evidence_root.exists()
+
+
+@pytest.mark.unit
+def test_to_sha_refuses_a_commit_off_the_upstream_line(scratch: Scratch) -> None:
+    _fast_forward_to_upstream(scratch)
+    (scratch.clone / "tracked.txt").write_text("side\n", encoding="utf-8")
+    git(scratch.env, scratch.clone, "commit", "-q", "-am", "side")
+    side = git(scratch.env, scratch.clone, "rev-parse", "HEAD")
+    git(scratch.env, scratch.clone, "reset", "-q", "--hard", scratch.upstream_head)
+    proc = scratch.run("omnimarket", "--execute", "--to-sha", side)
+    assert proc.returncode == 2, proc.stderr
+    assert "is not an ancestor of" in proc.stderr
+    assert git(scratch.env, scratch.clone, "rev-parse", "HEAD") == scratch.upstream_head
+
+
+@pytest.mark.unit
+def test_to_sha_refuses_an_unknown_commit_and_mode_combinations(
+    scratch: Scratch,
+) -> None:
+    proc = scratch.run("omnimarket", "--execute", "--to-sha", "0" * 40)
+    assert proc.returncode == 2 and "is not a commit" in proc.stderr
+    proc = scratch.run("omnimarket", "--to-sha", scratch.old_head, "--to-branch", "dev")
+    assert proc.returncode == 2 and "cannot be combined" in proc.stderr

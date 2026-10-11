@@ -104,9 +104,16 @@ summary: >
 # publisher and the consumer disagree is unrepresentable.
 lane: "dev"
 
-# The host the operator Mac dials. Lane ports below are host-side published
-# ports on that host; containers on a lane network use redpanda:9092 instead.
-lane_host: "192.168.86.201"  # onex-allow-internal-ip
+# THE BROKER ADDRESS IS A DEPLOYMENT FACT, NOT PART OF THIS CONTRACT. Each lane
+# below declares its compose project, network and transport; the host-side
+# `bootstrap_servers` of the selected lane is supplied by whoever runs the system,
+# in an overlay at `config/lab/hook_edge_lane.yaml` under the workspace config root
+# (ONEX_WORKSPACE_CONFIG_ROOT, otherwise the sibling config repository of the
+# registry root), with the same `known_lanes.<lane>.bootstrap_servers` shape. A
+# lane may also declare `bootstrap_servers` inline here, which wins over the
+# overlay. With neither, the resolver publishes nowhere and says which overlay is
+# missing: hook_edge_lane.py raises HookEdgeLaneOverlayMissing, hook_edge_lane.sh
+# leaves the environment untouched and names the file on stderr.
 
 # ---------------------------------------------------------------------------
 # TRANSPORT IS DECLARED, NEVER INFERRED (OMN-17284, following OMN-18012)
@@ -179,7 +186,6 @@ known_lanes:
   dev:
     compose_project: "omnibase-infra"
     network: "omnibase-infra-network"
-    bootstrap_servers: "192.168.86.201:19092"  # onex-allow-internal-ip onex-allow-kafka-broker
     # SASL over PLAINTEXT: :19092 carries no TLS. Declaring SASL_SSL here
     # would reproduce the CI publishers' 2026-09-07 failure verbatim
     # ("SSL handshake failed ... connecting to a PLAINTEXT broker listener?").
@@ -201,7 +207,6 @@ known_lanes:
   stability-test:
     compose_project: "omnibase-infra-stability-test"
     network: "omnibase-infra-stability-test-network"
-    bootstrap_servers: "192.168.86.201:39092"  # onex-allow-internal-ip onex-allow-kafka-broker
     # No SASL: OMN-18012 phase B deliberately scoped the flip to the dev lane
     # only, because the redpanda service is declared in the BASE compose file
     # that four other lanes merge. Measured 2026-09-15: an unauthenticated
@@ -210,7 +215,6 @@ known_lanes:
   prod:
     compose_project: "omnibase-infra-prod"
     network: "omnibase-infra-prod-network"
-    bootstrap_servers: "192.168.86.201:49092"  # onex-allow-internal-ip onex-allow-kafka-broker
     # Last-known transport, NOT currently verifiable: the lab compose prod
     # lane was retired under OMN-18320 and removed from the census manifest,
     # so there is no listener to probe. Recorded rather than deleted because

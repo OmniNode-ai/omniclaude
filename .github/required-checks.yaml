@@ -17,6 +17,10 @@
 # Migration Safety procedure — flip branch protection first (or same PR), then
 # update this file, so the reconcile job never observes a divergence window.
 #
+# `mode: RETIRED` marks a context whose producing job was deleted. It names the ticket,
+# the replacement and the live branch-protection edit still owed; the guards and the
+# reconcile job read only REQUIRED rows, so a RETIRED row is never counted as required.
+#
 # `job_path` len 1 = Shape A (direct job); len 2 = Shape B/C
 # ([caller_job_id, reusable_job_id]) per the design spec's context->job
 # resolution algorithm (OMN-14854 ticket, spec section 1).
@@ -386,12 +390,8 @@ gates:
     rationale: "Live required status check on omniclaude dev branch protection. result_triage ENFORCED (OMN-15314, waiver lifted): the aggregator triages every upstream with an explicit four-way `case` plus a default-deny `*` branch, and the legitimately-conditional upstreams are covered by a per-upstream skip policy that re-evaluates each one's declared precondition (zone-filter docs_only / fork-PR) instead of a blanket `!= skipped` escape."
 
   - name: "Version Pin Compliance"
-    mode: REQUIRED
-    producer_kind: local
-    workflow: ci.yml
-    job_path: ["version-pin-check"]
-    skip_semantics: never
-    rationale: "Live required status check on omniclaude dev branch protection."
+    mode: RETIRED
+    rationale: "OMN-20941 (OCC retirement, OMN-20074): the version-pin-check job is deleted from ci.yml. It checked out onex_change_control standards and ran check_version_pins.py against a version matrix that lists omnibase-core 0.33.1 while core ships 0.47.x, and its continue-on-error: true meant its result could never turn Quality Gate red. omnibase_core retired the identical job in omnibase_core#1947 (OMN-20921). Pin integrity is carried by the REQUIRED pypi-pin-resolvability context (pin-resolvability-gate.yml, OMN-19655), which reports on every pull request. Branch protection on dev still lists this context until the operator drops it; the reconcile job reports that divergence until then, and the context is no longer produced, so pull requests stay BLOCKED on it until the protection edit lands."
 
   - name: "no-noncanonical-lifecycle-classes"
     mode: REQUIRED
@@ -427,12 +427,11 @@ gates:
 
   - name: "pr-title / check-title"
     mode: REQUIRED
-    producer_kind: cross_repo
-    caller_workflow: pr-title-check.yml
-    caller_job: pr-title
-    cross_repo_ref: "OmniNode-ai/onex_change_control/.github/workflows/pr-title-check-reusable.yml@main"
+    producer_kind: local
+    workflow: pr-title-check.yml
+    job_path: ["pr-title"]
     skip_semantics: never
-    rationale: "PR title ticket-reference check (cross-repo reusable hosted in onex_change_control)."
+    rationale: "PR title ticket-reference check: the job runs omnimarket's node_pr_title_check_compute from a pinned omnimarket release (OMN-20958)."
 
   - name: "URL Authority Gate"
     mode: REQUIRED

@@ -3406,70 +3406,6 @@ jobs:
         run: python onex_change_control/scripts/validation/validate_skill_hygiene.py --skills-root plugins/onex/skills --strict
 
   # ---------------------------------------------------------------------------
-  # Version Pin Compliance Check (OMN-4810)
-  # ---------------------------------------------------------------------------
-  # Verifies that this repo's dependency pins are compliant with the shared
-  # version matrix defined in onex_change_control/standards/version-matrix.yaml.
-  version-pin-check:
-    needs: occ-preflight
-    if: always()
-    name: Version Pin Compliance
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         (github.event.pull_request.head.repo.full_name != github.repository ||
-          (github.event.pull_request.head.repo.full_name == github.repository &&
-           github.event.pull_request.base.ref == 'dev')))
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
-      }}
-    timeout-minutes: 10
-    # Advisory until range pin support (OMN-5132) and matrix alignment land
-    continue-on-error: true
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      # OMN-16373: CROSS_REPO_PAT retirement — mint a short-lived
-      # onexbot-occ-writer App installation token, scoped to the one
-      # sibling repo this job reads.
-      - name: Mint onexbot-occ-writer app token
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
-          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
-          owner: OmniNode-ai
-          repositories: onex_change_control
-          permission-contents: write
-
-      - name: Checkout onex_change_control standards
-        uses: actions/checkout@v7
-        with:
-          repository: OmniNode-ai/onex_change_control
-          ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
-          token: ${{ steps.app-token.outputs.token || github.token }}
-          path: onex_change_control
-          sparse-checkout: |
-            standards/
-          sparse-checkout-cone-mode: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install dependencies
-        working-directory: ${{ github.workspace }}
-        run: pip install pyyaml packaging
-
-      - name: Check version pin compliance
-        working-directory: ${{ github.workspace }}
-        run: python onex_change_control/standards/check_version_pins.py --repo omniclaude --root onex_change_control --repo-path .
-
-  # ---------------------------------------------------------------------------
   # Merge-Sweep Contract Tests (OMN-6189)
   # ---------------------------------------------------------------------------
   # Structural regression tests for the merge-sweep skill prompt contract.
@@ -4103,8 +4039,6 @@ jobs:
       - arch-no-compact-cmd-topic
       # CDQA-07 (OMN-2977)
       - arch-invariants
-      # Version pin compliance (OMN-4810)
-      - version-pin-check
       # Skill hygiene (OMN-5200)
       - skill-hygiene
       # Mode metadata integrity (OMN-5402)
@@ -4182,7 +4116,6 @@ jobs:
             "arch-no-hardcoded-ip=${{ needs.arch-no-hardcoded-ip.result }}" \
             "arch-no-compact-cmd-topic=${{ needs.arch-no-compact-cmd-topic.result }}" \
             "arch-invariants=${{ needs.arch-invariants.result }}" \
-            "version-pin-check=${{ needs.version-pin-check.result }}" \
             "skill-hygiene=${{ needs.skill-hygiene.result }}" \
             "mode-metadata-guard=${{ needs.mode-metadata-guard.result }}" \
             "merge-sweep-contract=${{ needs.merge-sweep-contract.result }}" \
@@ -4406,7 +4339,7 @@ jobs:
       }}
     if: needs.occ-preflight.result == 'success'
     steps:
-      - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@47342e562a516b0278e22a974f35cbf2a64b33eb
+      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@de3398d1fcf7a6f48451f680b74b1a6c6c383b8a # omnibase_core dev (OMN-20964)
         with:
           checks: "boundary-parity"
           warn-only: "false"

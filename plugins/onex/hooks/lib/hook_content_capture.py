@@ -15,7 +15,27 @@ What this does, per hook call
   result, each keyed by ``tool_use_id``.
 * ``--kind stop`` (Stop): the assistant reply of the turn that just ended,
   read from the harness's own ``last_assistant_message`` when it sends one,
-  else from ``transcript_path``.
+  else from ``transcript_path``. Also, from the same transcript, every prompt
+  the OPERATOR typed that this session has not yet recorded, one
+  ``operator_prompt`` item each (OMN-20905, below).
+
+Operator prompts (OMN-20905)
+----------------------------
+Operator ruling, RULING row 2026-10-10T22:40:43Z: the operator's decisions and
+asks are extracted asynchronously from the bus, not by a capture hook. The bus
+must therefore say which prompts the operator typed. The UserPromptSubmit
+payload cannot: it carries the same fields for an operator's prompt, a lane
+brief given to ``claude -p``, a scheduled prompt and a task notification, and
+the prompt's transcript entry, which does say, is written only after the hook
+returns (measured 2026-10-10 on Claude Code 2.1.295). At Stop the entries
+exist. A user entry is the operator's when its ``origin.kind`` is ``human``
+and it is neither meta nor a sidechain; a lane brief (``origin`` absent,
+``turnOrigin`` ``sdk``), a scheduled prompt, a task notification and a
+compaction summary never are. Each is journalled once per session (a marker
+of transcript entry ids beside the turn state), and the first Stop of a
+session looks back at most ``OPERATOR_LOOKBACK_SECONDS``, so installing this
+never replays a long session's history. A message the operator typed while a
+turn was running never fires UserPromptSubmit; it is recorded here too.
 
 Each item is redacted WHOLE by the capture-redaction contract, then split per
 the contract's size policy, and every chunk is journalled as one
@@ -59,6 +79,7 @@ import json
 import os
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -87,8 +108,18 @@ TRANSCRIPT_TAIL_BYTES = 8 * 1024 * 1024
 TRANSCRIPT_POLL_ATTEMPTS = 6
 TRANSCRIPT_POLL_SECONDS = 0.5
 
+#: The content kind of a prompt the operator typed, resolved at Stop.
+OPERATOR_PROMPT_KIND = "operator_prompt"
+
+#: The first Stop of a session records operator prompts this recent only.
+OPERATOR_LOOKBACK_SECONDS = 3600
+
+#: Transcript entry ids kept in a session's operator marker.
+OPERATOR_MARKER_KEEP = 512
+
 _RESOLVER_MODULE_NAME = "omniclaude_capture_redaction_by_path"
 _REPLY_MARKER_SUFFIX = ".reply"
+_OPERATOR_MARKER_SUFFIX = ".operator"
 
 
 def _log(message: str) -> None:
@@ -264,6 +295,19 @@ def _assistant_text(entry: dict[str, Any]) -> list[str]:
     ]
 
 
+def _tail_lines(transcript: Path, tail_bytes: int) -> list[str]:
+    """The transcript's last ``tail_bytes`` as lines; ``[]`` when unreadable."""
+    try:
+        size = transcript.stat().st_size
+        with transcript.open("rb") as handle:
+            if size > tail_bytes:
+                handle.seek(size - tail_bytes)
+                handle.readline()  # drop the partial first line
+            return handle.read().decode("utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+
+
 def last_turn_reply(
     transcript: Path, *, tail_bytes: int = TRANSCRIPT_TAIL_BYTES
 ) -> str:
@@ -272,15 +316,7 @@ def last_turn_reply(
     Reads only the tail of the file. Returns ``""`` when the last turn has no
     reply yet, including when the transcript is absent or unreadable.
     """
-    try:
-        size = transcript.stat().st_size
-        with transcript.open("rb") as handle:
-            if size > tail_bytes:
-                handle.seek(size - tail_bytes)
-                handle.readline()  # drop the partial first line
-            lines = handle.read().decode("utf-8", errors="replace").splitlines()
-    except OSError:
-        return ""
+    lines = _tail_lines(transcript, tail_bytes)
     collected: list[str] = []
     for raw in reversed(lines):
         try:
@@ -334,6 +370,113 @@ def _reply_already_captured(turn_dir: Path, session_id: str, digest: str) -> boo
     return False
 
 
+def _prompt_text(entry: dict[str, Any]) -> str:
+    message = entry.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        str(block.get("text"))
+        for block in content
+        if isinstance(block, dict)
+        and block.get("type") == "text"
+        and isinstance(block.get("text"), str)
+    )
+
+
+def is_operator_prompt_entry(entry: dict[str, Any]) -> bool:
+    """A real prompt whose transcript origin is a human: the operator typed it."""
+    if not _is_prompt_entry(entry):
+        return False
+    origin = entry.get("origin")
+    return isinstance(origin, dict) and origin.get("kind") == "human"
+
+
+def _said_at(entry: dict[str, Any]) -> datetime | None:
+    stamp = entry.get("timestamp")
+    if not isinstance(stamp, str):
+        return None
+    try:
+        when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return when if when.tzinfo is not None else None
+
+
+def _operator_marker(turn_dir: Path, session_id: str) -> Path:
+    safe = hashlib.sha256(session_id.encode("utf-8")).hexdigest()
+    return turn_dir / f"{safe}{_OPERATOR_MARKER_SUFFIX}"
+
+
+def _read_marker(marker: Path) -> list[str] | None:
+    """Entry ids already recorded; ``None`` when this session has no marker yet."""
+    try:
+        text = marker.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def operator_prompt_items(
+    transcript: Path,
+    *,
+    turn_dir: Path,
+    session_id: str,
+    now: datetime,
+    tail_bytes: int = TRANSCRIPT_TAIL_BYTES,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Operator prompts not yet recorded for this session, and their entry ids.
+
+    The ids are written to the marker by :func:`record_operator_marker` only
+    after the items are journalled, so a failed append records them again on
+    the next Stop rather than losing them.
+    """
+    seen = _read_marker(_operator_marker(turn_dir, session_id))
+    floor = now - timedelta(seconds=OPERATOR_LOOKBACK_SECONDS) if seen is None else None
+    known = set(seen or ())
+    items: list[dict[str, Any]] = []
+    ids: list[str] = []
+    for raw in _tail_lines(transcript, tail_bytes):
+        try:
+            entry = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict) or not is_operator_prompt_entry(entry):
+            continue
+        entry_id = entry.get("uuid")
+        if not isinstance(entry_id, str) or not entry_id or entry_id in known:
+            continue
+        said_at = _said_at(entry)
+        if floor is not None and (said_at is None or said_at < floor):
+            continue
+        text = _prompt_text(entry)
+        if not text.strip():
+            continue
+        item: dict[str, Any] = {"content_kind": OPERATOR_PROMPT_KIND, "content": text}
+        prompt_id = entry.get("promptId")
+        if isinstance(prompt_id, str) and prompt_id:
+            item["prompt_id"] = prompt_id
+        if said_at is not None:
+            item["said_at"] = said_at.astimezone(UTC).isoformat()
+        items.append(item)
+        ids.append(entry_id)
+        known.add(entry_id)
+    return items, ids
+
+
+def record_operator_marker(turn_dir: Path, session_id: str, ids: list[str]) -> None:
+    """Remember recorded entry ids (the newest ``OPERATOR_MARKER_KEEP``)."""
+    marker = _operator_marker(turn_dir, session_id)
+    kept = [*(_read_marker(marker) or []), *ids][-OPERATOR_MARKER_KEEP:]
+    try:
+        turn_dir.mkdir(parents=True, exist_ok=True)
+        marker.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    except OSError as exc:
+        _log(f"operator marker not written ({exc}); the prompts may be recorded again")
+
+
 # ---------------------------------------------------------------------------
 # entrypoint
 # ---------------------------------------------------------------------------
@@ -358,8 +501,13 @@ def capture(
     agent_id: str | None = None,
     session_id: str | None = None,
     transcript_path: str | None = None,
+    now: datetime | None = None,
 ) -> int:
-    """Journal every content record for one hook call. Returns how many."""
+    """Journal every content record for one hook call. Returns how many.
+
+    ``now`` anchors the first Stop's operator-prompt lookback; ``main`` passes
+    the wall clock.
+    """
     if not capture_enabled_by_operator():
         return 0
     if not drainer_can_publish(status_path_for(journal_dir)):
@@ -378,11 +526,26 @@ def capture(
     if not isinstance(session, str) or not session:
         return 0
     items = _ITEMS[kind](hook_input)
-    if kind == "stop" and items:
-        digest = hashlib.sha256(items[0]["content"].encode("utf-8")).hexdigest()
-        turn_dir = appender.hook_turn_id.turn_dir_for(journal_dir)
-        if _reply_already_captured(turn_dir, session, digest):
-            return 0
+    operator_ids: list[str] = []
+    turn_dir = appender.hook_turn_id.turn_dir_for(journal_dir)
+    if kind == "stop":
+        if items:
+            digest = hashlib.sha256(items[0]["content"].encode("utf-8")).hexdigest()
+            if _reply_already_captured(turn_dir, session, digest):
+                items = []
+        raw_transcript = (
+            transcript_path
+            or hook_input.get("transcript_path")
+            or hook_input.get("transcriptPath")
+        )
+        if not agent_id and isinstance(raw_transcript, str) and raw_transcript:
+            operator_items, operator_ids = operator_prompt_items(
+                Path(raw_transcript),
+                turn_dir=turn_dir,
+                session_id=session,
+                now=now or datetime.now(UTC),
+            )
+            items = [*items, *operator_items]
 
     written = 0
     for item in items:
@@ -414,6 +577,8 @@ def capture(
                 journal_dir=str(journal_dir),
             )
             written += 1
+    if operator_ids:
+        record_operator_marker(turn_dir, session, operator_ids)
     return written
 
 
@@ -454,6 +619,7 @@ def main(argv: list[str] | None = None) -> int:
             agent_id=args.agent_id or None,
             session_id=args.session_id or None,
             transcript_path=args.transcript_path or None,
+            now=datetime.now(UTC),
         )
         if count:
             _log(f"journalled {count} {CONTENT_EVENT_TYPE} record(s) ({args.kind})")

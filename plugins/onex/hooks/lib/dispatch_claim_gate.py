@@ -7,12 +7,18 @@ No LLM involvement — regex rules guarantee consistency.
 
 Extraction precedence (first match wins):
   1. Explicit frontmatter:  blocker_id: <40-char-hex>
-  2. SSH 201 host:           ssh ... 192.168.86.201  # onex-allow-internal-ip
+  2. SSH to a claim host:    ssh ... <host>
   3. rpk topic produce:      rpk topic produce ... rebuild
-  4. fix-containers keyword: "fix containers on 192.168.86.201"  # onex-allow-internal-ip
+  4. fix-containers keyword: "fix containers on <host>"
   5. OMN ticket:             OMN-XXXX in Agent prompt
   6. PR merge ref:           gh pr merge --repo OmniNode-ai/repo N
   7. No match -> None (pass through)
+
+``<host>`` is a host of the overlay ``config/lab/dispatch_claim_hosts.yaml``
+under the workspace config root (``ONEX_WORKSPACE_CONFIG_ROOT``). The shipped
+code names no host: with no overlay the host rules (2 and 4) are inactive, rule
+3 records host ``local``, the other rules are unchanged, and a command that
+looks like a host rule says so on stderr, naming the missing overlay.
 """
 
 from __future__ import annotations
@@ -21,16 +27,21 @@ import hashlib
 import json
 import re
 import sys
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+try:
+    from onex_state import missing_workspace_config_message, workspace_config_file
+except ImportError:  # imported as a package member rather than from hooks/lib
+    from plugins.onex.hooks.lib.onex_state import (
+        missing_workspace_config_message,
+        workspace_config_file,
+    )
+
 # Pattern constants
 _RE_EXPLICIT = re.compile(r"blocker_id:\s*([0-9a-f]{40})", re.IGNORECASE)
-_RE_SSH_201 = re.compile(r"ssh\s+\S*192\.168\.86\.201", re.IGNORECASE)
 _RE_RPK_REBUILD = re.compile(r"rpk\s+topic\s+produce\s+\S*rebuild", re.IGNORECASE)
-_RE_FIX_CONTAINERS = re.compile(
-    r"fix.{0,20}containers\s+on\s+192\.168\.86\.201", re.IGNORECASE
-)
 _RE_OMN_TICKET = re.compile(r"\bOMN-(\d{4,6})\b")
 _RE_PR_MERGE = re.compile(
     r"gh\s+pr\s+merge\s+.*?--repo\s+OmniNode-ai/([^\s]+)\s+(\d+)", re.IGNORECASE
@@ -39,32 +50,97 @@ _RE_PR_MERGE = re.compile(
 _DEFAULT_TTL = 300
 
 
-def extract_blocker_info(tool_input: str) -> tuple[str, str, str] | None:
+HOSTS_OVERLAY = "config/lab/dispatch_claim_hosts.yaml"
+_HOST_LINE = re.compile(r"""^\s+-\s*["']?([^"'#\s]+)["']?\s*(?:#.*)?$""")
+_HOST_SHAPED = re.compile(
+    r"\bssh\s|fix.{0,20}containers\s+on\s|rpk\s+topic\s+produce", re.IGNORECASE
+)
+_noted_missing = False
+
+
+def load_claim_hosts() -> tuple[str, ...]:
+    """Read the claim hosts from the overlay; ``()`` when it is absent or empty."""
+    path = workspace_config_file(HOSTS_OVERLAY)
+    if path is None:
+        return ()
+    hosts: list[str] = []
+    in_hosts = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("hosts:"):
+            in_hosts = True
+            continue
+        if in_hosts:
+            match = _HOST_LINE.match(line)
+            if match:
+                hosts.append(match.group(1))
+            elif line.strip() and not line.lstrip().startswith("#"):
+                in_hosts = False
+    return tuple(hosts)
+
+
+def _note_inactive_host_rules(tool_input: str) -> None:
+    """Say once per process which overlay would activate the host rules."""
+    global _noted_missing
+    if _noted_missing or not _HOST_SHAPED.search(tool_input):
+        return
+    _noted_missing = True
+    print(
+        "dispatch-claim: host rules inactive: "
+        + missing_workspace_config_message(
+            HOSTS_OVERLAY,
+            "the ssh and fix-containers claim rules need a hosts list",
+        ),
+        file=sys.stderr,
+    )
+
+
+def _configured(hosts: Sequence[str], matched: str) -> str:
+    """The overlay's spelling of a host the (case-insensitive) rule matched."""
+    return next((h for h in hosts if h.lower() == matched.lower()), matched)
+
+
+def extract_blocker_info(
+    tool_input: str, hosts: Sequence[str] | None = None
+) -> tuple[str, str, str] | None:
     """Extract (kind, host, resource) from tool input text.
 
+    ``hosts`` are the claim hosts; ``None`` reads them from the overlay.
     Returns None if no rule matches (caller should pass through).
     """
+    claim_hosts = load_claim_hosts() if hosts is None else tuple(hosts)
+    if not claim_hosts:
+        _note_inactive_host_rules(tool_input)
+    alternation = "|".join(re.escape(h) for h in claim_hosts)
+
     if _RE_EXPLICIT.search(tool_input):
         m = _RE_EXPLICIT.search(tool_input)
         assert m is not None
         return ("explicit", "local", m.group(1))
 
-    if _RE_SSH_201.search(tool_input):
-        return ("ssh_201", "192.168.86.201", "ssh_session")  # onex-allow-internal-ip
+    if claim_hosts:
+        m = re.search(rf"ssh\s+\S*({alternation})", tool_input, re.IGNORECASE)
+        if m:
+            return ("ssh_201", _configured(claim_hosts, m.group(1)), "ssh_session")
 
     if _RE_RPK_REBUILD.search(tool_input):
         return (
             "deploy_rebuild",
-            "192.168.86.201",  # onex-allow-internal-ip
+            claim_hosts[0] if claim_hosts else "local",
             "rebuild_request",
         )
 
-    if _RE_FIX_CONTAINERS.search(tool_input):
-        return (
-            "fix_containers",
-            "192.168.86.201",  # onex-allow-internal-ip
-            "docker_containers",
+    if claim_hosts:
+        m = re.search(
+            rf"fix.{{0,20}}containers\s+on\s+({alternation})",
+            tool_input,
+            re.IGNORECASE,
         )
+        if m:
+            return (
+                "fix_containers",
+                _configured(claim_hosts, m.group(1)),
+                "docker_containers",
+            )
 
     m = _RE_OMN_TICKET.search(tool_input)
     if m:
@@ -85,6 +161,7 @@ def check_and_acquire(
     claimant: str,
     claims_dir: Path,
     ttl_seconds: int = _DEFAULT_TTL,
+    hosts: Sequence[str] | None = None,
 ) -> dict[str, object]:
     """Check if a claim exists for this tool_input; acquire if not.
 
@@ -93,7 +170,7 @@ def check_and_acquire(
       {"action": "acquired", "blocker_id": X}  — claim newly acquired
       {"action": "blocked", "blocker_id": X, "held_by": Y, "ttl_remaining": Z}
     """
-    info = extract_blocker_info(tool_input)
+    info = extract_blocker_info(tool_input, hosts)
     if info is None:
         return {"action": "pass"}
 
@@ -245,16 +322,8 @@ if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "check":
         d = Path(sys.argv[2])
         d.mkdir(parents=True, exist_ok=True)
-        result1 = check_and_acquire(
-            "fix containers on 192.168.86.201",  # onex-allow-internal-ip
-            "agent-smoke-1",
-            d,
-        )
-        result2 = check_and_acquire(
-            "fix containers on 192.168.86.201",  # onex-allow-internal-ip
-            "agent-smoke-2",
-            d,
-        )
+        result1 = check_and_acquire("dispatch OMN-8928 smoke", "agent-smoke-1", d)
+        result2 = check_and_acquire("dispatch OMN-8928 smoke", "agent-smoke-2", d)
         print(json.dumps({"first": result1, "second": result2}, indent=2))
         assert result1["action"] == "acquired", f"Expected acquired, got {result1}"
         assert result2["action"] == "blocked", f"Expected blocked, got {result2}"
