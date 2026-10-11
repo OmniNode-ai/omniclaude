@@ -742,15 +742,32 @@ LANE_OVERLAY_RELATIVE = "config/lab/hook_edge_lane.yaml"
 
 
 def _onex_state() -> Any:
-    """The sibling ``onex_state`` module, importable however this file was loaded."""
-    try:
-        import onex_state
-    except ImportError:
-        import sys
+    """The sibling ``onex_state`` module, importable however this file was loaded.
 
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import onex_state
-    return onex_state
+    A bare ``import onex_state`` returns whichever module of that name is
+    already in ``sys.modules`` -- ``src/omniclaude/hooks/lib/onex_state.py``
+    shares the name and lacks the workspace-config helpers -- so a module that
+    is not this file's sibling is replaced by the sibling loaded from its path.
+    """
+    import importlib.util
+    import sys
+
+    sibling = Path(__file__).resolve().parent / "onex_state.py"
+    loaded = sys.modules.get("onex_state")
+    loaded_file = getattr(loaded, "__file__", None)
+    if loaded is not None and loaded_file and Path(loaded_file).resolve() == sibling:
+        return loaded
+    private_name = "_hook_edge_lane_onex_state"
+    cached = sys.modules.get(private_name)
+    if cached is not None:
+        return cached
+    spec = importlib.util.spec_from_file_location(private_name, sibling)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {sibling}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sys.modules[private_name] = module
+    return module
 
 
 def _missing_overlay_message(what: str) -> str:
