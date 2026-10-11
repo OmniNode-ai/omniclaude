@@ -764,7 +764,29 @@ _gw_check_run_endpoint() {
   return 0
 }
 
-# Is the argv in "$@" a gateway shape (a failing-job log, one job's or check run's detail)?
+# One commit object by its full 40-hex sha (OMN-20911): repos/<o>/<r>/commits/<sha>. The
+# onex_change_control check-receipt-hardening pre-commit hook proves every receipt
+# commit_sha against GitHub with exactly this GET, and a local object proves nothing (a
+# patch applied on the gate host mints a different sha that exists locally). A commit
+# object never changes, so the cached read gateway answers it once per sha. Only the full
+# sha shape passes: an abbreviation, a ref, a path below the sha (/status, /check-runs,
+# /comments) and a listing (commits with no sha) stay refused.
+_gw_commit_endpoint() {
+  local rest sha
+  case "$1" in *..*|*\?*|*#*) return 1 ;; repos/*) ;; *) return 1 ;; esac
+  rest="${1#repos/}"
+  [ -n "${rest%%/*}" ] || return 1
+  rest="${rest#*/}"
+  [ -n "${rest%%/*}" ] || return 1
+  rest="${rest#*/}"
+  case "$rest" in commits/*) sha="${rest#commits/}" ;; *) return 1 ;; esac
+  [ "${#sha}" -eq 40 ] || return 1
+  case "$sha" in *[!0-9a-fA-F]*) return 1 ;; esac
+  return 0
+}
+
+# Is the argv in "$@" a gateway shape (a failing-job log, one job's or check run's detail,
+# or one commit object by its full sha)?
 _gw_shape() {
   local ep
   if [ "$_cls" = "api" ]; then
@@ -773,6 +795,7 @@ _gw_shape() {
     ep="${ep#/}"
     _prs_job_log_endpoint "$ep" && return 0
     _gw_check_run_endpoint "$ep" && return 0
+    _gw_commit_endpoint "$ep" && return 0
     return 1
   fi
   [ "$_cls" = "run view" ] && _prs_job_log "$@" && return 0
@@ -845,8 +868,8 @@ unset _prs_guarded _prs_ep _prs_class _prs_o _prs_r _prs_n _prs_why _rs_owner _r
 #     review|ready|merge|close, workflow run, run rerun|cancel, ...);
 #   - the two cached harness PR-link shapes (_cacheable) and the declared exact-head check;
 #   - `gh api rate_limit`, which GitHub does not count against any bucket;
-#   - the gateway shapes (failing-job logs, one check run's detail), served by the cached,
-#     per-hour-budgeted read gateway below;
+#   - the gateway shapes (failing-job logs, one check run's detail, one commit object by its
+#     full sha), served by the cached, per-hour-budgeted read gateway below;
 #   - the allowed callers of the PR-state guard (the PR watcher, the landing controller's
 #     own scripts), and a DIRECT parent that is one of the sanctioned read scripts:
 #     pr-handoff/scripts/handoff.sh and handoff_row.sh (the handoff's PR-text read),
@@ -947,7 +970,7 @@ if [ "$_gw" -eq 0 ] && _lane_is_read "$@" && ! _cacheable "$@" \
     'Read it locally instead:' \
     "  PR state, checks, reviews, mergeability: python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr ${_rs_owner:-OmniNode-ai}/$_lr_r#<n>   (--status for the state file's age; the same records are on the bus as onex.evt.omnimarket.pr-state-observed.v1)" \
     "  files, contents, diffs, commits, tags, history: git -C \$OMNI_HOME/$_lr_r show|log|diff origin/dev...   (the canonical clones, kept fetched by canonical-clone-sync)" \
-    '  a failing-job log, one job'"'"'s run id and steps, one check run'"'"'s output: gh api repos/<o>/<r>/actions/jobs/<id>/logs, gh api repos/<o>/<r>/actions/jobs/<id>, gh api repos/<o>/<r>/check-runs/<id>[/annotations], gh run view <run> --log-failed; the job id is in the watcher record (ci.detail) and these are served by the cached read gateway with a per-hour budget' \
+    '  a failing-job log, one job'"'"'s run id and steps, one check run'"'"'s output: gh api repos/<o>/<r>/actions/jobs/<id>/logs, gh api repos/<o>/<r>/actions/jobs/<id>, gh api repos/<o>/<r>/check-runs/<id>[/annotations], gh run view <run> --log-failed; the job id is in the watcher record (ci.detail) and these are served by the cached read gateway with a per-hour budget; so is one commit object by its full 40-hex sha, gh api repos/<o>/<r>/commits/<sha> (the receipt-hardening hook proves a receipt commit_sha with it)' \
     'Writes (pr create|edit|comment|review, workflow run, run rerun, api POST/PATCH/PUT/DELETE, graphql mutation) are unaffected.' >&2
   _call_log 1 refused
   exit 1
@@ -1210,7 +1233,7 @@ if _cacheable "$@"; then
 fi
 
 # --- cached read gateway (OMN-20911) ---------------------------------------------
-# The gateway shapes (_gw_shape: a failing-job log, one check run's detail) reach GitHub
+# The gateway shapes (_gw_shape: a failing-job log, one check run's detail, one commit object) reach GitHub
 # only through here, for every caller but the PR-state guard's allowed callers. A hit is
 # served from ${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway (a finished job's log
 # and a completed check run do not change); a miss spends one unit of this host's hourly

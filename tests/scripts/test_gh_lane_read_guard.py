@@ -113,12 +113,19 @@ def _assert_lane_refused(
     assert (rows[-1][6], rows[-1][7]) == ("1", "refused")
 
 
+FULL_SHA = "0123456789abcdef0123456789abcdef01234567"
+
 # Reads the PR-state guard (OMN-19856) never covered: the lane guard must refuse each.
 LANE_READS = [
     ["api", "repos/OmniNode-ai/onex_change_control/contents/contracts/OMN-1.yaml"],
     ["api", "repos/OmniNode-ai/omnimarket/actions/artifacts"],
     ["api", "repos/o/r/actions/artifacts/9/zip"],
     ["api", "repos/o/r/commits/abc"],
+    ["api", "repos/o/r/commits"],
+    ["api", f"repos/o/r/commits/{FULL_SHA[:39]}"],
+    ["api", f"repos/o/r/commits/{FULL_SHA}1"],
+    ["api", f"repos/o/r/commits/{FULL_SHA[:39]}g"],
+    ["api", f"repos/o/r/commits/{FULL_SHA}/comments"],
     ["api", "repos/o/r/issues/9/comments"],
     ["api", "user"],
     ["api", "-X", "GET", "repos/o/r/releases", "-f", "per_page=5"],
@@ -429,6 +436,9 @@ GATEWAY = [
     ["api", "repos/o/r/check-runs/77"],
     ["api", "repos/o/r/check-runs/77/annotations"],
     ["api", "repos/o/r/actions/jobs/555"],
+    # The receipt-hardening hook's exact call (OMN-20911): one commit object, full sha.
+    ["api", "--include", f"repos/o/r/commits/{FULL_SHA}"],
+    ["api", f"repos/o/r/commits/{FULL_SHA.upper()}"],
 ]
 
 
