@@ -46,7 +46,7 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py -q -k neutral_default_passes"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC2"]
-  - id: "dod-omn20923-ac1-private-ci-overlay"
+  - id: "dod-omn20923-ac3-private-ci-overlay"
     description: "The roster is read from the private CI overlay; a fork with none gets the neutral default."
     source: "manual"
     checks:
