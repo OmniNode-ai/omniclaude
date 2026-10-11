@@ -62,4 +62,3 @@ Skill Monorepo-Ref Gate
 Skip Count Ratchet (OMN-18776)
 Tests Gate
 URL Authority Gate
-Version Pin Compliance
