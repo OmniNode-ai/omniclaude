@@ -293,27 +293,26 @@ def test_delegate_hello_uses_dispatch_entrypoint_and_receipt(harness: Harness) -
     }
 
 
-def test_phase3_builds_proven_and_stamps_only_at_both_passes() -> None:
+def test_phase3_builds_proven_and_stamps_only_after_its_delegation_passes() -> None:
+    """OMN-20818: one phase 3 for every combination of models, so one stamp,
+    after the delegation with no model pinned has answered."""
     text = SCRIPT.read_text()
-    phase3 = text.split("phase3() {", 1)[1].split("phase3_ollama() {", 1)[0]
+    phase3 = text.split("phase3() {", 1)[1].split("\n}", 1)[0]
     reconcile = next(
         line for line in phase3.splitlines() if "reconcile-workspace-venvs.sh" in line
     )
     assert '--omni-home "$WORKSPACE" --proven' in reconcile
     calls = re.findall(r'^  step "[^"]+" stamp_proven_floor \|\|\n', text, re.M)
-    assert len(calls) == 2
-    assert len(re.findall(r"\bstamp_proven_floor\b", text)) == 3  # definition + calls
-    for name in ("phase3", "phase3_ollama"):
-        body = text.split(f"{name}() {{", 1)[1].split("\n}", 1)[0]
-        assert re.search(
-            r'  step "[^"]+" stamp_proven_floor \|\|\n'
-            r'    phase_fail "[^"\n]+"\n'
-            r'  phase_pass "model:[^"\n]+"$',
-            body,
-        )
-        assert body.index("stamp_proven_floor") > body.index(
-            'say "  Delegation answered'
-        )
+    assert len(calls) == 1
+    assert len(re.findall(r"\bstamp_proven_floor\b", text)) == 2  # definition + call
+    assert re.search(
+        r'  step "[^"]+" stamp_proven_floor \|\|\n'
+        r'    phase_fail "[^"\n]+"\n'
+        r'  phase_pass "[^\n]+$',
+        phase3,
+    )
+    assert phase3.index("stamp_proven_floor") > phase3.index('say "  Delegation chose')
+    assert phase3.index('say "  Delegation chose') > phase3.index("delegate_hello")
     stamp = text.split("stamp_proven_floor() {", 1)[1].split("\n}", 1)[0]
     assert '--output "$WORKSPACE/.onex-workspace-floor.json"' in stamp
     # Every mention of the output path belongs to this function: no redirect,
