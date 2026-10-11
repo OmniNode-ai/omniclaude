@@ -13,10 +13,18 @@ requirements:
         statement: "AC1: a change that adds a file under a lane-overlays path, or any config file carrying an internal address or a lab endpoint, fails the gate on added lines -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py -k overlay_with_lab_values asserts exit 1 on a fixture that adds such a file"
       - id: "AC2"
         statement: "AC2: an unrelated change, and a file carrying the neutral public default, pass the gate -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py -k neutral_default_passes asserts exit 0"
+  - id: "req-private-ci-overlay"
+    statement: "The roster comes only from the private CI overlay named by an org variable; with none configured the gate fails closed naming the cause."
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: REVIEW_VOTERS_OVERLAY points at the CI overlay outside the workspace, the repository comes from OMNI_CI_OVERLAY_REPO, an unset variable fails with 'no review voters configured', and a named one resolves -- falsifier: env -u PYTHONPATH uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
 evidence_requirements:
   - kind: "tests"
     description: "The deployment-config tests pass at the head."
     command: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py tests/scripts/test_deployment_config_class_omn20923.py -q -k 'overlay_with_lab_values or neutral_default_passes or deployment_config or 4817 or bifrost or private_host'"
+  - kind: "tests"
+    description: "The workflow tests pass at the head."
+    command: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -38,3 +46,11 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py -q -k neutral_default_passes"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC2"]
+  - id: "dod-omn20923-ac3-private-ci-overlay"
+    description: "The roster is read from the private CI overlay; a fork with none gets the neutral default."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]

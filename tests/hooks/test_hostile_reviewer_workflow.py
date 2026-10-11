@@ -5,10 +5,10 @@
 Asserts that ``.github/workflows/hostile-reviewer.yml`` is wired correctly:
 
 - Triggers on the expected ``pull_request`` event types.
-- Runs on the ``omnibase-ci`` self-hosted runner that exposes the local
-  DeepSeek-R1 endpoint.
-- Invokes ``omniintelligence.review_pairing.cli_review`` with at least TWO
-  ``--model`` flags, naming both fleet-standard keys (OMN-18473).
+- Runs on the ``omnibase-ci`` self-hosted runner that reaches the voters'
+  private network.
+- Invokes ``omniintelligence.review_pairing.cli_review`` with the review
+  voters contract overlay and names no voter endpoint or model (OMN-20910).
 - Defines a ``hostile-review-gate`` job that depends on ``hostile-review``
   and exits non-zero when the review job reports ``failure``.
 - Posts a PR summary comment via ``actions/github-script``.
@@ -23,9 +23,13 @@ from __future__ import annotations
 
 import pathlib
 import re
+import subprocess
 
 import pytest
 import yaml
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -81,9 +85,9 @@ def test_workflow_triggers_on_pull_request(workflow: dict[object, object]) -> No
 def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -> None:
     """The review job must run on the self-hosted ``omnibase-ci`` runner.
 
-    The DeepSeek-R1 endpoint at .201:8001 is LAN-only — GitHub-hosted
-    runners cannot reach it. This is the fundamental constraint that drove
-    OMN-8603 (runner toolchain) and pins the gate to .201.
+    The review voters sit on a private network and are LAN-only — GitHub-hosted
+    runners cannot reach them. This is the fundamental constraint that drove
+    OMN-8603 (runner toolchain) and pins the gate to the self-hosted fleet.
     """
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict), "workflow must define jobs"
@@ -96,8 +100,8 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
         labels = set(runs_on)
         assert "self-hosted" in labels, "runner must be self-hosted"
         assert "omnibase-ci" in labels, (
-            "runner label must include 'omnibase-ci' so the .201 LAN endpoints "
-            "(LLM_DEEPSEEK_URL) are reachable"
+            "runner label must include 'omnibase-ci' so the private-network voter "
+            "endpoints are reachable"
         )
         return
 
@@ -117,7 +121,7 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
         """'["self-hosted","omnibase-ci"]'""" in runs_on
     ), (
         "same-repo review runs must resolve to the self-hosted omnibase-ci "
-        "labels so the LAN-only DeepSeek endpoint is reachable, through the "
+        "labels so the LAN-only voter endpoints are reachable, through the "
         "dedicated OMNI_HOSTILE_REVIEW_RUNS_ON_JSON knob"
     )
 
@@ -125,7 +129,7 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
 def test_same_repo_dev_prs_do_not_use_public_runner_branch(
     workflow: dict[object, object],
 ) -> None:
-    """Same-repo dev PRs need the LAN-only DeepSeek endpoint on the trusted runner.
+    """Same-repo dev PRs need the LAN-only voter endpoints on the trusted runner.
 
     Forks may still take the public-runner branch, but a same-repo PR targeting
     dev must not. That exact shape ran on ``ubuntu-latest`` for omniclaude#2181
@@ -151,107 +155,375 @@ def test_same_repo_dev_prs_do_not_use_public_runner_branch(
     )
 
 
-def test_review_step_invokes_cli_review_with_model(
-    workflow: dict[object, object],
-) -> None:
-    """A step must invoke ``cli_review`` with AT LEAST TWO ``--model`` flags.
-
-    OMN-18473 pins the model COUNT, and both keys by name, mirroring
-    ``omnibase_infra`` ``tests/ci/test_hostile_reviewer_ci_gate.py``
-    (``test_hostile_review_job_uses_live_local_models``), which asserts its own
-    two keys the same way.
-
-    Why the count is load-bearing rather than a style preference: cli_review
-    returns 0 only when >= 2 models succeed and 2 ("DEGRADED -- a minimum of 2
-    models is required for a full pass") when exactly one does. From 2026-04-11
-    (71d816a99) to 2026-09-16 this workflow passed exactly one ``--model``, so
-    exit 0 was unreachable and every verdict it produced was DEGRADED by
-    construction. Nothing caught that, because the assertion this replaces
-    accepted "at least one ``--model``".
-
-    Both keys are named because the pair is a deliberate choice, not an
-    arbitrary one. ``deepseek-r1`` and ``qwen3-review`` are two registry keys
-    for ONE backend (same endpoint, same ``api_model_id``, OMN-16481), so
-    pairing THOSE two would satisfy a naive count while passing one backend
-    twice under two spellings -- exactly the defect a count-only assertion
-    cannot see.
-    """
+def _review_job_steps(workflow: dict[object, object]) -> list[dict[str, object]]:
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
     review_job = jobs["hostile-review"]
     assert isinstance(review_job, dict)
-
     steps = review_job.get("steps") or []
     assert isinstance(steps, list) and steps, "review job must have steps"
+    return [step for step in steps if isinstance(step, dict)]
 
-    run_blocks = [
-        step.get("run", "")
-        for step in steps
-        if isinstance(step, dict) and step.get("run")
+
+# OMN-20910: what a voter endpoint looks like when someone writes one into the
+# workflow -- a URL with an explicit port, an endpoint variable, or a --model
+# flag. Comment lines are skipped; the workflow keeps its history there.
+_VOTER_ENDPOINT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"https?://[A-Za-z0-9.\-]+:\d{2,5}"),
+    re.compile(r"\bLLM_[A-Z0-9_]+_URL\b"),
+    re.compile(r"vars\.LLM_"),
+    re.compile(r"--model[\s=]"),
+)
+
+# Positive control: the lines this workflow carried before the overlay.
+_KNOWN_BAD = """\
+          LLM_EXAMPLE_VOTER_B_URL: ${{ vars.LLM_EXAMPLE_VOTER_B_URL }}
+              --model example-voter-a \\
+              --model example-voter-b \\
+          LLM_EXAMPLE_VOTER_B_URL: "http://voter-b.example.invalid:9002"
+"""
+
+
+def voter_endpoint_findings(text: str) -> list[str]:
+    """Every non-comment line of ``text`` that names a voter endpoint or model flag."""
+    return [
+        f"{number}: {line.strip()}"
+        for number, line in enumerate(text.splitlines(), start=1)
+        if not line.lstrip().startswith("#")
+        and any(p.search(line) for p in _VOTER_ENDPOINT_PATTERNS)
     ]
-    combined = "\n".join(run_blocks)
 
-    assert "omniintelligence.review_pairing.cli_review" in combined, (
-        "review job must invoke omniintelligence.review_pairing.cli_review"
+
+def test_the_voter_endpoint_ratchet_finds_every_known_bad_line() -> None:
+    """Positive control: the zero below is only evidence if this finds four."""
+    assert len(voter_endpoint_findings(_KNOWN_BAD)) == 4
+    # Each pattern needs its own control: a count alone survives a broken pattern
+    # whenever another pattern matches the same line.
+    lines = _KNOWN_BAD.splitlines()
+    for pattern in _VOTER_ENDPOINT_PATTERNS:
+        assert any(pattern.search(line) for line in lines), pattern.pattern
+
+
+def test_workflow_names_no_voter_endpoint_or_model() -> None:
+    """OMN-20910, RULING 2026-10-10T18:17:37Z: voters live in the contract overlay only."""
+    findings = voter_endpoint_findings(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    assert findings == [], (
+        "hostile-reviewer.yml names a review voter endpoint, port or model; "
+        f"voters are declared only in the review voters overlay: {findings}"
     )
-    model_flag_count = combined.count("--model ")
-    assert model_flag_count >= 2, (
-        "review job must pass at least TWO --model flags to cli_review "
-        f"(found {model_flag_count}) -- cli_review returns 0 only when >= 2 "
-        "models succeed, so a single-model invocation is DEGRADED by "
-        "construction on every run (OMN-18473)"
+    assert "LLM_EXAMPLE_VOTER_B_URL" not in WORKFLOW_PATH.read_text(encoding="utf-8")
+
+
+def test_review_step_invokes_cli_review_with_the_voters_overlay(
+    workflow: dict[object, object],
+) -> None:
+    """The review reads its voters from the overlay (OMN-20910).
+
+    The two-voter count that OMN-18473 pinned here is now a property of the
+    overlay and of cli_review: a required voter that does not vote exits 2,
+    named, and fewer than two distinct voters is a degraded quorum that this
+    gate fails closed on. The overlay is validated by omniintelligence's
+    node_review_voters_overlay_compute before any voter is called.
+    """
+    review_step = next(
+        s for s in _review_job_steps(workflow) if s.get("id") == "review"
     )
-    # Only real flags: a key followed by a line continuation, never the word
-    # after "--model" in a comment inside the run block.
-    models = re.findall(r"--model\s+([A-Za-z0-9_.-]+)\s*\\\n", combined)
-    assert models == ["qwen3-review", "local-studio-planner"], (
-        "review job must pass exactly the two DIFFERENT lab models, "
-        f"qwen3-review and local-studio-planner, each on its own lab host; found {models}. "
-        "deepseek-r1, qwen3-review and qwen3-review-b were three keys for one "
-        "backend (OMN-16481), so the old pair reviewed with a single model "
-        "twice, and a cloud reviewer would send a private diff off the lab "
-        "(OMN-17492)"
-    )
-    for not_a_voter in ("deepseek-r1", "qwen3-review-b", "glm-review"):
-        assert not_a_voter not in models
-    assert "--pr" in combined and "--repo" in combined, (
+    run = str(review_step.get("run", ""))
+    assert "omniintelligence.review_pairing.cli_review" in run
+    assert '--voters-overlay "$REVIEW_VOTERS_OVERLAY"' in run
+    assert "--pr" in run and "--repo" in run, (
         "review job must pass --pr and --repo to cli_review"
     )
-    assert "REVIEW_JSON=\"$REVIEW_JSON\" python3 - <<'PYEOF'" in combined, (
+    assert "REVIEW_JSON=\"$REVIEW_JSON\" python3 - <<'PYEOF'" in run, (
         "review JSON must be passed through the environment because the "
         "heredoc occupies Python stdin"
     )
-    assert "echo \"$REVIEW_JSON\" | python3 - <<'PYEOF'" not in combined, (
+    assert "echo \"$REVIEW_JSON\" | python3 - <<'PYEOF'" not in run, (
         "do not pipe review JSON into python3 - with a heredoc; Python reads "
         "the script from stdin and the JSON payload is lost"
     )
+    env = review_step.get("env") or {}
+    assert isinstance(env, dict)
+    assert not [k for k in env if str(k).startswith("LLM_") and str(k).endswith("_URL")]
 
 
-def test_review_step_resolves_second_voter_url_from_actions_variable(
+OVERLAY_ENV = (
+    "${{ github.workspace }}/../ci-overlay/config/onex/overlays/"
+    "node_review_voters_overlay_compute/overlay.yaml"
+)
+PINNED_REF = "0123456789abcdef0123456789abcdef01234567"
+
+
+def _named_step(workflow: dict[object, object], name: str) -> dict[str, object]:
+    matches = [s for s in _review_job_steps(workflow) if s.get("name") == name]
+    assert len(matches) == 1, f"expected one step named {name!r}"
+    return matches[0]
+
+
+def test_voters_overlay_path_is_the_ci_overlay_outside_the_workspace(
     workflow: dict[object, object],
 ) -> None:
-    """OMN-20422: the second voter's URL comes from the renamed Actions variable.
-
-    The registry key is ``local-studio-planner`` and its ``env_var`` is
-    ``LLM_LOCAL_STUDIO_PLANNER_URL``. A review step that still exported the
-    retired ``LLM_GPT_OSS_REVIEW_URL`` would leave the new key without a URL,
-    and the vote would fail as an unreachable reviewer. The address itself
-    lives in the repository Actions variable, not in this public file.
-    """
+    """OMN-20923 (RULING 2026-10-10T21:57:38Z): the roster is a deployment fact
+    no shipped repository carries. It is read from the private CI overlay,
+    outside the checkout, so a pull request cannot supply its own voters."""
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
     review_job = jobs["hostile-review"]
     assert isinstance(review_job, dict)
-    steps = review_job.get("steps") or []
-    review_step = next(
-        step for step in steps if isinstance(step, dict) and step.get("id") == "review"
-    )
-    env = review_step.get("env") or {}
+    env = review_job.get("env")
+    assert isinstance(env, dict)
+    assert env["REVIEW_VOTERS_OVERLAY"] == OVERLAY_ENV
+    clean = _named_step(workflow, "Clean stale dependency clones")
+    assert "../ci-overlay" in str(clean.get("run", ""))
 
-    assert env.get("LLM_LOCAL_STUDIO_PLANNER_URL") == (
-        "${{ vars.LLM_LOCAL_STUDIO_PLANNER_URL }}"
+
+def test_the_ci_overlay_repository_comes_from_an_org_variable(
+    workflow: dict[object, object],
+) -> None:
+    step = _named_step(workflow, "Resolve the CI overlay")
+    step_env = step.get("env")
+    assert isinstance(step_env, dict)
+    assert step_env["CI_OVERLAY_REPO"] == "${{ vars.OMNI_CI_OVERLAY_REPO }}"
+    assert step_env["CI_OVERLAY_REF"] == "${{ vars.OMNI_CI_OVERLAY_REF }}"
+    fetch = _named_step(workflow, "Fetch the CI overlay")
+    with_ = fetch.get("with")
+    assert isinstance(with_, dict)
+    assert with_["repository"] == (
+        "${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }}"
     )
-    assert "LLM_GPT_OSS_REVIEW_URL" not in env
+    assert with_["persist-credentials"] is False
+    assert with_["ref"] == "${{ steps.ci-overlay.outputs.ref }}"
+    text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "lane-overlays" not in text
+    assert "github.com/OmniNode-ai/omnibase_infra.git" not in text
+
+
+def _run_resolve(
+    workflow: dict[object, object],
+    repo_var: str,
+    tmp_path: pathlib.Path,
+    ref_var: str = PINNED_REF,
+) -> tuple[int, str, str]:
+    output = tmp_path / "github_output"
+    output.write_text("", encoding="utf-8")
+    proc = subprocess.run(
+        ["bash", "-c", str(_named_step(workflow, "Resolve the CI overlay")["run"])],
+        env={
+            "CI_OVERLAY_REPO": repo_var,
+            "CI_OVERLAY_REF": ref_var,
+            "GITHUB_OUTPUT": str(output),
+            "PATH": "/usr/bin:/bin",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.returncode, output.read_text(encoding="utf-8"), proc.stdout
+
+
+def test_a_fork_with_no_ci_overlay_gets_the_neutral_default(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    """Unset variable: the gate fails closed, naming "no review voters configured"."""
+    rc, out, stdout = _run_resolve(workflow, "", tmp_path)
+    assert rc == 1
+    assert "no review voters configured" in stdout
+    assert "name=" not in out
+
+
+def test_our_ci_resolves_the_named_overlay_repository(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    rc, out, _ = _run_resolve(workflow, "deploy-config", tmp_path)
+    assert rc == 0
+    assert "name=deploy-config" in out
+    assert f"ref={PINNED_REF}" in out
+    rc, _, _ = _run_resolve(workflow, "owner/repo", tmp_path)
+    assert rc == 1
+
+
+def test_the_resolve_step_never_interpolates_a_variable_into_echo(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-20910 (blocking Hostile Reviewer finding): OMNI_CI_OVERLAY_REPO is an
+    org-level variable. The step passes it through ``env:`` and must only ever
+    reference it as a quoted shell variable handed to ``printf '%s'`` as data,
+    never as text in an ``echo`` program line, and must write its outputs with
+    ``printf '%s\\n'`` so a value can never be read as an echo option or format."""
+    run = str(_named_step(workflow, "Resolve the CI overlay")["run"])
+    assert "${{" not in run, "inputs reach the script through env:, not expressions"
+    echoes = [line.strip() for line in run.splitlines() if re.match(r"\s*echo\b", line)]
+    assert echoes == [], f"the resolve step must write with printf, not echo: {echoes}"
+    assert "printf '%s\\n' \"name=${CI_OVERLAY_REPO}\"" in run
+    assert "printf '%s\\n' \"ref=${CI_OVERLAY_REF}\"" in run
+
+
+@pytest.mark.parametrize("variable", ["CI_OVERLAY_REPO", "CI_OVERLAY_REF"])
+def test_a_rejected_value_cannot_inject_a_workflow_command_into_the_log(
+    workflow: dict[object, object], tmp_path: pathlib.Path, variable: str
+) -> None:
+    """A rejected value is never echoed back: a newline in it would start a line
+    of its own in the job log, and a line beginning ``::`` is a workflow command."""
+    hostile = "x\n::add-mask::injected\n::set-output name=ref::deadbeef"
+    if variable == "CI_OVERLAY_REPO":
+        rc, out, stdout = _run_resolve(workflow, hostile, tmp_path)
+    else:
+        rc, out, stdout = _run_resolve(
+            workflow, "deploy-config", tmp_path, ref_var=hostile
+        )
+    assert rc == 1
+    assert out == ""
+    assert "injected" not in stdout
+    assert "deadbeef" not in stdout
+    # Positive control: the rejection itself is still reported, as an error line.
+    assert any(line.startswith("::error::") for line in stdout.splitlines())
+
+
+def test_the_fork_default_does_not_ask_for_a_pin(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    """The no-overlay reason takes precedence over a missing pin."""
+    rc, out, stdout = _run_resolve(workflow, "", tmp_path, ref_var="")
+    assert rc == 1
+    assert "no review voters configured" in stdout
+    assert "OMNI_CI_OVERLAY_REF" not in stdout
+    assert out == ""
+
+
+def test_an_unset_overlay_ref_fails_closed_naming_the_variable(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    """A configured overlay requires an explicit commit pin."""
+    rc, out, stdout = _run_resolve(workflow, "deploy-config", tmp_path, ref_var="")
+    assert rc == 1
+    assert "OMNI_CI_OVERLAY_REF is unset" in stdout
+    assert "name=" not in out
+    assert "ref=" not in out
+
+
+@pytest.mark.parametrize(
+    "ref_var",
+    [
+        "main",
+        "refs/heads/main",
+        PINNED_REF[:8],
+        PINNED_REF.upper(),
+        PINNED_REF + "0",
+        PINNED_REF[:-1] + "g",
+        f"{PINNED_REF}\nmain",
+        " " + PINNED_REF,
+    ],
+)
+def test_an_overlay_ref_that_is_not_a_full_sha_fails_closed(
+    workflow: dict[object, object], tmp_path: pathlib.Path, ref_var: str
+) -> None:
+    """Branches, tags, short shas and malformed pins are refused."""
+    rc, out, stdout = _run_resolve(workflow, "deploy-config", tmp_path, ref_var=ref_var)
+    assert rc == 1
+    assert "must be a full 40-hex" in stdout
+    assert "name=" not in out
+    assert "ref=" not in out
+
+
+def _run_place(
+    workflow: dict[object, object],
+    tmp_path: pathlib.Path,
+    expected_ref: str | None,
+) -> tuple[int, str, str]:
+    """Run the placement script against a real local overlay commit."""
+    workspace = tmp_path / "ws"
+    checkout = workspace / ".ci-overlay-checkout"
+    checkout.mkdir(parents=True)
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "GIT_AUTHOR_NAME": "Overlay test",
+        "GIT_AUTHOR_EMAIL": "overlay@example.invalid",
+        "GIT_COMMITTER_NAME": "Overlay test",
+        "GIT_COMMITTER_EMAIL": "overlay@example.invalid",
+    }
+    subprocess.run(
+        ["git", "init"],
+        cwd=checkout,
+        env=scrub_git_location_env(env),
+        capture_output=True,
+        check=True,
+    )
+    overlay_path = pathlib.Path(
+        "config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml"
+    )
+    overlay = checkout / overlay_path
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text("schema: review_voters_overlay.v1\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", str(overlay_path)],
+        cwd=checkout,
+        env=scrub_git_location_env(env),
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "Add voters overlay"],
+        cwd=checkout,
+        env=scrub_git_location_env(env),
+        capture_output=True,
+        check=True,
+    )
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=checkout,
+        env=scrub_git_location_env(env),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    proc = subprocess.run(
+        [
+            "bash",
+            "-c",
+            str(
+                _named_step(workflow, "Place the CI overlay outside the workspace")[
+                    "run"
+                ]
+            ),
+        ],
+        cwd=workspace,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(tmp_path),
+            "OVERLAY_SOURCE": "OmniNode-ai/overlay",
+            "EXPECTED_OVERLAY_REF": sha if expected_ref is None else expected_ref,
+            "REVIEW_VOTERS_OVERLAY": str(
+                workspace / ".." / "ci-overlay" / overlay_path
+            ),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.returncode, proc.stdout, sha
+
+
+def test_the_overlay_is_read_only_at_the_pinned_commit(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    """The fetched HEAD must match the pin before voters can be read."""
+    rc, stdout, sha = _run_place(workflow, tmp_path / "matching", expected_ref=None)
+    assert rc == 0
+    assert sha in stdout
+    rc, stdout, _ = _run_place(
+        workflow, tmp_path / "mismatching", expected_ref="0" * 40
+    )
+    assert rc == 1
+    assert "not the pinned OMNI_CI_OVERLAY_REF" in stdout
+
+
+def test_the_place_step_has_no_expression_interpolation(
+    workflow: dict[object, object],
+) -> None:
+    """The placement script runs as plain bash with environment inputs."""
+    step = _named_step(workflow, "Place the CI overlay outside the workspace")
+    assert "${{" not in str(step["run"])
 
 
 def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
@@ -265,6 +537,8 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
 
     steps = review_job.get("steps") or []
     assert isinstance(steps, list) and steps
+    # The voters overlay is fetched from the private CI overlay (OMN-20923) by
+    # an actions/checkout step, not a run block; it is data, not a sibling.
     run_blocks = [
         step.get("run", "")
         for step in steps
@@ -636,7 +910,7 @@ def test_verdict_parser_behaviour_on_quorum_payloads(
     mentioning it. These fixtures exercise the four cases that matter, and
     each zero has its positive control beside it.
     """
-    two_models = ["qwen3-review", "local-studio-planner"]
+    two_models = ["example-voter-a", "example-voter-b"]
 
     # One model raised a finding, the other did not: reported, not blocking.
     below = _run_verdict_snippet(
@@ -669,7 +943,7 @@ def test_verdict_parser_behaviour_on_quorum_payloads(
     degraded = _run_verdict_snippet(
         workflow,
         {
-            "models_succeeded": ["qwen3-review"],
+            "models_succeeded": ["example-voter-a"],
             "total_findings": 1,
             "results": [],
             "quorum": {
