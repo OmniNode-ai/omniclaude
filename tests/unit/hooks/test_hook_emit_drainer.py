@@ -32,7 +32,7 @@ from types import SimpleNamespace
 
 import pytest
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("hook_lane_overlay")]
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.parent
 _LIB_DIR = _REPO_ROOT / "plugins" / "onex" / "hooks" / "lib"

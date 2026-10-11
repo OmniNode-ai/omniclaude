@@ -26,12 +26,23 @@ import time
 from typing import Any
 from urllib.request import Request, urlopen
 
+try:
+    from onex_state import missing_workspace_config_message, workspace_config_file
+except ImportError:  # imported as a package member rather than from hooks/lib
+    from plugins.onex.hooks.lib.onex_state import (
+        missing_workspace_config_message,
+        workspace_config_file,
+    )
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 
 REPO_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
-EMBEDDING_URL = os.environ.get("LLM_EMBEDDING_URL", "http://192.168.86.200:8100")  # noqa: E501  # onex-allow-internal-ip  # kafka-fallback-ok
+EMBEDDING_OVERLAY = "config/lab/code_graph_query.yaml"
+_EMBEDDING_URL_LINE = re.compile(
+    r"""^embedding_url:\s*["']?([^"'#\s]+)["']?\s*(?:#.*)?$"""
+)
 COLLECTION = "code_patterns"
 SIMILARITY_THRESHOLD = 0.75
 
@@ -56,11 +67,35 @@ def _run_psql(sql: str) -> tuple[bool, str]:
         return False, str(e)
 
 
+def _embedding_url() -> str:
+    """The embedding service: ``LLM_EMBEDDING_URL``, else the workspace overlay.
+
+    The shipped code names no endpoint. With neither supplied this refuses, in a
+    message that names the overlay file, instead of dialling a default.
+    """
+    url = os.environ.get("LLM_EMBEDDING_URL", "")  # url-authority-ok: operator-supplied
+    configured = url.strip()
+    if configured:
+        return configured
+    overlay = workspace_config_file(EMBEDDING_OVERLAY)
+    if overlay is not None:
+        for line in overlay.read_text(encoding="utf-8").splitlines():
+            match = _EMBEDDING_URL_LINE.match(line)
+            if match:
+                return match.group(1)
+    raise RuntimeError(
+        "embedding service not configured: LLM_EMBEDDING_URL is unset and "
+        + missing_workspace_config_message(
+            EMBEDDING_OVERLAY, "it holds `embedding_url: <url>`"
+        )
+    )
+
+
 def _get_embedding(text: str) -> list[float]:
     """Get embedding vector from LLM endpoint."""
     payload = json.dumps({"input": text, "model": "embedding"}).encode()
     req = Request(  # noqa: S310 — URL from env var, not user input
-        f"{EMBEDDING_URL}/v1/embeddings",
+        f"{_embedding_url()}/v1/embeddings",
         data=payload,
         headers={"Content-Type": "application/json"},
         method="POST",

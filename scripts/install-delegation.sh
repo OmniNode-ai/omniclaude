@@ -107,7 +107,7 @@ Options:
   --apply                 Execute changes (default is dry-run preview).
   --uninstall             Restore prior state using the rollback manifest.
   --endpoint-url <url>    LLM endpoint URL to write into the bifrost endpoint
-                          overlay (e.g. http://192.168.86.201:8000). If omitted
+                          overlay (e.g. http://llm.example.com:8000). If omitted
                           during --apply, an interactive prompt will ask for it.
   --from-source <path>    Install the omniclaude package from a local repo
                           (default: install ${PACKAGE_NAME} from package index).
@@ -121,7 +121,7 @@ Options:
 Examples:
   $0                      Preview the install plan (no changes).
   $0 --apply              Run the install for real.
-  $0 --apply --endpoint-url http://192.168.86.201:8000
+  $0 --apply --endpoint-url http://llm.example.com:8000
   $0 --uninstall          Roll back the install.
 EOF
 }
@@ -325,7 +325,7 @@ PY
 
   # Prompt for endpoint URL if not provided via --endpoint-url (interactive only).
   if [[ -z "${ENDPOINT_URL}" ]] && ! "${DRY_RUN}" && [[ -t 0 ]]; then
-    printf '\n%sEnter the LLM endpoint URL%s (e.g. http://192.168.86.201:8000): ' \
+    printf '\n%sEnter the LLM endpoint URL%s (e.g. http://llm.example.com:8000): ' \
       "${C_BOLD}" "${C_RESET}"
     read -r ENDPOINT_URL
     if [[ -z "${ENDPOINT_URL}" ]]; then
