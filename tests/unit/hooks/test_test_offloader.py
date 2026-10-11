@@ -19,8 +19,19 @@ import pytest
 
 # Add the module path
 _MODULE_DIR = Path(__file__).parents[3] / "src/omniclaude/hooks/lib"
+# Appended, never inserted first: this directory holds an older onex_state than
+# plugins/onex/hooks/lib, and an entry ahead of the plugin lib makes the first bare
+# ``import onex_state`` of a smart-selection run resolve here.
 if str(_MODULE_DIR) not in sys.path:
-    sys.path.insert(0, str(_MODULE_DIR))
+    sys.path.append(str(_MODULE_DIR))
+
+
+@pytest.mark.unit
+def test_src_hooks_lib_is_behind_the_plugin_hooks_lib_on_sys_path() -> None:
+    """The hook-edge drainer tests failed on ``onex_state`` resolving to the src copy."""
+    plugin_lib = str(_MODULE_DIR.parents[3] / "plugins" / "onex" / "hooks" / "lib")
+    assert plugin_lib in sys.path
+    assert sys.path.index(plugin_lib) < sys.path.index(str(_MODULE_DIR))
 
 
 # =============================================================================
