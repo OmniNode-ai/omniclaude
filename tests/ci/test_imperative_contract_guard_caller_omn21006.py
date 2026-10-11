@@ -2,10 +2,9 @@
 # SPDX-License-Identifier: MIT
 """OMN-21006: caller-owned allowlist, core ratchet, and historical guard parity.
 
-The paths and finding digest were read from the historical guard at
-f81a37f80de412743ade0891b3293f359b970f50 on the unmodified caller tree.
-Core 0.47.41 carries the handlers pinned by the caller; an isolated validator
-environment keeps these probes independent of the application's core version.
+The historical reusable checked out origin/main for its validator and allowlists.
+The entries and finding digest were read at a89a6f30fabf74189195f57b57fcc5d4751f4c48.
+An isolated validator environment installs the caller's exact core workflow pin.
 """
 
 from __future__ import annotations
@@ -28,10 +27,23 @@ ALLOWLIST_PATH = ".github/imperative-contract-allowlist.yaml"
 ALLOWLIST = ROOT / ALLOWLIST_PATH
 CORE_SHA = "031148215620031436cba30619bbae67c0bb38ad"
 CORE_USES = "OmniNode-ai/omnibase_core/.github/workflows/imperative-contract-guard.yml"
-RECORDED_PATHS = [
+RECORDED_HANDLER_PATHS = [
     "omniclaude/nodes/node_delegation_orchestrator/handlers/handler_cross_cli_invoker.py",
     "omniclaude/nodes/node_git_effect/handlers/handler_git_subprocess.py",
     "omniclaude/nodes/node_github_pr_watcher_effect/handlers/watch_registry.py",
+]
+RECORDED_FREESTANDING_ENTRIES = [
+    ("src/omniclaude/hooks/lib/compliance_result_subscriber.py", "raw_kafka"),
+    ("src/omniclaude/hooks/lib/decision_record_subscriber.py", "raw_kafka"),
+    ("src/omniclaude/hooks/topics.py", "hardcoded_topic"),
+    (
+        "src/omniclaude/nodes/node_local_llm_inference_effect/backends/backend_vllm.py",
+        "raw_http_inference",
+    ),
+    (
+        "src/omniclaude/nodes/node_personality_logging_effect/sinks/sink_slack.py",
+        "raw_http_inference",
+    ),
 ]
 LIVE_HANDLER = (
     "src/omniclaude/nodes/node_git_effect/handlers/handler_git_admission_transport.py"
@@ -44,7 +56,7 @@ FINDING_KEYS = (
 )
 # All finding fields, including details, line numbers, reachability and allowlisting.
 RECORDED_OCC_FINDING_DIGEST = (
-    "135ca459d14a71f6cc6e08263fdea91f67709ce00e98a6e016399fe73c26c0fc"
+    "dc967304fad97a8fbd0a5b4c19be43713fc2f1f4f2a70d7a1a8427813d5ab2ec"
 )
 
 
@@ -56,7 +68,14 @@ def _mapping(path: Path) -> dict:
 
 def _core(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["uv", "run", "--no-project", "--with", "omnibase-core==0.47.41", *args],
+        [
+            "uv",
+            "run",
+            "--no-project",
+            "--with",
+            f"omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@{CORE_SHA}",
+            *args,
+        ],
         input=stdin,
         capture_output=True,
         text=True,
@@ -96,7 +115,11 @@ def test_own_allowlist_preserves_all_historical_entries_and_metadata() -> None:
                 "violations": ["missing_handler_routing"],
                 "ticket": "OMN-11880",
             }
-            for path in RECORDED_PATHS
+            for path in RECORDED_HANDLER_PATHS
+        ]
+        + [
+            {"path": path, "violations": [violation], "ticket": "OMN-12564"}
+            for path, violation in RECORDED_FREESTANDING_ENTRIES
         ]
     }
 
@@ -163,7 +186,7 @@ def test_core_ratchet_accepts_unchanged_and_shrinking_but_refuses_growth() -> No
         "admitted": True,
     }
     assert shrunk["admitted"] is True
-    assert shrunk["removed"] == [RECORDED_PATHS[-1]]
+    assert shrunk["removed"] == [RECORDED_FREESTANDING_ENTRIES[-1][0]]
     assert grown["admitted"] is False
     assert grown["bootstrap"] is False
     assert grown["added"] == [extra]
@@ -191,14 +214,14 @@ def test_core_matches_historical_findings_and_adds_only_the_live_plant(
         "--json",
     )
     clean = _core(*args)
-    assert clean.returncode == 1, clean.stdout + clean.stderr
+    assert clean.returncode == 0, clean.stdout + clean.stderr
     clean_report = json.loads(clean.stdout)[0]
     clean_findings = {key: clean_report[key] for key in FINDING_KEYS}
     digest = hashlib.sha256(
         json.dumps(clean_findings, sort_keys=True).encode()
     ).hexdigest()
     assert digest == RECORDED_OCC_FINDING_DIGEST
-    assert clean_report["new_violation_count"] == 5
+    assert clean_report["new_violation_count"] == 0
 
     handler = root / LIVE_HANDLER
     original = handler.read_text(encoding="utf-8")
@@ -210,7 +233,7 @@ def test_core_matches_historical_findings_and_adds_only_the_live_plant(
     planted = _core(*args)
     assert planted.returncode == 1, planted.stdout + planted.stderr
     planted_report = json.loads(planted.stdout)[0]
-    assert planted_report["new_violation_count"] == 6
+    assert planted_report["new_violation_count"] == 1
     (violation,) = planted_report["new_violations"]
     assert violation["handler_path"] == LIVE_HANDLER.removeprefix("src/")
     assert violation["reachability"] == "live"
