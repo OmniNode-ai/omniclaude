@@ -8,7 +8,7 @@ session start instead of at the first failed dispatch.
 
 * ``workspace_reconcile_tick.sh`` — PostToolUse, throttled. Delegates to
   ``onex-host-reconcile`` (OMN-17311, OMN-20670; the legacy ``reconcile-host.sh``
-  is a fallback) and writes a receipt
+  is retired and never run) and writes a receipt
   line plus a one-line verdict. It performs no repair of its own: it used to
   fetch and ``git pull --ff-only`` each clone and report ``status=PULLED`` on
   the pull's EXIT CODE, which is the OMN-17307 defect -- a clone with
@@ -19,7 +19,7 @@ session start instead of at the first failed dispatch.
 Everything here runs the real scripts as subprocesses against a hermetic
 ``$OMNI_HOME`` built from local git repos. Nothing reaches the network, no real
 clone is touched, and the reconciler is a recording stub (its own behaviour is
-covered by omnibase_infra's ``tests/scripts/test_reconcile_host_omn17307.py``)
+covered by omnibase_internal's ``tests/test_host_reconcile*.py``)
 so these tests prove the hooks' WIRING and their two hard safety properties:
 
     the tick performs no repair of its own, and it can never fail a tool call.
@@ -142,37 +142,29 @@ class _Workspace:
         # OMN-17311: the tick delegates to the ONE host reconciler. Its own
         # behaviour -- fetch, fast-forward, refuse a dirty clone, and prove by
         # readback that every surface reached its target -- is covered by
-        # omnibase_infra's tests/scripts/test_reconcile_host_omn17307.py. Here
+        # omnibase_internal's tests/test_host_reconcile*.py. Here
         # it is a recording stub, because what these tests pin is the WIRING.
-        self.reconciler = self.infra_scripts / "reconcile-host.sh"
-        self.reconcile_log = root / "reconcile.log"
-        self.set_reconciler_exit(0)
         # OMN-20670 / OMN-17427: the canonical reconciler is the
         # ``onex-host-reconcile`` console script of the omnibase_internal
         # project, installed into that clone's own ``.venv`` (by its
         # ``onex-internal-clone-sync`` timer) -- never into the dispatch venv.
-        # It is NOT installed by default here, so every pre-existing test keeps
-        # exercising the legacy script path; the tests below install it.
+        # The canonical command is installed by default here.
         self.internal = root / "omnibase_internal"
         self.canonical = self.internal / ".venv" / "bin" / "onex-host-reconcile"
-        self.canonical_log = root / "canonical.log"
+        self.reconcile_log = root / "reconcile.log"
+        self.canonical_log = self.reconcile_log
+        self.set_reconciler_exit(0)
 
     def set_reconciler_exit(self, code: int) -> None:
-        """Recording stub for ``reconcile-host.sh``.
+        """Recording stub for ``onex-host-reconcile``.
 
         Exit codes are the reconciler's own: 0 every surface proven at target,
         2 a surface could not be proven, 3 indeterminate configuration.
         """
-        self.reconciler.write_text(
-            "#!/usr/bin/env bash\n"
-            f'printf "%s\\n" "$*" >> "{self.reconcile_log}"\n'
-            f"exit {code}\n",
-            encoding="utf-8",
-        )
-        self.reconciler.chmod(0o755)
+        self.install_canonical(code)
 
     def remove_reconciler(self) -> None:
-        self.reconciler.unlink()
+        self.canonical.unlink(missing_ok=True)
 
     def install_canonical(self, code: int = 0) -> None:
         """Recording stub for ``onex-host-reconcile`` (same exit-code table)."""
@@ -274,13 +266,7 @@ class _Workspace:
         )
 
     def reconcile_calls(self) -> list[str]:
-        if not self.reconcile_log.exists():
-            return []
-        return [
-            line
-            for line in self.reconcile_log.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
+        return self.canonical_calls()
 
 
 @pytest.fixture
@@ -402,7 +388,7 @@ def test_the_tick_never_pulls_a_clone_itself(ws: _Workspace) -> None:
     ws.run_tick()
 
     assert _git("rev-parse", "HEAD", cwd=ws.clone) == before, (
-        "the tick advanced a clone by itself; repair belongs to reconcile-host.sh "
+        "the tick advanced a clone by itself; repair belongs to onex-host-reconcile "
         "so that both hosts run identical logic and one readback covers both"
     )
 
@@ -470,6 +456,7 @@ def test_bootstrap_advances_omnibase_infra_only_while_the_reconciler_is_absent(
     shutil.move(str(infra_clone), str(ws.root / "omnibase_infra"))
     target = _advance_remote(infra_seed, "omnibase_infra_src", ws.root, "two")
 
+    ws.remove_reconciler()
     ws.run_tick()
 
     assert _git("rev-parse", "HEAD", cwd=ws.root / "omnibase_infra") == target
@@ -511,26 +498,28 @@ def test_the_tick_runs_the_canonical_command_when_it_is_installed(
     assert "in sync" in ws.status_file.read_text(encoding="utf-8")
 
 
-def test_the_canonical_command_wins_over_the_legacy_script(ws: _Workspace) -> None:
-    ws.install_canonical(0)
+def test_a_leftover_legacy_script_is_never_run(ws: _Workspace) -> None:
+    """omnibase_infra deleted scripts/reconcile-host.sh (OMN-20670).
 
-    ws.run_tick()
-
-    assert ws.canonical_calls(), "the canonical command was not run"
-    assert not ws.reconcile_calls(), (
-        "the legacy script ran beside the canonical command"
+    A stale copy left on a host must not be run, and the absence of the canonical
+    command is reported as drift.
+    """
+    ws.remove_reconciler()
+    legacy_log = ws.root.parent / "legacy.log"
+    legacy = ws.infra_scripts / "reconcile-host.sh"
+    legacy.write_text(
+        f'#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "{legacy_log}"\nexit 0\n',
+        encoding="utf-8",
     )
+    legacy.chmod(0o755)
 
-
-def test_the_legacy_script_still_runs_until_the_command_is_installed(
-    ws: _Workspace,
-) -> None:
-    """Merge order must not matter: no host loses its reconciler in between."""
     ws.run_tick()
 
-    assert ws.reconcile_calls(), "no reconciler ran although the legacy script exists"
-    assert not ws.canonical_calls()
-    assert "in sync" in ws.status_file.read_text(encoding="utf-8")
+    assert not legacy_log.exists(), "the tick ran the deleted reconcile-host.sh"
+    assert "DRIFT: no workspace reconciler" in ws.status_file.read_text(
+        encoding="utf-8"
+    )
+    assert "reconciler=ABSENT" in ws.receipts.read_text(encoding="utf-8")
 
 
 def test_a_failing_canonical_reconcile_surfaces_as_drift(ws: _Workspace) -> None:
