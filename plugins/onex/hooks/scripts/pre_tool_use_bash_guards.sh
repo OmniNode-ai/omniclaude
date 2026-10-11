@@ -105,7 +105,7 @@ fi
 if [[ $_obg_lane_read -eq 1 ]]; then
     _OBG_CALLER_CWD="$PWD"
     _OBG_LANE_OUT="$(
-        # The session's mode goes to the node, which treats nobody as a lane in lite
+        # The session mode goes to the node, which treats nobody as a lane in lite
         # mode (a non-OmniNode install). This entrypoint itself never exits on it.
         _OBG_MODE="full"
         if [[ -f "${_OBG_SCRIPTS}/../../lib/mode.sh" ]]; then
