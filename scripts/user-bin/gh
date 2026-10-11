@@ -858,13 +858,13 @@ unset _prs_guarded _prs_ep _prs_class _prs_o _prs_r _prs_n _prs_why _rs_owner _r
 # status, run list|download|watch, repo view, issue view|list, release list|view, workflow
 # list|view, pr checkout, variable get, gh status, ...). No off switch, no warning mode.
 #
-# A lane context is a call made by an agent, decided by either:
-#   (a) an agent environment marker: CLAUDECODE, CLAUDE_CODE_SESSION_ID,
+# A lane context is a call made by an agent, decided by either, in this order:
+#   (a) an ancestor process (up to 12 up) that is Claude Code, the Claude desktop app,
+#       the Codex CLI or the ChatGPT/Codex app, or a process table ps cannot read; or
+#   (b) an agent environment marker: CLAUDECODE, CLAUDE_CODE_SESSION_ID,
 #       CLAUDE_CODE_ENTRYPOINT, ONEX_LANE, ONEX_LANE_ID, ONEX_AGENT_NAME, CLAUDE_AGENT_NAME,
 #       CLAUDE_SUBAGENT_NAME, CODEX_THREAD_ID, CODEX_SANDBOX, CODEX_SANDBOX_NETWORK_DISABLED
-#       or CODEX_MANAGED_BY_NPM; or
-#   (b) an ancestor process (up to 12 up) that is Claude Code, the Claude desktop app,
-#       the Codex CLI or the ChatGPT/Codex app.
+#       or CODEX_MANAGED_BY_NPM (a marker only adds lane context; unsetting one removes none).
 # Not a lane: launchd/cron automation and an operator terminal with neither.
 #
 # Still allowed in a lane context:
@@ -887,18 +887,15 @@ _lane_ctx_why=""
 _lane_context() {
   _lane_ctx_why=""
   local v pid="$PPID" steps=0 info next comm
-  for v in CLAUDECODE CLAUDE_CODE_SESSION_ID CLAUDE_CODE_ENTRYPOINT ONEX_LANE ONEX_LANE_ID \
-           ONEX_AGENT_NAME CLAUDE_AGENT_NAME CLAUDE_SUBAGENT_NAME CODEX_THREAD_ID CODEX_SANDBOX \
-           CODEX_SANDBOX_NETWORK_DISABLED CODEX_MANAGED_BY_NPM; do
-    if [ -n "${!v:-}" ]; then
-      _lane_ctx_why="environment $v"
-      return 0
-    fi
-  done
-  # The environment markers are a fast path, not the decision: an agent that unsets them
-  # is still caught by the ancestry walk below. That walk is only as good as ps, so a
-  # process table this process cannot read about itself (a sandbox that hides it, a
-  # missing or broken ps) counts as a lane: an unverifiable caller fails closed.
+  # The process ancestry decides first, and the environment cannot change it: an agent
+  # that unsets or blanks every marker below is still refused here, because the walk reads
+  # the process table, not the environment (PPID is read-only in bash). The markers only
+  # ever ADD lane context afterwards; no value of any variable removes it. The walk is
+  # only as good as ps, so a process table this process cannot read about itself (a
+  # sandbox that hides it, a missing or broken ps) counts as a lane: an unverifiable caller
+  # fails closed. Threat model: this routes cooperative agents off the shared GitHub read
+  # quota. A local process that bypasses the shim entirely (real gh by absolute path, a
+  # token in its environment) is out of its reach and is tracked as OMN-20916.
   info="$(ps -o ppid= -o comm= -p "$$" 2>/dev/null)"
   if [ -z "${info//[[:space:]]/}" ]; then
     _lane_ctx_why="unreadable process ancestry"
@@ -920,6 +917,14 @@ _lane_context() {
     esac
     pid="$next"
     steps=$((steps + 1))
+  done
+  for v in CLAUDECODE CLAUDE_CODE_SESSION_ID CLAUDE_CODE_ENTRYPOINT ONEX_LANE ONEX_LANE_ID \
+           ONEX_AGENT_NAME CLAUDE_AGENT_NAME CLAUDE_SUBAGENT_NAME CODEX_THREAD_ID CODEX_SANDBOX \
+           CODEX_SANDBOX_NETWORK_DISABLED CODEX_MANAGED_BY_NPM; do
+    if [ -n "${!v:-}" ]; then
+      _lane_ctx_why="environment $v"
+      return 0
+    fi
   done
   return 1
 }

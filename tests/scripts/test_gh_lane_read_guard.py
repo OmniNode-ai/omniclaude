@@ -210,6 +210,36 @@ def test_positive_control_the_same_read_passes_outside_a_lane(
     assert _calls(env) == [argv]
 
 
+ALL_MARKERS = [
+    "CLAUDECODE",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "ONEX_LANE",
+    "ONEX_LANE_ID",
+    "ONEX_AGENT_NAME",
+    "CLAUDE_AGENT_NAME",
+    "CLAUDE_SUBAGENT_NAME",
+    "CODEX_THREAD_ID",
+    "CODEX_SANDBOX",
+    "CODEX_SANDBOX_NETWORK_DISABLED",
+    "CODEX_MANAGED_BY_NPM",
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("comm", ["claude", "/opt/homebrew/bin/codex"])
+def test_blanking_every_marker_does_not_unmake_a_lane(
+    env: dict[str, str], tmp_path: Path, comm: str
+) -> None:
+    """The environment cannot remove lane context: an agent-spawned call with every marker
+    set to the empty string (and none set at all, in the fixture) is still refused, by the
+    ancestry walk that runs before any marker is read."""
+    install_ancestry_ps(tmp_path / "realbin", comm)
+    result = _run(env, "api", "user", extra=dict.fromkeys(ALL_MARKERS, ""))
+    _assert_lane_refused(env, result)
+    assert "(ancestor process " in result.stderr.splitlines()[0]
+
+
 @pytest.mark.unit
 def test_unreadable_process_ancestry_fails_closed(
     env: dict[str, str], tmp_path: Path
