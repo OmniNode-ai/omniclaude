@@ -383,12 +383,8 @@ def test_contract_and_schedule_wire_the_native_bus_worker() -> None:
     assert mint["with"]["permission-pull-requests"] == "write"
 
 
-def test_monitor_is_not_hosted_by_the_occ_heal_workflow() -> None:
-    occ_heal = yaml.safe_load(OCC_HEAL_WORKFLOW.read_text())
-    assert "dev-head-red-alert" not in occ_heal["jobs"], (
-        "the dev-head monitor must not live in the OCC heal workflow, which the "
-        "OCC retirement deletes (OMN-20074)"
-    )
+def test_monitor_survives_the_occ_heal_workflow_retirement() -> None:
+    assert not OCC_HEAL_WORKFLOW.exists()
     assert "dev-head-red-alert" in _host_workflow()["jobs"]
 
 

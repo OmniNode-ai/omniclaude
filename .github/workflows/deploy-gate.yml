@@ -27,18 +27,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  occ-preflight:
-    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6
-    permissions:
-      contents: read
-      pull-requests: read
-    with:
-      contracts-dir: contracts
-      receipts-dir: drift/dod_receipts
-
   deploy-gate:
-    needs: occ-preflight
     # OMN-16878 (OMN-15057 vector 5): this context becomes a REQUIRED status
     # check on `dev` in the same change. `needs:` with no `if:` means GitHub's
     # implicit job-level `if:` is `success()` over `needs:` — a failed or

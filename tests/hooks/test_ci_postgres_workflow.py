@@ -234,7 +234,7 @@ def test_golden_chain_live_is_required_service_container_gate(
     assert "golden-chain-live=${{ needs.golden-chain-live.result }}" in gate_run
 
 
-def test_ci_summary_checks_contract_compliance_result(
+def test_ci_summary_polls_gate_and_external_results(
     ci_workflow: dict[str, Any],
 ) -> None:
     summary = _job(ci_workflow, "ci-summary")
@@ -258,16 +258,6 @@ def test_ci_summary_checks_contract_compliance_result(
     # to the gate script on every poll iteration.
     assert "repos/${GH_REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" in run
     assert "--check-runs-file check_runs.json" in run
-
-
-def test_contract_compliance_pins_uv_python(ci_workflow: dict[str, Any]) -> None:
-    job = _job(ci_workflow, "contract-compliance")
-    setup_step = _step(job, "Set up Python")
-    install_step = _step(job, "Install onex_change_control checker")
-
-    assert setup_step.get("uses") == "actions/setup-python@v7"
-    assert setup_step["with"]["python-version"] == "${{ env.PYTHON_VERSION }}"
-    assert '--python "${PYTHON_VERSION}"' in install_step["run"]
 
 
 def test_no_faked_boundary_pins_uv_python() -> None:

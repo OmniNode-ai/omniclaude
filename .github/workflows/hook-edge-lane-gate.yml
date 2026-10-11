@@ -47,18 +47,7 @@ concurrency:
     # also re-open skip-vector 1 now that the context is REQUIRED.
 
 jobs:
-  occ-preflight:
-    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6
-    permissions:
-      contents: read
-      pull-requests: read
-    with:
-      contracts-dir: contracts
-      receipts-dir: drift/dod_receipts
-
   hook-edge-lane-gate:
-    needs: occ-preflight
     # Skip-vector 5 (OMN-15057, same fix OMN-16878 applied to deploy-gate):
     # `needs:` with no `if:` means the implicit job condition is `success()`
     # over `needs:`, so a failed or cancelled occ-preflight SKIPS this job — and

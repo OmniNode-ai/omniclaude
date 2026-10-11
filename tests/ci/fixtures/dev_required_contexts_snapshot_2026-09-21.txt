@@ -28,7 +28,6 @@ contract-validation
 Cross-Repo Boundary Parity
 Database Schema Validation
 deploy-gate
-DoD Evidence Check
 Enum Governance
 Env Var Registry (OMN-6263)
 Exports Validation
@@ -47,13 +46,13 @@ Mode Metadata Integrity
 No Faked Boundary Gate
 no-noncanonical-lifecycle-classes
 non-dev-base-guard
-occ-preflight / eligibility
 Omni Standards Gate
 ONEX Compliance
 pr-title / check-title
 Quality Gate
 reason-graph
 receipt-honesty
+repo-evidence / dod-verify
 required-check-skip-guard / check-skip-vectors
 Secret Detection
 Skill Contract Validation

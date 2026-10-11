@@ -28,7 +28,6 @@ Canonical Handler-Shape Ratchet
 Code Quality
 Comment Render Delegation (OMN-18512)
 Contract Compliance
-Contract Compliance Check
 Cross-Repo Boundary Parity
 Daemon Venv Skew Gate
 Database Schema Validation
@@ -36,7 +35,6 @@ Deploy to Production
 Deploy to Staging
 Detect Changes
 Distribution Classification Lint
-DoD Evidence Check
 Enum Governance
 Env Var Registry (OMN-6263)
 Exports Validation
@@ -52,7 +50,6 @@ Merge Test Coverage
 Merge-Sweep Contract
 Migration Freeze
 Mode Metadata Integrity
-OCC Companion Merged Gate (OMN-15214)
 ONEX Compliance
 Omnimarket Dispatch Drift Gate
 PR Failure Citations (OMN-18782)
@@ -89,8 +86,8 @@ gate / Defect Anchor
 gate / Handoff Infra Health
 gate / reject-imperative-skill-patterns
 no-noncanonical-lifecycle-classes
-occ-preflight
 skill-receipt-mode-gate
+validate
 validate
 validate-agent-configs
 zone-filter

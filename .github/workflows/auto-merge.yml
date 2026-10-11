@@ -173,16 +173,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  occ-preflight:
-    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6
-    permissions:
-      contents: read
-      pull-requests: read
-    with:
-      contracts-dir: contracts
-      receipts-dir: drift/dod_receipts
-
   # OMN-20074 (RULING 2026-10-10T15:10:25Z): declared automation, which
   # advisory-job-gate CHECKS rather than exempts -- this job must stay out of
   # required_status_checks, out of any required job's `needs:`, and free of
@@ -190,7 +180,6 @@ jobs:
   # block a merge.
   # advisory-automation: OMN-20074 arms auto-merge and enqueues a ready pull request
   auto-merge:
-    needs: occ-preflight
     name: Enable Auto-Merge
     runs-on: >-
       ${{
