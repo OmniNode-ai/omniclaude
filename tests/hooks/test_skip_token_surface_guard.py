@@ -61,7 +61,8 @@ def test_subagent_stop_blocks_skip_token_in_final_message(tmp_path: Path) -> Non
 
 
 @pytest.mark.unit
-def test_stop_allows_skip_token_with_approval_receipt(tmp_path: Path) -> None:
+def test_stop_blocks_skip_token_even_with_a_receipt_id_comment(tmp_path: Path) -> None:
+    """OMN-20074: the approvals registry is retired, so no comment rescues a token."""
     result = _run_guard(
         {
             "final_message": (
@@ -74,8 +75,9 @@ def test_stop_allows_skip_token_with_approval_receipt(tmp_path: Path) -> None:
         state_dir=tmp_path / "state",
     )
 
-    assert result.returncode == 0
-    assert result.stdout == ""
+    assert result.returncode == 2
+    payload = json.loads(result.stdout)
+    assert payload["hookSpecificOutput"]["decision"] == "block"
 
 
 @pytest.mark.unit
