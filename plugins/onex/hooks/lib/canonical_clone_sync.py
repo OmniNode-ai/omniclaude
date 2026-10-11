@@ -116,6 +116,31 @@ symref never moves a clone. The refresh runs with
 never switches: the engine follows the checked-out branch and puts the failure
 in the result's reason. ``refresh`` never moves a checked-out branch.
 
+Hook scripts must parse before a clone serves them (OMN-20961)
+--------------------------------------------------------------
+The omniclaude canonical clone IS the hook deploy on the Mac: Claude Code runs
+its hook scripts from that tree on every tool call, under macOS ``/bin/bash``
+3.2. On 2026-10-11 the timer run fast-forwarded it at 08:59:37Z to a commit
+whose ``pre_tool_use_bash_guards.sh`` parsed under the Linux bash 5 of CI and
+not under bash 3.2, and every Bash call on the Mac was refused for about two
+hours. Nothing read the parse back. Two checks now do, on any clone that
+carries ``plugins/onex/hooks/scripts`` or ``plugins/onex/hooks/lib`` and on a
+host with ``/bin/bash``:
+
+* before the fast-forward (and before a return to the default branch), every
+  ``*.sh`` under those directories AT THE TARGET COMMIT is fed to
+  ``/bin/bash -n``. Any failure REFUSES the move, so the clone never serves a
+  script that does not parse, and the next timer run refuses the same target
+  again rather than re-deploying it;
+* after the fast-forward, the same scripts in the working tree are parsed
+  again. A failure there moves the clone back to its previous commit through
+  the sanctioned ``scripts/converge-canonical-clone.sh --to-sha`` (which
+  preserves the tree and writes the ledger row) and the result is REFUSED with
+  ``after`` back at ``before``; a rollback that does not land is FAILED.
+
+Either failure raises one operator alarm per (repository, target) through
+``alert-channel.sh``'s ``alert_channel_alarm`` plus a local notification.
+
 Verification
 ------------
 A result is never read from ``git merge``'s exit status. ``HEAD`` is re-read
@@ -173,6 +198,17 @@ MAX_WORKERS = 8
 # The one sanctioned door through the canonical-clone ref guard for a HEAD
 # symref move (pull-all.sh uses the same one). Set for the switch call alone.
 CONVERGE_ENV = {"ONEX_CANONICAL_CONVERGE": "1"}
+
+# OMN-20961: hook scripts the Mac runs under /bin/bash 3.2 are parsed before
+# and after a clone moves.
+HOOK_SCRIPT_DIRS = ("plugins/onex/hooks/scripts", "plugins/onex/hooks/lib")
+HOOK_PARSE_BASH = "/bin/bash"
+HOOK_PARSE_TIMEOUT_SECONDS = 20
+HOOK_PARSE_TICKET = "OMN-20961"
+HOOK_PARSE_LANE = "canonical-clone-sync"
+CONVERGE_SCRIPT = Path("scripts") / "converge-canonical-clone.sh"
+CONVERGE_TIMEOUT_SECONDS = 300
+ENGINE_REPO_ROOT = Path(__file__).resolve().parents[4]
 
 # Result vocabulary. Every clone gets exactly one of these per run.
 ADVANCED = "ADVANCED"
@@ -950,6 +986,10 @@ def _return_to_default(
             f"e.g. {', '.join(changed[:3])}"
         )
 
+    unparseable = refuse_unparseable_target(clone, result, target)
+    if unparseable:
+        return refuse(unparseable)
+
     local = run_git(clone, "rev-parse", "--verify", "--quiet", f"refs/heads/{default}")
     if local.out:
         if run_git(clone, "merge-base", "--is-ancestor", local.out, target).code != 0:
@@ -994,6 +1034,239 @@ def _return_to_default(
             f"read back HEAD on {now!r} at {after}; expected {default!r} at {target}"
         )
     result.result = ADVANCED
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# Hook parse guard (OMN-20961)
+# --------------------------------------------------------------------------- #
+def _hook_parse_bash() -> str | None:
+    """The interpreter hooks run under, or None when this host has none."""
+    bash = HOOK_PARSE_BASH
+    return bash if Path(bash).is_file() and os.access(bash, os.X_OK) else None
+
+
+def _bash_parse_error(bash: str, script: bytes) -> str | None:
+    """``bash -n`` over ``script`` on stdin; the first error line, or None."""
+    try:
+        proc = subprocess.run(
+            [bash, "-n"],
+            input=script,
+            capture_output=True,
+            timeout=HOOK_PARSE_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return f"{bash} -n timed out after {HOOK_PARSE_TIMEOUT_SECONDS}s"
+    except OSError as exc:
+        return f"{bash} -n could not run: {exc}"
+    if proc.returncode == 0:
+        return None
+    lines = proc.stderr.decode(errors="replace").strip().splitlines()
+    return lines[0] if lines else f"{bash} -n exited {proc.returncode}"
+
+
+def hook_parse_failures_at(clone: Path, rev: str) -> list[str] | None:
+    """Hook shell scripts at ``rev`` that ``/bin/bash -n`` refuses.
+
+    None when there is nothing to check: no bash on this host, or no hook
+    script directory at ``rev``. A tree that cannot be listed or read is a
+    failure, never a pass.
+    """
+    bash = _hook_parse_bash()
+    if bash is None:
+        return None
+    listed = run_git(
+        clone,
+        "ls-tree",
+        "-r",
+        "-z",
+        "--name-only",
+        rev,
+        "--",
+        *HOOK_SCRIPT_DIRS,
+        strip=False,
+    )
+    if listed.code != 0:
+        return [f"cannot list the hook scripts at {rev}: {_tail(listed.err)}"]
+    paths = sorted(p for p in listed.out.split("\0") if p.endswith(".sh"))
+    if not paths:
+        return None
+    failures: list[str] = []
+    for path in paths:
+        try:
+            blob = subprocess.run(
+                ["git", "-C", str(clone), "cat-file", "blob", f"{rev}:{path}"],
+                capture_output=True,
+                env=git_env(),
+                timeout=GIT_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            failures.append(f"{path}: cannot read the blob: {exc}")
+            continue
+        if blob.returncode != 0:
+            failures.append(f"{path}: cannot read the blob at {rev}")
+            continue
+        error = _bash_parse_error(bash, blob.stdout)
+        if error is not None:
+            failures.append(f"{path}: {error}")
+    return failures
+
+
+def hook_parse_failures_in_tree(clone: Path) -> list[str] | None:
+    """The same check over the files the clone's working tree now serves."""
+    bash = _hook_parse_bash()
+    if bash is None:
+        return None
+    paths = sorted(
+        p
+        for d in HOOK_SCRIPT_DIRS
+        if (clone / d).is_dir()
+        for p in (clone / d).rglob("*.sh")
+        if p.is_file()
+    )
+    if not paths:
+        return None
+    failures: list[str] = []
+    for path in paths:
+        try:
+            script = path.read_bytes()
+        except OSError as exc:
+            failures.append(f"{path.relative_to(clone)}: unreadable: {exc}")
+            continue
+        error = _bash_parse_error(bash, script)
+        if error is not None:
+            failures.append(f"{path.relative_to(clone)}: {error}")
+    return failures
+
+
+def _alarm_cmd(category: str, text: str) -> list[str]:
+    alert_sh = (
+        ENGINE_REPO_ROOT / "plugins" / "onex" / "hooks" / "scripts" / "alert-channel.sh"
+    )
+    script = (
+        "rc=3\n"
+        'source "$1" 2>/dev/null || true\n'
+        "if declare -F alert_channel_alarm >/dev/null 2>&1; then\n"
+        '  alert_channel_alarm "$2" "$3"; rc=$?\n'
+        "fi\n"
+        # The text goes to osascript as an argument, never into its source.
+        "if [[ -x /usr/bin/osascript ]]; then\n"
+        "  /usr/bin/osascript -e 'on run argv' -e 'display notification "
+        '(item 1 of argv) with title "Canonical clone hook parse FAILED" '
+        'sound name "Sosumi"\' -e \'end run\' "$3" >/dev/null 2>&1 || true\n'
+        "fi\n"
+        "exit $rc\n"
+    )
+    return [
+        HOOK_PARSE_BASH,
+        "-c",
+        script,
+        "clone-sync-alarm",
+        str(alert_sh),
+        category,
+        text,
+    ]
+
+
+def raise_hook_parse_alarm(result: CloneResult, text: str) -> None:
+    """One operator alarm per (repository, target); never raises."""
+    key = re.sub(
+        r"[^A-Za-z0-9_.-]", "_", f"{result.repo or result.clone}-{result.target}"
+    )
+    marker = state_dir(os.environ) / "canonical-clone-sync" / "hook-parse-alarmed" / key
+    if marker.exists():
+        return
+    try:
+        subprocess.run(
+            _alarm_cmd("canonical_clone_hook_parse", text),
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(utc_now() + "\n")
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _summarise(failures: Sequence[str]) -> str:
+    shown = "; ".join(failures[:3])
+    more = f" (+{len(failures) - 3} more)" if len(failures) > 3 else ""
+    return shown + more
+
+
+def refuse_unparseable_target(
+    clone: Path, result: CloneResult, target: str
+) -> str | None:
+    """A refusal reason when the hook scripts at ``target`` do not parse."""
+    failures = hook_parse_failures_at(clone, target)
+    if not failures:
+        return None
+    reason = (
+        f"hook scripts at {target[:12]} do not parse under {HOOK_PARSE_BASH} "
+        f"({HOOK_PARSE_TICKET}); the clone was not moved: {_summarise(failures)}"
+    )
+    raise_hook_parse_alarm(
+        result,
+        f"{result.repo or clone}: canonical clone {clone} held at "
+        f"{(result.before or '?')[:12]}; {reason}",
+    )
+    return reason
+
+
+def readback_or_roll_back(clone: Path, result: CloneResult) -> CloneResult:
+    """Parse the advanced tree; on failure converge back to ``result.before``."""
+    failures = hook_parse_failures_in_tree(clone)
+    if not failures:
+        return result
+    before = result.before or ""
+    converge = ENGINE_REPO_ROOT / CONVERGE_SCRIPT
+    detail = _summarise(failures)
+    outcome = ""
+    try:
+        proc = subprocess.run(
+            [
+                HOOK_PARSE_BASH,
+                str(converge),
+                str(clone),
+                "--execute",
+                "--to-sha",
+                before,
+                "--ticket",
+                HOOK_PARSE_TICKET,
+                "--lane",
+                HOOK_PARSE_LANE,
+            ],
+            capture_output=True,
+            text=True,
+            env=git_env(),
+            timeout=CONVERGE_TIMEOUT_SECONDS,
+            check=False,
+        )
+        outcome = _tail(proc.stderr or proc.stdout)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        outcome = f"converge could not run: {exc}"
+    head = run_git(clone, "rev-parse", "--verify", "--quiet", "HEAD").out
+    result.after = head or None
+    if before and head == before:
+        result.result = REFUSED
+        result.reason = (
+            f"hook scripts at {(result.target or '?')[:12]} did not parse under "
+            f"{HOOK_PARSE_BASH} after the fast-forward ({HOOK_PARSE_TICKET}); "
+            f"rolled back to {before[:12]} by {CONVERGE_SCRIPT}: {detail}"
+        )
+    else:
+        result.result = FAILED
+        result.reason = (
+            f"hook scripts at {(result.target or '?')[:12]} do not parse under "
+            f"{HOOK_PARSE_BASH} and the rollback to {before[:12] or '?'} did not "
+            f"land (HEAD {head[:12] or '?'}): {detail}; converge: {outcome}"
+        )
+    raise_hook_parse_alarm(
+        result, f"{result.repo or clone}: canonical clone {clone}: {result.reason}"
+    )
     return result
 
 
@@ -1156,6 +1429,10 @@ def sync_clone(clone: Path) -> CloneResult:
                 )
             result.carried_dirty_paths = len(unstaged)
 
+        unparseable = refuse_unparseable_target(clone, result, target)
+        if unparseable:
+            return refuse(unparseable)
+
         commit_lock = (
             file_lock(clone / SHARED_TREE_COMMIT_LOCK, COMMIT_LOCK_WAIT_SECONDS)
             if shared_tree
@@ -1177,7 +1454,7 @@ def sync_clone(clone: Path) -> CloneResult:
         if after != target:
             return fail("HEAD did not reach the fetched target after the fast-forward")
         result.result = ADVANCED
-        return result
+        return readback_or_roll_back(clone, result)
 
 
 # --------------------------------------------------------------------------- #
