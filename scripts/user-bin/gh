@@ -812,7 +812,7 @@ unset _prs_guarded _prs_ep _prs_class _prs_o _prs_r _prs_n _prs_why _rs_owner _r
 # guard's allowed callers are): ONEX_PR_WATCHER=1, the PR watcher module and the landing
 # controller's own scripts (_prs_caller_allowed), the node effect runner (`onex run-node`,
 # onex-runtime, omnibase_infra.runtime.kernel) and the release-cut tick
-# (omnibase_internal.omnimarket_release_cut_tick).
+# (any package's omnimarket_release_cut_tick module).
 # The refusal is a call-log row: class = the gh verb, endpoint = the onex scm verb.
 _lw_why=""
 _lw_lane() {
@@ -839,7 +839,7 @@ _lw_allowed_identity() {
   case " $args " in
     *"/onex run-node "*|*" onex run-node "*) return 0 ;;
     *"/onex-runtime "*|*" onex-runtime "*|*" omnibase_infra.runtime.kernel "*) return 0 ;;
-    *" omnibase_internal.omnimarket_release_cut_tick "*) return 0 ;;
+    *".omnimarket_release_cut_tick "*) return 0 ;;
   esac
   return 1
 }

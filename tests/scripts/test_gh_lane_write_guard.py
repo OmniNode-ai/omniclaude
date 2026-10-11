@@ -391,18 +391,14 @@ def _identity_parent(tmp_path: Path, env: dict[str, str], identity: str) -> list
         entry = tmp_path / "venv-bin" / name
         _write_exec(entry, f"#!{sys.executable}\n{CHILD}")
         return [str(entry), "run-node", "node_x"] if name == "onex" else [str(entry)]
-    if identity in ("release-cut-tick", "pr-watcher-module"):
-        module = (
-            "omnimarket_release_cut_tick"
-            if identity == "release-cut-tick"
-            else "pr_watcher"
-        )
-        pkg = tmp_path / "pylib" / "omnibase_internal"
+    if identity == "release-cut-tick":
+        module = "omnimarket_release_cut_tick"
+        pkg = tmp_path / "pylib" / "lanepkg"
         pkg.mkdir(parents=True, exist_ok=True)
         (pkg / "__init__.py").write_text("")
         (pkg / f"{module}.py").write_text(CHILD)
         env["PYTHONPATH"] = str(tmp_path / "pylib")
-        return [sys.executable, "-m", f"omnibase_internal.{module}"]
+        return [sys.executable, "-m", f"lanepkg.{module}"]
     raise AssertionError(identity)
 
 
@@ -411,7 +407,6 @@ IDENTITIES = [
     "node-effect-runner",
     "onex-runtime",
     "release-cut-tick",
-    "pr-watcher-module",
 ]
 
 
