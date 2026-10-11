@@ -12,15 +12,22 @@ Verifies:
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-# Add the module path
 _MODULE_DIR = Path(__file__).parents[3] / "src/omniclaude/hooks/lib"
-if str(_MODULE_DIR) not in sys.path:
-    sys.path.insert(0, str(_MODULE_DIR))
+
+
+@pytest.fixture(autouse=True)
+def _module_dir_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Put the module directory on sys.path for one test, then take it off.
+
+    The directory also holds an ``onex_state.py``. Left on sys.path for the
+    whole session, it shadows ``plugins/onex/hooks/lib/onex_state.py`` for
+    every test collected after this file (OMN-20864).
+    """
+    monkeypatch.syspath_prepend(str(_MODULE_DIR))
 
 
 # =============================================================================
