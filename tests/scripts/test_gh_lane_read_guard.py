@@ -559,6 +559,18 @@ def test_gateway_budget_holds_under_concurrent_misses(
 
 
 @pytest.mark.unit
+def test_gateway_serves_get_only_and_keys_on_the_method(env: dict[str, str]) -> None:
+    """A HEAD answer has no body, so HEAD is not a gateway shape: a lane HEAD is refused
+    and can never seed the cache entry a later GET of the same endpoint is served from."""
+    lane = {"ONEX_LANE": "lane", "FAKE_GH_STDOUT": "the detail"}
+    head = _run(env, "api", "-X", "HEAD", "repos/o/r/check-runs/77", extra=lane)
+    _assert_lane_refused(env, head)
+    get = _run(env, "api", "repos/o/r/check-runs/77", extra=lane)
+    assert (get.returncode, get.stdout) == (0, "the detail"), get.stderr
+    assert _calls(env) == [["api", "repos/o/r/check-runs/77"]]
+
+
+@pytest.mark.unit
 def test_gateway_never_serves_a_placeholder_endpoint(env: dict[str, str]) -> None:
     """repos/{owner}/{repo}/... resolves from GH_REPO or the working directory, which the
     cache key cannot see, so it is not a gateway shape: a lane is refused, not served

@@ -793,7 +793,9 @@ _gw_commit_endpoint() {
 _gw_shape() {
   local ep
   if [ "$_cls" = "api" ]; then
-    [ "$_method" = "GET" ] || [ "$_method" = "HEAD" ] || return 1
+    # GET only: a HEAD answer has no body, so it must never share a cache entry with a GET
+    # (and no gateway consumer sends one).
+    [ "$_method" = "GET" ] || return 1
     ep="${_endpoint#https://api.github.com/}"
     ep="${ep#/}"
     case "$ep" in *\{*|*\}*) return 1 ;; esac
@@ -1281,7 +1283,7 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
     _call_log 1 refused
     exit 1
   fi
-  _gw_scope="${GH_HOST:-github.com}"
+  _gw_scope="${GH_HOST:-github.com}|${_method:-GET}"
   [ "$_cls" = "run view" ] && _gw_scope="$_gw_scope|$(_origin_repo)"
   # `gh run view <run> --log-failed` with no --attempt or --job reads the latest attempt,
   # which a rerun replaces, so that answer is held for at most five minutes. A job id and
