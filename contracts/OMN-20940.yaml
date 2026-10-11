@@ -1,0 +1,40 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-20940"
+title: "omniclaude produces the required hygiene context public-repo-hygiene / deployment-config and runs the hook locally"
+summary: "Operator RULING 2026-10-10T21:57:38Z, amended 2026-10-10T22:07:49Z ('This should be in ci.'): no deployment or lab configuration lives in a shipped repository, and the check that refuses it is a required CI context on every shipped repository. omniclaude (OMN-20923) ships the check as the job deployment-config of its reusable hygiene workflow and as the exported deployment-config pre-commit hook. This change makes omniclaude produce that context on every pull request, including forks, with no secret, and run the same check at the same commit in pre-commit. The context is added to the repository's required status checks by a separate branch-protection or ruleset write, read back per repository."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-deployment-config-required-context"
+    statement: "omniclaude produces public-repo-hygiene / deployment-config on a pull request and runs the deployment-config hook in pre-commit at the same omniclaude commit."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the deployment-config job is present in the reusable hygiene workflow that this repository's own caller runs, and the exported deployment-config hook is declared by the manifest -- falsifier: grep -c 'deployment-config:' .github/workflows/public-repo-hygiene-reusable.yml prints 1 and grep -c 'id: deployment-config' .pre-commit-hooks.yaml prints 1; both print 0 at the merge base only if #2669 were reverted"
+      - id: "AC2"
+        statement: "AC2: the pre-commit configuration runs the deployment-config hook at the same omniclaude commit as the caller workflow, so the local and CI verdicts cannot diverge -- falsifier: grep -c 'rev: 0c9f9146d8dd0446fc5c10952aa57247b3a880ae' .pre-commit-config.yaml is at least 1 and grep -c 'id: deployment-config' .pre-commit-config.yaml prints 1; both print 0 at the merge base"
+evidence_requirements:
+  - kind: "tests"
+    description: "The caller and the hook both carry the deployment-config wiring at the head."
+    command: "test \"$(grep -c '^  deployment-config:' .github/workflows/public-repo-hygiene-reusable.yml)\" = 1 && test \"$(grep -c 'id: deployment-config' .pre-commit-hooks.yaml)\" = 1 && test \"$(grep -c 'id: deployment-config' .pre-commit-config.yaml)\" = 1"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn20940-ac1-caller-pin"
+    description: "The reusable workflow carries the deployment-config job, the manifest exports the hook, and this repository's own pre-commit config runs it."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "test \"$(grep -c '^  deployment-config:' .github/workflows/public-repo-hygiene-reusable.yml)\" = 1 && test \"$(grep -c 'id: deployment-config' .pre-commit-hooks.yaml)\" = 1 && test \"$(grep -c 'id: deployment-config' .pre-commit-config.yaml)\" = 1"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn20940-ac2-precommit-hook"
+    description: "The pre-commit configuration runs the deployment-config hook at the caller's commit."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "test \"$(grep -c 'id: deployment-config' .pre-commit-config.yaml)\" = 1"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
