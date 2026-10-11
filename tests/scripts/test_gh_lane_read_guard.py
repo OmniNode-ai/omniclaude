@@ -472,3 +472,145 @@ def test_gateway_budget_refuses_when_spent_and_ignores_the_environment(
     hit = _run(env, "api", "repos/o/r/actions/jobs/1/logs", extra=lane)
     assert hit.returncode == 0, hit.stderr
     assert len(_calls(env)) == 2
+
+
+# --- the commit object through the gateway (OMN-20960) -----------------------------
+# onex_change_control's receipt-hardening hook resolves every receipt commit_sha with
+# `gh api --include repos/<owner>/<repo>/commits/<sha>` and parses the status line,
+# headers and JSON body. A commit object addressed by a full 40-hex sha is immutable and
+# carries no PR state, so exactly that address goes through the gateway; every other
+# commits read stays refused.
+
+SHA = "0123456789abcdef0123456789abcdef01234567"
+COMMIT = f"repos/OmniNode-ai/onex_change_control/commits/{SHA}"
+HTTP_COMMIT = (
+    "HTTP/2.0 200 OK\n"
+    "Content-Type: application/json; charset=utf-8\n"
+    "X-Ratelimit-Remaining: 4999\n"
+    "\n"
+    f'{{"sha":"{SHA}","commit":{{"message":"m"}}}}'
+)
+
+COMMIT_OBJECT = [
+    ["api", "--include", COMMIT],
+    ["api", "-i", COMMIT],
+    ["api", COMMIT],
+    ["api", "-X", "GET", "--include", f"/{COMMIT}"],
+    ["api", "--include", f"https://api.github.com/{COMMIT}"],
+]
+
+
+def _usage_rows(env: dict[str, str]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for day in (Path(env["XDG_CACHE_HOME"]) / "omni" / "gh-usage").glob("*.jsonl"):
+        rows += [json.loads(line) for line in day.read_text().splitlines() if line]
+    return rows
+
+
+def _budget_spent(env: dict[str, str]) -> int:
+    budget = Path(env["XDG_CACHE_HOME"]) / "omni" / "gh-shim" / "gateway" / "budget"
+    return sum(len(f.read_text().splitlines()) for f in budget.glob("*"))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("argv", COMMIT_OBJECT, ids=lambda a: " ".join(a)[:70])
+def test_commit_object_served_to_a_lane_once_then_from_cache(
+    env: dict[str, str], argv: list[str]
+) -> None:
+    lane = {"CLAUDECODE": "1", "FAKE_GH_STDOUT": HTTP_COMMIT}
+    first = _run(env, *argv, extra=lane)
+    second = _run(env, *argv, extra=lane)
+    # The --include answer reaches the caller byte for byte, status line and headers too.
+    assert (first.returncode, first.stdout, first.stderr) == (0, HTTP_COMMIT, "")
+    assert (second.returncode, second.stdout, second.stderr) == (0, HTTP_COMMIT, "")
+    assert _calls(env) == [argv], "the second read is a cache hit"
+    assert _budget_spent(env) == 1, "only the miss spends the hourly budget"
+    assert [r[7] for r in _call_log_rows(env)] == ["allowed", "allowed"]
+    assert [r["cache"] for r in _usage_rows(env)] == ["miss", "hit"]
+
+
+@pytest.mark.unit
+def test_commit_object_not_cached_when_github_answers_an_error(
+    env: dict[str, str],
+) -> None:
+    argv = ["api", "--include", COMMIT]
+    missing = (
+        'HTTP/2.0 422 Unprocessable Entity\n\n{"message":"No commit found for SHA"}'
+    )
+    first = _run(
+        env,
+        *argv,
+        extra={"ONEX_LANE": "l", "FAKE_GH_STDOUT": missing, "FAKE_GH_RC": "1"},
+    )
+    assert (first.returncode, first.stdout) == (1, missing), first.stderr
+    _run(env, *argv, extra={"ONEX_LANE": "l", "FAKE_GH_STDOUT": HTTP_COMMIT})
+    assert _calls(env) == [argv, argv]
+
+
+@pytest.mark.unit
+def test_commit_object_spends_the_shared_gateway_budget(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    conf = tmp_path / "config" / "omni" / "gh-gateway.env"
+    conf.parent.mkdir(parents=True)
+    conf.write_text("ONEX_GH_GATEWAY_BUDGET=1\n")
+    lane = {"ONEX_LANE": "lane", "FAKE_GH_STDOUT": HTTP_COMMIT}
+    assert _run(env, "api", "repos/o/r/actions/jobs/1/logs", extra=lane).returncode == 0
+    spent = _run(env, "api", "--include", COMMIT, extra=lane)
+    assert spent.returncode == 1
+    assert spent.stderr.startswith("REFUSED (OMN-20911): the cached read gateway")
+    assert len(_calls(env)) == 1
+
+
+# Every other commits read, and every look-alike, is refused from a lane exactly as before:
+# the lane read guard (OMN-20911) or, for PR and check state, the PR-state guard (OMN-19856).
+COMMIT_NEGATIVES = [
+    ["api", "--include", "repos/OmniNode-ai/onex_change_control/commits/0123456"],
+    ["api", "--include", f"repos/OmniNode-ai/onex_change_control/commits/{SHA[:39]}"],
+    ["api", "--include", f"repos/OmniNode-ai/onex_change_control/commits/{SHA}0"],
+    [
+        "api",
+        "--include",
+        f"repos/OmniNode-ai/onex_change_control/commits/{SHA.upper()}",
+    ],
+    ["api", "--include", "repos/OmniNode-ai/onex_change_control/commits/dev"],
+    [
+        "api",
+        "--include",
+        "repos/OmniNode-ai/onex_change_control/commits/refs/heads/dev",
+    ],
+    ["api", "--include", "repos/OmniNode-ai/onex_change_control/commits/HEAD"],
+    ["api", "repos/OmniNode-ai/onex_change_control/commits"],
+    ["api", f"repos/OmniNode-ai/onex_change_control/commits?sha={SHA}"],
+    ["api", f"{COMMIT}?per_page=1"],
+    ["api", "-X", "GET", COMMIT, "-f", "per_page=1"],
+    ["api", f"{COMMIT}/status"],
+    ["api", f"{COMMIT}/statuses"],
+    ["api", f"{COMMIT}/check-runs"],
+    ["api", f"{COMMIT}/check-suites"],
+    ["api", f"{COMMIT}/pulls"],
+    ["api", f"{COMMIT}/comments"],
+    ["api", f"{COMMIT}/"],
+    ["api", "repos/OmniNode-ai/onex_change_control/pulls/9"],
+    ["api", "repos/OmniNode-ai/onex_change_control/pulls/9/commits"],
+    ["api", "repos/OmniNode-ai/onex_change_control/git/commits/" + SHA],
+    ["api", "--include", f"repos/o/r/commits/{SHA}"],
+    ["api", "--include", f"repos/OmniNode-ai-fork/r/commits/{SHA}"],
+    ["api", "--include", f"repos/OmniNode-ai/../o/commits/{SHA}"],
+    ["api", "--include", f"https://example.com/{COMMIT}"],
+    ["pr", "view", "9", "--repo", "OmniNode-ai/onex_change_control", "--json", "state"],
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("argv", COMMIT_NEGATIVES, ids=lambda a: " ".join(a)[:90])
+def test_commit_object_negative_still_refused_from_a_lane(
+    env: dict[str, str], argv: list[str]
+) -> None:
+    result = _run(env, *argv, extra={"CLAUDECODE": "1", "FAKE_GH_STDOUT": HTTP_COMMIT})
+    assert result.returncode == 1, result.stderr
+    assert _calls(env) == [], "a refused read must never reach the real gh"
+    assert result.stderr.startswith(
+        ("REFUSED (OMN-20911): gh ", "REFUSED (OMN-19856): ")
+    ), result.stderr
+    assert _budget_spent(env) == 0

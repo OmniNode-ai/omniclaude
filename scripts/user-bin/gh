@@ -51,9 +51,10 @@
 #
 # Lane read guard (OMN-20911): from a lane context (an agent environment marker, or a
 # Claude Code / Codex / ChatGPT ancestor process) every other GitHub read is refused too,
-# with the local reader named; writes stay allowed. Failing-job logs and one check run's
-# detail go through a cached read gateway with a per-hour budget instead (RULING
-# 2026-10-10T18:17:36Z). Full contract at the guard, below the PR-state guard.
+# with the local reader named; writes stay allowed. Failing-job logs, one check run's
+# detail and one commit object by full sha (OMN-20960) go through a cached read gateway
+# with a per-hour budget instead (RULING 2026-10-10T18:17:36Z). Full contract at the
+# guard, below the PR-state guard.
 #
 # Shared call log (OMN-19852): every allowed or refused call appends one
 # tab-separated line to ONEX_GH_CALLS_LOG, else ONEX_STATE_DIR/gh-calls.log
@@ -764,7 +765,34 @@ _gw_check_run_endpoint() {
   return 0
 }
 
-# Is the argv in "$@" a gateway shape (a failing-job log, one job's or check run's detail)?
+# One commit object (OMN-20960): repos/OmniNode-ai/<r>/commits/<40 lowercase hex>, nothing
+# after the sha. onex_change_control's receipt-hardening hook resolves every receipt
+# commit_sha with `gh api --include repos/<o>/<r>/commits/<sha>` and parses the status line,
+# headers and body. A commit addressed by its full sha is immutable and carries no PR state.
+# A short sha, a ref or branch, a listing, a query string or field, and /status, /check-runs,
+# /pulls and every other sub-path are not this shape. $1 is the endpoint; the rest is argv,
+# read again because _classify drops the query string from _endpoint.
+_gw_commit_endpoint() {
+  local ep="$1" rest name sha a raw=0
+  shift
+  case "$ep" in *..*|*\?*|*#*) return 1 ;; repos/OmniNode-ai/*/commits/*) ;; *) return 1 ;; esac
+  rest="${ep#repos/OmniNode-ai/}"
+  name="${rest%%/*}"
+  sha="${rest#"$name"/commits/}"
+  case "$name" in ""|*[!A-Za-z0-9._-]*) return 1 ;; esac
+  [ "${#sha}" -eq 40 ] || return 1
+  case "$sha" in *[!0-9a-f]*) return 1 ;; esac
+  for a in "$@"; do
+    case "$a" in
+      -f|-F|--field|--raw-field|--input|--field=*|--raw-field=*|--input=*) return 1 ;;
+      "$ep"|"/$ep"|"https://api.github.com/$ep") raw=1 ;;
+    esac
+  done
+  [ "$raw" -eq 1 ]
+}
+
+# Is the argv in "$@" a gateway shape (a failing-job log, one job's or check run's detail,
+# one commit object)?
 _gw_shape() {
   local ep
   if [ "$_cls" = "api" ]; then
@@ -773,6 +801,7 @@ _gw_shape() {
     ep="${ep#/}"
     _prs_job_log_endpoint "$ep" && return 0
     _gw_check_run_endpoint "$ep" && return 0
+    _gw_commit_endpoint "$ep" "$@" && return 0
     return 1
   fi
   [ "$_cls" = "run view" ] && _prs_job_log "$@" && return 0
@@ -845,8 +874,8 @@ unset _prs_guarded _prs_ep _prs_class _prs_o _prs_r _prs_n _prs_why _rs_owner _r
 #     review|ready|merge|close, workflow run, run rerun|cancel, ...);
 #   - the two cached harness PR-link shapes (_cacheable) and the declared exact-head check;
 #   - `gh api rate_limit`, which GitHub does not count against any bucket;
-#   - the gateway shapes (failing-job logs, one check run's detail), served by the cached,
-#     per-hour-budgeted read gateway below;
+#   - the gateway shapes (failing-job logs, one check run's detail, one commit object by
+#     full sha), served by the cached, per-hour-budgeted read gateway below;
 #   - the allowed callers of the PR-state guard (the PR watcher, the landing controller's
 #     own scripts), and a DIRECT parent that is one of the sanctioned read scripts:
 #     pr-handoff/scripts/handoff.sh and handoff_row.sh (the handoff's PR-text read),
@@ -1210,10 +1239,10 @@ if _cacheable "$@"; then
 fi
 
 # --- cached read gateway (OMN-20911) ---------------------------------------------
-# The gateway shapes (_gw_shape: a failing-job log, one check run's detail) reach GitHub
-# only through here, for every caller but the PR-state guard's allowed callers. A hit is
-# served from ${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway (a finished job's log
-# and a completed check run do not change); a miss spends one unit of this host's hourly
+# The gateway shapes (_gw_shape: a failing-job log, one check run's detail, one commit
+# object by full sha) reach GitHub only through here, for every caller but the PR-state guard's allowed callers. A hit is
+# served from ${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway (a finished job's log,
+# a completed check run and a commit addressed by its full sha do not change); a miss spends one unit of this host's hourly
 # budget, and a spent budget refuses until the next UTC hour. TTL and budget come only
 # from ${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env (ONEX_GH_GATEWAY_TTL, default
 # 21600 s; ONEX_GH_GATEWAY_BUDGET, default 60 misses an hour), never from the environment,
@@ -1255,7 +1284,7 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
     esac
   fi
   _gw_hour_file="$_gw_dir/budget/$(date -u +%Y%m%d%H)"
-  _gw_spent="$(wc -l < "$_gw_hour_file" 2>/dev/null | tr -d '[:space:]')"
+  _gw_spent="$({ wc -l < "$_gw_hour_file"; } 2>/dev/null | tr -d '[:space:]')"
   case "$_gw_spent" in ""|*[!0-9]*) _gw_spent=0 ;; esac
   if [ "$_gw_spent" -ge "$_gw_budget" ]; then
     printf '%s\n' \
