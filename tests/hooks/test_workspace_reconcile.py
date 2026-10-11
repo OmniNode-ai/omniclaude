@@ -19,7 +19,7 @@ session start instead of at the first failed dispatch.
 Everything here runs the real scripts as subprocesses against a hermetic
 ``$OMNI_HOME`` built from local git repos. Nothing reaches the network, no real
 clone is touched, and the reconciler is a recording stub (its own behaviour is
-covered by omnibase_internal's ``tests/test_host_reconcile*.py``)
+covered by its own project's test suite)
 so these tests prove the hooks' WIRING and their two hard safety properties:
 
     the tick performs no repair of its own, and it can never fail a tool call.
@@ -142,7 +142,7 @@ class _Workspace:
         # OMN-17311: the tick delegates to the ONE host reconciler. Its own
         # behaviour -- fetch, fast-forward, refuse a dirty clone, and prove by
         # readback that every surface reached its target -- is covered by
-        # omnibase_internal's tests/test_host_reconcile*.py. Here
+        # its own project's test suite. Here
         # it is a recording stub, because what these tests pin is the WIRING.
         # OMN-20670 / OMN-17427: the canonical reconciler is the
         # ``onex-host-reconcile`` console script of the omnibase_internal

@@ -5,7 +5,7 @@ summary: >
   omnibase_infra deleted scripts/reconcile-host.sh. The workspace reconcile tick
   still ran it when onex-host-reconcile was not installed, which left the tick as
   the last caller of the old entry point. The fallback is removed: the tick runs
-  only onex-host-reconcile from the omnibase_internal clone's .venv, and with it
+  only onex-host-reconcile from its own project venv, and with it
   absent it reports reconciler=ABSENT and drift, as before. This PR covers AC2
   for reconcile-host.sh; the movement verifier script is later work.
 is_seam_ticket: false
