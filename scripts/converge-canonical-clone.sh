@@ -22,6 +22,20 @@
 #                               [--ticket OMN-XXXX] [--lane <name>]
 #   converge-canonical-clone.sh <repo> --branch <name> [--execute]
 #                               [--ticket OMN-XXXX] [--lane <name>]
+#   converge-canonical-clone.sh <repo> --to-sha <commit> [--execute]
+#                               [--ticket OMN-XXXX] [--lane <name>]
+#
+# --to-sha <commit> (OMN-20961) is the ROLLBACK: the clone is moved BACK to an
+# earlier commit of its own upstream, the same preserve-then-reset as the
+# default mode with that commit as the target. It exists for the canonical-clone
+# sync engine, which parses every hook script after a fast-forward and, when one
+# does not parse under macOS /bin/bash 3.2, returns the clone to the commit it
+# served before (on 2026-10-11 one such fast-forward refused every Bash call on
+# the Mac for about two hours). The commit must be an ancestor of the upstream,
+# so a rollback can only step back along the line the clone already follows;
+# HEAD must be on its tracking branch (not detached, not the wrong branch).
+# Verified as HEAD == <commit>, attached, an ancestor of @{u}, clean tracked
+# tree; the ledger row says ROLLED_BACK.
 #
 # --branch <name> (OMN-16500) converges a NON-checked-out local branch to its
 # configured upstream without touching the working tree or the index: it
@@ -124,6 +138,7 @@ ticket=""
 lane="converge-canonical-clone"
 branch_opt=""
 to_branch_opt=""
+to_sha_opt=""
 branch_source=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -131,6 +146,7 @@ while [[ $# -gt 0 ]]; do
     --clean-untracked) clean_untracked=1 ;;
     --branch) [[ $# -ge 2 ]] || refuse "--branch needs a value"; branch_opt="$2"; shift ;;
     --to-branch) [[ $# -ge 2 ]] || refuse "--to-branch needs a value"; to_branch_opt="$2"; shift ;;
+    --to-sha) [[ $# -ge 2 ]] || refuse "--to-sha needs a value"; to_sha_opt="$2"; shift ;;
     --ticket) [[ $# -ge 2 ]] || refuse "--ticket needs a value"; ticket="$2"; shift ;;
     --lane) [[ $# -ge 2 ]] || refuse "--lane needs a value"; lane="$2"; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -142,6 +158,9 @@ done
 [[ -n "$target" ]] || { usage >&2; exit 2; }
 if [[ -n "$branch_opt" && "$clean_untracked" == "1" ]]; then
   refuse "--clean-untracked cannot be combined with --branch: branch mode never touches the working tree"
+fi
+if [[ -n "$to_sha_opt" && ( -n "$branch_opt" || -n "$to_branch_opt" ) ]]; then
+  refuse "--to-sha cannot be combined with --branch or --to-branch: a rollback moves the checked-out branch back along its own upstream"
 fi
 if [[ -n "$branch_opt" && -n "$to_branch_opt" ]]; then
   refuse "--to-branch cannot be combined with --branch: --branch converges a non-checked-out ref and never moves HEAD, --to-branch names where a DETACHED HEAD re-attaches"
@@ -420,6 +439,21 @@ g fetch --quiet "$remote" || fail "git fetch $remote failed in $clone"
 
 head_before="$(g rev-parse HEAD)"
 target_sha="$(g rev-parse --verify "${upstream}^{commit}")" || fail "cannot resolve $upstream"
+rollback=0
+if [[ -n "$to_sha_opt" ]]; then
+  if (( detached )); then
+    refuse "--to-sha needs HEAD on its own tracking branch; $clone is detached. Converge it with the default mode first"
+  fi
+  if (( off_branch )); then
+    refuse "--to-sha needs HEAD on its own tracking branch; $clone is on '$current_branch', not '$branch'. Converge it with the default mode first"
+  fi
+  rollback_sha="$(g rev-parse --verify --quiet "${to_sha_opt}^{commit}")" \
+    || refuse "--to-sha $to_sha_opt is not a commit in $clone"
+  g merge-base --is-ancestor "$rollback_sha" "$target_sha" \
+    || refuse "--to-sha $rollback_sha is not an ancestor of $upstream ($target_sha); a rollback only steps back along the clone's own upstream"
+  target_sha="$rollback_sha"
+  rollback=1
+fi
 status="$(g status --porcelain --untracked-files=all)"
 untracked_list="$(g ls-files --others --exclude-standard)"
 dirty_total="$(count_lines "$status")"
@@ -431,7 +465,11 @@ untracked="$(count_lines "$untracked_list")"
 # equal the upstream tip: the clone still has no branch, so the next `git pull`
 # has nothing to fast-forward and every downstream consumer stays frozen.
 if (( ! detached )) && (( ! off_branch )) && [[ -z "$status" && "$head_before" == "$target_sha" ]]; then
-  echo "already converged: $repo ($clone) HEAD == $upstream ($target_sha), clean tree"
+  if (( rollback )); then
+    echo "already rolled back: $repo ($clone) HEAD == --to-sha ($target_sha), clean tree"
+  else
+    echo "already converged: $repo ($clone) HEAD == $upstream ($target_sha), clean tree"
+  fi
   exit 0
 fi
 
@@ -497,6 +535,7 @@ done <<< "$untracked_list"
   echo "upstream=$upstream"
   echo "head_before=$head_before"
   echo "target=$target_sha"
+  echo "rollback=$rollback"
   echo "utc=$ts"
   echo "dirty_paths=$dirty_total staged=$staged unstaged=$unstaged untracked=$untracked"
   echo "clean_untracked=$clean_untracked"
@@ -545,7 +584,11 @@ head_after="$(g rev-parse HEAD)"
 # ticket exists to repair, and a sha-only check would let it survive.
 [[ "$(g symbolic-ref -q --short HEAD)" == "$branch" ]] \
   || fail "HEAD is not attached to $branch after converge"
-[[ "$(g rev-parse '@{u}')" == "$head_after" ]] || fail "HEAD != @{u} after reset"
+if (( rollback )); then
+  g merge-base --is-ancestor "$head_after" '@{u}' || fail "HEAD is not an ancestor of @{u} after the rollback"
+else
+  [[ "$(g rev-parse '@{u}')" == "$head_after" ]] || fail "HEAD != @{u} after reset"
+fi
 [[ -z "$(g status --porcelain --untracked-files=no)" ]] || fail "tracked tree still dirty after reset"
 
 # --- record ------------------------------------------------------------------
@@ -555,11 +598,17 @@ if (( detached )); then
 elif (( off_branch )); then
   detached_note=" returned clone from WRONG BRANCH '$current_branch' to '$branch' ($branch_source), $detached_ahead commit(s) reachable only from the old HEAD preserved as patches, branch '$current_branch' left intact;"
 fi
-row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | STATUS | lane=$lane | ticket=${ticket:-$repo} | event=CONVERGED | converge-canonical-clone.sh $repo ($clone): branch $branch upstream $upstream;$detached_note HEAD ${head_before:0:7} -> ${head_after:0:7}; $dirty_total dirty paths ($staged staged, $unstaged worktree-modified, $untracked untracked) preserved at $evidence (full-vs-HEAD.patch sha256 ${patch_sha:0:12}); git reset --hard $target_sha$clean_note; verified HEAD==@{u} and clean tracked tree. No secrets printed."
+event="CONVERGED"
+verified_note="HEAD==@{u}"
+if (( rollback )); then
+  event="ROLLED_BACK"
+  verified_note="HEAD==--to-sha, an ancestor of @{u}"
+fi
+row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | STATUS | lane=$lane | ticket=${ticket:-$repo} | event=$event | converge-canonical-clone.sh $repo ($clone): branch $branch upstream $upstream;$detached_note HEAD ${head_before:0:7} -> ${head_after:0:7}; $dirty_total dirty paths ($staged staged, $unstaged worktree-modified, $untracked untracked) preserved at $evidence (full-vs-HEAD.patch sha256 ${patch_sha:0:12}); git reset --hard $target_sha$clean_note; verified $verified_note and clean tracked tree. No secrets printed."
 append_ledger_row "$row"
 
 cat <<EOF
-CONVERGED: $repo ($clone)
+$event: $repo ($clone)
   branch=$branch upstream=$upstream$( (( detached )) && printf '\n  re-attached DETACHED HEAD to %s (%s); %s detached-only commit(s) preserved' "$branch" "$branch_source" "$detached_ahead" || true)$( (( off_branch )) && printf "\n  returned clone from WRONG BRANCH '%s' to '%s' (%s); %s commit(s) reachable only from the old HEAD preserved; branch '%s' left intact" "$current_branch" "$branch" "$branch_source" "$detached_ahead" "$current_branch" || true)
   HEAD $head_before -> $head_after
   preserved: $evidence (full-vs-HEAD.patch sha256 $patch_sha)

@@ -1360,3 +1360,145 @@ def test_lan_source_sync_does_not_ask_the_source_checkout_for_the_default_branch
     _git("remote", "set-head", "origin", "main", cwd=lab)
     assert ccs._refresh_remote_head(lab, "origin").code == 0
     assert ccs._remote_default_branch(lab, "origin") == "main"
+
+
+# --------------------------------------------------------------------------- #
+# hook parse guard (OMN-20961): a clone never serves a hook script that does
+# not parse, and a fast-forward whose readback fails is rolled back
+# --------------------------------------------------------------------------- #
+_GOOD_HOOK = "#!/bin/bash\nif true; then\n  echo ok\nfi\n"
+# Unterminated `if`: refused by every bash, so the test holds on Linux CI too.
+_BROKEN_HOOK = "#!/bin/bash\nif true; then\n  echo ok\n"
+_HOOK_REL = "plugins/onex/hooks/scripts/guard.sh"
+
+
+def _commit_hook(reg: Registry, name: str, text: str, rel: str = _HOOK_REL) -> str:
+    seed = reg.seeds / "Acme" / name
+    (seed / rel).parent.mkdir(parents=True, exist_ok=True)
+    (seed / rel).write_text(text)
+    _git("add", rel, cwd=seed)
+    _git("commit", "--quiet", "-m", f"hook {rel}", cwd=seed)
+    _git("push", "--quiet", "origin", "HEAD:dev", cwd=seed)
+    return _git("rev-parse", "HEAD", cwd=seed)
+
+
+@pytest.fixture
+def hook_env(reg: Registry, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Route the alarm to a file and give the converge script its registry."""
+    if ccs._hook_parse_bash() is None:
+        pytest.skip("no /bin/bash on this host")
+    alarms = reg.tmp / "alarms.log"
+    alarm = reg.tmp / "alarm.sh"
+    alarm.write_text(f'#!/bin/sh\nprintf "%s|%s\\n" "$1" "$2" >> "{alarms}"\n')
+    alarm.chmod(0o755)
+    monkeypatch.setattr(
+        ccs, "_alarm_cmd", lambda category, text: [str(alarm), category, text]
+    )
+    monkeypatch.setenv("OMNI_HOME", str(reg.home))
+    monkeypatch.setenv("ONEX_STATE_DIR", str(reg.state))
+    monkeypatch.delenv("ONEX_LEDGER_PATH", raising=False)
+    return alarms
+
+
+def _alarm_lines(alarms: Path) -> list[str]:
+    return alarms.read_text().splitlines() if alarms.exists() else []
+
+
+def test_hook_parse_refuses_a_target_whose_hook_script_does_not_parse(
+    reg: Registry, hook_env: Path
+) -> None:
+    clone = reg.make("svc")
+    _commit_hook(reg, "svc", _GOOD_HOOK)
+    assert ccs.sync_clone(clone).result == ccs.ADVANCED
+    before = _head(clone)
+    target = _commit_hook(reg, "svc", _BROKEN_HOOK)
+
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.REFUSED, res
+    assert "do not parse" in (res.reason or "") and _HOOK_REL in (res.reason or "")
+    assert _head(clone) == before
+    assert (clone / _HOOK_REL).read_text() == _GOOD_HOOK
+    assert res.target == target
+    lines = _alarm_lines(hook_env)
+    assert len(lines) == 1 and lines[0].startswith("canonical_clone_hook_parse|")
+
+    # The next timer run refuses the same target again and does not re-alarm.
+    again = ccs.sync_clone(clone)
+    assert again.result == ccs.REFUSED and _head(clone) == before
+    assert len(_alarm_lines(hook_env)) == 1
+
+
+def test_hook_parse_lets_a_parseable_hook_change_through(
+    reg: Registry, hook_env: Path
+) -> None:
+    clone = reg.make("svc")
+    target = _commit_hook(reg, "svc", _GOOD_HOOK)
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.ADVANCED, res
+    assert _head(clone) == target
+    assert _alarm_lines(hook_env) == []
+
+
+def test_hook_parse_checks_the_lib_directory_too(reg: Registry, hook_env: Path) -> None:
+    clone = reg.make("svc")
+    before = _head(clone)
+    _commit_hook(reg, "svc", _BROKEN_HOOK, rel="plugins/onex/hooks/lib/helper.sh")
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.REFUSED and "helper.sh" in (res.reason or "")
+    assert _head(clone) == before
+
+
+def test_hook_parse_failures_at_finds_the_broken_blob(
+    reg: Registry, hook_env: Path
+) -> None:
+    # Positive control for the blob reader: a zero is only evidence if a
+    # broken script is reported.
+    clone = reg.make("svc")
+    good = _commit_hook(reg, "svc", _GOOD_HOOK)
+    bad = _commit_hook(reg, "svc", _BROKEN_HOOK)
+    _git("fetch", "--quiet", "origin", cwd=clone)
+    assert ccs.hook_parse_failures_at(clone, good) == []
+    failures = ccs.hook_parse_failures_at(clone, bad)
+    assert failures and failures[0].startswith(_HOOK_REL)
+    assert ccs.hook_parse_failures_at(clone, _head(clone)) is None  # no hook dirs
+
+
+def test_hook_parse_readback_rolls_back_through_the_converge_script(
+    reg: Registry, hook_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clone = reg.make("svc")
+    _commit_hook(reg, "svc", _GOOD_HOOK)
+    assert ccs.sync_clone(clone).result == ccs.ADVANCED
+    before = _head(clone)
+    target = _commit_hook(reg, "svc", _BROKEN_HOOK)
+    # Simulate a target that passed the pre-check yet does not parse in the
+    # tree (the case the readback exists for).
+    monkeypatch.setattr(ccs, "hook_parse_failures_at", lambda *_: [])
+
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.REFUSED, res
+    assert "rolled back" in (res.reason or "")
+    assert (res.before, res.target, res.after) == (before, target, before)
+    assert _head(clone) == before
+    assert _git("symbolic-ref", "--short", "HEAD", cwd=clone) == "dev"
+    assert (clone / _HOOK_REL).read_text() == _GOOD_HOOK
+    rows = (
+        reg.home / ".onex_state" / "canonical-clone-converge" / "pending-ledger-rows.md"
+    ).read_text()
+    assert "event=ROLLED_BACK" in rows and "ticket=OMN-20961" in rows
+    assert len(_alarm_lines(hook_env)) == 1
+
+
+def test_hook_parse_readback_reports_a_rollback_that_did_not_land(
+    reg: Registry, hook_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clone = reg.make("svc")
+    target = _commit_hook(reg, "svc", _BROKEN_HOOK)
+    monkeypatch.setattr(ccs, "hook_parse_failures_at", lambda *_: [])
+    monkeypatch.setattr(ccs, "CONVERGE_SCRIPT", Path("scripts/no-such-converge.sh"))
+
+    res = ccs.sync_clone(clone)
+    assert res.result == ccs.FAILED, res
+    assert "did not land" in (res.reason or "")
+    assert _head(clone) == target
+    assert len(_alarm_lines(hook_env)) == 1
