@@ -796,11 +796,47 @@ _gw_commit_endpoint() {
   [ "$raw" -eq 1 ]
 }
 
+# The published-board reader reads two shapes no local source holds: the publish-beta-board
+# workflow's run list and one run's jobs, in the one repository named by ONEX_GH_BOARD_REPO
+# (<owner>/<repo>) in ${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env. The repository
+# comes only from that file, never from the environment, so a lane cannot widen it; unset,
+# the board shapes are refused like any other read. They are gateway shapes of the "board"
+# kind: a short TTL and their own hourly budget, so the board read neither starves nor is
+# starved by failing-job log reads. Any other workflow or repo stays refused (OMN-20911
+# follow-up).
+_gw_board_repo() {
+  local conf="${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env" line v repo=""
+  [ -f "$conf" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      ONEX_GH_BOARD_REPO=*) v="$(_conf_strip_comment "${line#*=}")"; repo="$v" ;;
+    esac
+  done < "$conf"
+  case "$repo" in
+    ""|*[!A-Za-z0-9._/-]*|*/*/*|/*|*/|*..*) return 1 ;;
+    */*) printf '%s' "$repo" ;;
+    *) return 1 ;;
+  esac
+}
+_gw_board_endpoint() {
+  local p="$1" id repo
+  case "$p" in *..*|*\?*|*#*) return 1 ;; esac
+  repo="$(_gw_board_repo)" || return 1
+  case "$p" in
+    "repos/$repo/actions/workflows/publish-beta-board.yml/runs") return 0 ;;
+    "repos/$repo/actions/runs/"*/jobs)
+      id="${p#"repos/$repo/actions/runs/"}"; id="${id%/jobs}"
+      case "$id" in ""|*[!0-9]*) return 1 ;; esac
+      return 0 ;;
+  esac
+  return 1
+}
 # Is the argv in "$@" a gateway shape (a failing-job log, one job's or check run's detail,
-# or one commit object by its full sha)? Every gateway shape names its owner and
+# one commit object by its full sha, or one of the two published-board reads)? Every gateway shape names its owner and
 # repository literally: a {owner}/{repo} placeholder resolves from GH_REPO or the working
 # directory, which the cache key cannot see, so one cached answer could be served for
 # another repository. A placeholder endpoint is therefore not a gateway shape.
+_gw_kind=""
 _gw_shape() {
   local ep
   if [ "$_cls" = "api" ]; then
@@ -813,6 +849,7 @@ _gw_shape() {
     _prs_job_log_endpoint "$ep" && return 0
     _gw_check_run_endpoint "$ep" && return 0
     _gw_commit_endpoint "$ep" "$@" && return 0
+    _gw_board_endpoint "$ep" && { _gw_kind=board; return 0; }
     return 1
   fi
   [ "$_cls" = "run view" ] && _prs_job_log "$@" && return 0
@@ -830,7 +867,8 @@ if [ "$_cls" = "api" ]; then
       */check-runs/*) _gw_check_run_endpoint "$_prs_ep" || _prs_guarded=1 ;;
       */check-runs*|*/check-suites*|*/commits/*/status|*/statuses*) _prs_guarded=1 ;;
       */actions/runs*|*/actions/jobs*)
-        _prs_job_log_endpoint "$_prs_ep" || _gw_check_run_endpoint "$_prs_ep" || _prs_guarded=1 ;;
+        _prs_job_log_endpoint "$_prs_ep" || _gw_check_run_endpoint "$_prs_ep" \
+          || _gw_board_endpoint "$_prs_ep" || _prs_guarded=1 ;;
     esac
   fi
 else
@@ -1211,6 +1249,12 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
       esac
     done < "$_gw_conf"
   fi
+  _gw_hour_tag=""
+  if [ "$_gw_kind" = "board" ]; then
+    _gw_ttl=300
+    _gw_budget=60
+    _gw_hour_tag="-board"
+  fi
   _gw_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway"
   if ! mkdir -p "$_gw_dir/budget" 2>/dev/null; then
     printf '%s\n' \
@@ -1250,7 +1294,7 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
   # Claim the unit first, then count: each claim is one short O_APPEND line, so two
   # concurrent misses can never both read a count below the budget and both proceed (no
   # check-then-act window). A refused claim stays counted, which only over-counts the hour.
-  _gw_hour_file="$_gw_dir/budget/$(date -u +%Y%m%d%H)"
+  _gw_hour_file="$_gw_dir/budget/$(date -u +%Y%m%d%H)$_gw_hour_tag"
   if ! printf '%s\n' "$$" >> "$_gw_hour_file" 2>/dev/null; then
     printf '%s\n' \
       "REFUSED (OMN-20911): the cached read gateway cannot record this read in its budget file $_gw_hour_file; fix the file rather than read uncounted." >&2
