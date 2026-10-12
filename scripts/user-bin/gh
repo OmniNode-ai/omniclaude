@@ -51,9 +51,10 @@
 #
 # Lane read guard (OMN-20911): from a lane context (an agent environment marker, or a
 # Claude Code / Codex / ChatGPT ancestor process) every other GitHub read is refused too,
-# with the local reader named; writes stay allowed. Failing-job logs and one check run's
-# detail go through a cached read gateway with a per-hour budget instead (RULING
-# 2026-10-10T18:17:36Z). Full contract at the guard, below the PR-state guard.
+# with the local reader named; writes stay allowed. Failing-job logs, one check run's
+# detail and one commit object by full sha (OMN-20960) go through a cached read gateway
+# with a per-hour budget instead (RULING 2026-10-10T18:17:36Z). Full contract at the
+# guard, below the PR-state guard.
 #
 # Lane write guard (OMN-20914): from a lane, a gh write that `onex scm` serves (read from
 # the operations table of node_github_repo_write_effect's contract in the omnimarket the
@@ -769,25 +770,30 @@ _gw_check_run_endpoint() {
   return 0
 }
 
-# One commit object by its full 40-hex sha (OMN-20911): repos/<o>/<r>/commits/<sha>. The
-# onex_change_control check-receipt-hardening pre-commit hook proves every receipt
-# commit_sha against GitHub with exactly this GET, and a local object proves nothing (a
-# patch applied on the gate host mints a different sha that exists locally). A commit
-# object never changes, so the cached read gateway answers it once per sha. Only the full
-# sha shape passes: an abbreviation, a ref, a path below the sha (/status, /check-runs,
-# /comments) and a listing (commits with no sha) stay refused.
+# One commit object (OMN-20960): repos/OmniNode-ai/<r>/commits/<40 lowercase hex>, nothing
+# after the sha. onex_change_control's receipt-hardening hook resolves every receipt
+# commit_sha with `gh api --include repos/<o>/<r>/commits/<sha>` and parses the status line,
+# headers and body. A commit addressed by its full sha is immutable and carries no PR state.
+# A short sha, a ref or branch, a listing, a query string or field, and /status, /check-runs,
+# /pulls and every other sub-path are not this shape. $1 is the endpoint; the rest is argv,
+# read again because _classify drops the query string from _endpoint.
 _gw_commit_endpoint() {
-  local rest sha
-  case "$1" in *..*|*\?*|*#*) return 1 ;; repos/*) ;; *) return 1 ;; esac
-  rest="${1#repos/}"
-  [ -n "${rest%%/*}" ] || return 1
-  rest="${rest#*/}"
-  [ -n "${rest%%/*}" ] || return 1
-  rest="${rest#*/}"
-  case "$rest" in commits/*) sha="${rest#commits/}" ;; *) return 1 ;; esac
+  local ep="$1" rest name sha a raw=0
+  shift
+  case "$ep" in *..*|*\?*|*#*) return 1 ;; repos/OmniNode-ai/*/commits/*) ;; *) return 1 ;; esac
+  rest="${ep#repos/OmniNode-ai/}"
+  name="${rest%%/*}"
+  sha="${rest#"$name"/commits/}"
+  case "$name" in ""|*[!A-Za-z0-9._-]*) return 1 ;; esac
   [ "${#sha}" -eq 40 ] || return 1
-  case "$sha" in *[!0-9a-fA-F]*) return 1 ;; esac
-  return 0
+  case "$sha" in *[!0-9a-f]*) return 1 ;; esac
+  for a in "$@"; do
+    case "$a" in
+      -f|-F|--field|--raw-field|--input|--field=*|--raw-field=*|--input=*) return 1 ;;
+      "$ep"|"/$ep"|"https://api.github.com/$ep") raw=1 ;;
+    esac
+  done
+  [ "$raw" -eq 1 ]
 }
 
 # Is the argv in "$@" a gateway shape (a failing-job log, one job's or check run's detail,
@@ -806,7 +812,7 @@ _gw_shape() {
     case "$ep" in *\{*|*\}*) return 1 ;; esac
     _prs_job_log_endpoint "$ep" && return 0
     _gw_check_run_endpoint "$ep" && return 0
-    _gw_commit_endpoint "$ep" && return 0
+    _gw_commit_endpoint "$ep" "$@" && return 0
     return 1
   fi
   [ "$_cls" = "run view" ] && _prs_job_log "$@" && return 0
@@ -1251,7 +1257,7 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
     _call_log 1 refused
     exit 1
   fi
-  _gw_spent="$(wc -l < "$_gw_hour_file" 2>/dev/null | tr -d '[:space:]')"
+  _gw_spent="$({ wc -l < "$_gw_hour_file"; } 2>/dev/null | tr -d '[:space:]')"
   case "$_gw_spent" in ""|*[!0-9]*) _gw_spent="$((_gw_budget + 1))" ;; esac
   if [ "$_gw_spent" -gt "$_gw_budget" ]; then
     printf '%s\n' \
