@@ -182,12 +182,18 @@ id that a stable synthetic value cannot serve.
 
 ## Fail-closed, everywhere
 
-A missing repo config, an unreadable or unparseable vocabulary, a vocabulary
-whose live-visibility cache is stale beyond its declared max age, a
-malformed registry, and an unrecognised mode are all non-zero exits. A gate
-that cannot read its own rules has not passed; it has not run. This matters
-more than it sounds: the four false "zero failures" readings of the
-trusted-CI canary all came from a sweep that errored and returned no rows.
+A missing repo config, an unreadable or unparseable vocabulary, an undated
+live-visibility cache, a malformed registry, and an unrecognised mode are all
+non-zero exits. A gate that cannot read its own rules has not passed; it has
+not run. This matters more than it sounds: the four false "zero failures"
+readings of the trusted-CI canary all came from a sweep that errored and
+returned no rows.
+
+A visibility cache past its declared max age is the one logged fallback
+(OMN-18030): the gate scans with the stale list, which still refuses every
+name it holds, prints a ``::warning::`` naming the age, and records one
+FRICTION row per stale cache where the host keeps a ledger. It never refuses
+a commit unscanned for want of a refresh a lane cannot run.
 
 ## Modes
 
@@ -262,6 +268,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -1108,12 +1115,18 @@ def load_host_nicknames(path: Path) -> list[str]:
 
 
 def _assert_visibility_cache_fresh(vocab: Vocabulary, origin: str) -> None:
-    """A stale private-repo cache is a refusal, not a warning.
+    """A stale private-repo cache is a LOGGED FALLBACK, never an unscanned refusal.
 
     ``private-repo-name`` is a never-exemptable class resolved from repository
-    visibility. A cache older than its declared max age is a list that has
-    gone stale — exactly the hardcoded-list failure the plan names — so the
-    gate refuses rather than scanning against it.
+    visibility, and a cache older than its declared max age may miss a
+    repository made private since. It used to refuse the run outright, so
+    every commit to a public repository was refused unscanned while the
+    refresh could not run (OMN-18030: a lane may not make the GitHub read the
+    refresh needs). The gate now scans with the stale list, which still holds
+    every name it held, so a real match is still refused; it says so on
+    stderr, and records one FRICTION row per stale cache (see
+    :func:`_record_stale_cache`). An undated or unparseable cache is still a
+    refusal: there is no list age to report against.
     """
     if not vocab.private_repo_names:
         return
@@ -1137,13 +1150,124 @@ def _assert_visibility_cache_fresh(vocab: Vocabulary, origin: str) -> None:
         resolved = resolved.replace(tzinfo=UTC)
     age_days = (datetime.now(UTC) - resolved).days
     if age_days > vocab.private_repo_cache_max_age_days:
-        raise ConfigError(
-            f"{origin}: the private-repo visibility cache was resolved "
-            f"{age_days} days ago, past its declared max age of "
-            f"{vocab.private_repo_cache_max_age_days} days. A stale list is "
-            "the hardcoded-list failure this class exists to avoid. Run "
-            "--refresh-visibility. THE GATE DID NOT RUN."
+        max_age = vocab.private_repo_cache_max_age_days
+        print(
+            f"::warning::the private-repo visibility cache was resolved "
+            f"{age_days} days ago, past its declared max age of {max_age} days. "
+            f"Scanning with the stale list ({STALE_CACHE_FALLBACK}): every name "
+            "it holds is still refused, but a repository made private since it "
+            "was resolved is not in it. Refresh the vocabulary (OMN-18030).",
+            file=sys.stderr,
         )
+        _record_stale_cache(vocab, origin, age_days)
+
+
+#: How a stale visibility cache is handled, as named in the warning and the row.
+STALE_CACHE_FALLBACK = "fallback=stale-vocabulary-scan"
+#: The ticket that owns the vocabulary refresh; every stale-cache row cites it.
+STALE_CACHE_TICKET = "OMN-18030"
+_LEDGER_APPEND_TIMEOUT_S = 30
+
+
+def _ledger_cell(text: str) -> str:
+    """One ledger cell: no pipe, no newline."""
+    return " ".join(text.replace("|", "/").split())
+
+
+def _record_stale_cache(vocab: Vocabulary, origin: str, age_days: int) -> None:
+    """Record one FRICTION row for this stale cache, on hosts that keep a ledger.
+
+    One row per stale cache (its path, resolution time and max age), not one per
+    commit: an episode marker under ``$ONEX_STATE_DIR`` is written once the row
+    is, so a failed write is retried on the next run. The row goes to the
+    remote lane's relay outbox (``ONEX_LEDGER_RELAY_OUTBOX``) when one is set,
+    since a lab host's ledger is a read-only copy, and otherwise through the
+    packaged ledger writer in ``$OMNIBASE_INTERNAL_HOME`` (or
+    ``ONEX_LEDGER_APPEND_TOOL``, a script taking the same arguments). CI keeps
+    no ledger and no state directory, so there the warning is the whole record.
+    Nothing here can fail the run: the scan has already been decided.
+    """
+    state = os.environ.get("ONEX_STATE_DIR")
+    if not state:
+        print(
+            "  stale-cache FRICTION row not written: ONEX_STATE_DIR is unset "
+            "(no ledger on this host).",
+            file=sys.stderr,
+        )
+        return
+    max_age = vocab.private_repo_cache_max_age_days
+    key = f"{Path(origin).resolve()}\0{vocab.private_repo_names_resolved_at}\0{max_age}"
+    marker = (
+        Path(state)
+        / "hooks"
+        / "public-repo-hygiene"
+        / f"stale-vocab-{hashlib.sha256(key.encode()).hexdigest()[:16]}.recorded"
+    )
+    if marker.exists():
+        return
+    lane = os.environ.get("ONEX_LANE") or "public-repo-hygiene-gate"
+    text = (
+        "public-repo hygiene gate scanned with a stale vocabulary: the "
+        f"private-repo visibility cache was resolved {age_days} days ago "
+        f"({vocab.private_repo_names_resolved_at}), past its max age {max_age} "
+        f"days; {STALE_CACHE_FALLBACK}, a real match still refused, never "
+        f"refused unscanned. host={os.uname().nodename}. Refresh the vocabulary."
+    )
+    row = (
+        f"{datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')} | FRICTION | "
+        f"lane={_ledger_cell(lane)} | existing={STALE_CACHE_TICKET} | "
+        f"cost=~1 lane-minutes | {_ledger_cell(text)}"
+    )
+    if _append_ledger_row(row):
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(row + "\n", encoding="utf-8")
+
+
+def _append_ledger_row(row: str) -> bool:
+    """Append ``row``; True when it was written. Reasons for False go to stderr."""
+    outbox = os.environ.get("ONEX_LEDGER_RELAY_OUTBOX")
+    if outbox:
+        try:
+            with open(outbox, "a", encoding="utf-8") as fh:
+                fh.write(row + "\n")
+        except OSError as exc:
+            print(f"  stale-cache FRICTION row not queued: {exc}", file=sys.stderr)
+            return False
+        return True
+    ledger = os.environ.get("ONEX_LEDGER_PATH")
+    tool = os.environ.get("ONEX_LEDGER_APPEND_TOOL")
+    project = os.environ.get("OMNIBASE_INTERNAL_HOME")
+    if not ledger or not (tool or project):
+        print(
+            "  stale-cache FRICTION row not written: set ONEX_LEDGER_PATH and "
+            "OMNIBASE_INTERNAL_HOME (the ledger writer) to record it.",
+            file=sys.stderr,
+        )
+        return False
+    args = [ledger, "--timeout", "10s", "--append", row]
+    if tool:
+        cmd = [sys.executable, tool, *args]
+    else:
+        cmd = ["uv", "run", "--quiet", "--project", str(project), "onex-ledger", *args]
+    try:
+        done = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=_LEDGER_APPEND_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"  stale-cache FRICTION row not written: {exc}", file=sys.stderr)
+        return False
+    if done.returncode != 0:
+        print(
+            f"  stale-cache FRICTION row not written: the ledger writer exited "
+            f"{done.returncode}: {done.stderr.strip()[:300]}",
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def load_registry(path: Path) -> list[Suppression]:
@@ -2392,8 +2516,6 @@ def main(argv: list[str] | None = None) -> int:
 
     vocab_path = args.vocabulary
     if vocab_path is None:
-        import os
-
         vocabulary_env = os.environ.get("OMNI_HYGIENE_VOCAB_PATH")
         if not vocabulary_env:
             print(
