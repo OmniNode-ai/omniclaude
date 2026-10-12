@@ -24,13 +24,29 @@ description: >
   events using YAML-defined classification rules. Pure computation node — all
   classification intelligence lives in this contract, not in Python code.
 
+runtime_profiles: [main]
+
 input_model:
-  name: FrictionSignal
-  module: plugins.onex.skills._shared.friction_signal
+  name: ModelFrictionSkillCompletedSignal
+  module: omniclaude.nodes.node_friction_observer_compute.models
 
 output_model:
-  name: ClassificationResult
-  module: plugins.onex.skills._shared.friction_classifier
+  name: ModelFrictionObservedEvent
+  module: omniclaude.nodes.node_friction_observer_compute.models
+
+handler:
+  module: omniclaude.nodes.node_friction_observer_compute.handlers.handler_friction_observer
+  class: HandlerFrictionObserver
+  input_model: omniclaude.nodes.node_friction_observer_compute.models.ModelFrictionSkillCompletedSignal
+  output_model: omniclaude.nodes.node_friction_observer_compute.models.ModelFrictionObservedEvent
+
+handler_routing:
+  routing_strategy: operation_match
+  handlers:
+    - operation: friction_observe
+      handler:
+        name: HandlerFrictionObserver
+        module: omniclaude.nodes.node_friction_observer_compute.handlers.handler_friction_observer
 
 execution:
   backend: claude_code
@@ -148,19 +164,26 @@ classification_rules:
     description_template: "Unclassified friction signal: {event_type} from {source}"
 
 # ============================================================================
-# Kafka subscriptions — for event-driven mode (Phase 2).
-# When run as a Kafka consumer, the runtime auto-subscribes to these topics.
+# Kafka wiring. The handler reads skill-completed events. The other signal
+# topics (circuit breaker, budget cap, notification, build loop) have rules
+# above for the hooks' direct classifier but no signal model here, so they are
+# not subscribed until each has one.
 # ============================================================================
 event_bus:
   subscribe_topics:
     - "onex.evt.omniclaude.skill-completed.v1"
-    - "onex.evt.omniclaude.circuit-breaker-tripped.v1"
-    - "onex.evt.omniclaude.budget-cap-hit.v1"
-    - "onex.evt.omniclaude.notification-blocked.v1"
-    - "onex.evt.omnibase-infra.build-loop-failed.v1"
-    - "onex.evt.omnibase-infra.build-loop-build-completed.v1"
   publish_topics:
     - "onex.evt.omniclaude.friction-observed.v1"
+
+published_events:
+  - event_type: FrictionObservedEvent
+    topic: onex.evt.omniclaude.friction-observed.v1
+    description: One classified friction signal.
+
+terminal_event: onex.evt.omniclaude.friction-observed.v1
+
+runtime_dispatch:
+  command_topic: onex.evt.omniclaude.skill-completed.v1
 
 capabilities:
   - name: friction.classify
