@@ -1,0 +1,62 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20911
+title: "The gh shim's lane read guard falls back to the cached, hourly-budgeted gateway for a read it used to refuse, until a verb is set strict in gh-gateway.env"
+summary: >
+  The gh shim (scripts/user-bin) stops refusing a GitHub read from a lane (OMN-20911). A
+  lane read that is not a PR-state read goes through the cached read gateway instead: a
+  300 second cache, then one unit of the hourly ONEX_GH_GATEWAY_BUDGET, and one call-log
+  row with action fallback. A spent budget refuses the read and names the budget. A verb
+  set strict in the gh-gateway.env file (never in the environment) is refused with the
+  local readers named, as before. PR-state reads, lane writes and non-lane reads are
+  unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20911-lane-read-fallback
+    statement: A lane read that is not a PR-state read falls back to the cached gateway inside the hourly budget, logged as a fallback, and is refused only when the budget is spent or its verb is strict in gh-gateway.env.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: a lane read runs the real gh once, spends one unit of the hourly budget, is logged with action fallback, and an identical read inside 300 seconds is served from the cache; a failed answer, a local action, a stream and a query read from a file are never cached -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -k "inside_budget or served_from_cache or failed_answer or local_actions or graphql_query or cache_key" fails against the dev shim'
+      - id: AC2
+        statement: 'AC2: a spent budget refuses the read naming ONEX_GH_GATEWAY_BUDGET, and a verb is strict only when gh-gateway.env says ONEX_GH_LANE_READ_STRICT_<VERB>=1, never from the environment and never for another value -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -k "spent_budget or strict" fails against the dev shim'
+      - id: AC3
+        statement: 'AC3: PR-state reads stay refused without strict config, lane writes and non-lane reads are unchanged, and the lane read, write and refusal-row suites agree with the fallback -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py fails against the dev shim'
+evidence_requirements:
+  - kind: tests
+    description: The shim's lane read fallback, its cache, its hourly budget and its per-verb strict config.
+    command: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov
+  - kind: tests
+    description: The lane read, write and refusal-row guard suites still pass with the fallback in place.
+    command: uv run pytest tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn20911-ac1-lane-read-fallback
+    description: A lane read falls back to the cached gateway, spends one unit of the hourly budget and is logged as a fallback, and an identical read inside 300 seconds is served from the cache, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k "inside_budget or served_from_cache or failed_answer or local_actions or graphql_query or cache_key"
+    binds_ac:
+      - AC1
+  - id: dod-omn20911-ac2-budget-and-strict
+    description: A spent budget refuses the read naming the budget, and a verb is strict only from gh-gateway.env with the value 1, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k "spent_budget or strict"
+    binds_ac:
+      - AC2
+  - id: dod-omn20911-ac3-unchanged-and-suites
+    description: PR-state reads stay refused, lane writes and non-lane reads are unchanged, and the guard suites agree with the fallback, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k "pr_state_reads or lane_writes_are_unaffected or non_lane_read"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+    binds_ac:
+      - AC3
