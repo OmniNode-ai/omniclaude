@@ -2,7 +2,6 @@ Comment Render Delegation (OMN-18512)
 Refusal Surface (OMN-18983)
 PR Failure Citations (OMN-18782)
 Runner Route (OMN-18031)
-occ-preflight
 zone-filter
 Code Quality
 Markdown Link Check
@@ -44,7 +43,6 @@ Hook System Tests (OMN-20109)
 Plugin Validate (OMN-17427)
 Agent Framework Tests
 Database Schema Validation
-DoD Evidence Check
 Merge Test Coverage
 Mode Metadata Integrity
 Skill Hygiene
@@ -60,11 +58,9 @@ Quality Gate
 Tests Gate
 Security Gate
 Cross-Repo Boundary Parity
-Contract Compliance Check
 no-noncanonical-lifecycle-classes
 Shape-Gate Independence (OMN-20298)
 Pre-commit Suite (OMN-19612)
-OCC Companion Merged Gate (OMN-15214)
 Runtime Profiles
 Canonical File Shape (OMN-20304)
 Path Changes (OMN-20074)

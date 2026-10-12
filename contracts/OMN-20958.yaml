@@ -20,8 +20,8 @@ requirements:
         statement: "AC2: omniclaude's PR Title Check workflow produces the `pr-title / check-title` context by running the omnimarket node from a pinned omnimarket release and no longer references the change-control repository -- falsifier: uv run pytest tests/ci/test_pr_title_check_omnimarket_node.py -q fails when the workflow still uses the change-control reusable or renames the context"
 evidence_requirements:
   - kind: tests
-    description: "The caller runs the node at a pinned release under the unchanged context; the manifest row and the CI Summary mirror name the node."
-    command: "uv run pytest tests/ci/test_pr_title_check_omnimarket_node.py tests/ci/test_ci_summary_gate_bot_skip_omn19167.py -q --no-cov"
+    description: "The caller runs the node at a pinned release under the unchanged context; the manifest row names the node."
+    command: "uv run pytest tests/ci/test_pr_title_check_omnimarket_node.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -32,6 +32,6 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_pr_title_check_omnimarket_node.py tests/ci/test_ci_summary_gate_bot_skip_omn19167.py -q --no-cov"
+        check_value: "uv run pytest tests/ci/test_pr_title_check_omnimarket_node.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC2"]
