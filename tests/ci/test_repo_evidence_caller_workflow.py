@@ -87,12 +87,12 @@ def test_caller_workflow_shape() -> None:
     assert "secrets: inherit" not in text, "caller must not inherit secrets"
 
 
-def test_caller_compares_with_occ_for_the_s5_shadow_count() -> None:
+def test_caller_ends_comparison_after_the_s5_shadow_count() -> None:
     job = yaml.safe_load(CALLER_PATH.read_text(encoding="utf-8"))["jobs"][
         "repo-evidence"
     ]
-    assert job["with"].get("compare-with-occ") == "true", (
-        'the S5 shadow count requires compare-with-occ: "true" (a quoted string input)'
+    assert job["with"].get("compare-with-occ") == "false", (
+        'OMN-20975 ends the S5 count with compare-with-occ: "false" before S6'
     )
     assert job["with"].get("shadow") == "true", (
         'the S5 shadow count requires shadow: "true" (a quoted string input), so '
