@@ -45,8 +45,10 @@
     Per-repo permitted roots: .public-repo-hygiene.yaml at the consuming
     repo's root. Suppressions resolve against a CODEOWNERS-reviewed registry
     with an expiry; a self-written annotation is not an approval. Five content
-    classes accept no annotation at all. Requires OMNI_HOME to locate the
-    PRIVATE denylist vocabulary, and fails closed without it. The lab-config
+    classes accept no annotation at all. Requires OMNI_HYGIENE_VOCAB_PATH to
+    name the PRIVATE denylist vocabulary, and fails closed without it; a
+    vocabulary whose visibility cache is past its max age is scanned with a
+    warning and one FRICTION row (OMN-18030), never refused unscanned. The lab-config
     class (OMN-19766) reads a second private file, the lab vocabulary: pass
     --lab-vocabulary <path> in args, or place it beside the vocabulary under
     the name public_repo_hygiene_lab_vocabulary.yaml; absent is exit 2.

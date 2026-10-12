@@ -672,22 +672,136 @@ def test_unparseable_vocabulary_is_a_refusal(tmp_path: Path) -> None:
         _run(root, bad)
 
 
-def test_stale_visibility_cache_is_a_refusal(tmp_path: Path) -> None:
-    """A stale private-repo list is the hardcoded-list failure the class
-    exists to avoid, and a stale list that still reports green is worse than
-    no list at all.
-    """
-    stale = tmp_path / "v.yaml"
-    stale.write_text(
+_FALLBACK_ENV = (
+    "ONEX_LEDGER_RELAY_OUTBOX",
+    "ONEX_LEDGER_PATH",
+    "ONEX_LEDGER_APPEND_TOOL",
+    "OMNIBASE_INTERNAL_HOME",
+    "ONEX_STATE_DIR",
+    "ONEX_LANE",
+)
+
+
+@pytest.fixture
+def stale_vocab(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A vocabulary whose visibility cache is past its max age, with every
+    ledger destination cleared so a test sets only the one it exercises."""
+    for name in _FALLBACK_ENV:
+        monkeypatch.delenv(name, raising=False)
+    path = tmp_path / "v" / "vocabulary.yaml"
+    path.parent.mkdir()
+    path.write_text(
         VOCAB.replace("2999-01-01T00:00:00Z", "2020-01-01T00:00:00Z").replace(
             "private_repo_cache_max_age_days: 3650",
             "private_repo_cache_max_age_days: 30",
         ),
         encoding="utf-8",
     )
+    return path
+
+
+def test_stale_visibility_cache_scans_and_still_refuses_a_real_match(
+    tmp_path: Path, stale_vocab: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """OMN-18030: a stale cache is a logged fallback, never an unscanned
+    refusal. The stale list still names every repository it held, so a real
+    match is still refused, and the never-exemptable class stays strict."""
+    root = _make_repo(tmp_path / "r", {"src/x.py": f"R = '{PRIVATE_REPO}'\n"})
+    code, blocking, _ = _run(root, stale_vocab)
+    assert code == 1
+    assert "private-repo-name" in _classes(blocking)
+    err = capsys.readouterr().err
+    assert "::warning::" in err
+    assert "days ago" in err and "max age of 30 days" in err
+    assert "fallback=stale-vocabulary-scan" in err
+
+
+def test_stale_visibility_cache_clean_tree_passes_scanned(
+    tmp_path: Path, stale_vocab: Path
+) -> None:
     root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
-    with pytest.raises(gate.ConfigError, match="THE GATE DID NOT RUN"):
-        _run(root, stale)
+    code, blocking, _ = _run(root, stale_vocab)
+    assert code == 0
+    assert blocking == []
+
+
+def test_stale_visibility_cache_writes_one_friction_row_per_episode(
+    tmp_path: Path, stale_vocab: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One FRICTION row naming the age and the fallback, queued for the
+    launching host on a remote lane; a second run of the same stale cache
+    writes no second row."""
+    outbox = tmp_path / "outbox.rows"
+    monkeypatch.setenv("ONEX_LEDGER_RELAY_OUTBOX", str(outbox))
+    monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("ONEX_LANE", "lane-under-test")
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
+    _run(root, stale_vocab)
+    _run(root, stale_vocab)
+    rows = outbox.read_text(encoding="utf-8").splitlines()
+    assert len(rows) == 1
+    row = rows[0]
+    assert " | FRICTION | lane=lane-under-test | existing=OMN-18030 | cost=" in row
+    assert "days ago" in row and "max age 30 days" in row
+    assert "fallback=stale-vocabulary-scan" in row
+    assert "|" not in row.split(" | ")[-1]
+
+
+def test_stale_visibility_cache_row_goes_through_the_ledger_writer(
+    tmp_path: Path, stale_vocab: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no relay outbox the row is appended by the ledger writer (the
+    ONEX_LEDGER_APPEND_TOOL seam stands in for it), never by a raw write."""
+    seen = tmp_path / "seen.txt"
+    tool = tmp_path / "append_tool.py"
+    tool.write_text(
+        "import sys, pathlib\n"
+        f"pathlib.Path({str(seen)!r}).write_text('\\n'.join(sys.argv[1:]))\n",
+        encoding="utf-8",
+    )
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text("", encoding="utf-8")
+    monkeypatch.setenv("ONEX_LEDGER_PATH", str(ledger))
+    monkeypatch.setenv("ONEX_LEDGER_APPEND_TOOL", str(tool))
+    monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path / "state"))
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
+    _run(root, stale_vocab)
+    argv = seen.read_text(encoding="utf-8").split("\n")
+    assert argv[0] == str(ledger)
+    assert argv[argv.index("--append") + 1].split(" | ")[1] == "FRICTION"
+    assert ledger.read_text(encoding="utf-8") == ""
+
+
+def test_stale_visibility_cache_row_retries_after_a_failed_write(
+    tmp_path: Path, stale_vocab: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row that could not be written is retried on the next run: the
+    episode marker is written only after the row is."""
+    tool = tmp_path / "append_tool.py"
+    tool.write_text("import sys\nsys.exit(3)\n", encoding="utf-8")
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text("", encoding="utf-8")
+    monkeypatch.setenv("ONEX_LEDGER_PATH", str(ledger))
+    monkeypatch.setenv("ONEX_LEDGER_APPEND_TOOL", str(tool))
+    monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path / "state"))
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
+    code, _, _ = _run(root, stale_vocab)
+    assert code == 0
+    outbox = tmp_path / "outbox.rows"
+    monkeypatch.setenv("ONEX_LEDGER_RELAY_OUTBOX", str(outbox))
+    _run(root, stale_vocab)
+    assert len(outbox.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_fresh_visibility_cache_writes_no_friction_row(
+    tmp_path: Path, vocab: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outbox = tmp_path / "outbox.rows"
+    monkeypatch.setenv("ONEX_LEDGER_RELAY_OUTBOX", str(outbox))
+    monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path / "state"))
+    root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
+    _run(root, vocab)
+    assert not outbox.exists()
 
 
 def test_undated_visibility_cache_is_a_refusal(tmp_path: Path) -> None:
