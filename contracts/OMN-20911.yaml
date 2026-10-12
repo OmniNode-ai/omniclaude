@@ -1,0 +1,62 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20911
+title: "The gh shim's lane read and write guards let four named consumers and gh workflow run fall back to the old GitHub call, with one FRICTION row per use"
+summary: >
+  scripts/user-bin/gh keeps refusing GitHub reads from a lane (OMN-20911) and gh
+  writes that onex scm serves (OMN-20914), except for four read consumers with no
+  working replacement (enforcement-surface-placement, worktree-prune,
+  worktree-auto-prune, bulk-pr-throttle) and gh workflow run, whose onex scm
+  replacement fails on the dev bus. Each such use appends one FRICTION row to
+  $ONEX_STATE_DIR/friction/gh-lane-fallback.rows, and a use that cannot be
+  recorded is refused. An unnamed script and every other covered write stay refused.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20911-lane-read-fallbacks
+    statement: A named consumer with no working replacement keeps its old GitHub call from a lane only with a recorded FRICTION row; every other lane read or covered write stays refused.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: a named consumer read from a lane falls back to the real gh and writes exactly one FRICTION row per use; a use that cannot be recorded is refused -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py fails 7 of 11 against the dev shim'
+      - id: AC2
+        statement: 'AC2: an unnamed script read from a lane is still refused with no row, and a covered write other than gh workflow run stays refused -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py -k "unnamed or other_covered_writes"'
+      - id: AC3
+        statement: 'AC3: gh workflow run from a lane falls back with one FRICTION row and is refused when the row cannot be written -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py -k workflow_run'
+evidence_requirements:
+  - kind: tests
+    description: The shim's lane fallback for named consumers and gh workflow run, the FRICTION row per use, and refusal when the row cannot be recorded.
+    command: uv run pytest tests/scripts/test_gh_lane_fallback.py -q --no-cov
+  - kind: tests
+    description: The lane read and write guard suites still pass with the fallback in place.
+    command: uv run pytest tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn20911-ac1-named-consumer-fallback
+    description: A named consumer read from a lane falls back with one FRICTION row per use, and an unrecordable fallback is refused, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_fallback.py -q --no-cov -k "named_consumer or each_use or cannot_be_recorded or outside_a_lane"
+    binds_ac:
+      - AC1
+  - id: dod-omn20911-ac2-unnamed-stays-refused
+    description: An unnamed script read and other covered writes stay refused from a lane at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_fallback.py -q --no-cov -k "unnamed or other_covered_writes"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+    binds_ac:
+      - AC2
+  - id: dod-omn20911-ac3-workflow-run-fallback
+    description: gh workflow run from a lane falls back with one FRICTION row and is refused when the row cannot be written, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_fallback.py -q --no-cov -k workflow_run
+    binds_ac:
+      - AC3
