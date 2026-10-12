@@ -423,6 +423,31 @@ _call_log() {
     "$(_clean "$1")" "$(_clean "$2")" >> "$file" 2>/dev/null || true
 }
 
+# _refusal_row <guard> <reason class> <detail>   (OMN-21020)
+# Writes one class=refusal row for a refusal through the refusal recorder's shell entry
+# (plugins/onex/hooks/lib/hook_refusal.sh), the same seam every hook guard records through:
+# the recorder resolves the lane, redacts, dedupes and carries the suppressed count. Only the
+# two gates the call log alone used to hold call this: the lane read (OMN-20911) and the
+# covered write (OMN-20914). The seam is the canonical clone's, or ONEX_HOOK_REFUSAL_SEAM.
+# Fail-open by construction: a seam that cannot be found or run never changes the refusal,
+# which the caller has already decided.
+_refusal_row() {
+  local seam="${ONEX_HOOK_REFUSAL_SEAM:-}"
+  if [ -z "$seam" ] && [ -n "${OMNI_HOME:-}" ]; then
+    seam="$OMNI_HOME/omniclaude/plugins/onex/hooks/lib/hook_refusal.sh"
+  fi
+  [ -n "$seam" ] && [ -r "$seam" ] || return 0
+  (
+    _OMNICLAUDE_HOOK_NAME="$1"
+    _OMNICLAUDE_HOOK_PAYLOAD='{}'
+    ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-${OMNI_HOME:-}}"
+    # shellcheck source=/dev/null
+    source "$seam" || exit 0
+    hook_record_refusal "$2" "$3"
+  ) || true
+  return 0
+}
+
 # _log <exit code> <cache: hit|miss|none>
 _log() {
   [ "${ONEX_GH_USAGE_LOG:-1}" = "0" ] && return 0
@@ -1041,6 +1066,7 @@ if [ "$_gw" -eq 0 ] && _lane_is_read "$@" && ! _cacheable "$@" \
     "  files, contents, diffs, commits, tags, history: git -C \$OMNI_HOME/$_lr_r show|log|diff origin/dev...   (the canonical clones, kept fetched by canonical-clone-sync)" \
     '  a failing-job log, one job'"'"'s run id and steps, one check run'"'"'s output: gh api repos/<o>/<r>/actions/jobs/<id>/logs, gh api repos/<o>/<r>/actions/jobs/<id>, gh api repos/<o>/<r>/check-runs/<id>[/annotations], gh run view <run> --log-failed; the job id is in the watcher record (ci.detail) and these are served by the cached read gateway with a per-hour budget; so is one commit object by its full 40-hex sha, gh api repos/<o>/<r>/commits/<sha> (the receipt-hardening hook proves a receipt commit_sha with it)' \
     'Writes (pr create|edit|comment|review, workflow run, run rerun, api POST/PATCH/PUT/DELETE, graphql mutation) are unaffected.' >&2
+  _refusal_row gh_shim_lane_read_guard lane-github-read-via-gh-shim "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why)"
   _call_log 1 refused
   exit 1
 fi
@@ -1461,6 +1487,7 @@ if [ "$_method" = "WRITE" ] && _lw_lane && _lw_covered "$@" && ! _lw_allowed_ide
     "Use instead: onex scm $_lw_scm   (node_github_repo_write_effect operation $_lw_op; onex scm $_lw_scm --help for its options, onex scm verbs for the whole table)" \
     "The verb is refused because onex scm serves it for $_rs_owner/$_rs_repo; gh pr merge, gh run rerun and gh api writes have no onex scm operation and are unaffected." >&2
   _endpoint="onex scm $_lw_scm"
+  _refusal_row gh_shim_lane_write_guard covered-write-via-gh-shim "REFUSED (OMN-20914): gh $_cls from a lane ($_lw_why); use onex scm $_lw_scm"
   _call_log 1 refused
   exit 1
 fi
