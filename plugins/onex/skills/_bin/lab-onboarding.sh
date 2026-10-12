@@ -526,6 +526,97 @@ key_looks_like() {
   esac
 }
 
+# OpenRouter: the developer chooses the model their key runs, from the models
+# OpenRouter lists for that key, by number, never by typing an id. The key goes
+# to OpenRouter alone, in a header read from stdin, so it never appears in an
+# argument. The list offered is the free models (id ending :free): they need no
+# credit, and the full list runs to hundreds.
+#
+# Where the list lives is onex's provider catalogue's `models_url`, the same one
+# `onex models add` checks the choice against. Preflight runs before the
+# workspace is cloned, so it reads the catalogue from the omnimarket clone when
+# there is one, else from omnimarket's default branch.
+CATALOGUE_REL="omnimarket/src/omnimarket/configs/byok_provider_backends.v1.yaml"
+CATALOGUE_URL="https://raw.githubusercontent.com/OmniNode-ai/$(printf '%s' "$CATALOGUE_REL" | sed 's#/#/HEAD/#')"
+OPENROUTER_MODEL=""   # the model chosen for an OpenRouter key entered in this run
+MODEL_LIST=""; MODEL_LIST_ERR=""
+
+# catalogue_models_url provider -> the provider row's models_url; 1 when unread
+catalogue_models_url() {
+  local text
+  if [ -n "${ONBOARD_TEST_CATALOGUE:-}" ]; then text="$(cat "$ONBOARD_TEST_CATALOGUE" 2>/dev/null)"
+  elif [ -f "$WORKSPACE/$CATALOGUE_REL" ]; then text="$(cat "$WORKSPACE/$CATALOGUE_REL")"
+  else text="$(curl -fsS -m 30 "$CATALOGUE_URL" 2>/dev/null)"; fi
+  printf '%s\n' "$text" | awk -v want="$1" '
+    /^  - provider:/ { gsub(/["'"'"']/, "", $3); row = ($3 == want); next }
+    row && /^    models_url:/ { v = $2; gsub(/["'"'"']/, "", v); print v; exit }' | grep .
+}
+
+# openrouter_models key -> MODEL_LIST, one free model id per line, sorted; 1
+# with MODEL_LIST_ERR (the provider's own words when it gave any) when the list
+# cannot be read or names no free model.
+openrouter_models() {
+  local out code body reason url
+  MODEL_LIST=""; MODEL_LIST_ERR=""
+  if ! url="$(catalogue_models_url openrouter)"; then
+    MODEL_LIST_ERR="onex's provider catalogue, which names where its model list is, could not be read"
+    return 1
+  fi
+  if ! out="$(printf 'Authorization: Bearer %s\n' "$1" | curl -sS -m 30 -H @- -w '\n%{http_code}' "$url" 2>&1)"; then
+    MODEL_LIST_ERR="its model list could not be reached ($(printf '%s\n' "$out" | tail -n 1 | sed 's/^curl: ([0-9]*) //' | cut -c1-200))"
+    return 1
+  fi
+  code="$(printf '%s\n' "$out" | tail -n 1)"
+  body="$(printf '%s\n' "$out" | sed '$d')"
+  if [ "$code" != "200" ]; then
+    reason="$(printf '%s' "$body" | grep -oE '"message"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed -E 's/^"message"[[:space:]]*:[[:space:]]*"(.*)"$/\1/' | cut -c1-200)"
+    MODEL_LIST_ERR="its model list answered HTTP $code${reason:+: $reason}"
+    return 1
+  fi
+  MODEL_LIST="$(printf '%s' "$body" | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]+:free"' | sed -E 's/^.*"([^"]+)"$/\1/' | sort -u)"
+  if [ -z "$MODEL_LIST" ]; then
+    MODEL_LIST_ERR="its model list names no free model for this key"
+    return 1
+  fi
+}
+
+# choose_openrouter_model key -> OPENROUTER_MODEL, chosen by number; an empty or
+# out-of-range answer asks again. 1 with MODEL_LIST_ERR when the list cannot be read.
+choose_openrouter_model() {
+  local a n i=0 m
+  OPENROUTER_MODEL=""
+  say "  Asking OpenRouter which models your key can use…"
+  openrouter_models "$1" || return 1
+  n="$(printf '%s\n' "$MODEL_LIST" | wc -l | tr -d ' ')"
+  say ""
+  say "  Your OpenRouter model: the $n free models OpenRouter lists for your key."
+  say ""
+  while IFS= read -r m; do
+    i=$((i + 1))
+    say "    $(printf '%2d' "$i")) $m"
+  done <<EOF
+$MODEL_LIST
+EOF
+  say ""
+  say "  A model that uses credits can be set later: onex models add openrouter --model <id>"
+  while :; do
+    say ""
+    printf '  Choose one OpenRouter model, 1 to %s: ' "$n"
+    IFS= read -r a || quit_setup
+    a="$(printf '%s' "$a" | tr -d ' ')"
+    case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
+    case "$a" in
+      ''|*[!0-9]*) ;;
+      *) if [ "$a" -ge 1 ] && [ "$a" -le "$n" ]; then
+           OPENROUTER_MODEL="$(printf '%s\n' "$MODEL_LIST" | sed -n "$((10#$a))p")"
+           break
+         fi ;;
+    esac
+    say "  Choose one number, 1 to $n, or q to quit."
+  done
+  say "  OpenRouter model: $OPENROUTER_MODEL"
+}
+
 stored_key_providers() { # every provider an earlier run already stored a key for, one per line
   [ -x "$HOME/.local/bin/onex" ] || return 1
   local p list found=1
@@ -625,6 +716,14 @@ ask_keys() {
       fi
       set_pending_key "$p" "$value"; value=""
       say "  $label key received."
+      if [ "$p" = "openrouter" ] && ! choose_openrouter_model "$(pending_key openrouter)"; then
+        # Nothing is stored for a key whose models cannot be listed: no model
+        # is ever picked for the developer. The other models carry on.
+        set_pending_key openrouter ""
+        drop_model openrouter; SKIPPED="${SKIPPED:+$SKIPPED }openrouter"
+        set_result openrouter "fail:$MODEL_LIST_ERR"
+        say "  ✗ OpenRouter: $MODEL_LIST_ERR. Nothing was stored for it; your other models carry on."
+      fi
       break
     done
   done
@@ -638,13 +737,15 @@ confirm_models() { # 0 continue, 1 change the choice; q quits
     if [ "$p" = "ollama" ]; then
       if ollama_overrides_ours; then say "    Ollama      already set up on this Mac"
       else say "    Ollama      no key; downloads a model sized to this Mac's $(ram_gb) GB of memory"; fi
+    elif [ "$p" = "openrouter" ] && [ -n "$(pending_key "$p")" ]; then
+      say "    $(printf '%-11s' "$(provider_label "$p")") key received, model $OPENROUTER_MODEL"
     elif [ -n "$(pending_key "$p")" ]; then
       say "    $(printf '%-11s' "$(provider_label "$p")") key received"
     else
       say "    $(printf '%-11s' "$(provider_label "$p")") your stored key"
     fi
   done
-  for p in $SKIPPED; do say "    $(printf '%-11s' "$(provider_label "$p")") skipped (no key)"; done
+  for p in $SKIPPED; do say "    $(result_line "$p")"; done
   say ""
   printf '  Continue? [Y = yes, c = change, q = quit] '
   IFS= read -r a || quit_setup
@@ -689,7 +790,7 @@ settle_models() {
       else
         ask_models
       fi
-      SKIPPED=""
+      SKIPPED=""; set_result openrouter ""
       ask_keys
       if [ -z "$MODELS" ]; then
         say ""
@@ -701,6 +802,7 @@ settle_models() {
     # Keys for models dropped at the summary are forgotten here.
     local p
     for p in gemini openrouter openai; do has_model "$p" || set_pending_key "$p" ""; done
+    [ -n "$(pending_key openrouter)" ] || OPENROUTER_MODEL=""
   fi
   if has_model ollama; then settle_ollama; fi
 }
@@ -1320,11 +1422,17 @@ record_model_status() { # provider
 }
 
 setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason>
-  local p="$1" key out err line status
+  local p="$1" key out err line status model=""
   err="$RUN_DIR/models.err"
   key="$(pending_key "$p")"; set_pending_key "$p" ""
+  [ "$p" = "openrouter" ] && model="$OPENROUTER_MODEL"
+  if [ -n "$key" ] && [ "$p" = "openrouter" ] && [ -z "$model" ]; then
+    key=""
+    set_result "$p" "fail:no OpenRouter model was chosen, so nothing was stored"
+    return 0
+  fi
   if [ -n "$key" ]; then
-    out="$(printf '%s' "$key" | models_cmd add "$p" --json 2>"$err")"
+    out="$(printf '%s' "$key" | models_cmd add "$p" --json ${model:+--model "$model"} 2>"$err")"
   else
     out="$(models_cmd test "$p" --json 2>"$err")"
   fi

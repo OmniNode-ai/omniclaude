@@ -1,0 +1,48 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21058
+title: "Onboarding lists the models an OpenRouter key can use and the developer picks one by number"
+summary: >
+  After the OpenRouter key, onboarding reads OpenRouter's model list for that
+  key, shows its free models as numbered choices, and passes the chosen one to
+  onex models add openrouter --model. Nothing is picked for the developer; a
+  key whose list cannot be read ends OpenRouter with the provider's reason and
+  the other models carry on.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-openrouter-model-pick
+    statement: "Onboarding sets up OpenRouter on a model the developer picks by number from the key's own model list."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: after the OpenRouter key is entered, onboarding shows a numbered list of models the key can use, read from the provider's live model list for that key, and the developer chooses by number; an empty or out-of-range answer asks again -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model
+      - id: "AC2"
+        statement: |-
+          AC2: the chosen model reaches `onex models add openrouter --model <id>`, and the one pinned delegation for OpenRouter answers on that model -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model
+      - id: "AC3"
+        statement: |-
+          AC3: onboarding never stores an OpenRouter model the developer did not choose, and a key whose model list cannot be read ends OpenRouter with the provider's reason while the other models carry on -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model
+      - id: "AC4"
+        statement: |-
+          AC4: `--provider openrouter` run unattended with a stored key keeps the stored key's model and asks nothing -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model
+evidence_requirements:
+  - kind: tests
+    description: "The OpenRouter model is chosen by number from the key's list, reaches onex models add --model, is never picked for the developer, and an unattended run keeps the stored model"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21058-openrouter-model-pick
+    description: "Numbered choice from a served model list read with the key, empty and out-of-range answers re-asked, the choice passed to onex models add openrouter --model, no add without a chosen model, an unreadable or empty list ending OpenRouter with the provider's reason while Gemini carries on, and an unattended run with a stored key asking nothing. The provider is a local stand-in; a live OpenRouter run is the onboarding walk."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model"
+    binds_ac:
+      - AC1
+      - AC2
+      - AC3
+      - AC4
