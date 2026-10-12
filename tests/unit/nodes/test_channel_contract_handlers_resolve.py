@@ -23,6 +23,7 @@ import pytest
 import yaml
 from omnibase_core.enums.enum_node_kind import EnumNodeKind
 from omnibase_core.models.dispatch.model_handler_output import ModelHandlerOutput
+from pydantic import BaseModel
 
 from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.nodes.node_channel_orchestrator.models.model_channel_orchestrator_input import (
@@ -180,3 +181,19 @@ def test_reply_requested_event_feeds_the_dispatcher() -> None:
     assert result.routed is True
     assert reply.correlation_id == request.correlation_id
     assert reply.reply_to == "synthetic-msg-1"
+
+
+@pytest.mark.unit
+def test_reply_requested_event_declares_the_dispatcher_request_fields() -> None:
+    """The event declares its own fields and they equal the dispatcher request's."""
+    from omniclaude.nodes.node_channel_orchestrator.models.model_channel_reply_requested import (
+        ModelChannelReplyRequested,
+    )
+    from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
+        ModelChannelReply,
+    )
+
+    assert ModelChannelReplyRequested.__bases__ == (BaseModel,)
+    assert set(ModelChannelReplyRequested.model_fields) == set(
+        ModelChannelReply.model_fields
+    )
