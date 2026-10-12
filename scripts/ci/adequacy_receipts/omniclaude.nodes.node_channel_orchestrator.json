@@ -1,0 +1,18 @@
+{
+  "branch_coverage_pct": 100.0,
+  "candidate_count": 6,
+  "coverage_target": 80.0,
+  "handler_module": "omniclaude.nodes.node_channel_orchestrator.handlers.handler_channel_orchestrate",
+  "handler_module_sha256": "sha256:bb853584a51af681d7b07f2b3a4f2b7c08499e6f8e875c4772f139e78af7db1c",
+  "meets_target": true,
+  "node_id": "omniclaude.nodes.node_channel_orchestrator",
+  "receipt_schema": "adequacy_receipt.v1",
+  "recorded_at": "2026-10-12T13:32:02.280312+00:00",
+  "recorder_schema": "adequacy_receipt.v1",
+  "selected_count": 1,
+  "selected_input_hashes": [
+    "sha256:e6e6c4e559ce34657615b77d624ddbb9f028a0ae8c5293b482a70b2253048998"
+  ],
+  "uncovered_waiver": null,
+  "volatile_mask": []
+}
