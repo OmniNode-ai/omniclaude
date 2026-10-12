@@ -57,6 +57,18 @@ dod_evidence:
       - check_type: test_passes
         check_value: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k "pr_state_reads or lane_writes_are_unaffected or non_lane_read"
       - check_type: test_passes
-        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py -q --no-cov -k "positive_control_the_same_read_passes_outside_a_lane"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py -q --no-cov -k "lane_gh_read_refused"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py -q --no-cov -k "commit_object_negative_still_refused_from_a_lane"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py -q --no-cov -k "commit_object and not commit_object_negative_still_refused_from_a_lane"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py -q --no-cov -k "not positive_control_the_same_read_passes_outside_a_lane and not lane_gh_read_refused and not commit_object"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_write_guard.py -q --no-cov
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
     binds_ac:
       - AC3
