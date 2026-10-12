@@ -92,6 +92,22 @@ while [[ "$_OBG_INPUT" == *$'\n' ]]; do _OBG_INPUT="${_OBG_INPUT%$'\n'}"; done
 # interpreter, the node not importable, an unreadable payload) is refused, as every
 # guard here refuses a call it cannot evaluate. A Bash command naming none of
 # api.github.com or a /gh path starts no interpreter.
+#
+# Every refusal here writes one class=refusal row through the refusal recorder
+# (OMN-21020). The block runs ahead of the seven guards, so none of their
+# hook_record_refusal calls can see it; the recording is the recorder's seam, called
+# from a subshell so the guard name and the payload stay out of this shell's scope.
+_obg_record_lane_read_refusal() {
+    # $1 reason class, $2 the refusal's text (its first line becomes the detail).
+    (
+        _OMNICLAUDE_HOOK_NAME="pre_tool_use_lane_github_read_guard"
+        _OMNICLAUDE_HOOK_PAYLOAD="$_OBG_INPUT"
+        # shellcheck source=../lib/hook_refusal.sh
+        source "${_OBG_LIB}/hook_refusal.sh" || exit 0
+        hook_record_refusal "$1" "${2%%$'\n'*}"
+    ) || true
+}
+
 _OBG_TOOL=""
 [[ "$_OBG_INPUT" =~ \"tool_name\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]] && _OBG_TOOL="${BASH_REMATCH[1]}"
 _obg_lane_read=0
@@ -124,11 +140,21 @@ if [[ $_obg_lane_read -eq 1 ]]; then
     _OBG_LANE_RC=$?
     if [[ $_OBG_LANE_RC -eq 2 ]]; then
         printf '%s\n' "$_OBG_LANE_OUT"
-        printf '%s\n' "$_OBG_LANE_OUT" | jq -r '.reason // empty' >&2 2>/dev/null || true
+        _OBG_LANE_REASON="$(printf '%s\n' "$_OBG_LANE_OUT" | jq -r '.reason // empty' 2>/dev/null || true)"
+        [[ -n "$_OBG_LANE_REASON" ]] && printf '%s\n' "$_OBG_LANE_REASON" >&2
+        # The reason class is the bypass path the node judged, named by its own text.
+        case "$_OBG_LANE_REASON" in
+            *"GitHub MCP tool"*) _OBG_LANE_CLASS="lane-github-read-mcp-tool" ;;
+            *"direct call to the GitHub API"*) _OBG_LANE_CLASS="lane-github-read-raw-api" ;;
+            *) _OBG_LANE_CLASS="lane-github-read-real-gh" ;;
+        esac
+        _obg_record_lane_read_refusal "$_OBG_LANE_CLASS" "$_OBG_LANE_REASON"
         exit 2
     fi
     if [[ $_OBG_LANE_RC -ne 0 ]]; then
         _OBG_LANE_WHY="${_OBG_LANE_OUT:0:400}"
+        _obg_record_lane_read_refusal "lane-github-read-check-could-not-judge" \
+            "BLOCKED: the OMN-20916 lane GitHub read check could not judge this call (exit ${_OBG_LANE_RC})"
         jq -nc --arg r "BLOCKED: the OMN-20916 lane GitHub read check could not judge this call (exit ${_OBG_LANE_RC}). A call it cannot judge is refused, never assumed safe. Detail: ${_OBG_LANE_WHY}" \
             '{"decision": "block", "reason": $r}' 2>/dev/null \
             || printf '%s\n' '{"decision": "block", "reason": "BLOCKED: the OMN-20916 lane GitHub read check could not judge this call."}'
