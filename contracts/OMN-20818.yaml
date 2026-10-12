@@ -76,3 +76,21 @@ dod_evidence:
         check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q"
     binds_ac:
       - AC12
+  - id: dod-omn20818-ac1-11-onboarding-tests
+    description: "The #2637 onboarding tests bound to AC1-AC11: terminal-only questions, questions before install, choice by number, one key at a time, wrong-provider keys, skips, stored keys, the summary, one result line per model, Ollama with keys, and the comma-separated --provider list. Providers are stubbed; a live multi-provider run is still owed for AC9."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_lab_onboarding_proven_set_omn20381.py -q"
+    binds_ac:
+      - AC1
+      - AC2
+      - AC3
+      - AC4
+      - AC5
+      - AC6
+      - AC7
+      - AC8
+      - AC9
+      - AC10
+      - AC11
