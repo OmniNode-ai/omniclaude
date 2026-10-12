@@ -61,6 +61,10 @@
 # `onex` command runs) is refused, naming the `onex scm` verb that replaces it. A write with
 # no onex scm operation stays allowed. Full contract at the guard, below the PR-state guard.
 #
+# Logged fallback (OMN-20911, RULING 2026-10-12T05:03:28Z): a few named consumers whose
+# replacement path does not work yet keep their old call through both lane guards, and
+# every such use appends one FRICTION row. List and contract at _fb_match.
+#
 # Shared call log (OMN-19852): every allowed or refused call appends one
 # tab-separated line to ONEX_GH_CALLS_LOG, else ONEX_STATE_DIR/gh-calls.log
 # (no log is written when neither is set).
@@ -264,6 +268,11 @@ _resolve_lane() {
     next="${info%%[[:space:]]*}"
     pargs="${info#"$next"}"
     pargs="${pargs#"${pargs%%[![:space:]]*}"}"
+    # A role is named by the interpreter and script at the head of the command line. An
+    # ancestor such as a headless `claude -p` carries its whole prompt in argv (150 kB
+    # measured, OMN-20911), and the word loop below over that never finished within 30 s,
+    # so only the head is read: the shim must never be able to hang a gh call.
+    pargs="${pargs:0:4096}"
     [ "$steps" -eq 0 ] && direct_args="$pargs"
     role=""; job=0
     case "$pargs" in *omnibase_internal.pr_watcher*) role="pr-watcher" ;; esac
@@ -1050,6 +1059,67 @@ _lane_sanctioned_script() {
   return 1
 }
 
+# --- logged fallback for named consumers (OMN-20911) -------------------------------
+# RULING 2026-10-12T05:03:28Z: a gate whose replacement path does not work end to end
+# today falls back to the old path with a logged fallback until the replacement proves
+# out, and is then made strict. The consumers below make a GitHub call from inside a lane
+# (a pre-commit hook or a lane-run script) and had no working replacement when the guards
+# shipped, so each keeps its old call by name, decided on the DIRECT parent only (like
+# _lane_sanctioned_script), never on the environment:
+#   enforcement-surface-placement  onex_change_control's placement pre-commit hook
+#                                   (check-platform-leads-review-tripwire) reads live
+#                                   branch protection, which no clone holds;
+#   worktree-prune                  scripts/prune-worktrees.sh, merged-PR limb (gh pr list);
+#   worktree-auto-prune             scripts/worktree_auto_prune.py, merged-PR limb;
+#   bulk-pr-throttle                omnibase_infra scripts/ci/bulk_pr_throttle.py, the
+#                                   allow_auto_merge repository read;
+#   workflow-run                    `gh workflow run` from a lane (lane write guard below):
+#                                   its replacement, onex scm workflow-run, fails on the
+#                                   bus terminal subscribe.
+# Every use appends one FRICTION row (gate, consumer, the call it fell back to) to
+# $ONEX_STATE_DIR/friction/gh-lane-fallback.rows, else to the gh-usage cache directory.
+# A use that cannot be recorded is refused like any other lane read: an uncounted
+# fallback could never be proven unused. Making a consumer strict again is deleting its
+# line here once its row count stays at zero.
+_fb_consumer=""
+_fb_match() {
+  _fb_consumer=""
+  local args
+  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  [ -n "$args" ] || return 1
+  case " $args " in
+    *"/check-platform-leads-review-tripwire "*|*" check-platform-leads-review-tripwire "*|\
+    *" onex_change_control.scripts.check_platform_leads_review_tripwire "*|\
+    *"/check_platform_leads_review_tripwire.py "*)
+      _fb_consumer="enforcement-surface-placement" ;;
+    *"/prune-worktrees.sh "*|*" prune-worktrees.sh "*) _fb_consumer="worktree-prune" ;;
+    *"/worktree_auto_prune.py "*|*" worktree_auto_prune.py "*) _fb_consumer="worktree-auto-prune" ;;
+    *"/bulk_pr_throttle.py "*|*" bulk_pr_throttle.py "*) _fb_consumer="bulk-pr-throttle" ;;
+    *) return 1 ;;
+  esac
+  return 0
+}
+
+# _fb_record <gate> <consumer> <the call it fell back to> <replacement that does not work>
+_fb_record() {
+  local dir file ts
+  if [ -n "${ONEX_STATE_DIR:-}" ]; then
+    dir="$ONEX_STATE_DIR/friction"
+  else
+    dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage"
+  fi
+  file="$dir/gh-lane-fallback.rows"
+  mkdir -p "$dir" 2>/dev/null || return 1
+  _resolve_lane
+  _resolve_parent_host
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '%s | FRICTION | lane=%s | ticket=OMN-20911 | gate=%s | consumer=%s | fallback=%s | host=%s | cost=~1 lane-minutes | logged fallback (RULING 2026-10-12T05:03:28Z): %s used the old gh path because its replacement (%s) does not work end to end yet; the gate goes strict for it when this consumer has no row\n' \
+    "$ts" "$(_clean "$_lane")" "$(_clean "$1")" "$(_clean "$2")" "$(_clean "$3")" \
+    "$_lane_host" "$(_clean "$2")" "$(_clean "$4")" >> "$file" 2>/dev/null || return 1
+  _fb_file="$file"
+  return 0
+}
+
 _gw=0
 _gw_shape "$@" && _gw=1
 if [ "$_gw" -eq 0 ] && _lane_is_read "$@" && ! _cacheable "$@" \
@@ -1057,18 +1127,23 @@ if [ "$_gw" -eq 0 ] && _lane_is_read "$@" && ! _cacheable "$@" \
    && ! _prs_exact_head "$@" && ! _prs_caller_allowed \
    && _lane_context && ! _lane_sanctioned_script; then
   if [ "$_cls" = "api" ]; then _lr_class="gh api $_method ${_endpoint:--}"; else _lr_class="gh $_cls"; fi
-  _prs_resolve "$@"
-  _lr_r="${_rs_repo:-<repo>}"
-  printf '%s\n' \
-    "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why). Lanes do not read GitHub; gh is for writes (RULING 2026-10-10T18:17:36Z, re-affirming RULING 2026-09-25T14:34:28Z)." \
-    'Read it locally instead:' \
-    "  PR state, checks, reviews, mergeability: python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr ${_rs_owner:-OmniNode-ai}/$_lr_r#<n>   (--status for the state file's age; the same records are on the bus as onex.evt.omnimarket.pr-state-observed.v1)" \
-    "  files, contents, diffs, commits, tags, history: git -C \$OMNI_HOME/$_lr_r show|log|diff origin/dev...   (the canonical clones, kept fetched by canonical-clone-sync)" \
-    '  a failing-job log, one job'"'"'s run id and steps, one check run'"'"'s output: gh api repos/<o>/<r>/actions/jobs/<id>/logs, gh api repos/<o>/<r>/actions/jobs/<id>, gh api repos/<o>/<r>/check-runs/<id>[/annotations], gh run view <run> --log-failed; the job id is in the watcher record (ci.detail) and these are served by the cached read gateway with a per-hour budget; so is one commit object by its full 40-hex sha, gh api repos/<o>/<r>/commits/<sha> (the receipt-hardening hook proves a receipt commit_sha with it)' \
-    'Writes (pr create|edit|comment|review, workflow run, run rerun, api POST/PATCH/PUT/DELETE, graphql mutation) are unaffected.' >&2
-  _refusal_row gh_shim_lane_read_guard lane-github-read-via-gh-shim "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why)"
-  _call_log 1 refused
-  exit 1
+  if _fb_match && _fb_record gh-lane-read-guard "$_fb_consumer" "$_lr_class" "a lane-local reader"; then
+    printf '%s\n' \
+      "FALLBACK (OMN-20911): $_lr_class from a lane ($_lane_ctx_why) is allowed for the named consumer $_fb_consumer until its replacement works; this use is recorded in $_fb_file." >&2
+  else
+    _prs_resolve "$@"
+    _lr_r="${_rs_repo:-<repo>}"
+    printf '%s\n' \
+      "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why). Lanes do not read GitHub; gh is for writes (RULING 2026-10-10T18:17:36Z, re-affirming RULING 2026-09-25T14:34:28Z)." \
+      'Read it locally instead:' \
+      "  PR state, checks, reviews, mergeability: python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr ${_rs_owner:-OmniNode-ai}/$_lr_r#<n>   (--status for the state file's age; the same records are on the bus as onex.evt.omnimarket.pr-state-observed.v1)" \
+      "  files, contents, diffs, commits, tags, history: git -C \$OMNI_HOME/$_lr_r show|log|diff origin/dev...   (the canonical clones, kept fetched by canonical-clone-sync)" \
+      '  a failing-job log, one job'"'"'s run id and steps, one check run'"'"'s output: gh api repos/<o>/<r>/actions/jobs/<id>/logs, gh api repos/<o>/<r>/actions/jobs/<id>, gh api repos/<o>/<r>/check-runs/<id>[/annotations], gh run view <run> --log-failed; the job id is in the watcher record (ci.detail) and these are served by the cached read gateway with a per-hour budget; so is one commit object by its full 40-hex sha, gh api repos/<o>/<r>/commits/<sha> (the receipt-hardening hook proves a receipt commit_sha with it)' \
+      'Writes (pr create|edit|comment|review, workflow run, run rerun, api POST/PATCH/PUT/DELETE, graphql mutation) are unaffected.' >&2
+    _refusal_row gh_shim_lane_read_guard lane-github-read-via-gh-shim "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why)"
+    _call_log 1 refused
+    exit 1
+  fi
 fi
 unset _lr_class _lr_r _rs_owner _rs_repo _rs_n
 
@@ -1481,7 +1556,10 @@ EOF_LW
   return 0
 }
 
-if [ "$_method" = "WRITE" ] && _lw_lane && _lw_covered "$@" && ! _lw_allowed_identity; then
+if [ "$_method" = "WRITE" ] && _lw_lane && _lw_covered "$@" && ! _lw_allowed_identity \
+   && ! { [ "$_cls" = "workflow run" ] \
+          && _fb_record gh-lane-write-guard workflow-run "gh $_cls" "onex scm $_lw_scm" \
+          && printf '%s\n' "FALLBACK (OMN-20911): gh $_cls from a lane ($_lw_why) is allowed until onex scm $_lw_scm works end to end; this use is recorded in $_fb_file." >&2; }; then
   printf '%s\n' \
     "REFUSED (OMN-20914): gh $_cls from a lane ($_lw_why); lanes do GitHub writes through the source-control node, not gh (RULING 2026-10-10T18:32:46Z)." \
     "Use instead: onex scm $_lw_scm   (node_github_repo_write_effect operation $_lw_op; onex scm $_lw_scm --help for its options, onex scm verbs for the whole table)" \
