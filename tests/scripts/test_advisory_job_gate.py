@@ -24,6 +24,7 @@ import os
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -643,8 +644,15 @@ jobs:
         )
 
     def test_a_missing_required_contexts_file_is_a_refusal_not_a_pass(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        def unavailable(_args: list[str]) -> str:
+            raise gate.GateError("authoritative live read refused")
+
+        monkeypatch.setattr(gate, "_gh", unavailable)
         root = _repo(tmp_path, {"ci.yml": CLEAN})
         code = _run(root, baseline=_baseline(tmp_path, EMPTY_BASELINE))
         assert code == 2
@@ -660,6 +668,117 @@ jobs:
             contexts=_contexts(tmp_path, []),
         )
         assert code == 2
+
+
+class TestLandingControllerContextCache:
+    """OMN-21006: a fresh controller read remains usable after a quota refusal."""
+
+    @pytest.fixture
+    def cached_contexts(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> tuple[Path, Path, int]:
+        root = _repo(tmp_path, {"ci.yml": CLEAN})
+        (root / ".git").write_text("gitdir: /fixture/worktrees/lane\n")
+        home = tmp_path / "home"
+        cache = home / ".local/state/omni/landing/required-contexts.json"
+        cache.parent.mkdir(parents=True)
+        now = 1791756000
+        cache.write_text(
+            json.dumps(
+                {
+                    "fixture:dev": {
+                        "read_at": datetime.fromtimestamp(now - 60, UTC).strftime(
+                            "%Y-%m-%dT%H:%M:%SZ"
+                        ),
+                        "contexts": ["unit-tests"],
+                    }
+                }
+            )
+        )
+        monkeypatch.setattr(gate.Path, "home", lambda: home)
+        monkeypatch.setattr(gate.time, "time", lambda: now)
+
+        def unavailable(_args: list[str]) -> str:
+            raise gate.GateError("authoritative live read refused")
+
+        def default_branch(args: list[str], **_kwargs: Any) -> Any:
+            assert args == [
+                "git",
+                "-C",
+                str(root),
+                "symbolic-ref",
+                "--short",
+                "refs/remotes/origin/HEAD",
+            ]
+            return gate.subprocess.CompletedProcess(args, 0, "origin/dev\n", "")
+
+        monkeypatch.setattr(gate, "_gh", unavailable)
+        monkeypatch.setattr(gate.subprocess, "run", default_branch)
+        return root, cache, now
+
+    def test_fresh_exact_repo_and_branch_cache_runs_the_gate(
+        self, cached_contexts: tuple[Path, Path, int], tmp_path: Path
+    ) -> None:
+        root, _, _ = cached_contexts
+        contexts, source = gate.resolve_required_contexts("OmniNode-ai/fixture", root)
+        assert contexts == ["unit-tests"]
+        assert "controller" in source
+        assert "60s-old" in source
+        assert (
+            _run(
+                root,
+                repo="OmniNode-ai/fixture",
+                baseline=_baseline(tmp_path, EMPTY_BASELINE),
+            )
+            == 0
+        )
+
+    def test_cached_contexts_still_refuse_an_unenforced_job(
+        self, cached_contexts: tuple[Path, Path, int], tmp_path: Path
+    ) -> None:
+        root, _, _ = cached_contexts
+        (root / ".github/workflows/extra.yml").write_text(
+            CLEAN.replace("unit-tests:", "unenforced-tests:")
+        )
+        assert (
+            _run(
+                root,
+                repo="OmniNode-ai/fixture",
+                baseline=_baseline(tmp_path, EMPTY_BASELINE),
+            )
+            == 1
+        )
+
+    @pytest.mark.parametrize(
+        "defect", ["stale", "future", "branch", "missing", "shape"]
+    )
+    def test_unusable_controller_cache_remains_a_refusal(
+        self, cached_contexts: tuple[Path, Path, int], defect: str
+    ) -> None:
+        root, cache, now = cached_contexts
+        data = json.loads(cache.read_text())
+        row = data["fixture:dev"]
+        if defect in {"stale", "future"}:
+            stamp = now - 6 * 3600 - 1 if defect == "stale" else now + 1
+            row["read_at"] = datetime.fromtimestamp(stamp, UTC).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+        elif defect == "branch":
+            data["fixture:main"] = data.pop("fixture:dev")
+        elif defect == "missing":
+            del row["read_at"]
+        else:
+            row["contexts"] = "unit-tests"
+        cache.write_text(json.dumps(data))
+        with pytest.raises(gate.GateError, match="no fresh cache"):
+            gate.resolve_required_contexts("OmniNode-ai/fixture", root)
+
+    def test_other_organization_cannot_use_this_controller_cache(
+        self, cached_contexts: tuple[Path, Path, int]
+    ) -> None:
+        root, _, _ = cached_contexts
+        with pytest.raises(gate.GateError, match="no fresh cache"):
+            gate.resolve_required_contexts("AnotherOrg/fixture", root)
 
 
 class TestAC6TheGateIsItselfRequired:
