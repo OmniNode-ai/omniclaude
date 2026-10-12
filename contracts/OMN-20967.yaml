@@ -1,0 +1,30 @@
+schema_version: 1.0.0
+ticket_id: OMN-20967
+title: No Anthropic key value can enter a workflow
+summary: A pytest ratchet reads every file under .github/workflows/, hostile-reviewer.yml included, and fails when one spells the Anthropic key prefix. The positive control assembles its key-shaped string at test time. The ratchet is a pre-commit hook and runs in CI.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-workflow-key-prefix-scan
+    statement: No workflow in this repository spells the Anthropic key prefix, and a seeded key-shaped string fails the scan.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: no Anthropic key value appears in any workflow file under .github/workflows/ -- falsifier: tests/ci/test_anthropic_key_prefix_workflows_omn20967.py scans every workflow including hostile-reviewer.yml and fails when a key-shaped string assembled at test time is planted in an env value, a comment or a run line (uv run pytest on that file)'
+evidence_requirements:
+  - kind: tests
+    description: The workflow scan over the real tree, three seeded placements that fail it and a clean workflow that passes it.
+    command: uv run pytest tests/ci/test_anthropic_key_prefix_workflows_omn20967.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn20967-ac1-workflow-key-scan
+    description: The real workflow tree is clean and each seeded placement of a key-shaped string fails the scan.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_anthropic_key_prefix_workflows_omn20967.py -q
+    binds_ac:
+      - AC1

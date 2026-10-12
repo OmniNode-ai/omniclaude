@@ -122,6 +122,8 @@ jobs:
         run: uv run pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov
       - name: Verify imperative contract guard caller and parity (OMN-21006)
         run: uv run pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
+      - name: No Anthropic key value in a workflow (OMN-20967)
+        run: uv run pytest tests/ci/test_anthropic_key_prefix_workflows_omn20967.py -q --no-cov
       - name: Verify advisory gate controller cache and refusal controls (OMN-21006)
         run: uv run pytest tests/scripts/test_advisory_job_gate.py -q
       - name: Verify Git effect subprocess compatibility
