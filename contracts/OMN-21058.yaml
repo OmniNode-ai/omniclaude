@@ -16,20 +16,20 @@ requirements:
     acceptance:
       - id: "AC1"
         statement: |-
-          AC1: after the OpenRouter key is entered, onboarding shows a numbered list of models the key can use, read from the provider's live model list for that key, and the developer chooses by number; an empty or out-of-range answer asks again -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model
+          AC1: after the OpenRouter key is entered, onboarding shows a numbered list of models the key can use, read from the provider's live model list for that key, and the developer chooses by number; an empty or out-of-range answer asks again -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model -x
       - id: "AC2"
         statement: |-
-          AC2: the chosen model reaches `onex models add openrouter --model <id>`, and the one pinned delegation for OpenRouter answers on that model -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model
+          AC2: the chosen model reaches `onex models add openrouter --model <id>`, and the one pinned delegation for OpenRouter answers on that model -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model -x
       - id: "AC3"
         statement: |-
-          AC3: onboarding never stores an OpenRouter model the developer did not choose, and a key whose model list cannot be read ends OpenRouter with the provider's reason while the other models carry on -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model
+          AC3: onboarding never stores an OpenRouter model the developer did not choose, and a key whose model list cannot be read ends OpenRouter with the provider's reason while the other models carry on -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model -x
       - id: "AC4"
         statement: |-
-          AC4: `--provider openrouter` run unattended with a stored key keeps the stored key's model and asks nothing -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model
+          AC4: `--provider openrouter` run unattended with a stored key keeps the stored key's model and asks nothing -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model -x
 evidence_requirements:
   - kind: tests
     description: "The OpenRouter model is chosen by number from the key's list, reaches onex models add --model, is never picked for the developer, and an unattended run keeps the stored model"
-    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model -x"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -40,7 +40,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model"
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model -x"
     binds_ac:
       - AC1
       - AC2

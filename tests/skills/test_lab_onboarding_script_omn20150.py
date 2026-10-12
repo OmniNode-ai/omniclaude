@@ -1061,12 +1061,17 @@ _HIDDEN = "(input is hidden):"
 
 
 def _preflight(
-    tmp_path: Path, steps: list[tuple[str, str]], *args: str, **extra: str
+    tmp_path: Path,
+    steps: list[tuple[str, str]],
+    *args: str,
+    timeout: float = 120,
+    **extra: str,
 ) -> tuple[str, int]:
     return _drive_tty(
         ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers", *args],
         _phase0_env(tmp_path, **extra),
         steps,
+        timeout=timeout,
     )
 
 
@@ -1425,6 +1430,9 @@ def test_phase_4_accepts_an_answer_from_any_key_that_passed_and_nothing_else() -
 # them, and a key whose list cannot be read ends OpenRouter alone.
 # ---------------------------------------------------------------------------
 
+# The merge-base control runs these against a script that never asks for a
+# model: fail inside the verifier's 30 s per-check ceiling, not after 120 s.
+_OR_TIMEOUT = 10.0
 _OR_KEY = "sk-or-v1-test"
 _OR_MODELS = {
     "data": [
@@ -1488,6 +1496,7 @@ def test_openrouter_model_is_chosen_by_number_from_the_keys_own_list(
                 (_OR_PICK, "2"),
                 ("Continue?", "q"),
             ],
+            timeout=_OR_TIMEOUT,
             ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, str(served["url"])),
         )
     assert served["auth"] == [f"Bearer {_OR_KEY}"]  # read for this key
@@ -1572,6 +1581,7 @@ def test_openrouter_model_list_unreadable_ends_openrouter_and_the_rest_carry_on(
                 ("OpenRouter key (2 of 2)", _OR_KEY),
                 ("Continue?", "q"),
             ],
+            timeout=_OR_TIMEOUT,
             ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, str(served["url"])),
         )
     assert f"✗ OpenRouter: {reason}" in out
@@ -1594,6 +1604,7 @@ def test_openrouter_model_list_unreachable_ends_openrouter(tmp_path: Path) -> No
     out, _ = _preflight(
         tmp_path,
         [(_MENU, "2"), (_HIDDEN, _OR_KEY), (_MENU, "q")],
+        timeout=_OR_TIMEOUT,
     )
     assert "✗ OpenRouter: its model list could not be reached" in out
     assert "Every model was skipped. Choose at least one." in out
