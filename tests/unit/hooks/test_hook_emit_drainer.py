@@ -29,6 +29,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -94,6 +95,31 @@ def test_drain_preserves_fifo_order(jdir: Path) -> None:
 
 def test_drain_on_empty_journal_is_a_noop(jdir: Path) -> None:
     assert drainer.drain_once(jdir, FakeEmitter()) == (0, 0, 0)  # type: ignore[arg-type]
+
+
+def test_recovery_retains_overflow_then_publishes_every_record(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed(jdir, 5)
+    expected = [entry.record.event_id for entry in journal.list_pending(jdir)]
+    enforce_bound = journal.enforce_bound
+    monkeypatch.setattr(journal, "enforce_bound", lambda path: enforce_bound(path, 2))
+
+    stalled = FakeEmitter(fail_after=0)
+    result = drainer.drain_once(
+        jdir, cast("drainer._Emitter", stalled), preserve_backlog=True
+    )
+    assert result == (0, 5, 0)
+    assert [entry.record.event_id for entry in journal.list_pending(jdir)] == expected
+
+    working = FakeEmitter()
+    result = drainer.drain_once(
+        jdir, cast("drainer._Emitter", working), preserve_backlog=True
+    )
+    assert result == (5, 0, 0)
+    assert working.published == expected
+    assert journal.list_pending(jdir) == []
+    assert not journal.loss_log_path(jdir).exists()
 
 
 def test_semantic_journal_record_uses_no_topic_override() -> None:

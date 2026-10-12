@@ -94,6 +94,12 @@ COVERED: dict[str, tuple[list[str], str, str]] = {
     ),
 }
 
+# The verbs a lane is refused. `gh workflow run` is covered but takes the logged fallback
+# (RULING 2026-10-12T05:03:28Z): its replacement, onex scm workflow-run, fails on the bus
+# terminal subscribe, so a lane keeps gh for it and every use writes one FRICTION row
+# (tests/scripts/test_gh_lane_fallback.py).
+REFUSED = [v for v in COVERED if v != "workflow run"]
+
 # Writes onex scm has no operation for (it refuses merge, arm, rerun and update-branch,
 # naming the landing controller): by AC3 they stay allowed from a lane.
 UNCOVERED_WRITES = [
@@ -244,7 +250,7 @@ def _assert_passed(
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("gh_verb", list(COVERED), ids=str)
+@pytest.mark.parametrize("gh_verb", REFUSED, ids=str)
 def test_covered_verb_from_a_lane_is_refused_naming_the_onex_scm_verb(
     env: dict[str, str], gh_verb: str
 ) -> None:

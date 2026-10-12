@@ -28,6 +28,7 @@ from tests.scripts.test_gh_lane_write_guard import (
     COVERED,
     ENFORCED,
     FAKE_GH,
+    REFUSED,
     UNCOVERED_WRITES,
     _install,
 )
@@ -196,7 +197,7 @@ def test_refusal_row_lane_read_spent_fallback_budget_writes_one_row(box: Box) ->
     assert len(box.rows()) == 1
 
 
-@pytest.mark.parametrize("gh_verb", list(COVERED), ids=str)
+@pytest.mark.parametrize("gh_verb", REFUSED, ids=str)
 def test_refusal_row_covered_write_writes_one_row(box: Box, gh_verb: str) -> None:
     argv, _scm_verb, _operation = COVERED[gh_verb]
     result = box.gh(*argv, lane=True)
