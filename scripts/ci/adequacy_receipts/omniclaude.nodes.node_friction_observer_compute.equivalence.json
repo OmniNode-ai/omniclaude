@@ -1,0 +1,8 @@
+{
+  "node_id": "omniclaude.nodes.node_friction_observer_compute",
+  "selected_input_hashes": [
+    "sha256:8e7dd36fbd95447974f8058680ba69d93c8ac02d1f8a7e22949a13f314747f17",
+    "sha256:6ab3585a261e6f02ebff27d9921b5929261723e46dc5deb8d2ef1d3723b4b735"
+  ],
+  "status": "pass"
+}

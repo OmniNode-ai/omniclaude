@@ -1,0 +1,22 @@
+{
+  "branch_coverage_pct": 64.37,
+  "candidate_count": 30,
+  "coverage_target": 80.0,
+  "handler_module": "omniclaude.nodes.node_friction_observer_compute.handlers.handler_friction_observer",
+  "handler_module_sha256": "sha256:578fb4c6a48b025036a979a5d36b6b19d889ced4b79ecb01f6d37036c8b6972a",
+  "meets_target": false,
+  "node_id": "omniclaude.nodes.node_friction_observer_compute",
+  "receipt_schema": "adequacy_receipt.v1",
+  "recorded_at": "2026-10-12T14:01:34.159164+00:00",
+  "recorder_schema": "adequacy_receipt.v1",
+  "selected_count": 2,
+  "selected_input_hashes": [
+    "sha256:8e7dd36fbd95447974f8058680ba69d93c8ac02d1f8a7e22949a13f314747f17",
+    "sha256:6ab3585a261e6f02ebff27d9921b5929261723e46dc5deb8d2ef1d3723b4b735"
+  ],
+  "uncovered_waiver": {
+    "reason": "OMN-21042 gives node_friction_observer_compute its first handler. The receipt selects 2 of 30 replay inputs (a partial and a failed skill) that reach 56 of 87 statements and branches (64.37 percent). The 31 not reached are: the three malformed-contract raises in load_rules (not a mapping, duplicate rule_id, wildcard before the last enabled rule), the success guard in handle, the no-rule-matched return, the event-type-mismatch and bare-event-pattern arms of _matches, and the unknown-template-key arm of _render. No failure signal reaches any of them under the shipped contract rules; tests/unit/nodes/test_node_friction_observer_handler.py exercises them directly (TestHandlerBranchesTheShippedContractNeverReaches, test_success_is_not_friction). Behavior parity with the pre-handler portable classifier is replayed on all 30 corpus inputs by TestFlipArtifactsReplay.",
+    "uncovered_branch_count": 31
+  },
+  "volatile_mask": []
+}
