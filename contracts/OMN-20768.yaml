@@ -16,7 +16,7 @@ interfaces_touched: []
 evidence_requirements:
   - kind: tests
     description: "CI Summary gate tests pass, including the re-run attempt sweep cases"
-    command: "uv run pytest tests/ci/test_ci_summary_gate.py tests/ci/test_ci_summary_gate_bot_skip_omn19167.py -q --no-cov"
+    command: "uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""

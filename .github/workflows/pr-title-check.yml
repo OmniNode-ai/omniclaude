@@ -15,18 +15,7 @@ concurrency:
 
 
 jobs:
-  occ-preflight:
-    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6
-    permissions:
-      contents: read
-      pull-requests: read
-    with:
-      contracts-dir: contracts
-      receipts-dir: drift/dod_receipts
-
   pr-title:
-    needs: occ-preflight
     if: always()
     # OMN-20958: the decision moved out of the change-control repository's
     # pr-title-check-reusable.yml into omnimarket's node_pr_title_check_compute,

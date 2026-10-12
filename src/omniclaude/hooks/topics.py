@@ -644,17 +644,6 @@ class TopicBase(StrEnum):
     CONTRACT_DRIFT_DETECTED = "onex.evt.onex-change-control.contract-drift-detected.v1"
     """Emitted by onex_change_control when contract drift is detected during check-drift."""
 
-    # ==========================================================================
-    # Build-loop lifecycle topics (OMN-7400)
-    # Emitted by the omnibase_infra build-loop orchestrator on completion.
-    # Subscribed by node_friction_observer_compute for friction analysis.
-    # ==========================================================================
-    BUILD_LOOP_BUILD_COMPLETED = "onex.evt.omnibase-infra.build-loop-build-completed.v1"
-    """Emitted by the build-loop orchestrator after a successful build cycle."""
-
-    BUILD_LOOP_FAILED = "onex.evt.omnibase-infra.build-loop-failed.v1"
-    """Emitted by the build-loop orchestrator when a build cycle fails."""
-
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

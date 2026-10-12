@@ -15,7 +15,6 @@ import pytest
 import yaml
 
 from scripts.ci.ci_summary_gate import (
-    CONDITIONAL_SWEEP_EXCLUSIONS,
     EXTERNAL_SWEEP_EXCLUSIONS,
     evaluate_external_sweep,
 )
@@ -87,22 +86,25 @@ def test_caller_workflow_shape() -> None:
     assert "secrets: inherit" not in text, "caller must not inherit secrets"
 
 
-def test_caller_ends_comparison_after_the_s5_shadow_count() -> None:
+def test_caller_verifier_ships_the_occ_difference_classifier() -> None:
     job = yaml.safe_load(CALLER_PATH.read_text(encoding="utf-8"))["jobs"][
         "repo-evidence"
     ]
-    assert job["with"].get("compare-with-occ") == "false", (
-        'OMN-20975 ends the S5 count with compare-with-occ: "false" before S6'
-    )
-    assert job["with"].get("shadow") == "true", (
-        'the S5 shadow count requires shadow: "true" (a quoted string input), so '
-        "no repo-evidence job concludes anything but success"
-    )
     version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
     assert version >= _DIFFERENCE_CLASSIFIER_FLOOR, (
         "verifier-version must ship node_dod_verify occ-difference "
         f"(>= {'.'.join(map(str, _DIFFERENCE_CLASSIFIER_FLOOR))})"
     )
+
+
+def test_caller_enforces_and_stops_comparing_with_occ_after_the_s6_cutover() -> None:
+    job = yaml.safe_load(CALLER_PATH.read_text(encoding="utf-8"))["jobs"][
+        "repo-evidence"
+    ]
+    assert job["with"].get("compare-with-occ") == "false"
+    assert job["with"].get("shadow") == "false"
+    version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
+    assert version >= (0, 4, 294)
 
 
 def test_caller_pins_the_reusable_that_classifies_a_contract_in_another_repo() -> None:
@@ -291,7 +293,7 @@ def _row(name: str, conclusion: str, row_id: int) -> dict[str, Any]:
 def _sweep(rows: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
     # exclusions={} so the registry cannot be what keeps the sweep green.
     failures, _in_flight, swept, _excluded = evaluate_external_sweep(
-        rows, exclusions={}, conditional_exclusions={}, now=_SWEEP_NOW
+        rows, expected=(), exclusions={}, now=_SWEEP_NOW
     )
     return failures, swept
 
@@ -355,4 +357,3 @@ def test_external_sweep_planted_disagreement_row_is_green_and_its_verdict_stays_
 def test_external_sweep_needs_no_exclusion_for_the_repo_evidence_contexts() -> None:
     for name in _REPO_EVIDENCE_CONTEXTS:
         assert name not in EXTERNAL_SWEEP_EXCLUSIONS, f"{name}: widening the sweep"
-        assert name not in CONDITIONAL_SWEEP_EXCLUSIONS, f"{name}: widening the sweep"

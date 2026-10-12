@@ -44,12 +44,6 @@ _FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 _RELEASE_TAG = re.compile(r"^v\d+\.\d+\.\d+$")
 # A ref that is resolved from this repo's own uv.lock by an earlier step.
 _LOCK_RESOLVED = re.compile(r"^\$\{\{\s*steps\.\w+_pin\.outputs\.(rev|tag)\s*\}\}$")
-# OCC evidence DATA read at the exact commit a ticket's evidence names (a merge
-# commit sha resolved and validated 40-hex by an earlier step), not sibling code.
-_EVIDENCE_SHA = re.compile(
-    r"^\$\{\{\s*steps\.(dod-evidence\.outputs\.source"
-    r"|resolve_contract_compliance_evidence\.outputs\.occ_sha)\s*\}\}$"
-)
 _INPUT_REF = re.compile(r"^\$\{\{\s*inputs\.(?P<name>[\w-]+)\s*\}\}$")
 _CLONE = re.compile(
     rf"git clone\b(?P<flags>[^\n]*?)https://github\.com/OmniNode-ai/(?P<repo>{_SIBLING_RE})\.git"
@@ -92,7 +86,6 @@ def _violations(name: str, text: str) -> list[str]:
                     if not (
                         _FULL_SHA.match(ref)
                         or _LOCK_RESOLVED.match(ref)
-                        or _EVIDENCE_SHA.match(ref)
                         or _input_defaults_to_sha(doc, ref)
                     ):
                         found.append(
