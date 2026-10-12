@@ -10,6 +10,9 @@ controller's own scripts and the sanctioned read scripts keep their access, and
 failing-job logs and one check run's detail go through a cached, per-hour-budgeted read
 gateway.
 
+These refusal tests run with every verb strict; the default fallback is covered in
+``test_gh_lane_read_fallback.py``.
+
 Each test puts a scripted fake ``gh`` (and, for ancestry, a fake ``ps``) behind the user
 shim. No test uses the network or an operator credential.
 """
@@ -36,6 +39,28 @@ exit "${FAKE_GH_RC:-0}"
 
 RULING = "RULING 2026-10-10T18:17:36Z"
 
+STRICT_ALL_CONF = "".join(
+    f"ONEX_GH_LANE_READ_STRICT_{verb}=1\n"
+    for verb in (
+        "API",
+        "API_GRAPHQL",
+        "PR_LIST",
+        "PR_DIFF",
+        "PR_STATUS",
+        "PR_CHECKOUT",
+        "RUN_LIST",
+        "RUN_DOWNLOAD",
+        "RUN_WATCH",
+        "REPO_VIEW",
+        "ISSUE_VIEW",
+        "ISSUE_LIST",
+        "RELEASE_LIST",
+        "WORKFLOW_LIST",
+        "VARIABLE_GET",
+        "STATUS",
+    )
+)
+
 
 def _write_exec(path: Path, body: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -50,6 +75,9 @@ def env(tmp_path: Path) -> dict[str, str]:
     fake_dir.mkdir()
     _write_exec(fake_dir / "gh", FAKE_GH)
     install_ancestry_ps(fake_dir)
+    conf = tmp_path / "config" / "omni" / "gh-gateway.env"
+    conf.parent.mkdir(parents=True)
+    conf.write_text(STRICT_ALL_CONF)
     return {
         "PATH": f"{SHIM.parent}:{fake_dir}:/usr/bin:/bin",
         "HOME": str(tmp_path / "home"),
@@ -511,8 +539,8 @@ def test_gateway_budget_refuses_when_spent_and_ignores_the_environment(
     env: dict[str, str], tmp_path: Path
 ) -> None:
     conf = tmp_path / "config" / "omni" / "gh-gateway.env"
-    conf.parent.mkdir(parents=True)
-    conf.write_text("ONEX_GH_GATEWAY_BUDGET=2\n")
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    conf.write_text(STRICT_ALL_CONF + "ONEX_GH_GATEWAY_BUDGET=2\n")
     lane = {"ONEX_LANE": "lane", "ONEX_GH_GATEWAY_BUDGET": "1000"}
     for job in ("1", "2"):
         ok = _run(env, "api", f"repos/o/r/actions/jobs/{job}/logs", extra=lane)
@@ -534,8 +562,8 @@ def test_gateway_budget_holds_under_concurrent_misses(
     """Twelve lanes miss at once against a budget of three: the claim is appended before
     the count is read, so no two callers can both see room and both reach GitHub."""
     conf = tmp_path / "config" / "omni" / "gh-gateway.env"
-    conf.parent.mkdir(parents=True)
-    conf.write_text("ONEX_GH_GATEWAY_BUDGET=3\n")
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    conf.write_text(STRICT_ALL_CONF + "ONEX_GH_GATEWAY_BUDGET=3\n")
     run_env = dict(env)
     run_env["ONEX_LANE"] = "lane"
     procs = [
@@ -598,7 +626,7 @@ BOARD_JOBS = [
 def _configure_board_repo(env: dict[str, str], repo: str = BOARD_REPO) -> None:
     conf = Path(env["XDG_CONFIG_HOME"]) / "omni" / "gh-gateway.env"
     conf.parent.mkdir(parents=True, exist_ok=True)
-    conf.write_text(f"ONEX_GH_BOARD_REPO={repo}\n")
+    conf.write_text(STRICT_ALL_CONF + f"ONEX_GH_BOARD_REPO={repo}\n")
 
 
 @pytest.mark.unit
@@ -734,8 +762,8 @@ def test_commit_object_spends_the_shared_gateway_budget(
     env: dict[str, str], tmp_path: Path
 ) -> None:
     conf = tmp_path / "config" / "omni" / "gh-gateway.env"
-    conf.parent.mkdir(parents=True)
-    conf.write_text("ONEX_GH_GATEWAY_BUDGET=1\n")
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    conf.write_text(STRICT_ALL_CONF + "ONEX_GH_GATEWAY_BUDGET=1\n")
     lane = {"ONEX_LANE": "lane", "FAKE_GH_STDOUT": HTTP_COMMIT}
     assert _run(env, "api", "repos/o/r/actions/jobs/1/logs", extra=lane).returncode == 0
     spent = _run(env, "api", "--include", COMMIT, extra=lane)

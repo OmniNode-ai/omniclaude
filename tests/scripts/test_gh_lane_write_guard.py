@@ -594,10 +594,12 @@ def test_a_write_with_no_onex_scm_operation_stays_allowed(
 def test_reads_are_untouched(env: dict[str, str]) -> None:
     listed = ["pr", "list", "--repo", ENFORCED]
     listed_result = _run(env, *listed)
-    assert listed_result.returncode == 1
-    assert listed_result.stderr.startswith("REFUSED (OMN-20911): ")
-    assert _calls(env) == [], "a refused lane read must never reach the real gh"
+    # The lane read guard's fallback (OMN-20911) serves it; the write guard never sees it.
+    assert listed_result.returncode == 0, listed_result.stderr
+    assert _calls(env) == [listed]
+    assert _call_log_rows(env)[-1][7] == "fallback"
 
     state = _run(env, "pr", "view", "9", "--repo", ENFORCED)
     assert state.returncode == 1
     assert state.stderr.startswith("REFUSED (OMN-19856): ")
+    assert _calls(env) == [listed]
