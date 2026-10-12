@@ -19,7 +19,7 @@ requirements:
       - id: AC1
         statement: 'AC1: a named consumer read from a lane falls back to the real gh and writes exactly one FRICTION row per use; a use that cannot be recorded is refused -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py fails 7 of 11 against the dev shim'
       - id: AC2
-        statement: 'AC2: an unnamed script read from a lane is still refused with no row, and a covered write other than gh workflow run stays refused -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py -k "unnamed or other_covered_writes"'
+        statement: 'AC2: an unnamed script read from a lane is still refused with no row, and a covered write other than gh workflow run stays refused, while the named consumers and gh workflow run fall back -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py -k "unnamed or other_covered_writes or named_consumer or workflow_run" fails against the dev shim'
       - id: AC3
         statement: 'AC3: gh workflow run from a lane falls back with one FRICTION row and is refused when the row cannot be written -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py -k workflow_run'
 evidence_requirements:
@@ -43,13 +43,13 @@ dod_evidence:
     binds_ac:
       - AC1
   - id: dod-omn20911-ac2-unnamed-stays-refused
-    description: An unnamed script read and other covered writes stay refused from a lane at this head.
+    description: An unnamed script read and other covered writes stay refused from a lane while only the named consumers and gh workflow run fall back, and the lane guard suites still pass beside the fallback suite, at this head.
     source: manual
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/scripts/test_gh_lane_fallback.py -q --no-cov -k "unnamed or other_covered_writes"
+        check_value: uv run pytest tests/scripts/test_gh_lane_fallback.py -q --no-cov -k "unnamed or other_covered_writes or named_consumer or workflow_run"
       - check_type: test_passes
-        check_value: uv run pytest tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+        check_value: uv run pytest tests/scripts/test_gh_lane_fallback.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
     binds_ac:
       - AC2
   - id: dod-omn20911-ac3-workflow-run-fallback
