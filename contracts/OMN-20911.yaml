@@ -1,41 +1,58 @@
 schema_version: "1.0.0"
 ticket_id: OMN-20911
-title: "The gh shim's lane read and write guards let four named consumers and gh workflow run fall back to the old GitHub call, with one FRICTION row per use"
+title: "The gh shim's lane read and write guards fall back, logged, instead of refusing: four named consumers and gh workflow run keep their old call with a FRICTION row, and every other lane read goes through the cached, hourly-budgeted gateway until its verb is set strict in gh-gateway.env"
 summary: >
-  scripts/user-bin/gh keeps refusing GitHub reads from a lane (OMN-20911) and gh
-  writes that onex scm serves (OMN-20914), except for four read consumers with no
-  working replacement (enforcement-surface-placement, worktree-prune,
-  worktree-auto-prune, bulk-pr-throttle) and gh workflow run, whose onex scm
-  replacement fails on the dev bus. Each such use appends one FRICTION row to
-  $ONEX_STATE_DIR/friction/gh-lane-fallback.rows, and a use that cannot be
-  recorded is refused. An unnamed script and every other covered write stay refused.
+  scripts/user-bin/gh stops refusing GitHub reads from a lane (OMN-20911) and gh writes
+  that onex scm serves (OMN-20914) while their replacements do not work end to end
+  (RULING 2026-10-12T05:03:28Z). Four read consumers with no working replacement
+  (enforcement-surface-placement, worktree-prune, worktree-auto-prune, bulk-pr-throttle)
+  and gh workflow run keep their old call, and each such use appends one FRICTION row to
+  $ONEX_STATE_DIR/friction/gh-lane-fallback.rows; a use that cannot be recorded is not
+  taken as a named fallback. Every other lane read that is not a PR-state read goes
+  through the cached read gateway: a 300 second cache, then one unit of the hourly
+  ONEX_GH_GATEWAY_BUDGET, and one call-log row with action fallback. A spent budget
+  refuses the read and names the budget. A verb set strict in the gh-gateway.env file
+  (never in the environment) is refused with the local readers named, as before.
+  PR-state reads, other covered writes and non-lane reads are unchanged.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
   - id: req-omn20911-lane-read-fallbacks
-    statement: A named consumer with no working replacement keeps its old GitHub call from a lane only with a recorded FRICTION row; every other lane read or covered write stays refused.
+    statement: A named consumer with no working replacement keeps its old GitHub call from a lane only with a recorded FRICTION row; every other covered write stays refused.
     acceptance:
       - id: AC1
-        statement: 'AC1: a named consumer read from a lane falls back to the real gh and writes exactly one FRICTION row per use; a use that cannot be recorded is refused -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py fails 7 of 11 against the dev shim'
+        statement: 'AC1: a named consumer read from a lane falls back to the real gh and writes exactly one FRICTION row per use; a use that cannot be recorded is not taken as a named fallback (it is refused when its verb is strict, and otherwise counted by the budgeted gateway) -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py fails 8 of 13 against the shim before the fallback'
       - id: AC2
-        statement: 'AC2: an unnamed script read from a lane is still refused with no row, and a covered write other than gh workflow run stays refused, while the named consumers and gh workflow run fall back -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py -k "unnamed or other_covered_writes or named_consumer or workflow_run" fails against the dev shim'
+        statement: 'AC2: an unnamed script read from a lane writes no FRICTION row and is refused when its verb is strict, and a covered write other than gh workflow run stays refused, while the named consumers and gh workflow run fall back -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py -k "unnamed or other_covered_writes or named_consumer or workflow_run" fails against the shim before the fallback'
       - id: AC3
         statement: 'AC3: gh workflow run from a lane falls back with one FRICTION row and is refused when the row cannot be written -- falsifier: uv run pytest tests/scripts/test_gh_lane_fallback.py -k workflow_run'
+  - id: req-omn20911-lane-read-fallback
+    statement: A lane read that is not a PR-state read falls back to the cached gateway inside the hourly budget, logged as a fallback, and is refused only when the budget is spent or its verb is strict in gh-gateway.env.
+    acceptance:
+      - id: AC4
+        statement: 'AC4: a lane read runs the real gh once, spends one unit of the hourly budget, is logged with action fallback, and an identical read inside 300 seconds is served from the cache; a failed answer, a local action, a stream and a query read from a file are never cached -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -k "inside_budget or served_from_cache or failed_answer or local_actions or graphql_query or cache_key" fails against the shim before the fallback'
+      - id: AC5
+        statement: 'AC5: a spent budget refuses the read naming ONEX_GH_GATEWAY_BUDGET, and a verb is strict only when gh-gateway.env says ONEX_GH_LANE_READ_STRICT_<VERB>=1, never from the environment and never for another value -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -k "spent_budget or strict" fails against the shim before the fallback'
+      - id: AC6
+        statement: 'AC6: PR-state reads stay refused without strict config, lane writes and non-lane reads are unchanged, and the lane read, write and refusal-row suites agree with the fallback -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py fails against the shim before the fallback'
 evidence_requirements:
   - kind: tests
-    description: The shim's lane fallback for named consumers and gh workflow run, the FRICTION row per use, and refusal when the row cannot be recorded.
+    description: The shim's lane fallback for named consumers and gh workflow run, the FRICTION row per use, and the unrecordable use not taken as a named fallback.
     command: uv run pytest tests/scripts/test_gh_lane_fallback.py -q --no-cov
   - kind: tests
-    description: The lane read and write guard suites still pass with the fallback in place.
-    command: uv run pytest tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+    description: The shim's lane read fallback, its cache, its hourly budget and its per-verb strict config.
+    command: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov
+  - kind: tests
+    description: The lane read, write and refusal-row guard suites still pass with both fallbacks in place.
+    command: uv run pytest tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ''
   follow_up_ticket_id: ''
 dod_evidence:
   - id: dod-omn20911-ac1-named-consumer-fallback
-    description: A named consumer read from a lane falls back with one FRICTION row per use, and an unrecordable fallback is refused, at this head.
+    description: A named consumer read from a lane falls back with one FRICTION row per use, and an unrecordable use is not taken as a named fallback, at this head.
     source: manual
     checks:
       - check_type: test_passes
@@ -43,7 +60,7 @@ dod_evidence:
     binds_ac:
       - AC1
   - id: dod-omn20911-ac2-unnamed-stays-refused
-    description: An unnamed script read and other covered writes stay refused from a lane while only the named consumers and gh workflow run fall back, and the lane guard suites still pass beside the fallback suite, at this head.
+    description: An unnamed script read is refused from a lane when its verb is strict and other covered writes stay refused, while only the named consumers and gh workflow run fall back, and the lane guard suites still pass beside the fallback suite, at this head.
     source: manual
     checks:
       - check_type: test_passes
@@ -60,3 +77,41 @@ dod_evidence:
         check_value: uv run pytest tests/scripts/test_gh_lane_fallback.py -q --no-cov -k workflow_run
     binds_ac:
       - AC3
+  - id: dod-omn20911-ac4-lane-read-fallback
+    description: A lane read falls back to the cached gateway, spends one unit of the hourly budget and is logged as a fallback, and an identical read inside 300 seconds is served from the cache, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k "inside_budget or served_from_cache or failed_answer or local_actions or graphql_query or cache_key"
+    binds_ac:
+      - AC4
+  - id: dod-omn20911-ac5-budget-and-strict
+    description: A spent budget refuses the read naming the budget, and a verb is strict only from gh-gateway.env with the value 1, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k "spent_budget or strict"
+    binds_ac:
+      - AC5
+  - id: dod-omn20911-ac6-unchanged-and-suites
+    description: PR-state reads stay refused, lane writes and non-lane reads are unchanged, and the guard suites agree with the fallback, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k "pr_state_reads or lane_writes_are_unaffected or non_lane_read"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py -q --no-cov -k "positive_control_the_same_read_passes_outside_a_lane"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py -q --no-cov -k "lane_gh_read_refused"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py -q --no-cov -k "commit_object_negative_still_refused_from_a_lane"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py -q --no-cov -k "commit_object and not commit_object_negative_still_refused_from_a_lane"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_guard.py -q --no-cov -k "not positive_control_the_same_read_passes_outside_a_lane and not lane_gh_read_refused and not commit_object"
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_write_guard.py -q --no-cov
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+    binds_ac:
+      - AC6

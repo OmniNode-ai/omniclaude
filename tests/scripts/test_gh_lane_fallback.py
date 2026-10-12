@@ -162,12 +162,27 @@ def test_each_use_is_one_more_row(env: dict[str, str], tmp_path: Path) -> None:
     assert len(_calls(env)) == 3
 
 
+def _set_strict(env: dict[str, str], verb: str) -> None:
+    """Make one verb strict in gh-gateway.env, the only place that can (never the env)."""
+    conf = Path(env["XDG_CONFIG_HOME"]) / "omni" / "gh-gateway.env"
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    conf.write_text(f"ONEX_GH_LANE_READ_STRICT_{verb}=1\n")
+
+
+def _call_log_actions(env: dict[str, str]) -> list[str]:
+    log = Path(env["ONEX_GH_CALLS_LOG"])
+    if not log.exists():
+        return []
+    return [line.split("\t")[7] for line in log.read_text().splitlines()]
+
+
 @pytest.mark.unit
-def test_an_unnamed_script_is_still_refused_and_writes_no_row(
+def test_an_unnamed_script_is_refused_when_its_verb_is_strict_and_writes_no_row(
     env: dict[str, str], tmp_path: Path
 ) -> None:
     """Negative twin: the same read under another script name is a lane read."""
     _, _, argv = CONSUMERS["bulk-pr-throttle"]
+    _set_strict(env, "API")
 
     result = _run_as(env, tmp_path, "python3", "scripts/ci/bulk_pr_throttle2.py", argv)
 
@@ -178,13 +193,33 @@ def test_an_unnamed_script_is_still_refused_and_writes_no_row(
 
 
 @pytest.mark.unit
-def test_a_fallback_that_cannot_be_recorded_is_refused(
+def test_an_unnamed_script_takes_the_budgeted_gateway_not_the_named_fallback(
     env: dict[str, str], tmp_path: Path
 ) -> None:
-    """An uncounted fallback could never be proven unused, so it is not taken."""
+    """Strict is off by default: the unnamed read is counted by the gateway, not by a row."""
+    _, _, argv = CONSUMERS["bulk-pr-throttle"]
+
+    result = _run_as(env, tmp_path, "python3", "scripts/ci/bulk_pr_throttle2.py", argv)
+
+    assert result.returncode == 0, result.stderr
+    assert "named consumer" not in result.stderr
+    assert _calls(env) == [argv]
+    assert _call_log_actions(env) == ["fallback"]
+    assert _rows(env) == []
+
+
+@pytest.mark.unit
+def test_a_named_fallback_that_cannot_be_recorded_is_not_taken(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """An uncounted named fallback could never be proven unused, so it is not taken.
+
+    The consumer is then an ordinary lane read: refused when its verb is strict.
+    """
     blocker = tmp_path / "state-is-a-file"
     blocker.write_text("")
     interpreter, rel, argv = CONSUMERS["worktree-auto-prune"]
+    _set_strict(env, "PR_LIST")
 
     result = _run_as(
         {**env, "ONEX_STATE_DIR": str(blocker)}, tmp_path, interpreter, rel, argv
@@ -193,6 +228,25 @@ def test_a_fallback_that_cannot_be_recorded_is_refused(
     assert result.returncode == 1, result.stderr
     assert result.stderr.startswith("REFUSED (OMN-20911): ")
     assert _calls(env) == []
+
+
+@pytest.mark.unit
+def test_a_named_fallback_that_cannot_be_recorded_falls_to_the_budgeted_gateway(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """With the verb not strict, the unrecordable consumer is counted by the gateway instead."""
+    blocker = tmp_path / "state-is-a-file"
+    blocker.write_text("")
+    interpreter, rel, argv = CONSUMERS["worktree-auto-prune"]
+
+    result = _run_as(
+        {**env, "ONEX_STATE_DIR": str(blocker)}, tmp_path, interpreter, rel, argv
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "named consumer" not in result.stderr
+    assert _calls(env) == [argv]
+    assert _call_log_actions(env) == ["fallback"]
 
 
 @pytest.mark.unit

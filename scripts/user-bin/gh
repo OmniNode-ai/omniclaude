@@ -50,11 +50,12 @@
 # Full contract at the guard, below the search guard.
 #
 # Lane read guard (OMN-20911): from a lane context (an agent environment marker, or a
-# Claude Code / Codex / ChatGPT ancestor process) every other GitHub read is refused too,
-# with the local reader named; writes stay allowed. Failing-job logs, one check run's
-# detail and one commit object by full sha (OMN-20960) go through a cached read gateway
-# with a per-hour budget instead (RULING 2026-10-10T18:17:36Z). Full contract at the
-# guard, below the PR-state guard.
+# Claude Code / Codex / ChatGPT ancestor process) every other GitHub read falls back to the
+# cached read gateway and its per-hour budget, logged `fallback`, until its verb is set
+# strict in gh-gateway.env; a strict verb is refused with the local reader named. Writes
+# stay allowed. Failing-job logs, one check run's detail and one commit object by full sha
+# (OMN-20960) go through the same gateway (RULING 2026-10-10T18:17:36Z; fallback per the
+# 2026-10-12T05:03:28Z ruling). Full contract at the guard, below the PR-state guard.
 #
 # Lane write guard (OMN-20914): from a lane, a gh write that `onex scm` serves (read from
 # the operations table of node_github_repo_write_effect's contract in the omnimarket the
@@ -402,7 +403,7 @@ _classify() {
   fi
 }
 
-# _call_log <exit code> <action: allowed|refused>
+# _call_log <exit code> <action: allowed|refused|fallback>
 _call_log() {
   [ "${ONEX_GH_USAGE_LOG:-1}" = "0" ] && return 0
   local file="" dir="" ts="" oversized=""
@@ -457,10 +458,10 @@ _refusal_row() {
   return 0
 }
 
-# _log <exit code> <cache: hit|miss|none>
+# _log <exit code> <cache: hit|miss|none> [call-log action, default allowed]
 _log() {
   [ "${ONEX_GH_USAGE_LOG:-1}" = "0" ] && return 0
-  _call_log "$1" allowed
+  _call_log "$1" "${3:-allowed}"
   local dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage"
   local ts session ticket="" identity="" route_reason=""
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -941,7 +942,21 @@ unset _prs_guarded _prs_ep _prs_class _prs_o _prs_r _prs_n _prs_why _rs_owner _r
 # a lane can make: `gh api` GET/HEAD of any endpoint (contents, artifacts, commits, user,
 # releases, ...), `gh api graphql` without a mutation, and every read verb (pr list|diff|
 # status, run list|download|watch, repo view, issue view|list, release list|view, workflow
-# list|view, pr checkout, variable get, gh status, ...). No off switch, no warning mode.
+# list|view, pr checkout, variable get, gh status, ...).
+#
+# Fallback until the bus read path works end to end (ruling 2026-10-12T05:03:28Z: a gate
+# whose replacement path does not work today falls back to the old path, logged, until
+# the replacement proves out, then goes strict). Such a lane read is not refused: it goes
+# through the cached read gateway below as the "fallback" kind (a 300 s cache, then one
+# unit of the same hourly ONEX_GH_GATEWAY_BUDGET the other gateway shapes spend, so the
+# landing controller's quota stays protected), and every such call is one call-log row
+# with action `fallback` (lane, verb, endpoint). Only a spent budget refuses it, naming
+# the budget. Strict mode returns per verb, read only from
+# ${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env, never from the environment:
+#   ONEX_GH_LANE_READ_STRICT_<VERB>=1
+# where <VERB> is the call's class upper-cased with spaces as "_" (API, API_GRAPHQL,
+# PR_LIST, PR_DIFF, RUN_LIST, REPO_VIEW, ISSUE_VIEW, STATUS, ...). Unset, or any value but
+# 1, is fallback. A strict verb is refused with the local readers named, as before.
 #
 # A lane context is a call made by an agent, decided by either, in this order:
 #   (a) an ancestor process (up to 12 up) that is Claude Code, the Claude desktop app,
@@ -1059,6 +1074,31 @@ _lane_sanctioned_script() {
   return 1
 }
 
+# Is the lane read guard strict for this call's verb? Only gh-gateway.env decides.
+_lane_read_strict() {
+  local conf="${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env" line key
+  [ -f "$conf" ] || return 1
+  key="$(printf '%s' "$_cls" | tr '[:lower:]' '[:upper:]' | tr ' ' '_' | tr -cd 'A-Z0-9_')"
+  [ -n "$key" ] || return 1
+  key="ONEX_GH_LANE_READ_STRICT_$key"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "$key"=*) [ "$(_conf_strip_comment "${line#*=}")" = "1" ] && return 0 ;;
+    esac
+  done < "$conf"
+  return 1
+}
+
+# The local readers a lane read is pointed at, on a strict refusal and a spent budget.
+_lane_read_alternatives() {
+  printf '%s\n' \
+    'Read it locally instead:' \
+    "  PR state, checks, reviews, mergeability: python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr ${_rs_owner:-OmniNode-ai}/$_lr_r#<n>   (--status for the state file's age; the same records are on the bus as onex.evt.omnimarket.pr-state-observed.v1)" \
+    "  files, contents, diffs, commits, tags, history: git -C \$OMNI_HOME/$_lr_r show|log|diff origin/dev...   (the canonical clones, kept fetched by canonical-clone-sync)" \
+    '  a failing-job log, one job'"'"'s run id and steps, one check run'"'"'s output: gh api repos/<o>/<r>/actions/jobs/<id>/logs, gh api repos/<o>/<r>/actions/jobs/<id>, gh api repos/<o>/<r>/check-runs/<id>[/annotations], gh run view <run> --log-failed; the job id is in the watcher record (ci.detail) and these are served by the cached read gateway with a per-hour budget; so is one commit object by its full 40-hex sha, gh api repos/<o>/<r>/commits/<sha> (the receipt-hardening hook proves a receipt commit_sha with it)' \
+    'Writes (pr create|edit|comment|review, workflow run, run rerun, api POST/PATCH/PUT/DELETE, graphql mutation) are unaffected.' >&2
+}
+
 # --- logged fallback for named consumers (OMN-20911) -------------------------------
 # RULING 2026-10-12T05:03:28Z: a gate whose replacement path does not work end to end
 # today falls back to the old path with a logged fallback until the replacement proves
@@ -1133,19 +1173,21 @@ if [ "$_gw" -eq 0 ] && _lane_is_read "$@" && ! _cacheable "$@" \
   else
     _prs_resolve "$@"
     _lr_r="${_rs_repo:-<repo>}"
-    printf '%s\n' \
-      "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why). Lanes do not read GitHub; gh is for writes (RULING 2026-10-10T18:17:36Z, re-affirming RULING 2026-09-25T14:34:28Z)." \
-      'Read it locally instead:' \
-      "  PR state, checks, reviews, mergeability: python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr ${_rs_owner:-OmniNode-ai}/$_lr_r#<n>   (--status for the state file's age; the same records are on the bus as onex.evt.omnimarket.pr-state-observed.v1)" \
-      "  files, contents, diffs, commits, tags, history: git -C \$OMNI_HOME/$_lr_r show|log|diff origin/dev...   (the canonical clones, kept fetched by canonical-clone-sync)" \
-      '  a failing-job log, one job'"'"'s run id and steps, one check run'"'"'s output: gh api repos/<o>/<r>/actions/jobs/<id>/logs, gh api repos/<o>/<r>/actions/jobs/<id>, gh api repos/<o>/<r>/check-runs/<id>[/annotations], gh run view <run> --log-failed; the job id is in the watcher record (ci.detail) and these are served by the cached read gateway with a per-hour budget; so is one commit object by its full 40-hex sha, gh api repos/<o>/<r>/commits/<sha> (the receipt-hardening hook proves a receipt commit_sha with it)' \
-      'Writes (pr create|edit|comment|review, workflow run, run rerun, api POST/PATCH/PUT/DELETE, graphql mutation) are unaffected.' >&2
-    _refusal_row gh_shim_lane_read_guard lane-github-read-via-gh-shim "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why)"
-    _call_log 1 refused
-    exit 1
+    if ! _lane_read_strict; then
+      # Fallback: the cached read gateway below serves it, counts it and logs it.
+      _gw=1
+      _gw_kind=fallback
+    else
+      printf '%s\n' \
+        "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why). Lanes do not read GitHub; gh is for writes (RULING 2026-10-10T18:17:36Z, re-affirming RULING 2026-09-25T14:34:28Z). This verb is strict in gh-gateway.env." >&2
+      _lane_read_alternatives
+      _refusal_row gh_shim_lane_read_guard lane-github-read-via-gh-shim "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why)"
+      _call_log 1 refused
+      exit 1
+    fi
   fi
 fi
-unset _lr_class _lr_r _rs_owner _rs_repo _rs_n
+[ "$_gw_kind" = "fallback" ] || unset _lr_class _lr_r _rs_owner _rs_repo _rs_n
 
 
 # Run one gh call and leave its routing identity/reason in _route. With routing
@@ -1335,6 +1377,11 @@ unset _mq_a _mq_prev _mq_shape _mq_reason _mq_why _mq_rules _mq_log_dir
 # from ${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env (ONEX_GH_GATEWAY_TTL, default
 # 21600 s; ONEX_GH_GATEWAY_BUDGET, default 60 misses an hour), never from the environment,
 # so a lane cannot raise its own budget. Only a successful answer is cached.
+# A lane read the lane read guard let through (_gw_kind=fallback) is held for at most
+# 300 s, keyed also on GH_REPO and the origin remote (a verb with no --repo reads the
+# working directory's repository), and logged with action `fallback`. A fallback read
+# that acts or streams locally (pr checkout, run download|watch, release download,
+# browse) or reads its query from a file is never cached: it spends a unit and runs.
 # The bus gateway (OMN-17427 plan) replaces this host-local cache.
 if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
   _gw_ttl=21600
@@ -1356,6 +1403,18 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
     _gw_budget=60
     _gw_hour_tag="-board"
   fi
+  _gw_action=allowed
+  _gw_nocache=0
+  if [ "$_gw_kind" = "fallback" ]; then
+    _gw_action=fallback
+    [ "$_gw_ttl" -gt 300 ] && _gw_ttl=300
+    case "$_cls" in
+      "pr checkout"|"run download"|"run watch"|"release download"|browse) _gw_nocache=1 ;;
+    esac
+    for _gw_a in "$@"; do
+      case "$_gw_a" in *=@*|--input|--input=*) _gw_nocache=1 ;; esac
+    done
+  fi
   _gw_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway"
   if ! mkdir -p "$_gw_dir/budget" 2>/dev/null; then
     printf '%s\n' \
@@ -1365,6 +1424,7 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
   fi
   _gw_scope="${GH_HOST:-github.com}|${_method:-GET}"
   [ "$_cls" = "run view" ] && _gw_scope="$_gw_scope|$(_origin_repo)"
+  [ "$_gw_kind" = "fallback" ] && _gw_scope="$_gw_scope|${GH_REPO:-}|$(_origin_repo)"
   # `gh run view <run> --log-failed` with no --attempt or --job reads the latest attempt,
   # which a rerun replaces, so that answer is held for at most five minutes. A job id and
   # an explicit attempt name one finished attempt and keep the full TTL.
@@ -1380,14 +1440,14 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
   if [ $(( $$ % 50 )) -eq 0 ]; then
     find "$_gw_dir" -type f -mmin +2880 -delete 2>/dev/null
   fi
-  if [ -f "$_gw_entry.meta" ]; then
+  if [ "$_gw_nocache" -eq 0 ] && [ -f "$_gw_entry.meta" ]; then
     read -r _gw_at < "$_gw_entry.meta"
     case "$_gw_at" in
       ""|*[!0-9]*) ;;
       *)
         if [ $((_now - _gw_at)) -lt "$_gw_ttl" ]; then
           cat "$_gw_entry.out" 2>/dev/null
-          _log 0 hit
+          _log 0 hit "$_gw_action"
           exit 0
         fi ;;
     esac
@@ -1404,12 +1464,26 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
   fi
   _gw_spent="$({ wc -l < "$_gw_hour_file"; } 2>/dev/null | tr -d '[:space:]')"
   case "$_gw_spent" in ""|*[!0-9]*) _gw_spent="$((_gw_budget + 1))" ;; esac
+  if [ "$_gw_spent" -gt "$_gw_budget" ] && [ "$_gw_kind" = "fallback" ]; then
+    printf '%s\n' \
+      "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why) and this host's lane read fallback budget is spent: ONEX_GH_GATEWAY_BUDGET=$_gw_budget GitHub reads for this UTC hour (gh-gateway.env, shared with the cached read gateway), $_gw_spent claimed; it refills at the next hour. Answers already fetched in the last 300 s are served from the cache." >&2
+    _lane_read_alternatives
+    _refusal_row gh_shim_lane_read_guard lane-github-read-via-gh-shim "REFUSED (OMN-20911): $_lr_class is a GitHub read from a lane ($_lane_ctx_why); lane read fallback budget ONEX_GH_GATEWAY_BUDGET=$_gw_budget spent"
+    _call_log 1 refused
+    exit 1
+  fi
   if [ "$_gw_spent" -gt "$_gw_budget" ]; then
     printf '%s\n' \
       "REFUSED (OMN-20911): the cached read gateway has spent this host's budget of $_gw_budget GitHub reads for this UTC hour ($_gw_budget used); it refills at the next hour." \
       'Read what you can locally meanwhile: the PR watcher state (pr_state_local.py --pr <owner>/<repo>#<n>) names every check run and its conclusion; answers already fetched this hour are served from the cache.' >&2
     _call_log 1 refused
     exit 1
+  fi
+  if [ "$_gw_nocache" -eq 1 ]; then
+    _run_gh "$@"
+    _rc=$?
+    _log "$_rc" none "$_gw_action"
+    exit "$_rc"
   fi
   _gw_tmp="$_gw_entry.tmp.$$"
   _run_gh "$@" > "$_gw_tmp.out" 2> "$_gw_tmp.err"
@@ -1422,7 +1496,7 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
       && mv -f "$_gw_tmp.meta" "$_gw_entry.meta" 2>/dev/null
   fi
   rm -f "$_gw_tmp.out" "$_gw_tmp.err" "$_gw_tmp.meta" 2>/dev/null
-  _log "$_rc" miss
+  _log "$_rc" miss "$_gw_action"
   exit "$_rc"
 fi
 
