@@ -13,10 +13,28 @@ requirements:
         statement: "AC1: a change that adds a file under a lane-overlays path, or any config file carrying an internal address or a lab endpoint, fails the gate on added lines -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py -k overlay_with_lab_values asserts exit 1 on a fixture that adds such a file"
       - id: "AC2"
         statement: "AC2: an unrelated change, and a file carrying the neutral public default, pass the gate -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py -k neutral_default_passes asserts exit 0"
+  - id: "req-private-ci-overlay"
+    statement: "The roster comes only from the private CI overlay named by an org variable; with none configured the gate fails closed naming the cause."
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: REVIEW_VOTERS_OVERLAY points at the CI overlay outside the workspace, the repository comes from OMNI_CI_OVERLAY_REPO, an unset variable fails with 'no review voters configured', and a named one resolves -- falsifier: env -u PYTHONPATH uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
+  - id: "req-workflow-files-read-in-full"
+    statement: "A workflow file is read in full by the deployment-config class, comments included: a pull request that adds a private address, a hostname in a private DNS zone, one of our lab host nicknames or one of our model ids to a workflow file fails the gate on added lines, and the vocabulary halves fail closed when the private files are absent."
+    acceptance:
+      - id: "AC4"
+        statement: "AC4: a workflow line naming a private address or a private-zone hostname fails the gate on added lines, comment lines included, while the container and cluster names every runner resolves and a non-workflow comment do not -- falsifier: pytest tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -k 'private_host_is_found_comments_included or generic_names or non_workflow' asserts the lines are found and not found respectively"
+      - id: "AC5"
+        statement: "AC5: with the private vocabulary, a workflow line naming a lab host nickname or one of our model ids fails the gate on added lines without quoting the line, a model vocabulary that is absent or malformed is exit 2, and the token-holding job runs this half and refuses when a private file is absent -- falsifier: pytest tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -k 'model_id or nickname or model_vocabulary or token_job or refusal_branch or explicit_vocabulary or does_not_quote or lab_comment' asserts exit 1, exit 2 and the step's refusal"
 evidence_requirements:
+  - kind: "tests"
+    description: "The workflow-file tests pass at the head; the PR body records the same file run against the gate at origin/dev (45 failed, 1 passed)."
+    command: "uv run pytest tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -q"
   - kind: "tests"
     description: "The deployment-config tests pass at the head."
     command: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py tests/scripts/test_deployment_config_class_omn20923.py -q -k 'overlay_with_lab_values or neutral_default_passes or deployment_config or 4817 or bifrost or private_host'"
+  - kind: "tests"
+    description: "The workflow tests pass at the head."
+    command: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -38,3 +56,27 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py -q -k neutral_default_passes"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC2"]
+  - id: "dod-omn20923-ac3-private-ci-overlay"
+    description: "The roster is read from the private CI overlay; a fork with none gets the neutral default."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
+  - id: "dod-omn20923-ac4-workflow-comments-read"
+    description: "A private address or private-zone hostname in a workflow comment fails on added lines; generic names pass."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -q -k 'private_host_is_found_comments_included or generic_names or non_workflow'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC4"]
+  - id: "dod-omn20923-ac5-workflow-vocabulary-half"
+    description: "Lab host nicknames and our model ids in a workflow fail on added lines, quietly, and the private files fail closed."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -q -k 'model_id or nickname or model_vocabulary or token_job or refusal_branch or explicit_vocabulary or does_not_quote or lab_comment'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC5"]

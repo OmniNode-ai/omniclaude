@@ -15,9 +15,6 @@
 
 schema_version: 1
 entries:
-  - path: .github/workflows/hostile-reviewer.yml
-    family: M
-    content_sha1: 07bdb8b424168bbff8e9c54cc543df232d39954d
   - path: plugins/onex/agents/configs/omniagent-smart-responder.yaml
     family: M
     content_sha1: 199be5452e8aeac55ca0916cf142ee1e2d829974

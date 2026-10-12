@@ -84,11 +84,14 @@
     repository: a lane-overlay file (anything under lane-overlays/, any
     *.bifrost.yaml that is not a *.example file) or a configuration value
     naming a private host (an RFC 1918 or CGNAT host address, a private network
-    narrower than /16, a tailnet name). Operator RULING 2026-10-10T21:57:38Z:
-    deployment facts come from overlays supplied by whoever runs the system.
-    Matched by shape, so it needs no private vocabulary and no OMNI_HOME. The
-    same check is the required CI context public-repo-hygiene /
-    deployment-config.
+    narrower than /16, a tailnet name); in a workflow file also any line,
+    comments included, naming a private address or a hostname in a private DNS
+    zone. Operator RULING 2026-10-10T21:57:38Z: deployment facts come from
+    overlays supplied by whoever runs the system. Matched by shape, so it needs
+    no private vocabulary and no OMNI_HOME. Where OMNI_HYGIENE_VOCAB_PATH is
+    set it also refuses a lab host nickname in a workflow file; our model ids
+    are checked in CI, which holds the private model vocabulary. The same check
+    is the required CI context public-repo-hygiene / deployment-config.
   language: script
   entry: scripts/public_repo_hygiene_gate.py --repo-root . --only-classes deployment-config --mode enforce --enforce-scope added-lines --diff-staged
   pass_filenames: false

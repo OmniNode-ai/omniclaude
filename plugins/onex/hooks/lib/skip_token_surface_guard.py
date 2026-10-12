@@ -23,10 +23,6 @@ SKIP_TOKEN_PATTERN = re.compile(  # noqa: secrets
     r"\[skip-[a-zA-Z][^\]\r\n<>]*\]",
     re.IGNORECASE,
 )
-ALLOWLIST_PATTERN = re.compile(
-    r"#\s*skip-token-allowed:\s*(?P<receipt>\S+)",
-    re.IGNORECASE,
-)
 TEXT_EVIDENCE_SUFFIXES = {
     ".err",
     ".json",
@@ -56,16 +52,16 @@ def find_unauthorized_skip_tokens(
     surface: str,
     path: str | None = None,
 ) -> list[SkipTokenFinding]:
-    """Return unauthorized ``[skip-*]`` tokens in ``text``.
+    """Return every ``[skip-*]`` token in ``text``.
 
-    A ``# skip-token-allowed: <receipt-id>`` receipt on the same surface allows
-    the token, matching the existing local and CI scanner contract.
+    There is no escape hatch (OMN-20074): a receipt-id comment on the same surface
+    does not allow a token, matching the local and CI scanner contract.
     """
 
     if not text:
         return []
     matches = list(SKIP_TOKEN_PATTERN.finditer(text))
-    if not matches or ALLOWLIST_PATTERN.search(text):
+    if not matches:
         return []
     return [
         SkipTokenFinding(surface=surface, token=match.group(0), path=path)  # noqa: secrets
@@ -244,9 +240,8 @@ def render_hook_output(
             "hookEventName": hook_event_name,
             "decision": "block",
             "additionalContext": (
-                "Unauthorized [skip-*] bypass token surfaced by agent output. "
-                "Fix the gate with evidence, or use '# skip-token-allowed: "
-                "<receipt-id>' only with a traceable approval receipt. "
+                "A [skip-*] bypass token surfaced by agent output. There is no "
+                "bypass: fix the gate with evidence. "
                 f"Surfaces: {', '.join(surfaces)}"
             ),
         }

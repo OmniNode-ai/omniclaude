@@ -72,6 +72,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -139,6 +140,7 @@ PR_TRIGGERS = ("pull_request", "pull_request_target", "merge_group")
 
 CONTEXT_CACHE = "advisory-job-gate-contexts.json"
 CACHE_TTL_SECONDS = 24 * 60 * 60
+CONTROLLER_CACHE_TTL_SECONDS = 6 * 60 * 60
 
 
 class GateError(RuntimeError):
@@ -489,6 +491,55 @@ def _gh(args: list[str]) -> str:
     return result.stdout
 
 
+def landing_controller_contexts(
+    slug: str, repo_root: Path
+) -> tuple[list[str], str] | None:
+    """Read the controller's existing, timestamped protection/ruleset answer.
+
+    OMN-21006: linked worktrees cannot use this gate's directory-only .git cache.
+    The controller cache is keyed by repo and default branch, and expires after
+    six hours. It is read only; a failed live read never refreshes its timestamp.
+    """
+    if not slug.startswith("OmniNode-ai/"):
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "symbolic-ref",
+                "--short",
+                "refs/remotes/origin/HEAD",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        ref = result.stdout.strip()
+        if result.returncode != 0 or not ref.startswith("origin/"):
+            return None
+        branch = ref.removeprefix("origin/")
+        if not branch:
+            return None
+        path = Path.home() / ".local/state/omni/landing/required-contexts.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        row = data[f"{slug.split('/', 1)[1]}:{branch}"]
+        read_at = datetime.strptime(row["read_at"], "%Y-%m-%dT%H:%M:%S%z")
+        age = time.time() - read_at.timestamp()
+        contexts = row["contexts"]
+        if not 0 <= age < CONTROLLER_CACHE_TTL_SECONDS:
+            return None
+        if not isinstance(contexts, list) or any(
+            not isinstance(item, str) or not item.strip() for item in contexts
+        ):
+            return None
+        return contexts, f"{len(contexts)} from the {int(age)}s-old controller cache"
+    except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError):
+        return None
+
+
 def resolve_required_contexts(slug: str, repo_root: Path) -> tuple[list[str], str]:
     """Live `required_status_checks` for the repository's default branch.
 
@@ -496,12 +547,16 @@ def resolve_required_contexts(slug: str, repo_root: Path) -> tuple[list[str], st
     public-repo hygiene gate takes on visibility. A 24h cache under `.git/`
     keeps a local pre-commit run cheap; a cache older than that is not used,
     and when neither the live read nor a fresh cache answers, the gate refuses.
+    A fresh, branch-matched controller cache also serves linked worktrees.
     """
     # In a WORKTREE `.git` is a file, not a directory (CLAUDE.md rule 17), so
     # there is nowhere to cache. Best-effort by design: a missing cache costs a
     # live read, never a verdict.
     git_dir = repo_root / ".git"
     cache = (git_dir / CONTEXT_CACHE) if git_dir.is_dir() else None
+    controller = landing_controller_contexts(slug, repo_root)
+    if controller is not None:
+        return controller
     try:
         branch = json.loads(
             _gh(["api", f"repos/{slug}", "--jq", "{b:.default_branch}"])

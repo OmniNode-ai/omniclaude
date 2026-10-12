@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.scripts.conftest import install_ancestry_ps
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIM = REPO_ROOT / "scripts" / "user-bin" / "gh"
 
@@ -39,6 +41,8 @@ def env(tmp_path: Path) -> dict[str, str]:
     fake_dir = tmp_path / "realbin"
     fake_dir.mkdir()
     _write_exec(fake_dir / "gh", FAKE_GH)
+    # Not a lane by ancestry, wherever the suite runs (OMN-20911).
+    install_ancestry_ps(fake_dir)
     return {
         "PATH": f"{SHIM.parent}:{fake_dir}:/usr/bin:/bin",
         "HOME": str(tmp_path / "home"),

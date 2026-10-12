@@ -325,6 +325,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             vocabularies/public_repo_hygiene_lab_vocabulary.yaml
+            vocabularies/public_repo_hygiene_model_vocabulary.yaml
           sparse-checkout-cone-mode: false
 
       - name: Run the public-repo hygiene gate
@@ -391,6 +392,46 @@ jobs:
             --lab-vocabulary "${LAB_VOCAB_PATH}" \
             --mode "${MODE}" \
             ${diff_args[@]+"${diff_args[@]}"}
+
+      # OMN-20923: the vocabulary half of the deployment-config class. The job
+      # named deployment-config below matches by shape and runs on a fork; it
+      # cannot know OUR host nicknames or OUR model ids, which are private. This
+      # step holds the token, so it applies them to every workflow file, comments
+      # included: the first two Hostile Reviewer consumers passed the shape half
+      # while their workflows named the lab's hosts and models in comments. It
+      # enforces on what a pull request ADDS, and it refuses (never skips) when
+      # either private file is absent: a vocabulary that did not load reads
+      # exactly like a workflow tree with no lab in it.
+      - name: Deployment configuration in workflow files (private vocabularies)
+        env:
+          SCRIPT_PATH: >-
+            ${{ github.repository != 'OmniNode-ai/omniclaude'
+                && '.omniclaude-public-repo-hygiene/scripts/public_repo_hygiene_gate.py'
+                || 'scripts/public_repo_hygiene_gate.py' }}
+          DIFF_BASE: ${{ steps.diff-base.outputs.sha }}
+          VOCAB_PATH: .public-repo-hygiene-vocabulary/docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
+          MODEL_VOCAB_PATH: .public-repo-hygiene-lab-vocabulary/vocabularies/public_repo_hygiene_model_vocabulary.yaml
+        run: |
+          set -euo pipefail
+          for required in "${SCRIPT_PATH}" "${VOCAB_PATH}" "${MODEL_VOCAB_PATH}"; do
+            if [ ! -f "${required}" ]; then
+              echo "::error::${required} is not present. The vocabulary half of" \
+                   "the deployment-config class cannot run without the gate and" \
+                   "both private vocabularies, and refuses rather than reporting" \
+                   "green. THE GATE DID NOT RUN."
+              exit 1
+            fi
+          done
+          if [ -n "${DIFF_BASE}" ]; then
+            python3 "${SCRIPT_PATH}" --repo-root . \
+              --only-classes deployment-config --mode enforce \
+              --vocabulary "${VOCAB_PATH}" --model-vocabulary "${MODEL_VOCAB_PATH}" \
+              --enforce-scope added-lines --diff-base "${DIFF_BASE}"
+          else
+            python3 "${SCRIPT_PATH}" --repo-root . \
+              --only-classes deployment-config --mode enforce \
+              --vocabulary "${VOCAB_PATH}" --model-vocabulary "${MODEL_VOCAB_PATH}"
+          fi
 
   # OMN-20923: the deployment-config class, as its own job. Operator RULING
   # 2026-10-10T21:57:38Z: no deployment or lab configuration, overlays
