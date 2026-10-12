@@ -31,7 +31,7 @@ HOOK = ROOT / "plugins/onex/hooks/scripts/pre_tool_use_bash_guards.sh"
 
 GUARD = "pre_tool_use_lane_github_read_guard"
 
-#: A stand-in for ``uv run --project omnibase_internal onex-ledger <ledger> --append <row>``.
+#: A stand-in for ``uv run --project <ledger writer project> onex-ledger <ledger> --append <row>``.
 _FAKE_LOCKER = (
     f"#!{sys.executable}\n"
     "import pathlib, sys\n"
@@ -52,7 +52,7 @@ class Scratch:
         self.ledger = self.home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
         self.ledger.parent.mkdir(parents=True)
         self.ledger.write_text("# ledger\n", encoding="utf-8")
-        project = tmp_path / "omnibase_internal"
+        self.project = project = tmp_path / "ledger_writer"
         project.mkdir()
         (project / "pyproject.toml").write_text("")
         stub = tmp_path / "uv"
@@ -70,6 +70,7 @@ class Scratch:
         env.update(
             PATH=f"{self.tmp}:" + os.environ.get("PATH", "/usr/bin:/bin"),
             OMNI_HOME=str(self.home),
+            OMNIBASE_INTERNAL_HOME=str(self.project),
             ONEX_STATE_DIR=str(self.tmp / "state"),
             ONEX_HOOK_LOG=str(self.tmp / "hooks.log"),
             ONEX_HOOK_REFUSAL_STATE_DIR=str(self.tmp / "refusal_state"),

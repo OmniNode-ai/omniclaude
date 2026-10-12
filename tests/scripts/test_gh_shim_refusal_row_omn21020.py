@@ -39,7 +39,7 @@ SEAM = ROOT / "plugins" / "onex" / "hooks" / "lib" / "hook_refusal.sh"
 READ_GUARD = "gh_shim_lane_read_guard"
 WRITE_GUARD = "gh_shim_lane_write_guard"
 
-#: A stand-in for ``uv run --project omnibase_internal onex-ledger <ledger> --append <row>``.
+#: A stand-in for ``uv run --project <ledger writer project> onex-ledger <ledger> --append <row>``.
 _FAKE_LOCKER = (
     f"#!{sys.executable}\n"
     "import pathlib, sys\n"
@@ -86,7 +86,7 @@ class Box:
         self.ledger = self.workspace / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
         self.ledger.parent.mkdir(parents=True)
         self.ledger.write_text("# ledger\n", encoding="utf-8")
-        project = tmp / "omnibase_internal"
+        project = tmp / "ledger_writer"
         project.mkdir()
         (project / "pyproject.toml").write_text("")
         realbin = tmp / "realbin"
@@ -102,6 +102,7 @@ class Box:
             "ONEX_GH_CALLS_LOG": str(tmp / "gh-calls.log"),
             "ONEX_LANDING_CONTROLLER_ROOT": str(tmp / "controller"),
             "OMNI_HOME": str(self.workspace),
+            "OMNIBASE_INTERNAL_HOME": str(project),
             "ONEX_HOOK_REFUSAL_SEAM": str(SEAM),
             "ONEX_HOOK_REFUSAL_STATE_DIR": str(tmp / "refusal_state"),
             "PYTHON_CMD": sys.executable,
