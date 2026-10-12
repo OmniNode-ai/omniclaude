@@ -47,10 +47,16 @@ requirements:
       - id: "AC11"
         statement: |-
           AC11: `--provider` takes a comma-separated list; the skill doc matches.
+      - id: "AC12"
+        statement: |-
+          AC12: The onboarding guide pins `lab-onboarding.sh` at the multi-model script's commit (c15d2e31, omniclaude#2637) or a later one, with the sha256 of the script at the pinned commit -- falsifier: tests/skills/test_onboarding_script_pin_omn20818.py fails against the guide's earlier pin (296be3fa, 8a059b09) and passes against the repinned guide.
 evidence_requirements:
   - kind: tests
     description: "The onboarding script asks every question in the terminal before installing, takes several models and their keys, and reports one result per model"
     command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_lab_onboarding_proven_set_omn20381.py -q"
+  - kind: tests
+    description: "The onboarding guide's pinned script commit is not older than the multi-model script, and its sha256 is the script's at that commit"
+    command: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -62,3 +68,11 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_lab_onboarding_proven_set_omn20381.py -q"
+  - id: dod-omn20818-ac12-onboarding-pin
+    description: "The guide pins the multi-model script's commit and the sha256 of the script at that commit"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q"
+    binds_ac:
+      - AC12
