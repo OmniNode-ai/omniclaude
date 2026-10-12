@@ -17,9 +17,21 @@ Related:
 from __future__ import annotations
 
 import logging
+from uuid import uuid4
 
+from omnibase_core.models.dispatch.model_handler_output import ModelHandlerOutput
+
+from omniclaude.nodes.node_channel_orchestrator.models.model_channel_message_processed import (
+    ModelChannelMessageProcessed,
+)
+from omniclaude.nodes.node_channel_orchestrator.models.model_channel_orchestrator_input import (
+    ModelChannelOrchestratorInput,
+)
 from omniclaude.nodes.node_channel_orchestrator.models.model_channel_orchestrator_output import (
     ModelChannelOrchestratorOutput,
+)
+from omniclaude.nodes.node_channel_orchestrator.models.model_channel_reply_requested import (
+    ModelChannelReplyRequested,
 )
 from omniclaude.shared.models.model_channel_envelope import (
     ModelChannelEnvelope,  # noqa: TC002
@@ -62,3 +74,47 @@ def handle_channel_orchestrate(
         thread_id=envelope.thread_id,
         correlation_id=envelope.correlation_id,
     )
+
+
+class HandlerChannelOrchestrate:
+    """Def-B handler the node contract routes ``channel.orchestrate`` to.
+
+    The runtime imports this class by the name in ``contract.yaml``, builds the
+    request model from the ``handle`` annotation, and publishes each event in
+    the returned output on the topic ``published_events`` gives for its class
+    name minus the ``Model`` prefix. The events ride in a ``ModelHandlerOutput``
+    because a bare list of events is dropped unless the runtime's multi-event
+    publish seam (``ONEX_MULTI_EVENT_PUBLISH_SEAM``) is switched on.
+    """
+
+    def handle(
+        self, request: ModelChannelOrchestratorInput
+    ) -> ModelHandlerOutput[None]:
+        """Turn one inbound channel message into its two declared events.
+
+        Args:
+            request: Normalized channel message from any adapter.
+
+        Returns:
+            Orchestrator output holding one reply-requested event for the reply
+            dispatcher and one message-processed observability event, both
+            carrying the message's correlation id.
+        """
+        output = handle_channel_orchestrate(request)
+        events = (
+            ModelChannelReplyRequested.model_validate(output),
+            ModelChannelMessageProcessed(
+                channel_id=request.channel_id,
+                channel_type=request.channel_type,
+                message_id=request.message_id,
+                received_at=request.timestamp,
+                reply_requested=True,
+                correlation_id=request.correlation_id,
+            ),
+        )
+        return ModelHandlerOutput.for_orchestrator(
+            input_envelope_id=uuid4(),
+            correlation_id=request.correlation_id,
+            handler_id="node_channel_orchestrator.channel_orchestrate",
+            events=events,
+        )
