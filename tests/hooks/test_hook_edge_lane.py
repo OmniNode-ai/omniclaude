@@ -37,7 +37,7 @@ from types import ModuleType
 
 import pytest
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("hook_lane_overlay")]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _HOOKS_DIR = _REPO_ROOT / "plugins" / "onex" / "hooks"
@@ -126,7 +126,7 @@ def test_contract_declares_the_dev_lane_per_the_ruling() -> None:
     assert contract.relay_required_network == contract.known_lanes["dev"].network, (
         "the relay must consume the same dev lane the publisher writes to"
     )
-    assert contract.bootstrap_servers == contract.known_lanes["dev"].bootstrap_servers
+    assert contract.bootstrap_servers == contract.configured_brokers()["dev"]
 
 
 def test_contract_prose_records_the_ruling_rather_than_the_old_refusal() -> None:
@@ -155,10 +155,7 @@ def test_contract_bootstrap_servers_matches_declared_lane() -> None:
     """The exported broker is the declared lane's broker, not a free-text value."""
     lib = _load_lib()
     contract = lib.load_contract(_CONTRACT_PATH)
-    assert (
-        contract.bootstrap_servers
-        == contract.known_lanes[contract.lane].bootstrap_servers
-    )
+    assert contract.bootstrap_servers == contract.configured_brokers()[contract.lane]
 
 
 def test_contract_declares_the_hook_topics() -> None:
@@ -485,7 +482,7 @@ def test_surface_disagreement_is_reported_not_obeyed() -> None:
     other_lane = next(
         name for name in sorted(contract.known_lanes) if name != contract.lane
     )
-    conflicting = contract.known_lanes[other_lane].bootstrap_servers
+    conflicting = contract.configured_brokers()[other_lane]
     assert conflicting != contract.bootstrap_servers
 
     findings = lib.audit_surfaces(

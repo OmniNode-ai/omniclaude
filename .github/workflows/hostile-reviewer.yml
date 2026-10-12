@@ -5,51 +5,43 @@
 #
 # Adversarial multi-model code review gate on every pull request.
 #
-# Invokes omniintelligence.review_pairing.cli_review (node-based path via
-# HandlerLlmCliSubprocess / adapter_codex_reviewer) with
-# --model qwen3-review --model local-studio-planner: two DIFFERENT lab models
-# (OMN-17492, operator rulings 2026-09-25), Qwen3.8-27B and Qwen3.6-35B-A3B (the local-studio-planner key, OMN-20422),
-# each on its own lab host. Private diffs go only to lab models, never to a
-# third-party cloud reviewer. Both hosts are always on (operator,
-# 2026-09-25), so there is no single-model pass: a lost reviewer is a
-# degraded quorum, which fails closed.
-# Codex is excluded from the initial pilot — add --model codex once non-interactive
-# OAuth auth is confirmed on the omnibase-ci runner (OMN-8524).
+# Invokes omniintelligence.review_pairing.cli_review with the voters declared
+# in a review voters overlay (review_voters_overlay.v1, OMN-20910) that no
+# shipped repository carries (OMN-20923, operator RULING 2026-10-10T21:57:38Z:
+# no lab or deployment configuration in a shipped repository; CI is configured
+# by an overlay supplied by whoever runs it). The org Actions variable
+# OMNI_CI_OVERLAY_REPO names a private repository of this owner; the node
+# overlay of node_review_voters_overlay_compute in it is fetched at the exact
+# commit OMNI_CI_OVERLAY_REF names (OMN-20910). If that variable is unset or
+# not a full 40-hex lowercase sha, the gate fails closed naming the variable.
+# OMNI_CI_OVERLAY_REPO unset (a fork or a customer): the neutral default applies,
+# no review voters configured, and the gate fails closed saying so. THIS FILE
+# NAMES NO VOTER, ENDPOINT, MODEL OR NETWORK: changing or adding a voter is a
+# commit to that overlay plus an update of OMNI_CI_OVERLAY_REF, with no
+# workflow PR in any repo. An unpinned default-branch read would let anyone
+# who can push there change the voters a private diff is sent to with no
+# reviewed change here. Private diffs go only to the voters the pinned
+# overlay declares. A
+# required voter that is unreachable or fails is named, one voter is no quorum,
+# and the job fails closed. Codex is not a voter (OMN-8524); a voter of any kind is
+# added in the overlay.
 #
-# TWO MODELS, BECAUSE THE CLI's CONTRACT ASKS FOR TWO (OMN-18473). cli_review
+# TWO VOTERS, BECAUSE THE CLI's CONTRACT ASKS FOR TWO (OMN-18473). cli_review
 # returns 0 only when >=2 models succeed and 2 ("DEGRADED — a minimum of 2
 # models is required for a full pass") when exactly one does. This repo passed
 # a single --model from 2026-04-11 (71d816a99) to 2026-09-16, so every verdict
-# it ever produced was DEGRADED by construction, while omnimarket passed two
-# (qwen3-review, qwen3-review-b) and omnibase_infra three (adding the cloud
-# glm-review). Operator ruling 2026-09-15, firm: no one-off repo configuration
-# — a differing repo is brought to the fleet standard.
+# it ever produced was DEGRADED by construction. Operator ruling 2026-09-15,
+# firm: no one-off repo configuration — a differing repo is brought to the
+# fleet standard.
 #
-# WHAT A SECOND MODEL HERE DOES AND DOES NOT BUY, stated so nobody re-derives
-# it wrongly. It does NOT damp a spurious finding. run_multi_model_review
-# CONCATENATES per-model results — there is no dedup, no agreement weighting
-# and no union anywhere on this path — and the verdict step below sums blocking
-# findings across every succeeded model, so ONE critical/error finding from
-# EITHER model blocks. Adding a model can only RAISE the blocking count. What
-# it buys is a second independent sample and conformance to the CLI's contract,
-# at the cost of a strictly stricter gate. That is the same trade omnibase_infra
-# and omnimarket already run under.
-#
-# SUPERSEDED BY OMN-17492 (2026-09-25), kept as the record of why the pair
-# changed: the paragraph below describes the old deepseek-r1 + qwen3-review-b
-# pair, which was one model reviewing twice. gpt-oss-review (now local-studio-planner) is the second,
-# independent local model it was waiting for, so no cloud credential is needed.
-# WHY qwen3-review-b AND NOT qwen3-review. deepseek-r1 and qwen3-review are two
-# registry keys for ONE backend: both resolve to the same lab endpoint with the
-# same api_model_id (Qwen3.6-35B-A3B) since the 4090 RMA — that is OMN-16481,
-# still open. Pairing them would pass one backend twice under two spellings.
-# qwen3-review-b is the key omnimarket pairs, and it is honestly ALSO the same
-# endpoint and served model; it differs in its env var override
-# (LLM_QWEN3_REVIEW_B_URL) and max_retries. Two samples of one set of weights is
-# what the fleet standard currently IS. The genuinely independent reviewer is
-# glm-review, which needs an LLM_GLM_API_KEY Actions secret that exists on
-# omnibase_infra and on neither this PUBLIC repo nor the org — provisioning a
-# cloud credential here is a separate, consent-gated change (OMN-16481).
+# WHAT A SECOND VOTER HERE DOES AND DOES NOT BUY, stated so nobody re-derives
+# it wrongly. It does NOT damp a spurious finding by averaging: run_multi_model_review
+# CONCATENATES per-model results, with no dedup and no weighting. What it buys
+# is cross-model agreement (OMN-18479): a critical/error finding blocks only when
+# at least two distinct succeeded voters raised it, and a finding only one voter
+# raised is reported as a warning. A second voter also conforms to the CLI's
+# contract. Whether the voters are genuinely independent models is a property of
+# the overlay, not of this file.
 #
 # Gate semantics (pilot phase):
 #   blocked     — critical/error findings raised by AT LEAST TWO distinct
@@ -124,10 +116,10 @@ jobs:
     # `OMNI_TRUSTED_CI_RUNS_ON_JSON` seam that governs lint/test/build here, and
     # NOT a bare hardcoded label either.
     #
-    # WHY NOT THE SEAM: this job calls DeepSeek-R1 on the lab host over the
-    # LAN, reading the lab endpoint variable and two
-    # trust-boundary variables from the runner's own environment. Only the
-    # self-hosted `omnibase-ci` fleet has any of the three. omniclaude is a
+    # WHY NOT THE SEAM: this job calls the overlay's voters over a private
+    # network, reading their endpoint variables and the trust-boundary
+    # variables from the runner's own environment. Only the self-hosted
+    # `omnibase-ci` fleet has them. omniclaude is a
     # PUBLIC repository whose seam is deliberately `["ubuntu-latest"]` at org and
     # repo scope under the 2026-09-14 ruling that public HERMETIC CI stays
     # hosted — and that ruling classifies a job by what it REACHES. This one
@@ -183,6 +175,8 @@ jobs:
       # Absolute: the review step runs in ../omniintelligence, and the upload
       # action resolves a relative path against the workspace.
       VERDICT_ARTIFACT: ${{ github.workspace }}/hostile-review-verdict.json
+      # OMN-20910: the one place the voters come from. Fetched by the step below.
+      REVIEW_VOTERS_OVERLAY: ${{ github.workspace }}/../ci-overlay/config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml
 
     steps:
       - name: Checkout PR branch
@@ -245,7 +239,94 @@ jobs:
 
       - name: Clean stale dependency clones
         working-directory: ${{ github.workspace }}
-        run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat
+        run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat ../ci-overlay
+
+      # OMN-20910: the roster is read at the exact commit OMNI_CI_OVERLAY_REF
+      # names. Unset or not a full lowercase sha, the gate fails closed naming
+      # the variable. An unpinned default-branch read would let anyone who can
+      # push to the overlay repository's default branch change the voters a
+      # private diff is sent to with no reviewed change here. Changing or
+      # adding a voter is an overlay commit plus an OMNI_CI_OVERLAY_REF update,
+      # with no workflow PR in any repo. The data is validated by the resolver
+      # and placed outside the workspace (OMN-20923), so a pull request cannot
+      # supply the voters that review it.
+      - name: Resolve the CI overlay
+        id: ci-overlay
+        working-directory: ${{ github.workspace }}
+        env:
+          CI_OVERLAY_REPO: ${{ vars.OMNI_CI_OVERLAY_REPO }}
+          CI_OVERLAY_REF: ${{ vars.OMNI_CI_OVERLAY_REF }}
+        run: |
+          set -euo pipefail
+          # Both variables arrive through env: and are only ever expanded as quoted
+          # shell variables. Messages and outputs are written with printf, the
+          # value as an argument and never as the format. A value that fails
+          # validation is not echoed back: a newline in it would start a log line
+          # of its own, and a line beginning with two colons is a workflow command.
+          if [ -z "${CI_OVERLAY_REPO}" ]; then
+            printf '%s\n' "::error::no review voters configured: OMNI_CI_OVERLAY_REPO is unset, so no CI overlay supplies config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml (review_voters_overlay.v1). The gate fails closed. To run it, put your voters in a repository of your own and set OMNI_CI_OVERLAY_REPO to its name."
+            exit 1
+          fi
+          if [[ ! "${CI_OVERLAY_REPO}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            printf '%s\n' "::error::OMNI_CI_OVERLAY_REPO must be a bare repository name (letters, digits, dot, underscore and hyphen only); the rejected value is not echoed"
+            exit 1
+          fi
+          if [ -z "${CI_OVERLAY_REF}" ]; then
+            printf '::error::OMNI_CI_OVERLAY_REF is unset: the CI overlay %s is read only at a pinned commit, so set the org Actions variable OMNI_CI_OVERLAY_REF to the full 40-hex commit sha of %s that carries config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml. The gate fails closed.\n' "${CI_OVERLAY_REPO}" "${CI_OVERLAY_REPO}"
+            exit 1
+          fi
+          if [[ ! "${CI_OVERLAY_REF}" =~ ^[0-9a-f]{40}$ ]]; then
+            printf '%s\n' "::error::OMNI_CI_OVERLAY_REF must be a full 40-hex lowercase commit sha; a branch, tag or short sha is refused because the voters could change without the pin changing. The rejected value is not echoed"
+            exit 1
+          fi
+          {
+            printf '%s\n' "name=${CI_OVERLAY_REPO}"
+            printf '%s\n' "ref=${CI_OVERLAY_REF}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Mint a read-only CI overlay token
+        id: ci-overlay-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.ci-overlay.outputs.name }}
+          permission-contents: read
+
+      # Read only the exact commit OMNI_CI_OVERLAY_REF names (OMN-20910).
+      # The resolver validates the pinned overlay data (OMN-20923).
+      - name: Fetch the CI overlay
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }}
+          ref: ${{ steps.ci-overlay.outputs.ref }}
+          token: ${{ steps.ci-overlay-token.outputs.token }}
+          path: .ci-overlay-checkout
+          persist-credentials: false
+          sparse-checkout: |
+            config/onex/overlays/node_review_voters_overlay_compute
+          sparse-checkout-cone-mode: false
+
+      - name: Place the CI overlay outside the workspace
+        working-directory: ${{ github.workspace }}
+        env:
+          OVERLAY_SOURCE: ${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }}
+          EXPECTED_OVERLAY_REF: ${{ steps.ci-overlay.outputs.ref }}
+        run: |
+          set -euo pipefail
+          rm -rf ../ci-overlay
+          mv .ci-overlay-checkout ../ci-overlay
+          FETCHED_REF="$(git -C ../ci-overlay rev-parse HEAD)"
+          echo "CI overlay read from ${OVERLAY_SOURCE} at ${FETCHED_REF}"
+          if [ "${FETCHED_REF}" != "${EXPECTED_OVERLAY_REF}" ]; then
+            echo "::error::the CI overlay checkout is at ${FETCHED_REF}, not the pinned OMNI_CI_OVERLAY_REF ${EXPECTED_OVERLAY_REF}; refusing to read voters from it"
+            exit 1
+          fi
+          if [ ! -s "$REVIEW_VOTERS_OVERLAY" ]; then
+            echo "::error::the CI overlay carries no config/onex/overlays/node_review_voters_overlay_compute/overlay.yaml; no voter can be resolved"
+            exit 1
+          fi
 
       - name: Clone omniintelligence
         working-directory: ${{ github.workspace }}
@@ -348,14 +429,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-          # OMN-20422 (RULING 2026-10-09T04:15:56Z): the local-studio-planner key resolves its URL from
-          # this variable, so the second voter is Qwen3.6-35B-A3B on a second port of the
-          # lab host that serves delegation. The address lives in this repository's Actions
-          # variable of the same name, not in the file: this is a public repository, and the
-          # hardcoded-lab-config and public-hygiene gates refuse a lab address in it.
-          LLM_LOCAL_STUDIO_PLANNER_URL: ${{ vars.LLM_LOCAL_STUDIO_PLANNER_URL }}
-          # LLM_DEEPSEEK_URL is read directly from the runner's environment (Infisical-injected
-          # or set in the runner's shell profile on .201) — no GitHub secret needed
+          # OMN-20910: no voter endpoint is set here. Every voter, its endpoint,
+          # model, sampling and focus come from REVIEW_VOTERS_OVERLAY (job env).
         working-directory: ../omniintelligence
         run: |
           set -euo pipefail
@@ -389,7 +464,7 @@ jobs:
           # Exit 2 is NOT a verdict and is no longer read as one. This step
           # previously treated it as the expected steady state, which is
           # precisely what made a single model's opinion sufficient to block
-          # a merge. Since OMN-18473 this step passes TWO --model flags, so
+          # a merge. Since OMN-18473 this step reviews with TWO voters (since OMN-20910 the overlay's), so
           # the expected outcome of a healthy run is exit 0; exit 2 now means
           # one of the two returned and agreement could not be established.
           # That is a degraded quorum, not a verdict on a single opinion, and
@@ -415,8 +490,7 @@ jobs:
             REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
               --pr "$PR_NUMBER" \
               --repo "$REPO" \
-              --model qwen3-review \
-              --model local-studio-planner \
+              --voters-overlay "$REVIEW_VOTERS_OVERLAY" \
               2>"$ATTEMPT_ERR")
             REVIEW_EXIT=$?
             set -e

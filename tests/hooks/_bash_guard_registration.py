@@ -6,7 +6,9 @@
 The seven Bash guards are reached through ONE registered entrypoint,
 ``pre_tool_use_bash_guards.sh``, which sources each of them in order. A guard
 is live on the Bash matcher when hooks.json registers it directly, or registers
-the entrypoint and the entrypoint's ``_OBG_GUARDS`` list names it.
+the entrypoint and the entrypoint's ``_OBG_GUARDS`` list names it. The entrypoint's
+matcher also covers the GitHub MCP tools (OMN-20916), so a group is on the Bash matcher
+when its matcher matches the tool name ``Bash``.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ def bash_matcher_commands() -> list[str]:
     return [
         h.get("command", "")
         for g in groups
-        if g.get("matcher") == "Bash"
+        if re.fullmatch(g.get("matcher", ""), "Bash")
         for h in g["hooks"]
     ]
 

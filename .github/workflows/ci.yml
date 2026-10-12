@@ -120,6 +120,10 @@ jobs:
         run: uv run pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov
       - name: Verify hooks shard coverage and report admission (OMN-19681)
         run: uv run pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov
+      - name: Verify imperative contract guard caller and parity (OMN-21006)
+        run: uv run pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
+      - name: Verify advisory gate controller cache and refusal controls (OMN-21006)
+        run: uv run pytest tests/scripts/test_advisory_job_gate.py -q
       - name: Verify Git effect subprocess compatibility
         run: uv run pytest tests/unit/nodes/node_git_effect/test_handler_git_subprocess.py -q --no-cov
 
@@ -4339,7 +4343,7 @@ jobs:
       }}
     if: needs.occ-preflight.result == 'success'
     steps:
-      - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@47342e562a516b0278e22a974f35cbf2a64b33eb
+      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@de3398d1fcf7a6f48451f680b74b1a6c6c383b8a # omnibase_core dev (OMN-20964)
         with:
           checks: "boundary-parity"
           warn-only: "false"
@@ -4560,7 +4564,7 @@ jobs:
       - name: Ratchet non-canonical lifecycle-word classes against frozen allowlist (OMN-14350)
         run: |
           uv run --no-project \
-            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@f50d00fc7918d0b12ccd0d3497160325e32e7ac5' \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@031148215620031436cba30619bbae67c0bb38ad' \
             python -m omnibase_core.validators.no_noncanonical_lifecycle_classes \
             --check-stale \
             --allowlist .onex_ratchets/noncanonical_class_allowlist.yaml \
@@ -4585,7 +4589,7 @@ jobs:
       - name: Refuse shape-gate detector jobs that depend on the preflight (OMN-20298)
         run: |
           uv run --no-project \
-            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@f50d00fc7918d0b12ccd0d3497160325e32e7ac5' \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@031148215620031436cba30619bbae67c0bb38ad' \
             python -m omnibase_core.handlers.handler_shape_gate_independence
 
   precommit-suite:
@@ -4834,7 +4838,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      CANONICAL_FILE_SHAPE_CORE: "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@f50d00fc7918d0b12ccd0d3497160325e32e7ac5"
+      CANONICAL_FILE_SHAPE_CORE: "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@031148215620031436cba30619bbae67c0bb38ad"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

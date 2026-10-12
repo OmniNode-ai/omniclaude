@@ -272,7 +272,7 @@ MESSAGE_CASES = [
     ("git commit -n", ["--no-verify", "git push -n", "--dry-run", "DO THIS INSTEAD"]),
     (
         'git commit -m "x [skip-deploy-gate: y]"',
-        ["FAILURE MODE", "skip-token-allowed", "DO THIS INSTEAD"],
+        ["FAILURE MODE", "no escape hatch", "DO THIS INSTEAD"],
     ),
     (
         "PREPUSH_FULL_SUITE=1 git push",

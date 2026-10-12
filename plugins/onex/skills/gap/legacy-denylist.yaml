@@ -7,15 +7,16 @@
 #
 # Used by: probe 2.11 (legacy_config / ARCHITECTURE_VIOLATION)
 # Auto-fix: YES (search-replace) -- the skill can apply deterministic replacements.
+#
+# Deployment-specific patterns (a decommissioned host or endpoint of one lab) are
+# not shipped here. The probe also reads `config/lab/gap_legacy_denylist.yaml`
+# under the workspace config root (ONEX_WORKSPACE_CONFIG_ROOT) when it exists,
+# with the same `patterns:` entry shape, and scans for those patterns as well.
 
 patterns:
   - pattern: "OLLAMA_BASE_URL"
     reason: "Ollama endpoint decommissioned; use the endpoint env var the bifrost routing contract names for the backend (BIFROST_LOCAL_CODER_ENDPOINT_URL), or LLM_EMBEDDING_URL"
     replacement_hint: "Resolve the endpoint from the bifrost routing contract (endpoint_url_env of the backend that serves the task type)"
-
-  - pattern: "192.168.86.200:29092"  # cloud-bus-ok OMN-14655 onex-allow-internal-ip
-    reason: "M2 Ultra Redpanda decommissioned (<TICKET>); local bus is localhost:19092, cloud bus via tunnel"
-    replacement_hint: "Use localhost:19092 for local Docker bus"
 
   - pattern: "omninode_bridge"
     reason: "Legacy database name replaced by omnibase_infra"

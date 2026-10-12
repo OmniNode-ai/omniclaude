@@ -18,7 +18,7 @@
         ]
       },
       {
-        "matcher": "Bash",
+        "matcher": "^(Bash|mcp__.*[Gg]it[Hh]ub.*)$",
         "hooks": [
           {
             "type": "command",

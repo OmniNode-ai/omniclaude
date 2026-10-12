@@ -145,9 +145,8 @@ def detect_wedges(
                     alternative=(
                         "STOP and report back — remove the token and fix the "
                         "underlying gate input instead (add the missing "
-                        "dod_evidence / Evidence-Source line / contract). The "
-                        "only escape hatch is a real, user-issued "
-                        "'# skip-token-allowed: <receipt-id>' handle."
+                        "dod_evidence / Evidence-Source line / contract). There "
+                        "is no escape hatch."
                     ),
                 )
             )

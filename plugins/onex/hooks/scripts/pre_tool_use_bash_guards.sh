@@ -76,6 +76,69 @@ _OBG_INPUT=""
 IFS= read -r -d '' _OBG_INPUT || true
 while [[ "$_OBG_INPUT" == *$'\n' ]]; do _OBG_INPUT="${_OBG_INPUT%$'\n'}"; done
 
+# --- Lane GitHub read check (OMN-20916) ----------------------------------------
+# RULING 2026-10-10T18:17:36Z: lanes must not be able to read GitHub at all. The gh
+# shim refuses a lane's gh reads; omniclaude's node_lane_github_read_guard_effect
+# refuses the three paths around it: a GitHub MCP read tool, a direct call to
+# api.github.com, and the real gh binary run by its path. Who is a lane, what is a
+# read and the refusal text are all the node's; this block only decides whether
+# the call could be one of the three, without an exec, and hands it over.
+#
+# This entrypoint is also registered on the GitHub MCP tools (its matcher is
+# ^(Bash|mcp__.*[Gg]it[Hh]ub.*)$). A GitHub MCP call runs this check alone and
+# never the seven Bash guards below, which judge Bash commands only.
+#
+# Fail-closed: a call that trips the pre-filter and cannot be judged (no
+# interpreter, the node not importable, an unreadable payload) is refused, as every
+# guard here refuses a call it cannot evaluate. A Bash command naming none of
+# api.github.com or a /gh path starts no interpreter.
+_OBG_TOOL=""
+[[ "$_OBG_INPUT" =~ \"tool_name\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]] && _OBG_TOOL="${BASH_REMATCH[1]}"
+_obg_lane_read=0
+if [[ "$_OBG_TOOL" == mcp__* ]]; then
+    _obg_lane_read=1
+elif [[ "$_OBG_INPUT" =~ [Aa][Pp][Ii]\.[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm] \
+        || "$_OBG_INPUT" =~ [Uu][Pp][Ll][Oo][Aa][Dd][Ss]\.[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm] \
+        || "$_OBG_INPUT" =~ /gh([^A-Za-z0-9_.-]|$) ]]; then
+    _obg_lane_read=1
+fi
+if [[ $_obg_lane_read -eq 1 ]]; then
+    _OBG_CALLER_CWD="$PWD"
+    _OBG_LANE_OUT="$(
+        # The session mode goes to the node, which treats nobody as a lane in lite
+        # mode (a non-OmniNode install). This entrypoint itself never exits on it.
+        _OBG_MODE="full"
+        if [[ -f "${_OBG_SCRIPTS}/../../lib/mode.sh" ]]; then
+            # shellcheck source=/dev/null
+            source "${_OBG_SCRIPTS}/../../lib/mode.sh"
+            _OBG_MODE="$(omniclaude_mode)"
+        fi
+        cd "$HOME" 2>/dev/null || cd /tmp || true
+        # shellcheck source=common.sh
+        source "${_OBG_SCRIPTS}/common.sh" >/dev/null 2>&1 || exit 1
+        unset PYTHONPATH
+        printf '%s\n' "$_OBG_INPUT" | "${PYTHON_CMD:-python3}" -m \
+            omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_lane_github_read_cli \
+            --cwd "$_OBG_CALLER_CWD" --mode "$_OBG_MODE" 2>&1
+    )"
+    _OBG_LANE_RC=$?
+    if [[ $_OBG_LANE_RC -eq 2 ]]; then
+        printf '%s\n' "$_OBG_LANE_OUT"
+        printf '%s\n' "$_OBG_LANE_OUT" | jq -r '.reason // empty' >&2 2>/dev/null || true
+        exit 2
+    fi
+    if [[ $_OBG_LANE_RC -ne 0 ]]; then
+        _OBG_LANE_WHY="${_OBG_LANE_OUT:0:400}"
+        jq -nc --arg r "BLOCKED: the OMN-20916 lane GitHub read check could not judge this call (exit ${_OBG_LANE_RC}). A call it cannot judge is refused, never assumed safe. Detail: ${_OBG_LANE_WHY}" \
+            '{"decision": "block", "reason": $r}' 2>/dev/null \
+            || printf '%s\n' '{"decision": "block", "reason": "BLOCKED: the OMN-20916 lane GitHub read check could not judge this call."}'
+        printf '%s\n' "BLOCKED: the OMN-20916 lane GitHub read check could not judge this call (exit ${_OBG_LANE_RC}). Detail: ${_OBG_LANE_WHY}" >&2
+        exit 2
+    fi
+fi
+# A GitHub MCP call is not a Bash command: the seven guards below never see it.
+[[ "$_OBG_TOOL" == mcp__* ]] && exit 0
+
 # shellcheck source=../lib/bash_guard_core.sh
 source "${_OBG_LIB}/bash_guard_core.sh"
 

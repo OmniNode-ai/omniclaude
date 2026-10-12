@@ -2,69 +2,23 @@
 # SPDX-License-Identifier: MIT
 """Dispatch claim release — PostToolUse claim teardown (OMN-8929).
 
-Mirrors dispatch_claim_gate.py extraction logic to find the claim file
-and release it if owned by the current claimant. All logic is inlined
-(no dep on onex_change_control or omnibase_core) so the hook venv needs
-no extra packages.
+Uses dispatch_claim_gate.py's extraction (including its overlay-supplied claim
+hosts) to find the claim file and release it if owned by the current claimant.
+No dep on onex_change_control or omnibase_core, so the hook venv needs no extra
+packages.
 """
 
 from __future__ import annotations
 
 import json
-import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
-# Same pattern constants as dispatch_claim_gate.py (must stay in sync)
-_RE_EXPLICIT = re.compile(r"blocker_id:\s*([0-9a-f]{40})", re.IGNORECASE)
-_RE_SSH_201 = re.compile(r"ssh\s+\S*192\.168\.86\.201", re.IGNORECASE)
-_RE_RPK_REBUILD = re.compile(r"rpk\s+topic\s+produce\s+\S*rebuild", re.IGNORECASE)
-_RE_FIX_CONTAINERS = re.compile(
-    r"fix.{0,20}containers\s+on\s+192\.168\.86\.201", re.IGNORECASE
-)
-_RE_OMN_TICKET = re.compile(r"\bOMN-(\d{4,6})\b")
-_RE_PR_MERGE = re.compile(
-    r"gh\s+pr\s+merge\s+.*?--repo\s+OmniNode-ai/([^\s]+)\s+(\d+)", re.IGNORECASE
-)
+from dispatch_claim_gate import extract_blocker_info
 
-
-def extract_blocker_info(tool_input: str) -> tuple[str, str, str] | None:
-    """Extract (kind, host, resource) — identical to dispatch_claim_gate."""
-    if _RE_EXPLICIT.search(tool_input):
-        m = _RE_EXPLICIT.search(tool_input)
-        assert m is not None
-        return ("explicit", "local", m.group(1))
-
-    if _RE_SSH_201.search(tool_input):
-        return (
-            "ssh_201",
-            "192.168.86.201",  # onex-allow-internal-ip
-            "ssh_session",
-        )
-
-    if _RE_RPK_REBUILD.search(tool_input):
-        return (
-            "deploy_rebuild",
-            "192.168.86.201",  # onex-allow-internal-ip
-            "rebuild_request",
-        )
-
-    if _RE_FIX_CONTAINERS.search(tool_input):
-        return (
-            "fix_containers",
-            "192.168.86.201",  # onex-allow-internal-ip
-            "docker_containers",
-        )
-
-    m = _RE_OMN_TICKET.search(tool_input)
-    if m:
-        return ("ticket_dispatch", "local", f"OMN-{m.group(1)}")
-
-    m = _RE_PR_MERGE.search(tool_input)
-    if m:
-        return ("pr_merge", "github.com", f"OmniNode-ai/{m.group(1)}#{m.group(2)}")
-
-    return None
+# One extraction rule set for acquire and release: the gate's, so the claim file
+# a release looks for is the one the gate wrote.
 
 
 def _compute_blocker_id(kind: str, host: str, resource: str) -> str:
@@ -79,6 +33,7 @@ def release_claim(
     tool_input: str,
     claimant: str,
     claims_dir: Path,
+    hosts: Sequence[str] | None = None,
 ) -> dict[str, object]:
     """Release a claim held by claimant for the given tool_input.
 
@@ -88,7 +43,7 @@ def release_claim(
       {"action": "not_owner"}        — claim exists but owned by another agent
       {"action": "released", "blocker_id": X}  — successfully released
     """
-    info = extract_blocker_info(tool_input)
+    info = extract_blocker_info(tool_input, hosts)
     if info is None:
         return {"action": "no_match"}
 
@@ -127,14 +82,14 @@ if __name__ == "__main__":
         import datetime
 
         bid = _hashlib.sha1(
-            b"fix_containers|192.168.86.201|docker_containers",  # onex-allow-internal-ip
+            b"ticket_dispatch|local|OMN-8929",
             usedforsecurity=False,
         ).hexdigest()
         claim = {
             "blocker_id": bid,
-            "kind": "fix_containers",
-            "host": "192.168.86.201",  # onex-allow-internal-ip
-            "resource": "docker_containers",
+            "kind": "ticket_dispatch",
+            "host": "local",
+            "resource": "OMN-8929",
             "claimant": "agent-alpha",
             "claimed_at": datetime.datetime.now(tz=datetime.UTC).isoformat(),
             "ttl_seconds": 300,
@@ -142,26 +97,14 @@ if __name__ == "__main__":
         }
         (d / f"{bid}.json").write_text(json.dumps(claim))
 
-        r1 = release_claim(
-            "fix containers on 192.168.86.201",  # onex-allow-internal-ip
-            "agent-beta",
-            d,
-        )
+        r1 = release_claim("dispatch OMN-8929 smoke", "agent-beta", d)
         assert r1["action"] == "not_owner", f"Expected not_owner, got {r1}"
 
-        r2 = release_claim(
-            "fix containers on 192.168.86.201",  # onex-allow-internal-ip
-            "agent-alpha",
-            d,
-        )
+        r2 = release_claim("dispatch OMN-8929 smoke", "agent-alpha", d)
         assert r2["action"] == "released", f"Expected released, got {r2}"
         assert not (d / f"{bid}.json").exists(), "Claim file should be deleted"
 
-        r3 = release_claim(
-            "fix containers on 192.168.86.201",  # onex-allow-internal-ip
-            "agent-alpha",
-            d,
-        )
+        r3 = release_claim("dispatch OMN-8929 smoke", "agent-alpha", d)
         assert r3["action"] == "not_found", f"Expected not_found, got {r3}"
 
         import json as _json

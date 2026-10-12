@@ -23,8 +23,20 @@ if _lib_path not in sys.path:
 
 from dispatch_claim_gate import check_and_acquire
 
-_PROMPT = "fix containers on 192.168.86.201"  # onex-allow-internal-ip
+_PROMPT = "fix containers on claimhost.example.test"
 _SHORT_TTL = 2  # seconds — for TTL expiry test
+
+
+@pytest.fixture(autouse=True)
+def _claim_host_overlay(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The shipped gate names no host; supply a synthetic hosts overlay."""
+    root = tmp_path_factory.mktemp("claim-host-overlay")
+    overlay = root / "config" / "lab" / "dispatch_claim_hosts.yaml"
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text('hosts:\n  - "claimhost.example.test"\n', encoding="utf-8")
+    monkeypatch.setenv("ONEX_WORKSPACE_CONFIG_ROOT", str(root))
 
 
 @pytest.mark.e2e

@@ -37,7 +37,7 @@ from omniclaude.hooks.model_claude_hook_event import (  # noqa: E402
     ModelClaudeHookEvent,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("hook_lane_overlay")]
 
 _FIXTURES = _REPO_ROOT / "tests" / "fixtures" / "hooks" / "claude_hook_capture"
 _CONTRACT = (

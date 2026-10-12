@@ -4,8 +4,8 @@
 
 TWO PROPERTIES, BOTH OF WHICH FAILED SILENTLY BEFORE THIS FILE EXISTED.
 
-1. PLACEMENT. The reviewer calls DeepSeek-R1 on the lab host over the LAN,
-   reading ``LLM_DEEPSEEK_R1_URL`` and two trust-boundary variables from the
+1. PLACEMENT. The reviewer calls its voters on a private network,
+   reading their endpoint variables and two trust-boundary variables from the
    runner's own environment. Only the self-hosted ``omnibase-ci`` fleet carries
    any of them. omniclaude is a PUBLIC repository whose
    ``OMNI_TRUSTED_CI_RUNS_ON_JSON`` seam is deliberately ``["ubuntu-latest"]``
@@ -260,6 +260,8 @@ def _run_review_script(
         "VERDICT_ARTIFACT": str(artifact),
         "PR_NUMBER": "2181",
         "REPO": "OmniNode-ai/omniclaude",
+        # Job-level in the workflow (OMN-20910); the stubbed uv never reads it.
+        "REVIEW_VOTERS_OVERLAY": str(tmp_path / "hostile-review-voters.yaml"),
     }
     env.update(extra_env or {})
 
@@ -286,7 +288,7 @@ def _run_review_script(
 FAKE_SIGNING_VALUE = "placeholder-not-a-real-value-0123456789"
 
 FAILING_STUB = f"""#!/usr/bin/env bash
-echo "Review failed for model 'qwen3-review': [ONEX_CORE_041_INVALID_CONFIGURATION] Environment variable {SIGNING_KEY_VAR} is not set." >&2
+echo "Review failed for model 'example-voter-a': [ONEX_CORE_041_INVALID_CONFIGURATION] Environment variable {SIGNING_KEY_VAR} is not set." >&2
 echo "{FAKE_SIGNING_VALUE}" >&2
 echo "ERROR: All models failed. Review could not be performed." >&2
 exit 1
@@ -325,10 +327,10 @@ exit 1
 # than agreement requires, is DEGRADED QUORUM -- no verdict at all -- and the
 # gate fails closed on it (see DEGRADED_QUORUM_STUB).
 PASSING_STUB = """#!/usr/bin/env bash
-echo "Model 'qwen3-review' succeeded in 233.5s (0 finding(s))." >&2
-echo "Model 'local-studio-planner' succeeded in 41.2s (0 finding(s))." >&2
+echo "Model 'example-voter-a' succeeded in 233.5s (0 finding(s))." >&2
+echo "Model 'example-voter-b' succeeded in 41.2s (0 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["qwen3-review", "local-studio-planner"], "total_findings": 0, "results": [{"success": true, "findings": []}], "quorum": {"verdict": "passed", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 0, "blocking_findings": [], "warning_findings": []}}
+{"models_succeeded": ["example-voter-a", "example-voter-b"], "total_findings": 0, "results": [{"success": true, "findings": []}], "quorum": {"verdict": "passed", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 0, "blocking_findings": [], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -342,10 +344,10 @@ exit 0
 # Both models raise the same finding, so it reaches quorum and blocks
 # (OMN-18479). One model raising it alone is a warning and does not.
 BLOCKING_STUB = """#!/usr/bin/env bash
-echo "Model 'qwen3-review' succeeded in 6.2s (1 finding(s))." >&2
-echo "Model 'local-studio-planner' succeeded in 8.1s (1 finding(s))." >&2
+echo "Model 'example-voter-a' succeeded in 6.2s (1 finding(s))." >&2
+echo "Model 'example-voter-b' succeeded in 8.1s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["qwen3-review", "local-studio-planner"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}, {"success": true, "model": "local-studio-planner", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2, "file_path": "a/b.py", "line_start": 12}], "warning_findings": []}}
+{"models_succeeded": ["example-voter-a", "example-voter-b"], "total_findings": 2, "results": [{"success": true, "model": "example-voter-a", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}, {"success": true, "model": "example-voter-b", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12, "line_end": 12}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2, "file_path": "a/b.py", "line_start": 12}], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -353,10 +355,10 @@ exit 0
 # A finding whose every mapped key is absent. The renderer must still say
 # something, because an empty row is indistinguishable from no finding.
 UNMAPPABLE_STUB = """#!/usr/bin/env bash
-echo "Model 'qwen3-review' succeeded in 1.0s (1 finding(s))." >&2
-echo "Model 'local-studio-planner' succeeded in 1.4s (1 finding(s))." >&2
+echo "Model 'example-voter-a' succeeded in 1.0s (1 finding(s))." >&2
+echo "Model 'example-voter-b' succeeded in 1.4s (1 finding(s))." >&2
 cat <<'JSON'
-{"models_succeeded": ["qwen3-review", "local-studio-planner"], "total_findings": 2, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}, {"success": true, "model": "local-studio-planner", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2}], "warning_findings": []}}
+{"models_succeeded": ["example-voter-a", "example-voter-b"], "total_findings": 2, "results": [{"success": true, "model": "example-voter-a", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}, {"success": true, "model": "example-voter-b", "findings": [{"severity": "critical", "some_future_field": "renamed upstream"}]}], "quorum": {"verdict": "blocked", "quorum_threshold": 2, "blocking_count": 1, "warning_count": 0, "blocking_findings": [{"agreement_count": 2}], "warning_findings": []}}
 JSON
 exit 0
 """
@@ -365,11 +367,11 @@ exit 0
 # and the gate fails closed (OMN-18479). Before that ticket this exact payload
 # produced a blocking verdict from a single opinion.
 DEGRADED_QUORUM_STUB = """#!/usr/bin/env bash
-echo "Model 'qwen3-review' succeeded in 6.2s (1 finding(s))." >&2
-echo "Model 'local-studio-planner' FAILED in 0.4s (0 finding(s))." >&2
+echo "Model 'example-voter-a' succeeded in 6.2s (1 finding(s))." >&2
+echo "Model 'example-voter-b' FAILED in 0.4s (0 finding(s))." >&2
 echo "ERROR: DEGRADED QUORUM \u2014 1 model(s) succeeded, 2 required for agreement." >&2
 cat <<'JSON'
-{"models_succeeded": ["qwen3-review"], "total_findings": 1, "results": [{"success": true, "model": "qwen3-review", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12}]}], "quorum": {"verdict": "degraded_quorum", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 1, "blocking_findings": [], "warning_findings": [{"agreement_count": 1}]}}
+{"models_succeeded": ["example-voter-a"], "total_findings": 1, "results": [{"success": true, "model": "example-voter-a", "findings": [{"severity": "error", "rule_id": "unbounded-retry", "normalized_message": "the loop has no ceiling", "raw_message": "the loop has no ceiling", "file_path": "a/b.py", "line_start": 12}]}], "quorum": {"verdict": "degraded_quorum", "quorum_threshold": 2, "blocking_count": 0, "warning_count": 1, "blocking_findings": [], "warning_findings": [{"agreement_count": 1}]}}
 JSON
 exit 2
 """
@@ -564,12 +566,12 @@ def test_a_successful_review_still_carries_its_stderr(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert outputs["verdict"] == "passed"
-    assert outputs["models_succeeded"] == "qwen3-review,local-studio-planner"
+    assert outputs["models_succeeded"] == "example-voter-a,example-voter-b"
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["verdict"] == "passed"
-    assert payload["models_succeeded"] == ["qwen3-review", "local-studio-planner"]
-    assert "Model 'qwen3-review' succeeded" in payload["stderr"]
-    assert "Model 'qwen3-review' succeeded" in result.stdout
+    assert payload["models_succeeded"] == ["example-voter-a", "example-voter-b"]
+    assert "Model 'example-voter-a' succeeded" in payload["stderr"]
+    assert "Model 'example-voter-a' succeeded" in result.stdout
 
 
 def test_both_attempts_are_logged_separately(tmp_path: Path) -> None:

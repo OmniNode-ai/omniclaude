@@ -427,7 +427,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -437,7 +437,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#2019). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#2019). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -455,7 +455,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -464,7 +464,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -475,7 +475,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -649,7 +649,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -658,7 +658,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -667,7 +667,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -685,7 +685,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (https://github.com/OmniNode-ai/omniclaude/pull/42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (https://github.com/OmniNode-ai/omniclaude/pull/42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1129,7 +1129,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1842,7 +1842,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1852,7 +1852,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#2019). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#2019). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1870,7 +1870,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1879,7 +1879,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -1890,7 +1890,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -2064,7 +2064,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -2073,7 +2073,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -2082,7 +2082,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -2100,7 +2100,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (https://github.com/OmniNode-ai/omniclaude/pull/42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (https://github.com/OmniNode-ai/omniclaude/pull/42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }
@@ -2656,7 +2656,7 @@
    "pre_tool_use_pr_body_stamp_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
+     "reason": "BLOCKED: the live description could not be read, so whether this edit drops a change-control evidence line is unknown. A read that failed is evidence of nothing. The PR watcher's record was tried next and refused: no PR watcher state file at {WS}/.claude_scratch/pr-watcher/state.json (OmniNode-ai/omniclaude#42). A body-replacing pull-request edit whose effect on the change-control evidence line cannot be verified is refused, never assumed harmless (OMN-18335).\n\nTo disable this guard deliberately: onex hooks disable BRANCH_PROTECTION_GUARD"
     },
     "rc": 2
    }

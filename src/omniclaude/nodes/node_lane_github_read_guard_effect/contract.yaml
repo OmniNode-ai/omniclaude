@@ -1,0 +1,97 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: NodeLaneGithubReadGuardEffect (OMN-20916)
+#
+# RULING 2026-10-10T18:17:36Z: lanes must not be able to read GitHub at all, as
+# enforcement and not instruction. The gh shim (scripts/user-bin/gh) refuses a lane's gh
+# reads; this node refuses the three read paths around it: a GitHub MCP read
+# tool, a direct call to api.github.com, and the real gh binary run by its path.
+# The PreToolUse Bash guards entrypoint reaches it through one process call,
+# `python -m` the handler_lane_github_read_cli module.
+
+name: node_lane_github_read_guard_effect
+version: "1.0.0"
+contract_name: node_lane_github_read_guard_effect
+node_name: node_lane_github_read_guard_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: EFFECT_GENERIC
+runtime_profiles: [main]
+
+description: >
+  Judges one PreToolUse call from a lane against the three GitHub read paths
+  that bypass the gh shim: a GitHub MCP server read tool, a Bash command that
+  reaches api.github.com through curl, wget or a script interpreter, and the
+  real gh binary run by its path with a read subcommand. A read from a lane is
+  refused with the local reader named; a write, and every call from the
+  operator's interactive session, is allowed. Reads only the first bytes of a
+  gh path to tell the shim from the real binary.
+
+input_model:
+  name: ModelLaneGithubReadRequest
+  module: omniclaude.nodes.node_lane_github_read_guard_effect.models
+
+output_model:
+  name: ModelLaneGithubReadDecision
+  module: omniclaude.nodes.node_lane_github_read_guard_effect.models
+
+handler:
+  module: omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_lane_github_read_guard
+  class: HandlerLaneGithubReadGuard
+  input_model: omniclaude.nodes.node_lane_github_read_guard_effect.models.ModelLaneGithubReadRequest
+
+handler_routing:
+  routing_strategy: payload_type_match
+  handlers:
+    - handler:
+        name: HandlerLaneGithubReadGuard
+        module: omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_lane_github_read_guard
+      event_model:
+        name: ModelLaneGithubReadRequest
+        module: omniclaude.nodes.node_lane_github_read_guard_effect.models
+
+descriptor:
+  node_archetype: effect
+  purity: effectful
+  idempotent: true
+  timeout_ms: 5000
+
+capabilities:
+  - name: hook.lane_github_read.check
+    description: Refuse a lane's GitHub reads that bypass the gh shim
+    version: 1.0.0
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omniclaude.lane-github-read-check.v1
+  publish_topics:
+    - onex.evt.omniclaude.lane-github-read-checked.v1
+
+runtime_dispatch:
+  command_topic: onex.cmd.omniclaude.lane-github-read-check.v1
+  terminal_events:
+    success: onex.evt.omniclaude.lane-github-read-checked.v1
+
+terminal_event: onex.evt.omniclaude.lane-github-read-checked.v1
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-20916
+  maturity: alpha
+  tags:
+    - effect
+    - hooks
+    - github
+    - quota
