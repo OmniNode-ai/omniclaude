@@ -680,8 +680,14 @@ topics:
       schema_version: capture_verbatim
       hook_source: capture_verbatim
       actor: capture_verbatim
-      # prompt | tool_input | tool_response | assistant_reply
+      # prompt | tool_input | tool_response | assistant_reply | operator_prompt
+      # (OMN-20905: a prompt whose transcript origin is human, recorded at
+      # Stop, which the operator decision capture consumes from this topic)
       content_kind: capture_verbatim
+      # OMN-20905: an operator_prompt's transcript prompt id and the time the
+      # operator said it. Identifiers and a timestamp, no content.
+      prompt_id: capture_verbatim
+      said_at: capture_verbatim
       tool_name: capture_verbatim
       tool_use_id: capture_verbatim
       # The size policy's bookkeeping: which chunk this is, of how many, the
