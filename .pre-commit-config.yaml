@@ -498,6 +498,20 @@ repos:
         files: '^(\.github/workflows/.*\.ya?ml|scripts/.*\.(py|sh)|plugins/.*/scripts/.*\.(py|sh)|tests/workflows/test_workflow_run_script_paths_exist\.py)$'
         stages: [pre-commit]
 
+      # OMN-20001: the release workflow notifies omnimarket so its pin moves in a PR
+      # (ruling 2026-10-01T21:43:10Z (3)). Check-only. SYNC with the ci.yml step
+      # "Verify the release notifies omnimarket (OMN-20001)".
+      - id: release-downstream-notice
+        name: Release notifies omnimarket so its pin moves (OMN-20001)
+        entry: >-
+          bash -c 'PYTHONDONTWRITEBYTECODE=1 uv run pytest
+          tests/ci/test_release_downstream_notice_omn20001.py
+          -q --no-cov -p no:cacheprovider'
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/(release|ci)\.yml|tests/ci/test_release_downstream_notice_omn20001\.py)$'
+        stages: [pre-commit]
+
       # OMN-16723: a reusable workflow's INNER checkout must be pinned to
       # github.job_workflow_sha, and a sparse checkout must assert what it
       # fetched. Sibling of the guard above, same shape, same trigger surface.

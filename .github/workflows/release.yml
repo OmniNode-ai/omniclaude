@@ -366,3 +366,51 @@ jobs:
               "source_repo": "${{ github.repository }}",
               "source_sha": "${{ github.sha }}"
             }
+
+  # ---------------------------------------------------------------------------
+  # Post-release: notify omnimarket so its pin moves in a PR (OMN-20001)
+  # ---------------------------------------------------------------------------
+  # Operator ruling 2026-10-01T21:43:10Z (3): a producer change that extends a
+  # cross-repo contract notifies its consumer, and the consumer's update is a PR
+  # in the consumer repo that lands through the consumer's own checks. omnimarket
+  # reads omniclaude at one pinned release tag; its omniclaude-pin-bump workflow
+  # receives `omniclaude-release` and opens the PR that moves that pin.
+  #
+  # Unlike the plugin-pin-cascade notice above, this one has no skip branch: an
+  # unconfigured App means the consumer is never told, so the job fails red
+  # instead of warning. Guarded by tests/ci/test_release_downstream_notice_omn20001.py.
+  notify-omnimarket-pin-bump:
+    name: Notify omnimarket Pin Bump
+    needs: release
+    if: ${{ !contains(needs.release.outputs.version, 'rc') }}
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
+    steps:
+      - name: Mint onexbot-occ-writer app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ONEXBOT_OCC_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_OCC_PRIVATE_KEY }}
+          owner: OmniNode-ai
+          repositories: omnimarket
+          permission-contents: write
+
+      - name: Dispatch omniclaude-release to omnimarket
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository: OmniNode-ai/omnimarket
+          event-type: omniclaude-release
+          client-payload: >-
+            {
+              "package": "omninode-claude",
+              "version": "${{ needs.release.outputs.version }}",
+              "source_repo": "${{ github.repository }}",
+              "source_sha": "${{ github.sha }}"
+            }
