@@ -36,6 +36,15 @@ requirements:
         statement: 'AC5: a spent budget refuses the read naming ONEX_GH_GATEWAY_BUDGET, and a verb is strict only when gh-gateway.env says ONEX_GH_LANE_READ_STRICT_<VERB>=1, never from the environment and never for another value -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -k "spent_budget or strict" fails against the shim before the fallback'
       - id: AC6
         statement: 'AC6: PR-state reads stay refused without strict config, lane writes and non-lane reads are unchanged, and the lane read, write and refusal-row suites agree with the fallback -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py fails against the shim before the fallback'
+  - id: req-omn20911-read-strict-switch
+    statement: The gh shim's lane read guard has one read-strict switch, off by default, and the shim tests that prove it and the fallback are named in a required CI job and a check-only pre-commit hook (unenforced-rulings plan, unit W8).
+    acceptance:
+      - id: AC7
+        statement: 'AC7: the five gh shim lane-guard test files read as wired, a required workflow context and a pre-commit hook referencing each -- falsifier: ruling_mechanisms wiring_for() on tests/scripts/test_gh_lane_fallback.py, test_gh_lane_read_fallback.py, test_gh_lane_read_guard.py, test_gh_lane_write_guard.py and test_gh_shim_refusal_row_omn21020.py returns wired=False before this change and wired=True after'
+      - id: AC8
+        statement: 'AC8: with ONEX_GH_LANE_READ_STRICT=1 in gh-gateway.env a lane read verb, gh pr view included, is refused and names the local reader, and no write verb is refused -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_fallback.py tests/scripts/test_gh_lane_fallback.py -k strict_read_refused fails 10 of 22 against the shim before the switch'
+      - id: AC9
+        statement: 'AC9: the switch is off unless gh-gateway.env says 1 and is flipped only in a separate change that cites a recorded replacement-success window (every lane read verb answered locally, zero fallback events) -- falsifier: the flipping change cites that window; here, uv run pytest tests/scripts/test_gh_lane_read_fallback.py -k strict_read_refused_is_off_unless_the_file_says_one'
 evidence_requirements:
   - kind: tests
     description: The shim's lane fallback for named consumers and gh workflow run, the FRICTION row per use, and the unrecordable use not taken as a named fallback.
@@ -115,3 +124,27 @@ dod_evidence:
         check_value: uv run pytest tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
     binds_ac:
       - AC6
+  - id: dod-omn20911-ac7-shim-tests-wired
+    description: The five gh shim lane-guard test files are run by a named step of the refusal-surface job in ci.yml and by the gh-shim-lane-guards pre-commit hook, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_fallback.py tests/scripts/test_gh_lane_read_fallback.py tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+    binds_ac:
+      - AC7
+  - id: dod-omn20911-ac8-strict-read-refused
+    description: With the read-strict switch on, a lane read verb is refused and names the local reader, a lane gh pr view included, and writes, rate_limit, gateway shapes and named consumers are not refused, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_fallback.py tests/scripts/test_gh_lane_fallback.py -q --no-cov -k strict_read_refused
+    binds_ac:
+      - AC8
+  - id: dod-omn20911-ac9-switch-off-by-default
+    description: The read-strict switch is off with no line, a value other than 1, or the environment key, at this head. The flip itself is a separate change.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k "strict_read_refused_is_off_unless_the_file_says_one or strict_read_refused_never_reads_the_switch_from_the_environment"
+    binds_ac:
+      - AC9

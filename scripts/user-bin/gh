@@ -150,8 +150,8 @@ fi
 # the whitespace before it: without this, "ONEX_GH_READ_ROUTING=1  # re-enabled"
 # would compare unequal to "1" and silently run every read on the operator
 # while the file reads enabled.
-_conf_strip_comment() {
-  local v="$1"
+_conf_strip_comment_into() {
+  local v="$2"
   case "$v" in *[[:space:]]'#'*) v="${v%%[[:space:]]\#*}" ;; esac
   while :; do
     case "$v" in
@@ -159,20 +159,21 @@ _conf_strip_comment() {
       *) break ;;
     esac
   done
-  printf '%s' "$v"
+  printf -v "$1" '%s' "$v"
 }
+_conf_v=""
 _routing_conf="${ONEX_GH_READ_ROUTING_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-read-routing.env}"
 if [ -f "$_routing_conf" ] && { [ -z "${ONEX_GH_READ_ROUTING+x}" ] || [ -z "${GH_READ_TOKEN_CMD+x}" ]; }; then
   while IFS= read -r _line || [ -n "$_line" ]; do
     case "$_line" in
       ONEX_GH_READ_ROUTING=*)
         if [ -z "${ONEX_GH_READ_ROUTING+x}" ]; then
-          _conf_v="$(_conf_strip_comment "${_line#*=}")"
+          _conf_strip_comment_into _conf_v "${_line#*=}"
           export ONEX_GH_READ_ROUTING="$_conf_v"
         fi ;;
       GH_READ_TOKEN_CMD=*)
         if [ -z "${GH_READ_TOKEN_CMD+x}" ]; then
-          _conf_v="$(_conf_strip_comment "${_line#*=}")"
+          _conf_strip_comment_into _conf_v "${_line#*=}"
           export GH_READ_TOKEN_CMD="$_conf_v"
         fi ;;
     esac
@@ -181,17 +182,52 @@ fi
 
 _cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/prview"
 
+# These reads describe this invocation. Reuse them across guards and logs rather
+# than starting git or date again for the same working directory and call.
+_origin_done=0
+_origin_url=""
+_origin=""
+_read_origin() {
+  [ "$_origin_done" -eq 1 ] && return 0
+  _origin_done=1
+  _origin_url="$(git config --get remote.origin.url 2>/dev/null)"
+  _origin="${_origin_url%.git}"
+  _origin="${_origin##*:}"
+  case "$_origin" in */*/*) _origin="${_origin#"${_origin%/*/*}"/}" ;; esac
+}
+
+_call_timestamp=""
+_read_timestamp() {
+  [ -n "$_call_timestamp" ] || _call_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+
+# Bash 3.2 has no ${value^^}. The strict-config key is ASCII, so translate in
+# this shell instead of starting a pipeline for every guarded read.
+_ascii_upper_into() {
+  local value="$2" lower=abcdefghijklmnopqrstuvwxyz upper=ABCDEFGHIJKLMNOPQRSTUVWXYZ i
+  for ((i=0; i<26; i++)); do
+    value="${value//${lower:i:1}/${upper:i:1}}"
+  done
+  printf -v "$1" '%s' "$value"
+}
+
 # --- usage log (OMN-19585) -----------------------------------------------------
 
 # Keep only characters that are safe inside a log value and meaningful in a
 # repo, endpoint or lane name, and blank anything shaped like a GitHub token.
-_clean() {
-  local v="$1"
+_clean_into() {
+  local v="$2"
   v="${v//[^A-Za-z0-9._\/:@+=, -]/}"
   case "$v" in
     *ghp_*|*gho_*|*ghu_*|*ghs_*|*ghr_*|*github_pat_*) v="REDACTED" ;;
   esac
-  printf '%s' "${v:0:200}"
+  printf -v "$1" '%s' "${v:0:200}"
+}
+
+_clean() {
+  local cleaned=""
+  _clean_into cleaned "$1"
+  printf '%s' "$cleaned"
 }
 
 # Optional launcher context from the remote-lane runner (OMN-20420): the
@@ -199,11 +235,11 @@ _clean() {
 # usage-log (JSONL) fields only; the call-log TSV keeps its 8 columns.
 _parent_lane=""; _lane_host=""
 _resolve_parent_host() {
-  _parent_lane="$(_clean "${ONEX_PARENT_LANE:-}")"
+  _clean_into _parent_lane "${ONEX_PARENT_LANE:-}"
   if [ -n "${ONEX_LANE_HOST:-}" ]; then
-    _lane_host="$(_clean "$ONEX_LANE_HOST")"
+    _clean_into _lane_host "$ONEX_LANE_HOST"
   else
-    _lane_host="$(_clean "${HOSTNAME%%.*}")"
+    _clean_into _lane_host "${HOSTNAME%%.*}"
   fi
 }
 
@@ -217,7 +253,7 @@ _resolve_lane() {
   local registry_dir="" record="" hash="" registered="" parent="" pargs="" script="" w=""
   local pid="$PPID" steps=0 next="" info="" direct_args="" role="" job=0 module="" rest=""
   if [ -n "${ONEX_LANE:-}" ]; then
-    _lane="$(_clean "$ONEX_LANE")"; _lane_src="env"
+    _clean_into _lane "$ONEX_LANE"; _lane_src="env"
     return
   fi
   if [ -n "${ONEX_LANE_ID:-}" ]; then agent="$ONEX_LANE_ID"
@@ -226,7 +262,7 @@ _resolve_lane() {
   elif [ -n "${CLAUDE_SUBAGENT_NAME:-}" ]; then agent="$CLAUDE_SUBAGENT_NAME"
   fi
   if [ -n "$agent" ]; then
-    _lane="$(_clean "$agent")"; _lane_src="agent-env"
+    _clean_into _lane "$agent"; _lane_src="agent-env"
     return
   fi
   cwd="$(pwd -P 2>/dev/null)"
@@ -400,7 +436,8 @@ _classify() {
     else
       case "$group" in
         pr|issue|run|workflow|release|label|repo|cache|ruleset)
-          _repo="$(git config --get remote.origin.url 2>/dev/null)"
+          _read_origin
+          _repo="$_origin_url"
           _repo="${_repo%.git}"; _repo="${_repo##*/}"; _repo="${_repo##*:}"
           ;;
       esac
@@ -411,7 +448,8 @@ _classify() {
 # _call_log <exit code> <action: allowed|refused|fallback>
 _call_log() {
   [ "${ONEX_GH_USAGE_LOG:-1}" = "0" ] && return 0
-  local file="" dir="" ts="" oversized=""
+  local file="" dir="" ts="" oversized="" value="" cleaned=""
+  local log_fields=()
   if [ -n "${ONEX_GH_CALLS_LOG:-}" ]; then
     file="$ONEX_GH_CALLS_LOG"
   elif [ -n "${ONEX_STATE_DIR:-}" ]; then
@@ -431,11 +469,14 @@ _call_log() {
     fi
   fi
   _resolve_lane
-  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$(_clean "$ts")" "$(_clean "$_lane")" "$(_clean "$_lane_src")" \
-    "$(_clean "$_cls")" "$(_clean "$_method")" "$(_clean "$_endpoint")" \
-    "$(_clean "$1")" "$(_clean "$2")" >> "$file" 2>/dev/null || true
+  _read_timestamp
+  ts="$_call_timestamp"
+  # Sanitize in this shell: command substitution would fork once per field.
+  for value in "$ts" "$_lane" "$_lane_src" "$_cls" "$_method" "$_endpoint" "$1" "$2"; do
+    _clean_into cleaned "$value"
+    log_fields+=("$cleaned")
+  done
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${log_fields[@]}" >> "$file" 2>/dev/null || true
 }
 
 # _refusal_row <guard> <reason class> <detail>   (OMN-21020)
@@ -469,25 +510,34 @@ _log() {
   _call_log "$1" "${3:-allowed}"
   local dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage"
   local ts session ticket="" identity="" route_reason=""
-  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  session="$(_clean "${CLAUDE_CODE_SESSION_ID:-}")"
+  local cls="" method="" repo="" endpoint=""
+  _read_timestamp
+  ts="$_call_timestamp"
+  _clean_into session "${CLAUDE_CODE_SESSION_ID:-}"
   case "$PWD" in
     */omni_worktrees/OMN-*) ticket="${PWD#*/omni_worktrees/}"; ticket="${ticket%%/*}" ;;
   esac
   mkdir -p "$dir" 2>/dev/null || return 0
   _resolve_lane
   _resolve_parent_host
+  _clean_into ticket "$ticket"
+  _clean_into cls "$_cls"
+  _clean_into method "$_method"
+  _clean_into repo "$_repo"
+  _clean_into endpoint "$_endpoint"
   if [ -n "$_route" ]; then
     identity="${_route%% *}"
     case "$_route" in *\ *) route_reason="${_route#* }" ;; esac
+    _clean_into identity "$identity"
+    _clean_into route_reason "$route_reason"
     printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","identity":"%s","route_reason":"%s","parent":"%s","host":"%s","pid":%s,"gateway":"%s"}\n' \
-      "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
-      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$(_clean "$identity")" "$(_clean "$route_reason")" "$_parent_lane" "$_lane_host" "$$" "$_gateway" \
+      "$ts" "$_lane" "$_lane_src" "$session" "$ticket" "$cls" "$method" \
+      "$repo" "$endpoint" "$1" "$2" "$identity" "$route_reason" "$_parent_lane" "$_lane_host" "$$" "$_gateway" \
       >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
   else
     printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","parent":"%s","host":"%s","pid":%s,"gateway":"%s"}\n' \
-      "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
-      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$_parent_lane" "$_lane_host" "$$" "$_gateway" \
+      "$ts" "$_lane" "$_lane_src" "$session" "$ticket" "$cls" "$method" \
+      "$repo" "$endpoint" "$1" "$2" "$_parent_lane" "$_lane_host" "$$" "$_gateway" \
       >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
   fi
 }
@@ -511,10 +561,12 @@ _cacheable() {
 }
 
 _sha() {
-  if command -v shasum >/dev/null 2>&1; then
-    printf '%s' "$1" | shasum -a 256 | cut -c1-40
-  else
+  # Prefer the native utility to starting Perl for every gateway cache key.
+  # macOS installations without sha256sum retain the shasum fallback.
+  if command -v sha256sum >/dev/null 2>&1; then
     printf '%s' "$1" | sha256sum | cut -c1-40
+  else
+    printf '%s' "$1" | shasum -a 256 | cut -c1-40
   fi
 }
 
@@ -558,16 +610,6 @@ if [ "$_search_call" -eq 1 ] && [ "${ONEX_PR_WATCHER:-}" != "1" ]; then
 fi
 unset _search_call
 
-# owner/repo of the working directory's origin remote, or "" outside a clone.
-_origin_repo() {
-  local url
-  url="$(git config --get remote.origin.url 2>/dev/null)"
-  url="${url%.git}"
-  url="${url##*:}"
-  case "$url" in */*/*) url="${url#"${url%/*/*}"/}" ;; esac
-  printf '%s' "$url"
-}
-
 # --- PR-state read guard (OMN-19856) -------------------------------------------
 # RULING 2026-09-27T18:05:21Z: every PR-state read comes from the PR watcher's state
 # file; GitHub is for mutations and the exact-head check right before one. Between
@@ -610,10 +652,20 @@ _origin_repo() {
 # refused with a message naming the part that failed.
 
 # Direct parent's argv, only on demand. -ww: a BSD ps would otherwise cut the line.
+_parent_args_done=0
+_parent_args=""
+_read_parent_args() {
+  [ "$_parent_args_done" -eq 1 ] && return 0
+  _parent_args_done=1
+  # The same direct parent is checked by several guards during one invocation.
+  _parent_args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+}
+
 _prs_caller_allowed() {
   [ "${ONEX_PR_WATCHER:-}" = "1" ] && return 0
   local args root scripts
-  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  _read_parent_args
+  args="$_parent_args"
   [ -n "$args" ] || return 1
   case "$args" in *omnibase_internal.pr_watcher*) return 0 ;; esac
   root="${ONEX_LANDING_CONTROLLER_ROOT:-$HOME/.omninode/landing-controller}"
@@ -754,7 +806,8 @@ _prs_resolve() {
     done
   fi
   if [ -z "$_rs_repo" ]; then
-    v="$(_origin_repo)"
+    _read_origin
+    v="$_origin"
     case "$v" in */*) _rs_owner="${v%%/*}"; _rs_repo="${v#*/}" ;; esac
   fi
 }
@@ -849,7 +902,7 @@ _gw_board_repo() {
   [ -f "$conf" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      ONEX_GH_BOARD_REPO=*) v="$(_conf_strip_comment "${line#*=}")"; repo="$v" ;;
+      ONEX_GH_BOARD_REPO=*) _conf_strip_comment_into repo "${line#*=}" ;;
     esac
   done < "$conf"
   case "$repo" in
@@ -962,6 +1015,12 @@ unset _prs_guarded _prs_ep _prs_class _prs_o _prs_r _prs_n _prs_why _rs_owner _r
 # where <VERB> is the call's class upper-cased with spaces as "_" (API, API_GRAPHQL,
 # PR_LIST, PR_DIFF, RUN_LIST, REPO_VIEW, ISSUE_VIEW, STATUS, ...). Unset, or any value but
 # 1, is fallback. A strict verb is refused with the local readers named, as before.
+# The read-strict switch (unenforced-rulings plan, unit W8): the same file's
+#   ONEX_GH_LANE_READ_STRICT=1
+# makes every lane read verb strict at once. It is OFF unless that line says 1, and it is
+# flipped in its own change, only on a recorded replacement-success window (every lane read
+# verb answered locally, zero fallback events). It does not reach the named consumers
+# below, the gateway shapes, the sanctioned scripts, or any write.
 #
 # A lane context is a call made by an agent, decided by either, in this order:
 #   (a) an ancestor process (up to 12 up) that is Claude Code, the Claude desktop app,
@@ -1066,7 +1125,8 @@ _lane_is_read() {
 
 _lane_sanctioned_script() {
   local args
-  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  _read_parent_args
+  args="$_parent_args"
   [ -n "$args" ] || return 1
   case " $args " in
     *"/skills/pr-handoff/scripts/handoff.sh "*) return 0 ;;
@@ -1081,14 +1141,18 @@ _lane_sanctioned_script() {
 
 # Is the lane read guard strict for this call's verb? Only gh-gateway.env decides.
 _lane_read_strict() {
-  local conf="${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env" line key
+  local conf="${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env" line key strict_value
   [ -f "$conf" ] || return 1
-  key="$(printf '%s' "$_cls" | tr '[:lower:]' '[:upper:]' | tr ' ' '_' | tr -cd 'A-Z0-9_')"
+  _ascii_upper_into key "$_cls"
+  key="${key// /_}"
+  key="${key//[^A-Z0-9_]/}"
   [ -n "$key" ] || return 1
   key="ONEX_GH_LANE_READ_STRICT_$key"
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      "$key"=*) [ "$(_conf_strip_comment "${line#*=}")" = "1" ] && return 0 ;;
+      "$key"=*|ONEX_GH_LANE_READ_STRICT=*)
+        _conf_strip_comment_into strict_value "${line#*=}"
+        [ "$strict_value" = "1" ] && return 0 ;;
     esac
   done < "$conf"
   return 1
@@ -1130,7 +1194,8 @@ _fb_consumer=""
 _fb_match() {
   _fb_consumer=""
   local args
-  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  _read_parent_args
+  args="$_parent_args"
   [ -n "$args" ] || return 1
   case " $args " in
     *"/check-platform-leads-review-tripwire "*|*" check-platform-leads-review-tripwire "*|\
@@ -1319,7 +1384,7 @@ if [ "${1:-}" = "pr" ] && [ "${2:-}" = "merge" ]; then
     esac
     _mq_prev="$_mq_a"
   done
-  [ -n "$_mq_repo" ] || _mq_repo="$(_origin_repo)"
+  if [ -z "$_mq_repo" ]; then _read_origin; _mq_repo="$_origin"; fi
 elif [ "$_cls" = "api" ] && [ "$_method" = "PUT" ]; then
   case "$_endpoint" in
     repos/*/pulls/*/merge)
@@ -1394,7 +1459,7 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
   _gw_conf="${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env"
   if [ -f "$_gw_conf" ]; then
     while IFS= read -r _line || [ -n "$_line" ]; do
-      _conf_v="$(_conf_strip_comment "${_line#*=}")"
+      _conf_strip_comment_into _conf_v "${_line#*=}"
       case "$_conf_v" in ""|*[!0-9]*) continue ;; esac
       case "$_line" in
         ONEX_GH_GATEWAY_TTL=*) _gw_ttl="$_conf_v" ;;
@@ -1428,8 +1493,9 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
     exit 1
   fi
   _gw_scope="${GH_HOST:-github.com}|${_method:-GET}"
-  [ "$_cls" = "run view" ] && _gw_scope="$_gw_scope|$(_origin_repo)"
-  [ "$_gw_kind" = "fallback" ] && _gw_scope="$_gw_scope|${GH_REPO:-}|$(_origin_repo)"
+  if [ "$_cls" = "run view" ] || [ "$_gw_kind" = "fallback" ]; then _read_origin; fi
+  [ "$_cls" = "run view" ] && _gw_scope="$_gw_scope|$_origin"
+  [ "$_gw_kind" = "fallback" ] && _gw_scope="$_gw_scope|${GH_REPO:-}|$_origin"
   # `gh run view <run> --log-failed` with no --attempt or --job reads the latest attempt,
   # which a rerun replaces, so that answer is held for at most five minutes. A job id and
   # an explicit attempt name one finished attempt and keep the full TTL.
@@ -1557,7 +1623,8 @@ _lw_lane() {
 _lw_allowed_identity() {
   _prs_caller_allowed && return 0
   local args
-  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  _read_parent_args
+  args="$_parent_args"
   [ -n "$args" ] || return 1
   case " $args " in
     *"/onex run-node "*|*" onex run-node "*) return 0 ;;
@@ -1689,7 +1756,7 @@ if [ "${1:-}" = "pr" ]; then
         case "$_a" in --repo=*) _mut_repo="${_a#--repo=}" ;; esac
         _prev="$_a"
       done
-      [ -n "$_mut_repo" ] || _mut_repo="$(_origin_repo)"
+      if [ -z "$_mut_repo" ]; then _read_origin; _mut_repo="$_origin"; fi
       if [ -n "$_mut_repo" ]; then
         rm -f "$_cache_root/$(_sha "$_mut_repo" | cut -c1-16)".* 2>/dev/null
       else
@@ -1706,7 +1773,8 @@ if _cacheable "$@"; then
     _branch="$(git symbolic-ref --short -q HEAD 2>/dev/null)"
   fi
   if [ -n "$_top" ] && [ -n "$_branch" ]; then
-    _repo_id="$(_origin_repo)"
+    _read_origin
+    _repo_id="$_origin"
     [ -n "$_repo_id" ] || _repo_id="$_top"
     # Only a branch name, or none, is looked up in the watcher state: a PR number, a URL or an
     # owner:branch ref names a PR the state is not asked about, so it goes to the cache and gh.

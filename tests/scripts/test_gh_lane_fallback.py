@@ -330,3 +330,22 @@ def test_other_covered_writes_stay_refused(env: dict[str, str]) -> None:
     assert result.stderr.startswith("REFUSED (OMN-20914): gh pr create")
     assert _calls(env) == []
     assert _rows(env) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("consumer", list(CONSUMERS), ids=str)
+def test_strict_read_refused_switch_leaves_a_named_consumer_on_its_fallback(
+    env: dict[str, str], tmp_path: Path, consumer: str
+) -> None:
+    """The read-strict switch (OMN-20911, W8) is for unnamed reads; a named consumer's
+    logged fallback is decided first and keeps its row until it is deleted from the shim."""
+    conf = Path(env["XDG_CONFIG_HOME"]) / "omni" / "gh-gateway.env"
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    conf.write_text("ONEX_GH_LANE_READ_STRICT=1\n")
+    interpreter, rel, argv = CONSUMERS[consumer]
+
+    result = _run_as(env, tmp_path, interpreter, rel, argv)
+
+    assert result.returncode == 0, result.stderr
+    assert _calls(env) == [argv]
+    assert len(_rows(env)) == 1
