@@ -847,6 +847,7 @@ def drain_once(
     failure_counts: dict[str, int] | None = None,
     refused_event_types: dict[str, str] | None = None,
     quarantine_after: int = DEFAULT_QUARANTINE_AFTER_FAILURES,
+    preserve_backlog: bool = False,
 ) -> tuple[int, int, int]:
     """Drain up to ``batch_limit`` records. Return (published, failed, dead_lettered).
 
@@ -896,7 +897,9 @@ def drain_once(
     # (OMN-20110). A drop means the drainer is not keeping up: it is logged
     # and alarms the operator once per drop episode.
     try:
-        dropped = journal.enforce_bound(journal_dir)
+        # Recovery of an already overflowing journal must publish its retained
+        # records rather than evict them on the first restarted cycle.
+        dropped = 0 if preserve_backlog else journal.enforce_bound(journal_dir)
     except (OSError, TimeoutError) as exc:
         logger.error("journal bound not enforced this cycle: %s", exc)
     else:
@@ -987,6 +990,7 @@ def run(
     poll_seconds: float,
     idle_poll_seconds: float,
     once: bool,
+    preserve_backlog: bool = False,
 ) -> int:
     lock = journal.SingletonLock(lock_path)
     if not lock.acquire():
@@ -1085,6 +1089,7 @@ def run(
                 emitter,
                 failure_counts=failure_counts,
                 refused_event_types=refused_event_types,
+                preserve_backlog=preserve_backlog,
             )
             if published:
                 # The cycle time makes the publish rate readable from this log
@@ -1222,6 +1227,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--log-level", default="INFO")
     parser.add_argument(
+        "--preserve-backlog",
+        action="store_true",
+        help="Recover queued events without overflow eviction; reinstall normally after recovery.",
+    )
+    parser.add_argument(
         "--log-file",
         default=None,
         help=(
@@ -1269,6 +1279,7 @@ def main(argv: list[str] | None = None) -> int:
             poll_seconds=args.poll_seconds,
             idle_poll_seconds=args.idle_poll_seconds,
             once=args.once,
+            preserve_backlog=args.preserve_backlog,
         )
     except Exception as exc:  # noqa: BLE001 -- a daemon must not die on a stray error
         logger.error("drainer exiting on unexpected error: %s", exc)

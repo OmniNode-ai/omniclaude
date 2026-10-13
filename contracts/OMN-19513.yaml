@@ -1,0 +1,46 @@
+schema_version: 1.0.0
+ticket_id: OMN-19513
+title: Retain the hook drainer configuration root and recovery backlog
+summary: The launchd installer retains an explicitly selected workspace configuration root and refuses a root without the hook-edge overlay before replacing the agent. Recovery installations can preserve queued records through failed publication and drain them without overflow eviction. Live host recovery and projection readback remain pending landing and reinstallation.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-hook-drainer-config-root
+    statement: The launchd environment retains the selected broker overlay, while an invalid overlay refuses installation before replacing the previous agent.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: the rendered launchd environment resolves the broker from the selected configuration root, including a symlink and XML-special characters, and a missing overlay leaves the previous agent intact -- falsifier: uv run pytest tests/scripts/test_install_hook_emit_drainer_config_root.py -q --no-cov -k "overlay_survives or missing_overlay" fails against the pre-fix installer'
+  - id: req-hook-drainer-preserve-backlog
+    statement: Recovery mode retains an overflowing journal through a failed publish and then publishes every retained record in FIFO order without a loss log.
+    acceptance:
+      - id: AC2
+        statement: 'AC2: preserve_backlog retains every queued record after failed publication, then publishes every record in order without overflow loss -- falsifier: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k recovery_retains_overflow_then_publishes_every_record fails against the pre-fix drainer'
+evidence_requirements:
+  - kind: tests
+    description: Selected configuration survives launchd rendering and missing overlays preserve the previous agent.
+    command: uv run pytest tests/scripts/test_install_hook_emit_drainer_config_root.py -q --no-cov -k "overlay_survives or missing_overlay"
+  - kind: tests
+    description: Recovery retains overflowing queued records through failure and publishes them in FIFO order without a loss log.
+    command: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k recovery_retains_overflow_then_publishes_every_record
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn19513-config-root
+    description: The existing installer tests exercise broker resolution from the rendered launchd environment and refusal before replacing an agent.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_install_hook_emit_drainer_config_root.py -q --no-cov -k "overlay_survives or missing_overlay"
+    binds_ac:
+      - AC1
+  - id: dod-omn19513-preserve-backlog
+    description: The existing recovery test retains every record through failed publication and checks ordered publication without overflow loss.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k recovery_retains_overflow_then_publishes_every_record
+    binds_ac:
+      - AC2

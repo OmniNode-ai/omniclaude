@@ -98,18 +98,7 @@ env:
   UV_HTTP_TIMEOUT: "300"
 
 jobs:
-  occ-preflight:
-    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6
-    permissions:
-      contents: read
-      pull-requests: read
-    with:
-      contracts-dir: contracts
-      receipts-dir: drift/dod_receipts
-
   hostile-review:
-    needs: occ-preflight
     name: Hostile Reviewer (adversarial gate)
     # RUNNER CARVE-OUT (OMN-18415) — the trusted branch reads a DEDICATED
     # `OMNI_HOSTILE_REVIEW_RUNS_ON_JSON` variable, NOT the shared
@@ -396,7 +385,7 @@ jobs:
         # verdict on install failure let this REQUIRED context self-report
         # success with zero adversarial review having run (fixed 2026-08-13).
         # A real dependency-install failure now fails this job outright and
-        # "Hostile Review Gate" (needs: [occ-preflight, hostile-review],
+        # "Hostile Review Gate" (needs: [hostile-review],
         # if: always()) reads the resulting `failure` result and fails
         # closed via its existing default-deny case statement.
         working-directory: ../omniintelligence
@@ -1029,22 +1018,16 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    needs: [occ-preflight, hostile-review]
+    needs: [hostile-review]
     if: always()
     steps:
       - name: Evaluate gate
         working-directory: ${{ github.workspace }}
         run: |
           echo "=== Hostile Review Gate ==="
-          PREFLIGHT="${{ needs.occ-preflight.result }}"
           RESULT="${{ needs.hostile-review.result }}"
-          echo "occ-preflight: $PREFLIGHT"
           echo "hostile-review: $RESULT"
 
-          if [ "$PREFLIGHT" != "success" ]; then
-            echo "::error::OCC preflight failed or did not complete (result: $PREFLIGHT)."
-            exit 1
-          fi
           # Four-way triage with a default-deny catch-all (OMN-15304 vector 6,
           # the omnimarket#1926 shape). Blocking only on `failure` let a
           # CANCELLED reviewer render this REQUIRED context green with no

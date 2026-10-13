@@ -192,10 +192,9 @@ def test_the_collector_sees_the_real_cross_repo_references() -> None:
     """
     cross_repo, _ = collect_references(WORKFLOWS_DIR)
 
-    # 38 seen after OMN-20074 folded 22 standalone gate files (each with its
-    # own occ-preflight caller) into ci.yml; the floor is a positive control on
-    # the collector, not a count to keep.
-    assert len(cross_repo) >= 30, (
+    # OCC callers were retired in S6. Keep a population control for the
+    # remaining cross-repo reusable references.
+    assert len(cross_repo) >= 5, (
         "expected the collector to see the repository's cross-repo reusable "
         f"references; it saw {len(cross_repo)}"
     )
@@ -204,21 +203,9 @@ def test_the_collector_sees_the_real_cross_repo_references() -> None:
     }, "expected at least the omnibase_core reusables to be seen"
 
 
-def test_no_workflow_references_the_occ_preflight_reusable_at_dev() -> None:
-    """The specific regression, named, so its return is unambiguous."""
+def test_no_workflow_references_the_retired_occ_preflight_reusable() -> None:
     cross_repo, _ = collect_references(WORKFLOWS_DIR)
-    preflight = [
-        reference
-        for reference in cross_repo
-        if reference.path.endswith("occ-preflight.yml")
-    ]
-
-    assert preflight, "positive control: the occ-preflight reusable is referenced here"
-    assert not [reference for reference in preflight if reference.ref == "dev"], (
-        "the occ-preflight reusable is referenced at @dev again; an unreleased "
-        "omnibase_core commit can then red every gate in this repository "
-        "(OMN-18494, run 35134199052)"
-    )
+    assert not [ref for ref in cross_repo if ref.path.endswith("occ-preflight.yml")]
 
 
 def test_the_same_repo_branch_is_live() -> None:

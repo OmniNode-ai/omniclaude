@@ -214,7 +214,7 @@ def test_workflow_only_change_selects_workflow_guards() -> None:
     green with a detector nothing selected (CLAUDE.md rule 5).
     """
     sel = compute_selection(
-        changed_files=[".github/workflows/call-occ-companion-effect.yml"],
+        changed_files=[".github/workflows/call-repo-evidence-gate.yml"],
         adjacency_path=ADJACENCY,
         ref_name="jonah/omn-9999-test",
     )
@@ -238,8 +238,8 @@ def test_workflow_trigger_is_additive_and_does_not_narrow() -> None:
     about today's tree, not a proof that survives someone writing one.
     """
     for changed in (
-        ".github/workflows/call-occ-companion-effect.yml",
-        "scripts/ci/occ_manual_replay_precheck.py",
+        ".github/workflows/call-repo-evidence-gate.yml",
+        "scripts/ci/ci_summary_gate.py",
         "plugins/onex/scripts/validate-all-agents.sh",
         "tests/workflows/test_workflow_run_script_paths_exist.py",
         "tests/ci/test_ci_summary_gate.py",
@@ -276,7 +276,7 @@ def test_ci_script_change_selects_workflow_guards_and_keeps_unit() -> None:
     tests/unit/ coverage it already had -- tests/unit/scripts/ and this very
     module genuinely cover scripts/, so dropping it would NARROW coverage."""
     sel = compute_selection(
-        changed_files=["scripts/ci/occ_manual_replay_precheck.py"],
+        changed_files=["scripts/ci/ci_summary_gate.py"],
         adjacency_path=ADJACENCY,
         ref_name="jonah/omn-9999-test",
     )

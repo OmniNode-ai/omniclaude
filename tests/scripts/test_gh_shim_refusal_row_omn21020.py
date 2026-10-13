@@ -28,6 +28,7 @@ from tests.scripts.test_gh_lane_write_guard import (
     COVERED,
     ENFORCED,
     FAKE_GH,
+    REFUSED,
     UNCOVERED_WRITES,
     _install,
 )
@@ -81,6 +82,9 @@ class Box:
 
     def __init__(self, tmp: Path) -> None:
         self.tmp = tmp
+        conf = tmp / "config" / "omni" / "gh-gateway.env"
+        conf.parent.mkdir(parents=True)
+        conf.write_text("ONEX_GH_LANE_READ_STRICT_PR_LIST=1\n")
         self.workspace = tmp / "workspace"
         _install(self.workspace, contract=_contract())
         self.ledger = self.workspace / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
@@ -174,7 +178,26 @@ def test_refusal_row_lane_read_writes_one_row(box: Box) -> None:
     assert len(box.rows()) == 1
 
 
-@pytest.mark.parametrize("gh_verb", list(COVERED), ids=str)
+def test_refusal_row_lane_read_spent_fallback_budget_writes_one_row(box: Box) -> None:
+    conf = box.tmp / "config" / "omni" / "gh-gateway.env"
+    conf.write_text("ONEX_GH_LANE_READ_STRICT_PR_LIST=1\nONEX_GH_GATEWAY_BUDGET=0\n")
+    result = box.gh("api", "user", lane=True)
+    assert result.returncode == 1, result.stderr
+    first = result.stderr.splitlines()[0]
+    assert first.startswith("REFUSED (OMN-20911): "), result.stderr
+    assert "is a GitHub read from a lane" in first
+    assert "lane read fallback budget is spent" in first
+    assert "ONEX_GH_GATEWAY_BUDGET=0" in first
+    assert not box.reached_real_gh()
+    row = box.wait_for_rows(1)[0]
+    assert _cell(row, "class") == "refusal"
+    assert _cell(row, "guard") == READ_GUARD
+    assert _cell(row, "reason") == "lane-github-read-via-gh-shim"
+    time.sleep(0.5)
+    assert len(box.rows()) == 1
+
+
+@pytest.mark.parametrize("gh_verb", REFUSED, ids=str)
 def test_refusal_row_covered_write_writes_one_row(box: Box, gh_verb: str) -> None:
     argv, _scm_verb, _operation = COVERED[gh_verb]
     result = box.gh(*argv, lane=True)

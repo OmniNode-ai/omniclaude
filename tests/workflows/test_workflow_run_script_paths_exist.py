@@ -458,22 +458,9 @@ def test_undeclared_foreign_path_is_not_silently_excluded() -> None:
         )
 
 
-def test_precheck_script_reference_is_covered() -> None:
-    """Pin the specific reference OMN-15393 is about, so a future refactor
-    cannot drop it from the matcher's reach and call this guard green."""
+def test_retired_manual_replay_script_has_no_workflow_reference() -> None:
     refs = _iter_repo_root_run_script_refs()
-    covered = {
-        (workflow, script)
-        for workflow, _job_id, script in refs
-        if script.endswith("occ_manual_replay_precheck.py")
-    }
-    assert covered == {
-        ("call-occ-autobind.yml", "scripts/ci/occ_manual_replay_precheck.py"),
-        ("call-occ-companion-effect.yml", "scripts/ci/occ_manual_replay_precheck.py"),
-    }, (
-        f"both OCC born-path callers must invoke the manual-replay precheck "
-        f"from the repo root and be seen by this matcher; found: {sorted(covered)}"
-    )
+    assert not [ref for ref in refs if ref[2].endswith("occ_manual_replay_precheck.py")]
 
 
 def test_every_repo_root_run_script_reference_exists() -> None:
