@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CALLER = ROOT / ".github/workflows/imperative-contract-guard.yml"
 ALLOWLIST_PATH = ".github/imperative-contract-allowlist.yaml"
 ALLOWLIST = ROOT / ALLOWLIST_PATH
-CORE_SHA = "031148215620031436cba30619bbae67c0bb38ad"
+CORE_SHA = "70f7ceda44af968ccf26264ecd429cfd27503971"
 CORE_USES = "OmniNode-ai/omnibase_core/.github/workflows/imperative-contract-guard.yml"
 RECORDED_HANDLER_PATHS = [
     "omniclaude/nodes/node_delegation_orchestrator/handlers/handler_cross_cli_invoker.py",

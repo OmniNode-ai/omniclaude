@@ -12,7 +12,6 @@ stock macOS /bin/bash 3.2 (the D4 failure class).
 from __future__ import annotations
 
 import errno
-import json
 import os
 import pty
 import re
@@ -20,13 +19,8 @@ import select
 import signal
 import subprocess
 import sys
-import threading
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import cast
 
 import pytest
 
@@ -643,27 +637,8 @@ def _phase0_env(tmp_path: Path, **extra: str) -> dict[str, str]:
         "ONBOARD_TEST_VM": "0",
         "ONBOARD_TEST_ADMIN": "1",
         "ONBOARD_TEST_NEEDS_ADMIN": "0",
-        # Nothing listens there: a test that enters an OpenRouter key never
-        # reaches the real provider unless it serves its own list.
-        "ONBOARD_TEST_CATALOGUE": _catalogue(tmp_path, "http://127.0.0.1:9/list"),
         **extra,
     }
-
-
-def _catalogue(tmp_path: Path, url: str) -> str:
-    """A provider catalogue whose openrouter row lists its models at ``url``."""
-    path = tmp_path / f"catalogue-{abs(hash(url))}.yaml"
-    path.write_text(
-        "backends:\n"
-        "  - provider: gemini\n"
-        '    models_url: "http://127.0.0.1:9/not-this-one"\n'
-        "  - provider: openrouter\n"
-        "    backend_id: byok-openrouter\n"
-        f'    models_url: "{url}"\n'
-        "  - provider: openai\n"
-        '    models_url: "http://127.0.0.1:9/nor-this-one"\n'
-    )
-    return str(path)
 
 
 def _phase0_only(tmp_path: Path) -> Path:
@@ -954,8 +929,14 @@ def test_a_model_config_without_the_ollama_block_is_refused(tmp_path: Path) -> N
 
 
 def test_the_script_holds_no_model_name_port_or_model_path() -> None:
-    """The hardcoded-model-config gate's rule: those live in the model config."""
-    text = SCRIPT.read_text()
+    """The hardcoded-model-config gate's rule: those live in the model config.
+    The one exception is the fixed OpenRouter model (team decision 2026-10-13),
+    which omnibase_core's policy admits as a VENDOR_DEFAULT file."""
+    text = "\n".join(
+        ln
+        for ln in SCRIPT.read_text().splitlines()
+        if ln != f'OPENROUTER_MODEL="{_OR_FIXED}"'
+    )
     assert not re.search(r"qwen|gpt-oss|llama[0-9]|11434", text)
     assert "/v1/chat/completions" not in text
 
@@ -1424,246 +1405,95 @@ def test_phase_4_accepts_an_answer_from_any_key_that_passed_and_nothing_else() -
 
 
 # ---------------------------------------------------------------------------
-# OMN-21058: after the OpenRouter key, onboarding lists the free models
-# OpenRouter offers that key, numbered, and the developer picks one by number.
-# The model goes to `onex models add openrouter --model`; nothing is picked for
-# them, and a key whose list cannot be read ends OpenRouter alone.
+# OpenRouter runs one fixed model: onboarding asks no model question, and
+# `onex models add openrouter --model` always gets qwen/qwen3.8-27b.
 # ---------------------------------------------------------------------------
 
-# The merge-base control runs these against a script that never asks for a
-# model: fail inside the verifier's 30 s per-check ceiling, not after 120 s.
+# The merge-base control runs these against a script that asks for a model:
+# fail inside the verifier's 30 s per-check ceiling, not after 120 s.
 _OR_TIMEOUT = 10.0
 _OR_KEY = "sk-or-v1-test"
-_OR_MODELS = {
-    "data": [
-        {"id": "z-lab/zeta-7b:free", "pricing": {"prompt": "0"}},
-        {"id": "a-lab/alpha-70b", "pricing": {"prompt": "0.000001"}},
-        {"id": "m-lab/mu-12b-it:free", "pricing": {"prompt": "0"}},
-        {"id": "b-lab/beta-coder:free", "hugging_face_id": "b-lab/not-an-id:free"},
-    ]
-}
-_OR_FREE = ["b-lab/beta-coder:free", "m-lab/mu-12b-it:free", "z-lab/zeta-7b:free"]
-_OR_PICK = "Choose one OpenRouter model, 1 to 3:"
+_OR_FIXED = "qwen/qwen3.8-27b"
 
 
-@contextmanager
-def _openrouter(
-    status: int = 200, body: object = _OR_MODELS
-) -> Iterator[dict[str, object]]:
-    """A local stand-in for OpenRouter's model list; records each request's auth."""
-    seen: dict[str, object] = {"auth": []}
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
-            cast("list[str | None]", seen["auth"]).append(
-                self.headers.get("Authorization")
-            )
-            payload = json.dumps(body).encode()
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
-
-        def log_message(self, *_args: object) -> None:
-            return
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    seen["url"] = f"http://127.0.0.1:{server.server_address[1]}/list"
-    try:
-        yield seen
-    finally:
-        server.shutdown()
-        server.server_close()
+def _openrouter_model_line() -> str:
+    """The script's own OPENROUTER_MODEL assignment, as phase 3 sees it."""
+    return next(
+        ln
+        for ln in SCRIPT.read_text().splitlines()
+        if ln.startswith("OPENROUTER_MODEL=")
+    )
 
 
-def test_openrouter_model_is_chosen_by_number_from_the_keys_own_list(
-    tmp_path: Path,
-) -> None:
-    """AC1: the key's live list, numbered; empty and out-of-range answers ask again."""
-    with _openrouter() as served:
-        out, _ = _preflight(
-            tmp_path,
-            [
-                (_MENU, "2"),
-                ("OpenRouter key (1 of 1)", _OR_KEY),
-                (_OR_PICK, ""),
-                (_OR_PICK, "4"),
-                (_OR_PICK, "0"),
-                (_OR_PICK, "x"),
-                (_OR_PICK, "2"),
-                ("Continue?", "q"),
-            ],
-            timeout=_OR_TIMEOUT,
-            ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, str(served["url"])),
-        )
-    assert served["auth"] == [f"Bearer {_OR_KEY}"]  # read for this key
-    listing = out.split("free models OpenRouter lists for your key.")[1]
-    assert [ln.split(") ", 1)[1] for ln in listing.splitlines() if ") " in ln][
-        :3
-    ] == _OR_FREE
-    assert "a-lab/alpha-70b" not in out and "not-an-id" not in out
-    assert out.count(_OR_PICK) == 5
-    assert out.count("Choose one number, 1 to 3, or q to quit.") == 4
-    assert "OpenRouter model: m-lab/mu-12b-it:free" in out
+def test_openrouter_fixed_model_asks_no_model_question(tmp_path: Path) -> None:
+    """After the OpenRouter key, no model list and no question: the fixed model is named."""
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "2"),
+            ("OpenRouter key (1 of 1)", _OR_KEY),
+            ("Continue?", "q"),
+        ],
+        timeout=_OR_TIMEOUT,
+    )
+    assert "Choose one OpenRouter model" not in out
+    assert f"OpenRouter model: {_OR_FIXED}" in out
     summary = out.split("Ready to set up:")[1]
-    assert "OpenRouter  key received, model m-lab/mu-12b-it:free" in summary
+    assert f"OpenRouter  key received, model {_OR_FIXED}" in summary
     assert _OR_KEY not in out  # never echoed
 
 
-def test_openrouter_model_key_is_sent_by_header_on_stdin_never_as_an_argument() -> None:
-    body = _function_body("openrouter_models")
-    assert "| curl -sS -m 30 -H @- " in body
-    assert "Authorization: Bearer %s" in body
-
-
-def test_openrouter_model_chosen_reaches_onex_models_add(tmp_path: Path) -> None:
-    """AC2: `onex models add openrouter --model <chosen>`, key on stdin; the
+def test_openrouter_fixed_model_reaches_onex_models_add(tmp_path: Path) -> None:
+    """`onex models add openrouter --model qwen/qwen3.8-27b`, key on stdin; the
     pinned test delegation answers on that model."""
     result = _phase3_harness(
         tmp_path,
         {
-            "openrouter": '{"provider": "openrouter", "status": "passed", "model": "m-lab/mu-12b-it:free"}'
+            "openrouter": f'{{"provider": "openrouter", "status": "passed", "model": "{_OR_FIXED}"}}'
         },
-        preamble=f'KEY_OPENROUTER="{_OR_KEY}"; OPENROUTER_MODEL="m-lab/mu-12b-it:free"\n',
+        preamble=f'KEY_OPENROUTER="{_OR_KEY}"; {_openrouter_model_line()}\n',
     )
     calls = (tmp_path / "calls").read_text().splitlines()
-    assert calls == [
-        f"add openrouter --json --model m-lab/mu-12b-it:free stdin={len(_OR_KEY)}"
-    ]
-    assert "OpenRouter  ✓ answered (m-lab/mu-12b-it:free)" in result.stdout, (
-        result.stderr
-    )
+    assert calls == [f"add openrouter --json --model {_OR_FIXED} stdin={len(_OR_KEY)}"]
+    assert f"OpenRouter  ✓ answered ({_OR_FIXED})" in result.stdout, result.stderr
     assert "passed: openrouter" in result.stdout
 
 
-def test_openrouter_model_never_stored_unless_chosen(tmp_path: Path) -> None:
-    """AC3: an OpenRouter key with no chosen model is never handed to onex."""
-    result = _phase3_harness(
-        tmp_path,
-        {"openrouter": '{"provider": "openrouter", "status": "passed", "model": "x"}'},
-        preamble=f'KEY_OPENROUTER="{_OR_KEY}"\n',
-    )
-    assert not (tmp_path / "calls").exists()
-    assert (
-        "OpenRouter  ✗ no OpenRouter model was chosen, so nothing was stored"
-        in result.stdout
-    )
-
-
-@pytest.mark.parametrize(
-    ("status", "body", "reason"),
-    [
-        (
-            401,
-            {"error": {"message": "No auth credentials found", "code": 401}},
-            "its model list answered HTTP 401: No auth credentials found",
-        ),
-        (
-            200,
-            {"data": [{"id": "a-lab/alpha-70b"}]},
-            "its model list names no free model",
-        ),
-    ],
-)
-def test_openrouter_model_list_unreadable_ends_openrouter_and_the_rest_carry_on(
-    tmp_path: Path, status: int, body: object, reason: str
-) -> None:
-    """AC3: the provider's reason, nothing stored for OpenRouter, Gemini carries on."""
-    with _openrouter(status, body) as served:
-        out, _ = _preflight(
-            tmp_path,
-            [
-                (_MENU, "1,2"),
-                ("Gemini key (1 of 2)", "AIza-g"),
-                ("OpenRouter key (2 of 2)", _OR_KEY),
-                ("Continue?", "q"),
-            ],
-            timeout=_OR_TIMEOUT,
-            ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, str(served["url"])),
-        )
-    assert f"✗ OpenRouter: {reason}" in out
-    assert "Nothing was stored for it; your other models carry on." in out
-    assert "Choose one OpenRouter model" not in out
-    summary = out.split("Ready to set up:")[1]
-    assert "Gemini      key received" in summary
-    assert f"OpenRouter  ✗ {reason}" in summary
-
-
-def test_openrouter_model_list_location_comes_from_the_provider_catalogue() -> None:
-    """The script names no model endpoint: the catalogue's openrouter row does."""
-    assert "openrouter.ai/api" not in SCRIPT.read_text()
-    body = _function_body("catalogue_models_url")
-    assert '"$WORKSPACE/$CATALOGUE_REL"' in body and '"$CATALOGUE_URL"' in body
-
-
-def test_openrouter_model_list_unreachable_ends_openrouter(tmp_path: Path) -> None:
-    """AC3: no answer at all is a reason too; the only model gone asks the choice again."""
-    out, _ = _preflight(
-        tmp_path,
-        [(_MENU, "2"), (_HIDDEN, _OR_KEY), (_MENU, "q")],
-        timeout=_OR_TIMEOUT,
-    )
-    assert "✗ OpenRouter: its model list could not be reached" in out
-    assert "Every model was skipped. Choose at least one." in out
-
-
-def test_openrouter_model_list_failure_never_reaches_onex(tmp_path: Path) -> None:
-    """AC3: phase 3 reports the preflight reason and runs nothing for OpenRouter."""
-    result = _phase3_harness(
-        tmp_path,
-        {"gemini": '{"provider": "gemini", "status": "passed", "model": "g"}'},
-        skipped="openrouter",
-        preamble='KEY_GEMINI="AIza-g"; set_result openrouter "fail:its model list answered HTTP 401"\n',
-    )
-    calls = (tmp_path / "calls").read_text()
-    assert "openrouter" not in calls
-    assert "OpenRouter  ✗ its model list answered HTTP 401" in result.stdout
-    assert "model=openrouter result=FAIL" in (tmp_path / "status").read_text()
-
-
-def test_openrouter_model_unattended_with_a_stored_key_asks_nothing(
+def test_openrouter_fixed_model_unattended_with_a_stored_key_asks_nothing(
     tmp_path: Path,
 ) -> None:
-    """AC4: --provider openrouter, no terminal, a stored key: no question, and
+    """--provider openrouter, no terminal, a stored key: no question, and
     phase 3 tests the stored key's model rather than adding one."""
     _stored_keys(tmp_path, "openrouter")
-    with _openrouter() as served:
-        result = subprocess.run(
-            [
-                "/bin/bash",
-                str(_phase0_only(tmp_path)),
-                "--no-containers",
-                "--provider",
-                "openrouter",
-            ],
-            env=_phase0_env(
-                tmp_path,
-                ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, str(served["url"])),
-            ),
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(_phase0_only(tmp_path)),
+            "--no-containers",
+            "--provider",
+            "openrouter",
+        ],
+        env=_phase0_env(tmp_path),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
     assert result.returncode == 0, result.stdout
     assert (
         "No terminal to ask on, so these models are used: OpenRouter." in result.stdout
     )
     assert "Choose one OpenRouter model" not in result.stdout
-    assert served["auth"] == []  # the list is not even read
 
     kept = _phase3_harness(
         tmp_path,
         {
-            "openrouter": '{"provider": "openrouter", "status": "passed", "model": "stored/model:free"}'
+            "openrouter": '{"provider": "openrouter", "status": "passed", "model": "stored/model"}'
         },
         preamble="",
     )
     assert (tmp_path / "calls").read_text().splitlines() == [
         "test openrouter --json stdin=0"
     ]
-    assert "OpenRouter  ✓ answered (stored/model:free)" in kept.stdout
+    assert "OpenRouter  ✓ answered (stored/model)" in kept.stdout

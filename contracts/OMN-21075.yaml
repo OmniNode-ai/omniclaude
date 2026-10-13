@@ -1,0 +1,44 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21075
+title: "Onboarding sets up every OpenRouter key on Qwen3.8 27B and asks no model question"
+summary: >
+  Team decision 2026-10-13: onboarding keeps its three questions (models,
+  keys, Docker), and every OpenRouter key is set up on qwen/qwen3.8-27b, named
+  in the script, with no model question. This replaces the pick-by-number list
+  from OMN-21058. omnibase_core admits the script as a VENDOR_DEFAULT file
+  (same ticket), and this repository moves its omnibase_core pin to that policy.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21075-openrouter-fixed-model
+    statement: "Onboarding sets up OpenRouter on qwen/qwen3.8-27b with no model question."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: after the OpenRouter key, onboarding names qwen/qwen3.8-27b, asks no model question, and shows that model in the summary -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_fixed_model -x
+      - id: "AC2"
+        statement: |-
+          AC2: phase 3 runs onex models add openrouter --model qwen/qwen3.8-27b with the key on stdin, and the pinned OpenRouter delegation answers on that model -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_fixed_model -x
+      - id: "AC3"
+        statement: |-
+          AC3: an unattended --provider openrouter run with a stored key asks nothing and tests the stored key -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_fixed_model -x
+evidence_requirements:
+  - kind: tests
+    description: "OpenRouter is named on qwen/qwen3.8-27b with no question, the model reaches onex models add, and an unattended stored-key run asks nothing"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_fixed_model -x"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21075-openrouter-fixed-model
+    description: "No model question after the OpenRouter key, qwen/qwen3.8-27b named in the run and the summary, passed to onex models add openrouter --model with the key on stdin, and an unattended run with a stored key asking nothing. The provider is a stand-in; a live OpenRouter run is the onboarding walk."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_fixed_model -x"
+    binds_ac:
+      - AC1
+      - AC2
+      - AC3

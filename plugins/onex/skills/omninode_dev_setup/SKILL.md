@@ -95,8 +95,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/_bin/lab-onboarding.sh" --preflight-only <arg
     window, at a hidden prompt naming its provider, right after preflight and
     before anything installs. If they lack a key they chose, they press Enter at
     its prompt to skip it, and can add it later with `onex models add <provider>`.
-    After an OpenRouter key, the run lists the free models OpenRouter offers that
-    key, numbered, and they pick one by number; nothing is picked for them.
+    An OpenRouter key always runs `qwen/qwen3.8-27b` (Qwen3.8 27B), with no model
+    question; it is a paid model, so the key needs credit on openrouter.ai.
   - **Ollama**: no key. It runs a model on the Mac, so it downloads one
     (sized to the Mac's memory, as omnimarket's model config declares) and is slower,
     especially on Intel or in a VM.
