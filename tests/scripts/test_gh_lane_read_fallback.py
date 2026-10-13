@@ -405,6 +405,15 @@ def test_strict_read_refused_is_off_unless_the_file_says_one(
         assert result.returncode == 0, result.stderr
     assert _calls(env) == argvs
     assert [row[7] for row in _call_log_rows(env)] == ["fallback"] * 3
+    # Negative control: the one value that turns the switch on refuses the same read.
+    # Without it this test passes on a shim that has no switch at all.
+    _configure(env, STRICT_ALL)
+    refused = _run(env, *argvs[0], extra={"ONEX_LANE": LANE})
+    assert refused.returncode == 1, refused.stderr
+    assert refused.stderr.splitlines()[0].endswith(
+        "This verb is strict in gh-gateway.env."
+    ), refused.stderr
+    assert _calls(env) == argvs
 
 
 @pytest.mark.unit
@@ -418,6 +427,11 @@ def test_strict_read_refused_never_reads_the_switch_from_the_environment(
     assert result.returncode == 0, result.stderr
     assert _calls(env) == [argv]
     assert [row[7] for row in _call_log_rows(env)] == ["fallback"]
+    # Negative control: the same key in the file is what the shim does read.
+    _configure(env, STRICT_ALL)
+    refused = _run(env, *argv, extra={"ONEX_LANE": LANE})
+    assert refused.returncode == 1, refused.stderr
+    assert _calls(env) == [argv]
 
 
 @pytest.mark.unit
