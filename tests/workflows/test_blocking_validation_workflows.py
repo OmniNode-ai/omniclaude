@@ -153,10 +153,15 @@ FOLDED_JOBS: tuple[_Folded, ...] = (
             "scripts/hooks/pre-push-branch-claim",
             "tests/scripts/test_branch_claim.py",
             "tests/scripts/test_branch_claim_hook.py",
+            # OMN-20708: the lab-check reader's test, the caller and the
+            # pre-commit hook that runs it widen the gate's trigger.
+            "tests/scripts/test_branch_claim_check_workflow.py",
             "tests/scripts/test_lane_identity_canary.py",
             "scripts/hooks/prepare-commit-msg-lane",
             ".github/workflows/branch-claim-gate.yml",
+            ".github/workflows/branch-claim-check.yml",
             ".github/workflows/branch-claim-check-reusable.yml",
+            ".pre-commit-config.yaml",
         ),
         push=("main", "dev", "hotfix/**"),
         dispatch=False,

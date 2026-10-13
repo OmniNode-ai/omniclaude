@@ -7,6 +7,15 @@
 # local path rather than a pinned cross-repository SHA. Caller repositories pin
 # an immutable omniclaude SHA instead; see the reusable workflow's header.
 #
+# OMN-20708: the reusable workflow can read the lab node's branch-claim check
+# (`claim_source: work-ledger`, which opens no ledger) instead of the private
+# markdown ledger. This caller stays on `file` until a completed
+# `branch-claim / work-ledger` check from the writer App is visible on an
+# omniclaude pull request head: a caller flipped before then waits out the whole
+# window on every pull request and fails with THE CHECK DID NOT RUN. Observed
+# 2026-10-13: none of omniclaude#2708, #2710, #2711 or #2672 carried that check.
+# The flip is the one `claim_source` line below.
+#
 # It RECORDS. The operator ruling of 2026-09-13T09:11:33Z put the refusing half
 # behind a measurement of the release path, so `mode` stays at its default here.
 
@@ -24,8 +33,11 @@ concurrency:
 
 permissions:
   contents: read
+  checks: read
 
 jobs:
   branch-claim-check:
     uses: ./.github/workflows/branch-claim-check-reusable.yml
+    with:
+      claim_source: file
     secrets: inherit

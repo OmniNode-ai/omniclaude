@@ -791,6 +791,16 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-20708: the branch-claim check's lab-node reader. SYNC with the ci.yml
+      # Branch Claim Gate step "Branch-claim check workflow reader (OMN-20708)".
+      - id: branch-claim-check-workflow
+        name: Branch-claim check reads the lab node's check (OMN-20708)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/scripts/test_branch_claim_check_workflow.py -q --no-cov -p no:randomly
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/branch-claim-check(-reusable)?\.yml|tests/scripts/test_branch_claim_check_workflow\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
+        stages: [pre-commit]
+
       # OMN-20910: a review voter's model is declared only in the contract
       # overlay. SYNC with the ci.yml refusal-surface step "Review voter model
       # comes from the overlay (OMN-20910)".

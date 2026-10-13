@@ -4578,10 +4578,13 @@ jobs:
                 - 'scripts/hooks/pre-push-branch-claim'
                 - 'tests/scripts/test_branch_claim.py'
                 - 'tests/scripts/test_branch_claim_hook.py'
+                - 'tests/scripts/test_branch_claim_check_workflow.py'
                 - 'tests/scripts/test_lane_identity_canary.py'
                 - 'scripts/hooks/prepare-commit-msg-lane'
                 - '.github/workflows/ci.yml'
+                - '.github/workflows/branch-claim-check.yml'
                 - '.github/workflows/branch-claim-check-reusable.yml'
+                - '.pre-commit-config.yaml'
               push: ['main', 'dev', 'hotfix/**']
             check-deterministic-skills:
               paths:
@@ -4884,6 +4887,13 @@ jobs:
             tests/scripts/test_branch_claim.py \
             tests/scripts/test_branch_claim_hook.py \
             tests/scripts/test_lane_identity_canary.py -q
+
+      # OMN-20708: the reader of the lab node's branch-claim check (`claim_source:
+      # work-ledger`) runs its own Bash against a fake gh and real jq. Paired with
+      # the branch-claim-check-workflow pre-commit hook. This job's result is part
+      # of the required CI Summary context.
+      - name: Branch-claim check workflow reader (OMN-20708)
+        run: uv run pytest tests/scripts/test_branch_claim_check_workflow.py -q --no-cov -p no:randomly
 
   # Folded from .github/workflows/check-deterministic-skills.yml (OMN-20074); runs when its original `paths:` change.
   # Deterministic-Skill Routing Enforcement Gate (OMN-8749, wired under OMN-14808)

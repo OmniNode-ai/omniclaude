@@ -1,0 +1,57 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20708"
+title: "The branch claim check can answer from the database work ledger, with the markdown ledger absent"
+summary: "omniclaude's reusable branch-claim workflow gains a claim_source input. With work-ledger it reads the check the lab node posts on the pull request head (branch-claim / work-ledger, from the writer App), opens no database connection and checks out no ledger; with file (the default, and what this repository's own caller still passes) it runs the existing markdown-ledger resolution. The caller flips to work-ledger in a later change, once a completed lab check is visible on an omniclaude head. This slice adds the test that runs the reader's own Bash, a named step for it in the Branch Claim Gate job (a member of the required CI Summary umbrella) and a check-only pre-commit hook."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-reader-needs-no-markdown-ledger"
+    statement: "With claim_source work-ledger the job runs no step that fetches or reads the markdown ledger, and an unheld branch passes."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: with work-ledger the only steps that run are the source validator and the lab-check reader, and the reader passes an unheld branch with no ledger present -- falsifier: uv run pytest tests/scripts/test_branch_claim_check_workflow.py -q --no-cov -k 'work_ledger_source_runs_no_ledger_step or ledger_absent_passes'"
+  - id: "req-reader-refuses-held-elsewhere"
+    statement: "A branch another lane holds is refused in refuse mode, and a missing, garbled or did-not-run lab answer never passes in either mode."
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: held-elsewhere and fence-behind fail in refuse mode and only warn in record mode, and an absent, pending, foreign-app, garbled or did-not-run lab check fails in both modes -- falsifier: uv run pytest tests/scripts/test_branch_claim_check_workflow.py -q --no-cov -k 'claimed_elsewhere_refused or no_completed_matching_run_fails or garbled_first_line_fails or outcomes_follow_mode'"
+  - id: "req-reader-test-is-wired"
+    statement: "The reader's test file is a named step of a job the required CI Summary context covers and a check-only pre-commit hook."
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: the test file is the step Branch-claim check workflow reader (OMN-20708) of the Branch Claim Gate job, its path filter names the caller, the reusable workflow and the test, and the branch-claim-check-workflow pre-commit hook runs it -- falsifier: uv run pytest tests/scripts/test_branch_claim_check_workflow.py -q --no-cov -k branch_claim_check_workflow_is_wired"
+evidence_requirements:
+  - kind: "tests"
+    description: "The lab-check reader's Bash, run with a fake gh and real jq."
+    command: "uv run pytest tests/scripts/test_branch_claim_check_workflow.py tests/scripts/test_branch_claim.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn20708-ac1-no-markdown-ledger"
+    description: "With work-ledger the job runs only the validator and the reader, and an unheld branch passes with no ledger present."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_branch_claim_check_workflow.py -q --no-cov -k 'work_ledger_source_runs_no_ledger_step or ledger_absent_passes'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn20708-ac2-held-elsewhere-refused"
+    description: "A branch held elsewhere is refused in refuse mode and an unanswered lab check never passes."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_branch_claim_check_workflow.py -q --no-cov -k 'claimed_elsewhere_refused or no_completed_matching_run_fails or garbled_first_line_fails or outcomes_follow_mode'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
+  - id: "dod-omn20708-ac3-wired"
+    description: "The test file is a named step of the Branch Claim Gate job (covered by the required CI Summary context) and a pre-commit hook entry."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_branch_claim_check_workflow.py -q --no-cov -k branch_claim_check_workflow_is_wired"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
