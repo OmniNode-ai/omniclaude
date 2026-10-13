@@ -44,8 +44,10 @@ def jdir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture(autouse=True)
-def _capture_on(monkeypatch: pytest.MonkeyPatch) -> None:
+def _capture_on(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv(capture_mod.OPT_OUT_ENV, raising=False)
+    # OMN-20926: never reach this machine's own captured-secret store.
+    monkeypatch.setattr(capture_mod, "onex_home", lambda: tmp_path / "no-onex")
 
 
 def _write_status(journal_dir: Path, types: tuple[str, ...] | None) -> None:

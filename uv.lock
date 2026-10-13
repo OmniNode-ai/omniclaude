@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine != 's390x'",
@@ -13,7 +13,7 @@ overrides = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=a44caa7efd7950d4145ca67c6c1404921ca0b221" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=f7ff837dfb882cad126f88a023cfc400e113de49" },
     { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb" },
 ]
 
@@ -1746,8 +1746,8 @@ wheels = [
 
 [[package]]
 name = "omnimarket"
-version = "0.4.312"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=a44caa7efd7950d4145ca67c6c1404921ca0b221#a44caa7efd7950d4145ca67c6c1404921ca0b221" }
+version = "0.4.313"
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=f7ff837dfb882cad126f88a023cfc400e113de49#f7ff837dfb882cad126f88a023cfc400e113de49" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1877,7 +1877,7 @@ requires-dist = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=a44caa7efd7950d4145ca67c6c1404921ca0b221" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=f7ff837dfb882cad126f88a023cfc400e113de49" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=f4bf0a1989fc37bd7ad9b4a7ad591f801d2a1070" },
     { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=f4bf0a1989fc37bd7ad9b4a7ad591f801d2a1070" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
