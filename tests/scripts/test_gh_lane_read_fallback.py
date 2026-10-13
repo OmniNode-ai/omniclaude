@@ -333,3 +333,121 @@ def test_non_lane_read_is_allowed_without_spending_budget(env: dict[str, str]) -
     assert _calls(env) == [argv]
     assert _budget_spent(env) == 0
     assert [row[7] for row in _call_log_rows(env)] == ["allowed"]
+
+
+# OMN-20911 (unenforced-rulings plan, unit W8): the read-strict switch. One line in
+# gh-gateway.env, ONEX_GH_LANE_READ_STRICT=1, makes every lane read verb strict at once;
+# it is OFF unless that line is there. It is flipped in its own change, on a recorded
+# window in which every lane read verb was answered locally with zero fallback events.
+STRICT_ALL = "ONEX_GH_LANE_READ_STRICT=1\n"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["api", "user"],
+        ["api", "repos/o/r/releases"],
+        ["api", "graphql", "-f", "query={viewer{login}}"],
+        ["pr", "list", "--repo", "o/r"],
+        ["pr", "diff", "9", "--repo", "o/r"],
+        ["run", "list", "--repo", "o/r"],
+        ["repo", "view", "o/r"],
+        ["issue", "list", "--repo", "o/r"],
+        ["release", "list", "--repo", "o/r"],
+        ["status"],
+    ],
+)
+def test_strict_read_refused_for_every_lane_read_verb_when_the_switch_is_on(
+    env: dict[str, str], argv: list[str]
+) -> None:
+    _configure(env, STRICT_ALL)
+    refused = _run(env, *argv, extra={"ONEX_LANE": LANE})
+    assert refused.returncode == 1, refused.stderr
+    first = refused.stderr.splitlines()[0]
+    assert first.startswith("REFUSED (OMN-20911): "), refused.stderr
+    assert "is a GitHub read from a lane" in first
+    assert first.endswith("This verb is strict in gh-gateway.env.")
+    assert "pr_state_local.py --pr" in refused.stderr
+    assert "canonical clones" in refused.stderr
+    assert _calls(env) == []
+    assert _budget_spent(env) == 0
+    assert [(row[6], row[7]) for row in _call_log_rows(env)] == [("1", "refused")]
+
+
+@pytest.mark.unit
+def test_strict_read_refused_for_a_lane_pr_view_names_the_local_reader(
+    env: dict[str, str],
+) -> None:
+    _configure(env, STRICT_ALL)
+    refused = _run(env, "pr", "view", "9", "--repo", "o/r", extra={"ONEX_LANE": LANE})
+    assert refused.returncode == 1, refused.stderr
+    assert refused.stderr.startswith("REFUSED (OMN-19856): "), refused.stderr
+    assert "pr_state_local.py --pr o/r#9" in refused.stderr
+    assert "git -C $OMNI_HOME/r log|diff origin/dev..." in refused.stderr
+    assert _calls(env) == []
+    assert _budget_spent(env) == 0
+
+
+@pytest.mark.unit
+def test_strict_read_refused_is_off_unless_the_file_says_one(
+    env: dict[str, str],
+) -> None:
+    """Positive control: the same reads fall back with no switch, or any value but 1."""
+    argvs = []
+    for n, body in enumerate(
+        (None, "ONEX_GH_LANE_READ_STRICT=0\n", "ONEX_GH_LANE_READ_STRICT=yes\n")
+    ):
+        if body is not None:
+            _configure(env, body)
+        argvs.append(["pr", "list", "--repo", f"o/r{n}"])  # distinct: no cache hit
+        result = _run(env, *argvs[-1], extra={"ONEX_LANE": LANE})
+        assert result.returncode == 0, result.stderr
+    assert _calls(env) == argvs
+    assert [row[7] for row in _call_log_rows(env)] == ["fallback"] * 3
+
+
+@pytest.mark.unit
+def test_strict_read_refused_never_reads_the_switch_from_the_environment(
+    env: dict[str, str],
+) -> None:
+    argv = ["pr", "list", "--repo", "o/r"]
+    result = _run(
+        env, *argv, extra={"ONEX_LANE": LANE, "ONEX_GH_LANE_READ_STRICT": "1"}
+    )
+    assert result.returncode == 0, result.stderr
+    assert _calls(env) == [argv]
+    assert [row[7] for row in _call_log_rows(env)] == ["fallback"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["pr", "create", "--title", "t", "--body", "b"],
+        ["pr", "comment", "9", "--body", "hi"],
+        ["api", "-X", "POST", "repos/o/r/issues/9/comments", "-f", "body=hi"],
+        ["api", "rate_limit"],
+    ],
+)
+def test_strict_read_refused_leaves_writes_and_rate_limit_alone(
+    env: dict[str, str], argv: list[str]
+) -> None:
+    _configure(env, STRICT_ALL)
+    result = _run(env, *argv, extra={"ONEX_LANE": LANE})
+    assert result.returncode == 0, result.stderr
+    assert _calls(env) == [argv]
+    assert _budget_spent(env) == 0
+
+
+@pytest.mark.unit
+def test_strict_read_refused_does_not_refuse_the_gateway_shapes(
+    env: dict[str, str],
+) -> None:
+    """A failing-job log is served by the budgeted gateway whatever the switch says."""
+    _configure(env, STRICT_ALL)
+    argv = ["api", "repos/o/r/actions/jobs/123/logs"]
+    result = _run(env, *argv, extra={"ONEX_LANE": LANE})
+    assert result.returncode == 0, result.stderr
+    assert _calls(env) == [argv]
+    assert _budget_spent(env) == 1

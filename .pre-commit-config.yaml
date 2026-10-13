@@ -802,6 +802,17 @@ repos:
         files: '^(\.github/workflows/[^/]+\.ya?ml|tests/hooks/test_hostile_reviewer_workflow\.py|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
+      # OMN-20911: the gh shim's lane read-strict switch, logged fallback and refusals.
+      # SYNC with the ci.yml refusal-surface step "Verify gh shim lane read-strict switch
+      # and fallback (OMN-20911)".
+      - id: gh-shim-lane-guards
+        name: gh shim lane read-strict switch and fallback (OMN-20911)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/scripts/test_gh_lane_fallback.py tests/scripts/test_gh_lane_read_fallback.py tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(scripts/user-bin/gh|tests/scripts/test_gh_(lane_fallback|lane_read_fallback|lane_read_guard|lane_write_guard|shim_refusal_row_omn21020)\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: ledger-ruling-reread-regression
         name: Ledger ruling re-read before publishing (OMN-18645)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov

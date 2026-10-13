@@ -127,6 +127,17 @@ jobs:
       # OMN-20910: paired with the review-voter-model-from-overlay pre-commit hook.
       - name: Review voter model comes from the overlay (OMN-20910)
         run: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -p no:randomly
+      # OMN-20911: paired with the gh-shim-lane-guards pre-commit hook. The read-strict
+      # switch, the logged fallback and the lane read/write refusals of the gh shim.
+      - name: Verify gh shim lane read-strict switch and fallback (OMN-20911)
+        run: >-
+          uv run pytest
+          tests/scripts/test_gh_lane_fallback.py
+          tests/scripts/test_gh_lane_read_fallback.py
+          tests/scripts/test_gh_lane_read_guard.py
+          tests/scripts/test_gh_lane_write_guard.py
+          tests/scripts/test_gh_shim_refusal_row_omn21020.py
+          -q --no-cov
       - name: Verify advisory gate controller cache and refusal controls (OMN-21006)
         run: uv run pytest tests/scripts/test_advisory_job_gate.py -q
       - name: Verify Git effect subprocess compatibility
