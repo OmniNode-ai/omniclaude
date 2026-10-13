@@ -62,8 +62,16 @@ def _git(*args: str) -> subprocess.CompletedProcess[bytes]:
     )
 
 
+def _has_commit(commit: str) -> bool:
+    return _git("cat-file", "-e", f"{commit}^{{commit}}").returncode == 0
+
+
 def _require_commit(commit: str) -> None:
-    if _git("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
+    # CI checks out at depth 1, so the pinned commit is usually absent: fetch it
+    # (with its history, which the ancestry check needs) before giving up.
+    if not _has_commit(commit):
+        _git("fetch", "--quiet", "--no-tags", "origin", commit)
+    if not _has_commit(commit):
         pytest.skip(f"{commit} is not in this checkout's history")
 
 
