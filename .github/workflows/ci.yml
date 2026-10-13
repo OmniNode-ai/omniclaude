@@ -127,6 +127,8 @@ jobs:
       # OMN-20910: paired with the review-voter-model-from-overlay pre-commit hook.
       - name: Review voter model comes from the overlay (OMN-20910)
         run: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -p no:randomly
+      - name: Verify a bad plugin version is refused and one bot bump PR is kept (OMN-20710)
+        run: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov
       - name: Verify advisory gate controller cache and refusal controls (OMN-21006)
         run: uv run pytest tests/scripts/test_advisory_job_gate.py -q
       - name: Verify Git effect subprocess compatibility
