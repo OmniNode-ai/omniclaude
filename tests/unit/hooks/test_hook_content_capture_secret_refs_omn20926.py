@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import importlib
+import re
 import sys
 import types
 from pathlib import Path
@@ -29,6 +30,7 @@ from omniclaude.hooks.capture_redaction import (
     load_contract,
     plan_content_chunks,
     redact_capture,
+    sub_keeping_references,
 )
 
 _LIB_DIR = Path(__file__).resolve().parents[3] / "plugins" / "onex" / "hooks" / "lib"
@@ -338,3 +340,23 @@ def test_chunking_never_cuts_a_reference(tmp_path: Path) -> None:
     assert plan.truncated is True
     assert sum(chunk.count(ref) for chunk in plan.chunks) == 1
     assert joined.count("secret:") == 1
+
+
+def test_a_match_starting_inside_a_reference_keeps_the_text_after_it() -> None:
+    contract = load_contract()
+    ref = _reference().reference_for(_digest(GITHUB_FAKE))
+    text = "before " + ref + " TAIL after"
+    # The pattern starts inside the reference and runs past its end.
+    pattern = re.compile(re.escape(ref[5:]) + " TAIL")
+    out = sub_keeping_references(pattern, text, contract, lambda m: "<hit>")
+    assert out == text
+    assert ref in out
+
+
+def test_a_zero_width_pattern_terminates_and_leaves_references_standing() -> None:
+    contract = load_contract()
+    ref = _reference().reference_for(_digest(GITHUB_FAKE))
+    text = "ab " + ref + " cd"
+    out = sub_keeping_references(re.compile(r"x*"), text, contract, lambda m: "|")
+    assert ref in out
+    assert out.replace("|", "") == text
