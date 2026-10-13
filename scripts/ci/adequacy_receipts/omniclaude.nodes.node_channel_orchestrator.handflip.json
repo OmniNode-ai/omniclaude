@@ -1,0 +1,30 @@
+{
+  "base_ref": "0c7a1d577e6d5dc089a1fd8ee4d0721c053dfa3b", "base_ref_note": "dev head this branch was cut from, before the handler classes were added # pragma: allowlist secret",
+  "canonical_handler_module": "omniclaude.nodes.node_channel_orchestrator.handlers.handler_channel_orchestrate",
+  "legacy_handler_module": "omniclaude.nodes.node_channel_orchestrator.handlers.handler_channel_orchestrate",
+  "node_id": "omniclaude.nodes.node_channel_orchestrator",
+  "parity": {
+    "selected_input_hashes": [
+      "sha256:e6e6c4e559ce34657615b77d624ddbb9f028a0ae8c5293b482a70b2253048998"
+    ],
+    "status": "pass",
+    "test_ids": [
+      "tests/unit/nodes/test_channel_contract_handlers_resolve.py::test_contract_handler_class_exists_and_is_def_b[orchestrator]",
+      "tests/unit/nodes/test_channel_contract_handlers_resolve.py::test_orchestrator_handle_declares_the_contract_input_model",
+      "tests/unit/nodes/test_channel_contract_handlers_resolve.py::test_orchestrator_emits_exactly_the_two_declared_events",
+      "tests/unit/nodes/test_channel_contract_handlers_resolve.py::test_orchestrator_events_ride_in_handler_output_not_a_bare_list",
+      "tests/unit/nodes/test_channel_contract_handlers_resolve.py::test_message_processed_event_carries_no_message_content",
+      "tests/unit/nodes/node_channel_orchestrator/test_handler_channel_orchestrate.py::TestHandlerChannelOrchestrate::test_returns_output_model",
+      "tests/unit/nodes/node_channel_orchestrator/test_handler_channel_orchestrate.py::TestHandlerChannelOrchestrate::test_reply_text_populated",
+      "tests/unit/nodes/node_channel_orchestrator/test_handler_channel_orchestrate.py::TestHandlerChannelOrchestrate::test_preserves_channel_routing",
+      "tests/unit/nodes/node_channel_orchestrator/test_handler_channel_orchestrate.py::TestHandlerChannelOrchestrate::test_preserves_correlation_id",
+      "tests/unit/nodes/node_channel_orchestrator/test_handler_channel_orchestrate.py::TestHandlerChannelOrchestrate::test_sets_reply_to_message_id",
+      "tests/unit/nodes/node_channel_orchestrator/test_handler_channel_orchestrate.py::TestHandlerChannelOrchestrate::test_preserves_thread_id",
+      "tests/unit/nodes/node_channel_orchestrator/test_handler_channel_orchestrate.py::TestHandlerChannelOrchestrate::test_all_channel_types"
+    ]
+  },
+  "preserved_symbols": [
+    "handle_channel_orchestrate"
+  ],
+  "receipt_schema": "handflip_proof.v1"
+}

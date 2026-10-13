@@ -1,0 +1,28 @@
+{
+  "base_ref": "0c7a1d577e6d5dc089a1fd8ee4d0721c053dfa3b", "base_ref_note": "dev head this branch was cut from, before the handler classes were added # pragma: allowlist secret",
+  "canonical_handler_module": "omniclaude.nodes.node_channel_reply_dispatcher.handlers.handler_dispatch_reply",
+  "legacy_handler_module": "omniclaude.nodes.node_channel_reply_dispatcher.handlers.handler_dispatch_reply",
+  "node_id": "omniclaude.nodes.node_channel_reply_dispatcher",
+  "parity": {
+    "selected_input_hashes": [
+      "sha256:6dc3780d4b2d15d3ccfe7dcef7779ef26147e2b2e36ea2c3076f3d60e537a5f6",
+      "sha256:d4cd36f942236bdd70d242007eabede71ca3b71c1c29dba0fbc5c1d3cc402946"
+    ],
+    "status": "pass",
+    "test_ids": [
+      "tests/unit/nodes/test_channel_contract_handlers_resolve.py::test_contract_handler_class_exists_and_is_def_b[reply_dispatcher]",
+      "tests/unit/nodes/test_channel_contract_handlers_resolve.py::test_reply_requested_event_feeds_the_dispatcher",
+      "tests/unit/nodes/node_channel_reply_dispatcher/test_handler_dispatch_reply.py::TestHandlerDispatchReply::test_discord_routes_correctly",
+      "tests/unit/nodes/node_channel_reply_dispatcher/test_handler_dispatch_reply.py::TestHandlerDispatchReply::test_slack_routes_correctly",
+      "tests/unit/nodes/node_channel_reply_dispatcher/test_handler_dispatch_reply.py::TestHandlerDispatchReply::test_telegram_routes_correctly",
+      "tests/unit/nodes/node_channel_reply_dispatcher/test_handler_dispatch_reply.py::TestHandlerDispatchReply::test_email_routes_correctly",
+      "tests/unit/nodes/node_channel_reply_dispatcher/test_handler_dispatch_reply.py::TestHandlerDispatchReply::test_sms_routes_correctly",
+      "tests/unit/nodes/node_channel_reply_dispatcher/test_handler_dispatch_reply.py::TestHandlerDispatchReply::test_matrix_no_outbound_topic",
+      "tests/unit/nodes/node_channel_reply_dispatcher/test_handler_dispatch_reply.py::TestHandlerDispatchReply::test_preserves_correlation_through_routing"
+    ]
+  },
+  "preserved_symbols": [
+    "handle_dispatch_reply"
+  ],
+  "receipt_schema": "handflip_proof.v1"
+}

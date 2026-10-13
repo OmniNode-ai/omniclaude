@@ -73,3 +73,11 @@ def handle_dispatch_reply(reply: ModelChannelReply) -> DispatchResult:
     )
 
     return DispatchResult(routed=True, topic=topic)
+
+
+class HandlerDispatchReply:
+    """Def-B handler the node contract routes ``channel.dispatch_reply`` to."""
+
+    def handle(self, request: ModelChannelReply) -> DispatchResult:
+        """Route one reply to its channel-specific outbound topic."""
+        return handle_dispatch_reply(request)
