@@ -32,7 +32,8 @@ emergency_bypass:
 dod_evidence:
 - id: dod-omn20710-ac1
   description: The validator CLI refuses a lowered, a malformed and a marketplace-inconsistent version
-    and passes an unchanged and a raised one; with the lowered and skew checks removed the test fails.
+    and passes an unchanged and a raised one; the selected cases include the wiring case, which fails
+    at the merge base where ci.yml names no step and pre-commit has no hook for the test file.
   source: manual
   checks:
   - check_type: test_passes
