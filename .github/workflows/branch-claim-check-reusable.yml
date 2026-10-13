@@ -182,6 +182,15 @@ jobs:
               ;;
           esac
 
+      # TRUST BOUNDARY. A check run's `app` is set by GitHub from the token that
+      # created it, not from the request body: only an installation token of the
+      # named App can publish a check run attributed to it. A workflow's
+      # GITHUB_TOKEN publishes as `github-actions`, and a person with write
+      # access publishes as whatever App their token belongs to, so neither can
+      # post a run this step accepts. Runs from any other App are counted,
+      # reported and ignored. The check name is percent-encoded with jq's
+      # `@uri`, which escapes `&`, `=`, `#` and every other reserved character,
+      # so it cannot add query parameters.
       - name: Read the lab branch-claim check for this head
         if: inputs.claim_source == 'work-ledger'
         shell: bash
