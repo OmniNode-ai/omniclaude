@@ -59,6 +59,8 @@ COST_TABLE: dict[str, int] = {
 RUN_COST = 2
 DEFAULT_COST = 1
 FREE_METHODS = frozenset({"LOCAL"})
+# A call the shim answered from its cache or from the PR watcher state (OMN-19479) spent no request.
+ANSWERED_LOCALLY = frozenset({"hit", "watcher"})
 
 _DURATION = re.compile(r"^(\d+)([smhd])$")
 
@@ -76,7 +78,7 @@ def core_cost(rec: dict[str, object]) -> int:
     """Estimated core REST requests one logged call spent."""
     if (
         rec.get("identity") == "app"
-        or rec.get("cache") == "hit"
+        or rec.get("cache") in ANSWERED_LOCALLY
         or rec.get("method") in FREE_METHODS
     ):
         return 0
@@ -91,7 +93,7 @@ def core_cost(rec: dict[str, object]) -> int:
 
 
 def is_graphql(rec: dict[str, object]) -> bool:
-    return rec.get("cls") == "api graphql" and rec.get("cache") != "hit"
+    return rec.get("cls") == "api graphql" and rec.get("cache") not in ANSWERED_LOCALLY
 
 
 def default_log_dir() -> Path:

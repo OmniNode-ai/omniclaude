@@ -512,7 +512,15 @@ if [ "$HAS_JQ" -eq 1 ]; then
     PR_AGE=$((NOW - PR_MTIME))
     [ "$PR_AGE" -le "$PR_TTL" ] && PR_FRESH=1
   fi
-  if [ "$PR_FRESH" -eq 0 ] && command -v gh >/dev/null 2>&1; then
+  # OMN-19479: the PR watcher already holds every open PR's base branch in its state file
+  # (one reader for the whole host, RULING 2026-09-27T18:05:21Z), so where that file exists
+  # the counts come from it with no GitHub call at all. Only a host with no watcher state
+  # file falls back to polling gh below.
+  PR_WATCHER_STATE="${ONEX_PR_WATCHER_STATE:-${OMNI_HOME:+$OMNI_HOME/.claude_scratch/pr-watcher/state.json}}"
+  [ -n "$PR_WATCHER_STATE" ] && [ -f "$PR_WATCHER_STATE" ] || PR_WATCHER_STATE=""
+  PR_WATCHER_MAX_AGE="${ONEX_PR_WATCHER_MAX_AGE_S:-600}"
+  case "$PR_WATCHER_MAX_AGE" in ""|*[!0-9]*) PR_WATCHER_MAX_AGE=600 ;; esac
+  if [ "$PR_FRESH" -eq 0 ] && { [ -n "$PR_WATCHER_STATE" ] || command -v gh >/dev/null 2>&1; }; then
     (
       mkdir -p "$(dirname "$PR_CACHE")" 2>/dev/null
       # OMN-19479: one refresher per host. Every session renders this line and
@@ -538,6 +546,41 @@ if [ "$HAS_JQ" -eq 1 ]; then
         [ $(( $(date +%s) - re_mtime )) -le "$PR_TTL" ] && exit 0
       fi
       counts=""; failed=""
+      pr_tmp="${PR_CACHE}.tmp.${BASHPID:-$$}"
+      if [ -n "$PR_WATCHER_STATE" ]; then
+        # A repository the state does not list, or a state whose last tick is older than
+        # PR_WATCHER_MAX_AGE, is recorded as a failure, never as zero open PRs (OMN-18841).
+        jq -c --arg repos "$PR_REPOS" --argjson now "$(date +%s)" --argjson max "$PR_WATCHER_MAX_AGE" '
+          . as $s
+          | ((try (.last_tick | fromdateiso8601) catch 0) as $t | ($now - $t) <= $max) as $fresh
+          | ($repos | split(" ") | map(split(":"))) as $pairs
+          | ($pairs | map(. as [$short, $repo]
+              | {k: $short,
+                 v: (if $fresh and (($s.repos // {}) | has($repo))
+                     then ([$s.prs[]? | select(.facts.repo == $repo and .facts.state == "OPEN") | .facts.base]) as $b
+                          | "\([$b[] | select(. == "main" or . == "master")] | length)/\([$b[] | select(. == "dev" or . == "develop")] | length)"
+                     else "err" end)})) as $rows
+          | {schema: 2, refreshed_at: $now,
+             status: (if any($rows[]; .v == "err") then "degraded" else "ok" end),
+             failed: [$rows[] | select(.v == "err") | .k],
+             repos: ($rows | map({(.k): .v}) | add)}' \
+          "$PR_WATCHER_STATE" > "$pr_tmp" 2>/dev/null || : > "$pr_tmp"
+        if [ -s "$pr_tmp" ]; then
+          mv -f "$pr_tmp" "$PR_CACHE" 2>/dev/null
+        else
+          # Unreadable state file: say so for every repository.
+          for pair in $PR_REPOS; do
+            short="${pair%%:*}"
+            failed="${failed}${failed:+,}\"${short}\""
+            counts="${counts}${counts:+,}\"${short}\":\"${PR_ERR_SENTINEL}\""
+          done
+          printf '{"schema":2,"refreshed_at":%s,"status":"degraded","failed":[%s],"repos":{%s}}' \
+            "$(date +%s)" "$failed" "$counts" > "$pr_tmp" 2>/dev/null \
+            && mv -f "$pr_tmp" "$PR_CACHE" 2>/dev/null
+        fi
+        rm -f "$pr_tmp" 2>/dev/null
+        exit 0
+      fi
       for pair in $PR_REPOS; do
         short="${pair%%:*}"; repo="${pair##*:}"
         # Primary: `gh pr list --json`, which resolves over GraphQL. Fallback:
@@ -562,7 +605,6 @@ if [ "$HAS_JQ" -eq 1 ]; then
       if [ -n "$failed" ]; then pr_status="degraded"; else pr_status="ok"; fi
       # Write atomically: a torn or half-written cache reads as invalid JSON,
       # which is another way the segment disappears without saying so.
-      pr_tmp="${PR_CACHE}.tmp.${BASHPID:-$$}"
       if printf '{"schema":2,"refreshed_at":%s,"status":"%s","failed":[%s],"repos":{%s}}' \
            "$(date +%s)" "$pr_status" "$failed" "$counts" > "$pr_tmp" 2>/dev/null; then
         mv -f "$pr_tmp" "$PR_CACHE" 2>/dev/null

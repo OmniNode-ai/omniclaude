@@ -169,6 +169,162 @@ def test_cache_is_keyed_per_branch(env: dict[str, str]) -> None:
     assert len(_calls(env)) == 2
 
 
+# --- OMN-19479: the PR watcher's state answers the lookup before the cache or gh --
+
+
+def _watcher_state(
+    tmp_path: Path,
+    prs: dict[str, dict[str, object]],
+    *,
+    age_s: int = 0,
+) -> dict[str, str]:
+    """Write a watcher state file ``age_s`` seconds old; return the env that points the shim at it."""
+    tick = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - age_s))
+    path = tmp_path / "watcher-state.json"
+    path.write_text(json.dumps({"schema": 1, "last_tick": tick, "prs": prs}))
+    return {"ONEX_PR_WATCHER_STATE": str(path)}
+
+
+def _pr(
+    number: int, head_ref: str, *, state: str = "OPEN", repo: str = "omniclaude"
+) -> dict[str, object]:
+    return {
+        "facts": {
+            "repo": repo,
+            "number": number,
+            "state": state,
+            "head_ref": head_ref,
+            "base": "dev",
+        }
+    }
+
+
+def _with_origin(env: dict[str, str], url: str) -> None:
+    subprocess.run(
+        ["git", "remote", "add", "origin", url],
+        cwd=env["REPO"],
+        env={"PATH": env["PATH"], "HOME": env["HOME"], "GIT_CONFIG_NOSYSTEM": "1"},
+        check=True,
+    )
+
+
+def _usage_caches(env: dict[str, str]) -> list[str]:
+    d = Path(env["XDG_CACHE_HOME"]) / "omni" / "gh-usage"
+    return [
+        json.loads(line)["cache"]
+        for f in sorted(d.glob("*.jsonl"))
+        for line in f.read_text().splitlines()
+        if line.strip()
+    ]
+
+
+@pytest.mark.unit
+def test_watcher_answers_the_link_lookup_with_no_gh_call(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    if shutil.which("jq") is None:
+        pytest.skip("the watcher lookup needs jq")
+    _with_origin(env, "https://github.com/OmniNode-ai/omniclaude.git")
+    extra = _watcher_state(tmp_path, {"omniclaude#7": _pr(7, "main")})
+    url = _run(env, "pr", "view", "--json", "url", extra=extra)
+    full = _run(env, "pr", "view", "main", "--json", "number,url,state", extra=extra)
+    assert url.returncode == 0
+    assert json.loads(url.stdout) == {
+        "url": "https://github.com/OmniNode-ai/omniclaude/pull/7"
+    }
+    assert json.loads(full.stdout) == {
+        "number": 7,
+        "state": "OPEN",
+        "url": "https://github.com/OmniNode-ai/omniclaude/pull/7",
+    }
+    assert _calls(env) == []
+    assert _usage_caches(env) == ["watcher", "watcher"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "case",
+    ["stale", "no-open-pr", "merged-only", "two-open", "other-repo", "no-state"],
+)
+def test_watcher_miss_runs_the_real_gh(
+    env: dict[str, str], tmp_path: Path, case: str
+) -> None:
+    if shutil.which("jq") is None:
+        pytest.skip("the watcher lookup needs jq")
+    _with_origin(env, "https://github.com/OmniNode-ai/omniclaude.git")
+    prs: dict[str, dict[str, object]] = {"omniclaude#7": _pr(7, "main")}
+    age = 0
+    if case == "stale":
+        age = 3600
+    elif case == "no-open-pr":
+        prs = {"omniclaude#7": _pr(7, "feature")}
+    elif case == "merged-only":
+        prs = {"omniclaude#7": _pr(7, "main", state="MERGED")}
+    elif case == "two-open":
+        prs["omniclaude#8"] = _pr(8, "main")
+    elif case == "other-repo":
+        prs = {"omnibase_core#7": _pr(7, "main", repo="omnibase_core")}
+    extra = _watcher_state(tmp_path, prs, age_s=age)
+    if case == "no-state":
+        extra = {"ONEX_PR_WATCHER_STATE": str(tmp_path / "absent.json")}
+    r = _run(
+        env,
+        "pr",
+        "view",
+        "--json",
+        "url",
+        extra={**extra, "FAKE_GH_STDOUT": '{"url":"from-gh"}'},
+    )
+    assert r.returncode == 0 and r.stdout == '{"url":"from-gh"}'
+    assert len(_calls(env)) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "ref", ["7", "OmniNode-ai:main", "https://github.com/OmniNode-ai/omniclaude/pull/7"]
+)
+def test_watcher_is_not_asked_about_a_pr_number_url_or_owner_ref(
+    env: dict[str, str], tmp_path: Path, ref: str
+) -> None:
+    """Only a branch name is looked up by head ref; every other argument goes to gh."""
+    if shutil.which("jq") is None:
+        pytest.skip("the watcher lookup needs jq")
+    _with_origin(env, "https://github.com/OmniNode-ai/omniclaude.git")
+    extra = _watcher_state(tmp_path, {"omniclaude#7": _pr(7, "main")})
+    r = _run(
+        env,
+        "pr",
+        "view",
+        ref,
+        "--json",
+        "url",
+        extra={**extra, "FAKE_GH_STDOUT": '{"url":"from-gh"}'},
+    )
+    assert r.returncode == 0 and r.stdout == '{"url":"from-gh"}'
+    assert len(_calls(env)) == 1
+
+
+@pytest.mark.unit
+def test_watcher_never_answers_any_other_read_shape(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """A different field list (here ``state``) is not a harness link shape: gh answers it."""
+    if shutil.which("jq") is None:
+        pytest.skip("the watcher lookup needs jq")
+    _with_origin(env, "https://github.com/OmniNode-ai/omniclaude.git")
+    extra = _watcher_state(tmp_path, {"omniclaude#7": _pr(7, "main")})
+    r = _run(
+        env,
+        "pr",
+        "view",
+        "--json",
+        "state",
+        extra={**extra, "FAKE_GH_STDOUT": '{"state":"x"}'},
+    )
+    assert r.stdout == '{"state":"x"}'
+    assert len(_calls(env)) == 1
+
+
 @pytest.mark.unit
 def test_cache_expires_after_ttl(env: dict[str, str]) -> None:
     ttl0 = {"ONEX_GH_SHIM_TTL": "0"}
