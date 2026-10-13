@@ -17,6 +17,13 @@ requirements:
     acceptance:
       - id: "AC3"
         statement: "AC3: a ratchet over the workflow finds no voter endpoint, port, model flag or endpoint variable, and finds all four lines of a known-bad fixture -- falsifier: env -u PYTHONPATH uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'ratchet or names_no_voter'"
+  - id: "req-no-voter-model-in-workflows"
+    statement: "The workflow names no review voter model: no vars.*MODEL* reference, no model id literal, no MODEL env key bound to a literal."
+    acceptance:
+      - id: "AC4"
+        statement: "AC4: the ratchet refuses a vars.<anything>MODEL reference, a model id literal and a MODEL env key bound to a literal, finds all five lines of a known-bad model fixture, and the new cases fail on the merge base -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k voter_model_from_overlay"
+      - id: "AC5"
+        statement: "AC5: the ratchet's test file runs as a step of the refusal-surface job that the required CI Summary context covers and as a check-only pre-commit hook -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k voter_model_from_overlay_ratchet_is_wired"
 evidence_requirements:
   - kind: "tests"
     description: "The workflow reads the overlay and names no voter."
@@ -42,3 +49,19 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'ratchet or names_no_voter'"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC3"]
+  - id: "dod-omn20910-ac4-no-voter-model"
+    description: "The widened ratchet refuses a model variable, a model id literal and a MODEL env literal, and the workflow carries none."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k voter_model_from_overlay"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC4"]
+  - id: "dod-omn20910-ac5-ratchet-wired"
+    description: "The test file is a step of the refusal-surface job (covered by the required CI Summary context) and a pre-commit hook entry."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k voter_model_from_overlay_ratchet_is_wired"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC5"]

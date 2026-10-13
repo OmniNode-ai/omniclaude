@@ -791,6 +791,17 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-20910: a review voter's model is declared only in the contract
+      # overlay. SYNC with the ci.yml refusal-surface step "Review voter model
+      # comes from the overlay (OMN-20910)".
+      - id: review-voter-model-from-overlay
+        name: Review voter model comes from the overlay (OMN-20910)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -p no:randomly
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/[^/]+\.ya?ml|tests/hooks/test_hostile_reviewer_workflow\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: ledger-ruling-reread-regression
         name: Ledger ruling re-read before publishing (OMN-18645)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov
