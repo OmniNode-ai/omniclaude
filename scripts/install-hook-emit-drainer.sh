@@ -30,6 +30,9 @@
 #   bash omniclaude/scripts/install-hook-emit-drainer.sh --uninstall
 #   bash omniclaude/scripts/install-hook-emit-drainer.sh --status
 #   bash omniclaude/scripts/install-hook-emit-drainer.sh --dry-run  # render only
+#   ONEX_HOOK_EMIT_PRESERVE_BACKLOG=1 bash omniclaude/scripts/install-hook-emit-drainer.sh
+#     Recover an overflowing queue without evicting retained events. Reinstall
+#     without this setting after the queue drains to restore the normal bound.
 
 set -euo pipefail
 
@@ -288,6 +291,19 @@ else
   exit 1
 fi
 
+# The selected workspace config root is a host deployment fact. launchd does
+# not inherit this installer's environment: losing it selects a different
+# sibling clone, which may lack the hook-edge broker overlay (OMN-19513).
+if [[ -n "${ONEX_WORKSPACE_CONFIG_ROOT:-}" ]] \
+  && [[ ! -f "${ONEX_WORKSPACE_CONFIG_ROOT}/config/lab/hook_edge_lane.yaml" ]]; then
+  echo "ERROR: ONEX_WORKSPACE_CONFIG_ROOT lacks config/lab/hook_edge_lane.yaml: ${ONEX_WORKSPACE_CONFIG_ROOT}" >&2
+  exit 1
+fi
+case "${ONEX_HOOK_EMIT_PRESERVE_BACKLOG:-0}" in
+  0|1) ;;
+  *) echo "ERROR: ONEX_HOOK_EMIT_PRESERVE_BACKLOG must be 0 or 1." >&2; exit 1 ;;
+esac
+
 if [[ "${1:-}" != "--dry-run" ]]; then
   export OMNI_HOME="${OMNI_HOME_RESOLVED}"
   export CLAUDE_PLUGIN_DATA="${PLUGIN_DATA}"
@@ -315,10 +331,24 @@ sed -e "s|__OMNI_HOME__|${OMNI_HOME_RESOLVED}|g" \
   | sed -e 's|<key>Disabled</key>|<key>Disabled</key>|' \
   | "${BREW_PYTHON}" -c "
 import sys
+import os
+import plistlib
+from pathlib import Path
 s = sys.stdin.read()
 # Flip the shipped Disabled=true to false. Anchored on the Disabled key so a
 # stray <true/> elsewhere in the plist (KeepAlive, RunAtLoad) is untouched.
 s = s.replace('<key>Disabled</key>\n  <true/>', '<key>Disabled</key>\n  <false/>', 1)
+config_root = os.environ.get('ONEX_WORKSPACE_CONFIG_ROOT', '')
+preserve_backlog = os.environ.get('ONEX_HOOK_EMIT_PRESERVE_BACKLOG', '0') == '1'
+if config_root or preserve_backlog:
+    payload = plistlib.loads(s.encode('utf-8'))
+    if config_root:
+        payload['EnvironmentVariables']['ONEX_WORKSPACE_CONFIG_ROOT'] = str(
+            Path(config_root).expanduser().resolve()
+        )
+    if preserve_backlog:
+        payload['ProgramArguments'].append('--preserve-backlog')
+    s = plistlib.dumps(payload).decode('utf-8')
 sys.stdout.write(s)
 " > "${RENDERED}"
 

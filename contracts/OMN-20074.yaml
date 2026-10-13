@@ -49,6 +49,13 @@ requirements:
       - id: "AC6"
         statement: |-
           AC6: the caller pins receipt-gate.yml at 4e4f5e0404d364e296c5d37db6aa3ab9e07f8ffa and sets verifier-version 0.4.310 or newer, and no contracts/*.yaml repeats a mapping key -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q --no-cov -k "writer_app or duplicate_key" fails at the merge base
+  - id: "req-omn20074-s6-cutover"
+    statement: |-
+      omniclaude's pull-request admission must take no verdict from onex_change_control: the OCC caller workflows and every nested occ-preflight job are gone, no ci.yml job resolves an OCC evidence companion, the repo-evidence caller enforces without comparing with OCC, and neither CI Summary nor the required-checks manifest expects an OCC context while CI Summary expects repo-evidence / dod-verify.
+    acceptance:
+      - id: "AC7"
+        statement: |-
+          AC7: no event-triggered workflow calls an OCC reusable or waits on occ-preflight, call-occ-preflight.yml, call-occ-autobind.yml, call-occ-companion-effect.yml, call-receipt-gate.yml and occ-companion-merge-heal.yml are deleted, ci.yml has no dod-evidence-check, contract-compliance or occ-companion-merged job, the caller sets shadow and compare-with-occ to "false", and CI Summary and .github/required-checks.yaml name no OCC context while CI Summary expects repo-evidence / dod-verify -- falsifier: uv run pytest tests/ci/test_no_occ_callers_omn20074.py -q --no-cov fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -68,6 +75,9 @@ evidence_requirements:
   - kind: tests
     description: "The caller pins the reusable and verifier carrying the writer app classifiers, and every repo contract loads with no duplicate mapping key."
     command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q --no-cov -k \"writer_app or duplicate_key\""
+  - kind: tests
+    description: "No OCC caller, preflight edge, companion job or OCC context is left, and the caller enforces without OCC."
+    command: "uv run pytest tests/ci/test_no_occ_callers_omn20074.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -120,3 +130,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q --no-cov -k \"writer_app or duplicate_key\""
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC6"]
+  - id: dod-omn20074-s6-cutover
+    description: "The structural test proves omniclaude has no OCC caller, preflight edge, companion job or OCC context left and that the repo-evidence caller enforces without OCC."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_no_occ_callers_omn20074.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC7"]

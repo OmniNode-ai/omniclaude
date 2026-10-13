@@ -16,18 +16,7 @@ concurrency:
 
 
 jobs:
-  occ-preflight:
-    # self-gating-ok: centralized OCC preflight reusable is the canonical cross-repo gate for non-OCC repositories.
-    uses: OmniNode-ai/omnibase_core/.github/workflows/occ-preflight.yml@13ceae69c246a33c9fc8fc4b33f83fb66b89edc6
-    permissions:
-      contents: read
-      pull-requests: read
-    with:
-      contracts-dir: contracts
-      receipts-dir: drift/dod_receipts
-
   check-handshake:
-    needs: occ-preflight
     name: Check architecture handshake
     runs-on: >-
       ${{
@@ -47,8 +36,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: OmniNode-ai/omnibase_core
-                                                  # Auto-bumped by omnibase_core publish-downstream-pin-bump.yml to 2ca615af292a.
-          ref: 2ca615af292a52898359d23538299f3bc0880f07  # pragma: allowlist secret
+                                                  # Auto-bumped by omnibase_core publish-downstream-pin-bump.yml to bac865f4f32a.
+          ref: bac865f4f32a3f8ca80cabcfac06c8400d8c80d7  # pragma: allowlist secret
           path: omnibase_core
 
       - name: Verify omnibase_core checkout

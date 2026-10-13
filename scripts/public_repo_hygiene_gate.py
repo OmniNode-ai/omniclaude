@@ -120,6 +120,30 @@ pull request with no secrets:
   lines are not values. Tests, fixtures and docs are out of its scope; the
   other classes still read them.
 
+A workflow file (``.github/workflows/*.yml``) is read further, because the
+first two Hostile Reviewer consumers (omnimarket#3731, omniclaude#2664) passed
+this class while their workflows carried the lab's host nicknames, endpoints
+and model names in COMMENTS and in prose, which the value rule above never
+reads. In a workflow file the class therefore reads EVERY line, comments
+included, and refuses:
+
+- a private address or tailnet name, as above;
+- a hostname in a private DNS zone (``.lan``, ``.lab``, ``.local``,
+  ``.internal``, ``.home.arpa``) in a URL, an ssh target or a ``host:port``;
+  the container and cluster names every runner resolves
+  (``host.docker.internal``, ``*.cluster.local``) are not a lab;
+- with ``--vocabulary``: a lab host nickname from the private vocabulary's
+  ``host_nicknames``;
+- with ``--model-vocabulary``: one of OUR model ids, from the private model
+  vocabulary (``lab_model_ids``, a file of its own for the reason the LAB
+  vocabulary is: a new key in a file an older pinned gate reads would turn that
+  gate's run into ``THE GATE DID NOT RUN``).
+
+The two vocabulary rules are not evaluated on a fork, where there is no token
+to read a private file; the run says so. The CI job that holds the token runs
+them. A finding from a vocabulary rule never echoes its line: the line names
+the private value.
+
 It runs only as its own targeted check, ``--only-classes deployment-config``,
 never mixed with the vocabulary classes, and a repo config cannot list it in
 ``enforce_classes`` (a class the full run does not evaluate would read as
@@ -158,12 +182,18 @@ id that a stable synthetic value cannot serve.
 
 ## Fail-closed, everywhere
 
-A missing repo config, an unreadable or unparseable vocabulary, a vocabulary
-whose live-visibility cache is stale beyond its declared max age, a
-malformed registry, and an unrecognised mode are all non-zero exits. A gate
-that cannot read its own rules has not passed; it has not run. This matters
-more than it sounds: the four false "zero failures" readings of the
-trusted-CI canary all came from a sweep that errored and returned no rows.
+A missing repo config, an unreadable or unparseable vocabulary, an undated
+live-visibility cache, a malformed registry, and an unrecognised mode are all
+non-zero exits. A gate that cannot read its own rules has not passed; it has
+not run. This matters more than it sounds: the four false "zero failures"
+readings of the trusted-CI canary all came from a sweep that errored and
+returned no rows.
+
+A visibility cache past its declared max age is the one logged fallback
+(OMN-18030): the gate scans with the stale list, which still refuses every
+name it holds, prints a ``::warning::`` naming the age, and records one
+FRICTION row per stale cache where the host keeps a ledger. It never refuses
+a commit unscanned for want of a refresh a lane cannot run.
 
 ## Modes
 
@@ -238,6 +268,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -377,6 +408,72 @@ DEPLOYMENT_PRIVATE_ADDRESS_RE = re.compile(
 #: compose bridge network, a whole RFC 1918 block): not a finding.
 DEPLOYMENT_GENERIC_NETWORK_MAX_PREFIX = 16
 _DEPLOYMENT_COMMENT_PREFIXES = ("#", ";", "//", "<!--", "*")
+#: A workflow file: read line by line INCLUDING comments (see the module
+#: docstring).
+DEPLOYMENT_WORKFLOW_RE = re.compile(r"^\.github/workflows/[^/]+\.ya?ml$")
+#: A hostname in a private DNS zone, in the places a host is named: after
+#: ``://`` or ``@``, or before ``:<port>``. A bare ``settings.local.json`` or
+#: ``.env.local`` is a file name, not a host, and is not matched.
+DEPLOYMENT_PRIVATE_ZONE_RE = re.compile(
+    # in a URL authority or an ssh target, any of the zones
+    r"(?:(?<=://)|(?<=@))(?:[a-z0-9-]+\.)+(?:lan|lab|local|internal|home\.arpa)"
+    r"(?![a-z0-9-]|\.[a-z0-9])"
+    # before a port, any of the zones
+    r"|(?<![a-z0-9._/-])(?:[a-z0-9-]+\.)+(?:lan|lab|local|internal|home\.arpa)"
+    r"(?=:\d{1,5}\b)"
+    # bare, any of the zones; ``.local`` is also a file-name suffix and
+    # ``.internal`` and ``.lab`` end dotted identifiers, so a bare match is
+    # screened by DEPLOYMENT_NOT_A_HOST_LABELS below
+    r"|(?<![a-z0-9._/@-])(?:[a-z0-9-]+\.)+(?:lan|lab|local|internal|home\.arpa)"
+    r"(?![a-z0-9_-]|\.[a-z0-9])",
+    re.IGNORECASE,
+)
+#: First labels that make a bare ``X.<zone>`` a file name or an expression, not
+#: a host: GitHub Actions contexts (``${{ matrix.lab }}``) and the file stems
+#: every project has (``config.local``, ``settings.local``).
+DEPLOYMENT_NOT_A_HOST_LABELS: frozenset[str] = frozenset(
+    {
+        "github",
+        "env",
+        "vars",
+        "secrets",
+        "inputs",
+        "matrix",
+        "steps",
+        "needs",
+        "job",
+        "jobs",
+        "runner",
+        "strategy",
+        "config",
+        "settings",
+        "application",
+        "docker-compose",
+        "compose",
+        "override",
+        "values",
+        "local",
+    }
+)
+#: Names every runner or cluster resolves, which name no one's lab: exact
+#: names, and anything inside a Kubernetes ``cluster.local`` domain.
+DEPLOYMENT_GENERIC_HOSTS: frozenset[str] = frozenset(
+    {
+        "host.docker.internal",
+        "gateway.docker.internal",
+        "kubernetes.docker.internal",
+        "host.containers.internal",
+        "metadata.google.internal",
+    }
+)
+DEPLOYMENT_GENERIC_ZONE_RE = re.compile(r"\.cluster\.local$", re.IGNORECASE)
+#: The private MODEL vocabulary: OUR model ids (registry keys, served ids). A
+#: file of its own, beside the lab vocabulary, for the reason the lab
+#: vocabulary is one: an older gate pinned between OMN-19766 and now reads the
+#: lab file and refuses a key it does not know.
+MODEL_VOCABULARY_BASENAME = "public_repo_hygiene_model_vocabulary.yaml"
+MODEL_VOCABULARY_REQUIRED_KEYS: frozenset[str] = frozenset({"lab_model_ids"})
+MODEL_VOCABULARY_OPTIONAL_KEYS: frozenset[str] = frozenset({"schema_version"})
 
 #: ``enforce_scope`` values (OMN-19835). ``whole-tree`` is the default and the
 #: behaviour every repository had before the key existed.
@@ -953,13 +1050,83 @@ def load_lab_vocabulary(path: Path) -> list[str]:
     return ids
 
 
+def load_model_vocabulary(path: Path) -> list[str]:
+    """Load the private MODEL vocabulary's ``lab_model_ids``. FAILS CLOSED.
+
+    Missing file, unknown key, and a missing or empty list are all exit 2, for
+    the reason the lab vocabulary's are: an absent list builds a pattern that
+    matches nothing and the deployment-config class reports green over every
+    one of our model ids in a workflow.
+    """
+    if not path.is_file():
+        raise ConfigError(
+            f"model vocabulary not found at {path}. The deployment-config "
+            "class reads our model ids from a PRIVATE file and cannot scan "
+            "without it. This is a fail-closed refusal, not a pass. THE GATE "
+            "DID NOT RUN."
+        )
+    origin = str(path)
+    data = parse_restricted_yaml(path.read_text(encoding="utf-8"), origin)
+    known = MODEL_VOCABULARY_REQUIRED_KEYS | MODEL_VOCABULARY_OPTIONAL_KEYS
+    unknown = sorted(set(data) - known)
+    if unknown:
+        raise ConfigError(
+            f"{origin}: unknown model vocabulary key(s) {unknown}. A misspelled "
+            "key would be read as an EMPTY list. THE GATE DID NOT RUN."
+        )
+    if "lab_model_ids" not in data:
+        raise ConfigError(
+            f"{origin}: missing required key 'lab_model_ids'. An absent list "
+            "would silently disable the model rule. THE GATE DID NOT RUN."
+        )
+    ids = [v for v in _as_str_list(data, "lab_model_ids", origin) if v.strip()]
+    if not ids:
+        raise ConfigError(
+            f"{origin}: 'lab_model_ids' is empty. An empty list matches nothing "
+            "and would report every model id as clean. THE GATE DID NOT RUN."
+        )
+    return ids
+
+
+def load_host_nicknames(path: Path) -> list[str]:
+    """The private vocabulary's ``host_nicknames`` regex fragments. FAILS CLOSED.
+
+    Read on its own, without the rest of the vocabulary and without the
+    private-repo visibility freshness check: the deployment-config class is a
+    separate required job, and a stale visibility cache, which refuses the
+    full run, says nothing about whether a workflow names a lab host.
+    """
+    if not path.is_file():
+        raise ConfigError(
+            f"vocabulary not found at {path}. The deployment-config class reads "
+            "the lab host nicknames from a PRIVATE file and cannot apply them "
+            "without it. THE GATE DID NOT RUN."
+        )
+    origin = str(path)
+    data = parse_restricted_yaml(path.read_text(encoding="utf-8"), origin)
+    nicknames = [v for v in _as_str_list(data, "host_nicknames", origin) if v.strip()]
+    if not nicknames:
+        raise ConfigError(
+            f"{origin}: 'host_nicknames' is missing or empty. An empty list "
+            "matches nothing and would report every lab host as clean. THE "
+            "GATE DID NOT RUN."
+        )
+    return nicknames
+
+
 def _assert_visibility_cache_fresh(vocab: Vocabulary, origin: str) -> None:
-    """A stale private-repo cache is a refusal, not a warning.
+    """A stale private-repo cache is a LOGGED FALLBACK, never an unscanned refusal.
 
     ``private-repo-name`` is a never-exemptable class resolved from repository
-    visibility. A cache older than its declared max age is a list that has
-    gone stale — exactly the hardcoded-list failure the plan names — so the
-    gate refuses rather than scanning against it.
+    visibility, and a cache older than its declared max age may miss a
+    repository made private since. It used to refuse the run outright, so
+    every commit to a public repository was refused unscanned while the
+    refresh could not run (OMN-18030: a lane may not make the GitHub read the
+    refresh needs). The gate now scans with the stale list, which still holds
+    every name it held, so a real match is still refused; it says so on
+    stderr, and records one FRICTION row per stale cache (see
+    :func:`_record_stale_cache`). An undated or unparseable cache is still a
+    refusal: there is no list age to report against.
     """
     if not vocab.private_repo_names:
         return
@@ -983,13 +1150,124 @@ def _assert_visibility_cache_fresh(vocab: Vocabulary, origin: str) -> None:
         resolved = resolved.replace(tzinfo=UTC)
     age_days = (datetime.now(UTC) - resolved).days
     if age_days > vocab.private_repo_cache_max_age_days:
-        raise ConfigError(
-            f"{origin}: the private-repo visibility cache was resolved "
-            f"{age_days} days ago, past its declared max age of "
-            f"{vocab.private_repo_cache_max_age_days} days. A stale list is "
-            "the hardcoded-list failure this class exists to avoid. Run "
-            "--refresh-visibility. THE GATE DID NOT RUN."
+        max_age = vocab.private_repo_cache_max_age_days
+        print(
+            f"::warning::the private-repo visibility cache was resolved "
+            f"{age_days} days ago, past its declared max age of {max_age} days. "
+            f"Scanning with the stale list ({STALE_CACHE_FALLBACK}): every name "
+            "it holds is still refused, but a repository made private since it "
+            "was resolved is not in it. Refresh the vocabulary (OMN-18030).",
+            file=sys.stderr,
         )
+        _record_stale_cache(vocab, origin, age_days)
+
+
+#: How a stale visibility cache is handled, as named in the warning and the row.
+STALE_CACHE_FALLBACK = "fallback=stale-vocabulary-scan"
+#: The ticket that owns the vocabulary refresh; every stale-cache row cites it.
+STALE_CACHE_TICKET = "OMN-18030"
+_LEDGER_APPEND_TIMEOUT_S = 30
+
+
+def _ledger_cell(text: str) -> str:
+    """One ledger cell: no pipe, no newline."""
+    return " ".join(text.replace("|", "/").split())
+
+
+def _record_stale_cache(vocab: Vocabulary, origin: str, age_days: int) -> None:
+    """Record one FRICTION row for this stale cache, on hosts that keep a ledger.
+
+    One row per stale cache (its path, resolution time and max age), not one per
+    commit: an episode marker under ``$ONEX_STATE_DIR`` is written once the row
+    is, so a failed write is retried on the next run. The row goes to the
+    remote lane's relay outbox (``ONEX_LEDGER_RELAY_OUTBOX``) when one is set,
+    since a lab host's ledger is a read-only copy, and otherwise through the
+    packaged ledger writer in ``$OMNIBASE_INTERNAL_HOME`` (or
+    ``ONEX_LEDGER_APPEND_TOOL``, a script taking the same arguments). CI keeps
+    no ledger and no state directory, so there the warning is the whole record.
+    Nothing here can fail the run: the scan has already been decided.
+    """
+    state = os.environ.get("ONEX_STATE_DIR")
+    if not state:
+        print(
+            "  stale-cache FRICTION row not written: ONEX_STATE_DIR is unset "
+            "(no ledger on this host).",
+            file=sys.stderr,
+        )
+        return
+    max_age = vocab.private_repo_cache_max_age_days
+    key = f"{Path(origin).resolve()}\0{vocab.private_repo_names_resolved_at}\0{max_age}"
+    marker = (
+        Path(state)
+        / "hooks"
+        / "public-repo-hygiene"
+        / f"stale-vocab-{hashlib.sha256(key.encode()).hexdigest()[:16]}.recorded"
+    )
+    if marker.exists():
+        return
+    lane = os.environ.get("ONEX_LANE") or "public-repo-hygiene-gate"
+    text = (
+        "public-repo hygiene gate scanned with a stale vocabulary: the "
+        f"private-repo visibility cache was resolved {age_days} days ago "
+        f"({vocab.private_repo_names_resolved_at}), past its max age {max_age} "
+        f"days; {STALE_CACHE_FALLBACK}, a real match still refused, never "
+        f"refused unscanned. host={os.uname().nodename}. Refresh the vocabulary."
+    )
+    row = (
+        f"{datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')} | FRICTION | "
+        f"lane={_ledger_cell(lane)} | existing={STALE_CACHE_TICKET} | "
+        f"cost=~1 lane-minutes | {_ledger_cell(text)}"
+    )
+    if _append_ledger_row(row):
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(row + "\n", encoding="utf-8")
+
+
+def _append_ledger_row(row: str) -> bool:
+    """Append ``row``; True when it was written. Reasons for False go to stderr."""
+    outbox = os.environ.get("ONEX_LEDGER_RELAY_OUTBOX")
+    if outbox:
+        try:
+            with open(outbox, "a", encoding="utf-8") as fh:
+                fh.write(row + "\n")
+        except OSError as exc:
+            print(f"  stale-cache FRICTION row not queued: {exc}", file=sys.stderr)
+            return False
+        return True
+    ledger = os.environ.get("ONEX_LEDGER_PATH")
+    tool = os.environ.get("ONEX_LEDGER_APPEND_TOOL")
+    project = os.environ.get("OMNIBASE_INTERNAL_HOME")
+    if not ledger or not (tool or project):
+        print(
+            "  stale-cache FRICTION row not written: set ONEX_LEDGER_PATH and "
+            "OMNIBASE_INTERNAL_HOME (the ledger writer) to record it.",
+            file=sys.stderr,
+        )
+        return False
+    args = [ledger, "--timeout", "10s", "--append", row]
+    if tool:
+        cmd = [sys.executable, tool, *args]
+    else:
+        cmd = ["uv", "run", "--quiet", "--project", str(project), "onex-ledger", *args]
+    try:
+        done = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=_LEDGER_APPEND_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"  stale-cache FRICTION row not written: {exc}", file=sys.stderr)
+        return False
+    if done.returncode != 0:
+        print(
+            f"  stale-cache FRICTION row not written: the ledger writer exited "
+            f"{done.returncode}: {done.stderr.strip()[:300]}",
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def load_registry(path: Path) -> list[Suppression]:
@@ -1674,11 +1952,59 @@ def _names_private_host(text: str) -> bool:
     return False
 
 
-def scan_deployment_config(rel_path: str, lines: list[str]) -> list[Finding]:
+def _names_private_zone(text: str) -> bool:
+    for match in DEPLOYMENT_PRIVATE_ZONE_RE.finditer(text):
+        host = match.group(0).lower()
+        if host in DEPLOYMENT_GENERIC_HOSTS or DEPLOYMENT_GENERIC_ZONE_RE.search(host):
+            continue
+        if host.split(".", 1)[0] in DEPLOYMENT_NOT_A_HOST_LABELS:
+            continue
+        return True
+    return False
+
+
+@dataclass(frozen=True)
+class DeploymentVocabulary:
+    """The private halves of the class, for a run that holds the token.
+
+    ``host_pattern`` and ``model_pattern`` are ``None`` when that vocabulary
+    was not supplied (a fork, which has no token); the report says so.
+    """
+
+    host_pattern: re.Pattern[str] | None = None
+    model_pattern: re.Pattern[str] | None = None
+
+
+def build_deployment_vocabulary(
+    vocab_path: Path | None, model_vocab_path: Path | None
+) -> DeploymentVocabulary:
+    host_pattern: re.Pattern[str] | None = None
+    model_pattern: re.Pattern[str] | None = None
+    if vocab_path is not None:
+        host_pattern = re.compile(
+            _raw_alternation(load_host_nicknames(vocab_path)), re.IGNORECASE
+        )
+    if model_vocab_path is not None:
+        model_pattern = re.compile(
+            rf"(?<![A-Za-z0-9_])(?:{_alternation(load_model_vocabulary(model_vocab_path))})"
+            r"(?![A-Za-z0-9_])",
+            re.IGNORECASE,
+        )
+    return DeploymentVocabulary(host_pattern, model_pattern)
+
+
+def scan_deployment_config(
+    rel_path: str,
+    lines: list[str],
+    vocab: DeploymentVocabulary | None = None,
+) -> list[Finding]:
     """The deployment-config class (OMN-20923) for one tracked file.
 
     Path half: a deployment overlay file that is not an example (line 0).
-    Content half: a configuration-file value line naming a private host.
+    Content half: a configuration-file value line naming a private host. In a
+    workflow file every line is read, comments included, for a private
+    address, a hostname in a private DNS zone and, when ``vocab`` carries
+    them, a lab host nickname or one of our model ids.
     """
     findings: list[Finding] = []
     if DEPLOYMENT_OVERLAY_PATH_RE.search(rel_path) and not DEPLOYMENT_EXAMPLE_RE.search(
@@ -1695,7 +2021,43 @@ def scan_deployment_config(rel_path: str, lines: list[str]) -> list[Finding]:
         )
     if not _is_deployment_config_file(rel_path):
         return findings
+    is_workflow = bool(DEPLOYMENT_WORKFLOW_RE.match(rel_path))
     for line_no, line in enumerate(lines, start=1):
+        if is_workflow:
+            text = line.strip()
+            if not text:
+                continue
+            if _names_private_host(text) or _names_private_zone(text):
+                findings.append(
+                    Finding(rel_path, line_no, DEPLOYMENT_CONFIG_CLASS, text[:200])
+                )
+                continue
+            if vocab is not None:
+                # The line names the private value, so the finding does not
+                # quote it: this report is a public CI log.
+                if vocab.host_pattern is not None and vocab.host_pattern.search(text):
+                    findings.append(
+                        Finding(
+                            rel_path,
+                            line_no,
+                            DEPLOYMENT_CONFIG_CLASS,
+                            "a workflow line naming a lab host (private vocabulary; "
+                            "line withheld)",
+                        )
+                    )
+                elif vocab.model_pattern is not None and vocab.model_pattern.search(
+                    text
+                ):
+                    findings.append(
+                        Finding(
+                            rel_path,
+                            line_no,
+                            DEPLOYMENT_CONFIG_CLASS,
+                            "a workflow line naming one of our model ids (private "
+                            "vocabulary; line withheld)",
+                        )
+                    )
+            continue
         value = _deployment_value_text(line)
         if value and _names_private_host(value):
             findings.append(
@@ -1711,8 +2073,10 @@ def run_deployment_config(
     *,
     enforce_scope: str,
     added_lines: AddedLines | None,
+    vocab: DeploymentVocabulary | None = None,
 ) -> tuple[int, list[Finding], list[Finding]]:
-    """The targeted deployment-config run: no vocabulary, no repo config.
+    """The targeted deployment-config run: no repo config, and a vocabulary
+    only when the caller holds one (``vocab``).
 
     Returns ``(exit_code, findings, failing)``. In ``enforce`` mode every
     finding fails, or, under ``added-lines``, every finding the change adds.
@@ -1728,7 +2092,7 @@ def run_deployment_config(
     findings: list[Finding] = []
     for rel_path in sorted(paths):
         lines = _read_lines(repo_root / rel_path) or []
-        findings.extend(scan_deployment_config(rel_path, lines))
+        findings.extend(scan_deployment_config(rel_path, lines, vocab))
     if mode != "enforce":
         failing: list[Finding] = []
     elif enforce_scope == ADDED_LINES_SCOPE and added_lines is not None:
@@ -1924,6 +2288,37 @@ def _print_report(
             )
 
 
+def _deployment_vocabulary_paths(
+    args: argparse.Namespace,
+) -> tuple[Path | None, Path | None]:
+    """The private vocabulary paths a deployment-config run may use.
+
+    None of them is required: the class runs on a fork with no token, shape
+    only. A path that is GIVEN (a flag or the environment) and absent is a
+    refusal in the loader, never a silent shape-only run.
+    """
+    import os
+
+    vocab_path: Path | None = args.vocabulary
+    if vocab_path is None and os.environ.get("OMNI_HYGIENE_VOCAB_PATH"):
+        vocab_path = Path(os.environ["OMNI_HYGIENE_VOCAB_PATH"])
+    model_vocab_path: Path | None = args.model_vocabulary
+    if model_vocab_path is None and vocab_path is not None:
+        beside = vocab_path.parent / MODEL_VOCABULARY_BASENAME
+        if beside.is_file():
+            model_vocab_path = beside
+        elif args.vocabulary is not None:
+            # An explicit --vocabulary is the CI form: it holds the token, so a
+            # missing model vocabulary is a fetch that failed, never a pass.
+            raise ConfigError(
+                f"--vocabulary was given but {MODEL_VOCABULARY_BASENAME} is "
+                "neither given (--model-vocabulary) nor beside it. The model "
+                "rule cannot run and the gate refuses rather than reporting "
+                "green. THE GATE DID NOT RUN."
+            )
+    return vocab_path, model_vocab_path
+
+
 def _main_deployment_config(args: argparse.Namespace, repo_root: Path) -> int:
     """``--only-classes deployment-config``: report, then the verdict."""
     scope = args.enforce_scope or WHOLE_TREE_SCOPE
@@ -1933,12 +2328,15 @@ def _main_deployment_config(args: argparse.Namespace, repo_root: Path) -> int:
             added_lines = added_lines_from_base(repo_root, args.diff_base)
         elif args.diff_staged:
             added_lines = added_lines_staged(repo_root)
+        vocab_path, model_vocab_path = _deployment_vocabulary_paths(args)
+        deployment_vocab = build_deployment_vocabulary(vocab_path, model_vocab_path)
         exit_code, findings, failing = run_deployment_config(
             repo_root,
             args.mode,
             args.paths if args.staged else None,
             enforce_scope=scope,
             added_lines=added_lines,
+            vocab=deployment_vocab,
         )
     except ConfigError as exc:
         print(f"::error::{exc}", file=sys.stderr)
@@ -1948,6 +2346,17 @@ def _main_deployment_config(args: argparse.Namespace, repo_root: Path) -> int:
         return 2
     _print_report(findings, [], args.mode)
     print(f"\n  restricted to: {DEPLOYMENT_CONFIG_CLASS}")
+    if deployment_vocab.host_pattern is None:
+        print(
+            "\n  NOT EVALUATED: lab host nicknames in workflow files (no "
+            "--vocabulary and no OMNI_HYGIENE_VOCAB_PATH; a fork has no token)."
+        )
+    if deployment_vocab.model_pattern is None:
+        print(
+            "\n  NOT EVALUATED: our model ids in workflow files (no "
+            f"--model-vocabulary and no {MODEL_VOCABULARY_BASENAME} beside the "
+            "vocabulary)."
+        )
     source = added_lines.source if added_lines is not None else "none"
     print(
         f"\n  ENFORCE SCOPE: {scope} (diff source: {source}, mode={args.mode}). "
@@ -1998,6 +2407,22 @@ def main(argv: list[str] | None = None) -> int:
             "that is absent is exit 2. With none given and none beside the "
             "vocabulary, the class is reported as not evaluated, unless it is "
             "requested (--only-classes) or enforced, which is exit 2."
+        ),
+    )
+    parser.add_argument(
+        "--model-vocabulary",
+        type=Path,
+        default=None,
+        help=(
+            "path to the PRIVATE model vocabulary (lab_model_ids) for the "
+            "deployment-config class's workflow rule (OMN-20923). Defaults to "
+            f"{MODEL_VOCABULARY_BASENAME} beside the vocabulary when that file "
+            "exists. A given path that is absent is exit 2, and so is an "
+            "explicit --vocabulary with no model vocabulary given or beside it "
+            "(the CI form holds the token, so that is a failed fetch). With "
+            "the vocabulary from OMNI_HYGIENE_VOCAB_PATH only, the rule is "
+            "reported as not evaluated. Used by --only-classes "
+            "deployment-config only."
         ),
     )
     parser.add_argument(
@@ -2091,8 +2516,6 @@ def main(argv: list[str] | None = None) -> int:
 
     vocab_path = args.vocabulary
     if vocab_path is None:
-        import os
-
         vocabulary_env = os.environ.get("OMNI_HYGIENE_VOCAB_PATH")
         if not vocabulary_env:
             print(

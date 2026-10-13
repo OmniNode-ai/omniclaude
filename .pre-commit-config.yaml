@@ -29,6 +29,22 @@
 repos:
   - repo: local
     hooks:
+      - id: imperative-contract-guard-caller
+        name: Imperative contract guard caller and parity (OMN-21006)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
+        language: system
+        pass_filenames: false
+        files: '^(\.github/(imperative-contract-allowlist\.yaml|workflows/(imperative-contract-guard|ci)\.yml)|\.pre-commit-config\.yaml|contracts/OMN-21006\.yaml|tests/ci/test_imperative_contract_guard_caller_omn21006\.py)$'
+        stages: [pre-commit]
+
+      - id: anthropic-key-prefix-workflows
+        name: No Anthropic key value in a workflow (OMN-20967)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_anthropic_key_prefix_workflows_omn20967.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/|tests/ci/test_anthropic_key_prefix_workflows_omn20967\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: ci-summary-external-contexts
         name: CI Summary external contexts and snapshot refresh (OMN-19055)
         entry: >-
@@ -85,7 +101,7 @@ repos:
   # this block keeps check-stub-implementations only, because that
   # validator's source differs between 63635097 and the OMN-20304 commit.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: f50d00fc7918d0b12ccd0d3497160325e32e7ac5 # pragma: allowlist secret
+    rev: 031148215620031436cba30619bbae67c0bb38ad # pragma: allowlist secret
     hooks:
       # Shape-gate independence (OMN-20298): a shape-gate detector job never waits on
       # the change-control preflight and never reads its result. BLOCKING, zero
@@ -148,8 +164,11 @@ repos:
   # omnibase-core pin in ci.yml to equal this hook's rev, and the new CI job
   # pins a3b56675. The lifecycle validator's source is identical at 63635097
   # and a3b56675.
+  # OMN-21006: the old shape validator refuses the caller-owned guard allowlist.
+  # The new pin reads allowlist-path from core's shrink-only reusable; CI and
+  # the shared validator pins move together to satisfy the pin-parity check.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: f50d00fc7918d0b12ccd0d3497160325e32e7ac5  # v0.47.24  # pragma: allowlist secret
+    rev: 031148215620031436cba30619bbae67c0bb38ad  # pragma: allowlist secret
     hooks:
       - id: check-hardcoded-model-config-compute
       - id: canonical-file-shape
@@ -876,6 +895,14 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         files: ^\.github/workflows/.*\.ya?ml$
+
+      - id: advisory-job-gate-tests
+        name: Advisory gate fresh controller cache and refusal controls (OMN-21006)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/scripts/test_advisory_job_gate.py -q
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(scripts/advisory_job_gate\.py|tests/scripts/test_advisory_job_gate\.py)$
 
       # --------------------------------------------------------------------------
       # Migration Freeze Check - Block new migrations during DB-per-repo refactor

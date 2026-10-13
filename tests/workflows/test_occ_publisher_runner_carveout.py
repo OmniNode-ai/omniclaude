@@ -52,16 +52,11 @@ FLEET_LITERAL = '\'["self-hosted","omnibase-ci"]\''
 #
 # The two reusables are the single home every caller repo inherits from: `vars`
 # in a reusable resolve in the CALLER's context, so pinning here covers all 12
-# consumer repos with no caller-side change (OMN-16682 constraint 7). The two
-# manual-replay jobs are omniclaude's own workflow_dispatch recovery entrypoints
-# for the same broker — they hardcode RUNNER_IS_TRUSTED=true, so on a hosted
-# runner the recovery path would be dead exactly when an autobind outage makes
-# it necessary.
+# consumer repos with no caller-side change (OMN-16682 constraint 7).
+# The local manual-replay entrypoints were retired in S6 (OMN-20074).
 BROKER_DEPENDENT_JOBS: tuple[tuple[str, str, bool], ...] = (
     ("call-occ-autobind-reusable.yml", "publish-occ-autobind", True),
     ("call-occ-companion-effect-reusable.yml", "publish-occ-companion-effect", True),
-    ("call-occ-autobind.yml", "occ-autobind-manual-replay", False),
-    ("call-occ-companion-effect.yml", "occ-companion-effect-manual-replay", False),
 )
 
 

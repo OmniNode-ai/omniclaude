@@ -1,0 +1,67 @@
+---
+schema_version: 1.0.0
+ticket_id: OMN-21006
+title: omniclaude imperative guard calls core with its own shrink-only allowlist
+summary: 'The caller pins core at 031148215620031436cba30619bbae67c0bb38ad and passes the unchanged historical
+  allowlist. The shape validator pins move together after the old revision refused the allowlist. AC3
+  uses the driver-note parity interpretation: pre-existing clean-tree findings remain debt.'
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-core-guard-caller
+  statement: The caller uses core, owns the unchanged shrink-only allowlist, and retains historical findings
+    and refusal behavior.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: omniclaude''s imperative-contract-guard caller uses omnibase_core''s reusable at
+      a full sha (031148215 or later on core dev) and no workflow in omniclaude references onex_change_control
+      for this guard -- falsifier: a test in tests/ci added by the PR parses the caller workflow and fails
+      at the merge base (uv run pytest on that file)'
+  - id: AC2
+    statement: 'AC2: omniclaude carries its own allowlist file whose entries equal, path for path, the
+      omniclaude entries the onex_change_control guard used at f81a37f8, and the reusable''s ratchet refuses
+      an allowlist that gains a path -- falsifier: the same test file compares the allowlist to the recorded
+      f81a37f8 entries and a planted extra path is refused by the core ratchet handler (uv run pytest
+      on that file)'
+  - id: AC3
+    statement: 'AC3: The guard still refuses what it refused before on omniclaude''s tree -- falsifier:
+      on a lab host, the core handler run over omniclaude''s tree with a planted imperative contract exits
+      non-zero, and over the clean tree exits 0, with the same verdicts as the onex_change_control script
+      at f81a37f8 on both inputs, recorded on the PR body Lab: line'
+evidence_requirements:
+- kind: tests
+  description: Caller wiring, historical entries, shrink-only ratchet and historical finding parity with
+    a planted live handler.
+  command: uv run pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn21006-ac1
+  description: The caller pins core and preserves its job/context; the old caller fails the test.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
+  binds_ac:
+  - AC1
+- id: dod-omn21006-ac2
+  description: All three historical entries and metadata match; unchanged/shrinking lists pass and an
+    extra path is refused.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
+  binds_ac:
+  - AC2
+- id: dod-omn21006-ac3
+  description: The core findings equal the historical OCC findings, and the planted live HTTP call adds
+    exactly one blocker; the old caller fails the test.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
+  binds_ac:
+  - AC3

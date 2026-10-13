@@ -312,31 +312,11 @@ class TestCiSummaryGate:
         code, _ = evaluate(jobs)
         assert code == EXIT_FAILURE
 
-    def test_occ_companion_merged_gate_is_strict_and_fails_closed(self) -> None:
-        # OMN-15221/OMN-15224 (OMN-15214 canary port): the companion-merged gate makes the
-        # 2026-07-26 hygiene-sweep trigger state (OPEN companion + MERGED product
-        # PR) unreachable via the merge path. It must be a GATE_JOB (CI Summary
-        # WAITS for it) AND strict-success (a skip/cancel fails closed) so a
-        # red/absent/skipped result can never green the required "CI Summary"
-        # context — folding into the umbrella instead of adding a new top-level
-        # required context avoids the never-reports wedge.
-        gate = "OCC Companion Merged Gate (OMN-15214)"
-        assert gate in GATE_JOBS
-        assert gate in STRICT_SUCCESS_JOBS
-        jobs = [j for j in _all_gates("success") if j["name"] != gate]
-        jobs.append(_job(gate, "failure"))
-        code, report = evaluate(jobs)
-        assert code == EXIT_FAILURE
-        assert gate in report
-        # A skip must also fail closed — the job is unconditional in ci.yml.
-        jobs = [j for j in _all_gates("success") if j["name"] != gate]
-        jobs.append(_job(gate, "skipped"))
-        code, _ = evaluate(jobs)
-        assert code == EXIT_FAILURE
-        # Absent entirely → PENDING (completeness anchor), never a vacuous green.
-        jobs = [j for j in _all_gates("success") if j["name"] != gate]
-        code, _ = evaluate(jobs)
-        assert code == EXIT_PENDING
+    def test_retired_occ_jobs_are_absent_from_gate_registries(self) -> None:
+        retired = {"Contract Compliance Check", "OCC Companion Merged Gate (OMN-15214)"}
+        assert not retired & set(GATE_JOBS)
+        assert not retired & set(STRICT_SUCCESS_JOBS)
+        assert "DoD Evidence Check" not in SOFT_ALLOWLIST
 
 
 @pytest.mark.unit
@@ -468,7 +448,6 @@ class TestPushExternalContexts:
                 "Hook Edge Lane Gate",
                 "Hook Inventory Gate",
                 "Lane Identity Gate",
-                "occ-preflight / eligibility",
             )
         ]
 
@@ -522,18 +501,18 @@ class TestPushExternalContexts:
             EXPECTED_EXTERNAL_CONTEXTS
         )
 
-    def test_push_occ_preflight_still_required(self) -> None:
-        rows = self._push_success()
-        assert evaluate_external(rows[:-1], event_name="push") == (
-            "PENDING",
-            [],
-            ["occ-preflight / eligibility"],
+    def test_push_does_not_require_pr_target_evidence_or_occ(self) -> None:
+        assert not ALL_MUST_SUCCEED_EXTERNAL_NAMES
+        assert "repo-evidence / dod-verify" in EXPECTED_EXTERNAL_CONTEXTS
+        assert (
+            "repo-evidence / dod-verify"
+            not in ci_summary_gate.PUSH_REPORTING_EXTERNAL_CONTEXTS
         )
-        rows[-1]["conclusion"] = "failure"
-        verdict, failures, pending = evaluate_external(rows, event_name="push")
-        assert verdict == "FAILURE"
-        assert failures == ["occ-preflight / eligibility (1/1 producer(s) not success)"]
-        assert pending == []
+        assert evaluate_external(self._push_success(), event_name="push") == (
+            "SUCCESS",
+            [],
+            [],
+        )
 
     def test_main_push_success(self, tmp_path: Path) -> None:
         jobs_path = tmp_path / "jobs.json"
@@ -641,27 +620,30 @@ class TestExternalContextLayer:
             )
             assert name in pending
 
-    def test_occ_preflight_all_producers_must_succeed_not_any(self) -> None:
+    def test_explicit_all_producers_must_succeed_not_any(self) -> None:
         # OMN-15112 generalization: ~52 caller workflows mint
-        # "occ-preflight / eligibility" against the same head SHA. GitHub's
+        # "duplicate external verdict" against the same head SHA. GitHub's
         # required-check semantics are ANY-of-name == success. Prove this
         # layer is ALL-of-name instead: one cancelled duplicate among two
         # producers must fail closed even though another producer succeeded.
-        assert "occ-preflight / eligibility" in ALL_MUST_SUCCEED_EXTERNAL_NAMES
         rows = self._all_external_success()
-        rows = [r for r in rows if r["name"] != "occ-preflight / eligibility"]
-        rows.append(self._check_run("occ-preflight / eligibility", "success"))
-        rows.append(self._check_run("occ-preflight / eligibility", "cancelled"))
-        verdict, failures, _ = evaluate_external(rows)
+        rows = [r for r in rows if r["name"] != "duplicate external verdict"]
+        rows.append(self._check_run("duplicate external verdict", "success"))
+        rows.append(self._check_run("duplicate external verdict", "cancelled"))
+        verdict, failures, _ = evaluate_external(
+            rows, all_must_succeed=frozenset({"duplicate external verdict"})
+        )
         assert verdict == "FAILURE"
-        assert any("occ-preflight / eligibility" in f for f in failures)
+        assert any("duplicate external verdict" in f for f in failures)
 
-    def test_occ_preflight_all_producers_success_is_success(self) -> None:
+    def test_explicit_all_producers_success_is_success(self) -> None:
         rows = self._all_external_success()
-        rows = [r for r in rows if r["name"] != "occ-preflight / eligibility"]
-        rows.append(self._check_run("occ-preflight / eligibility", "success"))
-        rows.append(self._check_run("occ-preflight / eligibility", "success"))
-        verdict, failures, pending = evaluate_external(rows)
+        rows = [r for r in rows if r["name"] != "duplicate external verdict"]
+        rows.append(self._check_run("duplicate external verdict", "success"))
+        rows.append(self._check_run("duplicate external verdict", "success"))
+        verdict, failures, pending = evaluate_external(
+            rows, all_must_succeed=frozenset({"duplicate external verdict"})
+        )
         assert verdict == "SUCCESS"
         assert failures == []
         assert pending == []
@@ -817,13 +799,14 @@ class TestExternalContextLatestPerName:
     def test_tied_latest_does_not_mask_an_older_distinct_failure(self) -> None:
         # A tie at the maximum keeps EVERY row in play, not just the tied
         # ones -- so an unambiguously older failure still blocks too.
-        name = "occ-preflight / eligibility"
-        assert name in ALL_MUST_SUCCEED_EXTERNAL_NAMES
+        name = "duplicate external verdict"
         rows = [r for r in self._all_external_success() if r["name"] != name]
         rows.append(self._check_run(name, "failure", started_at="2026-08-20T05:40:00Z"))
         rows.append(self._check_run(name, "success", started_at="2026-08-20T05:45:45Z"))
         rows.append(self._check_run(name, "success", started_at="2026-08-20T05:45:45Z"))
-        verdict, failures, _ = evaluate_external(rows)
+        verdict, failures, _ = evaluate_external(
+            rows, all_must_succeed=frozenset({"duplicate external verdict"})
+        )
         assert verdict == "FAILURE"
         # The ALL-must-succeed path annotates the name with its producer
         # tally; all 3 rows stayed in play, so 1 of 3 is reported red.
@@ -844,15 +827,16 @@ class TestExternalContextLatestPerName:
 
     def test_all_must_succeed_stale_failure_then_fresh_success_is_success(self) -> None:
         # Same fix applied to the ALL_MUST_SUCCEED_EXTERNAL_NAMES path
-        # (occ-preflight / eligibility in production): a stale FAILURE from
+        # (duplicate external verdict in production): a stale FAILURE from
         # an earlier attempt must not permanently wedge the gate once a
         # fresh SUCCESS for the same name is provably later.
-        name = "occ-preflight / eligibility"
-        assert name in ALL_MUST_SUCCEED_EXTERNAL_NAMES
+        name = "duplicate external verdict"
         rows = [r for r in self._all_external_success() if r["name"] != name]
         rows.append(self._check_run(name, "failure", id=4001))
         rows.append(self._check_run(name, "success", id=4002))
-        verdict, failures, pending = evaluate_external(rows)
+        verdict, failures, pending = evaluate_external(
+            rows, all_must_succeed=frozenset({"duplicate external verdict"})
+        )
         assert verdict == "SUCCESS"
         assert failures == []
         assert pending == []
@@ -866,11 +850,13 @@ class TestExternalContextLatestPerName:
         # same time, not a rerun history), the ALL-must-succeed behavior is
         # unchanged -- one cancelled duplicate among two producers still
         # fails closed even though the other succeeded.
-        name = "occ-preflight / eligibility"
+        name = "duplicate external verdict"
         rows = [r for r in self._all_external_success() if r["name"] != name]
         rows.append(self._check_run(name, "success"))
         rows.append(self._check_run(name, "cancelled"))
-        verdict, failures, _ = evaluate_external(rows)
+        verdict, failures, _ = evaluate_external(
+            rows, all_must_succeed=frozenset({"duplicate external verdict"})
+        )
         assert verdict == "FAILURE"
         assert any(name in f for f in failures)
 
@@ -978,7 +964,9 @@ class TestExternalContextCompleteness:
     and the classification tuples drift apart, not when branch protection
     changes without a snapshot refresh; re-capture the fixture file (and
     review the diff) when branch protection legitimately changes. OMN-19055
-    requires a fixture refresh with each manifest or ci.yml change; the existing
+    requires a fixture refresh with each manifest change and with each ci.yml
+    change that alters the job-name set (OMN-20964: a ci.yml change that keeps
+    the set equal to the snapshot has nothing to refresh); the existing
     privileged manifest reconcile detects live protection drift."""
 
     # OMN-19055: the three previously exempt contexts are classified by L4.
@@ -1025,18 +1013,28 @@ class TestExternalContextCompleteness:
             ["Lane Identity Gate"],
         )
 
-    def test_ci_job_snapshot_matches_current_workflow(self) -> None:
+    @staticmethod
+    def _workflow_job_names() -> set[str]:
         workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
-        actual = {job.get("name", key) for key, job in workflow["jobs"].items()}
-        snapshot = set(
+        return {job.get("name", key) for key, job in workflow["jobs"].items()}
+
+    @staticmethod
+    def _job_name_snapshot() -> set[str]:
+        return set(
             (FIXTURES_DIR / "ciyml_job_names_snapshot_2026-09-21.txt")
             .read_text()
             .splitlines()
         )
+
+    def test_ci_job_snapshot_matches_current_workflow(self) -> None:
+        actual = self._workflow_job_names()
+        snapshot = self._job_name_snapshot()
         assert snapshot == actual, "Refresh the CI job-name snapshot from ci.yml"
 
-    @staticmethod
-    def _assert_snapshot_refresh(changed: set[str]) -> None:
+    @classmethod
+    def _assert_snapshot_refresh(
+        cls, changed: set[str], job_names: set[str] | None = None
+    ) -> None:
         pairs = (
             (
                 ".github/required-checks.yaml",
@@ -1045,10 +1043,19 @@ class TestExternalContextCompleteness:
             (".github/workflows/ci.yml", "ciyml_job_names_snapshot_2026-09-21.txt"),
         )
         for source, fixture in pairs:
-            if source in changed:
-                assert f"tests/ci/fixtures/{fixture}" in changed, (
-                    f"{source} changed; refresh and review {fixture} in the same change"
-                )
+            if source not in changed:
+                continue
+            # OMN-20964: the job-name snapshot records ci.yml's job names and
+            # nothing else, so a ci.yml change that leaves that set equal to
+            # the snapshot has nothing to refresh. Any added, removed or
+            # renamed job still demands the fixture in the same change.
+            if source == ".github/workflows/ci.yml":
+                current = cls._workflow_job_names() if job_names is None else job_names
+                if current == cls._job_name_snapshot():
+                    continue
+            assert f"tests/ci/fixtures/{fixture}" in changed, (
+                f"{source} changed; refresh and review {fixture} in the same change"
+            )
 
     @pytest.mark.parametrize(
         ("source", "fixture"),
@@ -1061,10 +1068,55 @@ class TestExternalContextCompleteness:
         ],
     )
     def test_snapshot_refresh_trigger_controls(self, source: str, fixture: str) -> None:
+        # A drifted job-name set, so the ci.yml pair's trigger is live (OMN-20964).
+        drifted = self._job_name_snapshot() | {"OMN-20964 Added Job"}
         with pytest.raises(AssertionError, match="refresh and review"):
-            self._assert_snapshot_refresh({source})
-        self._assert_snapshot_refresh({source, f"tests/ci/fixtures/{fixture}"})
-        self._assert_snapshot_refresh({"README.md"})
+            self._assert_snapshot_refresh({source}, job_names=drifted)
+        self._assert_snapshot_refresh(
+            {source, f"tests/ci/fixtures/{fixture}"}, job_names=drifted
+        )
+        self._assert_snapshot_refresh({"README.md"}, job_names=drifted)
+
+    def test_ci_change_with_unchanged_job_names_needs_no_job_name_refresh(
+        self,
+    ) -> None:
+        # OMN-20964: a ci.yml edit that leaves the job-name set equal to the
+        # snapshot (a step's `uses:` line, say) has no snapshot diff to show.
+        self._assert_snapshot_refresh(
+            {".github/workflows/ci.yml"}, job_names=self._job_name_snapshot()
+        )
+
+    @pytest.mark.parametrize("drift", ["added", "renamed"])
+    def test_ci_change_with_job_name_drift_still_needs_the_refresh(
+        self, drift: str
+    ) -> None:
+        snapshot = self._job_name_snapshot()
+        renamed = sorted(snapshot)[0]
+        job_names = (
+            snapshot | {"OMN-20964 Added Job"}
+            if drift == "added"
+            else (snapshot - {renamed}) | {f"{renamed} (renamed)"}
+        )
+        with pytest.raises(AssertionError, match="refresh and review"):
+            self._assert_snapshot_refresh(
+                {".github/workflows/ci.yml"}, job_names=job_names
+            )
+        self._assert_snapshot_refresh(
+            {
+                ".github/workflows/ci.yml",
+                "tests/ci/fixtures/ciyml_job_names_snapshot_2026-09-21.txt",
+            },
+            job_names=job_names,
+        )
+
+    def test_required_checks_change_needs_its_refresh_whatever_the_job_names(
+        self,
+    ) -> None:
+        with pytest.raises(AssertionError, match="refresh and review"):
+            self._assert_snapshot_refresh(
+                {".github/required-checks.yaml", ".github/workflows/ci.yml"},
+                job_names=self._job_name_snapshot(),
+            )
 
     def test_snapshot_diff_scrubs_git_location_env(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1136,9 +1188,8 @@ class TestExternalContextCompleteness:
         )
 
     def test_no_classified_entry_is_a_phantom(self) -> None:
-        # The inverse direction: every classified L4 entry must correspond to
-        # a real snapshot-required context, or the tuple carries a name that
-        # never gates anything live.
+        # Every L4 entry names either a snapshot-required context or a
+        # measured current producer enforced by CI Summary after S6.
         required = {
             line.strip()
             for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-09-21.txt")
@@ -1151,9 +1202,30 @@ class TestExternalContextCompleteness:
             | set(ALL_MUST_SUCCEED_EXTERNAL_NAMES)
             | self._EXEMPT_EXTERNAL_CONTEXTS
         )
-        phantoms = classified - required
+        # S6 also enforces contexts directly through CI Summary. A new
+        # registration must name a real producer in a current workflow and
+        # match its captured check-run name; it cannot invent a phantom check.
+        payload = json.loads(SWEEP_FIXTURE.read_text(encoding="utf-8"))
+        captured = {
+            row["name"]
+            for head in payload["pull_requests"].values()
+            for row in head["check_runs_all"]
+        }
+        producers = set()
+        for path in (REPO_ROOT / ".github/workflows").glob("*.yml"):
+            workflow = yaml.safe_load(path.read_text())
+            triggers = workflow.get("on", workflow.get(True)) or {}
+            if "pull_request" not in triggers:
+                continue
+            for key, job in workflow["jobs"].items():
+                name = job.get("name", key)
+                if "uses" in job:
+                    producers.update(n for n in captured if n.startswith(name + " / "))
+                else:
+                    producers.add(name)
+        phantoms = classified - required - (producers & captured)
         assert not phantoms, (
-            f"L4-classified name(s) absent from live required contexts: {sorted(phantoms)}"
+            f"L4-classified name(s) without a required or measured producer: {sorted(phantoms)}"
         )
 
 
@@ -1365,7 +1437,7 @@ def _poll_step_run() -> str:
 SWEEP_FIXTURE = FIXTURES_DIR / "omn18970_external_sweep_check_runs.json"
 SWEEP_NOW = datetime(2026, 9, 21, 5, 0, 0, tzinfo=UTC)
 
-# The one name the shipped registry admits, and the head it was measured on.
+# Historical retired producer and the head where its failure was measured.
 FLAKY_AUTOBIND_OUTCOME = "occ-autobind / outcome"
 RED_AT_MERGE_PR = "2279"
 
@@ -1459,8 +1531,12 @@ class TestExternalDefaultDenySweep:
         assert swept == []
 
     def test_an_all_must_succeed_name_is_not_swept(self) -> None:
-        name = sorted(ALL_MUST_SUCCEED_EXTERNAL_NAMES)[0]
-        _failures, _f, swept, _e = _sweep([_sweep_row(name, "failure")])
+        name = "duplicate external verdict"
+        _failures, _f, swept, _e = evaluate_external_sweep(
+            [_sweep_row(name, "failure")],
+            all_must_succeed=frozenset({name}),
+            now=SWEEP_NOW,
+        )
         assert swept == []
 
     def test_an_in_run_job_is_not_double_judged(self) -> None:
@@ -1687,25 +1763,8 @@ class TestSweepFoldsIntoTheCombinedVerdict:
 class TestSweepExclusions:
     """AC-2 / AC-3 — the registry is closed-ended, and its one entry is real."""
 
-    def test_the_registry_holds_exactly_the_nine_measured_names(self) -> None:
-        """Under the strict bar, every by-design non-green name needs an entry.
-
-        That is the point of the ruling: the tolerance is written down with a
-        reason, an owner and a date, instead of hiding inside a conclusion set
-        nobody reads. These nine are every name the measurement found
-        non-green on any head.
-        """
-        assert set(EXTERNAL_SWEEP_EXCLUSIONS) == {
-            FLAKY_AUTOBIND_OUTCOME,
-            "occ-autobind / mint status",
-            "occ-companion-effect / mint status",
-            "occ-autobind-manual-replay",
-            "occ-companion-effect-manual-replay",
-            "call",
-            "imperative-contract-guard",
-            "verify / dod-verify",
-            ci_summary_gate._MARKER_AUDIT_CONTEXT,
-        }
+    def test_the_registry_only_retains_the_post_merge_marker_audit(self) -> None:
+        assert set(EXTERNAL_SWEEP_EXCLUSIONS) == {ci_summary_gate._MARKER_AUDIT_CONTEXT}
 
     def test_every_entry_carries_a_reason_an_owner_and_both_dates(self) -> None:
         for name, entry in EXTERNAL_SWEEP_EXCLUSIONS.items():
@@ -1740,17 +1799,6 @@ class TestSweepExclusions:
 
     def test_every_shipped_entry_is_wellformed(self) -> None:
         assert validate_sweep_exclusions(EXTERNAL_SWEEP_EXCLUSIONS) == []
-
-    def test_the_autobind_outcome_entry_still_records_its_measurement(self) -> None:
-        """The one entry that stands for a real red keeps its numbers.
-
-        Its reason has to carry the measured rate, because renewing it means
-        re-measuring and comparing, not re-reading an adjective.
-        """
-        entry = EXTERNAL_SWEEP_EXCLUSIONS[FLAKY_AUTOBIND_OUTCOME]
-        assert entry.ticket == "OMN-18939"
-        assert "fifteen heads" in entry.reason
-        assert "2279" in entry.reason
 
     def test_no_shipped_entry_has_expired(self) -> None:
         """The calendar tripwire.
@@ -1844,13 +1892,13 @@ class TestSweepAgainstRealHeads:
             assert len(head["head_sha"]) == 40
 
     @pytest.mark.parametrize("pr", CLEAN_PRS)
-    def test_merge_time_state_is_clean_and_the_sweep_really_looked(
+    def test_historical_occ_rows_are_no_longer_exempt_and_the_sweep_looks(
         self, pr: str
     ) -> None:
         """Zero failures AND a non-zero population — rule 16's two halves.
 
-        Run with the SHIPPED registry, because under the strict bar the
-        by-design non-green names are exactly what the registry is for.
+        The fixture predates S6. Its retired OCC rows no longer qualify for
+        an exclusion, so replaying them now must report their non-success.
         """
         head = _sweep_head(pr)
         failures, _in_flight, swept, _excluded = evaluate_external_sweep(
@@ -1859,7 +1907,11 @@ class TestSweepAgainstRealHeads:
             events=check_run_event_index(head["workflow_runs"]),
             now=SWEEP_NOW,
         )
-        assert failures == [], failures
+        assert failures == [
+            "occ-autobind / outcome (neutral)",
+            "occ-autobind-manual-replay (skipped)",
+            "occ-companion-effect-manual-replay (skipped)",
+        ]
         assert len(swept) >= 30, (pr, len(swept))
 
     @pytest.mark.parametrize("pr", CLEAN_PRS)
@@ -1880,46 +1932,17 @@ class TestSweepAgainstRealHeads:
         )
         assert failures, "stripping the registry changed nothing, so it is inert"
 
-    def test_the_shipped_exclusion_is_load_bearing_on_the_head_that_merged_red(
-        self,
-    ) -> None:
-        """AC-3. Without the entry this real head FAILS; with it, it passes.
-
-        Pull request 2279 merged 2026-09-19 with the autobind outcome context
-        concluded `failure` at merge time, on a transient error from the
-        version-control step inside the companion-authoring effect rather than
-        anything about the pull request. This is the measurement that put the
-        one real entry in the registry, replayed.
-        """
+    def test_historical_autobind_failure_is_no_longer_excluded(self) -> None:
         head = _sweep_head(RED_AT_MERGE_PR)
-        rows = _at_merge(head)
-        common: dict[str, Any] = {
-            "in_run_names": frozenset(head["in_run_job_names"]),
-            "events": check_run_event_index(head["workflow_runs"]),
-            "now": SWEEP_NOW,
-        }
-
-        # The payload really does carry the red, so neither arm below passes
-        # for an unrelated reason.
-        assert any(
-            r["name"] == FLAKY_AUTOBIND_OUTCOME and r.get("conclusion") == "failure"
-            for r in rows
+        failures, _f, swept, excluded = evaluate_external_sweep(
+            _at_merge(head),
+            in_run_names=frozenset(head["in_run_job_names"]),
+            events=check_run_event_index(head["workflow_runs"]),
+            now=SWEEP_NOW,
         )
-
-        without, _f, _s, _e = evaluate_external_sweep(rows, exclusions={}, **common)
-        # Under the strict bar, stripping the registry reds every by-design
-        # non-green name on this head, not only the one real failure. Both
-        # halves matter: the failure is present, and it is present BECAUSE the
-        # entry was removed.
-        assert f"{FLAKY_AUTOBIND_OUTCOME} (failure)" in without, without
-        assert len(without) == len(EXTERNAL_SWEEP_EXCLUSIONS) - 1 or len(without) > 1
-
-        with_entry, _f, _s, excluded = evaluate_external_sweep(
-            rows, exclusions=EXTERNAL_SWEEP_EXCLUSIONS, **common
-        )
-        assert with_entry == [], with_entry
-        assert FLAKY_AUTOBIND_OUTCOME in excluded
-        # Every name the registry admitted on this head is one of its entries.
+        assert f"{FLAKY_AUTOBIND_OUTCOME} (failure)" in failures
+        assert FLAKY_AUTOBIND_OUTCOME in swept
+        assert FLAKY_AUTOBIND_OUTCOME not in excluded
         assert set(excluded) <= set(EXTERNAL_SWEEP_EXCLUSIONS)
 
     def test_flipping_one_real_row_flips_the_verdict(self) -> None:
@@ -1931,15 +1954,20 @@ class TestSweepAgainstRealHeads:
             "events": check_run_event_index(head["workflow_runs"]),
             "now": SWEEP_NOW,
         }
-        _f0, _i0, swept, _e0 = evaluate_external_sweep(rows, **common)
-        target = swept[0]
-
-        assert evaluate_external_sweep(rows, **common)[0] == []
+        baseline, _i0, swept, _e0 = evaluate_external_sweep(rows, **common)
+        target = next(
+            name
+            for name in swept
+            if any(r["name"] == name and r["conclusion"] == "success" for r in rows)
+        )
+        assert not any(f.startswith(target + " (") for f in baseline)
         flipped = [
             {**r, "conclusion": "failure"} if r["name"] == target else r for r in rows
         ]
-        assert evaluate_external_sweep(flipped, **common)[0] == [f"{target} (failure)"]
-        assert evaluate_external_sweep(rows, **common)[0] == []
+        assert set(evaluate_external_sweep(flipped, **common)[0]) == set(baseline) | {
+            f"{target} (failure)"
+        }
+        assert evaluate_external_sweep(rows, **common)[0] == baseline
 
 
 @pytest.mark.unit

@@ -16,20 +16,20 @@ requirements:
           AC1: omniclaude carries a caller workflow for the receipt-gate's caller-evidence mode that runs from the base branch (pull_request_target), pins the reusable by full sha and sets evidence-source caller -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k workflow_shape
       - id: "AC2"
         statement: |-
-          AC2: the caller sets compare-with-occ to "true" with a verifier-version that ships the occ-difference classifier, so the S5 shadow count records the new-path verdict beside OCC's -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s5_shadow_count
+          AC2: the caller pins a verifier-version that ships the occ-difference classifier (node_dod_verify occ-difference, omnimarket#3277), so the S5 shadow count recorded the new-path verdict beside OCC's and a rollback can turn comparison back on -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k verifier_ships_the_occ_difference_classifier
       - id: "AC3"
         statement: |-
           AC3: every acceptance criterion of every contracts/OMN-*.yaml in omniclaude that declares binds_ac is bound to a test_passes item whose pytest selector names a test file that exists -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k contract_binds
       - id: "AC4"
         statement: |-
-          AC4: the caller sets shadow to "true", and with that caller present evaluate_external_sweep reports no failure for repo-evidence / verify and repo-evidence / dod-verify (including a row that carries a planted OCC disagreement) with no entry added to EXTERNAL_SWEEP_EXCLUSIONS or CONDITIONAL_SWEEP_EXCLUSIONS, while a skipped verify or a failed dod-verify still fails the sweep -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k external_sweep
+          AC4: evaluate_external_sweep reports no failure for repo-evidence / verify and repo-evidence / dod-verify (including a row that carries a planted OCC disagreement) with no entry added to EXTERNAL_SWEEP_EXCLUSIONS or CONDITIONAL_SWEEP_EXCLUSIONS, while a skipped verify or a failed dod-verify still fails the sweep -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k external_sweep
 evidence_requirements:
   - kind: "tests"
     description: "The caller workflow has the required base-branch trigger, immutable pin, inputs and read-only permissions."
     command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k workflow_shape"
   - kind: "tests"
-    description: "The caller turns the OCC difference step on with a verifier that ships it."
-    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s5_shadow_count"
+    description: "The caller pins a verifier that ships the difference classifier."
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k verifier_ships_the_occ_difference_classifier"
   - kind: "tests"
     description: "Every repo-owned contract that declares binds_ac binds each criterion to test evidence in an existing test file."
     command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k contract_binds"
@@ -49,11 +49,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k workflow_shape"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: "dod-repo-evidence-ac2"
-    description: "The focused workflow test proves the caller compares with OCC and pins a verifier that ships the difference classifier."
+    description: "The focused workflow test proves the caller pins a verifier that ships the difference classifier."
     source: "manual"
     checks:
       - check_type: "test_passes"
-        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k s5_shadow_count"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py -q -k verifier_ships_the_occ_difference_classifier"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: "dod-repo-evidence-ac3"
     description: "The contract binding test proves every repo contract that declares binds_ac binds each criterion to test evidence in an existing test file."
