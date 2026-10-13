@@ -1,0 +1,52 @@
+---
+schema_version: 1.0.0
+ticket_id: OMN-19585
+title: gh_usage_report counts every lane the gh shim names as attributed
+summary: 'The gh shim logs every call by lane and gh_usage_report.py attributes the operator bucket
+  per lane (OMN-19585, already on dev). The shim has since added lane_source role and module, which
+  the report still counted in its UNATTRIBUTED share. This change counts every source the shim names
+  as attributed, so only lane_source parent (no env, session, role, module or script found) is
+  unattributed.'
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-report-attributes-named-sources
+  statement: The usage report's unattributed share holds only calls whose lane_source is parent.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: a call logged with lane_source role or module is attributed to its named lane
+      and not counted in the unattributed share -- falsifier: uv run pytest
+      tests/scripts/test_gh_usage_log.py -k every_source'
+  - id: AC2
+    statement: 'AC2: the report still names the share it cannot attribute -- falsifier: uv run pytest
+      tests/scripts/test_gh_usage_log.py -k report'
+evidence_requirements:
+- kind: tests
+  description: The report tests pass on the fixture logs, including one row for each lane_source the
+    shim writes; the new case fails at the merge base, where role and module count as unattributed.
+  command: uv run pytest tests/scripts/test_gh_usage_log.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn19585-ac1
+  description: With one fixture row for each of the eight lane_source values the shim writes, exactly
+    one call (parent) is unattributed and the attributed share is 0.875; at the merge base the same
+    test reports three unattributed calls.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/test_gh_usage_log.py -q --no-cov -k every_source
+  binds_ac:
+  - AC1
+- id: dod-omn19585-ac2
+  description: The existing report tests, which assert the UNATTRIBUTED line and share for parent
+    callers, still pass.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/test_gh_usage_log.py -q --no-cov -k report
+  binds_ac:
+  - AC2
