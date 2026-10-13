@@ -242,10 +242,13 @@ fi
 echo "AC5 — with a PR watcher state file the segment is built with no gh call"
 
 NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-WATCHER_REPOS='"omnibase_core":{"default_branch":"dev"},"omnibase_infra":{"default_branch":"dev"},"omnibase_spi":{"default_branch":"dev"},"omniclaude":{"default_branch":"dev"},"omninode_infra":{"default_branch":"dev"},"omnidash":{"default_branch":"dev"},"omniintelligence":{"default_branch":"dev"},"omnimemory":{"default_branch":"dev"},"omniweb":{"default_branch":"dev"},"onex_change_control":{"default_branch":"dev"}'
+# Every repository the segment counts, read from the script itself so the fixture lists exactly the
+# set the refresh asks about.
+WATCHER_REPOS="$(grep -m1 '^  PR_REPOS=' "$STATUSLINE" | sed 's/^  PR_REPOS="//; s/"$//' | tr ' ' '\n' \
+  | sed 's/^[^:]*://; s/.*/"&":{"default_branch":"dev"}/' | paste -sd, -)"
 WATCHER_PRS='"omnibase_core#1":{"facts":{"repo":"omnibase_core","state":"OPEN","base":"dev"}},"omnibase_core#2":{"facts":{"repo":"omnibase_core","state":"OPEN","base":"dev"}},"omnibase_core#3":{"facts":{"repo":"omnibase_core","state":"MERGED","base":"dev"}},"omnibase_infra#4":{"facts":{"repo":"omnibase_infra","state":"OPEN","base":"main"}},"omnibase_infra#5":{"facts":{"repo":"omnibase_infra","state":"OPEN","base":"dev"}},"omnibase_infra#6":{"facts":{"repo":"omnibase_infra","state":"CLOSED","base":"main"}}'
 W_STATE="$WORK/watcher-state.json"
-printf '{"schema":1,"last_tick":"%s","repos":{%s,"omnimarket":{"default_branch":"dev"}},"prs":{%s}}' \
+printf '{"schema":1,"last_tick":"%s","repos":{%s},"prs":{%s}}' \
   "$NOW_ISO" "$WATCHER_REPOS" "$WATCHER_PRS" > "$W_STATE"
 
 GH_LOG="$WORK/gh-calls.log"; : > "$GH_LOG"
