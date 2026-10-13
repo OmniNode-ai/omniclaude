@@ -109,3 +109,19 @@ def test_pinned_digest_is_the_script_at_the_pinned_commit() -> None:
     shown = _git("show", f"{pinned}:{SCRIPT_PATH}")
     assert shown.returncode == 0, shown.stderr.decode(errors="replace")
     assert hashlib.sha256(shown.stdout).hexdigest() == _pinned_digest()
+
+
+# OMN-21075 AC5: the pinned script sets up OpenRouter on the fixed model, so a
+# developer following the guide is never asked to choose one.
+FIXED_OPENROUTER_MODEL_LINE = 'OPENROUTER_MODEL="qwen/qwen3.8-27b"'
+
+
+def test_pinned_script_sets_up_openrouter_on_the_fixed_model() -> None:
+    pinned = _pinned_commit()
+    _require_commit(pinned)
+    shown = _git("show", f"{pinned}:{SCRIPT_PATH}")
+    assert shown.returncode == 0, shown.stderr.decode(errors="replace")
+    assert FIXED_OPENROUTER_MODEL_LINE in shown.stdout.decode().splitlines(), (
+        f"ONBOARDING.md pins {pinned}, whose script does not carry "
+        f"{FIXED_OPENROUTER_MODEL_LINE}"
+    )
