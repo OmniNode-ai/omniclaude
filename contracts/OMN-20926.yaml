@@ -50,6 +50,6 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_capture_redaction_sync_omn18357.py -q"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py -q -k drifted_secret_reference"
     binds_ac:
       - AC4

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from omniclaude.hooks.capture_redaction import (
     default_contract_path,
@@ -360,3 +361,60 @@ def test_a_zero_width_pattern_terminates_and_leaves_references_standing() -> Non
     out = sub_keeping_references(re.compile(r"x*"), text, contract, lambda m: "|")
     assert ref in out
     assert out.replace("|", "") == text
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _generator() -> Any:
+    scripts = str(_REPO_ROOT / "scripts" / "validation")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    return importlib.import_module("generate_event_registry")
+
+
+def _check_against_owner(tmp_path: Path, owner_contract: dict[str, Any]) -> list[str]:
+    gen = _generator()
+    nodes = tmp_path / "nodes"
+    registry = nodes / "node_emit_daemon" / "registries" / "topics.yaml"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(yaml.safe_dump({"events": {}}), encoding="utf-8")
+    owner = nodes / gen.OWNING_CAPTURE_CONTRACT_RELPATH
+    owner.parent.mkdir(parents=True, exist_ok=True)
+    owner.write_text(yaml.safe_dump(owner_contract, sort_keys=False), encoding="utf-8")
+    mirror = tmp_path / "mirror" / "capture_redaction.yaml"
+    mirror.parent.mkdir(parents=True, exist_ok=True)
+    mirror.write_text(
+        gen.VENDORED_CAPTURE_CONTRACT.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    in_use = {
+        "prompt.submitted": {
+            "fan_out": [{"topic": "t", "transform": gen.CAPTURE_REDACTION_TRANSFORM}]
+        }
+    }
+    return list(
+        gen.check_vendored_capture_contract(in_use, registry, mirror_path=mirror)
+    )
+
+
+def test_a_drifted_secret_reference_in_the_owning_contract_is_refused(
+    tmp_path: Path,
+) -> None:
+    """AC4: the secret_reference block is mirror posture, and drift in it is caught.
+
+    The control is the matching owner, which must pass; without it a check
+    that objects to everything would satisfy the drifted case too.
+    """
+    gen = _generator()
+    committed = yaml.safe_load(
+        gen.VENDORED_CAPTURE_CONTRACT.read_text(encoding="utf-8")
+    )
+    assert committed["secret_reference"]["pattern"]
+
+    assert _check_against_owner(tmp_path / "same", committed) == []
+
+    drifted = yaml.safe_load(gen.VENDORED_CAPTURE_CONTRACT.read_text(encoding="utf-8"))
+    drifted["secret_reference"]["store_key_template"] = "DRIFTED_{digest}"
+    violations = _check_against_owner(tmp_path / "drift", drifted)
+    assert violations, "the drift check did not object to a drifted secret_reference"
+    assert "secret_reference" in violations[0]
