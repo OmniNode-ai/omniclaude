@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,7 @@ from scripts.validation import validate_plugin_version_bump as gate  # noqa: E40
 PLUGIN_JSON = "plugins/onex/.claude-plugin/plugin.json"
 MARKETPLACE_JSON = "plugins/test-marketplace/.claude-plugin/marketplace.json"
 WORKFLOW = REPO_ROOT / ".github/workflows/plugin-version-bump.yml"
+CI_WORKFLOW = REPO_ROOT / ".github/workflows/ci.yml"
 
 
 def _git_env(repo: Path) -> dict[str, str]:
@@ -510,8 +512,13 @@ def test_bad_version_refused(
 
 
 @pytest.mark.unit
-def test_bad_version_refused_by_the_ci_gate_and_the_precommit_hook() -> None:
-    """The CI gate and the pre-commit hook run the validator that refuses (AC1)."""
+def test_bad_version_refused_and_single_bump_pr_cases_run_in_ci_and_precommit() -> None:
+    """The cases above are wired: a named required-umbrella CI step plus a check-only hook.
+
+    This is the part of AC1 and AC2 that is a change to the repository's wiring,
+    so it fails on a tree where the step or the hook is absent. The gate and the
+    bot themselves are unchanged by OMN-20710: they already ran on dev.
+    """
     gate = yaml.safe_load(GATE_WORKFLOW.read_text())
     gate_job = gate["jobs"]["plugin-version-bump-gate"]
     run = next(
@@ -522,6 +529,20 @@ def test_bad_version_refused_by_the_ci_gate_and_the_precommit_hook() -> None:
     assert "scripts/validation/validate_plugin_version_bump.py --base" in run
     assert "--bump-to-base" not in run
     assert gate_job["name"] == "Plugin Version Bump Gate"
+
+    ci_steps = yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]["refusal-surface"][
+        "steps"
+    ]
+    named = [
+        s for s in ci_steps if "test_plugin_version_bump_gate.py" in s.get("run", "")
+    ]
+    assert len(named) == 1
+    assert "(OMN-20710)" in named[0]["name"]
+    assert named[0]["run"].startswith(
+        "uv run pytest tests/ci/test_plugin_version_bump_gate.py"
+    )
+    assert "-k" not in named[0]["run"].split()  # the whole file, not a subset
+
     hooks = {
         hook["id"]: hook
         for repo_cfg in yaml.safe_load(
@@ -532,6 +553,16 @@ def test_bad_version_refused_by_the_ci_gate_and_the_precommit_hook() -> None:
     entry = hooks["plugin-version-bump-gate"]["entry"]
     assert "validate_plugin_version_bump.py --base origin/dev" in entry
     assert hooks["plugin-version-bump-gate"]["always_run"] is True
+    tests_hook = hooks["plugin-version-bump-tests"]
+    assert "tests/ci/test_plugin_version_bump_gate.py" in tests_hook["entry"]
+    assert tests_hook["pass_filenames"] is False
+    for touched in (
+        "tests/ci/test_plugin_version_bump_gate.py",
+        "scripts/validation/validate_plugin_version_bump.py",
+        ".github/workflows/plugin-version-bump.yml",
+        ".github/workflows/plugin-version-bump-gate.yml",
+    ):
+        assert re.search(tests_hook["files"], touched), touched
 
 
 def _publish_step() -> dict:
