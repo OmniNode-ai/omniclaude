@@ -185,13 +185,19 @@ _cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/prview"
 
 # Keep only characters that are safe inside a log value and meaningful in a
 # repo, endpoint or lane name, and blank anything shaped like a GitHub token.
-_clean() {
-  local v="$1"
+_clean_into() {
+  local v="$2"
   v="${v//[^A-Za-z0-9._\/:@+=, -]/}"
   case "$v" in
     *ghp_*|*gho_*|*ghu_*|*ghs_*|*ghr_*|*github_pat_*) v="REDACTED" ;;
   esac
-  printf '%s' "${v:0:200}"
+  printf -v "$1" '%s' "${v:0:200}"
+}
+
+_clean() {
+  local cleaned=""
+  _clean_into cleaned "$1"
+  printf '%s' "$cleaned"
 }
 
 # Optional launcher context from the remote-lane runner (OMN-20420): the
@@ -199,11 +205,11 @@ _clean() {
 # usage-log (JSONL) fields only; the call-log TSV keeps its 8 columns.
 _parent_lane=""; _lane_host=""
 _resolve_parent_host() {
-  _parent_lane="$(_clean "${ONEX_PARENT_LANE:-}")"
+  _clean_into _parent_lane "${ONEX_PARENT_LANE:-}"
   if [ -n "${ONEX_LANE_HOST:-}" ]; then
-    _lane_host="$(_clean "$ONEX_LANE_HOST")"
+    _clean_into _lane_host "$ONEX_LANE_HOST"
   else
-    _lane_host="$(_clean "${HOSTNAME%%.*}")"
+    _clean_into _lane_host "${HOSTNAME%%.*}"
   fi
 }
 
@@ -217,7 +223,7 @@ _resolve_lane() {
   local registry_dir="" record="" hash="" registered="" parent="" pargs="" script="" w=""
   local pid="$PPID" steps=0 next="" info="" direct_args="" role="" job=0 module="" rest=""
   if [ -n "${ONEX_LANE:-}" ]; then
-    _lane="$(_clean "$ONEX_LANE")"; _lane_src="env"
+    _clean_into _lane "$ONEX_LANE"; _lane_src="env"
     return
   fi
   if [ -n "${ONEX_LANE_ID:-}" ]; then agent="$ONEX_LANE_ID"
@@ -226,7 +232,7 @@ _resolve_lane() {
   elif [ -n "${CLAUDE_SUBAGENT_NAME:-}" ]; then agent="$CLAUDE_SUBAGENT_NAME"
   fi
   if [ -n "$agent" ]; then
-    _lane="$(_clean "$agent")"; _lane_src="agent-env"
+    _clean_into _lane "$agent"; _lane_src="agent-env"
     return
   fi
   cwd="$(pwd -P 2>/dev/null)"
@@ -411,7 +417,8 @@ _classify() {
 # _call_log <exit code> <action: allowed|refused|fallback>
 _call_log() {
   [ "${ONEX_GH_USAGE_LOG:-1}" = "0" ] && return 0
-  local file="" dir="" ts="" oversized=""
+  local file="" dir="" ts="" oversized="" value="" cleaned=""
+  local log_fields=()
   if [ -n "${ONEX_GH_CALLS_LOG:-}" ]; then
     file="$ONEX_GH_CALLS_LOG"
   elif [ -n "${ONEX_STATE_DIR:-}" ]; then
@@ -432,10 +439,12 @@ _call_log() {
   fi
   _resolve_lane
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$(_clean "$ts")" "$(_clean "$_lane")" "$(_clean "$_lane_src")" \
-    "$(_clean "$_cls")" "$(_clean "$_method")" "$(_clean "$_endpoint")" \
-    "$(_clean "$1")" "$(_clean "$2")" >> "$file" 2>/dev/null || true
+  # Sanitize in this shell: command substitution would fork once per field.
+  for value in "$ts" "$_lane" "$_lane_src" "$_cls" "$_method" "$_endpoint" "$1" "$2"; do
+    _clean_into cleaned "$value"
+    log_fields+=("$cleaned")
+  done
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${log_fields[@]}" >> "$file" 2>/dev/null || true
 }
 
 # _refusal_row <guard> <reason class> <detail>   (OMN-21020)
@@ -469,25 +478,33 @@ _log() {
   _call_log "$1" "${3:-allowed}"
   local dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage"
   local ts session ticket="" identity="" route_reason=""
+  local cls="" method="" repo="" endpoint=""
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  session="$(_clean "${CLAUDE_CODE_SESSION_ID:-}")"
+  _clean_into session "${CLAUDE_CODE_SESSION_ID:-}"
   case "$PWD" in
     */omni_worktrees/OMN-*) ticket="${PWD#*/omni_worktrees/}"; ticket="${ticket%%/*}" ;;
   esac
   mkdir -p "$dir" 2>/dev/null || return 0
   _resolve_lane
   _resolve_parent_host
+  _clean_into ticket "$ticket"
+  _clean_into cls "$_cls"
+  _clean_into method "$_method"
+  _clean_into repo "$_repo"
+  _clean_into endpoint "$_endpoint"
   if [ -n "$_route" ]; then
     identity="${_route%% *}"
     case "$_route" in *\ *) route_reason="${_route#* }" ;; esac
+    _clean_into identity "$identity"
+    _clean_into route_reason "$route_reason"
     printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","identity":"%s","route_reason":"%s","parent":"%s","host":"%s","pid":%s,"gateway":"%s"}\n' \
-      "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
-      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$(_clean "$identity")" "$(_clean "$route_reason")" "$_parent_lane" "$_lane_host" "$$" "$_gateway" \
+      "$ts" "$_lane" "$_lane_src" "$session" "$ticket" "$cls" "$method" \
+      "$repo" "$endpoint" "$1" "$2" "$identity" "$route_reason" "$_parent_lane" "$_lane_host" "$$" "$_gateway" \
       >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
   else
     printf '{"ts":"%s","lane":"%s","lane_source":"%s","session":"%s","ticket":"%s","cls":"%s","method":"%s","repo":"%s","endpoint":"%s","exit":%s,"cache":"%s","parent":"%s","host":"%s","pid":%s,"gateway":"%s"}\n' \
-      "$ts" "$_lane" "$_lane_src" "$session" "$(_clean "$ticket")" "$(_clean "$_cls")" "$(_clean "$_method")" \
-      "$(_clean "$_repo")" "$(_clean "$_endpoint")" "$1" "$2" "$_parent_lane" "$_lane_host" "$$" "$_gateway" \
+      "$ts" "$_lane" "$_lane_src" "$session" "$ticket" "$cls" "$method" \
+      "$repo" "$endpoint" "$1" "$2" "$_parent_lane" "$_lane_host" "$$" "$_gateway" \
       >> "$dir/${ts%%T*}.jsonl" 2>/dev/null || true
   fi
 }
@@ -511,10 +528,12 @@ _cacheable() {
 }
 
 _sha() {
-  if command -v shasum >/dev/null 2>&1; then
-    printf '%s' "$1" | shasum -a 256 | cut -c1-40
-  else
+  # Prefer the native utility to starting Perl for every gateway cache key.
+  # macOS installations without sha256sum retain the shasum fallback.
+  if command -v sha256sum >/dev/null 2>&1; then
     printf '%s' "$1" | sha256sum | cut -c1-40
+  else
+    printf '%s' "$1" | shasum -a 256 | cut -c1-40
   fi
 }
 
@@ -610,10 +629,20 @@ _origin_repo() {
 # refused with a message naming the part that failed.
 
 # Direct parent's argv, only on demand. -ww: a BSD ps would otherwise cut the line.
+_parent_args_done=0
+_parent_args=""
+_read_parent_args() {
+  [ "$_parent_args_done" -eq 1 ] && return 0
+  _parent_args_done=1
+  # The same direct parent is checked by several guards during one invocation.
+  _parent_args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+}
+
 _prs_caller_allowed() {
   [ "${ONEX_PR_WATCHER:-}" = "1" ] && return 0
   local args root scripts
-  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  _read_parent_args
+  args="$_parent_args"
   [ -n "$args" ] || return 1
   case "$args" in *omnibase_internal.pr_watcher*) return 0 ;; esac
   root="${ONEX_LANDING_CONTROLLER_ROOT:-$HOME/.omninode/landing-controller}"
@@ -1072,7 +1101,8 @@ _lane_is_read() {
 
 _lane_sanctioned_script() {
   local args
-  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  _read_parent_args
+  args="$_parent_args"
   [ -n "$args" ] || return 1
   case " $args " in
     *"/skills/pr-handoff/scripts/handoff.sh "*) return 0 ;;
@@ -1137,7 +1167,8 @@ _fb_consumer=""
 _fb_match() {
   _fb_consumer=""
   local args
-  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  _read_parent_args
+  args="$_parent_args"
   [ -n "$args" ] || return 1
   case " $args " in
     *"/check-platform-leads-review-tripwire "*|*" check-platform-leads-review-tripwire "*|\
@@ -1564,7 +1595,8 @@ _lw_lane() {
 _lw_allowed_identity() {
   _prs_caller_allowed && return 0
   local args
-  args="$(ps -ww -o args= -p "$PPID" 2>/dev/null)"
+  _read_parent_args
+  args="$_parent_args"
   [ -n "$args" ] || return 1
   case " $args " in
     *"/onex run-node "*|*" onex run-node "*) return 0 ;;
