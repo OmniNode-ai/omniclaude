@@ -1,0 +1,52 @@
+---
+schema_version: 1.0.0
+ticket_id: OMN-20710
+title: omniclaude plugin version bump has named falsifiers for a bad version and a single bot bump PR
+summary: 'The per-PR plugin version gate and the post-merge bot bump already exist (OMN-20710). This
+  change adds the two named test cases the unenforced-rulings plan unit N7 requires, wires the test
+  file as a named step in the refusal-surface job of the required CI Summary umbrella, and adds a
+  check-only pre-commit hook for it.'
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-version-bump-falsifiers
+  statement: A lowered, malformed or inconsistent plugin version is refused by the gate's CLI, and
+    successive dev merges leave exactly one bot bump PR that is rebuilt in place.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: a lowered, malformed or inconsistent plugin version is refused -- falsifier: uv
+      run pytest tests/ci/test_plugin_version_bump_gate.py -k bad_version_refused'
+  - id: AC2
+    statement: 'AC2: concurrent dev merges produce one bot bump PR -- falsifier: uv run pytest
+      tests/ci/test_plugin_version_bump_gate.py -k single_bump_pr'
+evidence_requirements:
+- kind: tests
+  description: The gate CLI exits 1 for each bad version and 0 for the controls; the real bump and
+    publish shell steps run at three dev tips against a local origin and open one PR.
+  command: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn20710-ac1
+  description: The validator CLI refuses a lowered, a malformed and a marketplace-inconsistent version
+    and passes an unchanged and a raised one; the selected cases include the wiring case, which fails
+    at the merge base where ci.yml names no step and pre-commit has no hook for the test file.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov -k bad_version_refused
+  binds_ac:
+  - AC1
+- id: dod-omn20710-ac2
+  description: Three dev merges leave one open bot bump PR, the branch is force-rebuilt when dev
+    conflicts with it, and the PR closes once dev carries the version; with the open-PR branch removed
+    from the publish step the test fails.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov -k single_bump_pr
+  binds_ac:
+  - AC2
