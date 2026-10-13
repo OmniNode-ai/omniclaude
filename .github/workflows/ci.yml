@@ -124,6 +124,9 @@ jobs:
         run: uv run pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
       - name: No Anthropic key value in a workflow (OMN-20967)
         run: uv run pytest tests/ci/test_anthropic_key_prefix_workflows_omn20967.py -q --no-cov
+      # OMN-20910: paired with the review-voter-model-from-overlay pre-commit hook.
+      - name: Review voter model comes from the overlay (OMN-20910)
+        run: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -p no:randomly
       - name: Verify advisory gate controller cache and refusal controls (OMN-21006)
         run: uv run pytest tests/scripts/test_advisory_job_gate.py -q
       - name: Verify Git effect subprocess compatibility
