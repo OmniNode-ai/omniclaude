@@ -144,6 +144,11 @@ jobs:
         run: uv run pytest tests/scripts/test_advisory_job_gate.py -q
       - name: Verify Git effect subprocess compatibility
         run: uv run pytest tests/unit/nodes/node_git_effect/test_handler_git_subprocess.py -q --no-cov
+      # OMN-20001: the release workflow notifies omnimarket so its pin moves in a PR
+      # (ruling 2026-10-01T21:43:10Z (3)). SYNC with pre-commit hook
+      # 'release-downstream-notice'.
+      - name: Verify the release notifies omnimarket (OMN-20001)
+        run: uv run pytest tests/ci/test_release_downstream_notice_omn20001.py -q --no-cov
 
   # OMN-18782: independent admission check, including body-only edits.
   pr-failure-citations:

@@ -1,0 +1,57 @@
+---
+schema_version: 1.0.0
+ticket_id: OMN-20001
+title: An omniclaude release notifies omnimarket so its pin moves in a PR
+summary: 'Operator ruling 2026-10-01T21:43:10Z (3): a producer change that extends a cross-repo
+  contract notifies its consumer, and the consumer''s update is a PR that lands through the consumer''s
+  own checks. release.yml gains the notify-omnimarket-pin-bump job, which dispatches omniclaude-release
+  to omnimarket after a non-rc release; omnimarket''s omniclaude-pin-bump workflow opens the PR.
+  tests/ci/test_release_downstream_notice_omn20001.py refuses a release workflow without the job and
+  runs as a named CI step and a check-only pre-commit hook.'
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-release-notifies-omnimarket
+  statement: The release workflow dispatches omniclaude-release to omnimarket with the released version
+    after a non-rc release, and cannot skip the dispatch for want of credentials.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: a release workflow without the notice job, with the wrong event type or target,
+      with a payload lacking the version, or with a skippable dispatch is refused -- falsifier: uv
+      run pytest tests/ci/test_release_downstream_notice_omn20001.py -q --no-cov -k release_notice
+      fails when the job is removed from release.yml'
+  - id: AC2
+    statement: 'AC2: the check runs in a required CI job and a pre-commit hook -- falsifier: uv run
+      pytest tests/ci/test_release_downstream_notice_omn20001.py -q --no-cov -k notice_wired fails
+      when the CI step or the hook is removed'
+evidence_requirements:
+- kind: tests
+  description: The release workflow carries the notice job and each planted violation is refused.
+  command: uv run pytest tests/ci/test_release_downstream_notice_omn20001.py -q --no-cov -k release_notice
+- kind: tests
+  description: The check is a named CI step and a pre-commit hook.
+  command: uv run pytest tests/ci/test_release_downstream_notice_omn20001.py -q --no-cov -k notice_wired
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn20001-release-notice
+  description: The release workflow carries the notice job and each planted violation is refused.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_release_downstream_notice_omn20001.py -q --no-cov -k release_notice
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC1
+- id: dod-omn20001-notice-wired
+  description: The check is a named CI step and a pre-commit hook.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_release_downstream_notice_omn20001.py -q --no-cov -k notice_wired
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC2
