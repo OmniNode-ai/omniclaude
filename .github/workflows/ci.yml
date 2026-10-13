@@ -137,6 +137,7 @@ jobs:
           tests/scripts/test_gh_lane_read_guard.py
           tests/scripts/test_gh_lane_write_guard.py
           tests/scripts/test_gh_shim_refusal_row_omn21020.py
+          tests/scripts/test_gh_refusal_names_onex_scm.py
           -q --no-cov
       - name: Verify a bad plugin version is refused and one bot bump PR is kept (OMN-20710)
         run: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov

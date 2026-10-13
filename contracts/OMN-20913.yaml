@@ -1,0 +1,50 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20913
+title: "The gh shim's refusal of a lane GitHub read names the onex scm verb that replaces it"
+summary: >
+  The gh shim refuses a GitHub read from a lane through the PR-state guard (OMN-19856)
+  and the strict lane read guard (OMN-20911). Each of those refusals now prints one
+  line, "Use instead: onex scm <verb> ...", chosen from the refused call's class and
+  endpoint; a read no onex scm verb serves says so. The line is added after the REFUSED
+  line and before the existing local readers. No guard decision changes: no read is
+  newly refused or newly allowed. The verbs pr-commits, file-read, commit-view and
+  commit-checks are added to onex scm in omnimarket by the sibling change for this
+  ticket; the omnimarket contract for OMN-20913 binds AC1 there. This contract declares
+  only the shim's refusal text and does not bind any other criterion of the ticket.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20913-shim-names-the-verb
+    statement: Each lane read the gh shim refuses names the onex scm verb that replaces it, or says that no verb serves it.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: a refused PR-state read and a refused strict lane read each print exactly one "Use instead: onex scm <verb>" line, before the local readers, for pr view, pr checks, pr list, pr diff, run view, run list, run download, release list and the gh api shapes for pulls, pull commits, reviews, check-runs by sha, commits, contents, actions runs and artifacts, branch protection and releases, and a read no verb serves prints no such line -- falsifier: uv run pytest tests/scripts/test_gh_refusal_names_onex_scm.py fails 29 of 30 against the shim before this change'
+evidence_requirements:
+  - kind: tests
+    description: The shim refusal names the onex scm verb for each refused read shape, in both guards, and an allowed exact-head check prints no such line.
+    command: uv run pytest tests/scripts/test_gh_refusal_names_onex_scm.py -q --no-cov
+  - kind: tests
+    description: The lane read, write, fallback, refusal-row and PR-state guard suites still pass with the new line in place.
+    command: uv run pytest tests/scripts/test_gh_lane_fallback.py tests/scripts/test_gh_lane_read_fallback.py tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py tests/scripts/test_gh_pr_state_read_guard.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn20913-shim-ac1-refusal-names-the-verb
+    description: Each refused lane read names its onex scm verb, or says none serves it, in the PR-state and strict lane read guards, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_refusal_names_onex_scm.py -q --no-cov
+    binds_ac:
+      - AC1
+  - id: dod-omn20913-shim-ac1-guards-unchanged
+    description: The lane read, write, fallback, refusal-row and PR-state guard suites pass with the new line in place, at this head.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_gh_lane_fallback.py tests/scripts/test_gh_lane_read_fallback.py tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py tests/scripts/test_gh_pr_state_read_guard.py -q --no-cov
+    binds_ac:
+      - AC1

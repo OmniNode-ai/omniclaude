@@ -766,6 +766,57 @@ _prs_exact_head() {
   return 0
 }
 
+# The `onex scm` verb that replaces the refused read (OMN-20913): prints one
+# "Use instead:" line for the argv class in $_cls and $_endpoint, with the owner,
+# repository and PR number _prs_resolve found (so call that first). A read no verb
+# serves says so and points at `onex scm verbs`, which lists what this host's onex
+# serves. Every verb it names answers from the PR watcher state and the canonical clones
+# first and the source-control gateway node second; none reads GitHub from the lane.
+_scm_replacement() {
+  local o="${_rs_owner:-OmniNode-ai}" r="${_rs_repo:-<repo>}" n="${_rs_n:-<n>}"
+  local rp verb="" ep
+  rp="$o/$r"
+  ep="${_endpoint#https://api.github.com/}"
+  ep="${ep#/}"
+  if [ "$_cls" = "api" ]; then
+    case "$ep" in
+      repos/*/*/pulls/*/commits*) verb="pr-commits $rp#$n" ;;
+      repos/*/*/pulls/*/reviews*|repos/*/*/pulls/*/requested_reviewers*) verb="pr-review $rp#$n" ;;
+      repos/*/*/pulls/*/files*) verb="pr-commits $rp#$n   (the diff itself: git -C \$OMNI_HOME/$r diff origin/<base>...<head>)" ;;
+      repos/*/*/pulls/[0-9]*) verb="pr-view $rp#$n   (mergeability and head: pr-status; the body: pr-view --source bus)" ;;
+      repos/*/*/pulls) verb="pr-list $rp   (merged PRs and every head: pr-heads $rp)" ;;
+      repos/*/*/commits/*/check-runs*|repos/*/*/commits/*/check-suites*|repos/*/*/commits/*/status) verb="commit-checks $rp --sha <sha>" ;;
+      repos/*/*/commits/*/pulls) verb="pr-heads $rp --head-sha <sha>" ;;
+      repos/*/*/commits/*) verb="commit-view $rp --ref <sha-or-branch>" ;;
+      repos/*/*/contents/*) verb="file-read $rp --path <path> --ref <ref>" ;;
+      repos/*/*/check-runs/*) verb="job-log $rp --job-id <id>   (the id is in the watcher record, ci.detail)" ;;
+      repos/*/*/actions/runs/*/jobs*|repos/*/*/actions/runs/[0-9]*) verb="run-view $rp --run-id <id>" ;;
+      repos/*/*/actions/runs*|repos/*/*/actions/workflows/*/runs*) verb="run-list $rp --branch <branch> --head-sha <sha>" ;;
+      repos/*/*/actions/jobs/*/logs) verb="job-log $rp --job-id <id>" ;;
+      repos/*/*/actions/jobs/*) verb="run-view $rp --run-id <run-id>" ;;
+      repos/*/*/actions/artifacts*) verb="run-download $rp --run-id <id>" ;;
+      repos/*/*/branches/*/protection*|repos/*/*/rules/branches/*) verb="branch-protection $rp --branch <branch>" ;;
+      repos/*/*/releases*|repos/*/*/tags) verb="release-list $rp" ;;
+    esac
+  else
+    case "$_cls" in
+      "pr view") verb="pr-view $rp#$n   (mergeability and head: pr-status; reviews: pr-review; branch to ticket: pr-ticket)" ;;
+      "pr checks") verb="pr-checks $rp#$n" ;;
+      "pr list") verb="pr-list $rp   (merged PRs and every head: pr-heads $rp)" ;;
+      "pr diff") verb="pr-commits $rp#$n   (the diff itself: git -C \$OMNI_HOME/$r diff origin/<base>...<head>)" ;;
+      "run view") verb="run-view $rp --run-id <id>   (a failing job's log: job-log $rp --job-id <id>)" ;;
+      "run list") verb="run-list $rp --branch <branch>" ;;
+      "run download") verb="run-download $rp --run-id <id>" ;;
+      "release list"|"release view") verb="release-list $rp" ;;
+    esac
+  fi
+  if [ -n "$verb" ]; then
+    printf '%s\n' "Use instead: onex scm $verb   (onex scm verbs lists every verb this host serves)"
+  else
+    printf '%s\n' "No onex scm verb serves this read yet (onex scm verbs lists every verb this host serves); read the canonical clone with git instead."
+  fi
+}
+
 # Resolve the owner, repository and PR number a refused argv names, for the
 # alternatives text. Sets _rs_owner, _rs_repo, _rs_n; each is "" when unresolved.
 _prs_resolve() {
@@ -978,6 +1029,7 @@ if [ "$_prs_guarded" -eq 1 ] && ! _prs_caller_allowed && ! _prs_exact_head "$@";
   printf '%s\n' \
     "REFUSED (OMN-19856): $_prs_class is a PR-state read; GitHub is for mutations and the declared exact-head check only (RULING 2026-09-27T18:05:21Z)." >&2
   [ -n "$_prs_why" ] && printf '%s\n' "Declared exact-head check failed: $_prs_why" >&2
+  _scm_replacement >&2
   printf '%s\n' \
     'Read it locally instead:' \
     "  python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr $_prs_o/$_prs_r#$_prs_n   (--json for the whole record, --status for the state file's age)" \
@@ -1160,6 +1212,7 @@ _lane_read_strict() {
 
 # The local readers a lane read is pointed at, on a strict refusal and a spent budget.
 _lane_read_alternatives() {
+  _scm_replacement >&2
   printf '%s\n' \
     'Read it locally instead:' \
     "  PR state, checks, reviews, mergeability: python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr ${_rs_owner:-OmniNode-ai}/$_lr_r#<n>   (--status for the state file's age; the same records are on the bus as onex.evt.omnimarket.pr-state-observed.v1)" \
