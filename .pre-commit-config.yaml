@@ -37,6 +37,14 @@ repos:
         files: '^(\.github/(imperative-contract-allowlist\.yaml|workflows/(imperative-contract-guard|ci)\.yml)|\.pre-commit-config\.yaml|contracts/OMN-21006\.yaml|tests/ci/test_imperative_contract_guard_caller_omn21006\.py)$'
         stages: [pre-commit]
 
+      - id: plugin-version-bump-tests
+        name: Bad plugin version refused, one bot bump PR (OMN-20710)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/(plugin-version-bump|plugin-version-bump-gate|ci)\.yml|scripts/validation/validate_plugin_version_bump\.py|tests/ci/test_plugin_version_bump_gate\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: anthropic-key-prefix-workflows
         name: No Anthropic key value in a workflow (OMN-20967)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_anthropic_key_prefix_workflows_omn20967.py -q --no-cov

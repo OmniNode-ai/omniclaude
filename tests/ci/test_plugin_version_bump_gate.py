@@ -458,3 +458,286 @@ def test_workflow_shape_has_one_app_authenticated_dev_bump() -> None:
     assert app["with"]["app-id"] == "${{ secrets.ONEXBOT_OCC_APP_ID }}"
     assert app["with"]["permission-workflows"] == "write"
     assert "GITHUB_TOKEN" not in WORKFLOW.read_text()
+
+
+VALIDATOR = REPO_ROOT / "scripts/validation/validate_plugin_version_bump.py"
+GATE_WORKFLOW = REPO_ROOT / ".github/workflows/plugin-version-bump-gate.yml"
+
+
+def _run_validator(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """The validator as the gate workflow runs it: its CLI, in its own process."""
+    return subprocess.run(
+        [sys.executable, str(VALIDATOR), "--repo-root", str(repo), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**_git_env(repo), "PYTHONPATH": ""},
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("plugin", "marketplace", "kind"),
+    [
+        ("0.9.9", "0.9.9", "LOWERED_VERSION"),
+        ("1.0.0", "1.0.0", None),
+        ("2.x", "2.x", "BROKEN_VERSION"),
+        ("1.0.1", "1.0.0", "MARKETPLACE_SKEW"),
+        ("1.0.1", "1.0.1", None),
+    ],
+    ids=["lowered", "unchanged", "malformed", "inconsistent", "raised"],
+)
+def test_bad_version_refused(
+    repo: Path, plugin: str, marketplace: str, kind: str | None
+) -> None:
+    """OMN-20710 AC1: the gate's CLI exits 1 for a lowered, malformed or inconsistent version.
+
+    The two rows that carry no finding are the positive controls: the same
+    command exits 0 on an unchanged and on a raised, agreeing version, so the
+    refusals above are the validator's verdict and not a harness failure.
+    """
+    (repo / "plugins/onex/skills/a/SKILL.md").write_text("two\n")
+    _write_versions(repo, plugin, marketplace)
+    _commit(repo)
+    proc = _run_validator(repo, "--base", "dev")
+    if kind is None:
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert proc.stderr == ""
+    else:
+        assert proc.returncode == 1, proc.stdout + proc.stderr
+        assert kind in proc.stderr
+        assert "PRs no longer bump" in proc.stderr
+
+
+@pytest.mark.unit
+def test_bad_version_refused_by_the_ci_gate_and_the_precommit_hook() -> None:
+    """The CI gate and the pre-commit hook run the validator that refuses (AC1)."""
+    gate = yaml.safe_load(GATE_WORKFLOW.read_text())
+    gate_job = gate["jobs"]["plugin-version-bump-gate"]
+    run = next(
+        s["run"]
+        for s in gate_job["steps"]
+        if "validate_plugin_version_bump" in s.get("run", "")
+    )
+    assert "scripts/validation/validate_plugin_version_bump.py --base" in run
+    assert "--bump-to-base" not in run
+    assert gate_job["name"] == "Plugin Version Bump Gate"
+    hooks = {
+        hook["id"]: hook
+        for repo_cfg in yaml.safe_load(
+            (REPO_ROOT / ".pre-commit-config.yaml").read_text()
+        )["repos"]
+        for hook in repo_cfg["hooks"]
+    }
+    entry = hooks["plugin-version-bump-gate"]["entry"]
+    assert "validate_plugin_version_bump.py --base origin/dev" in entry
+    assert hooks["plugin-version-bump-gate"]["always_run"] is True
+
+
+def _publish_step() -> dict:
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+    steps = workflow["jobs"]["plugin-version-bump"]["steps"]
+    return next(
+        s for s in steps if s.get("name", "").startswith("Open, update or close")
+    )
+
+
+def _bump_step() -> dict:
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+    return next(
+        s
+        for s in workflow["jobs"]["plugin-version-bump"]["steps"]
+        if s.get("id") == "bump"
+    )
+
+
+_FAKE_GH = """#!/bin/bash
+# A stand-in for the pull request API: one state directory, no network.
+state="$FAKE_GH_STATE"
+case "$1 $2" in
+  "pr list") cat "$state/open" 2>/dev/null || true ;;
+  "pr create") echo create >> "$state/calls"; echo 1 > "$state/open"; echo "https://example.invalid/pull/1" ;;
+  "pr close") echo close >> "$state/calls"; rm -f "$state/open" ;;
+  *) echo "unexpected gh call: $*" >&2; exit 1 ;;
+esac
+"""
+
+
+class _BotHarness:
+    """Run the workflow's two real shell steps against a local origin and a fake gh."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.origin = root / "origin.git"
+        self.seed = root / "seed"
+        self.state = root / "gh-state"
+        self.state.mkdir()
+        shim = root / "shim"
+        shim.mkdir()
+        (shim / "python").symlink_to(sys.executable)
+        gh = shim / "gh"
+        gh.write_text(_FAKE_GH)
+        gh.chmod(0o755)
+        self.shim = shim
+        self.runs = 0
+        self.branch = yaml.safe_load(WORKFLOW.read_text())["jobs"][
+            "plugin-version-bump"
+        ]["env"]["BUMP_BRANCH"]
+        _git(root, "init", "-q", "--bare", "-b", "dev", str(self.origin))
+        self.seed.mkdir()
+        _git(self.seed, "init", "-q", "-b", "dev")
+        _write_versions(self.seed, "1.0.0")
+        skill = self.seed / "plugins/onex/skills/a/SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text("one\n")
+        validator = self.seed / "scripts/validation/validate_plugin_version_bump.py"
+        validator.parent.mkdir(parents=True)
+        shutil.copyfile(VALIDATOR, validator)
+        _git(self.seed, "add", "-A")
+        _git(self.seed, "commit", "-q", "-m", "base")
+        _git(self.seed, "remote", "add", "origin", str(self.origin))
+        _git(self.seed, "push", "-q", "origin", "dev")
+
+    def merge_to_dev(self, text: str, marketplace: str | None = None) -> None:
+        """One more change on dev, as a squash merge would leave it."""
+        (self.seed / "plugins/onex/skills/a/SKILL.md").write_text(text)
+        if marketplace is not None:
+            (self.seed / MARKETPLACE_JSON).write_text(marketplace)
+        _git(self.seed, "add", "-A")
+        _git(self.seed, "commit", "-q", "-m", f"merge {text.strip()}")
+        _git(self.seed, "push", "-q", "origin", "dev")
+
+    def _env(self, work: Path, **extra: str) -> dict[str, str]:
+        return {
+            **_git_env(work),
+            "PATH": f"{self.shim}:{os.environ['PATH']}",
+            "RUNNER_TEMP": str(self.root / f"runner-temp-{self.runs}"),
+            "GITHUB_OUTPUT": str(self.root / f"output-{self.runs}"),
+            "FAKE_GH_STATE": str(self.state),
+            **extra,
+        }
+
+    def run_workflow(self) -> Path:
+        """One workflow run at the current dev tip: the bump step, then the publish step."""
+        self.runs += 1
+        work = self.root / f"run-{self.runs}"
+        _git(self.root, "clone", "-q", "--branch", "dev", str(self.origin), str(work))
+        env = self._env(work)
+        Path(env["RUNNER_TEMP"]).mkdir()
+        bump = subprocess.run(
+            ["bash", "-c", _bump_step()["run"]],
+            cwd=work,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        assert bump.returncode == 0, bump.stdout + bump.stderr
+        changed = (
+            Path(env["GITHUB_OUTPUT"]).read_text().strip().removeprefix("changed=")
+        )
+        publish = subprocess.run(
+            ["bash", "-c", _publish_step()["run"]],
+            cwd=work,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={
+                **env,
+                "BUMP_BRANCH": self.branch,
+                "GH_TOKEN": "unused",
+                "REPO": "OmniNode-ai/omniclaude",
+                "CHANGED": changed,
+                "RUN_URL": f"https://example.invalid/run/{self.runs}",
+                "GITHUB_WORKFLOW": "Plugin Version Bump",
+            },
+        )
+        assert publish.returncode == 0, publish.stdout + publish.stderr
+        return work
+
+    @property
+    def creates(self) -> int:
+        calls = self.state / "calls"
+        return calls.read_text().split().count("create") if calls.exists() else 0
+
+    @property
+    def closes(self) -> int:
+        calls = self.state / "calls"
+        return calls.read_text().split().count("close") if calls.exists() else 0
+
+    @property
+    def open_prs(self) -> int:
+        return 1 if (self.state / "open").exists() else 0
+
+    def branch_tip(self) -> str:
+        return _git(
+            self.root, "ls-remote", str(self.origin), f"refs/heads/{self.branch}"
+        ).split()[0]
+
+
+@pytest.mark.unit
+def test_single_bump_pr_across_concurrent_dev_merges(tmp_path: Path) -> None:
+    """OMN-20710 AC2: successive dev merges leave one bot bump PR, rebuilt in place.
+
+    Each workflow run is the real bump step and the real publish step against a
+    local origin, with only the pull request API replaced. The workflow's
+    concurrency group queues runs one at a time, so a burst of dev merges is a
+    sequence of these runs at successive dev tips.
+    """
+    bot = _BotHarness(tmp_path)
+
+    # Dev merge 1: no bump PR exists, so the run opens the one PR.
+    bot.merge_to_dev("two\n")
+    first = bot.run_workflow()
+    assert (bot.creates, bot.open_prs) == (1, 1)
+    assert _versions(first) == ("1.0.1", "1.0.1")
+    first_tip = bot.branch_tip()
+    assert first_tip == _git(first, "rev-parse", "HEAD").strip()
+
+    # Dev merge 2 touches the same marketplace line the bump edits: the branch no
+    # longer merges cleanly, so the run rebuilds it in place and opens no second PR.
+    bot.merge_to_dev(
+        "three\n",
+        marketplace=json.dumps(
+            {"plugins": [{"name": "onex", "version": "1.0.0", "description": "x"}]}
+        ),
+    )
+    second = bot.run_workflow()
+    assert (bot.creates, bot.open_prs) == (1, 1)
+    assert bot.branch_tip() == _git(second, "rev-parse", "HEAD").strip()
+    assert bot.branch_tip() != first_tip
+    assert _versions(second) == ("1.0.1", "1.0.1")
+
+    # Dev merge 3 changes nothing the bump touches: the run finds the branch
+    # already carrying the bump and neither pushes nor opens another PR.
+    bot.merge_to_dev("four\n")
+    rebuilt_tip = bot.branch_tip()
+    bot.run_workflow()
+    assert (bot.creates, bot.open_prs) == (1, 1)
+    assert bot.branch_tip() == rebuilt_tip
+
+    # The bump PR merges: dev carries the version, so the run closes the PR.
+    bot.merge_to_dev("four\n", marketplace=(second / MARKETPLACE_JSON).read_text())
+    _git(bot.seed, "checkout", "-q", "dev", "--", MARKETPLACE_JSON)
+    (bot.seed / PLUGIN_JSON).write_text(
+        json.dumps({"name": "onex", "version": "1.0.1"})
+    )
+    _git(bot.seed, "add", "-A")
+    _git(bot.seed, "commit", "-q", "-m", "chore: post-merge plugin version bump")
+    _git(bot.seed, "push", "-q", "origin", "dev")
+    bot.run_workflow()
+    assert (bot.creates, bot.closes, bot.open_prs) == (1, 1, 0)
+
+
+@pytest.mark.unit
+def test_single_bump_pr_is_one_fixed_branch_under_one_concurrency_group() -> None:
+    """The structural half of AC2: one branch name, runs queued, a PR opened only when none is."""
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+    assert workflow["concurrency"] == {
+        "group": "plugin-version-bump",
+        "cancel-in-progress": False,
+    }
+    run = _publish_step()["run"]
+    assert run.count("gh pr create") == 1
+    assert run.index('if [ -n "$open" ]') < run.index("gh pr create")
+    assert '--head "$BUMP_BRANCH"' in run
