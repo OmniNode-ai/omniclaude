@@ -109,7 +109,7 @@ repos:
   # this block keeps check-stub-implementations only, because that
   # validator's source differs between 63635097 and the OMN-20304 commit.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 031148215620031436cba30619bbae67c0bb38ad # pragma: allowlist secret
+    rev: 70f7ceda44af968ccf26264ecd429cfd27503971 # pragma: allowlist secret
     hooks:
       # Shape-gate independence (OMN-20298): a shape-gate detector job never waits on
       # the change-control preflight and never reads its result. BLOCKING, zero
@@ -176,7 +176,7 @@ repos:
   # The new pin reads allowlist-path from core's shrink-only reusable; CI and
   # the shared validator pins move together to satisfy the pin-parity check.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 031148215620031436cba30619bbae67c0bb38ad  # pragma: allowlist secret
+    rev: 70f7ceda44af968ccf26264ecd429cfd27503971  # pragma: allowlist secret
     hooks:
       - id: check-hardcoded-model-config-compute
       - id: canonical-file-shape
