@@ -550,6 +550,10 @@ def test_bad_version_refused_and_single_bump_pr_cases_run_in_ci_and_precommit() 
         )["repos"]
         for hook in repo_cfg["hooks"]
     }
+    # `plugin-version-bump-gate` is the existing hook in .pre-commit-config.yaml
+    # (already on dev, id: plugin-version-bump-gate, always_run: true); only
+    # `plugin-version-bump-tests` is added beside it by this change.
+    assert "plugin-version-bump-gate" in hooks, "the existing gate hook is missing"
     entry = hooks["plugin-version-bump-gate"]["entry"]
     assert "validate_plugin_version_bump.py --base origin/dev" in entry
     assert hooks["plugin-version-bump-gate"]["always_run"] is True
