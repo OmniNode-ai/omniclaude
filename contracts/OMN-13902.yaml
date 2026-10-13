@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 ticket_id: OMN-13902
 title: sibling version alignment for omniclaude
-summary: OMN-13902 is sibling version alignment through the sibling-lock-refresh workflow. This contract validates omniclaude sibling-refresh behavior and lock resolution directly. The sibling-lock-refresh workflow checks out sources, advances clone-governed revs, refreshes package locks, and opens a bot pull request, performing no deploy, container restart, docker compose against .201, image build/push, rpk produce, or live cluster/runtime mutation.
+summary: OMN-13902 is sibling version alignment through the sibling-lock-refresh workflow. This contract validates omniclaude sibling-refresh behavior and lock resolution directly. The sibling-lock-refresh workflow checks out sources, advances clone-governed revs, refreshes package locks, and opens a bot pull request, performing no deploy, container restart, docker compose against a lab host, image build/push, rpk produce, or live cluster/runtime mutation.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -14,18 +14,18 @@ requirements:
     statement: A strict descendant is accepted, a non-descendant is refused without writing, both dependency and source rev occurrences are rewritten together, and only omnimarket is declared clone-governed.
     acceptance:
       - id: AC1
-        statement: 'AC1: A strict descendant is accepted, a non-descendant is refused without writing, both dependency and source rev occurrences are rewritten together, and only omnimarket is declared clone-governed. -- falsifier: uv run pytest tests/test_git_source_pins.py -q --no-cov'
+        statement: 'AC1: A strict descendant is accepted, a non-descendant is refused without writing, both dependency and source rev occurrences are rewritten together, and only omnimarket is declared clone-governed. -- falsifier: grep -q "@35c3c7d1b3727f599b79176879ed720c52ee9c51" pyproject.toml && uv run pytest tests/test_git_source_pins.py -q --no-cov'
   - id: req-sibling-lock-resolution
     statement: uv.lock resolves the declared dependencies and git source revs without rewriting.
     acceptance:
       - id: AC2
-        statement: 'AC2: uv.lock resolves the declared dependencies and git source revs without rewriting. -- falsifier: uv lock --check'
+        statement: 'AC2: uv.lock resolves the declared dependencies and git source revs without rewriting. -- falsifier: grep -q "rev=35c3c7d1b3727f599b79176879ed720c52ee9c51" uv.lock && uv lock --check'
 evidence_requirements:
   - kind: tests
-    command: uv run pytest tests/test_git_source_pins.py -q --no-cov
+    command: grep -q "@35c3c7d1b3727f599b79176879ed720c52ee9c51" pyproject.toml && uv run pytest tests/test_git_source_pins.py -q --no-cov
     description: Validates forward-only git refresh behavior including descendant acceptance, non-descendant refusal, and rev rewriting.
   - kind: ci
-    command: uv lock --check
+    command: grep -q "rev=35c3c7d1b3727f599b79176879ed720c52ee9c51" uv.lock && uv lock --check
     description: Verifies that uv.lock resolves the declared dependencies and git source revs without rewriting.
 dod_evidence:
   - id: dod-omniclaude-sibling-refresh-behavior
@@ -34,8 +34,8 @@ dod_evidence:
       - AC1
     description: Validates forward-only git refresh behavior including descendant acceptance, non-descendant refusal, and rev rewriting.
     checks:
-      - check_type: test_passes
-        check_value: uv run pytest tests/test_git_source_pins.py -q --no-cov
+      - check_type: command
+        check_value: grep -q "@35c3c7d1b3727f599b79176879ed720c52ee9c51" pyproject.toml && uv run pytest tests/test_git_source_pins.py -q --no-cov
   - id: dod-omniclaude-sibling-lock-resolution
     source: manual
     binds_ac:
@@ -43,4 +43,4 @@ dod_evidence:
     description: Verifies that uv.lock resolves the declared dependencies and git source revs without rewriting.
     checks:
       - check_type: command
-        check_value: uv lock --check
+        check_value: grep -q "rev=35c3c7d1b3727f599b79176879ed720c52ee9c51" uv.lock && uv lock --check
