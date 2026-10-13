@@ -26,6 +26,10 @@ Attribution:
     call to the one sub-agent whose Bash tool call was running when the call
     was made, and names it by its dispatch label. A call that no running tool
     call, or more than one, could have made stays on the session.
+  * ``lane_source=role``: a known ancestor role named the caller
+    (``role:<name>``); counted as named.
+  * ``lane_source=module``: the caller was an interpreter running
+    ``-m <module>`` (``module:<name>``); counted as named.
   * ``lane_source=script``: the caller was an interpreter running a named
     script (``script:<basename>``); counted as named.
   * ``lane_source=parent``: neither was set (a launchd job, a Codex lane, a
@@ -61,6 +65,10 @@ DEFAULT_COST = 1
 FREE_METHODS = frozenset({"LOCAL"})
 # A call the shim answered from its cache or from the PR watcher state (OMN-19479) spent no request.
 ANSWERED_LOCALLY = frozenset({"hit", "watcher"})
+# Every lane_source the shim names a lane for; only ``parent`` means none was found.
+NAMED_SOURCES = frozenset(
+    {"env", "agent-env", "registry", "session", "role", "module", "script"}
+)
 
 _DURATION = re.compile(r"^(\d+)([smhd])$")
 
@@ -272,7 +280,7 @@ def build_report(
         row["graphql_calls"] += 1 if is_graphql(rec) else 0
         row["cache_hits"] += 1 if rec.get("cache") == "hit" else 0
         row["app_calls"] += 1 if rec.get("identity") == "app" else 0
-        if source not in ("env", "agent-env", "registry", "session", "script"):
+        if source not in NAMED_SOURCES:
             unattributed_calls += 1
             unattributed_cost += cost
     total_calls = len(records)

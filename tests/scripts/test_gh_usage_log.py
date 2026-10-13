@@ -552,6 +552,48 @@ def test_report_weights_per_lane_and_names_unattributed(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_report_counts_every_source_the_shim_names_as_attributed(
+    tmp_path: Path,
+) -> None:
+    """OMN-19585: every lane_source the shim names a lane for is attributed.
+
+    The shim also writes `module` (python -m <module>) and `role` (a known
+    ancestor role); only `parent` means neither was found.
+    """
+    mod = _load_report()
+    base = datetime(2026, 10, 13, 10, 0, tzinfo=UTC)
+    log_dir = tmp_path / "gh-usage"
+    log_dir.mkdir()
+    sources = {
+        "env": "lane-a",
+        "agent-env": "lane-b",
+        "registry": "lane-c",
+        "session": "session:s1",
+        "role": "role:landing",
+        "module": "module:pytest",
+        "script": "script:prune.py",
+        "parent": "parent:bash",
+    }
+    with (log_dir / f"{base.date().isoformat()}.jsonl").open("w") as fh:
+        for i, (source, lane) in enumerate(sources.items()):
+            row = {
+                "ts": (base + timedelta(minutes=i)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "exit": 0,
+                "lane": lane,
+                "lane_source": source,
+                "cls": "api",
+                "method": "GET",
+                "cache": "none",
+            }
+            fh.write(json.dumps(row) + "\n")
+    since, until = base, base + timedelta(hours=1)
+    rep = mod.build_report(mod.load_records(log_dir, since, until), since, until, None)
+    assert rep["total_calls"] == len(sources)
+    assert rep["unattributed_calls"] == 1
+    assert rep["attributed_share_of_calls"] == 0.875
+
+
+@pytest.mark.unit
 def test_report_cli_json_and_window(tmp_path: Path) -> None:
     base = datetime(2026, 9, 25, 10, 0, tzinfo=UTC)
     log_dir = tmp_path / "gh-usage"
