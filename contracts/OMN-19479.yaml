@@ -1,0 +1,50 @@
+schema_version: "1.0.0"
+ticket_id: OMN-19479
+title: "The harness PR-link lookup and the statusline read the PR watcher's state instead of polling GitHub"
+summary: >
+  The gh user shim answers the harness PR-link lookup from the PR watcher's
+  state file when it is fresh and names exactly one open PR for the branch, and
+  the statusline builds its open-PR counts from the same file; each runs the real
+  gh (or records a visible failure) only when the state cannot answer.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-pr-link-and-statusline-read-the-watcher
+    statement: "The harness PR-link lookup and the statusline spend no GitHub request while the PR watcher's state is fresh."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: a PR-link lookup (`gh pr view [<branch>] --json url` or `--json number,url,state`) for a branch with exactly one open PR in a fresh watcher state makes no real gh call and prints the JSON gh would print -- falsifier: uv run pytest tests/scripts/test_gh_user_shim.py -q -k watcher
+      - id: "AC2"
+        statement: |-
+          AC2: a stale or missing state, a branch with no open PR or more than one, a PR number, URL or owner ref, and every other command reach the real gh unchanged -- falsifier: uv run pytest tests/scripts/test_gh_user_shim.py -q -k "watcher or passthrough"
+      - id: "AC3"
+        statement: |-
+          AC3: with a watcher state file the statusline refresh makes zero gh calls, counts open PRs by base from the state, and records an absent repository, a stale tick or an unreadable file as a failure rather than a zero -- falsifier: bash tests/hooks/test_statusline_pr_segment.sh
+evidence_requirements:
+  - kind: tests
+    description: "Shim watcher-first lookup, its misses, and the statusline watcher-state refresh"
+    command: "uv run pytest tests/scripts/test_gh_user_shim.py tests/scripts/test_gh_usage_log.py tests/hooks/test_statusline_pr_segment.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn19479-watcher-lookup
+    description: "The shim answers the link lookup from a fresh watcher state with no real gh call and falls through to the real gh on every miss shape"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_gh_user_shim.py -q -k watcher"
+    binds_ac:
+      - AC1
+      - AC2
+  - id: dod-omn19479-statusline-watcher
+    description: "The statusline segment is built from the watcher state with zero gh calls; a missing repository, a stale tick and an unreadable file render as unreachable"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_statusline_pr_segment.py -q"
+    binds_ac:
+      - AC3

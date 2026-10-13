@@ -15,6 +15,11 @@
 #   gh pr view [<branch>] --json url
 #   gh pr view [<branch>] --json number,url,state
 #
+# Before it reads that cache the shim asks the PR watcher's state file (OMN-19479): a fresh
+# state naming exactly one open PR whose head branch is the one asked about answers the
+# lookup with no GitHub call, logged cache=watcher; anything else (no state, a stale
+# tick, no jq, a branch with no open PR) runs the real gh as before.
+#
 # Nothing else is cached. A PR mutation that can change those answers
 # (create, ready, close, reopen, merge) purges the cache before it runs.
 # A cached "no pull requests found" answer is kept like a positive one; any
@@ -1645,6 +1650,31 @@ if [ "$_method" = "WRITE" ] && _lw_lane && _lw_covered "$@" && ! _lw_allowed_ide
 fi
 unset _lw_why _lw_scm _lw_op _rs_owner _rs_repo _rs_n
 
+# The harness PR-link lookup, answered from the PR watcher's state file (OMN-19479). Prints
+# the JSON gh would print and returns 0 only when the state is fresher than
+# ONEX_PR_WATCHER_MAX_AGE_S (default 600 s) and names exactly one OPEN PR of <repo_id> (an
+# OmniNode-ai repository) whose head branch is <branch>; any other case returns 1 and the
+# caller runs the real gh. $3 is the --json field list, one of the two cacheable shapes.
+_watcher_link() {
+  local repo_id="$1" branch="$2" fields="$3" state max name out
+  command -v jq >/dev/null 2>&1 || return 1
+  state="${ONEX_PR_WATCHER_STATE:-${OMNI_HOME:+$OMNI_HOME/.claude_scratch/pr-watcher/state.json}}"
+  [ -n "$state" ] && [ -r "$state" ] || return 1
+  max="${ONEX_PR_WATCHER_MAX_AGE_S:-600}"
+  case "$max" in ""|*[!0-9]*) max=600 ;; esac
+  case "$repo_id" in OmniNode-ai/?*) name="${repo_id#OmniNode-ai/}" ;; *) return 1 ;; esac
+  out="$(jq -c --arg repo "$name" --arg branch "$branch" --arg fields "$fields" \
+    --argjson now "$(date +%s)" --argjson max "$max" '
+      select(($now - (try (.last_tick | fromdateiso8601) catch 0)) <= $max)
+      | [.prs[]? | select(.facts.repo == $repo and .facts.state == "OPEN" and .facts.head_ref == $branch)] as $m
+      | select(($m | length) == 1)
+      | "https://github.com/OmniNode-ai/\($repo)/pull/\($m[0].facts.number)" as $url
+      | if $fields == "url" then {url: $url} else {number: $m[0].facts.number, state: "OPEN", url: $url} end
+    ' "$state" 2>/dev/null)" || return 1
+  [ -n "$out" ] || return 1
+  printf '%s\n' "$out"
+}
+
 # A PR mutation can change the cached answers for its repository: drop that
 # repository's entries before it runs (every entry when the repository is
 # unknown). Entries are named <repo hash>.<key>, so lookups in other
@@ -1678,6 +1708,19 @@ if _cacheable "$@"; then
   if [ -n "$_top" ] && [ -n "$_branch" ]; then
     _repo_id="$(_origin_repo)"
     [ -n "$_repo_id" ] || _repo_id="$_top"
+    # Only a branch name, or none, is looked up in the watcher state: a PR number, a URL or an
+    # owner:branch ref names a PR the state is not asked about, so it goes to the cache and gh.
+    case "$_branch_arg" in
+      "") _wl_ok=1 ;;
+      *[!A-Za-z0-9._/-]*) _wl_ok=0 ;;
+      *[!0-9]*) _wl_ok=1 ;;
+      *) _wl_ok=0 ;;
+    esac
+    if [ "$_wl_ok" -eq 1 ] && _wl_out="$(_watcher_link "$_repo_id" "$_branch" "$_fields")"; then
+      printf '%s\n' "$_wl_out"
+      _log 0 watcher
+      exit 0
+    fi
     _key="$(_sha "$_repo_id" | cut -c1-16).$(_sha "$_top|$_branch|$_fields")"
     _entry="$_cache_root/$_key"
     _now="$(date +%s)"

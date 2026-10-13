@@ -37,6 +37,9 @@ export KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:1
 export OMNICLAUDE_MODE=full
 # This suite drives the built-in segment; a locally installed extension must not replace it.
 export ONEX_STATUSLINE_PR_EXT=none
+# OMN-19479: a host with a PR watcher state file reads counts from it, not from gh. This suite's
+# gh-path cases run as a host with no state file; the watcher cases below point it at a fixture.
+export ONEX_PR_WATCHER_STATE="$WORK/no-such-watcher-state.json"
 
 make_gh_stub() {
   # $1 = mode: ok | fail_all | graphql_fail_rest_ok | absent
@@ -47,6 +50,7 @@ make_gh_stub() {
   cat > "$dir/gh" <<STUB
 #!/bin/bash
 mode="$mode"
+[ -n "\${GH_CALL_LOG:-}" ] && echo "\$*" >> "\$GH_CALL_LOG"
 case "\$1" in
   pr)  [ "\$mode" = "ok" ] && { echo '["dev","dev","main"]'; exit 0; }; exit 1 ;;
   api) case "\$mode" in
@@ -231,6 +235,90 @@ if wait_for_cache "$C_FALLBACK" 20; then
   esac
 else
   fail "the REST fallback writes a cache" "no cache at $C_FALLBACK"
+fi
+
+# --- OMN-19479: the counts come from the PR watcher's state file, not from gh ----
+
+echo "AC5 — with a PR watcher state file the segment is built with no gh call"
+
+NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Every repository the segment counts, read from the script itself so the fixture lists exactly the
+# set the refresh asks about.
+WATCHER_REPOS="$(grep -m1 '^  PR_REPOS=' "$STATUSLINE" | sed 's/^  PR_REPOS="//; s/"$//' | tr ' ' '\n' \
+  | sed 's/^[^:]*://; s/.*/"&":{"default_branch":"dev"}/' | paste -sd, -)"
+WATCHER_PRS='"omnibase_core#1":{"facts":{"repo":"omnibase_core","state":"OPEN","base":"dev"}},"omnibase_core#2":{"facts":{"repo":"omnibase_core","state":"OPEN","base":"dev"}},"omnibase_core#3":{"facts":{"repo":"omnibase_core","state":"MERGED","base":"dev"}},"omnibase_infra#4":{"facts":{"repo":"omnibase_infra","state":"OPEN","base":"main"}},"omnibase_infra#5":{"facts":{"repo":"omnibase_infra","state":"OPEN","base":"dev"}},"omnibase_infra#6":{"facts":{"repo":"omnibase_infra","state":"CLOSED","base":"main"}}'
+W_STATE="$WORK/watcher-state.json"
+printf '{"schema":1,"last_tick":"%s","repos":{%s},"prs":{%s}}' \
+  "$NOW_ISO" "$WATCHER_REPOS" "$WATCHER_PRS" > "$W_STATE"
+
+GH_LOG="$WORK/gh-calls.log"; : > "$GH_LOG"
+GH_WATCH="$(make_gh_stub ok)"
+C_WATCH="$WORK/watcher-cache.json"
+GH_CALL_LOG="$GH_LOG" PATH="$GH_WATCH:$PATH" ONEX_PR_WATCHER_STATE="$W_STATE" ONEX_STATUSLINE_PR_CACHE="$C_WATCH" \
+  bash "$STATUSLINE" <<< '{"workspace":{"project_dir":"'"$REPO_ROOT"'"},"model":{},"context_window":{}}' >/dev/null 2>&1
+if wait_for_cache "$C_WATCH" 20; then
+  core=$(jq -r '.repos.core' < "$C_WATCH")
+  infra=$(jq -r '.repos.infra' < "$C_WATCH")
+  st=$(jq -r '.status' < "$C_WATCH")
+  if [ "$core" = "0/2" ] && [ "$infra" = "1/1" ] && [ "$st" = "ok" ]; then
+    pass "open PRs are counted by base from the state file (merged and closed are not)"
+  else
+    fail "open PRs are counted by base from the state file" "core=$core infra=$infra status=$st"
+  fi
+else
+  fail "the watcher refresh writes a cache" "no cache at $C_WATCH"
+fi
+if [ ! -s "$GH_LOG" ]; then
+  pass "the refresh made zero gh calls"
+else
+  fail "the refresh made zero gh calls" "gh saw: $(cat "$GH_LOG")"
+fi
+
+# A repository the state does not list is unreachable, never a zero.
+C_MISSING="$WORK/watcher-missing.json"
+printf '{"schema":1,"last_tick":"%s","repos":{"omnibase_core":{"default_branch":"dev"}},"prs":{}}' "$NOW_ISO" > "$WORK/watcher-partial.json"
+PATH="$GH_WATCH:$PATH" ONEX_PR_WATCHER_STATE="$WORK/watcher-partial.json" ONEX_STATUSLINE_PR_CACHE="$C_MISSING" \
+  bash "$STATUSLINE" <<< '{"workspace":{"project_dir":"'"$REPO_ROOT"'"},"model":{},"context_window":{}}' >/dev/null 2>&1
+if wait_for_cache "$C_MISSING" 20; then
+  infra=$(jq -r '.repos.infra' < "$C_MISSING")
+  core=$(jq -r '.repos.core' < "$C_MISSING")
+  nf=$(jq -r '.failed | length' < "$C_MISSING")
+  if [ "$infra" = "err" ] && [ "$core" = "0/0" ] && [ "$nf" -eq 10 ]; then
+    pass "a repository absent from the state is recorded as a failure, not as zero"
+  else
+    fail "a repository absent from the state is recorded as a failure" "infra=$infra core=$core failed=$nf"
+  fi
+else
+  fail "the partial-state refresh writes a cache" "no cache at $C_MISSING"
+fi
+
+# A stale watcher is a failure for every repository, and still no gh call.
+C_STALE="$WORK/watcher-stale.json"
+printf '{"schema":1,"last_tick":"2020-01-01T00:00:00Z","repos":{%s},"prs":{%s}}' "$WATCHER_REPOS" "$WATCHER_PRS" > "$WORK/watcher-old.json"
+: > "$GH_LOG"
+GH_CALL_LOG="$GH_LOG" PATH="$GH_WATCH:$PATH" ONEX_PR_WATCHER_STATE="$WORK/watcher-old.json" ONEX_STATUSLINE_PR_CACHE="$C_STALE" \
+  bash "$STATUSLINE" <<< '{"workspace":{"project_dir":"'"$REPO_ROOT"'"},"model":{},"context_window":{}}' >/dev/null 2>&1
+if wait_for_cache "$C_STALE" 20; then
+  nf=$(jq -r '.failed | length' < "$C_STALE")
+  st=$(jq -r '.status' < "$C_STALE")
+  if [ "$nf" -eq 11 ] && [ "$st" = "degraded" ] && [ ! -s "$GH_LOG" ]; then
+    pass "a stale watcher state degrades every repository and makes no gh call"
+  else
+    fail "a stale watcher state degrades every repository" "failed=$nf status=$st gh=$(cat "$GH_LOG")"
+  fi
+else
+  fail "the stale-state refresh writes a cache" "no cache at $C_STALE"
+fi
+
+# An unreadable state file is a visible failure too.
+C_BAD="$WORK/watcher-bad.json"
+printf 'not json' > "$WORK/watcher-garbage.json"
+PATH="$GH_WATCH:$PATH" ONEX_PR_WATCHER_STATE="$WORK/watcher-garbage.json" ONEX_STATUSLINE_PR_CACHE="$C_BAD" \
+  bash "$STATUSLINE" <<< '{"workspace":{"project_dir":"'"$REPO_ROOT"'"},"model":{},"context_window":{}}' >/dev/null 2>&1
+if wait_for_cache "$C_BAD" 20 && [ "$(jq -r '.failed | length' < "$C_BAD")" -eq 11 ]; then
+  pass "an unreadable state file degrades every repository"
+else
+  fail "an unreadable state file degrades every repository" "cache: $(cat "$C_BAD" 2>/dev/null)"
 fi
 
 # --- AC4: positive control — the marker assertion is load-bearing -----------

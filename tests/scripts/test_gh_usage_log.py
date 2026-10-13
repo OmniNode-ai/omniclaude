@@ -676,3 +676,13 @@ def test_report_resolves_session_calls_to_the_running_subagent(tmp_path: Path) -
     rep = mod.build_report(recs, base, base + timedelta(hours=1), proj)
     by_lane = {r["lane"]: r["calls"] for r in rep["lanes"]}
     assert by_lane == {"pr-lander-83c": 1, "red-fix-1": 2}
+
+
+@pytest.mark.unit
+def test_report_counts_a_watcher_answered_lookup_as_free() -> None:
+    """OMN-19479: a lookup the shim answered from the PR watcher state spent no request."""
+    mod = _load_report()
+    base = {"cls": "pr view", "method": "GET"}
+    assert mod.core_cost({**base, "cache": "watcher"}) == 0
+    assert mod.core_cost({**base, "cache": "hit"}) == 0
+    assert mod.core_cost({**base, "cache": "miss"}) > 0
