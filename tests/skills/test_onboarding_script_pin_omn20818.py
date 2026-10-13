@@ -62,9 +62,30 @@ def _git(*args: str) -> subprocess.CompletedProcess[bytes]:
     )
 
 
+def _has_commit(commit: str) -> bool:
+    return _git("cat-file", "-e", f"{commit}^{{commit}}").returncode == 0
+
+
 def _require_commit(commit: str) -> None:
-    if _git("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
+    # CI checks out at depth 1, so the pinned commit is usually absent. Fetch
+    # it by sha rather than skip: a test that skips on every pull request run
+    # never executes, and the skip-count ratchet refuses it (OMN-18776).
+    if not _has_commit(commit):
+        _git("fetch", "--no-tags", "--depth=1", "origin", commit)
+    if not _has_commit(commit):
         pytest.skip(f"{commit} is not in this checkout's history")
+
+
+def _is_ancestor(ancestor: str, descendant: str) -> bool:
+    if _git("merge-base", "--is-ancestor", ancestor, descendant).returncode == 0:
+        return True
+    shallow = _git("rev-parse", "--is-shallow-repository").stdout.strip()
+    if shallow != b"true":
+        return False
+    # A depth-1 fetch cuts the history between two distinct commits, so an
+    # ancestry answer from a shallow checkout is not an answer. Unshallow once.
+    _git("fetch", "--no-tags", "--unshallow", "origin")
+    return _git("merge-base", "--is-ancestor", ancestor, descendant).returncode == 0
 
 
 def test_guide_pins_the_script_at_a_full_commit_and_digest() -> None:
@@ -76,8 +97,7 @@ def test_pin_is_not_older_than_the_multi_model_script() -> None:
     pinned = _pinned_commit()
     _require_commit(pinned)
     _require_commit(MULTI_MODEL_SCRIPT_COMMIT)
-    result = _git("merge-base", "--is-ancestor", MULTI_MODEL_SCRIPT_COMMIT, pinned)
-    assert result.returncode == 0, (
+    assert _is_ancestor(MULTI_MODEL_SCRIPT_COMMIT, pinned), (
         f"ONBOARDING.md pins {pinned}, which does not contain "
         f"{MULTI_MODEL_SCRIPT_COMMIT} (omniclaude#2637, the multi-model script)"
     )

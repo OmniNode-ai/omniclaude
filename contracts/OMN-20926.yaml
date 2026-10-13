@@ -1,55 +1,72 @@
-schema_version: "1.0.0"
+schema_version: 1.0.0
 ticket_id: OMN-20926
-title: "The content-capture producer stores detected secrets and emits references"
-summary: >
-  A secret the content scrubber finds is offered to a secret store sink and the
-  captured record carries a secret reference in its place. References stand
-  through every scrub and are never cut at a chunk boundary or the size cap.
-  A store that cannot take the secret falls back to the existing marker and
-  journals the reason and count, never a value. Capture is never blocked.
+title: The content-capture producer stores detected secrets and emits references, and the Skip Count Ratchet no longer refuses the onboarding pin tests
+summary: A secret the content scrubber finds is offered to a secret store sink and the captured record carries a secret reference in its place. References stand through every scrub and are never cut at a chunk boundary or the size cap. A store that cannot take the secret falls back to the existing marker and journals the reason and count, never a value. Capture is never blocked. The OMN-20818 onboarding pin tests skip on a depth-1 checkout because the pinned script commit is absent there, and the Skip Count Ratchet (OMN-18776) refuses a test that is collected and then skipped. This change makes the pin tests fetch the pinned commit by sha, and unshallow once when an ancestry answer from a shallow checkout is not an answer, so they run on a depth-1 checkout instead of skipping. The change covers only this test module; the captured-secret-reference work the ticket also carries is bound by its own pull requests.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
-  - id: req-capture-secret-refs
-    statement: "The content-capture producer replaces a detected secret's value with a stored secret reference, or with the marker when the store cannot take it."
-    acceptance:
-      - id: "AC1"
-        statement: |-
-          AC1: a detected secret is offered to the secret store sink, only its value is replaced by the returned reference, a labelled secret keeps its label, and the same secret is one stored value and one reference -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py -q -k "stored or labelled or same_secret"
-      - id: "AC2"
-        statement: |-
-          AC2: a reference already in the text stands through every scrub and is never cut at a chunk boundary or the size cap -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py -q -k "survives or chunking or reference_spans or sub_keeping"
-      - id: "AC3"
-        statement: |-
-          AC3: a store failure falls back to the marker, journals the reason and count and never a value, a machine that does not take part falls back quietly, and capture is never blocked -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py -q -k "falls_back or does_not_take_part or alarm"
-      - id: "AC4"
-        statement: |-
-          AC4: the mirrored capture_redaction.yaml matches the contract omnimarket owns, secret_reference block included -- falsifier: uv run python scripts/validation/generate_event_registry.py --daemon-registry "$OMNI_HOME/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml" --check
+- id: req-capture-secret-refs
+  statement: The content-capture producer replaces a detected secret's value with a stored secret reference, or with the marker when the store cannot take it.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: a detected secret is offered to the secret store sink, only its value is replaced by the returned reference, a labelled secret keeps its label, and the same secret is one stored value and one reference -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py -q -k "stored or labelled or same_secret"'
+  - id: AC2
+    statement: 'AC2: a reference already in the text stands through every scrub and is never cut at a chunk boundary or the size cap -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py -q -k "survives or chunking or reference_spans or sub_keeping"'
+  - id: AC3
+    statement: 'AC3: a store failure falls back to the marker, journals the reason and count and never a value, a machine that does not take part falls back quietly, and capture is never blocked -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py -q -k "falls_back or does_not_take_part or alarm"'
+  - id: AC4
+    statement: 'AC4: the mirrored capture_redaction.yaml matches the contract omnimarket owns, secret_reference block included -- falsifier: uv run python scripts/validation/generate_event_registry.py --daemon-registry "$OMNI_HOME/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml" --check'
+- id: req-pin-tests-run-on-depth-1
+  statement: The OMN-20818 onboarding pin tests run, and do not skip, in a checkout that holds only the pull request's head commit.
+  acceptance:
+  - id: AC5
+    statement: 'AC5: when the pinned script commit is absent from the checkout, the pin tests fetch it by sha before they skip, so a depth-1 checkout runs them -- falsifier: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -p no:randomly'
+  - id: AC6
+    statement: 'AC6: the ancestry check between the multi-model script commit and the pinned commit unshallows a shallow checkout once before it answers, and still fails when the guide pins a commit older than the multi-model script -- falsifier: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -p no:randomly -k not_older'
 evidence_requirements:
-  - kind: tests
-    description: "Secret store sink, reference survival, chunking and fallback tests pass"
-    command: "uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py tests/unit/hooks/test_hook_content_capture_omn19551.py tests/hooks/test_capture_redaction_omn17959.py tests/hooks/test_capture_redaction_sync_omn18357.py -q"
+- kind: tests
+  description: Secret store sink, reference survival, chunking and fallback tests pass
+  command: uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py tests/unit/hooks/test_hook_content_capture_omn19551.py tests/hooks/test_capture_redaction_omn17959.py tests/hooks/test_capture_redaction_sync_omn18357.py -q
+- kind: tests
+  description: The OMN-20818 onboarding pin tests pass at this head with the fetch-by-sha and one-time unshallow in place
+  command: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -p no:randomly
 emergency_bypass:
   enabled: false
-  justification: ""
-  follow_up_ticket_id: ""
+  justification: ''
+  follow_up_ticket_id: ''
 dod_evidence:
-  - id: dod-omn20926-capture-secret-refs
-    description: "The producer's secret store sink, reference survival through scrubs and chunking, and the quiet and loud fallbacks are covered by the focused suites."
-    source: manual
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py tests/unit/hooks/test_hook_content_capture_omn19551.py tests/hooks/test_capture_redaction_omn17959.py tests/hooks/test_capture_redaction_sync_omn18357.py -q"
-    binds_ac:
-      - AC1
-      - AC2
-      - AC3
-  - id: dod-omn20926-mirror-parity
-    description: "The mirrored contract matches omnimarket's owning copy."
-    source: manual
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py -q -k drifted_secret_reference"
-    binds_ac:
-      - AC4
+- id: dod-omn20926-capture-secret-refs
+  description: The producer's secret store sink, reference survival through scrubs and chunking, and the quiet and loud fallbacks are covered by the focused suites.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py tests/unit/hooks/test_hook_content_capture_omn19551.py tests/hooks/test_capture_redaction_omn17959.py tests/hooks/test_capture_redaction_sync_omn18357.py -q
+  binds_ac:
+  - AC1
+  - AC2
+  - AC3
+- id: dod-omn20926-mirror-parity
+  description: The mirrored contract matches omnimarket's owning copy.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/hooks/test_hook_content_capture_secret_refs_omn20926.py -q -k drifted_secret_reference
+  binds_ac:
+  - AC4
+- id: dod-omn20926-ac1-pin-tests-fetch-by-sha
+  description: The three OMN-20818 pin tests pass at this head; the pinned commit is fetched by sha when absent, so a depth-1 checkout runs them instead of skipping them.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -p no:randomly
+  binds_ac:
+  - AC5
+- id: dod-omn20926-ac2-pin-ancestry-unshallow
+  description: The pin-is-not-older test answers from the ancestry check after one unshallow of a shallow checkout; the same module's digest test still compares the guide's sha256 with the script at the pinned commit.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -p no:randomly
+  binds_ac:
+  - AC6
