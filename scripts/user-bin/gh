@@ -150,8 +150,8 @@ fi
 # the whitespace before it: without this, "ONEX_GH_READ_ROUTING=1  # re-enabled"
 # would compare unequal to "1" and silently run every read on the operator
 # while the file reads enabled.
-_conf_strip_comment() {
-  local v="$1"
+_conf_strip_comment_into() {
+  local v="$2"
   case "$v" in *[[:space:]]'#'*) v="${v%%[[:space:]]\#*}" ;; esac
   while :; do
     case "$v" in
@@ -159,20 +159,21 @@ _conf_strip_comment() {
       *) break ;;
     esac
   done
-  printf '%s' "$v"
+  printf -v "$1" '%s' "$v"
 }
+_conf_v=""
 _routing_conf="${ONEX_GH_READ_ROUTING_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-read-routing.env}"
 if [ -f "$_routing_conf" ] && { [ -z "${ONEX_GH_READ_ROUTING+x}" ] || [ -z "${GH_READ_TOKEN_CMD+x}" ]; }; then
   while IFS= read -r _line || [ -n "$_line" ]; do
     case "$_line" in
       ONEX_GH_READ_ROUTING=*)
         if [ -z "${ONEX_GH_READ_ROUTING+x}" ]; then
-          _conf_v="$(_conf_strip_comment "${_line#*=}")"
+          _conf_strip_comment_into _conf_v "${_line#*=}"
           export ONEX_GH_READ_ROUTING="$_conf_v"
         fi ;;
       GH_READ_TOKEN_CMD=*)
         if [ -z "${GH_READ_TOKEN_CMD+x}" ]; then
-          _conf_v="$(_conf_strip_comment "${_line#*=}")"
+          _conf_strip_comment_into _conf_v "${_line#*=}"
           export GH_READ_TOKEN_CMD="$_conf_v"
         fi ;;
     esac
@@ -180,6 +181,35 @@ if [ -f "$_routing_conf" ] && { [ -z "${ONEX_GH_READ_ROUTING+x}" ] || [ -z "${GH
 fi
 
 _cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/prview"
+
+# These reads describe this invocation. Reuse them across guards and logs rather
+# than starting git or date again for the same working directory and call.
+_origin_done=0
+_origin_url=""
+_origin=""
+_read_origin() {
+  [ "$_origin_done" -eq 1 ] && return 0
+  _origin_done=1
+  _origin_url="$(git config --get remote.origin.url 2>/dev/null)"
+  _origin="${_origin_url%.git}"
+  _origin="${_origin##*:}"
+  case "$_origin" in */*/*) _origin="${_origin#"${_origin%/*/*}"/}" ;; esac
+}
+
+_call_timestamp=""
+_read_timestamp() {
+  [ -n "$_call_timestamp" ] || _call_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+
+# Bash 3.2 has no ${value^^}. The strict-config key is ASCII, so translate in
+# this shell instead of starting a pipeline for every guarded read.
+_ascii_upper_into() {
+  local value="$2" lower=abcdefghijklmnopqrstuvwxyz upper=ABCDEFGHIJKLMNOPQRSTUVWXYZ i
+  for ((i=0; i<26; i++)); do
+    value="${value//${lower:i:1}/${upper:i:1}}"
+  done
+  printf -v "$1" '%s' "$value"
+}
 
 # --- usage log (OMN-19585) -----------------------------------------------------
 
@@ -406,7 +436,8 @@ _classify() {
     else
       case "$group" in
         pr|issue|run|workflow|release|label|repo|cache|ruleset)
-          _repo="$(git config --get remote.origin.url 2>/dev/null)"
+          _read_origin
+          _repo="$_origin_url"
           _repo="${_repo%.git}"; _repo="${_repo##*/}"; _repo="${_repo##*:}"
           ;;
       esac
@@ -438,7 +469,8 @@ _call_log() {
     fi
   fi
   _resolve_lane
-  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  _read_timestamp
+  ts="$_call_timestamp"
   # Sanitize in this shell: command substitution would fork once per field.
   for value in "$ts" "$_lane" "$_lane_src" "$_cls" "$_method" "$_endpoint" "$1" "$2"; do
     _clean_into cleaned "$value"
@@ -479,7 +511,8 @@ _log() {
   local dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-usage"
   local ts session ticket="" identity="" route_reason=""
   local cls="" method="" repo="" endpoint=""
-  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  _read_timestamp
+  ts="$_call_timestamp"
   _clean_into session "${CLAUDE_CODE_SESSION_ID:-}"
   case "$PWD" in
     */omni_worktrees/OMN-*) ticket="${PWD#*/omni_worktrees/}"; ticket="${ticket%%/*}" ;;
@@ -576,16 +609,6 @@ if [ "$_search_call" -eq 1 ] && [ "${ONEX_PR_WATCHER:-}" != "1" ]; then
   exit 1
 fi
 unset _search_call
-
-# owner/repo of the working directory's origin remote, or "" outside a clone.
-_origin_repo() {
-  local url
-  url="$(git config --get remote.origin.url 2>/dev/null)"
-  url="${url%.git}"
-  url="${url##*:}"
-  case "$url" in */*/*) url="${url#"${url%/*/*}"/}" ;; esac
-  printf '%s' "$url"
-}
 
 # --- PR-state read guard (OMN-19856) -------------------------------------------
 # RULING 2026-09-27T18:05:21Z: every PR-state read comes from the PR watcher's state
@@ -783,7 +806,8 @@ _prs_resolve() {
     done
   fi
   if [ -z "$_rs_repo" ]; then
-    v="$(_origin_repo)"
+    _read_origin
+    v="$_origin"
     case "$v" in */*) _rs_owner="${v%%/*}"; _rs_repo="${v#*/}" ;; esac
   fi
 }
@@ -878,7 +902,7 @@ _gw_board_repo() {
   [ -f "$conf" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      ONEX_GH_BOARD_REPO=*) v="$(_conf_strip_comment "${line#*=}")"; repo="$v" ;;
+      ONEX_GH_BOARD_REPO=*) _conf_strip_comment_into repo "${line#*=}" ;;
     esac
   done < "$conf"
   case "$repo" in
@@ -1117,15 +1141,18 @@ _lane_sanctioned_script() {
 
 # Is the lane read guard strict for this call's verb? Only gh-gateway.env decides.
 _lane_read_strict() {
-  local conf="${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env" line key
+  local conf="${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env" line key strict_value
   [ -f "$conf" ] || return 1
-  key="$(printf '%s' "$_cls" | tr '[:lower:]' '[:upper:]' | tr ' ' '_' | tr -cd 'A-Z0-9_')"
+  _ascii_upper_into key "$_cls"
+  key="${key// /_}"
+  key="${key//[^A-Z0-9_]/}"
   [ -n "$key" ] || return 1
   key="ONEX_GH_LANE_READ_STRICT_$key"
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       "$key"=*|ONEX_GH_LANE_READ_STRICT=*)
-        [ "$(_conf_strip_comment "${line#*=}")" = "1" ] && return 0 ;;
+        _conf_strip_comment_into strict_value "${line#*=}"
+        [ "$strict_value" = "1" ] && return 0 ;;
     esac
   done < "$conf"
   return 1
@@ -1357,7 +1384,7 @@ if [ "${1:-}" = "pr" ] && [ "${2:-}" = "merge" ]; then
     esac
     _mq_prev="$_mq_a"
   done
-  [ -n "$_mq_repo" ] || _mq_repo="$(_origin_repo)"
+  if [ -z "$_mq_repo" ]; then _read_origin; _mq_repo="$_origin"; fi
 elif [ "$_cls" = "api" ] && [ "$_method" = "PUT" ]; then
   case "$_endpoint" in
     repos/*/pulls/*/merge)
@@ -1432,7 +1459,7 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
   _gw_conf="${XDG_CONFIG_HOME:-$HOME/.config}/omni/gh-gateway.env"
   if [ -f "$_gw_conf" ]; then
     while IFS= read -r _line || [ -n "$_line" ]; do
-      _conf_v="$(_conf_strip_comment "${_line#*=}")"
+      _conf_strip_comment_into _conf_v "${_line#*=}"
       case "$_conf_v" in ""|*[!0-9]*) continue ;; esac
       case "$_line" in
         ONEX_GH_GATEWAY_TTL=*) _gw_ttl="$_conf_v" ;;
@@ -1466,8 +1493,9 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
     exit 1
   fi
   _gw_scope="${GH_HOST:-github.com}|${_method:-GET}"
-  [ "$_cls" = "run view" ] && _gw_scope="$_gw_scope|$(_origin_repo)"
-  [ "$_gw_kind" = "fallback" ] && _gw_scope="$_gw_scope|${GH_REPO:-}|$(_origin_repo)"
+  if [ "$_cls" = "run view" ] || [ "$_gw_kind" = "fallback" ]; then _read_origin; fi
+  [ "$_cls" = "run view" ] && _gw_scope="$_gw_scope|$_origin"
+  [ "$_gw_kind" = "fallback" ] && _gw_scope="$_gw_scope|${GH_REPO:-}|$_origin"
   # `gh run view <run> --log-failed` with no --attempt or --job reads the latest attempt,
   # which a rerun replaces, so that answer is held for at most five minutes. A job id and
   # an explicit attempt name one finished attempt and keep the full TTL.
@@ -1728,7 +1756,7 @@ if [ "${1:-}" = "pr" ]; then
         case "$_a" in --repo=*) _mut_repo="${_a#--repo=}" ;; esac
         _prev="$_a"
       done
-      [ -n "$_mut_repo" ] || _mut_repo="$(_origin_repo)"
+      if [ -z "$_mut_repo" ]; then _read_origin; _mut_repo="$_origin"; fi
       if [ -n "$_mut_repo" ]; then
         rm -f "$_cache_root/$(_sha "$_mut_repo" | cut -c1-16)".* 2>/dev/null
       else
@@ -1745,7 +1773,8 @@ if _cacheable "$@"; then
     _branch="$(git symbolic-ref --short -q HEAD 2>/dev/null)"
   fi
   if [ -n "$_top" ] && [ -n "$_branch" ]; then
-    _repo_id="$(_origin_repo)"
+    _read_origin
+    _repo_id="$_origin"
     [ -n "$_repo_id" ] || _repo_id="$_top"
     # Only a branch name, or none, is looked up in the watcher state: a PR number, a URL or an
     # owner:branch ref names a PR the state is not asked about, so it goes to the cache and gh.
