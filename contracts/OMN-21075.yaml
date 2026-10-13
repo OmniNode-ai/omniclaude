@@ -23,6 +23,12 @@ requirements:
       - id: "AC3"
         statement: |-
           AC3: an unattended --provider openrouter run with a stored key asks nothing and tests the stored key -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_fixed_model -x
+  - id: req-omn21075-guide-pin
+    statement: "The onboarding guide downloads the script that sets up OpenRouter on qwen/qwen3.8-27b."
+    acceptance:
+      - id: "AC5"
+        statement: |-
+          AC5: ONBOARDING.md pins the script that sets up OpenRouter on qwen/qwen3.8-27b, by commit and sha256 -- falsifier: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q
 evidence_requirements:
   - kind: tests
     description: "OpenRouter is named on qwen/qwen3.8-27b with no question, the model reaches onex models add, and an unattended stored-key run asks nothing"
@@ -42,3 +48,11 @@ dod_evidence:
       - AC1
       - AC2
       - AC3
+  - id: dod-omn21075-guide-pin
+    description: "ONBOARDING.md pins omniclaude c522d72a (#2721) by commit and sha256, and the script at that commit carries OPENROUTER_MODEL=\"qwen/qwen3.8-27b\"."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q"
+    binds_ac:
+      - AC5

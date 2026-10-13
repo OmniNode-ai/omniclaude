@@ -41,8 +41,8 @@ Fetch the script, check it is the one this page was written against, then run it
 
 ```bash
 curl -fsSL -o lab-onboarding.sh \
-  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/c15d2e31bb6bf77ea8546d06404b3a5789c6e9c6/plugins/onex/skills/_bin/lab-onboarding.sh
-echo "faedcec95e3a9da58d54ee279d3f7c75af0402ac6a81bd5921fa54c650c0d2d4  lab-onboarding.sh" | shasum -a 256 -c -
+  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/c522d72ab1a48b02cedde5a5bb3709df911c421e/plugins/onex/skills/_bin/lab-onboarding.sh
+echo "83b1235b729a3e97a2926fa0d4db45035eb899b960bdcfa98aa7d8219deb5294  lab-onboarding.sh" | shasum -a 256 -c -
 bash lab-onboarding.sh
 ```
 
@@ -86,6 +86,8 @@ Two questions, both before anything is installed:
 
 1. **Which model.** Gemini, OpenRouter, OpenAI or Ollama. Then your key, with the input
    hidden. If this Mac already has a key stored you are offered it rather than asked again.
+   OpenRouter always runs Qwen3.8 27B (`qwen/qwen3.8-27b`), so you are not asked for a model.
+   It is a paid model: the key needs credit on its openrouter.ai account.
 2. **Whether to run the local stack in Docker.** "Not now" is a complete setup — you can
    add it later. In a macOS VM the question is skipped, because Docker cannot run there.
 
