@@ -1,0 +1,50 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20926
+title: "The Skip Count Ratchet no longer refuses the OMN-20818 onboarding pin tests"
+summary: >
+  The OMN-20818 onboarding pin tests skip on a depth-1 checkout because the
+  pinned script commit is absent there, and the Skip Count Ratchet (OMN-18776)
+  refuses a test that is collected and then skipped. This change makes the
+  pin tests fetch the pinned commit by sha, and unshallow once when an
+  ancestry answer from a shallow checkout is not an answer, so they run on a
+  depth-1 checkout instead of skipping. The change covers only this test
+  module; the captured-secret-reference work the ticket also carries is
+  bound by its own pull requests.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-pin-tests-run-on-depth-1
+    statement: "The OMN-20818 onboarding pin tests run, and do not skip, in a checkout that holds only the pull request's head commit."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: when the pinned script commit is absent from the checkout, the pin tests fetch it by sha before they skip, so a depth-1 checkout runs them -- falsifier: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -p no:randomly
+      - id: "AC2"
+        statement: |-
+          AC2: the ancestry check between the multi-model script commit and the pinned commit unshallows a shallow checkout once before it answers, and still fails when the guide pins a commit older than the multi-model script -- falsifier: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -p no:randomly -k not_older
+evidence_requirements:
+  - kind: tests
+    description: "The OMN-20818 onboarding pin tests pass at this head with the fetch-by-sha and one-time unshallow in place"
+    command: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -p no:randomly"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20926-ac1-pin-tests-fetch-by-sha
+    description: "The three OMN-20818 pin tests pass at this head; the pinned commit is fetched by sha when absent, so a depth-1 checkout runs them instead of skipping them."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -p no:randomly"
+    binds_ac:
+      - AC1
+  - id: dod-omn20926-ac2-pin-ancestry-unshallow
+    description: "The pin-is-not-older test answers from the ancestry check after one unshallow of a shallow checkout; the same module's digest test still compares the guide's sha256 with the script at the pinned commit."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -p no:randomly"
+    binds_ac:
+      - AC2
