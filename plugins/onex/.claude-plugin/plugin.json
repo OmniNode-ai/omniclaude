@@ -12,7 +12,7 @@
     "onex_cli": {
       "package": "omnibase-core",
       "min_version": "0.39.0",
-      "install_hint": "pipx install 'omnibase-core>=0.39.0'",
+      "install_hint": "pipx install --python 3.12 'omnibase-core>=0.39.0'",
       "source_of_truth": "plugin-compat.yaml#min_runtime_version"
     },
     "python": ">=3.12"

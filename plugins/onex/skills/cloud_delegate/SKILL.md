@@ -69,7 +69,7 @@ the `onex.cli` entry-point group — installing that package is what makes
 | `omnimarket` | the `cloud` command group (`login`, `delegate`, `receipt`, `status`, `logout`) |
 
 ```bash
-uv tool install --with omnimarket omnibase-core
+uv tool install --python 3.12 --with omnimarket omnibase-core
 ```
 
 Verify: `onex cloud --help` must exit 0 from any directory. If it exits 2 with

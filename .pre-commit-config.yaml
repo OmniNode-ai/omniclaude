@@ -587,6 +587,23 @@ repos:
         files: '^(plugins/onex-delegate/.*|plugins/\.claude-plugin/marketplace\.json|\.claude-plugin/marketplace\.json)$'
         stages: [pre-commit]
 
+      # OMN-16632: every published onex install command (both marketplace.json
+      # copies, the plugin manifests and compat files, skill docs, hook text)
+      # must pin `--python 3.12`; unpinned, uv picks an interpreter that has no
+      # confluent-kafka wheel and the install fails on a clean machine. The same
+      # module runs in CI through the Plugin Compat Gate workflow
+      # (`pytest plugins/onex-delegate/tests/`). ~1s, no network.
+      - id: onex-install-python-pin
+        name: Published onex install commands pin the Python version (OMN-16632)
+        entry: >-
+          bash -c 'PYTHONDONTWRITEBYTECODE=1 uv run pytest
+          plugins/onex-delegate/tests/test_install_python_pin.py
+          -q -p no:cacheprovider'
+        language: system
+        pass_filenames: false
+        files: '^(plugins/.*|\.claude-plugin/marketplace\.json)$'
+        stages: [pre-commit]
+
       # OMN-14190 (Piece 4/5 of the canonical OCC stamp-model, epic OMN-14180):
       # Shift-left validation of OCC PR-metadata stamps BEFORE CI's receipt-gate.
       # Thin shim over `onex occ validate` (omnibase_infra.cli.cli_occ) — zero
