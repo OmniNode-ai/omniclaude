@@ -1637,9 +1637,8 @@ disabled_hooks:
       pre_tool_use_done_flip_guard.sh (hooks.json:10, matcher ^mcp__linear-
       server__(save_issue|update_issue)$) enforces a superset: it refuses the
       same payloads in full and lite mode and also refuses a self-authored
-      PASS receipt that this script allows. This script adds a fail-open path
-      when ONEX_EVIDENCE_ROOT is unset and a dod.guard.fired emit to a socket
-      nothing opens.
+      PASS receipt that this script allows. This script adds a dod.guard.fired
+      emit to a socket nothing opens.
     review_by: "2026-12-31"
     restoration:
       kind: "delete"
