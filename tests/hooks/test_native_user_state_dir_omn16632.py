@@ -25,7 +25,7 @@ pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[2]
 ENTRYPOINT = "plugins/onex/hooks/scripts/pre_tool_use_bash_guards.sh"
-ROTATION = "kubectl -n onex-dev delete secret operator-k8s"
+ROTATION = "kubectl -n sample-ns delete secret operator-k8s"
 WORKTREE_ADD = "git worktree add /tmp/native-user-stray/wt -b native-user-wt"
 _TOOLS = [
     "bash",
