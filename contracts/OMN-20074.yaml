@@ -63,6 +63,13 @@ requirements:
       - id: "AC8"
         statement: |-
           AC8: the no-untyped-metadata hook entry runs python -m omnibase_core.nodes.node_no_untyped_metadata_check_compute.runtime_no_untyped_metadata_check, no hook entry runs check-no-untyped-metadata, and the locked omnibase-core is 0.47.35 or newer -- falsifier: uv run pytest tests/ci/test_precommit_untyped_metadata_core_node_omn20074.py -q --no-cov fails at the merge base
+  - id: "req-omn20074-s9-unused-occ-scripts"
+    statement: |-
+      omniclaude must not host an OCC script no caller runs: scaffold_occ_receipt.py and materialize-dod-evidence-from-occ.sh are deleted with their tests and baseline rows, no skill instructs running either, and the reusables other repositories still call stay hosted.
+    acceptance:
+      - id: "AC9"
+        statement: |-
+          AC9: scripts/scaffold_occ_receipt.py, scripts/materialize-dod-evidence-from-occ.sh and their tests are absent, no plugins/onex/skills markdown names either script, the canonical-file-shape baseline lists neither, and call-occ-autobind-reusable.yml, call-occ-companion-effect-reusable.yml and deploy-gate-reusable.yml are still present -- falsifier: uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py -q --no-cov fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -88,6 +95,9 @@ evidence_requirements:
   - kind: tests
     description: "The no-untyped-metadata hook runs the omnibase_core node, no hook runs the OCC console script, and the locked omnibase-core carries the node."
     command: "uv run pytest tests/ci/test_precommit_untyped_metadata_core_node_omn20074.py -q --no-cov"
+  - kind: tests
+    description: "The unused OCC scripts are deleted, no skill names them, and the reusables with live callers stay hosted."
+    command: "uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -156,3 +166,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_precommit_untyped_metadata_core_node_omn20074.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC8"]
+  - id: dod-omn20074-s9-unused-occ-scripts
+    description: "The structural test proves the unused OCC scripts and their tests are gone, no skill names them, and the still-called reusables stay hosted."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC9"]

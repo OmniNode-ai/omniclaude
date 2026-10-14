@@ -22,6 +22,6 @@ tree_surface_budgets:
   memory-cite: 36  # public-skill-ok: detection-class name, not prose
   omni_home-prose: 427  # public-skill-ok: detection-class name, not prose
   operator-email: 31  # public-skill-ok: detection-class name, not prose
-  operator-name: 171  # public-skill-ok: detection-class name, not prose
+  operator-name: 166  # public-skill-ok: detection-class name, not prose
   person-name: 2  # public-skill-ok: detection-class name, not prose
   real-lan-ip: 14  # public-skill-ok: detection-class name, not prose
