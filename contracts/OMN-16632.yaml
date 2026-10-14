@@ -1,8 +1,8 @@
 ---
 schema_version: "1.0.0"
 ticket_id: "OMN-16632"
-title: "Developer onboarding sets up in an OMNIBASE_PATH workspace, never OMNI_HOME, and refuses a workspace holding clones it did not create"
-summary: "lab-onboarding.sh resolves its workspace from --workspace, then OMNIBASE_PATH, then $HOME/Code/omnibase; it never reads OMNI_HOME, unsets it so no child process inherits it, and writes no OMNI_HOME line into the shell profile (a V1 block that has one is rewritten). Phase 0 prints the resolved workspace and its source before anything is written, and refuses a workspace holding repository clones without the marker the script writes before its first clone."
+title: "Developer onboarding and native-user hook state resolution"
+summary: "lab-onboarding.sh resolves its workspace from --workspace, then OMNIBASE_PATH, then $HOME/Code/omnibase; it never reads OMNI_HOME, unsets it so no child process inherits it, and writes no OMNI_HOME line into the shell profile (a V1 block that has one is rewritten). Phase 0 prints the resolved workspace and its source before anything is written, and refuses a workspace holding repository clones without the marker the script writes before its first clone. With neither OMNI_HOME nor ONEX_STATE_DIR set, the hook state directory resolves to the per-user XDG state dir (${XDG_STATE_HOME:-$HOME/.local/state}/omniclaude) and pre_tool_use_bash_guards.sh no longer refuses every Bash call. Every guard that can act still acts; the worktree guard, which needs a registry root, says so once and allows only for that defaulted case. A hook with no python3 resolves one through uv or fails with one line naming python3."
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -17,10 +17,28 @@ requirements:
     acceptance:
       - id: "AC2"
         statement: "AC2: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -k 'did_not_create or linked_worktree or this_setup_created or marker'"
+  - id: "req-native-user-bash-not-refused"
+    statement: "A fresh HOME with neither OMNI_HOME nor ONEX_STATE_DIR runs ls through the Bash guards entrypoint without a refusal, and the state directory is the XDG one."
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: uv run pytest tests/hooks/test_native_user_state_dir_omn16632.py -k ls_is_allowed_with_neither_variable"
+  - id: "req-guards-still-act"
+    statement: "A guarded dangerous command is still refused for that user, a relative OMNI_HOME or ONEX_STATE_DIR is still refused, and our own session with OMNI_HOME unset or set keeps the worktree guard's decision."
+    acceptance:
+      - id: "AC4"
+        statement: "AC4: uv run pytest tests/hooks/test_native_user_state_dir_omn16632.py -k 'still_refused or keeps_the_worktree_guard or still_judges_the_worktree'"
+  - id: "req-missing-python3-one-line"
+    statement: "A hook that finds no python3 fails with one line naming python3."
+    acceptance:
+      - id: "AC5"
+        statement: "AC5: uv run pytest tests/hooks/test_native_user_state_dir_omn16632.py -k missing_python3"
 evidence_requirements:
   - kind: "tests"
     description: "Workspace resolution, profile block and foreign-workspace refusal of the onboarding script."
     command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov"
+  - kind: "tests"
+    description: "Native-user hook behaviour with a fresh HOME and neither variable set."
+    command: "uv run pytest tests/hooks/test_native_user_state_dir_omn16632.py tests/hooks/test_refusal_surface_omn18983.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -42,3 +60,27 @@ dod_evidence:
         check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'did_not_create or linked_worktree or this_setup_created or marker'"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC2"]
+  - id: "dod-omn16632-ac1-ls-allowed"
+    description: "ls is allowed with neither variable and the state dir is the XDG one."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_native_user_state_dir_omn16632.py -q --no-cov -k ls_is_allowed_with_neither_variable"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
+  - id: "dod-omn16632-ac2-guards-still-act"
+    description: "The rotation guard still refuses; a relative setting still refuses; our own session keeps the worktree guard."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_native_user_state_dir_omn16632.py -q --no-cov -k 'still_refused or keeps_the_worktree_guard or still_judges_the_worktree'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC4"]
+  - id: "dod-omn16632-ac3-missing-python3"
+    description: "No python3 fails with one line naming it."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_native_user_state_dir_omn16632.py -q --no-cov -k missing_python3"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC5"]
