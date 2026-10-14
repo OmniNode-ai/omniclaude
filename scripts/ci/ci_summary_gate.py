@@ -416,6 +416,29 @@ class JobState:
     run_attempt: int
 
 
+def _effective_status(raw: dict[str, object]) -> str:
+    """Return ``completed`` for a row GitHub has concluded, else its status.
+
+    OMN-17427: GitHub can leave a finished job's ``status`` at ``in_progress``
+    after it has written the job's ``conclusion`` and ``completed_at``. Measured
+    on the dev push run 38472613080: job 115555272207 finished at 21:42:45Z,
+    its dependents ran, and the jobs endpoint still answered ``in_progress``
+    two hours later, so this poller waited out its whole deadline on it. A
+    conclusion is only ever written when a job ends, so a row carrying both
+    fields is judged on its conclusion. A row with either field missing keeps
+    its reported status.
+    """
+
+    status = str(raw.get("status") or "")
+    if (
+        status != "completed"
+        and raw.get("conclusion") is not None
+        and raw.get("completed_at")
+    ):
+        return "completed"
+    return status
+
+
 def _job_states(
     jobs: list[dict[str, object]],
     *,
@@ -448,7 +471,7 @@ def _job_states(
         states.append(
             JobState(
                 name=name,
-                status=str(raw.get("status") or ""),
+                status=_effective_status(raw),
                 conclusion=None if conclusion is None else str(conclusion),
                 run_attempt=attempt,
             )
@@ -526,7 +549,7 @@ def _check_run_states(check_runs: list[dict[str, object]]) -> list[CheckRunState
         states.append(
             CheckRunState(
                 name=name,
-                status=str(raw.get("status") or ""),
+                status=_effective_status(raw),
                 conclusion=None if conclusion is None else str(conclusion),
                 id=run_id,
                 started_at=str(started_at) if started_at else None,

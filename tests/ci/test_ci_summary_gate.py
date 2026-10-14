@@ -2380,3 +2380,92 @@ class TestAnEarlierRunOfThisWorkflowIsNotExternalOmn20768:
             )
             == frozenset()
         )
+
+
+DEV_6D5B0CD9F_JOBS = FIXTURES_DIR / "omn17427_dev_6d5b0cd9f_run_jobs.json"
+
+
+@pytest.mark.unit
+class TestConcludedJobWithLaggingStatusOmn17427:
+    """A job GitHub has concluded is not running, whatever ``status`` says.
+
+    Measured on the omniclaude dev push run 38472613080 (head 6d5b0cd9f): job
+    115555272207 ``Aislop Sweep`` finished at 21:42:45Z (every step, ``Complete
+    job`` included, completed/success; ``Quality Gate``, which ``needs`` it,
+    ran and passed), yet the jobs endpoint kept answering ``status:
+    in_progress`` beside ``conclusion: success`` and ``completed_at:
+    21:42:46Z``. The poller re-polled that one row for its whole 90 minute
+    deadline and failed the required context closed.
+    """
+
+    def _concluded(
+        self, conclusion: str, *, completed_at: str | None = "2026-10-13T21:42:46Z"
+    ) -> dict:
+        row = _job("Aislop Sweep", conclusion, status="in_progress")
+        row["completed_at"] = completed_at
+        return row
+
+    def test_the_measured_dev_snapshot_concludes_success(self) -> None:
+        """THE red test: the run's own 96 job rows, as the poller read them."""
+        jobs = json.loads(DEV_6D5B0CD9F_JOBS.read_text(encoding="utf-8"))
+        assert len(jobs) == 96
+        lagging = [j["name"] for j in jobs if j["status"] != "completed"]
+        assert lagging == ["Aislop Sweep"]
+        code, report = evaluate(jobs, run_attempt=1)
+        assert code == EXIT_SUCCESS, report
+        assert "default-deny sweep rows still running" not in report
+
+    def test_a_concluded_success_does_not_hold_pending(self) -> None:
+        code, report = evaluate(_all_gates() + [self._concluded("success")])
+        assert code == EXIT_SUCCESS, report
+
+    def test_a_concluded_failure_still_fails(self) -> None:
+        """The conclusion is still judged: nothing is widened."""
+        code, report = evaluate(_all_gates() + [self._concluded("failure")])
+        assert code == EXIT_FAILURE, report
+        assert "default-deny sweep failures: Aislop Sweep" in report
+
+    def test_a_concluded_gate_job_counts_as_complete(self) -> None:
+        jobs = _all_gates()
+        jobs[0]["status"] = "in_progress"
+        jobs[0]["completed_at"] = "2026-10-13T21:42:46Z"
+        code, report = evaluate(jobs)
+        assert code == EXIT_SUCCESS, report
+
+    def test_a_conclusion_without_completed_at_still_holds_pending(self) -> None:
+        """Both fields are required; one alone keeps the stricter reading."""
+        code, report = evaluate(
+            _all_gates() + [self._concluded("success", completed_at=None)]
+        )
+        assert code == EXIT_PENDING, report
+        assert (
+            "  default-deny sweep rows still running (PENDING, re-polled): Aislop Sweep"
+            in report
+        )
+
+    def test_a_running_job_with_no_conclusion_still_holds_pending(self) -> None:
+        row = _job("Aislop Sweep", None, status="in_progress")
+        row["completed_at"] = "2026-10-13T21:42:46Z"
+        code, report = evaluate(_all_gates() + [row])
+        assert code == EXIT_PENDING, report
+
+    def test_an_external_concluded_row_is_judged_not_in_flight(self) -> None:
+        """The same reading holds for check-runs from other workflows."""
+        failures, in_flight, swept, _e = _sweep(
+            [_sweep_row("Some Unregistered Gate", "failure", status="in_progress")]
+        )
+        assert in_flight == []
+        assert failures == ["Some Unregistered Gate (failure)"]
+        assert swept == ["Some Unregistered Gate"]
+
+        failures, in_flight, _s, _e = _sweep(
+            [
+                _sweep_row(
+                    "Some Unregistered Gate",
+                    "success",
+                    status="in_progress",
+                    completed_at=None,
+                )
+            ]
+        )
+        assert in_flight == ["Some Unregistered Gate"]

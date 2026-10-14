@@ -10,6 +10,12 @@ summary: >
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
+requirements:
+  - id: req-ci-summary-judges-a-concluded-job
+    statement: CI Summary judges a job GitHub has concluded on its conclusion, not its lagging status.
+    acceptance:
+      - id: AC1
+        statement: "a job row with conclusion and completed_at set counts as completed while its status reads in_progress; a concluded failure still fails and a row missing either field still holds PENDING -- falsifier: uv run pytest tests/ci/test_ci_summary_gate.py -q -k TestConcludedJobWithLaggingStatusOmn17427"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -37,3 +43,18 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/hooks/test_ticket_creation_guard.py::test_create_without_a_project_is_admitted tests/hooks/test_ticket_creation_guard.py::test_registered_hook_admits_a_create_with_no_project -q"
+  - id: dod-ci-summary-judges-a-concluded-job
+    description: >
+      CI Summary judges a job GitHub has concluded (conclusion and
+      completed_at both set) on its conclusion even while its status still
+      reads in_progress, so the dev push run 38472613080 job snapshot at
+      6d5b0cd9f concludes success instead of waiting out the poll deadline;
+      a concluded failure still fails and a row missing either field still
+      holds the verdict at PENDING.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_ci_summary_gate.py -q -k TestConcludedJobWithLaggingStatusOmn17427"
+    binds_ac:
+      - AC1
