@@ -27,7 +27,10 @@ _OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
 . "${_ONEX_HOOK_SELF_DIR}/../lib/repo_guard.sh" 2>/dev/null || true
-if declare -F is_omninode_repo >/dev/null 2>&1; then
+# OMN-18609: a lane the launcher declared (ONEX_LANE) is this workspace's process whatever
+# its cwd holds, as in claude_hook_capture.sh. The merge sweep's diagnose lane runs in a
+# scratch directory with no OmniNode marker, so this guard dropped its records.
+if [[ -z "${ONEX_LANE:-}" ]] && declare -F is_omninode_repo >/dev/null 2>&1; then
     CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
         is_omninode_repo || {
         cat >/dev/null 2>/dev/null || true
