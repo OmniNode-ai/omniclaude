@@ -1,0 +1,32 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20955
+title: "The advisory-job census baseline names the omnibase_infra branch-protection audit parity step at its new position"
+summary: >-
+  omnibase_infra removed the change-control fetch, pin and shared-audit steps from branch-protection-audit.yml,
+  which moved its report-only parity step from step 6 to step 4. The census baseline keys that step by position,
+  so the gate read the step as unnamed. The baseline entry now names the step at step 4, line 126.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20955-baseline-rekey
+    statement: The committed census baseline names the omnibase_infra branch-protection-audit.yml report-only parity step by its current step position and carries no second entry for the old position.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: config/advisory_job_baseline.yaml carries .github/workflows/branch-protection-audit.yml::audit::step[4] for OmniNode-ai/omnibase_infra and no step[6] entry for that file; falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -k parity_step_is_keyed fails against the baseline with the step[6] key.'
+evidence_requirements:
+  - kind: tests
+    description: The advisory-job gate tests, including the parity-step key test, pass.
+    command: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20955-ac1
+    description: The advisory-job gate tests pass, including the test that the baseline keys the parity step at step 4.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov
