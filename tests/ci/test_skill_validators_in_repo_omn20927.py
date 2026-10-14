@@ -8,7 +8,7 @@ validator script from that checkout. Both validators judge omniclaude's own plug
 skills, so omniclaude owns the behaviour: they live in
 ``node_skill_validation_compute`` and both jobs, and the matching pre-commit hook,
 run that node's CLI. The Version Pin Compliance job is the sibling slice
-(OMN-20941, omniclaude#2673) and is not touched here.
+(omniclaude#2673) and is not touched here.
 """
 
 from __future__ import annotations
@@ -145,3 +145,44 @@ def test_every_handler_module_is_routed_in_the_contract() -> None:
         if not path.name.startswith("_")
     }
     assert modules == routed
+
+
+def _dangling_needs(jobs: dict[str, dict[str, Any]]) -> list[tuple[str, str]]:
+    """Return ``(job, missing_need)`` for every ``needs:`` entry that names no job."""
+    return [
+        (job_id, need)
+        for job_id, job in jobs.items()
+        for need in (
+            [job["needs"]]
+            if isinstance(job.get("needs"), str)
+            else job.get("needs", [])
+        )
+        if need not in jobs
+    ]
+
+
+def test_version_pin_ending_holds_across_the_whole_job_set() -> None:
+    """The third job named by the ticket ended in omniclaude#2673 (the sibling slice).
+
+    This holds the ending together with this change: no job in ``ci.yml`` runs the
+    version-pin script or either skill validator from an onex_change_control
+    checkout, the retired job is gone, and every ``needs:`` entry still names a job.
+    """
+    jobs = _ci_jobs()
+    text = CI_YML.read_text(encoding="utf-8")
+    assert "version-pin-check" not in jobs
+    for script in (
+        "check_version_pins",
+        "validate_skill_hygiene",
+        "validate_skill_contracts",
+    ):
+        assert script not in text, script
+    assert _dangling_needs(jobs) == []
+
+
+def test_dangling_needs_checker_flags_a_broken_needs_entry() -> None:
+    """Positive control: the needs checker above is not vacuous."""
+    jobs = _ci_jobs()
+    victim = next(job_id for job_id, job in jobs.items() if "needs" in job)
+    broken = {**jobs, victim: {**jobs[victim], "needs": ["no-such-job-omn20927"]}}
+    assert _dangling_needs(broken) == [(victim, "no-such-job-omn20927")]
