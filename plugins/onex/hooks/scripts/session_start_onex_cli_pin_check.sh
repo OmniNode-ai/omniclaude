@@ -78,14 +78,14 @@ if [[ -z "${MIN_VERSION:-}" || -z "${CONSOLE_MIN:-}" ]]; then
 fi
 : "${DELEGATE_PKG:=omnibase-infra}"
 : "${CONSOLE_PKG:=omnibase-core}"
-: "${INSTALL_HINT:=uv tool install --with '${DELEGATE_PKG}>=${MIN_VERSION}' '${CONSOLE_PKG}>=${CONSOLE_MIN}'}"
+: "${INSTALL_HINT:=uv tool install --python 3.12 --with '${DELEGATE_PKG}>=${MIN_VERSION}' '${CONSOLE_PKG}>=${CONSOLE_MIN}'}"
 
 if ! command -v onex >/dev/null 2>&1; then
     printf '\n[onex-cli-pin] onex CLI not found on PATH.\n' >&2
     printf '[onex-cli-pin]   Required: %s >= %s (ships the `onex` executable)\n' "$CONSOLE_PKG" "$CONSOLE_MIN" >&2
     printf '[onex-cli-pin]              + %s >= %s (registers the subcommands)\n' "$DELEGATE_PKG" "$MIN_VERSION" >&2
     printf '[onex-cli-pin]   Install:  %s\n' "$INSTALL_HINT" >&2
-    printf '[onex-cli-pin]   or pipx:  pipx install '"'"'%s>=%s'"'"' && pipx inject %s '"'"'%s>=%s'"'"'\n\n' \
+    printf '[onex-cli-pin]   or pipx:  pipx install --python 3.12 '"'"'%s>=%s'"'"' && pipx inject %s '"'"'%s>=%s'"'"'\n\n' \
         "$CONSOLE_PKG" "$CONSOLE_MIN" "$CONSOLE_PKG" "$DELEGATE_PKG" "$MIN_VERSION" >&2
     exit 0
 fi
