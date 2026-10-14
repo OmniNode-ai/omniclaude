@@ -18,7 +18,7 @@ REQUIRED_RULES = [
     "Never bypass pre-commit hooks",
     "Anchor-first ordering",
     "Verifiable-handle reporting",
-    "OCC receipt pairing",
+    "Repo-owned evidence",
     # OMN-13052 (D-6): UI DoD items require Playwright proof, not curl.
     "UI proof requires Playwright",
     "Docker builds run on the runtime host's stability lane",
@@ -45,7 +45,7 @@ def _resolved(path: Path, *, seen: frozenset[str] = frozenset()) -> str:
 
     Cycles are left unexpanded rather than followed. A pack documents its own
     import path in its "## Import" section, and packs legitimately reference one
-    another (the OCC rule points at @_lib/pr-safety/helpers.md), so a naive
+    another (the evidence rule points at @_lib/pr-safety/helpers.md), so a naive
     expansion recurses forever. Stopping at a repeat visit resolves every
     reference exactly once, which is what the injected prompt sees.
     """
@@ -147,26 +147,26 @@ def test_operating_rules_version_consistent_across_files() -> None:
         )
 
 
-# OMN-13050 (retro D-4): the OCC receipt-pairing recipe must be tool-generated and
-# embedded verbatim, with each prohibition paired to a failure mode + alternative.
+# OMN-13050 (retro D-4), amended by OMN-20074: the evidence rule names the repo's own
+# contract, never an OCC receipt, with each prohibition paired to a failure mode +
+# alternative.
 
-OCC_RECIPE_MARKERS = [
-    "scaffold_occ_receipt.py",
-    "contract_sha256",
-    "--base",
+EVIDENCE_RULE_MARKERS = [
+    "contracts/<TICKET-ID>.yaml",
+    "dod_evidence",
+    "--base dev",
     "STOP and report back",
-    "Evidence-Source",
-    "Evidence-Ticket",
 ]
 
 
 @pytest.mark.unit
-def test_prompt_md_embeds_occ_receipt_recipe() -> None:
-    """prompt.md injects the tool-generated OCC recipe incl. contract_sha256."""
+def test_prompt_md_embeds_repo_evidence_rule() -> None:
+    """prompt.md injects the repo-owned evidence rule."""
     prompt_md = DISPATCH_WORKER_DIR / "prompt.md"
     content = _resolved(prompt_md)
-    missing = [m for m in OCC_RECIPE_MARKERS if m not in content]
-    assert not missing, f"prompt.md missing OCC recipe markers: {missing}"
+    missing = [m for m in EVIDENCE_RULE_MARKERS if m not in content]
+    assert not missing, f"prompt.md missing evidence rule markers: {missing}"
+    assert "scaffold_occ_receipt.py" not in content
 
 
 @pytest.mark.unit
@@ -185,15 +185,15 @@ def test_prompt_md_skip_token_prohibition_pairs_alternative() -> None:
 
 
 @pytest.mark.unit
-def test_skill_md_references_occ_recipe() -> None:
-    """SKILL.md keeps the OCC recipe rule in sync with prompt.md."""
+def test_skill_md_references_repo_evidence_rule() -> None:
+    """SKILL.md keeps the evidence rule in sync with prompt.md."""
     skill_md = DISPATCH_WORKER_DIR / "SKILL.md"
     content = _resolved(skill_md)
-    assert "scaffold_occ_receipt.py" in content, (
-        "SKILL.md must reference the OCC receipt scaffold tool"
+    assert "contracts/<TICKET-ID>.yaml" in content, (
+        "SKILL.md must name the repo-owned contract as the evidence"
     )
-    assert "contract_sha256" in content, (
-        "SKILL.md must name contract_sha256 as part of the tool-generated schema"
+    assert "scaffold_occ_receipt.py" not in content, (
+        "SKILL.md must not instruct running the deleted OCC receipt scaffold"
     )
 
 

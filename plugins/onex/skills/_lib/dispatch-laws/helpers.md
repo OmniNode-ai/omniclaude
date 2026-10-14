@@ -84,26 +84,13 @@ refactor, and needs operator sign-off.
    ```
    ````
 
-8. **OCC receipt pairing — TOOL-GENERATE, never hand-author (<TICKET>, retro D-4).**
-   Hand-authored OCC receipts wedged OCC PR #2530 four ways and blocked three code
-   PRs overnight. If your change touches runtime paths (src nodes/handlers/contracts),
-   you MUST pair it with an `onex_change_control` (OCC) contract + DoD receipt. Do NOT
-   hand-write the receipt YAML. Generate it with the tool so the full schema —
-   INCLUDING `contract_sha256` (mandatory since <TICKET>; its omission is exactly
-   what wedged #2530) — is emitted and validated against `ModelDodReceipt`:
-
-   ```bash
-   # From the omniclaude repo root; --base defaults to dev mechanically.
-   uv run scripts/scaffold_occ_receipt.py <TICKET-ID> \
-     --pr-number <OCC-PR#> --commit-sha <code-PR-head-SHA> \
-     --occ-root <path-to-onex_change_control-checkout> \
-     --pr-body-file <code-PR-body.md> --ci-watch-confirmed \
-     --out drift/dod_receipts/<TICKET-ID>/dod-occ-pr-self/command.yaml
-   ```
-
-   The tool self-reports the four OCC #2530 wedges and refuses to emit a receipt
-   while any are present. Each prohibition below is paired with its failure mode
-   and the alternative action — do the alternative, do not work around the gate:
+8. **Repo-owned evidence — never pair an OCC receipt (<TICKET>).** The
+   `onex_change_control` (OCC) companion and its DoD receipt are retired. A change's
+   evidence is the repo's own `contracts/<TICKET-ID>.yaml`, with one `dod_evidence`
+   entry per acceptance criterion, committed in the same PR as the change. Do NOT
+   open an `onex_change_control` PR and do NOT author an OCC receipt. Each
+   prohibition below is paired with its failure mode and the alternative action —
+   do the alternative, do not work around the gate:
 
    - **No bracketed skip token.** Failure mode: a bracketed `skip-receipt-gate`
      or `skip-deploy-gate` bypass token of the form `[ skip-<gate>: ... ]`
@@ -111,13 +98,12 @@ refactor, and needs operator sign-off.
      hard-FAILS the PR at the reject-deploy-gate-skip pre-commit hook AND the GHA
      required check — self-judgement is not evidence (<TICKET>). Alternative:
      **STOP and report back — any bracketed skip-token hard-fails your PR.** Remove
-     the token and fix the real gate input (missing dod_evidence / Evidence-Source
-     line / contract). There is no escape hatch.
-   - **Target `dev`, not `main`.** Failure mode: an OCC/code PR with base=main whose
-     head is not the dev→main promotion branch is hard-FAILED by main-target-guard
-     (dev-only promotion). Alternative: branch off `origin/dev` and target `dev`
-     (the tool's `--base` defaults to dev); for a genuine promotion pass
-     `--promotion`.
+     the token and fix the real gate input (the missing `dod_evidence` entry or
+     contract). There is no escape hatch.
+   - **Target `dev`, not `main`.** Failure mode: a PR with base=main whose head is
+     not the dev→main promotion branch is hard-FAILED by main-target-guard
+     (dev-only promotion). Alternative: branch off `origin/dev` and pass
+     `--base dev`.
    - **Never arm blind.** Failure mode: arming auto-merge before a confirmed green
      CI verdict merges red or strands the PR unobserved (Operating Rule 3).
      Alternative: hand the PR to the landing lane (`/omni:pr-handoff`), which arms on
@@ -125,14 +111,7 @@ refactor, and needs operator sign-off.
      (`pr_state_local.py --pr <repo>#<n>`, never `gh pr checks --watch`), paste that
      output as evidence, then arm via the `enqueue_to_merge_queue()` /
      `arm_auto_merge()` helpers in `@_lib/pr-safety/helpers.md` (which select the
-     correct queue method); re-run the scaffold tool with `--ci-watch-confirmed`.
-   - **Cite Evidence-Source + Evidence-Ticket.** Failure mode: a code PR body
-     missing the unbulleted `Evidence-Source: OCC#<n>` (or `<sha>`) OR
-     `Evidence-Ticket: <TICKET-ID>` line FAILS the Receipt-Gate even with green
-     checks. Alternative: patch the code PR body to include both lines via the
-     `patch_pr_body()` helper in `@_lib/pr-safety/helpers.md` — the REST PATCH +
-     read-back path, never the interactive PR-edit command (Projects-classic
-     silent-no-op trap, <TICKET>).
+     correct queue method).
 
 9. **UI proof requires Playwright, not `curl` (D-6, <TICKET>).** For any DoD item that
    touches UI behavior, the required proof is a Playwright interaction with the operator's

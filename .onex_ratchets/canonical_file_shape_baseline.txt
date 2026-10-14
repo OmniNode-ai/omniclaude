@@ -577,7 +577,6 @@ scripts/lint_plan_hard_fields.py
 scripts/lint_plan_verified_state.py
 scripts/lint_skill_mcp_refs.py
 scripts/lint_verification_evidence.py
-scripts/materialize-dod-evidence-from-occ.sh
 scripts/nightly-merge-sweep.sh
 scripts/observability/agent_activity_dashboard.sh
 scripts/observability/apply_dashboard_views.sh
@@ -603,7 +602,6 @@ scripts/repair-plugin-venv.sh
 scripts/run-hook-bits-drift.sh
 scripts/run_hook_system_tests_precommit.sh
 scripts/runner_label_exists_gate.py
-scripts/scaffold_occ_receipt.py
 scripts/secrets_baseline_wiring_gate.py
 scripts/seed_decisions.py
 scripts/setup-session-crons.sh
