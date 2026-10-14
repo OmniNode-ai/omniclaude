@@ -76,8 +76,8 @@ dod_evidence:
         check_value: "uv run python scripts/generate_claude_hook_capture_fixtures.py --check"
     binds_ac: ["AC4"]
   - id: "dod-omn18946-deploy-probe"
-    description: "Deploy probe: the token-use reader read from GitHub at the checked-out commit defines read_new_usage. A head without this change has no such file and the probe finds no match."
+    description: "Deploy probe: the token-use read handler read from GitHub at the checked-out commit defines HandlerTranscriptUsageRead. A head without this change has no such file and the probe finds no match."
     source: "manual"
     checks:
       - check_type: "command"
-        check_value: "gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/hooks/lib/hook_transcript_usage.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -c '^def read_new_usage('"
+        check_value: "gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_transcript_usage_read_effect/handlers/handler_transcript_usage_read.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -c '^class HandlerTranscriptUsageRead:'"
