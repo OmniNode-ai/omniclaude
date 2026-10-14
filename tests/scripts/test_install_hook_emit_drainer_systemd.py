@@ -107,6 +107,24 @@ def test_template_is_a_user_unit_that_restarts_forever() -> None:
         assert token in text
 
 
+def test_unit_path_reaches_the_user_bin_directory_where_uv_lives() -> None:
+    """The alarm path runs ``uv run onex-ledger``; a user unit's default PATH has no ~/.local/bin.
+
+    On h202 on 2026-10-14 a drainer that could not deliver its Slack alarm also could not append
+    the ledger ALERT row: ``[Errno 2] No such file or directory: 'uv'``. The unit's environment
+    showed the systemd default PATH, which names no user directory. [OMN-18603]
+    """
+    text = _SYSTEMD_TEMPLATE.read_text(encoding="utf-8")
+    paths = [
+        line.removeprefix("Environment=PATH=").split(":")
+        for line in text.splitlines()
+        if line.startswith("Environment=PATH=")
+    ]
+    assert len(paths) == 1, "the unit must name its PATH exactly once"
+    assert "%h/.local/bin" in paths[0], "uv is installed under the user's ~/.local/bin"
+    assert "/usr/bin" in paths[0] and "/bin" in paths[0]
+
+
 def test_dry_run_renders_without_touching_the_host(tmp_path: Path) -> None:
     installer, env, calls, unit = _prepare(tmp_path)
 
