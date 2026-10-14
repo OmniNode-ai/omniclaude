@@ -135,6 +135,19 @@ carry it and the ticket that will move it:
 placed on the line immediately before, or anywhere inside, the job's mapping.
 A bare pin with no annotation is the failure. There is no global allowlist
 file and no `--force`: an allowlist is where exemptions go to stop being read.
+
+A HOST THAT CANNOT READ GETS A DATED SNAPSHOT, NEVER A PASS (OMN-17427). A lab-host
+lane cannot read Actions variables (HTTP 403 at both scopes) and its GitHub reads
+are refused by the lane read guard, so visibility and the variable scopes cannot be
+read live there. Set `PRRP_VARIABLES_SNAPSHOT` (or pass `--variables-snapshot`) to a
+file written by `--write-variables-snapshot` from a host whose credential CAN read
+them. The snapshot is consulted only after a live read failed, so a live answer
+always wins; one older than `--snapshot-max-age-hours` (24), dated ahead, missing,
+unparseable, or silent about the repository or scope asked for is a REFUSAL, exit 2.
+A hosted value inside a fresh snapshot is judged exactly like a live one. Inside
+GitHub Actions the flag and the variable are refused: hosted CI is the enforced
+merge gate and resolves live. Use the environment variable, not hook `args`, so the
+same hook entry runs unchanged in a pre-commit step inside Actions.
 """
 
 from __future__ import annotations
@@ -147,7 +160,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -760,16 +775,170 @@ def _gh(
     )
 
 
-def resolve_visibility(slug: str) -> str:
-    """Live repository visibility. Never a list, never an inference."""
+SNAPSHOT_SCHEMA = 1
+SNAPSHOT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+DEFAULT_SNAPSHOT_MAX_AGE_HOURS = 24.0
+# A snapshot dated slightly ahead of this host's clock is skew, not forgery.
+SNAPSHOT_CLOCK_SKEW = timedelta(minutes=5)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+class VariablesSnapshot:
+    """A dated copy of the answers the live reads give, for a host that cannot read.
+
+    A lab-host lane cannot read Actions variables (HTTP 403 at both scopes) and
+    its GitHub reads are refused by the lane read guard, so the live reads this
+    gate is built on fail there and the gate exited 2 for every workflow edit
+    (OMN-17427). This is a second SOURCE for those same facts, never a second
+    verdict: it is consulted only AFTER a live read failed, so a live answer
+    always wins, and every way it cannot be trusted is a refusal.
+
+    * older than ``max_age``, or dated in the future: refused as stale;
+    * missing, unparseable, wrong schema, or silent about the scope or the
+      repository asked for: refused -- "the snapshot does not mention it" is
+      not "it is unset";
+    * the gate's other fail-closed behaviour is untouched, so an unreadable
+      source still ends in THE GATE DID NOT RUN.
+
+    Written by ``--write-variables-snapshot`` from a host whose credential can
+    read the scopes; the file holds variable names and values only, never a
+    credential. Hosted CI never reads one (see ``main``): it must resolve live.
+    """
+
+    def __init__(
+        self,
+        path: Path,
+        max_age: timedelta,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
+        self._path = Path(path)
+        self._max_age = max_age
+        self._now = now
+        self._data: dict[str, Any] | None = None
+        self._captured_at: datetime | None = None
+
+    def _clock(self) -> datetime:
+        return (self._now or _utcnow)()
+
+    def _refresh_hint(self) -> str:
+        return (
+            "refresh it from a host whose credential can read Actions variables: "
+            "private_repo_runner_placement_gate.py --repo <owner/name> "
+            f"--write-variables-snapshot {self._path}"
+        )
+
+    def _load(self) -> dict[str, Any]:
+        if self._data is not None:
+            return self._data
+        try:
+            data = json.loads(self._path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise GateError(
+                f"snapshot {self._path} could not be read ({error}); "
+                f"{self._refresh_hint()}"
+            ) from error
+        if not isinstance(data, dict) or data.get("schema") != SNAPSHOT_SCHEMA:
+            raise GateError(
+                f"snapshot {self._path} is not schema {SNAPSHOT_SCHEMA}; "
+                f"{self._refresh_hint()}"
+            )
+        try:
+            captured = datetime.strptime(
+                str(data["captured_at"]), SNAPSHOT_TIME_FORMAT
+            ).replace(tzinfo=UTC)
+        except (KeyError, ValueError) as error:
+            raise GateError(
+                f"snapshot {self._path} has no usable captured_at; "
+                f"{self._refresh_hint()}"
+            ) from error
+        scopes, visibility = data.get("scopes"), data.get("visibility")
+        if not isinstance(scopes, dict) or not isinstance(visibility, dict):
+            raise GateError(
+                f"snapshot {self._path} has no scopes/visibility objects; "
+                f"{self._refresh_hint()}"
+            )
+        age = self._clock() - captured
+        if age < -SNAPSHOT_CLOCK_SKEW:
+            raise GateError(
+                f"snapshot {self._path} is dated in the future ({data['captured_at']}); "
+                f"{self._refresh_hint()}"
+            )
+        if age > self._max_age:
+            raise GateError(
+                f"snapshot {self._path} is stale: captured {data['captured_at']}, "
+                f"{self._format_age(age)} old, limit {self._format_age(self._max_age)}; "
+                f"{self._refresh_hint()}"
+            )
+        self._data, self._captured_at = data, captured
+        return data
+
+    @staticmethod
+    def _format_age(age: timedelta) -> str:
+        minutes = max(int(age.total_seconds() // 60), 0)
+        return f"{minutes // 60}h{minutes % 60:02d}m"
+
+    def describe(self) -> str:
+        """Where a value came from and how old it is, for the run's own output."""
+        self._load()
+        assert self._captured_at is not None
+        age = self._format_age(self._clock() - self._captured_at)
+        limit = self._format_age(self._max_age)
+        return f"snapshot {self._path} (age {age}, limit {limit})"
+
+    def scope(self, key: str) -> dict[str, str]:
+        """The recorded variables of ``org:<org>`` or ``repo:<owner/name>``."""
+        scopes = self._load()["scopes"]
+        values = scopes.get(key)
+        if not isinstance(values, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in values.items()
+        ):
+            raise GateError(f"snapshot {self._path} does not record scope {key}")
+        return dict(values)
+
+    def visibility(self, slug: str) -> str:
+        recorded = self._load()["visibility"].get(slug)
+        if recorded not in {"public", "private", "internal"}:
+            raise GateError(
+                f"snapshot {self._path} does not record the visibility of {slug}"
+            )
+        return str(recorded)
+
+
+def resolve_visibility(slug: str, snapshot: VariablesSnapshot | None = None) -> str:
+    """Live repository visibility. Never a list, never an inference.
+
+    When the live read fails and a snapshot is supplied, the snapshot's dated
+    answer is used and the run says so; a snapshot that cannot answer is the
+    same refusal as no snapshot.
+    """
     result = _gh(["api", f"repos/{slug}", "--jq", ".visibility"])
     if result.returncode != 0:
-        raise GateError(
-            f"could not resolve the visibility of {slug} from the GitHub API "
-            f"({result.stderr.strip()[:200]}). The rule applies to private "
-            "repositories only, so a gate that cannot read visibility has not "
-            "passed -- it has not run. THE GATE DID NOT RUN."
+        live = result.stderr.strip()[:200]
+        if snapshot is None:
+            raise GateError(
+                f"could not resolve the visibility of {slug} from the GitHub API "
+                f"({live}). The rule applies to private "
+                "repositories only, so a gate that cannot read visibility has not "
+                "passed -- it has not run. THE GATE DID NOT RUN."
+            )
+        try:
+            recorded = snapshot.visibility(slug)
+            where = snapshot.describe()
+        except GateError as error:
+            raise GateError(
+                f"could not resolve the visibility of {slug} from the GitHub API "
+                f"({live}) and the snapshot cannot answer: {error}. "
+                "THE GATE DID NOT RUN."
+            ) from error
+        print(
+            f"NOTE: visibility of {slug} is {recorded}, read from {where} because "
+            f"the live read failed ({live}).",
+            file=sys.stderr,
         )
+        return recorded
     visibility = result.stdout.strip()
     if visibility not in {"public", "private", "internal"}:
         raise GateError(
@@ -805,9 +974,10 @@ class Variables:
     pass.
     """
 
-    def __init__(self, slug: str) -> None:
+    def __init__(self, slug: str, snapshot: VariablesSnapshot | None = None) -> None:
         self._slug = slug
         self._org_name = slug.split("/", 1)[0]
+        self._snapshot = snapshot
         self._scopes: dict[str, dict[str, str] | None] = {}
         self._errors: dict[str, str] = {}
 
@@ -838,8 +1008,28 @@ class Variables:
             try:
                 self._scopes[which] = self._read(flag, target)
             except GateError as error:
-                self._errors[which] = str(error)
+                self._from_snapshot(which, str(error))
         return self._scopes.get(which)
+
+    def _from_snapshot(self, which: str, live_error: str) -> None:
+        """Use the dated snapshot for a scope whose LIVE read failed, or record why not."""
+        snapshot = self._snapshot
+        if snapshot is None:
+            self._errors[which] = live_error
+            return
+        key = f"org:{self._org_name}" if which == "org" else f"repo:{self._slug}"
+        try:
+            self._scopes[which] = snapshot.scope(key)
+            where = snapshot.describe()
+        except GateError as error:
+            self._scopes.pop(which, None)
+            self._errors[which] = f"{live_error}; the snapshot cannot answer: {error}"
+            return
+        print(
+            f"NOTE: {key} variables read from {where} because the live read "
+            f"failed ({live_error}).",
+            file=sys.stderr,
+        )
 
     def _refuse(self, name: str, which: str) -> GateError:
         where = "this repository" if which == "repo" else "the organisation"
@@ -847,7 +1037,9 @@ class Variables:
             f"{name} is needed to resolve a runs-on expression and {where} "
             f"variable scope could not be read ({self._errors[which]}). An "
             "Actions job token cannot read Actions variables at either scope; "
-            "pass a credential that can as the ACTIONS_VARIABLES_TOKEN secret. "
+            "pass a credential that can as the ACTIONS_VARIABLES_TOKEN secret "
+            "(a lab host with no such credential supplies a fresh "
+            "--variables-snapshot instead). "
             "Guessing the expression own default instead would report a "
             "repository inheriting a hosted organisation value as green. "
             "THE GATE DID NOT RUN."
@@ -1846,6 +2038,33 @@ def scan_every_workflow_branch(
     return findings
 
 
+def write_snapshot(slug: str, path: Path) -> None:
+    """Record the LIVE answers a lab host cannot read, dated, for ``--variables-snapshot``.
+
+    Run from a host whose credential can read both Actions variable scopes. Every
+    read is live and every failure is a GateError, so a snapshot is only ever
+    written from a complete read -- never from a partial one or from another
+    snapshot. The file is replaced atomically.
+    """
+    org = slug.split("/", 1)[0]
+    visibility = resolve_visibility(slug)
+    body = {
+        "schema": SNAPSHOT_SCHEMA,
+        "captured_at": _utcnow().strftime(SNAPSHOT_TIME_FORMAT),
+        "visibility": {slug: visibility},
+        "scopes": {
+            f"org:{org}": Variables._read("--org", org),
+            f"repo:{slug}": Variables._read("--repo", slug),
+        },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    scratch = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    scratch.write_text(
+        json.dumps(body, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    scratch.replace(path)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", default=".", type=Path)
@@ -1868,6 +2087,34 @@ def main(argv: list[str] | None = None) -> int:
             "path to a JSON object of variable name -> value, used INSTEAD of "
             "the live scopes. For tests only; CI never passes it, because a "
             "fixture cannot go stale in the way the live value can."
+        ),
+    )
+    parser.add_argument(
+        "--variables-snapshot",
+        default=os.environ.get("PRRP_VARIABLES_SNAPSHOT"),
+        help=(
+            "path to a dated snapshot of visibility and the organisation and "
+            "repository variable scopes, read ONLY for an answer whose live read "
+            "failed (a lab host cannot read Actions variables). Older than "
+            "--snapshot-max-age-hours, dated ahead, or silent about what is "
+            "needed: the gate refuses. Defaults to $PRRP_VARIABLES_SNAPSHOT. "
+            "Refused inside GitHub Actions, which must resolve live (OMN-17427)."
+        ),
+    )
+    parser.add_argument(
+        "--snapshot-max-age-hours",
+        type=float,
+        default=DEFAULT_SNAPSHOT_MAX_AGE_HOURS,
+        help="oldest --variables-snapshot the gate will read (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--write-variables-snapshot",
+        type=Path,
+        help=(
+            "read visibility and both variable scopes LIVE and write them, "
+            "dated, to this path for --variables-snapshot; run it from a host "
+            "whose credential can read Actions variables. Writes nothing and "
+            "exits 2 if any read fails."
         ),
     )
     parser.add_argument(
@@ -1942,6 +2189,7 @@ def main(argv: list[str] | None = None) -> int:
         name
         for name, value in (
             ("--variables-json", args.variables_json),
+            ("--variables-snapshot", args.variables_snapshot),
             ("--called-workflows-json", args.called_workflows_json),
             ("--assume-visibility", args.assume_visibility),
             ("--branches-json", args.branches_json),
@@ -1967,8 +2215,26 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    if args.write_variables_snapshot:
+        try:
+            write_snapshot(args.repo, args.write_variables_snapshot)
+        except (GateError, OSError) as error:
+            print(f"::error::{error} THE SNAPSHOT WAS NOT WRITTEN.", file=sys.stderr)
+            return 2
+        print(f"wrote {args.write_variables_snapshot} for {args.repo}")
+        return 0
+
+    snapshot = (
+        VariablesSnapshot(
+            Path(args.variables_snapshot),
+            timedelta(hours=args.snapshot_max_age_hours),
+        )
+        if args.variables_snapshot
+        else None
+    )
+
     try:
-        visibility = args.assume_visibility or resolve_visibility(args.repo)
+        visibility = args.assume_visibility or resolve_visibility(args.repo, snapshot)
         if visibility == "public":
             print(
                 f"OK: {args.repo} is public; GitHub-hosted runners are the "
@@ -1980,7 +2246,7 @@ def main(argv: list[str] | None = None) -> int:
                 json.loads(Path(args.variables_json).read_text(encoding="utf-8"))
             )
             if args.variables_json
-            else Variables(args.repo)
+            else Variables(args.repo, snapshot)
         )
         called = CalledWorkflows(
             Path(args.repo_root),

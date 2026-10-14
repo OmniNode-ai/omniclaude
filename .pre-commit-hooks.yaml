@@ -114,6 +114,10 @@
     `# private-repo-hosted-ok: <reason> (OMN-nnnnn)`. There is no allowlist
     file and no force flag. Unreadable visibility, an unresolvable variable
     and a missing workflow directory are all exit 2, never a pass.
+    A host that cannot read Actions variables (a lab-host lane, HTTP 403) sets
+    PRRP_VARIABLES_SNAPSHOT to a file written by --write-variables-snapshot
+    from a host that can; it is read only after a live read failed, and one
+    older than 24 hours or silent about what is needed is exit 2 (OMN-17427).
     See scripts/private_repo_runner_placement_gate.py.
   language: script
   entry: scripts/private_repo_runner_placement_gate.py --repo-root .
