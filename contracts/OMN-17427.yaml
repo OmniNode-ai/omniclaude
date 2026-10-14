@@ -16,6 +16,17 @@ requirements:
     acceptance:
       - id: AC1
         statement: "a job row with conclusion and completed_at set counts as completed while its status reads in_progress; a concluded failure still fails and a row missing either field still holds PENDING -- falsifier: uv run pytest tests/ci/test_ci_summary_gate.py -q -k TestConcludedJobWithLaggingStatusOmn17427"
+  - id: req-prrp-variables-snapshot
+    statement: A dated variables snapshot supplies facts only after a live read fails, with the same runner-placement verdicts and refusals.
+    acceptance:
+      - id: AC2
+        statement: A fresh snapshot supplies variables and visibility after a live read fails, a live answer takes precedence, and fallback use reports its age and live error.
+      - id: AC3
+        statement: Stale, future-dated, missing, unparseable, missing-scope and other-repository snapshots refuse; absent visibility refuses too.
+      - id: AC4
+        statement: Snapshot values preserve repository precedence and hosted-runner findings; the CLI returns 0, 1 or 2 for fleet, hosted or stale snapshots, accepts the environment path on a lab host and refuses snapshots in GitHub Actions.
+      - id: AC5
+        statement: Refresh writes a dated snapshot usable by the gate when all live reads succeed, and writes nothing when a live scope is unreadable.
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -58,3 +69,39 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_ci_summary_gate.py -q -k TestConcludedJobWithLaggingStatusOmn17427"
     binds_ac:
       - AC1
+  - id: dod-prrp-snapshot-live-first
+    description: Fresh fallback resolves variables and visibility, preserves live precedence and reports the snapshot age and live error.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_snapshot.py -q -k 'fresh_snapshot_resolves or live_answer_wins or fallback_is_announced or visibility_falls_back'"
+    binds_ac:
+      - AC2
+  - id: dod-prrp-snapshot-refusals
+    description: Unusable snapshots refuse instead of passing an unresolved runner placement or visibility.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_snapshot.py -q -k 'snapshot_refuses or snapshot_file_refuses or organisation_scope_refuses or another_repository_refuses or visibility_refuses'"
+    binds_ac:
+      - AC3
+  - id: dod-deploy-prrp-snapshot-cli
+    description: A hosted-runner-safe hermetic CLI check exercises the gate loaded from this checkout, including a hosted-value positive control, fleet success, stale refusal, environment path and GitHub Actions refusal.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_snapshot.py -q -k 'positive_control or repo_shadow or main_ or inside_github_actions or environment_names'"
+    binds_ac:
+      - AC4
+  - id: dod-prrp-snapshot-refresh
+    description: The refresh CLI captures live facts into a usable dated snapshot and leaves no file when a live read fails.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_snapshot.py -q -k refresh_command"
+    binds_ac:
+      - AC5
