@@ -10,8 +10,7 @@ named the scaffold tool was the dispatch-worker receipt-pairing rule, which now
 points at the repo's own contract instead.
 
 The reusables other repositories still call stay hosted here until their last
-caller is gone: the minting pair is still called by omninode_infra (deferred)
-and the deploy gate by omnibase_core and omnibase_infra.
+caller is gone, including the minting pair and the deploy gate.
 """
 
 from __future__ import annotations
