@@ -38,9 +38,8 @@ def _run_hook(
     """Run the completion guard hook with the given tool input.
 
     HOME defaults to the test ``cwd`` so common.sh sources nothing from the
-    real user's ``~/.omnibase/.env`` — the ambient ``ONEX_EVIDENCE_ROOT``
-    there would otherwise override the per-test fixture. Tests that need to
-    exercise the env-var policy itself should pass an explicit ``HOME``.
+    real user's ``~/.omnibase/.env``. The guard reads receipts from
+    ``<cwd>/.evidence/<ticket>/dod_report.json``.
     """
     isolated_home = cwd if cwd is not None else str(Path.home())
     env = {
@@ -89,11 +88,12 @@ class TestAllowsNonCompletionUpdates:
         assert result.returncode == 0
 
 
-class TestEvidenceRootEnvVar:
-    """ONEX_EVIDENCE_ROOT env var policy: fail-open when unset, fail-closed when misconfigured."""
+class TestEvidenceLocation:
+    """The guard reads the repo-local ``.evidence/<ticket>`` and nothing outside the repo."""
 
-    def test_fail_open_when_evidence_root_unset(self, tmp_path: Path) -> None:
-        # Use isolated HOME so common.sh can't source ~/.omnibase/.env
+    def test_missing_evidence_dir_blocks_done(self, tmp_path: Path) -> None:
+        # No .evidence directory, no ONEX_EVIDENCE_ROOT, no OMNI_HOME: the guard is
+        # active and refuses Done rather than going INACTIVE.
         isolated_home = tmp_path / "home"
         isolated_home.mkdir()
         result = _run_hook(
@@ -105,34 +105,20 @@ class TestEvidenceRootEnvVar:
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
                 "HOME": str(isolated_home),
-            },
-            cwd=str(tmp_path),
-        )
-        assert result.returncode == 0
-        assert "INACTIVE" in result.stderr or "not set" in result.stderr
-
-    def test_fail_closed_when_evidence_root_not_absolute(self, tmp_path: Path) -> None:
-        isolated_home = tmp_path / "home"
-        isolated_home.mkdir()
-        result = _run_hook(
-            {
-                "tool_name": "mcp__linear-server__save_issue",
-                "tool_input": {"id": "OMN-9999", "state": "Done"},
-            },
-            env_overrides={
-                "DOD_ENFORCEMENT_MODE": "hard",
-                "OMNICLAUDE_MODE": "full",
-                "HOME": str(isolated_home),
-                "ONEX_EVIDENCE_ROOT": "relative/path",
             },
             cwd=str(tmp_path),
         )
         assert result.returncode == 2
-        assert "not an absolute path" in result.stderr
+        assert "No DoD evidence receipt found" in result.stderr
+        assert "INACTIVE" not in result.stderr
 
-    def test_fail_closed_when_evidence_root_nonexistent(self, tmp_path: Path) -> None:
-        isolated_home = tmp_path / "home"
-        isolated_home.mkdir()
+    def test_ambient_evidence_root_env_var_is_ignored(self, tmp_path: Path) -> None:
+        # A receipt under the retired ONEX_EVIDENCE_ROOT location must not satisfy
+        # the guard; only <cwd>/.evidence/<ticket>/dod_report.json does.
+        legacy_root = tmp_path / "legacy_root"
+        _write_receipt(
+            legacy_root, "OMN-9999", _model_dod_receipt("OMN-9999", status="PASS")
+        )
         result = _run_hook(
             {
                 "tool_name": "mcp__linear-server__save_issue",
@@ -141,13 +127,15 @@ class TestEvidenceRootEnvVar:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "HOME": str(isolated_home),
-                "ONEX_EVIDENCE_ROOT": str(tmp_path / "nonexistent"),
+                "ONEX_EVIDENCE_ROOT": str(legacy_root),
             },
             cwd=str(tmp_path),
         )
         assert result.returncode == 2
-        assert "does not exist" in result.stderr
+
+    def test_no_onex_change_control_path_in_guard(self) -> None:
+        assert "onex_change_control" not in Path(HOOK_SCRIPT).read_text()
+        assert "ONEX_EVIDENCE_ROOT" not in Path(HOOK_SCRIPT).read_text()
 
 
 class TestBlocksDoneWithoutReceipt:
@@ -166,7 +154,6 @@ class TestBlocksDoneWithoutReceipt:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -182,7 +169,6 @@ class TestBlocksDoneWithoutReceipt:
             },
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "advisory",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -238,7 +224,6 @@ class TestAllowsDoneWithValidReceipt:
             },
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -264,7 +249,6 @@ class TestBlocksDoneWithStaleReceipt:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -289,7 +273,6 @@ class TestBlocksDoneWithFailedChecks:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -318,7 +301,6 @@ class TestBlocksLegacyReceiptSchema:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -344,7 +326,6 @@ class TestBlocksFailClosed:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -366,7 +347,6 @@ class TestBlocksFailClosed:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -388,7 +368,6 @@ class TestBlocksFailClosed:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -408,7 +387,6 @@ class TestBlocksFailClosed:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -429,7 +407,6 @@ class TestBlocksFailClosed:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -449,7 +426,6 @@ class TestBlocksFailClosed:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -470,7 +446,6 @@ class TestBlocksFailClosed:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -490,7 +465,6 @@ class TestAllowsDoneWhenNoContractExists:
             },
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "advisory",
-                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
