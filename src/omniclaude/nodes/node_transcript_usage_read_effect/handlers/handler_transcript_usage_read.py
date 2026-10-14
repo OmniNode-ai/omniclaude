@@ -41,7 +41,6 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
 
 from omniclaude.nodes.node_transcript_usage_read_effect.models import (
     ModelTranscriptUsageReadRequest,
@@ -82,7 +81,7 @@ def _read_marker(marker: Path) -> tuple[int, list[str]] | None:
     return offset, recent
 
 
-def _count(value: Any) -> int:
+def _count(value: object) -> int:
     """A usage field as a non-negative integer; anything else reads as zero."""
     if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
         return value
@@ -90,7 +89,7 @@ def _count(value: Any) -> int:
 
 
 def _message_usage(
-    entry: dict[str, Any], *, include_sidechain: bool
+    entry: dict[str, object], *, include_sidechain: bool
 ) -> tuple[str, str, tuple[int, int, int, int]] | None:
     """``(message id, model, (in, out, cache create, cache read))`` or ``None``."""
     if entry.get("type") != "assistant":
