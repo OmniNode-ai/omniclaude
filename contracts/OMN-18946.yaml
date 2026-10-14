@@ -13,7 +13,7 @@ summary: >-
 is_seam_ticket: false
 interface_change: true
 interfaces_touched:
-  - "the omniclaude hook-event metadata topic gains two derived hook_event_name values, GuardRefusal and AssistantUsage"
+  - "events"
 requirements:
   - id: "req-omn18946-refusal-identity"
     statement: "Every refused call has one event naming the guard that refused it, joined to the call by tool_use_id, and no secret text."
