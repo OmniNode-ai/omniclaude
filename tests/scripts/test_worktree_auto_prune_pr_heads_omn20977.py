@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """The pruner's pull-request state comes from ``onex scm pr-heads`` (OMN-20977).
 
@@ -35,6 +35,7 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 from omnibase_core.validators.no_unguarded_git_subprocess import (
@@ -87,19 +88,23 @@ def _git_ok(cwd: Path, *args: str) -> str:
     return proc.stdout.strip()
 
 
-def _recorded() -> dict[str, object]:
+def _recorded() -> dict[str, Any]:
     return json.loads(_FIXTURE.read_text(encoding="utf-8"))
 
 
-def _variant(**changes: object) -> dict[str, object]:
+def _recorded_rows() -> list[dict[str, Any]]:
+    return _recorded()["result"]["prs"]
+
+
+def _variant(**changes: object) -> dict[str, Any]:
     answer = _recorded()
     answer.update(changes)
     return answer
 
 
-def _with_rows(rows: list[dict[str, object]], **changes: object) -> dict[str, object]:
+def _with_rows(rows: list[dict[str, object]], **changes: object) -> dict[str, Any]:
     answer = _variant(**changes)
-    result = dict(answer["result"])  # type: ignore[arg-type]
+    result = dict(answer["result"])
     result["prs"] = rows
     answer["result"] = result
     return answer
@@ -120,9 +125,7 @@ def _row(number: int, state: str, head_ref: str | None, oid: str) -> dict[str, o
 A = "a" * 40
 B = "b" * 40
 MERGED_WITH_BRANCH = next(
-    row
-    for row in _recorded()["result"]["prs"]  # type: ignore[union-attr]
-    if row["state"] == "MERGED" and row.get("head_ref")  # type: ignore[union-attr]
+    row for row in _recorded_rows() if row["state"] == "MERGED" and row.get("head_ref")
 )
 
 
@@ -140,17 +143,13 @@ def test_branch_states_map_merged_rows_by_head_branch() -> None:
     )
     gone = [
         row
-        for row in _recorded()["result"]["prs"]  # type: ignore[union-attr]
-        if row["state"] == "MERGED" and not row.get("head_ref")  # type: ignore[union-attr]
+        for row in _recorded_rows()
+        if row["state"] == "MERGED" and not row.get("head_ref")
     ]
     assert gone, "the recording must hold merged rows whose branch is gone"
     assert all(not row.get("head_ref") for row in gone)
-    unmerged = next(
-        row
-        for row in _recorded()["result"]["prs"]  # type: ignore[union-attr]
-        if row["state"] == "UNMERGED"  # type: ignore[union-attr]
-    )
-    assert unmerged["head_ref"] not in states  # type: ignore[operator]
+    unmerged = next(row for row in _recorded_rows() if row["state"] == "UNMERGED")
+    assert unmerged["head_ref"] not in states
 
 
 def test_open_then_merged_precedence_is_preserved() -> None:
@@ -177,9 +176,7 @@ def test_a_failed_pr_heads_answer_is_an_empty_map() -> None:
 
 
 # ---------------------------------------------- collect_open_pr_branches
-def _fence_answer(
-    tick: str | None, rows: list[dict[str, object]]
-) -> dict[str, object]:
+def _fence_answer(tick: str | None, rows: list[dict[str, object]]) -> dict[str, Any]:
     return _with_rows(rows, watcher_tick=tick)
 
 
@@ -190,36 +187,28 @@ def test_the_fence_reads_open_rows_behind_a_fresh_tick() -> None:
         _row(30, "MERGED", "lane/omn-20977-done", B),
         _row(29, "UNMERGED", "lane/omn-20977-unknown", A),
     ]
-    open_branches = mod.collect_open_pr_branches_from_answer(
-        _fence_answer(tick, rows)
-    )
+    open_branches = mod.collect_open_pr_branches_from_answer(_fence_answer(tick, rows))
     assert open_branches == frozenset({"lane/omn-20977-open"})
 
 
 def test_the_fence_holds_when_the_watcher_tick_is_stale() -> None:
     """Nine minutes old: pr-heads has already downgraded every OPEN row to
     UNMERGED, so the open set would silently miss real open pull requests."""
-    stale = (datetime.now(UTC) - timedelta(minutes=9)).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
+    stale = (datetime.now(UTC) - timedelta(minutes=9)).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = [_row(31, "OPEN", "lane/omn-20977-open", A)]
-    assert (
-        mod.collect_open_pr_branches_from_answer(_fence_answer(stale, rows)) is None
-    )
+    assert mod.collect_open_pr_branches_from_answer(_fence_answer(stale, rows)) is None
 
 
 def test_the_fence_holds_without_a_watcher_tick() -> None:
     """The raw recording carries watcher_tick null: no OPEN row can exist."""
     rows = [_row(31, "OPEN", "lane/omn-20977-open", A)]
-    assert (
-        mod.collect_open_pr_branches_from_answer(_fence_answer(None, rows)) is None
-    )
+    assert mod.collect_open_pr_branches_from_answer(_fence_answer(None, rows)) is None
 
 
 def test_the_fence_holds_a_truncated_answer() -> None:
     tick = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     answer = _fence_answer(tick, [_row(31, "OPEN", "lane/omn-20977-open", A)])
-    answer["result"]["truncated"] = True  # type: ignore[index]
+    answer["result"]["truncated"] = True
     assert mod.collect_open_pr_branches_from_answer(answer) is None
 
 
@@ -235,11 +224,11 @@ def test_the_onex_command_resolves_from_the_environment(
     assert mod.resolve_onex_command() == ["/stub/onex", "--flag"]
 
 
-def test_the_onex_command_defaults_to_the_registry_venv_then_path(
+def test_the_onex_command_defaults_to_the_internal_venv_then_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("ONEX_SCM_CLI", raising=False)
-    monkeypatch.delenv("OMNI_HOME", raising=False)
+    monkeypatch.delenv("OMNIBASE_INTERNAL_HOME", raising=False)
     assert mod.resolve_onex_command() == ["onex"]
 
 
@@ -325,9 +314,7 @@ def test_a_merged_pr_worktree_is_pruned_from_pr_heads(
     root, _ledger = clean_worktree
     worktree = root / "OMN-20977" / "omniclaude"
     answer = _merged_answer(_git_ok(worktree, "rev-parse", "HEAD"))
-    row, removed = _run_main(
-        clean_worktree, tmp_path, monkeypatch, answer, "--execute"
-    )
+    row, removed = _run_main(clean_worktree, tmp_path, monkeypatch, answer, "--execute")
     assert row["disposition"] == "prune"
     assert not removed.exists()
 
@@ -361,9 +348,7 @@ def test_a_worktree_with_uncommitted_changes_is_never_removed(
     worktree = root / "OMN-20977" / "omniclaude"
     (worktree / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
     answer = _merged_answer(_git_ok(worktree, "rev-parse", "HEAD"))
-    row, kept = _run_main(
-        clean_worktree, tmp_path, monkeypatch, answer, "--execute"
-    )
+    row, kept = _run_main(clean_worktree, tmp_path, monkeypatch, answer, "--execute")
     assert row["disposition"] == "triage"
     assert "dirty_tree" in row["block_reasons"]
     assert kept.is_dir()

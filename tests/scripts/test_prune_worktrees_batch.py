@@ -286,8 +286,18 @@ def test_classification_merged_gone_open_active(tmp_path: Path) -> None:
     tickets = ["OMN-1", "OMN-2", "OMN-3", "OMN-GONE"]
     answers = {
         "omniclaude": [
-            _pr_row(4242, "MERGED", "lane/OMN-2-omniclaude", _worktree_oid("OMN-2", "omniclaude")),
-            _pr_row(5000, "OPEN", "lane/OMN-1-omniclaude", _worktree_oid("OMN-1", "omniclaude")),
+            _pr_row(
+                4242,
+                "MERGED",
+                "lane/OMN-2-omniclaude",
+                _worktree_oid("OMN-2", "omniclaude"),
+            ),
+            _pr_row(
+                5000,
+                "OPEN",
+                "lane/OMN-1-omniclaude",
+                _worktree_oid("OMN-1", "omniclaude"),
+            ),
         ],
         "omnibase_core": [
             # head_ref null: only the head oid names the merged PR.
@@ -332,13 +342,28 @@ def test_an_open_pr_row_never_makes_a_worktree_stale(tmp_path: Path) -> None:
     tickets = ["OMN-OPEN"]
     answers = {
         "omniclaude": [
-            _pr_row(6001, "OPEN", "lane/OMN-OPEN-omniclaude", _worktree_oid("OMN-OPEN", "omniclaude"))
+            _pr_row(
+                6001,
+                "OPEN",
+                "lane/OMN-OPEN-omniclaude",
+                _worktree_oid("OMN-OPEN", "omniclaude"),
+            )
         ],
         "omnibase_core": [
-            _pr_row(6002, "OPEN", "lane/OMN-OPEN-omnibase_core", _worktree_oid("OMN-OPEN", "omnibase_core"))
+            _pr_row(
+                6002,
+                "OPEN",
+                "lane/OMN-OPEN-omnibase_core",
+                _worktree_oid("OMN-OPEN", "omnibase_core"),
+            )
         ],
         "omnibase_infra": [
-            _pr_row(6003, "OPEN", "lane/OMN-OPEN-omnibase_infra", _worktree_oid("OMN-OPEN", "omnibase_infra"))
+            _pr_row(
+                6003,
+                "OPEN",
+                "lane/OMN-OPEN-omnibase_infra",
+                _worktree_oid("OMN-OPEN", "omnibase_infra"),
+            )
         ],
     }
     proc, _onex_log, _gh_log, n_worktrees = _run(

@@ -744,18 +744,16 @@ def resolve_onex_command() -> list[str]:
     """The argv prefix that runs the onex CLI.
 
     ``$ONEX_SCM_CLI`` (a full command line, e.g. ``uv run --project <dir>
-    onex``) wins. Otherwise prefer the canonical omnibase_internal clone's own
-    venv entry point — the project whose dependencies register the ``scm``
-    verb group — and otherwise a bare ``onex`` from PATH.
+    onex``) wins. Otherwise prefer the venv entry point under
+    ``$OMNIBASE_INTERNAL_HOME`` — the project whose dependencies register the
+    ``scm`` verb group — and otherwise a bare ``onex`` from PATH.
     """
     declared = os.environ.get("ONEX_SCM_CLI", "").strip()
     if declared:
         return shlex.split(declared)
-    registry_root = os.environ.get("OMNI_HOME", "").strip()
-    if registry_root:
-        candidate = (
-            Path(registry_root).parent / "omnibase_internal" / ".venv" / "bin" / "onex"
-        )
+    internal_home = os.environ.get("OMNIBASE_INTERNAL_HOME", "").strip()
+    if internal_home:
+        candidate = Path(internal_home) / ".venv" / "bin" / "onex"
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return [str(candidate)]
     return ["onex"]
@@ -830,9 +828,7 @@ def run_pr_heads(canonical: Path) -> dict[str, Any] | None:
     try:
         answer = json.loads(proc.stdout)
     except ValueError as exc:
-        print(
-            f"  pr-heads: {canonical.name}: unparseable JSON: {exc}", file=sys.stderr
-        )
+        print(f"  pr-heads: {canonical.name}: unparseable JSON: {exc}", file=sys.stderr)
         return None
     if not isinstance(answer, dict) or answer.get("outcome") != "completed":
         print(

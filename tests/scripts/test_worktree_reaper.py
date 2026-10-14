@@ -32,6 +32,9 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 _MODULE_PATH = Path(__file__).resolve().parents[2] / "scripts" / "worktree_reaper.py"
 
@@ -692,11 +695,7 @@ class _PrHeadsRegistry:
     def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self._monkeypatch = monkeypatch
         git_env = {
-            **{
-                k: v
-                for k, v in os.environ.items()
-                if not k.startswith("GIT_")
-            },
+            **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
             "GIT_AUTHOR_NAME": "omn20977",
             "GIT_COMMITTER_NAME": "omn20977",
             "GIT_AUTHOR_EMAIL": "omn20977@example.invalid",
@@ -704,24 +703,11 @@ class _PrHeadsRegistry:
         }
 
         def git(cwd: Path, *args: str) -> str:
-            scrubbed = {
-                k: v
-                for k, v in git_env.items()
-                if k
-                not in (
-                    "GIT_DIR",
-                    "GIT_WORK_TREE",
-                    "GIT_INDEX_FILE",
-                    "GIT_COMMON_DIR",
-                    "GIT_OBJECT_DIRECTORY",
-                    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-                )
-            }
             proc = subprocess.run(
                 ["git", "-C", str(cwd), *args],
                 capture_output=True,
                 text=True,
-                env=scrubbed,
+                env=scrub_git_location_env(git_env),
                 check=False,
                 timeout=60,
             )
@@ -806,7 +792,7 @@ class _PrHeadsRegistry:
             }
         )
         return worktree_reaper.run_reaper(
-            base_url="http://projection.test",  # onex-allow-internal-ip
+            base_url="http://projection.test",
             state_dir=tmp_path / "state",
             roots=[self.root],
             prune_script=_REAL_PRUNE,
@@ -841,9 +827,7 @@ def test_reaper_removes_a_worktree_pr_heads_names_merged_by_branch(
     # One pr-heads call for the one repo slug, with the canonical clone the
     # worktree's own .git pointer names.
     canonical = registry.worktree.parent.parent.parent / "canonical"
-    assert calls == [
-        f"scm pr-heads {SLUG} --source local --clone {canonical}"
-    ]
+    assert calls == [f"scm pr-heads {SLUG} --source local --clone {canonical}"]
 
 
 def test_reaper_removes_a_worktree_pr_heads_names_merged_by_head_oid(

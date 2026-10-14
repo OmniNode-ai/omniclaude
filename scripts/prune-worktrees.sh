@@ -19,9 +19,8 @@
 #   ./scripts/prune-worktrees.sh --execute --worktrees-root /path/to/worktrees
 #
 # Requirements:
-#   - the onex CLI (scm pr-heads): $ONEX_SCM_CLI wins, else the canonical
-#     omnibase_internal clone's venv entry point
-#     ($OMNI_HOME/../omnibase_internal/.venv/bin/onex), else `onex` on PATH
+#   - the onex CLI (scm pr-heads): $ONEX_SCM_CLI wins, else the venv entry
+#     point under $OMNIBASE_INTERNAL_HOME (.venv/bin/onex), else `onex` on PATH
 #   - git
 #   - python3 (parses the pr-heads JSON; also the pre-removal snapshot)
 #
@@ -101,16 +100,16 @@ remote_to_slug() {
 # ---------------------------------------------------------------------------
 # The onex CLI that answers `scm pr-heads` (OMN-20977). $ONEX_SCM_CLI holds a
 # full command line (e.g. "uv run --project /path onex"); otherwise prefer the
-# canonical omnibase_internal clone's own venv entry point, which carries the
-# omnimarket that serves the verb; otherwise a bare `onex` from PATH.
+# venv entry point under $OMNIBASE_INTERNAL_HOME, which carries the omnimarket
+# that serves the verb; otherwise a bare `onex` from PATH.
 # ---------------------------------------------------------------------------
 resolve_onex_command() {
   if [[ -n "${ONEX_SCM_CLI:-}" ]]; then
     printf '%s' "$ONEX_SCM_CLI"
     return
   fi
-  if [[ -n "${OMNI_HOME:-}" ]]; then
-    local candidate="${OMNI_HOME%/}/../omnibase_internal/.venv/bin/onex"
+  if [[ -n "${OMNIBASE_INTERNAL_HOME:-}" ]]; then
+    local candidate="${OMNIBASE_INTERNAL_HOME%/}/.venv/bin/onex"
     if [[ -x "$candidate" ]]; then
       printf '%s' "$candidate"
       return
@@ -146,8 +145,8 @@ ONEX_COMMAND="$(resolve_onex_command)"
 # Word-split the resolved command line into an argv array.
 read -r -a ONEX_CMD <<< "$ONEX_COMMAND"
 if [[ "${ONEX_CMD[0]}" == "onex" ]] && ! command -v onex &>/dev/null; then
-  echo "ERROR: the onex CLI was not found. Set ONEX_SCM_CLI, or point OMNI_HOME at the" >&2
-  echo "registry root holding omnibase_internal, or install onex on PATH." >&2
+  echo "ERROR: the onex CLI was not found. Set ONEX_SCM_CLI, or point OMNIBASE_INTERNAL_HOME at" >&2
+  echo "the project that ships onex, or install onex on PATH." >&2
   exit 1
 fi
 
