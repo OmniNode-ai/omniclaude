@@ -42,6 +42,10 @@ RestartSec=30
 # Telemetry drain must never compete with the operator's own work.
 Nice=10
 Environment=OMNI_HOME=__OMNI_HOME__
+# A user unit's default PATH names no user directory. The alarm path (hook_emit_bounded) runs
+# `uv run onex-ledger`, and uv lives under ~/.local/bin; without it the ledger ALERT row fails
+# with "No such file or directory: 'uv'" (OMN-18603). %h is systemd's specifier for the home.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=ONEX_STATE_DIR=__OMNI_HOME__/.onex_state
 WorkingDirectory=__OMNI_HOME__
 StandardOutput=append:__OMNI_HOME__/.onex_state/hooks/logs/hook-emit-drainer.log
