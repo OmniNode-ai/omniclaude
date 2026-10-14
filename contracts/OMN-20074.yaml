@@ -132,6 +132,7 @@ evidence_requirements:
   - kind: tests
     description: "The boundary-parity caller uses the core manifest after OCC producer retirement and the matching peer list."
     command: "uv run pytest tests/ci/test_boundary_parity_repin_omn20074.py -q --no-cov"
+  - kind: tests
     description: "No workflow, deploy gate file or import names the change control repository or package."
     command: "uv run pytest tests/ci/test_workflow_dependency_refs_off_occ_omn20074.py -q --no-cov"
 emergency_bypass:
