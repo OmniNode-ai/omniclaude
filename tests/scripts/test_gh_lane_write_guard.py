@@ -65,7 +65,8 @@ SCM_VERBS: Final[tuple[ModelScmVerb, ...]] = (
 )
 """
 
-ENFORCED = "OmniNode-ai/omnimarket"  # the one repository the contract puts in enforce
+ENFORCED = "OmniNode-ai/omnimarket"  # a repository the contract puts in enforce
+DRY_RUN = "someone-else/omnimarket"  # an owner write_config leaves in dry_run
 LANE = "write-guard-lane"
 
 # gh verb -> (argv, onex scm verb, node operation)
@@ -570,12 +571,35 @@ def test_onex_dispatch_venv_overrides_workspace(
 def test_a_repository_in_dry_run_mode_is_allowed(
     env: dict[str, str], gh_verb: str
 ) -> None:
-    """write_config puts only omnimarket in enforce: elsewhere onex scm sends nothing."""
-    argv = [
-        a if a != ENFORCED else "OmniNode-ai/omniclaude" for a in COVERED[gh_verb][0]
-    ]
+    """write_config enforces only the OmniNode-ai owner: elsewhere onex scm sends nothing."""
+    argv = [a if a != ENFORCED else DRY_RUN for a in COVERED[gh_verb][0]]
 
     _assert_passed(env, _run(env, *argv), argv)
+
+
+@pytest.mark.unit
+def test_a_repository_row_wins_over_its_owner_row(
+    tmp_path: Path, env: dict[str, str]
+) -> None:
+    """github_mode_by_repository pins one repository of an enforced owner to dry_run."""
+    contract = (
+        _pinned_contract().split("\nwrite_config:\n")[0]
+        + "\nwrite_config:\n"
+        + "  github_mode: dry_run\n"
+        + "  github_mode_by_owner:\n"
+        + "    OmniNode-ai: enforce\n"
+        + "  github_mode_by_repository:\n"
+        + f"    {ENFORCED}: dry_run\n"
+    )
+    workspace = tmp_path / "pinned"
+    _install(workspace, contract=contract)
+    run_env = dict(env, OMNI_HOME=str(workspace))
+    argv = COVERED["pr ready"][0]
+    _assert_passed(run_env, _run(run_env, *argv), argv)
+    Path(env["FAKE_GH_LOG"]).unlink()
+
+    other = [a if a != ENFORCED else "OmniNode-ai/omniclaude" for a in argv]
+    _assert_refused(run_env, _run(run_env, *other), "pr ready", "pr-ready")
 
 
 @pytest.mark.unit
