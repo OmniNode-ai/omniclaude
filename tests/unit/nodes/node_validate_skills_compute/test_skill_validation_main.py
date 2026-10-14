@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from omniclaude.nodes.node_skill_validation_compute.__main__ import main
+from omniclaude.nodes.node_validate_skills_compute.__main__ import main
 
 
 def _populate(root: Path, operation: str, scenario: str) -> dict[str, str] | None:
@@ -157,7 +157,7 @@ def test_module_entrypoint(tmp_path: Path, operation: str) -> None:
         [
             sys.executable,
             "-m",
-            "omniclaude.nodes.node_skill_validation_compute",
+            "omniclaude.nodes.node_validate_skills_compute",
             operation,
             "--skills-root",
             str(tmp_path),

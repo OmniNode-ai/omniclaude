@@ -6,7 +6,7 @@ The ``skill-hygiene`` and ``skill-contract-validation`` jobs in ``ci.yml`` minte
 onexbot-occ-writer token, checked out onex_change_control at a pinned rev and ran a
 validator script from that checkout. Both validators judge omniclaude's own plugin
 skills, so omniclaude owns the behaviour: they live in
-``node_skill_validation_compute`` and both jobs, and the matching pre-commit hook,
+``node_validate_skills_compute`` and both jobs, and the matching pre-commit hook,
 run that node's CLI. The Version Pin Compliance job is the sibling slice
 (omniclaude#2673) and is not touched here.
 """
@@ -25,10 +25,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 REQUIRED_CHECKS = REPO_ROOT / ".github" / "required-checks.yaml"
 PRE_COMMIT = REPO_ROOT / ".pre-commit-config.yaml"
-NODE_DIR = REPO_ROOT / "src" / "omniclaude" / "nodes" / "node_skill_validation_compute"
+NODE_DIR = REPO_ROOT / "src" / "omniclaude" / "nodes" / "node_validate_skills_compute"
 
 _OCC_REPOSITORY = "OmniNode-ai/onex_change_control"
-_CLI_MODULE = "omniclaude.nodes.node_skill_validation_compute"
+_CLI_MODULE = "omniclaude.nodes.node_validate_skills_compute"
 _SKILL_JOBS = {
     "skill-hygiene": "hygiene --skills-root plugins/onex/skills --strict",
     "skill-contract-validation": "contracts --skills-root plugins/onex/skills",

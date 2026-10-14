@@ -10,11 +10,11 @@ import json
 import sys
 from pathlib import Path
 
-from omniclaude.nodes.node_skill_validation_compute.handlers import (
+from omniclaude.nodes.node_validate_skills_compute.handlers import (
     HandlerSkillContracts,
     HandlerSkillHygiene,
 )
-from omniclaude.nodes.node_skill_validation_compute.models import (
+from omniclaude.nodes.node_validate_skills_compute.models import (
     ModelSkillValidationReport,
     ModelSkillValidationRequest,
 )

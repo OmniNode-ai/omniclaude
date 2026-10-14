@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from omniclaude.nodes.node_skill_validation_compute.handlers.handler_skill_contracts import (
+from omniclaude.nodes.node_validate_skills_compute.handlers.handler_skill_contracts import (
     HandlerSkillContracts,
     check_args_parity,
     check_duplicate_frontmatter,
@@ -17,7 +17,7 @@ from omniclaude.nodes.node_skill_validation_compute.handlers.handler_skill_contr
     parse_frontmatter,
     parse_frontmatter_args,
 )
-from omniclaude.nodes.node_skill_validation_compute.models import (
+from omniclaude.nodes.node_validate_skills_compute.models import (
     ModelSkillValidationRequest,
 )
 

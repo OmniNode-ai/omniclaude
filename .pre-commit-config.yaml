@@ -1307,7 +1307,7 @@ repos:
       - id: skill-contract-validation
         name: Skill Contract Validation
         language: system
-        entry: bash scripts/uv-run-worktree-safe.sh python -m omniclaude.nodes.node_skill_validation_compute contracts --skills-root plugins/onex/skills
+        entry: bash scripts/uv-run-worktree-safe.sh python -m omniclaude.nodes.node_validate_skills_compute contracts --skills-root plugins/onex/skills
         pass_filenames: false
         stages: [pre-commit]
         files: ^plugins/onex/skills/

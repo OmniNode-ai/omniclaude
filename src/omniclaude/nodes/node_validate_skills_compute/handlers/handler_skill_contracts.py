@@ -8,10 +8,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from omniclaude.nodes.node_skill_validation_compute.enums import (
+from omniclaude.nodes.node_validate_skills_compute.enums import (
     EnumSkillViolationSeverity,
 )
-from omniclaude.nodes.node_skill_validation_compute.models import (
+from omniclaude.nodes.node_validate_skills_compute.models import (
     ModelSkillValidationReport,
     ModelSkillValidationRequest,
     ModelSkillViolation,

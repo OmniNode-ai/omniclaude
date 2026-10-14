@@ -5,10 +5,10 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from omniclaude.nodes.node_skill_validation_compute.enums import (
+from omniclaude.nodes.node_validate_skills_compute.enums import (
     EnumSkillViolationSeverity,
 )
-from omniclaude.nodes.node_skill_validation_compute.models.model_skill_violation import (
+from omniclaude.nodes.node_validate_skills_compute.models.model_skill_violation import (
     ModelSkillViolation,
 )
 

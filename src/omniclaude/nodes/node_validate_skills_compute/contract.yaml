@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-name: node_skill_validation_compute
+name: node_validate_skills_compute
 version: "0.1.0"
-contract_name: node_skill_validation_compute
-node_name: node_skill_validation_compute
+contract_name: node_validate_skills_compute
+node_name: node_validate_skills_compute
 
 contract_version:
   major: 1
@@ -26,11 +26,11 @@ runtime_profiles: [main]
 
 input_model:
   name: ModelSkillValidationRequest
-  module: omniclaude.nodes.node_skill_validation_compute.models
+  module: omniclaude.nodes.node_validate_skills_compute.models
 
 output_model:
   name: ModelSkillValidationReport
-  module: omniclaude.nodes.node_skill_validation_compute.models
+  module: omniclaude.nodes.node_validate_skills_compute.models
 
 handler_routing:
   routing_strategy: operation_match
@@ -38,11 +38,11 @@ handler_routing:
     - operation: skill_hygiene_validate
       handler:
         name: HandlerSkillHygiene
-        module: omniclaude.nodes.node_skill_validation_compute.handlers.handler_skill_hygiene
+        module: omniclaude.nodes.node_validate_skills_compute.handlers.handler_skill_hygiene
     - operation: skill_contracts_validate
       handler:
         name: HandlerSkillContracts
-        module: omniclaude.nodes.node_skill_validation_compute.handlers.handler_skill_contracts
+        module: omniclaude.nodes.node_validate_skills_compute.handlers.handler_skill_contracts
 
 error_handling:
   retry_policy:

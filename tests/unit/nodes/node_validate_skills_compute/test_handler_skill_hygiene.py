@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from omniclaude.nodes.node_skill_validation_compute.enums import (
+from omniclaude.nodes.node_validate_skills_compute.enums import (
     EnumSkillViolationSeverity,
 )
-from omniclaude.nodes.node_skill_validation_compute.handlers.handler_skill_hygiene import (
+from omniclaude.nodes.node_validate_skills_compute.handlers.handler_skill_hygiene import (
     HandlerSkillHygiene,
     check_name_matches_dir,
     check_no_duplicate_names,
@@ -21,7 +21,7 @@ from omniclaude.nodes.node_skill_validation_compute.handlers.handler_skill_hygie
     check_underscore_names,
     parse_skill_md_frontmatter,
 )
-from omniclaude.nodes.node_skill_validation_compute.models import (
+from omniclaude.nodes.node_validate_skills_compute.models import (
     ModelSkillValidationRequest,
 )
 

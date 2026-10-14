@@ -3163,7 +3163,7 @@ jobs:
   # Skill Hygiene Check (OMN-5200)
   # ---------------------------------------------------------------------------
   # Validates skill directory naming, structure, and Python separation with the
-  # in-repo validator, node_skill_validation_compute (OMN-20927).
+  # in-repo validator, node_validate_skills_compute (OMN-20927).
   # ---------------------------------------------------------------------------
   # Mode Metadata Integrity (OMN-5402)
   # ---------------------------------------------------------------------------
@@ -3228,7 +3228,7 @@ jobs:
   skill-hygiene:
     if: always()
     name: Skill Hygiene
-    # Static validator (node_skill_validation_compute, OMN-20927); run hosted so fleet
+    # Static validator (node_validate_skills_compute, OMN-20927); run hosted so fleet
     # saturation cannot cancel the required Quality Gate aggregate.
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -3267,7 +3267,7 @@ jobs:
 
       - name: Validate skill hygiene
         working-directory: ${{ github.workspace }}
-        run: uv run python -m omniclaude.nodes.node_skill_validation_compute hygiene --skills-root plugins/onex/skills --strict
+        run: uv run python -m omniclaude.nodes.node_validate_skills_compute hygiene --skills-root plugins/onex/skills --strict
 
   # ---------------------------------------------------------------------------
   # Merge-Sweep Contract Tests (OMN-6189)
@@ -3386,7 +3386,7 @@ jobs:
       - name: Validate skill contracts
         # Initially without --strict; promote to --strict after baseline warnings are resolved
         working-directory: ${{ github.workspace }}
-        run: uv run python -m omniclaude.nodes.node_skill_validation_compute contracts --skills-root plugins/onex/skills
+        run: uv run python -m omniclaude.nodes.node_validate_skills_compute contracts --skills-root plugins/onex/skills
 
   # ============================================================================
   # OMN-18790 — skip-count baseline ratchet (mechanism OMN-18776, epic OMN-18775)

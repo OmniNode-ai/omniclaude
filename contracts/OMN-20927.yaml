@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 ticket_id: OMN-20927
 title: 'OCC retirement K: omniclaude''s skill-hygiene, skill-contracts and version-pin CI jobs stop reading onex_change_control'
-summary: The skill-hygiene and skill-contract-validation jobs in ci.yml, and the skill-contract-validation pre-commit hook, no longer mint an onexbot-occ-writer token or check out onex_change_control. Both validators are ported unchanged in behaviour into node_skill_validation_compute (two handlers and a CLI handler) and the jobs and the hook run that CLI. The OCC-backed wrapper script is deleted. The Version Pin Compliance half ended in omniclaude#2673 and is not touched here.
+summary: The skill-hygiene and skill-contract-validation jobs in ci.yml, and the skill-contract-validation pre-commit hook, no longer mint an onexbot-occ-writer token or check out onex_change_control. Both validators are ported unchanged in behaviour into node_validate_skills_compute (two handlers and a CLI handler) and the jobs and the hook run that CLI. The OCC-backed wrapper script is deleted. The Version Pin Compliance half ended in omniclaude#2673 and is not touched here.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -21,7 +21,7 @@ evidence_requirements:
   command: uv run pytest tests/ci/test_skill_validators_in_repo_omn20927.py -q -p no:randomly --no-cov
 - kind: tests
   description: Every hygiene and contract check refuses its planted defect with the source message, strict promotion matches the source, and the CLI keeps the source output and exit codes.
-  command: uv run pytest tests/unit/nodes/node_skill_validation_compute/test_handler_skill_hygiene.py tests/unit/nodes/node_skill_validation_compute/test_handler_skill_contracts.py tests/unit/nodes/node_skill_validation_compute/test_skill_validation_main.py -q -p no:randomly --no-cov
+  command: uv run pytest tests/unit/nodes/node_validate_skills_compute/test_handler_skill_hygiene.py tests/unit/nodes/node_validate_skills_compute/test_handler_skill_contracts.py tests/unit/nodes/node_validate_skills_compute/test_skill_validation_main.py -q -p no:randomly --no-cov
 - kind: tests
   description: 'Version Pin Compliance ended in omniclaude#2673: no ci.yml job runs the version-pin script or a skill validator from an onex_change_control checkout, the retired job is absent, every needs entry names a job, and the broken-needs positive control is rejected.'
   command: uv run pytest tests/ci/test_skill_validators_in_repo_omn20927.py -q -p no:randomly --no-cov -k 'version_pin_ending or dangling_needs'
@@ -44,7 +44,7 @@ dod_evidence:
   source: manual
   checks:
   - check_type: test_passes
-    check_value: uv run pytest tests/unit/nodes/node_skill_validation_compute/test_handler_skill_hygiene.py tests/unit/nodes/node_skill_validation_compute/test_handler_skill_contracts.py tests/unit/nodes/node_skill_validation_compute/test_skill_validation_main.py -q -p no:randomly --no-cov
+    check_value: uv run pytest tests/unit/nodes/node_validate_skills_compute/test_handler_skill_hygiene.py tests/unit/nodes/node_validate_skills_compute/test_handler_skill_contracts.py tests/unit/nodes/node_validate_skills_compute/test_skill_validation_main.py -q -p no:randomly --no-cov
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC2
