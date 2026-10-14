@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts.ci.detect_test_paths import FULL_SUITE_SPLITS, compute_selection
 from scripts.ci.test_selection_models import EnumFullSuiteReason
 
@@ -125,6 +127,33 @@ def test_unit_test_change_includes_that_directory() -> None:
     )
     assert not sel.is_full_suite
     assert "tests/unit/delegation/" in sel.selected_paths
+
+
+@pytest.mark.parametrize(
+    "changed_files",
+    [
+        ["tests/unit/test_smart_test_selection.py"],
+        ["tests/unit/test_dod_occ_materialization.py"],
+        [
+            "scripts/materialize-dod-evidence-from-occ.sh",
+            "tests/unit/test_dod_occ_materialization.py",
+        ],
+    ],
+    ids=["existing-flat-test", "deleted-flat-test", "s9-script-and-test-deletion"],
+)
+def test_flat_unit_test_change_selects_unit_root(changed_files: list[str]) -> None:
+    """A flat test, including a deleted one, must not become a directory."""
+    sel = compute_selection(
+        changed_files=changed_files,
+        adjacency_path=ADJACENCY,
+        ref_name="omn-20074-selector-regression",
+    )
+    assert "tests/unit/" in sel.selected_paths
+    assert all(not path.endswith(".py/") for path in sel.selected_paths)
+    if len(changed_files) == 1:
+        assert sel.selected_paths == ["tests/unit/"]
+    else:
+        assert sel.selected_paths == ["tests/ci/", "tests/unit/", "tests/workflows/"]
 
 
 def test_doc_only_change_falls_back_to_unit_root() -> None:
