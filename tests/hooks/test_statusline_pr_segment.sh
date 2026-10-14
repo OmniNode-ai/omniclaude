@@ -87,9 +87,9 @@ wait_for_cache() {
 
 fixture() { printf '%s' "$2" > "$1"; touch "$1"; }
 
-COUNTS_JSON='{"schema":2,"refreshed_at":9999999999,"status":"ok","failed":[],"repos":{"core":"0/2","infra":"1/14","spi":"0/0","claude":"0/0","node":"0/0","dash":"0/0","intel":"0/0","mem":"0/0","web":"0/0","cc":"0/0","market":"0/0"}}'
-FAILED_JSON='{"schema":2,"refreshed_at":9999999999,"status":"degraded","failed":["core","infra","spi","claude","node","dash","intel","mem","web","cc","market"],"repos":{"core":"err","infra":"err","spi":"err","claude":"err","node":"err","dash":"err","intel":"err","mem":"err","web":"err","cc":"err","market":"err"}}'
-ZERO_JSON='{"schema":2,"refreshed_at":9999999999,"status":"ok","failed":[],"repos":{"core":"0/0","infra":"0/0","spi":"0/0","claude":"0/0","node":"0/0","dash":"0/0","intel":"0/0","mem":"0/0","web":"0/0","cc":"0/0","market":"0/0"}}'
+COUNTS_JSON='{"schema":2,"refreshed_at":9999999999,"status":"ok","failed":[],"repos":{"core":"0/2","infra":"1/14","spi":"0/0","claude":"0/0","node":"0/0","dash":"0/0","intel":"0/0","mem":"0/0","web":"0/0","market":"0/0"}}'
+FAILED_JSON='{"schema":2,"refreshed_at":9999999999,"status":"degraded","failed":["core","infra","spi","claude","node","dash","intel","mem","web","market"],"repos":{"core":"err","infra":"err","spi":"err","claude":"err","node":"err","dash":"err","intel":"err","mem":"err","web":"err","market":"err"}}'
+ZERO_JSON='{"schema":2,"refreshed_at":9999999999,"status":"ok","failed":[],"repos":{"core":"0/0","infra":"0/0","spi":"0/0","claude":"0/0","node":"0/0","dash":"0/0","intel":"0/0","mem":"0/0","web":"0/0","market":"0/0"}}'
 
 echo "OMN-18841 statusline open-PR segment"
 
@@ -180,7 +180,7 @@ if wait_for_cache "$C_PROD_FAIL" 20; then
   st=$(jq -r '.status' < "$C_PROD_FAIL")
   nf=$(jq -r '.failed | length' < "$C_PROD_FAIL")
   sent=$(jq -r '.repos.core' < "$C_PROD_FAIL")
-  if [ "$st" = "degraded" ] && [ "$nf" -eq 11 ] && [ "$sent" = "err" ]; then
+  if [ "$st" = "degraded" ] && [ "$nf" -eq 10 ] && [ "$sent" = "err" ]; then
     pass "an all-failure refresh writes status=degraded and a per-repo sentinel"
   else
     fail "an all-failure refresh writes status=degraded and a per-repo sentinel" \
@@ -244,7 +244,8 @@ echo "AC5 — with a PR watcher state file the segment is built with no gh call"
 NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # Every repository the segment counts, read from the script itself so the fixture lists exactly the
 # set the refresh asks about.
-WATCHER_REPOS="$(grep -m1 '^  PR_REPOS=' "$STATUSLINE" | sed 's/^  PR_REPOS="//; s/"$//' | tr ' ' '\n' \
+# The line is evaluated, not parsed, because its quoting splits some names.
+WATCHER_REPOS="$(bash -c "$(grep -m1 '^  PR_REPOS=' "$STATUSLINE")"'; printf "%s" "$PR_REPOS"' | tr ' ' '\n' \
   | sed 's/^[^:]*://; s/.*/"&":{"default_branch":"dev"}/' | paste -sd, -)"
 WATCHER_PRS='"omnibase_core#1":{"facts":{"repo":"omnibase_core","state":"OPEN","base":"dev"}},"omnibase_core#2":{"facts":{"repo":"omnibase_core","state":"OPEN","base":"dev"}},"omnibase_core#3":{"facts":{"repo":"omnibase_core","state":"MERGED","base":"dev"}},"omnibase_infra#4":{"facts":{"repo":"omnibase_infra","state":"OPEN","base":"main"}},"omnibase_infra#5":{"facts":{"repo":"omnibase_infra","state":"OPEN","base":"dev"}},"omnibase_infra#6":{"facts":{"repo":"omnibase_infra","state":"CLOSED","base":"main"}}'
 W_STATE="$WORK/watcher-state.json"
@@ -283,7 +284,7 @@ if wait_for_cache "$C_MISSING" 20; then
   infra=$(jq -r '.repos.infra' < "$C_MISSING")
   core=$(jq -r '.repos.core' < "$C_MISSING")
   nf=$(jq -r '.failed | length' < "$C_MISSING")
-  if [ "$infra" = "err" ] && [ "$core" = "0/0" ] && [ "$nf" -eq 10 ]; then
+  if [ "$infra" = "err" ] && [ "$core" = "0/0" ] && [ "$nf" -eq 9 ]; then
     pass "a repository absent from the state is recorded as a failure, not as zero"
   else
     fail "a repository absent from the state is recorded as a failure" "infra=$infra core=$core failed=$nf"
@@ -301,7 +302,7 @@ GH_CALL_LOG="$GH_LOG" PATH="$GH_WATCH:$PATH" ONEX_PR_WATCHER_STATE="$WORK/watche
 if wait_for_cache "$C_STALE" 20; then
   nf=$(jq -r '.failed | length' < "$C_STALE")
   st=$(jq -r '.status' < "$C_STALE")
-  if [ "$nf" -eq 11 ] && [ "$st" = "degraded" ] && [ ! -s "$GH_LOG" ]; then
+  if [ "$nf" -eq 10 ] && [ "$st" = "degraded" ] && [ ! -s "$GH_LOG" ]; then
     pass "a stale watcher state degrades every repository and makes no gh call"
   else
     fail "a stale watcher state degrades every repository" "failed=$nf status=$st gh=$(cat "$GH_LOG")"
@@ -315,7 +316,7 @@ C_BAD="$WORK/watcher-bad.json"
 printf 'not json' > "$WORK/watcher-garbage.json"
 PATH="$GH_WATCH:$PATH" ONEX_PR_WATCHER_STATE="$WORK/watcher-garbage.json" ONEX_STATUSLINE_PR_CACHE="$C_BAD" \
   bash "$STATUSLINE" <<< '{"workspace":{"project_dir":"'"$REPO_ROOT"'"},"model":{},"context_window":{}}' >/dev/null 2>&1
-if wait_for_cache "$C_BAD" 20 && [ "$(jq -r '.failed | length' < "$C_BAD")" -eq 11 ]; then
+if wait_for_cache "$C_BAD" 20 && [ "$(jq -r '.failed | length' < "$C_BAD")" -eq 10 ]; then
   pass "an unreadable state file degrades every repository"
 else
   fail "an unreadable state file degrades every repository" "cache: $(cat "$C_BAD" 2>/dev/null)"

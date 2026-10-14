@@ -29,8 +29,6 @@ _ALIASES: dict[str, str] = {
     "omninode_infra": "OmniNode-ai/omninode_infra",
     "omniweb": "OmniNode-ai/omniweb",
     "web": "OmniNode-ai/omniweb",
-    "onex_change_control": "OmniNode-ai/onex_change_control",
-    "change_control": "OmniNode-ai/onex_change_control",
 }
 
 

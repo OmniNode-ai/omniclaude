@@ -22,7 +22,6 @@ REPOS=(
   omnimarket
   omnibase_infra
   omnibase_core
-  onex_change_control
   omnibase_spi
   omnibase_compat
   omnidash

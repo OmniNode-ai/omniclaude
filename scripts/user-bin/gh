@@ -1199,7 +1199,6 @@ _fb_match() {
   [ -n "$args" ] || return 1
   case " $args " in
     *"/check-platform-leads-review-tripwire "*|*" check-platform-leads-review-tripwire "*|\
-    *" onex_change_control.scripts.check_platform_leads_review_tripwire "*|\
     *"/check_platform_leads_review_tripwire.py "*)
       _fb_consumer="enforcement-surface-placement" ;;
     *"/prune-worktrees.sh "*|*" prune-worktrees.sh "*) _fb_consumer="worktree-prune" ;;

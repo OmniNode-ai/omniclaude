@@ -98,6 +98,13 @@ requirements:
       - id: "AC14"
         statement: |-
           AC14: ci.yml, contract-validation.yml, the deploy gate workflows and the deploy gate action and validator carry no non-comment line naming onex_change_control, nothing imports onex_change_control, and scripts/deploy-gate/checkout-occ-contracts.sh is absent -- falsifier: uv run pytest tests/ci/test_workflow_dependency_refs_off_occ_omn20074.py -q --no-cov fails at the merge base
+  - id: "req-omn20074-code-off-occ"
+    statement: |-
+      No Python module in omniclaude imports the onex_change_control package, and the script and code references to the change-control repository that no live caller needs are gone.
+    acceptance:
+      - id: "AC12"
+        statement: |-
+          AC12: no Python module under src, plugins, scripts or tests imports onex_change_control, the DoD evidence runner demotes an inert check with no change-control engine importable, and the OCC materialization script and its test are deleted -- falsifier: uv run pytest tests/ci/test_no_occ_code_imports_omn20074.py tests/lib/test_dod_evidence_runner.py -q --no-cov
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -135,6 +142,8 @@ evidence_requirements:
   - kind: tests
     description: "No workflow, deploy gate file or import names the change control repository or package."
     command: "uv run pytest tests/ci/test_workflow_dependency_refs_off_occ_omn20074.py -q --no-cov"
+    description: "No module imports the change-control package and the inert-check predicate is local."
+    command: "uv run pytest tests/ci/test_no_occ_code_imports_omn20074.py tests/lib/test_dod_evidence_runner.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -243,3 +252,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_workflow_dependency_refs_off_occ_omn20074.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC14"]
+  - id: dod-omn20074-code-off-occ
+    description: "The AST scan finds no onex_change_control import in src, plugins, scripts or tests, and the DoD evidence runner demotes an inert check with the change-control package unimportable."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_no_occ_code_imports_omn20074.py tests/lib/test_dod_evidence_runner.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC12"]
