@@ -77,6 +77,13 @@ requirements:
       - id: "AC10"
         statement: |-
           AC10: existing and deleted tests/unit/*.py changes select tests/unit/ without a .py/ argument; a script deletion retains tests/ci/, tests/unit/ and tests/workflows/ -- falsifier: uv run pytest tests/unit/test_smart_test_selection.py -q --no-cov -k flat_unit_test_change
+  - id: "req-omn20074-boundary-parity-pin"
+    statement: |-
+      Cross-Repo Boundary Parity must run the validate-boundaries action at an omnibase_core sha whose packaged kafka manifest carries no onex_change_control boundary (omnibase_core#1972).
+    acceptance:
+      - id: "AC12"
+        statement: |-
+          AC12: the ci.yml validate-boundaries pin is none of the shas that predate omnibase_core#1972 -- falsifier: uv run pytest tests/ci/test_boundary_parity_action_pin_omn20074.py -q --no-cov fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -105,6 +112,9 @@ evidence_requirements:
   - kind: tests
     description: "The unused OCC scripts are deleted, no skill names them, and the reusables with live callers stay hosted."
     command: "uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py -q --no-cov"
+  - kind: tests
+    description: "The boundary parity action is pinned at or after the omnibase_core manifest with no OCC boundary."
+    command: "uv run pytest tests/ci/test_boundary_parity_action_pin_omn20074.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -189,3 +199,11 @@ dod_evidence:
         check_value: "uv run pytest tests/unit/test_smart_test_selection.py -q --no-cov -k flat_unit_test_change"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC10"]
+  - id: dod-omn20074-boundary-parity-pin
+    description: "The pin test proves Cross-Repo Boundary Parity no longer runs a validate-boundaries sha that predates omnibase_core#1972."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_boundary_parity_action_pin_omn20074.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC12"]
