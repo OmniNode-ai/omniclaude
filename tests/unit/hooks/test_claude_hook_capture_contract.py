@@ -67,13 +67,19 @@ def _pretty(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
-def test_enum_contract_and_discriminated_union_cover_exactly_33_hooks() -> None:
+def test_enum_contract_and_discriminated_union_cover_33_hooks_and_the_derived() -> None:
     enum_names = {name.value for name in EnumClaudeHookEventName}
-    assert len(enum_names) == 33
+    derived = {name.value for name in EnumClaudeHookEventName.derived()}
+    # OMN-18946: 33 harness hooks plus the two events a plugin hook derives.
+    assert len(enum_names - derived) == 33
+    assert derived == {"GuardRefusal", "AssistantUsage"}
 
     contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
     coverage_names = {row["hook"] for row in contract["coverage"]}
     assert coverage_names == enum_names
+    assert {
+        row["hook"] for row in contract["coverage"] if row.get("derived")
+    } == derived
 
     annotated_args = get_args(ModelHookPayload)
     assert annotated_args and isinstance(annotated_args[1], object)
@@ -82,7 +88,7 @@ def test_enum_contract_and_discriminated_union_cover_exactly_33_hooks() -> None:
         get_args(member.model_fields["hook_event_name"].annotation)[0]
         for member in union_members
     }
-    assert len(union_members) == 33
+    assert len(union_members) == 33 + len(derived)
     assert member_names == enum_names
     assert isinstance(HOOK_PAYLOAD_ADAPTER, object)
 
@@ -501,3 +507,17 @@ def test_the_contract_declares_host_exit_code_and_the_four_columns() -> None:
         column["name"] for column in contract["projection"]["event_table"]["columns"]
     }
     assert {"lane", "model", "host", "exit_code"} <= columns
+
+
+@pytest.mark.parametrize("hook", ["GuardRefusal", "AssistantUsage"])
+def test_every_payload_key_of_a_derived_event_is_declared_verbatim(hook: str) -> None:
+    """OMN-18946: an undeclared key falls to ``capture_hashed`` and a digest of
+    the guard name or a token count is worth nothing."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    declared = contract["redaction"]["fields"]
+    event = _load_json(FIXTURE_ROOT / "events" / f"{hook}.json")
+    assert isinstance(event, dict)
+    payload = event["payload"]
+    assert isinstance(payload, dict)
+    for key in payload:
+        assert declared.get(f"payload.{key}") == "capture_verbatim", key

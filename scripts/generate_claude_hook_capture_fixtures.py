@@ -294,6 +294,28 @@ def _all_stdin() -> dict[EnumClaudeHookEventName, dict[str, JsonValue]]:
         final=False,
         delta="private streamed delta",
     )
+    # OMN-18946: the two derived events. Their stdin is what the producer
+    # synthesises (the refusal recorder; the transcript reader), not a harness
+    # payload.
+    add(
+        EnumClaudeHookEventName.GUARD_REFUSAL,
+        tool_name="Bash",
+        tool_use_id="toolu-fixture-refused",
+        guard="pre_tool_use_worktree_guard.sh",
+        reason_class="worktree-add-refused",
+        refused_hook_event_name="PreToolUse",
+    )
+    add(
+        EnumClaudeHookEventName.ASSISTANT_USAGE,
+        model="model-fixture-1",
+        message_count=2,
+        input_tokens=12,
+        output_tokens=345,
+        cache_creation_input_tokens=6,
+        cache_read_input_tokens=78,
+        usage_source_hook="Stop",
+        partial_window=False,
+    )
     return fixtures
 
 
@@ -821,8 +843,16 @@ def build_outputs() -> dict[Path, str]:
             [_record_json(record) for record in result.content_records]
         )
 
+    # The goal fixtures sit after the 33 harness hooks, as they did before the
+    # derived events joined the enum (OMN-18946): their bytes do not move.
     outputs.update(
-        _goal_outputs(FIXED_TIME + timedelta(seconds=len(EnumClaudeHookEventName)))
+        _goal_outputs(
+            FIXED_TIME
+            + timedelta(
+                seconds=len(EnumClaudeHookEventName)
+                - len(EnumClaudeHookEventName.derived())
+            )
+        )
     )
 
     scenarios = {

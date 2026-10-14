@@ -1,0 +1,34 @@
+{
+  "actor": "claude",
+  "claude_code_version": "2.1.283",
+  "content_refs": [],
+  "emitted_at": "2026-09-26T12:00:33Z",
+  "event_id": "cc35e904-44c1-5c85-a88b-eef9d6be89cf",
+  "hook_event_name": "GuardRefusal",
+  "lineage": {
+    "agent_description": null,
+    "agent_id": null,
+    "agent_model": null,
+    "agent_type": null,
+    "causation_id": "5f28a4ec-8e9f-514b-aec7-7a498810b8db",
+    "correlation_id": "665b6ecb-43bf-5f07-98e4-64f40226597d",
+    "is_subagent": false,
+    "parent_tool_use_id": null,
+    "prompt_id": "prompt-fixed-1",
+    "session_id": "session-fixture-1",
+    "spawn_depth": null,
+    "tool_use_id": "toolu-fixture-refused",
+    "turn_id": "turn-fixed-1",
+    "workflow_phase": null,
+    "workflow_run_id": null
+  },
+  "payload": {
+    "guard": "pre_tool_use_worktree_guard.sh",
+    "hook_event_name": "GuardRefusal",
+    "reason_class": "worktree-add-refused",
+    "refused_hook_event_name": "PreToolUse",
+    "tool_call_key": "5f28a4ec-8e9f-514b-aec7-7a498810b8db",
+    "tool_name": "Bash"
+  },
+  "schema_version": "1.0.0"
+}

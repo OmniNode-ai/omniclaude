@@ -1,0 +1,16 @@
+{
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "guard": "pre_tool_use_worktree_guard.sh",
+  "hook_event_name": "GuardRefusal",
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "reason_class": "worktree-add-refused",
+  "refused_hook_event_name": "PreToolUse",
+  "session_id": "session-fixture-1",
+  "tool_name": "Bash",
+  "tool_use_id": "toolu-fixture-refused",
+  "transcript_path": "/restricted/session-fixture-1.jsonl"
+}

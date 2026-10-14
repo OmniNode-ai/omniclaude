@@ -1,0 +1,102 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: NodeTranscriptUsageReadEffect (OMN-18946)
+#
+# Claude Code passes no token usage to any hook. A Stop, SubagentStop or
+# SessionEnd names a transcript, and the transcript carries usage and model on
+# every assistant entry, repeated on each content block of one API message.
+# This node reads the messages not yet counted for one session thread, once per
+# API message, per model; the caller journals the totals as AssistantUsage
+# events and then commits the read. The hook reaches it in-process: the hook
+# process cannot wait on a bus round-trip.
+
+name: node_transcript_usage_read_effect
+version: "1.0.0"
+contract_name: node_transcript_usage_read_effect
+node_name: node_transcript_usage_read_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: EFFECT_GENERIC
+runtime_profiles: [main]
+
+description: >
+  Reads token use and model per assistant message from a Claude Code
+  transcript: counts a message once across its content blocks and across
+  reads, excludes sidechain entries from the main thread, keeps a byte-offset
+  marker per session thread that only a commit advances, and says when its
+  first read took only a transcript tail.
+
+input_model:
+  name: ModelTranscriptUsageReadRequest
+  module: omniclaude.nodes.node_transcript_usage_read_effect.models
+
+output_model:
+  name: ModelTranscriptUsageReadResult
+  module: omniclaude.nodes.node_transcript_usage_read_effect.models
+
+handler:
+  module: omniclaude.nodes.node_transcript_usage_read_effect.handlers.handler_transcript_usage_read
+  class: HandlerTranscriptUsageRead
+  input_model: omniclaude.nodes.node_transcript_usage_read_effect.models.ModelTranscriptUsageReadRequest
+
+handler_routing:
+  routing_strategy: payload_type_match
+  handlers:
+    - handler:
+        name: HandlerTranscriptUsageRead
+        module: omniclaude.nodes.node_transcript_usage_read_effect.handlers.handler_transcript_usage_read
+      event_model:
+        name: ModelTranscriptUsageReadRequest
+        module: omniclaude.nodes.node_transcript_usage_read_effect.models
+    - handler:
+        name: HandlerTranscriptUsageCommit
+        module: omniclaude.nodes.node_transcript_usage_read_effect.handlers.handler_transcript_usage_commit
+      event_model:
+        name: ModelTranscriptUsageCommitRequest
+        module: omniclaude.nodes.node_transcript_usage_read_effect.models
+
+descriptor:
+  node_archetype: effect
+  purity: effectful
+  idempotent: true
+  timeout_ms: 10000
+
+capabilities:
+  - name: transcript.usage.read
+    description: Read token use and model per assistant message from a transcript
+    version: 1.0.0
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omniclaude.transcript-usage-read.v1
+  publish_topics:
+    - onex.evt.omniclaude.transcript-usage-read.v1
+
+runtime_dispatch:
+  command_topic: onex.cmd.omniclaude.transcript-usage-read.v1
+  terminal_events:
+    success: onex.evt.omniclaude.transcript-usage-read.v1
+
+terminal_event: onex.evt.omniclaude.transcript-usage-read.v1
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-18946
+  maturity: alpha
+  tags:
+    - effect
+    - hooks
+    - usage
+    - transcript

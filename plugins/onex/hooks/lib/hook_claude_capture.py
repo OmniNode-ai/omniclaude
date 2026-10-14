@@ -60,6 +60,27 @@ The contract module needs only ``pydantic``: loaded straight from its file it
 costs about 0.16 s, in a process the hook has already backgrounded, so the
 session never waits on it.
 
+Derived events (OMN-18946)
+--------------------------
+Two events ride this same topic and lineage with no harness hook behind them,
+because the facts they state are in no hook's stdin:
+
+* ``GuardRefusal``: a guard refused a call. A refused PreToolUse has no
+  PostToolUse to pair with, so the only trace of the refusal was a
+  rate-limited ledger FRICTION row that no event joins to. The refusal recorder
+  calls :func:`capture_guard_refusal` on EVERY refusal, before its own
+  rate limit, so each refused call has one event naming the guard and its
+  reason class (never the refusal's text), joined to the call by
+  ``tool_use_id``.
+* ``AssistantUsage``: tokens and model per assistant message. Stop,
+  SubagentStop and SessionEnd call :func:`capture_assistant_usage`, which reads
+  the transcript the hook names (see ``hook_transcript_usage``).
+
+A failed tool call's content is captured here too
+(:func:`capture_failure_content`): PostToolUseFailure already reaches this
+script, and its tool input and error text go to ``content.captured`` under the
+same redaction as a completed call's.
+
 Fail-open like every hook on this path: always exits 0, never writes stdout.
 """
 
@@ -562,6 +583,194 @@ def _str(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+# ---------------------------------------------------------------------------
+# derived events (OMN-18946)
+# ---------------------------------------------------------------------------
+
+#: Hooks after which a transcript is read for usage. The marker makes the three
+#: idempotent: a message counted at Stop is never counted again at SessionEnd.
+USAGE_HOOKS = frozenset({"Stop", "SubagentStop", "SessionEnd"})
+
+#: Stdin keys of the refused hook that a refusal event keeps. The refused
+#: command, script or prompt is content and is never among them.
+_REFUSAL_LINEAGE_KEYS = (
+    "agent_id",
+    "agent_type",
+    "prompt_id",
+    "tool_use_id",
+    "tool_name",
+    "transcript_path",
+    "cwd",
+)
+
+
+def capture_guard_refusal(
+    hook_input: Mapping[str, Any],
+    *,
+    guard: str,
+    reason_class: str,
+    journal_dir: Path | None = None,
+    cwd: str | None = None,
+    actor: str | None = None,
+    now: datetime | None = None,
+) -> int:
+    """Journal the ``GuardRefusal`` event for one refused hook call.
+
+    ``hook_input`` is the refused hook's own stdin. Only its lineage keys are
+    kept; ``guard`` and ``reason_class`` are the recorder's redacted, normalised
+    tokens. Returns how many events were journalled, 0 when a refusal of the
+    capture itself applies (opt-out, drainer, lane contract) or the refused
+    call names no session.
+    """
+    session = _str(hook_input.get("session_id"))
+    if session is None:
+        _log("skipped GuardRefusal: the refused call names no session")
+        return 0
+    stdin: dict[str, Any] = {
+        "hook_event_name": "GuardRefusal",
+        "session_id": session,
+        "guard": guard,
+        "reason_class": reason_class,
+    }
+    for key in _REFUSAL_LINEAGE_KEYS:
+        value = _str(hook_input.get(key))
+        if value is not None:
+            stdin[key] = value
+    refused_hook = _str(hook_input.get("hook_event_name"))
+    if refused_hook is not None:
+        stdin["refused_hook_event_name"] = refused_hook
+    return capture(
+        stdin,
+        journal_dir=journal_dir or journal.default_journal_dir(),
+        cwd=cwd,
+        actor=actor,
+        now=now,
+    )
+
+
+#: The transcript usage node: imported at call time (the hook interpreter must
+#: be able to import ``omniclaude``, as the refusal recorder's does), never at
+#: module load, so a capture that does not read a transcript pays nothing.
+_USAGE_NODE = "omniclaude.nodes.node_transcript_usage_read_effect"
+
+
+def _usage_node() -> tuple[Any, Any, Any, Any] | None:
+    """``(read handler, commit handler, read request, commit request)`` or ``None``."""
+    try:
+        read = importlib.import_module(
+            f"{_USAGE_NODE}.handlers.handler_transcript_usage_read"
+        )
+        commit = importlib.import_module(
+            f"{_USAGE_NODE}.handlers.handler_transcript_usage_commit"
+        )
+        models = importlib.import_module(f"{_USAGE_NODE}.models")
+    except ImportError as exc:
+        _log(f"skipped usage: {_USAGE_NODE} did not import ({type(exc).__name__})")
+        return None
+    return (
+        read.HandlerTranscriptUsageRead(),
+        commit.HandlerTranscriptUsageCommit(),
+        models.ModelTranscriptUsageReadRequest,
+        models.ModelTranscriptUsageCommitRequest,
+    )
+
+
+def capture_assistant_usage(
+    hook_input: Mapping[str, Any],
+    *,
+    journal_dir: Path,
+    actor: str | None = None,
+    now: datetime | None = None,
+) -> int:
+    """Journal one ``AssistantUsage`` event per model the transcript shows.
+
+    Only for the hooks in ``USAGE_HOOKS``. The read is consumed only when every
+    event of it was journalled, so a capture that is off, or an append that
+    failed, leaves the usage for the next Stop.
+    """
+    hook_name = hook_input.get("hook_event_name")
+    session = _str(hook_input.get("session_id"))
+    if hook_name not in USAGE_HOOKS or session is None:
+        return 0
+    subagent = hook_name == "SubagentStop"
+    agent_id = _str(hook_input.get("agent_id")) if subagent else None
+    raw_path = _str(
+        hook_input.get("agent_transcript_path" if subagent else "transcript_path")
+    )
+    if raw_path is None or (subagent and agent_id is None):
+        return 0
+    node = _usage_node()
+    if node is None:
+        return 0
+    reader, committer, read_request, commit_request = node
+    read = reader.handle(
+        read_request(
+            transcript_path=raw_path,
+            state_dir=str(hook_turn_id.turn_dir_for(journal_dir)),
+            session_id=session,
+            agent_id=agent_id,
+            include_sidechain=subagent,
+        )
+    )
+    written = 0
+    for totals in read.totals:
+        stdin: dict[str, Any] = {
+            "hook_event_name": "AssistantUsage",
+            "session_id": session,
+            "model": totals.model,
+            "message_count": totals.message_count,
+            "input_tokens": totals.input_tokens,
+            "output_tokens": totals.output_tokens,
+            "cache_creation_input_tokens": totals.cache_creation_input_tokens,
+            "cache_read_input_tokens": totals.cache_read_input_tokens,
+            "usage_source_hook": hook_name,
+            "partial_window": read.partial_window,
+        }
+        for key in ("agent_id", "agent_type", "prompt_id", "transcript_path", "cwd"):
+            value = _str(hook_input.get(key))
+            if value is not None:
+                stdin[key] = value
+        written += capture(stdin, journal_dir=journal_dir, actor=actor, now=now)
+    if written == len(read.totals):
+        committed = committer.handle(
+            commit_request(
+                marker_path=read.marker_path,
+                next_offset=read.next_offset,
+                seen_ids=read.seen_ids,
+            )
+        )
+        if not committed.committed:
+            _log(f"usage marker not written ({committed.reason}); usage may repeat")
+    return written
+
+
+def capture_failure_content(
+    hook_input: Mapping[str, Any],
+    *,
+    journal_dir: Path,
+    actor: str | None = None,
+) -> int:
+    """Journal a failed tool call's input and error text as content records.
+
+    Only for PostToolUseFailure. Content was stored for completed calls only
+    (the PostToolUse mirror runs ``--kind tool``); a failed call fires
+    PostToolUseFailure instead, and 0 of 7,544 failed Bash calls in a week had
+    their command or error stored. The redaction is the completed call's.
+    """
+    if hook_input.get("hook_event_name") != "PostToolUseFailure":
+        return 0
+    return content_capture.capture(
+        dict(hook_input),
+        kind="tool_failure",
+        journal_dir=journal_dir,
+        correlation_id=_str(hook_input.get("session_id")),
+        cwd=_str(hook_input.get("cwd")),
+        actor=actor,
+        agent_id=_str(hook_input.get("agent_id")),
+        transcript_path=_str(hook_input.get("transcript_path")),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Journal one lineage-carrying hook event (OMN-19513)."
@@ -581,12 +790,23 @@ def main(argv: list[str] | None = None) -> int:
             if args.journal_dir
             else journal.default_journal_dir()
         )
-        if capture(hook_input, journal_dir=journal_dir, actor=args.actor or None):
+        actor = args.actor or None
+        if capture(hook_input, journal_dir=journal_dir, actor=actor):
             lineage_note = "subagent" if hook_input.get("agent_id") else "main"
             _log(
                 f"journalled {HOOK_EVENT_TYPE} "
                 f"{hook_input.get('hook_event_name')} ({lineage_note})"
             )
+        usage_events = capture_assistant_usage(
+            hook_input, journal_dir=journal_dir, actor=actor
+        )
+        if usage_events:
+            _log(f"journalled {usage_events} AssistantUsage event(s)")
+        failure_records = capture_failure_content(
+            hook_input, journal_dir=journal_dir, actor=actor
+        )
+        if failure_records:
+            _log(f"journalled {failure_records} failed-call content record(s)")
     except Exception as exc:  # noqa: BLE001 -- outermost boundary: report, exit 1
         # The type only: a pydantic error message quotes the input, and hook
         # stdin is content. Exit 1 so hook_emit_bounded fails loud (OMN-20110).

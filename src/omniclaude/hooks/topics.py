@@ -539,6 +539,16 @@ class TopicBase(StrEnum):
     """Terminal event: the refusal's recording outcome (row already redacted)."""
 
     # ==========================================================================
+    # Transcript usage reading (OMN-18946)
+    # node_transcript_usage_read_effect command and terminal event.
+    # ==========================================================================
+    TRANSCRIPT_USAGE_READ = "onex.cmd.omniclaude.transcript-usage-read.v1"
+    """Command: read the token use of assistant messages not yet counted."""
+
+    TRANSCRIPT_USAGE_READ_COMPLETED = "onex.evt.omniclaude.transcript-usage-read.v1"
+    """Terminal event: the per-model totals one transcript read found."""
+
+    # ==========================================================================
     # PR ownership guard (OMN-20685)
     # node_pr_ownership_guard_effect command and terminal event.
     # ==========================================================================

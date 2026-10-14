@@ -320,6 +320,25 @@ coverage:
     volume_note: "Fires once per streamed display flush; delta is content-only."
     metadata_fields: [turn_id, message_id, index, final, delta_length]
     content_fields: {delta: capture_verbatim}
+  # OMN-18946: events a plugin hook DERIVES. No harness hook fires for them (the
+  # coverage test holds hooks.json to the rows without `derived`), but they ride
+  # this topic, lineage and fold like a hook.
+  - hook: GuardRefusal
+    derived: true
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P0
+    derived_by: "the hook refusal recorder, on every guard refusal, before its ledger rate limit"
+    metadata_fields: [guard, reason_class, refused_hook_event_name, tool_name, tool_call_key]
+    content_fields: {}
+  - hook: AssistantUsage
+    derived: true
+    registered_today: false
+    reaches_bus_today: false
+    build_priority: P0
+    derived_by: "claude_hook_capture, at Stop, SubagentStop and SessionEnd, from the transcript the hook names"
+    metadata_fields: [model, message_count, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, usage_source_hook, partial_window]
+    content_fields: {}
 
 redaction:
   class_names: [capture_verbatim, capture_hashed, capture_shape_only, never_capture]
@@ -406,6 +425,20 @@ redaction:
     payload.index: capture_verbatim
     payload.final: capture_verbatim
     payload.delta_length: capture_verbatim
+    # OMN-18946: GuardRefusal. The guard is a script name and the reason class a
+    # normalised slug (path-like and numeric segments dropped by the row node);
+    # neither is the refusal's text.
+    payload.guard: capture_verbatim
+    payload.reason_class: capture_verbatim
+    payload.refused_hook_event_name: capture_verbatim
+    # OMN-18946: AssistantUsage. Counts, a model id and a source-hook name.
+    payload.message_count: capture_verbatim
+    payload.input_tokens: capture_verbatim
+    payload.output_tokens: capture_verbatim
+    payload.cache_creation_input_tokens: capture_verbatim
+    payload.cache_read_input_tokens: capture_verbatim
+    payload.usage_source_hook: capture_verbatim
+    payload.partial_window: capture_verbatim
     payload.tool_input_ref: capture_verbatim
     payload.tool_response_ref: capture_verbatim
     payload.error_ref: capture_verbatim
@@ -464,9 +497,16 @@ projection:
       - {name: goal_id, type: uuid, nullable: true, content: "OMN-20031: set only on the goal-binding PreToolUse"}
       - {name: parent_goal_id, type: uuid, nullable: true}
       - {name: lane, type: text, nullable: true, content: "OMN-17427: the emit seam's lane stamp; empty is NULL"}
-      - {name: model, type: text, nullable: true, content: "OMN-17427: lineage.agent_model, else SessionStart payload.model"}
+      - {name: model, type: text, nullable: true, content: "OMN-17427: lineage.agent_model, else SessionStart payload.model; OMN-18946: an AssistantUsage event's payload.model, the model the API ran"}
       - {name: host, type: text, nullable: true, content: "OMN-17427: the emitting machine's hostname"}
       - {name: exit_code, type: integer, nullable: true, content: "OMN-17427: a Bash PostToolUse or PostToolUseFailure exit status"}
+      - {name: guard, type: text, nullable: true, content: "OMN-18946: the guard of a GuardRefusal event"}
+      - {name: refusal_reason, type: text, nullable: true, content: "OMN-18946: the reason class of a GuardRefusal event"}
+      - {name: input_tokens, type: bigint, nullable: true, content: "OMN-18946: AssistantUsage input tokens"}
+      - {name: output_tokens, type: bigint, nullable: true, content: "OMN-18946: AssistantUsage output tokens"}
+      - {name: cache_creation_input_tokens, type: bigint, nullable: true, content: "OMN-18946: AssistantUsage cache-write tokens"}
+      - {name: cache_read_input_tokens, type: bigint, nullable: true, content: "OMN-18946: AssistantUsage cache-read tokens"}
+      - {name: assistant_message_count, type: integer, nullable: true, content: "OMN-18946: distinct API messages an AssistantUsage event counts"}
       - {name: ingested_at, type: timestamptz, nullable: false}
   lineage_table:
     name: omninode_internal.claude_agent_spans
@@ -504,6 +544,18 @@ projection:
     close_span: "Close on SubagentStop."
     tool_call_count: >
       Count PostToolUse plus PostToolUseFailure events carrying that agent_id.
+    guard_refusal: >
+      OMN-18946. A GuardRefusal event is one row whose tool_use_id is the refused
+      call's, so it joins the call's PreToolUse by (session_id, tool_use_id) and
+      by causation_id = the PreToolUse's tool_call_key. A PreToolUse that has a
+      GuardRefusal row was refused; guard and refusal_reason name why. It is
+      not a tool call completion and adds nothing to tool_call_count.
+    assistant_usage: >
+      OMN-18946. An AssistantUsage event is one row per model per Stop,
+      SubagentStop or SessionEnd that found new assistant messages. A session's
+      token total is the sum of its AssistantUsage rows, across the main thread
+      and every subagent. payload.partial_window true means the first read of
+      that transcript took only its tail.
 
 known_gaps:
   - >

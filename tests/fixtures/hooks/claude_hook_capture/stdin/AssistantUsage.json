@@ -1,0 +1,19 @@
+{
+  "cache_creation_input_tokens": 6,
+  "cache_read_input_tokens": 78,
+  "cwd": "/workspace/fixture",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "AssistantUsage",
+  "input_tokens": 12,
+  "message_count": 2,
+  "model": "model-fixture-1",
+  "output_tokens": 345,
+  "partial_window": false,
+  "permission_mode": "default",
+  "prompt_id": "prompt-fixed-1",
+  "session_id": "session-fixture-1",
+  "transcript_path": "/restricted/session-fixture-1.jsonl",
+  "usage_source_hook": "Stop"
+}

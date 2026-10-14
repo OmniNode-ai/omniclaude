@@ -117,6 +117,12 @@ def _contract_hooks() -> list[str]:
     return [row["hook"] for row in raw["coverage"]]
 
 
+def _harness_hooks() -> list[str]:
+    """The contract's rows a harness hook fires for (OMN-18946: not the derived)."""
+    raw = yaml.safe_load(_CONTRACT.read_text(encoding="utf-8"))
+    return [row["hook"] for row in raw["coverage"] if not row.get("derived")]
+
+
 # ---------------------------------------------------------------------------
 # every hook type the producer is registered for maps and journals
 # ---------------------------------------------------------------------------
@@ -518,7 +524,7 @@ def test_hooks_json_registers_the_capture_for_every_covered_hook() -> None:
     registered = _registered_events("claude_hook_capture.sh")
     expected = {
         h
-        for h in _contract_hooks()
+        for h in _harness_hooks()
         if h not in capture_mod.NEVER_REGISTERED and h != "UserPromptSubmit"
     }
     assert set(registered) == expected
@@ -531,8 +537,14 @@ def test_hooks_json_registers_the_capture_for_every_covered_hook() -> None:
 
 def test_every_contract_hook_is_either_captured_or_named_never() -> None:
     covered = set(_registered_events("claude_hook_capture.sh")) | {"UserPromptSubmit"}
-    assert covered | set(capture_mod.NEVER_REGISTERED) == set(_contract_hooks())
-    assert len(_contract_hooks()) == 33
+    assert covered | set(capture_mod.NEVER_REGISTERED) == set(_harness_hooks())
+    assert len(_harness_hooks()) == 33
+    # OMN-18946: the two derived events are named by the contract and registered
+    # nowhere, because no harness hook fires for them.
+    assert set(_contract_hooks()) - set(_harness_hooks()) == {
+        "GuardRefusal",
+        "AssistantUsage",
+    }
 
 
 # ---------------------------------------------------------------------------

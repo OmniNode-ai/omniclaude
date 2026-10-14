@@ -45,7 +45,16 @@ class MissingHookFieldError(InvalidHookInputError):
 
 
 class EnumClaudeHookEventName(StrEnum):
-    """Claude Code 2.1.283 hook event names."""
+    """Claude Code 2.1.283 hook event names, plus the events this plugin derives.
+
+    The first 33 members are harness hooks. The last two are *derived* events
+    (OMN-18946): no hook fires for them, a plugin hook computes them. A refused
+    PreToolUse has no PostToolUse to pair with, so the guard that refused it
+    states the refusal; no hook's stdin carries token usage, so the transcript
+    is read for it. They ride the same topic, lineage and fold as a harness
+    hook, which is why they are members here, and ``derived()`` is how the
+    coverage tests tell the two kinds apart.
+    """
 
     PRE_TOOL_USE = "PreToolUse"
     POST_TOOL_USE = "PostToolUse"
@@ -80,6 +89,13 @@ class EnumClaudeHookEventName(StrEnum):
     FILE_CHANGED = "FileChanged"
     DIRECTORY_ADDED = "DirectoryAdded"
     MESSAGE_DISPLAY = "MessageDisplay"
+    GUARD_REFUSAL = "GuardRefusal"
+    ASSISTANT_USAGE = "AssistantUsage"
+
+    @classmethod
+    def derived(cls) -> frozenset[EnumClaudeHookEventName]:
+        """The events a plugin hook derives; the rest are harness hooks."""
+        return frozenset({cls.GUARD_REFUSAL, cls.ASSISTANT_USAGE})
 
 
 # Bus-crossing event schemas: frozen and additive-tolerant (repo invariant).
@@ -285,6 +301,57 @@ class ModelPostToolUseFailurePayload(BaseModel):
         self, handler: SerializerFunctionWrapHandler
     ) -> dict[str, object]:
         return _omit_absent_exit_code(handler(self))
+
+
+#: Longest guard, reason class or hook name a derived event carries. A guard is
+#: a script name and a reason class a slug; anything longer is not one.
+MAX_DERIVED_LABEL = 64
+
+
+class ModelGuardRefusalPayload(BaseModel):
+    """A guard refused a call (OMN-18946): which guard, and why, by class.
+
+    Metadata only. The refused call's input is content and rides the restricted
+    family when it is captured at all; the reason class is the guard's own
+    normalised token, never the refusal's text.
+    """
+
+    model_config = _EVENT_MODEL_CONFIG
+
+    hook_event_name: Literal["GuardRefusal"]
+    guard: str = Field(min_length=1, max_length=MAX_DERIVED_LABEL)
+    reason_class: str = Field(min_length=1, max_length=MAX_DERIVED_LABEL)
+    #: The harness hook the guard was refusing at, e.g. ``PreToolUse``.
+    refused_hook_event_name: str | None = Field(
+        default=None, max_length=MAX_DERIVED_LABEL
+    )
+    tool_name: str | None = None
+    #: Joins this refusal to the refused call's ``PreToolUse`` payload.
+    tool_call_key: UUID | None = None
+
+
+class ModelAssistantUsagePayload(BaseModel):
+    """Tokens one model used since the last read of a transcript (OMN-18946).
+
+    One event per model per Stop, SubagentStop or SessionEnd that finds new
+    assistant messages. ``message_count`` is distinct API messages: the
+    transcript repeats a message's usage on every one of its content blocks.
+    Summing the events of a session gives the session's total.
+    """
+
+    model_config = _EVENT_MODEL_CONFIG
+
+    hook_event_name: Literal["AssistantUsage"]
+    model: str = Field(min_length=1)
+    message_count: int = Field(ge=0)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    cache_creation_input_tokens: int = Field(ge=0)
+    cache_read_input_tokens: int = Field(ge=0)
+    usage_source_hook: Literal["Stop", "SubagentStop", "SessionEnd"]
+    #: True when the first read of a transcript took only its tail, so earlier
+    #: messages of a long-resumed session are not in any event.
+    partial_window: bool
 
 
 class ModelPostToolBatchPayload(BaseModel):
@@ -588,7 +655,9 @@ ModelHookPayload = Annotated[
     | ModelCwdChangedPayload
     | ModelFileChangedPayload
     | ModelDirectoryAddedPayload
-    | ModelMessageDisplayPayload,
+    | ModelMessageDisplayPayload
+    | ModelGuardRefusalPayload
+    | ModelAssistantUsagePayload,
     Field(discriminator="hook_event_name"),
 ]
 HOOK_PAYLOAD_ADAPTER: TypeAdapter[ModelHookPayload] = TypeAdapter(ModelHookPayload)
@@ -687,6 +756,7 @@ def make_event_id(
     tool_use_id: str | None,
     prompt_id: str | None,
     emitted_at: datetime,
+    discriminator: str | None = None,
 ) -> UUID:
     identity = [
         session_id,
@@ -696,6 +766,11 @@ def make_event_id(
         prompt_id or "",
         emitted_at.isoformat(),
     ]
+    if discriminator:
+        # OMN-18946: two derived events of one instant (two guards refusing one
+        # call, two models in one Stop) differ in this and nothing else. Absent
+        # for every harness hook, so no existing event id moves.
+        identity.append(discriminator)
     return uuid5(HOOK_CAPTURE_NAMESPACE, canonical_json(identity))
 
 
@@ -757,6 +832,13 @@ def _optional_int(stdin: Mapping[str, object], field: str) -> int | None:
         return None
     if not isinstance(value, int) or isinstance(value, bool):
         raise InvalidHookInputError(f"{field} must be an integer when present")
+    return value
+
+
+def _count(stdin: Mapping[str, object], field: str, hook_name: str) -> int:
+    value = _int(stdin, field, hook_name)
+    if value < 0:
+        raise InvalidHookInputError(f"{hook_name}.{field} must not be negative")
     return value
 
 
@@ -1222,6 +1304,45 @@ def _payload_from_stdin(
             delta_length=len(delta),
             delta_ref=capture.required("delta", delta),
         )
+    if hook_name is EnumClaudeHookEventName.GUARD_REFUSAL:
+        refusal_tool_use_id = _optional_string(stdin, "tool_use_id")
+        refused_hook = _optional_string(stdin, "refused_hook_event_name")
+        return _validated_payload(
+            ModelGuardRefusalPayload,
+            hook_event_name=name,
+            guard=capture.label(_string(stdin, "guard", name)),
+            reason_class=capture.label(_string(stdin, "reason_class", name)),
+            refused_hook_event_name=(
+                capture.label(refused_hook) if refused_hook else None
+            ),
+            tool_name=_optional_string(stdin, "tool_name"),
+            tool_call_key=(
+                make_tool_call_key(session_id, refusal_tool_use_id)
+                if refusal_tool_use_id
+                else None
+            ),
+        )
+    if hook_name is EnumClaudeHookEventName.ASSISTANT_USAGE:
+        return _validated_payload(
+            ModelAssistantUsagePayload,
+            hook_event_name=name,
+            model=_string(stdin, "model", name),
+            message_count=_count(stdin, "message_count", name),
+            input_tokens=_count(stdin, "input_tokens", name),
+            output_tokens=_count(stdin, "output_tokens", name),
+            cache_creation_input_tokens=_count(
+                stdin,
+                "cache_creation_input_tokens",
+                name,
+            ),
+            cache_read_input_tokens=_count(
+                stdin,
+                "cache_read_input_tokens",
+                name,
+            ),
+            usage_source_hook=_string(stdin, "usage_source_hook", name),
+            partial_window=_bool(stdin, "partial_window", name),
+        )
     raise UnknownHookEventError(name)
 
 
@@ -1285,6 +1406,10 @@ class _ContentCapture:
             return None
         return self.required(field, raw_value)
 
+    def label(self, value: str) -> str:
+        """A short metadata label, scrubbed then cut: never raw hook text."""
+        return self._scrubber(value).value[:MAX_DERIVED_LABEL]
+
 
 def map_hook_stdin(
     stdin: Mapping[str, object],
@@ -1325,6 +1450,11 @@ def map_hook_stdin(
     if sidecar is not None and agent_type not in {None, sidecar.agent_type}:
         raise InvalidHookInputError("sidecar agentType conflicts with hook stdin")
 
+    discriminator: str | None = None
+    if hook_name is EnumClaudeHookEventName.GUARD_REFUSAL:
+        discriminator = _optional_string(stdin, "guard")
+    elif hook_name is EnumClaudeHookEventName.ASSISTANT_USAGE:
+        discriminator = _optional_string(stdin, "model")
     event_id = make_event_id(
         session_id=session_id,
         agent_id=agent_id,
@@ -1332,6 +1462,7 @@ def map_hook_stdin(
         tool_use_id=tool_use_id,
         prompt_id=prompt_id,
         emitted_at=emitted_at,
+        discriminator=discriminator,
     )
     capture = _ContentCapture(
         event_id=event_id,
@@ -1355,6 +1486,7 @@ def map_hook_stdin(
             EnumClaudeHookEventName.POST_TOOL_USE_FAILURE,
             EnumClaudeHookEventName.PERMISSION_DENIED,
             EnumClaudeHookEventName.PERMISSION_REQUEST,
+            EnumClaudeHookEventName.GUARD_REFUSAL,
         }
         and tool_use_id is not None
     ):
@@ -1413,7 +1545,10 @@ __all__ = [
     "InvalidHookInputError",
     "MissingHookFieldError",
     "ModelClaudeHookEvent",
+    "MAX_DERIVED_LABEL",
+    "ModelAssistantUsagePayload",
     "ModelContentScrubResult",
+    "ModelGuardRefusalPayload",
     "ModelHookCaptureResult",
     "ModelHookContentRecord",
     "ModelHookContentRef",
