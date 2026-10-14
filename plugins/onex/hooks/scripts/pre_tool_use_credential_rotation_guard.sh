@@ -302,7 +302,9 @@ if [[ $GUARD_RC -eq 0 ]]; then
 fi
 
 if [[ $GUARD_RC -eq 3 ]]; then
-    REASON=$(printf '%s' "$GUARD_OUT" | jq -r '.reason // empty' 2>/dev/null || true)
+    # The verdict is the last line: stderr is merged into this capture, and a
+    # warning line ahead of it (OMNI_HOME unset, OMN-16632) is not JSON.
+    REASON=$(printf '%s' "$GUARD_OUT" | tail -n 1 | jq -r '.reason // empty' 2>/dev/null || true)
     if [[ -z "$REASON" ]]; then
         REASON="BLOCKED: this command rotates, re-issues or revokes a credential without an authorised ROTATION-CONSENT citation (OMN-17957), and the guard's own detail payload was unreadable."
     fi

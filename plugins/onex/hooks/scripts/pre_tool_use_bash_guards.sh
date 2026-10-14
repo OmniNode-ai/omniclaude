@@ -172,6 +172,18 @@ source "${_OBG_LIB}/bash_guard_core.sh"
 # before they start concurrently. Otherwise every guard that looks before the
 # first one creates it races to mkdir it too, and how many do depends on how
 # slow the machine is: more execs per call on a loaded runner.
+# A user outside our workspace has neither OMNI_HOME nor ONEX_STATE_DIR: the state
+# directory is then the per-user XDG one, the same order onex-paths.sh uses
+# (OMN-16632). Exported so the guards sourced below resolve the same directory.
+if [[ -z "${ONEX_STATE_DIR:-}" && -z "${OMNI_HOME:-}" ]]; then
+    if [[ "${XDG_STATE_HOME:-}" == /* ]]; then
+        export ONEX_STATE_DIR="${XDG_STATE_HOME}/omniclaude"
+        export ONEX_STATE_DIR_DEFAULTED=1
+    elif [[ "${HOME:-}" == /* ]]; then
+        export ONEX_STATE_DIR="${HOME}/.local/state/omniclaude"
+        export ONEX_STATE_DIR_DEFAULTED=1
+    fi
+fi
 if [[ ( -z "${ONEX_STATE_DIR:-}" && "${OMNI_HOME:-}" != /* ) ||
       ( -n "${ONEX_STATE_DIR:-}" && "$ONEX_STATE_DIR" != /* ) ]]; then
     printf '%s\n' 'onex-paths: set an absolute OMNI_HOME or ONEX_STATE_DIR for the refusal log' >&2

@@ -29,7 +29,7 @@ args:
     description: "With --provider ollama: the model to download (default: chosen from the Mac's memory)"
     required: false
   - name: --workspace
-    description: "Workspace directory (default: $OMNIBASE_PATH, else ~/code/omni)"
+    description: "Workspace directory (default: $OMNIBASE_PATH, else ~/Code/omnibase; OMNI_HOME is never read). A directory holding clones this setup did not create is refused"
     required: false
   - name: --restart
     description: "Run every phase again instead of resuming"

@@ -143,15 +143,10 @@ def _run_guard(
     env["DOD_ENFORCEMENT_MODE"] = enforcement_mode
     env["OMNICLAUDE_MODE"] = "full"
     env["CLAUDE_PLUGIN_ROOT"] = str(_REPO_ROOT / "plugins" / "onex")
-    # Isolate HOME so common.sh doesn't source the developer's
-    # ~/.omnibase/.env — that file's ONEX_EVIDENCE_ROOT would otherwise
-    # override the test fixture path below.
+    # Isolate HOME so common.sh doesn't source the developer's ~/.omnibase/.env.
     env["HOME"] = cwd
-    # Pin evidence root to the test workdir so the guard reads test fixtures,
-    # not whatever ambient ONEX_EVIDENCE_ROOT the host shell happens to export.
-    evidence_root = os.path.join(cwd, ".evidence")
-    os.makedirs(evidence_root, exist_ok=True)
-    env["ONEX_EVIDENCE_ROOT"] = evidence_root
+    # The guard reads <cwd>/.evidence/<ticket>/dod_report.json.
+    os.makedirs(os.path.join(cwd, ".evidence"), exist_ok=True)
     # Prevent emit_client_wrapper from trying to connect to Kafka
     env.pop("KAFKA_BOOTSTRAP_SERVERS", None)
 

@@ -73,7 +73,7 @@ You are a one-shot status snapshot agent. Your only job:
 <!-- status-snapshot-command:start -->
 ```sh
 if ! command -v onex >/dev/null 2>&1; then
-  printf '%s\n' "ERROR: Required standalone ONEX CLI was not found on PATH. Install it with: pipx install 'omnibase-core>=0.39.0'" >&2
+  printf '%s\n' "ERROR: Required standalone ONEX CLI was not found on PATH. Install it with: pipx install --python 3.12 'omnibase-core>=0.39.0'" >&2
   exit 127
 fi
 exec onex run-node node_pr_lifecycle_orchestrator --input '{"dry_run": true, "inventory_only": true}'

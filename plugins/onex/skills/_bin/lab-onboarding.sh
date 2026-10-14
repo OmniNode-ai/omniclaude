@@ -16,7 +16,7 @@
 #   0 Preflight          reads the machine; changes nothing; every question is asked here:
 #                        your models and their keys, Docker, and the Mac password
 #   1 Base tools         Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv
-#   2 Workspace          the canonical clones, OMNIBASE_PATH (and legacy OMNI_HOME), PATH
+#   2 Workspace          the canonical clones, OMNIBASE_PATH, PATH
 #   3 onex + models      dispatch venv, onex, local identity, then each model you chose set up
 #                        with `onex models add` and tested with one delegation pinned to it
 #   4 Docker             optional: only if you said yes; Docker Desktop installed, or started
@@ -41,7 +41,8 @@
 #                        own key, asked for one at a time; Ollama runs a model on this Mac,
 #                        no key. Delegation chooses among the ones set up
 #   --ollama-model NAME  the model Ollama downloads (default: chosen from this Mac's memory)
-#   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else $OMNI_HOME, else ~/code/omni)
+#   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else ~/Code/omnibase). A directory
+#                        that already holds clones this setup did not create is refused
 #   --restart            forget completed phases and run every phase again
 #   -h, --help           this text
 #
@@ -86,9 +87,17 @@ case "$RETRIES" in ''|*[!0-9]*) RETRIES=3 ;; esac
 PREFLIGHT_ONLY=0
 WANT_CONTAINERS=""        # 1 --containers, 0 --no-containers, empty: ask
 PROVIDER=""
-# OMNIBASE_PATH is the workspace variable; OMNI_HOME is its legacy name, still
-# read by the reconcile scripts this run drives, so both are honoured and set.
-WORKSPACE="${OMNIBASE_PATH:-${OMNI_HOME:-$HOME/code/omni}}"
+# OMNIBASE_PATH is the workspace variable, and the only one. OMNI_HOME
+# names the operator's private orchestration workspace: it is never read, never
+# written to a profile and never exported, and it is unset here so no child
+# (the onex wrapper prefers an inherited one over its own location) can reach it.
+DEFAULT_WORKSPACE="$HOME/Code/omnibase"
+if [ -n "${OMNIBASE_PATH:-}" ]; then
+  WORKSPACE="$OMNIBASE_PATH"; WORKSPACE_FROM="from OMNIBASE_PATH"
+else
+  WORKSPACE="$DEFAULT_WORKSPACE"; WORKSPACE_FROM="the default; OMNIBASE_PATH is not set"
+fi
+unset OMNI_HOME
 RESTART=0
 OLLAMA_MODEL=""
 
@@ -103,8 +112,8 @@ while [ $# -gt 0 ]; do
     --provider=*) PROVIDER="${1#*=}" ;;
     --ollama-model) shift; OLLAMA_MODEL="${1:-}" ;;
     --ollama-model=*) OLLAMA_MODEL="${1#*=}" ;;
-    --workspace) shift; WORKSPACE="${1:-}" ;;
-    --workspace=*) WORKSPACE="${1#*=}" ;;
+    --workspace) shift; WORKSPACE="${1:-}"; WORKSPACE_FROM="from --workspace" ;;
+    --workspace=*) WORKSPACE="${1#*=}"; WORKSPACE_FROM="from --workspace" ;;
     --restart) RESTART=1 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'omninode-dev-setup: unknown option: %s (see --help)\n' "$1" >&2; exit 2 ;;
@@ -848,6 +857,8 @@ phase0() {
   [ "$dstate" != "not installed" ] && m2disk=$M2_DISK_GB_DOCKER_PRESENT
 
   say "  Log file: $LOG"
+  say "  Workspace: $WORKSPACE ($WORKSPACE_FROM)"
+  refuse_foreign_workspace
   say ""
   row "Requirement" "This Mac" "Mode 1 needs" "Mode 2 (containers) needs"
   row "macOS" "$mv" "$M1_MACOS_MAJOR+" "$M1_MACOS_MAJOR+"
@@ -1071,7 +1082,6 @@ write_profile_block() { # file
     printf '%s\n' "$PROFILE_BEGIN"
     printf 'export OMNIBASE_PATH="%s"\n' "$WORKSPACE"
     printf 'export ONEX_WORKSPACE_CONFIG_ROOT="%s"\n' "$WORKSPACE_CONFIG_ROOT"
-    printf 'export OMNI_HOME="%s"   # legacy name, still read by the reconcile scripts\n' "$WORKSPACE"
     # shellcheck disable=SC2016  # written literally; expands in the user's shell
     printf 'eval "$(%s shellenv)"\n' "$(brew_bin)"
     # shellcheck disable=SC2016
@@ -1079,6 +1089,33 @@ write_profile_block() { # file
     printf '%s\n' "$PROFILE_END"
   } >>"$tmp"
   cat "$tmp" >"$f" && rm -f "$tmp"
+}
+
+# A workspace this setup created carries this marker, written before its first
+# clone. Phase 2 checks out the proven pin in every clone, which would detach a
+# developer's own clones, so a workspace holding clones without the marker is
+# refused. A V1 workspace (no marker yet) is recognised by the runtime config
+# V1 wrote there after cloning, and is adopted.
+WORKSPACE_MARKER="$WORKSPACE/.omninode-dev-setup"
+
+foreign_clones() { # -> the repos present in the workspace that this setup did not create
+  local r found=""
+  [ -f "$WORKSPACE_MARKER" ] && return 0
+  workspace_runtime_config_present && return 0
+  for r in $REPOS; do
+    [ -e "$WORKSPACE/$r" ] && found="${found}${found:+ }$r"
+  done
+  printf '%s' "$found"
+}
+
+refuse_foreign_workspace() {
+  local found; found="$(foreign_clones)"
+  [ -z "$found" ] && return 0
+  FAILED_STEP="check the workspace"
+  LAST_ERR="$WORKSPACE holds clones this setup did not create: $found"
+  say "  $WORKSPACE holds clones this setup did not create ($found)."
+  say "  They are left untouched: setup would check each one out at its proven commit."
+  phase_fail "choose an empty or new directory with --workspace DIR (or set OMNIBASE_PATH to one); nothing was changed in $WORKSPACE"
 }
 
 sync_clone() { # repo
@@ -1188,13 +1225,25 @@ phase2_verified() {
     pin_clone_at_proven "$r" || return 1
   done
   workspace_runtime_config_present || return 1
-  grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null
+  [ -f "$WORKSPACE_MARKER" ] || return 1
+  grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null || return 1
+  # A V1 block still exports OMNI_HOME: redo the phase so the block is rewritten.
+  ! profile_block_names_legacy_home "$HOME/.zshrc" && ! profile_block_names_legacy_home "$HOME/.bash_profile"
+}
+
+profile_block_names_legacy_home() { # file
+  [ -f "$1" ] || return 1
+  awk -v b="$PROFILE_BEGIN" -v e="$PROFILE_END" \
+    '$0==b{in_block=1} in_block && /OMNI_HOME/{found=1} $0==e{in_block=0} END{exit !found}' "$1"
 }
 
 phase2() {
   phase_start 2 "Workspace ($WORKSPACE)" "2-5 minutes"
   if is_done 2 && phase2_verified; then phase_pass "already in place"; return; fi
+  refuse_foreign_workspace
   mkdir -p "$WORKSPACE" || { FAILED_STEP="create $WORKSPACE"; phase_fail "choose another directory with --workspace"; }
+  [ -f "$WORKSPACE_MARKER" ] || printf 'This workspace was created by omninode-dev-setup.\n' >"$WORKSPACE_MARKER" ||
+    { FAILED_STEP="mark the workspace"; phase_fail "could not write $WORKSPACE_MARKER; check the directory is writable"; }
   local r pin default_repos=""
   for r in $REPOS; do
     if [ -d "$WORKSPACE/$r/.git" ]; then say "  $r: present, fetching"; else say "  $r: cloning"; fi
@@ -1221,9 +1270,9 @@ phase2() {
   say "  Workspace transport declared in $WORKSPACE_RUNTIME_CONFIG_REL (in-memory: everything runs on this Mac)."
   write_profile_block "$HOME/.zshrc"
   case "${SHELL:-}" in */bash) write_profile_block "$HOME/.bash_profile" ;; esac
-  export OMNIBASE_PATH="$WORKSPACE" OMNI_HOME="$WORKSPACE"
+  export OMNIBASE_PATH="$WORKSPACE"
   export ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
-  say "  OMNIBASE_PATH (and legacy OMNI_HOME), Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
+  say "  OMNIBASE_PATH, Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
   phase_pass
 }
 

@@ -1497,3 +1497,182 @@ def test_openrouter_fixed_model_unattended_with_a_stored_key_asks_nothing(
         "test openrouter --json stdin=0"
     ]
     assert "OpenRouter  ✓ answered (stored/model)" in kept.stdout
+
+
+# ---------------------------------------------------------------------------
+# OMN-16632: the workspace is OMNIBASE_PATH only. OMNI_HOME names the operator's
+# private orchestration workspace; a run on a machine that has it set must never
+# land there, and no run may plant it in a profile. A workspace that already
+# holds clones this script did not create is refused, not re-pinned.
+# ---------------------------------------------------------------------------
+
+OMNI_HOME_READ = re.compile(r"\$\{?OMNI_HOME\b")
+
+
+def _decoy(tmp_path: Path) -> tuple[Path, dict[Path, bytes]]:
+    decoy = tmp_path / "decoy_legacy_home"
+    (decoy / "omnibase_infra" / ".git").mkdir(parents=True)
+    (decoy / "omnibase_infra" / "README").write_text("the operator's own clone\n")
+    return decoy, _snapshot(decoy)
+
+
+def _snapshot(root: Path) -> dict[Path, bytes]:
+    return {p: p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()} | {
+        p: b"<dir>" for p in sorted(root.rglob("*")) if p.is_dir()
+    }
+
+
+def test_legacy_variable_set_and_omnibase_path_unset_uses_the_omnibase_default(
+    tmp_path: Path,
+) -> None:
+    decoy, before = _decoy(tmp_path)
+    result = _run(tmp_path, "--preflight-only", "--no-containers", OMNI_HOME=str(decoy))
+    assert result.returncode == 0, result.stdout + result.stderr
+    default = tmp_path / "home" / "Code" / "omnibase"
+    assert f"Workspace: {default} (the default" in result.stdout
+    assert str(decoy) not in result.stdout.replace(f"OMNI_HOME is set ({decoy})", ""), (
+        result.stdout
+    )
+    assert _snapshot(decoy) == before
+    assert _home_files(tmp_path) == []
+
+
+def test_omnibase_path_names_the_workspace(tmp_path: Path) -> None:
+    decoy, _ = _decoy(tmp_path)
+    ws = tmp_path / "mine"
+    result = _run(
+        tmp_path,
+        "--preflight-only",
+        "--no-containers",
+        OMNI_HOME=str(decoy),
+        OMNIBASE_PATH=str(ws),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"Workspace: {ws} (from OMNIBASE_PATH)" in result.stdout
+
+
+def test_the_workspace_flag_still_wins(tmp_path: Path) -> None:
+    decoy, _ = _decoy(tmp_path)
+    ws = tmp_path / "flagged"
+    result = _run(
+        tmp_path,
+        "--preflight-only",
+        "--no-containers",
+        "--workspace",
+        str(ws),
+        OMNI_HOME=str(decoy),
+        OMNIBASE_PATH=str(tmp_path / "env"),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"Workspace: {ws} (from --workspace)" in result.stdout
+
+
+def test_the_script_never_reads_or_exports_the_legacy_variable() -> None:
+    text = SCRIPT.read_text()
+    assert not OMNI_HOME_READ.search(text), OMNI_HOME_READ.findall(text)
+    assert not re.search(r"\bexport\s[^\n]*\bOMNI_HOME\b", text)
+    # The decoy must not reach any child process (the onex wrapper prefers an
+    # inherited OMNI_HOME over its own location).
+    assert re.search(r"^unset OMNI_HOME$", text, re.M)
+
+
+def _profile_block(tmp_path: Path, existing: str = "") -> str:
+    zshrc = tmp_path / "home" / ".zshrc"
+    zshrc.parent.mkdir(parents=True, exist_ok=True)
+    zshrc.write_text(existing)
+    text = SCRIPT.read_text()
+    begin = text[text.index("PROFILE_BEGIN=") : text.index("write_profile_block()")]
+    workspace = tmp_path / "home" / "Code" / "omnibase"
+    snippet = (
+        f"RUN_DIR={tmp_path}\nWORKSPACE={workspace}\n"
+        f"WORKSPACE_CONFIG_ROOT=$WORKSPACE/.onex/workspace-config\n"
+        "brew_bin() { echo /opt/homebrew/bin/brew; }\n"
+        + begin
+        + _functions("write_profile_block")
+        + f'\nwrite_profile_block "{zshrc}"\n'
+    )
+    _shell(snippet, tmp_path / "home")
+    return zshrc.read_text()
+
+
+def test_no_profile_line_names_the_legacy_variable(tmp_path: Path) -> None:
+    profile = _profile_block(tmp_path)
+    workspace = tmp_path / "home" / "Code" / "omnibase"
+    assert f'export OMNIBASE_PATH="{workspace}"' in profile
+    assert "OMNI_HOME" not in profile
+
+
+def test_a_v1_profile_block_loses_its_legacy_variable_line(tmp_path: Path) -> None:
+    v1 = (
+        "alias ll='ls -l'\n# >>> omninode onboarding >>>\n"
+        'export OMNIBASE_PATH="/x"\n'
+        'export OMNI_HOME="/x"   # legacy name, still read by the reconcile scripts\n'
+        "# <<< omninode onboarding <<<\n"
+    )
+    profile = _profile_block(tmp_path, v1)
+    assert "OMNI_HOME" not in profile
+    assert "alias ll='ls -l'" in profile
+    assert profile.count("# >>> omninode onboarding >>>") == 1
+
+
+def test_phase_2_is_redone_while_the_profile_names_the_legacy_variable() -> None:
+    body = _function_body("phase2_verified")
+    assert "OMNI_HOME" in body and "WORKSPACE_MARKER" in body, body
+
+
+def _clone(ws: Path, repo: str = "omnibase_infra") -> Path:
+    d = ws / repo
+    (d / ".git").mkdir(parents=True)
+    (d / "work.txt").write_text("a developer's own work\n")
+    return d
+
+
+def test_a_workspace_holding_clones_it_did_not_create_is_refused(
+    tmp_path: Path,
+) -> None:
+    ws = tmp_path / "devs_own"
+    _clone(ws)
+    before = _snapshot(ws)
+    result = _run(
+        tmp_path, "--preflight-only", "--no-containers", "--workspace", str(ws)
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"{ws} holds clones this setup did not create" in result.stdout
+    assert "--workspace" in result.stdout
+    assert _snapshot(ws) == before
+
+
+def test_a_linked_worktree_in_the_workspace_is_refused_too(tmp_path: Path) -> None:
+    ws = tmp_path / "devs_own"
+    (ws / "omniclaude").mkdir(parents=True)
+    (ws / "omniclaude" / ".git").write_text("gitdir: /elsewhere\n")
+    result = _run(
+        tmp_path, "--preflight-only", "--no-containers", "--workspace", str(ws)
+    )
+    assert result.returncode == 1, result.stdout
+    assert "holds clones this setup did not create" in result.stdout
+
+
+@pytest.mark.parametrize("owned_by", ["marker", "v1-runtime-config"])
+def test_a_workspace_this_setup_created_is_accepted(
+    tmp_path: Path, owned_by: str
+) -> None:
+    ws = tmp_path / "ours"
+    _clone(ws)
+    if owned_by == "marker":
+        (ws / ".omninode-dev-setup").write_text("created by omninode-dev-setup\n")
+    else:
+        cfg = ws / ".onex/workspace-config/config/onex/runtime/runtime_config.yaml"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text("# Written by omninode-dev-setup.\n")
+    result = _run(
+        tmp_path, "--preflight-only", "--no-containers", "--workspace", str(ws)
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "did not create" not in result.stdout
+
+
+def test_phase_2_writes_the_marker_before_the_first_clone() -> None:
+    body = _function_body("phase2")
+    assert body.index("WORKSPACE_MARKER") < body.index("sync_clone")
+    assert "refuse_foreign_workspace" in body
