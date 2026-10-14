@@ -489,20 +489,6 @@ topics:
       payload.index: capture_verbatim
       payload.final: capture_verbatim
       payload.delta_length: capture_verbatim
-      # OMN-18946: GuardRefusal. The guard is a script name and the reason class
-      # a normalised slug (path-like and numeric segments dropped by the row
-      # node); neither is the refusal's text.
-      payload.guard: capture_verbatim
-      payload.reason_class: capture_verbatim
-      payload.refused_hook_event_name: capture_verbatim
-      # OMN-18946: AssistantUsage. Counts, a model id and a source-hook name.
-      payload.message_count: capture_verbatim
-      payload.input_tokens: capture_verbatim
-      payload.output_tokens: capture_verbatim
-      payload.cache_creation_input_tokens: capture_verbatim
-      payload.cache_read_input_tokens: capture_verbatim
-      payload.usage_source_hook: capture_verbatim
-      payload.partial_window: capture_verbatim
       payload.tool_input_ref: capture_verbatim
       payload.tool_response_ref: capture_verbatim
       payload.error_ref: capture_verbatim
@@ -694,12 +680,9 @@ topics:
       schema_version: capture_verbatim
       hook_source: capture_verbatim
       actor: capture_verbatim
-      # prompt | tool_input | tool_response | tool_error | assistant_reply |
-      # operator_prompt
+      # prompt | tool_input | tool_response | assistant_reply | operator_prompt
       # (OMN-20905: a prompt whose transcript origin is human, recorded at
       # Stop, which the operator decision capture consumes from this topic)
-      # (OMN-18946: tool_error is a failed call's error text, from
-      # PostToolUseFailure, stored under the same redaction as tool_response)
       content_kind: capture_verbatim
       # OMN-20905: an operator_prompt's transcript prompt id and the time the
       # operator said it. Identifiers and a timestamp, no content.

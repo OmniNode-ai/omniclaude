@@ -507,3 +507,17 @@ def test_the_contract_declares_host_exit_code_and_the_four_columns() -> None:
         column["name"] for column in contract["projection"]["event_table"]["columns"]
     }
     assert {"lane", "model", "host", "exit_code"} <= columns
+
+
+@pytest.mark.parametrize("hook", ["GuardRefusal", "AssistantUsage"])
+def test_every_payload_key_of_a_derived_event_is_declared_verbatim(hook: str) -> None:
+    """OMN-18946: an undeclared key falls to ``capture_hashed`` and a digest of
+    the guard name or a token count is worth nothing."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    declared = contract["redaction"]["fields"]
+    event = _load_json(FIXTURE_ROOT / "events" / f"{hook}.json")
+    assert isinstance(event, dict)
+    payload = event["payload"]
+    assert isinstance(payload, dict)
+    for key in payload:
+        assert declared.get(f"payload.{key}") == "capture_verbatim", key
