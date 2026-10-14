@@ -54,6 +54,17 @@ def _str_or_none(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _deferred_by_status(event_type: str, drainer_status: str | None) -> bool:
+    """True when a ledger event's type is not listed by the drainer's status."""
+    if not drainer_status or not journal.is_ledger_event_type(event_type):
+        return False
+    import hook_emit_health as health
+
+    status = health.read_status(Path(drainer_status))
+    publishable = None if status is None else status.publishable_event_types
+    return publishable is None or event_type not in publishable
+
+
 def append_event(
     *,
     event_type: str,
@@ -66,12 +77,20 @@ def append_event(
     transcript_path: str | None,
     session_id: str | None,
     journal_dir: str | None,
+    drainer_status: str | None = None,
 ) -> str | None:
     """Stamp lane, actor and turn onto ``payload`` and journal it.
 
     Returns the turn id stamped on the record, so a caller journalling a
     second record for the same hook call (OMN-19551's content record) can
     carry the SAME turn instead of racing a second allocation.
+
+    ``drainer_status`` is the drainer's status file (OMN-20735). When given, a
+    ``work.ledger.*`` record whose type the status does not list as publishable
+    (no status, no types, or the type absent) is DEFERRED beside the journal
+    instead of journalled, because an unknown type at the journal head stalls
+    every record behind it. The drainer releases it once it lists the type. The
+    row is held, never skipped.
 
     Raises whatever the journal raises; :func:`main` turns it into exit 1.
     """
@@ -107,7 +126,12 @@ def append_event(
         host_turn_id=host_turn_id,
     )
     payload["turn_id"] = turn_id
-    journal.append(
+    write = (
+        journal.defer
+        if _deferred_by_status(event_type, drainer_status)
+        else journal.append
+    )
+    write(
         target,
         event_type=event_type,
         payload=payload,
@@ -176,6 +200,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Override the journal directory (defaults to ONEX_STATE_DIR).",
     )
+    parser.add_argument(
+        "--drainer-status",
+        default=None,
+        help=(
+            "The drainer's status file (OMN-20735). A work.ledger.* event whose "
+            "type it does not list as publishable is deferred, not journalled."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -190,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
             transcript_path=args.transcript_path,
             session_id=args.session_id,
             journal_dir=args.journal_dir,
+            drainer_status=args.drainer_status,
         )
     except Exception as exc:  # noqa: BLE001 -- outermost boundary: report, exit 1
         print(

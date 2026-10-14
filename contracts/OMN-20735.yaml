@@ -1,0 +1,44 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20735"
+title: "Work-ledger rows survive the shared hook-emit journal bound and an empty drainer status"
+summary: "A work.ledger.* record is exempt from the journal's over-bound eviction (enforce_bound passes over it and drops only other event types), and the appender, given the drainer's status file, defers a ledger row whose type the status does not list as publishable (empty, absent or without the type) to a deferred/ directory beside the journal. The drainer releases a deferred row into the journal on the cycle its status lists the type. Nothing is skipped and nothing is dropped."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-ledger-rows-exempt-from-the-bound"
+    statement: "enforce_bound never evicts a work.ledger.* record, however old, and still evicts other event types oldest-first."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: uv run pytest tests -k ledger_record_never_dropped_over_bound"
+  - id: "req-ledger-rows-deferred-not-skipped"
+    statement: "A ledger row whose type the drainer status does not list is deferred beside the journal and released into it once the drainer lists the type."
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: uv run pytest tests -k drainer_gate_defers_ledger_rows"
+evidence_requirements:
+  - kind: "tests"
+    description: "Journal bound exemption and the deferral of a ledger row on an empty drainer status."
+    command: "uv run pytest tests/unit/hooks/test_hook_emit_ledger_rows_omn20735.py tests/unit/hooks/test_hook_emit_drainer_loss_log_omn20535.py tests/unit/hooks/test_hook_emit_journal.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn20735-ac1-ledger-record-never-dropped"
+    description: "A work.ledger.* record is not evicted over the bound; other event types are."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_emit_ledger_rows_omn20735.py -q --no-cov -k ledger_record_never_dropped_over_bound"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn20735-ac2-gate-defers-ledger-rows"
+    description: "A ledger row is deferred, not skipped, on an empty drainer status, and the drainer releases it once its type is listed."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_emit_ledger_rows_omn20735.py -q --no-cov -k drainer_gate_defers_ledger_rows"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]

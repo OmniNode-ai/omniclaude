@@ -68,6 +68,7 @@ import socket
 import sys
 import time
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -86,10 +87,13 @@ __all__ = [
     "append",
     "default_journal_dir",
     "default_lock_path",
+    "defer",
     "enforce_bound",
     "list_pending",
+    "is_ledger_event_type",
     "loss_log_path",
     "record_loss",
+    "release_deferred",
 ]
 
 # OMN-20535 AC2: every journal record the drainer does not publish -- evicted over
@@ -101,6 +105,15 @@ __all__ = [
 LOSS_LOG_FILENAME = "hook_emit_journal_losses.jsonl"
 LOSS_LOG_ENV = "ONEX_HOOK_EMIT_LOSS_LOG"
 _LEDGER_EVENT_PREFIX = "work.ledger."
+
+# OMN-20735: a ledger row is exempt from the over-bound eviction (it shares the
+# journal with high-volume hook events, and is the oldest record by the time a
+# stalled drainer is noticed), and a row whose type the drainer does not yet list
+# as publishable is DEFERRED to this directory beside the journal records instead
+# of skipped. The drainer releases a deferred row into the journal once its status
+# lists the type. The directory is not a journal record file, so neither the
+# drain, the depth count nor the bound sees it.
+DEFERRED_DIRNAME = "deferred"
 
 # Bound chosen so a fully-stalled drainer holds roughly a day of the observed
 # peak rate (2,407 events/hr) without unbounded disk growth. On overflow the
@@ -268,7 +281,21 @@ def append(
 
     Raises :class:`JournalWriteError` when the record cannot be written.
     """
-    journal_dir = Path(journal_dir)
+    return _write_record(
+        Path(journal_dir),
+        event_type=event_type,
+        payload=payload,
+        correlation_id=correlation_id,
+    )
+
+
+def _write_record(
+    directory: Path,
+    *,
+    event_type: str,
+    payload: dict[str, object],
+    correlation_id: str | None,
+) -> AppendOutcome:
     record = JournalRecord(
         event_id=str(uuid.uuid4()),
         event_type=event_type,
@@ -279,20 +306,81 @@ def append(
     blob = record.to_json()
 
     name = f"{_next_seq():0{_SEQ_WIDTH}d}_{record.event_id}.json"
-    target = journal_dir / name
+    target = directory / name
     # Write to a temp file then rename: a reader never observes a
     # partially-written record.
-    tmp = journal_dir / f".{name}.tmp"
+    tmp = directory / f".{name}.tmp"
     try:
-        journal_dir.mkdir(parents=True, exist_ok=True)
+        directory.mkdir(parents=True, exist_ok=True)
         tmp.write_text(blob)
         tmp.replace(target)
     except OSError as exc:
         raise JournalWriteError(
-            exc.errno, f"cannot write journal record in {journal_dir}: {exc.strerror}"
+            exc.errno, f"cannot write journal record in {directory}: {exc.strerror}"
         ) from exc
     signal_ack(ACK_JOURNALLED)
     return AppendOutcome(path=target)
+
+
+def is_ledger_event_type(event_type: object) -> bool:
+    """True for a ``work.ledger.*`` event type (OMN-20735)."""
+    return isinstance(event_type, str) and event_type.startswith(_LEDGER_EVENT_PREFIX)
+
+
+def defer(
+    journal_dir: Path | str,
+    *,
+    event_type: str,
+    payload: dict[str, object],
+    correlation_id: str | None,
+) -> AppendOutcome:
+    """Hold one record beside the journal until the drainer can publish its type.
+
+    Same durable write as :func:`append`, into ``deferred/``. Raises
+    :class:`JournalWriteError` when it cannot be written (OMN-20735).
+    """
+    return _write_record(
+        Path(journal_dir) / DEFERRED_DIRNAME,
+        event_type=event_type,
+        payload=payload,
+        correlation_id=correlation_id,
+    )
+
+
+def release_deferred(
+    journal_dir: Path | str, publishable: Collection[str] | None
+) -> int:
+    """Move deferred records whose type is publishable into the journal.
+
+    Returns the count released. ``None`` (the drainer lists nothing) releases
+    nothing: the rows stay deferred. A MOVE under the record's own filename, so
+    its queue position is the time it was written, and the record is never
+    unreadable or absent from both directories. An unreadable deferred file is
+    left in place.
+    """
+    if publishable is None:
+        return 0
+    journal_dir = Path(journal_dir)
+    deferred_dir = journal_dir / DEFERRED_DIRNAME
+    try:
+        names = _sorted_record_names(deferred_dir)
+    except FileNotFoundError:
+        return 0
+    released = 0
+    for name in names:
+        path = deferred_dir / name
+        try:
+            record = JournalRecord.from_json(path.read_text())
+        except (OSError, ValueError, KeyError):
+            continue
+        if record.event_type not in publishable:
+            continue
+        try:
+            path.replace(journal_dir / name)
+        except OSError:
+            continue
+        released += 1
+    return released
 
 
 def loss_log_path(journal_dir: Path | str) -> Path:
@@ -354,7 +442,10 @@ def record_loss(
     return True
 
 
-def _record_eviction(journal_dir: Path, name: str) -> None:
+def _read_for_eviction(
+    journal_dir: Path, name: str
+) -> tuple[JournalRecord | None, str]:
+    """The record a file holds (None when unreadable) and the loss-line detail."""
     try:
         record: JournalRecord | None = JournalRecord.from_json(
             (journal_dir / name).read_text()
@@ -363,6 +454,12 @@ def _record_eviction(journal_dir: Path, name: str) -> None:
     except (OSError, ValueError, KeyError) as exc:
         record = None
         detail = f"evicted over the journal bound; record unreadable: {exc}"
+    return record, detail
+
+
+def _record_eviction(
+    journal_dir: Path, name: str, record: JournalRecord | None, detail: str
+) -> None:
     record_loss(
         journal_dir,
         disposition="dropped-over-bound",
@@ -402,6 +499,11 @@ def enforce_bound(
 ) -> int:
     """Drop the oldest records beyond ``max_records``. Returns the drop count.
 
+    A ``work.ledger.*`` record is never dropped (OMN-20735): the drop walks the
+    journal oldest-first and passes over ledger rows, so a journal that holds
+    more ledger rows than the bound stays over it rather than lose a row.
+    A record that cannot be read has no type to exempt and is dropped as before.
+
     Each dropped record is first written to the loss log (:func:`record_loss`),
     so a dropped work-ledger row is traceable by its row id (OMN-20535).
 
@@ -426,8 +528,13 @@ def enforce_bound(
         # Re-list under the lock: another enforcer may have already evicted.
         names = _sorted_record_names(journal_dir)
         excess = len(names) - max_records
-        for name in names[: max(excess, 0)]:
-            _record_eviction(journal_dir, name)
+        for name in names:
+            if dropped >= excess:
+                break
+            record, detail = _read_for_eviction(journal_dir, name)
+            if record is not None and is_ledger_event_type(record.event_type):
+                continue
+            _record_eviction(journal_dir, name, record, detail)
             try:
                 (journal_dir / name).unlink()
                 dropped += 1
