@@ -237,7 +237,7 @@ jobs:
   # job PLACEMENT would change to reveal it.
   route:
     name: Runner Route (OMN-18031)
-    uses: OmniNode-ai/omnimarket/.github/workflows/route-runner-reusable.yml@01a0d1b3e7d7ba1a09012f9af245ba29afa000b5
+    uses: OmniNode-ai/omnimarket/.github/workflows/route-runner-reusable.yml@5e67c9348a434e2b60b19b6f4b103f0ad4409945
     with:
       workflow_path: .github/workflows/ci.yml
     secrets:
@@ -4171,7 +4171,7 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     steps:
-      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@de3398d1fcf7a6f48451f680b74b1a6c6c383b8a # omnibase_core dev (OMN-20964)
+      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@b05c7d6f6336659d4965123bbc78a5d5b8822d70 # omnibase_core dev (OMN-20964)
         with:
           checks: "boundary-parity"
           warn-only: "false"
@@ -6395,7 +6395,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4.38.2
+        uses: github/codeql-action/upload-sarif@v4.38.3
         if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         with:
           sarif_file: 'trivy-results.sarif'

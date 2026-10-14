@@ -60,7 +60,7 @@ permissions:
 
 jobs:
   repo-evidence:
-    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@4e4f5e0404d364e296c5d37db6aa3ab9e07f8ffa # OMN-20074: the squash commit of omnibase_core#1932 on dev (descends from #1914; writer app workflow-pin and plugin version bump classification, verifier floor)
+    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@b05c7d6f6336659d4965123bbc78a5d5b8822d70 # OMN-20074: the squash commit of omnibase_core#1932 on dev (descends from #1914; writer app workflow-pin and plugin version bump classification, verifier floor)
     with:
       evidence-source: caller
       verifier-version: 0.4.310
