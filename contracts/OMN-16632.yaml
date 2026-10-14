@@ -1,0 +1,44 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-16632"
+title: "Developer onboarding sets up in an OMNIBASE_PATH workspace, never OMNI_HOME, and refuses a workspace holding clones it did not create"
+summary: "lab-onboarding.sh resolves its workspace from --workspace, then OMNIBASE_PATH, then $HOME/Code/omnibase; it never reads OMNI_HOME, unsets it so no child process inherits it, and writes no OMNI_HOME line into the shell profile (a V1 block that has one is rewritten). Phase 0 prints the resolved workspace and its source before anything is written, and refuses a workspace holding repository clones without the marker the script writes before its first clone."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-workspace-is-omnibase-path-only"
+    statement: "With OMNI_HOME set and OMNIBASE_PATH unset the workspace is the omnibase default; --workspace still wins; no profile line names OMNI_HOME."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -k 'legacy_variable or omnibase_path or workspace_flag'"
+  - id: "req-foreign-workspace-refused"
+    statement: "A workspace holding clones without the setup marker (or the V1 runtime config) is refused with a message naming the directory and --workspace, and is left untouched."
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -k 'did_not_create or linked_worktree or this_setup_created or marker'"
+evidence_requirements:
+  - kind: "tests"
+    description: "Workspace resolution, profile block and foreign-workspace refusal of the onboarding script."
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn16632-ac1-workspace-is-omnibase-path-only"
+    description: "OMNI_HOME is never the workspace and never lands in a profile; --workspace wins."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'legacy_variable or omnibase_path or workspace_flag'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn16632-ac2-foreign-workspace-refused"
+    description: "A workspace holding clones this setup did not create is refused and left untouched."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'did_not_create or linked_worktree or this_setup_created or marker'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
