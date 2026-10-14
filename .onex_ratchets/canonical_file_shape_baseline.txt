@@ -633,7 +633,6 @@ scripts/validate_frontmatter.py
 scripts/validate_onex.py
 scripts/validate_pattern_extraction.py
 scripts/validate_pattern_integration.py
-scripts/validate_skill_contracts_wrapper.sh
 scripts/validation/_path_scope.py
 scripts/validation/check_ai_slop.py
 scripts/validation/check_node_identity_keying.py

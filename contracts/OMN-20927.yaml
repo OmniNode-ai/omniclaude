@@ -1,0 +1,59 @@
+schema_version: 1.0.0
+ticket_id: OMN-20927
+title: 'OCC retirement K: omniclaude''s skill-hygiene, skill-contracts and version-pin CI jobs stop reading onex_change_control'
+summary: The skill-hygiene and skill-contract-validation jobs in ci.yml, and the skill-contract-validation pre-commit hook, no longer mint an onexbot-occ-writer token or check out onex_change_control. Both validators are ported unchanged in behaviour into node_skill_validation_compute (two handlers and a CLI handler) and the jobs and the hook run that CLI. The OCC-backed wrapper script is deleted. The Version Pin Compliance half ended in OMN-20941 (omniclaude#2673) and is not touched here.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn20927-skill-validators-in-repo
+  statement: omniclaude's skill hygiene and skill contract checks must run from an in-repo validator that refuses what the onex_change_control copies refused, and no ci.yml job or pre-commit hook may read onex_change_control for them.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: No job in omniclaude''s `.github/workflows/ci.yml` on the PR head checks out onex_change_control for skill hygiene, skill contracts or version pins -- falsifier: `git show HEAD:.github/workflows/ci.yml | grep -n -E "validate_skill_hygiene|validate_skill_contracts|check_version_pins"` shows no path under an onex_change_control checkout, and the three jobs'' steps contain no `repository: OmniNode-ai/onex_change_control`'
+  - id: AC2
+    statement: 'AC2: The skill-hygiene and skill-contracts checks still run on omniclaude PRs and still refuse what they refused before -- falsifier: both check runs conclude success on the PR head; and, recorded on the PR body''s Lab: line, the in-repo validator run against a planted defective skill (one the OCC copy at 1b0d2f03 rejects) exits non-zero, and against the clean tree exits 0, with the same verdicts as the OCC copy on both inputs'
+  - id: AC3
+    statement: 'AC3: Version Pin Compliance in omniclaude ends the way it ended in omnibase_core#1947 or omnibase_infra#4823, and the PR body names which and why -- falsifier: the job is either absent from ci.yml or present with no onex_change_control checkout, and CI Summary''s needs list stays consistent with the job set (CI Summary concludes success on the PR head)'
+evidence_requirements:
+- kind: tests
+  description: ci.yml's two skill jobs check out no onex_change_control and run the in-repo CLI after uv sync; the pre-commit hook and the deleted wrapper read no onex_change_control; both jobs stay gated.
+  command: uv run pytest tests/ci/test_skill_validators_in_repo_omn20927.py -q -p no:randomly --no-cov
+- kind: tests
+  description: Every hygiene and contract check refuses its planted defect with the source message, strict promotion matches the source, and the CLI keeps the source output and exit codes.
+  command: uv run pytest tests/unit/nodes/node_skill_validation_compute/test_handler_skill_hygiene.py tests/unit/nodes/node_skill_validation_compute/test_handler_skill_contracts.py tests/unit/nodes/node_skill_validation_compute/test_skill_validation_main.py -q -p no:randomly --no-cov
+- kind: tests
+  description: 'Version Pin Compliance ended in OMN-20941: job absent, needs list consistent, broken-needs positive control rejected.'
+  command: uv run pytest tests/ci/test_version_pin_check_retired_omn20941.py -q -p no:randomly --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn20927-ac1-no-occ-checkout
+  description: ci.yml's skill-hygiene and skill-contract-validation jobs name no onex_change_control and run the in-repo CLI.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_skill_validators_in_repo_omn20927.py -q -p no:randomly --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC1
+- id: dod-omn20927-ac2-same-verdicts
+  description: Each check refuses its planted defect with the source message; the PR body's Lab line records the in-repo CLI and the OCC copies agreeing on the clean tree and on a planted defective skill.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_skill_validation_compute/test_handler_skill_hygiene.py tests/unit/nodes/node_skill_validation_compute/test_handler_skill_contracts.py tests/unit/nodes/node_skill_validation_compute/test_skill_validation_main.py -q -p no:randomly --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC2
+- id: dod-omn20927-ac3-version-pin-ended
+  description: 'Version Pin Compliance ended in OMN-20941 (omniclaude#2673): the job is absent from ci.yml with no onex_change_control checkout, and CI Summary''s needs list resolves to jobs.'
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_version_pin_check_retired_omn20941.py -q -p no:randomly --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC3

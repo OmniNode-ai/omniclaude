@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: node_skill_validation_compute
+version: "0.1.0"
+contract_name: node_skill_validation_compute
+node_name: node_skill_validation_compute
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: COMPUTE_GENERIC
+
+description: >
+  Canonical skill hygiene and contract validation for CI and pre-commit.
+  Invoked through the CLI with source-compatible checks and output.
+
+runtime_profiles: [main]
+
+input_model:
+  name: ModelSkillValidationRequest
+  module: omniclaude.nodes.node_skill_validation_compute.models
+
+output_model:
+  name: ModelSkillValidationReport
+  module: omniclaude.nodes.node_skill_validation_compute.models
+
+handler_routing:
+  routing_strategy: operation_match
+  handlers:
+    - operation: skill_hygiene_validate
+      handler:
+        name: HandlerSkillHygiene
+        module: omniclaude.nodes.node_skill_validation_compute.handlers.handler_skill_hygiene
+    - operation: skill_contracts_validate
+      handler:
+        name: HandlerSkillContracts
+        module: omniclaude.nodes.node_skill_validation_compute.handlers.handler_skill_contracts
+
+error_handling:
+  retry_policy:
+    max_retries: 0
+    retry_on: []
+  circuit_breaker:
+    enabled: false
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-20927
+  maturity: mvp
+  tags:
+    - compute
+    - skills
+    - validation
