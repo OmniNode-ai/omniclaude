@@ -62,7 +62,12 @@ def _resolve(changed_files: list[str], config: ModelAdjacencyMap) -> list[str]:
                 direct_modules.add(module)
         elif path.startswith(TEST_UNIT_PREFIX):
             parts = path.split("/")
-            if len(parts) >= 3:
+            if len(parts) == 3:
+                # A flat test file is contained directly by the unit root.
+                # Changed-file lists include deletions, so select the parent
+                # without requiring the file to exist in the current tree.
+                selected.add(TEST_UNIT_PREFIX)
+            elif len(parts) > 3:
                 selected.add(f"{TEST_UNIT_PREFIX}{parts[2]}/")
 
         # Non-src trigger prefixes are checked for EVERY changed path, not as
