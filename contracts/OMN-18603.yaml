@@ -1,0 +1,33 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18603
+title: "The h202 hook-emit drainer unit reaches uv, so its ledger alarm can land"
+summary: >-
+  The hook-emit drainer's systemd user unit names a PATH that reaches ~/.local/bin, where uv lives, so
+  the drainer's own ledger ALERT append (uv run onex-ledger) runs instead of failing with
+  "No such file or directory: 'uv'". The drainer itself was restored on h202 through
+  scripts/install-hook-emit-drainer.sh; this change makes that installer render a unit whose alarm path works.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn18603-drainer-unit-path
+    statement: The installer-rendered systemd unit for the hook-emit drainer carries a PATH that includes the user's ~/.local/bin, and the drainer runs under that unit.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: the unit template names PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin and the installer renders and loads it; falsifier: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -k unit_path fails against the template without the line.'
+evidence_requirements:
+  - kind: tests
+    description: The systemd installer tests, including the PATH test, pass.
+    command: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn18603-ac1
+    description: The systemd installer tests pass, including the test that the unit PATH reaches the user bin directory.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -q --no-cov
