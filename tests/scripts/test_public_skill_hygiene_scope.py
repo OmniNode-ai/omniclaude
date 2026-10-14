@@ -367,3 +367,68 @@ def test_live_tree_is_green() -> None:
     tree-surface class exactly at its ratchet budget."""
     result = _run(REPO_ROOT)
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-2000:]
+
+
+# ---------------------------------------------------------------------------
+# OMN-17427: the sharded scan is the serial scan, only faster
+# ---------------------------------------------------------------------------
+
+
+def _sharded_repo(tmp_path: Path) -> Path:
+    files = {f"src/pkg/mod_{i}.py": f"value = {i}\n" for i in range(40)}
+    files["src/pkg/mod_7.py"] = f'path = "{OP_HOME}"\n'
+    files["docs/lan.md"] = f"host {LAN_LITERAL}\n"
+    files["scripts/deploy.sh"] = f"ssh {HOST_NICK} true\n"
+    return _make_repo(tmp_path, files)
+
+
+def _shard_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gate.os, "cpu_count", lambda: 4)
+    monkeypatch.setattr(gate, "_PARALLEL_MIN_FILES", 4)
+
+
+@pytest.mark.unit
+def test_sharded_scan_returns_the_serial_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _sharded_repo(tmp_path)
+    with monkeypatch.context() as serial:
+        serial.setattr(gate, "_PARALLEL_MIN_FILES", 10**9)
+        expected = gate.scan_tree(repo)
+
+    _shard_ready(monkeypatch)
+    real = gate._scan_in_shards
+    outcomes: list[object] = []
+
+    def recording(*args: object) -> object:
+        outcome = real(*args)
+        outcomes.append(outcome)
+        return outcome
+
+    monkeypatch.setattr(gate, "_scan_in_shards", recording)
+    assert gate.scan_tree(repo) == expected
+    # Positive control: the sharded path ran and produced the answer.
+    assert outcomes and outcomes[0] is not None
+    assert {"machine-path", "real-lan-ip", "host-nick"} <= _classes(expected[0])
+
+
+@pytest.mark.unit
+def test_a_dead_shard_falls_back_to_the_serial_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _sharded_repo(tmp_path)
+    with monkeypatch.context() as serial:
+        serial.setattr(gate, "_PARALLEL_MIN_FILES", 10**9)
+        expected = gate.scan_tree(repo)
+
+    _shard_ready(monkeypatch)
+    real_popen = subprocess.Popen
+
+    def dying(args: list[str], *rest: object, **kwargs: object) -> object:
+        if "--scan-shard" in args:
+            args = [sys.executable, "-c", "raise SystemExit(3)"]
+        return real_popen(args, *rest, **kwargs)
+
+    monkeypatch.setattr(gate.subprocess, "Popen", dying)
+    assert gate._scan_in_shards(repo, gate._tracked_files(repo), 2) is None
+    assert gate.scan_tree(repo) == expected

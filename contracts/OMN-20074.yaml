@@ -70,6 +70,13 @@ requirements:
       - id: "AC9"
         statement: |-
           AC9: scripts/scaffold_occ_receipt.py, scripts/materialize-dod-evidence-from-occ.sh and their tests are absent, no plugins/onex/skills markdown names either script, the canonical-file-shape baseline lists neither, and call-occ-autobind-reusable.yml, call-occ-companion-effect-reusable.yml and deploy-gate-reusable.yml are still present -- falsifier: uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py -q --no-cov fails at the merge base
+  - id: "req-omn20074-flat-test-selection"
+    statement: |-
+      The CI selector must map a changed flat unit test to its containing unit directory, including when the file was deleted during OCC retirement.
+    acceptance:
+      - id: "AC10"
+        statement: |-
+          AC10: existing and deleted tests/unit/*.py changes select tests/unit/ without a .py/ argument; a script deletion retains tests/ci/, tests/unit/ and tests/workflows/ -- falsifier: uv run pytest tests/unit/test_smart_test_selection.py -q --no-cov -k flat_unit_test_change
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -174,3 +181,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC9"]
+  - id: dod-omn20074-flat-test-selection
+    description: "Flat unit test changes select their containing directory, including the deleted OCC materialization test, and retain the script-triggered test directories."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/test_smart_test_selection.py -q --no-cov -k flat_unit_test_change"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC10"]
