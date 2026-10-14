@@ -27,10 +27,18 @@ requirements:
         statement: Snapshot values preserve repository precedence and hosted-runner findings; the CLI returns 0, 1 or 2 for fleet, hosted or stale snapshots, accepts the environment path on a lab host and refuses snapshots in GitHub Actions.
       - id: AC5
         statement: Refresh writes a dated snapshot usable by the gate when all live reads succeed, and writes nothing when a live scope is unreadable.
+  - id: req-hostile-reviewer-retry-budget-pin
+    statement: The Hostile Reviewer clones omniintelligence at the revision whose retry of an unparseable review reply gets 8192 tokens instead of 4096.
+    acceptance:
+      - id: AC6
+        statement: "pyproject.toml pins omninode-intelligence and uv.lock records only 3fcbf795087a79081c0ceeb676216bf64c5d49ae, the merge commit of omniintelligence#1072, which the workflow clones -- falsifier: uv run pytest tests/ci/test_hostile_reviewer_retry_budget_pin_omn17427.py -q fails over the merge base, which pins f4bf0a1989fc37bd7ad9b4a7ad591f801d2a1070"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
     command: "uv run pytest tests/hooks/test_ticket_creation_guard.py -q"
+  - kind: tests
+    description: "The pin and the lock name the omniintelligence revision with the larger retry budget"
+    command: "uv run pytest tests/ci/test_hostile_reviewer_retry_budget_pin_omn17427.py -q"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -105,3 +113,15 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_snapshot.py -q -k refresh_command"
     binds_ac:
       - AC5
+  - id: dod-hostile-reviewer-retry-budget-pin
+    description: >
+      pyproject.toml pins omninode-intelligence and uv.lock records only the
+      merge commit of omniintelligence#1072, which the Hostile Reviewer
+      workflow clones.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_hostile_reviewer_retry_budget_pin_omn17427.py -q"
+    binds_ac:
+      - AC6
