@@ -5,14 +5,32 @@
 # Shell path resolver for ONEX state directory.
 # Source this file to export derived path variables.
 #
-# Requires an explicit ONEX_STATE_DIR or an absolute OMNI_HOME registry root.
+# Resolution order (OMN-16632): an explicit ONEX_STATE_DIR; otherwise an absolute
+# OMNI_HOME registry root (<root>/.onex_state); otherwise, for a user outside our
+# workspace who has neither, the per-user XDG state dir the plugin owns
+# (${XDG_STATE_HOME:-$HOME/.local/state}/omniclaude). A relative XDG_STATE_HOME is
+# ignored, as the XDG spec says. pre_tool_use_bash_guards.sh repeats this order
+# before sourcing anything; tests/hooks/test_native_user_state_dir_omn16632.py
+# pins the two to the same answer. The defaulted case is flagged with
+# ONEX_STATE_DIR_DEFAULTED=1, the one fact a guard that needs our workspace reads to
+# tell "a user with no workspace" from "our session with its workspace unset".
 
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
-    if [[ "${OMNI_HOME:-}" != /* ]]; then
+    if [[ "${OMNI_HOME:-}" == /* ]]; then
+        export ONEX_STATE_DIR="${OMNI_HOME}/.onex_state"
+    elif [[ -n "${OMNI_HOME:-}" ]]; then
         printf '%s\n' 'onex-paths: OMNI_HOME must name an absolute registry root when ONEX_STATE_DIR is unset' >&2
         return 1
+    elif [[ "${XDG_STATE_HOME:-}" == /* ]]; then
+        export ONEX_STATE_DIR="${XDG_STATE_HOME}/omniclaude"
+        export ONEX_STATE_DIR_DEFAULTED=1
+    elif [[ "${HOME:-}" == /* ]]; then
+        export ONEX_STATE_DIR="${HOME}/.local/state/omniclaude"
+        export ONEX_STATE_DIR_DEFAULTED=1
+    else
+        printf '%s\n' 'onex-paths: set ONEX_STATE_DIR, OMNI_HOME or an absolute HOME' >&2
+        return 1
     fi
-    export ONEX_STATE_DIR="${OMNI_HOME}/.onex_state"
 fi
 if [[ "$ONEX_STATE_DIR" != /* ]]; then
     printf '%s\n' 'onex-paths: ONEX_STATE_DIR must be absolute' >&2

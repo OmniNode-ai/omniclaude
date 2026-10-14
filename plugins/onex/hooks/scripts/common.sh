@@ -161,6 +161,23 @@ find_python() {
         fi
     fi
 
+    # 5. Lite mode, no python3 on PATH (OMN-16632): a user who installed Python
+    # through uv has an interpreter uv can name but no python3 on PATH.
+    if ! command -v python3 &>/dev/null && command -v uv &>/dev/null; then
+        local mode_sh uv_python
+        mode_sh="$(dirname "${BASH_SOURCE[0]}")/../../lib/mode.sh"
+        if [[ -f "$mode_sh" ]]; then
+            source "$mode_sh"
+            if [[ "$(omniclaude_mode)" == "lite" ]]; then
+                uv_python="$(uv python find 2>/dev/null || true)"
+                if [[ -n "$uv_python" && -x "$uv_python" ]]; then
+                    echo "$uv_python"
+                    return
+                fi
+            fi
+        fi
+    fi
+
     # No fallback: return empty to trigger hard failure
     echo ""
 }
@@ -280,16 +297,8 @@ if [[ -z "${PYTHON_CMD}" ]]; then
         exit 0
     fi
     # Critical hook: hard-fail with actionable error
-    echo "ERROR: No valid Python found for ONEX hooks." 1>&2
-    echo "  Expected one of:" 1>&2
-    echo "    - PLUGIN_PYTHON_BIN=/path/to/python3 (explicit override)" 1>&2
-    echo "    - Repo .venv at \$(cd PLUGIN_ROOT/../.. && pwd)/.venv (run: uv sync)" 1>&2
-    echo "    - ONEX_REGISTRY_ROOT/omniclaude/.venv (set ONEX_REGISTRY_ROOT in shell profile, run: uv sync)" 1>&2
-    echo "    - OMNICLAUDE_PROJECT_ROOT=/path/to/repo with .venv (dev mode)" 1>&2
-    echo "" 1>&2
-    echo "  Auto-repair was attempted but failed. Check /tmp/omniclaude-venv-repair.log" 1>&2
-    echo "" 1>&2
-    echo "  Quick fix: cd to the omniclaude repo root and run 'uv sync'" 1>&2
+    # One line, naming the missing interpreter (OMN-16632): this runs once per hook.
+    echo "ERROR: onex hooks need a python3 and found none (not on PATH, no plugin venv); install python3 or set PLUGIN_PYTHON_BIN=/path/to/python3" 1>&2
     exit 1
 fi
 export PYTHON_CMD
