@@ -142,6 +142,7 @@ evidence_requirements:
   - kind: tests
     description: "No workflow, deploy gate file or import names the change control repository or package."
     command: "uv run pytest tests/ci/test_workflow_dependency_refs_off_occ_omn20074.py -q --no-cov"
+  - kind: tests
     description: "No module imports the change-control package and the inert-check predicate is local."
     command: "uv run pytest tests/ci/test_no_occ_code_imports_omn20074.py tests/lib/test_dod_evidence_runner.py -q --no-cov"
 emergency_bypass:
