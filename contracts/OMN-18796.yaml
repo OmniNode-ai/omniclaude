@@ -1,0 +1,42 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18796
+title: "The advisory-job census scopes coverage to the job, not to the workflow file"
+summary: >-
+  enforced_jobs returned every job in a workflow file as enforced when any one job in it matched a required context.
+  56 of 90 files share a boilerplate eligibility job that is a required context, so the census never saw the jobs
+  beside it. Coverage is now per job: a required job plus its transitive needs. A needs-less job whose id or name
+  contains "summary" still covers its whole file, which keeps omnibase_infra's CI Summary working.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn18796-per-job-census
+    statement: The advisory-job gate treats a job as enforced only when it is a required context, is reached from one through needs, or sits in the file of a needs-less summary job that is a required context.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: a workflow file with one required job and one separate non-required verification job reports the second job as unenforced; falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -k a_file_with_one_required_job_and_one_advisory_job fails.'
+      - id: AC2
+        statement: 'AC2: a job that a required job reaches through needs stays enforced, and a needs-less summary job that is a required context still covers its own file; falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -k "still_enforced or needsless_summary" fails.'
+evidence_requirements:
+  - kind: tests
+    description: The advisory-job gate tests pass, including the per-job census tests.
+    command: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn18796-ac1
+    description: The advisory-job gate tests pass, including the test that a non-required job beside a required one is reported.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov
+  - id: dod-omn18796-ac2
+    description: The advisory-job gate tests pass, including the needs-reach and needless-summary tests.
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov
