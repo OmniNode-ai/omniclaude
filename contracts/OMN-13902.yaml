@@ -14,18 +14,18 @@ requirements:
     statement: A strict descendant is accepted, a non-descendant is refused without writing, both dependency and source rev occurrences are rewritten together, and only omnimarket is declared clone-governed.
     acceptance:
       - id: AC1
-        statement: 'AC1: A strict descendant is accepted, a non-descendant is refused without writing, both dependency and source rev occurrences are rewritten together, and only omnimarket is declared clone-governed. -- falsifier: grep -q "@f7ff837dfb882cad126f88a023cfc400e113de49" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov'
+        statement: 'AC1: A strict descendant is accepted, a non-descendant is refused without writing, both dependency and source rev occurrences are rewritten together, and only omnimarket is declared clone-governed. -- falsifier: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov'
   - id: req-sibling-lock-resolution
     statement: uv.lock resolves the declared dependencies and git source revs without rewriting.
     acceptance:
       - id: AC2
-        statement: 'AC2: uv.lock resolves the declared dependencies and git source revs without rewriting. -- falsifier: grep -q "rev=f7ff837dfb882cad126f88a023cfc400e113de49" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov'
+        statement: 'AC2: uv.lock resolves the declared dependencies and git source revs without rewriting. -- falsifier: grep -Eq "omnimarket[.]git[?]rev=[0-9a-f]{40}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov'
 evidence_requirements:
   - kind: tests
-    command: grep -q "@f7ff837dfb882cad126f88a023cfc400e113de49" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+    command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
     description: Validates forward-only git refresh behavior including descendant acceptance, non-descendant refusal, and rev rewriting.
   - kind: ci
-    command: grep -q "rev=f7ff837dfb882cad126f88a023cfc400e113de49" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+    command: grep -Eq "omnimarket[.]git[?]rev=[0-9a-f]{40}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
     description: Verifies that uv.lock resolves the declared dependencies and git source revs without rewriting.
 dod_evidence:
   - id: dod-omniclaude-sibling-refresh-behavior
@@ -35,7 +35,7 @@ dod_evidence:
     description: Validates forward-only git refresh behavior including descendant acceptance, non-descendant refusal, and rev rewriting.
     checks:
       - check_type: command
-        check_value: grep -q "@f7ff837dfb882cad126f88a023cfc400e113de49" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+        check_value: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
   - id: dod-omniclaude-sibling-lock-resolution
     source: manual
     binds_ac:
@@ -43,4 +43,4 @@ dod_evidence:
     description: Verifies that uv.lock resolves the declared dependencies and git source revs without rewriting.
     checks:
       - check_type: command
-        check_value: grep -q "rev=f7ff837dfb882cad126f88a023cfc400e113de49" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+        check_value: grep -Eq "omnimarket[.]git[?]rev=[0-9a-f]{40}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
