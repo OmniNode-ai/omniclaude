@@ -34,7 +34,7 @@ through the `onex` CLI. The plugin pins a minimum compatible version in
 install path is `pipx`:
 
 ```bash
-pipx install 'omnibase-core>=0.39.0'
+pipx install --python 3.12 'omnibase-core>=0.39.0'
 onex --version   # must print >= 0.39.0
 ```
 

@@ -69,8 +69,13 @@ and the command is the same. Three packages, one environment (the pins are decla
 Install (this is the command to run):
 
 ```bash
-uv tool install --with 'omnibase-infra>=0.38.67' --with 'omnimarket>=0.4.205' 'omnibase-core>=0.46.8'
+uv tool install --python 3.12 --with 'omnibase-infra>=0.38.67' --with 'omnimarket>=0.4.205' 'omnibase-core>=0.46.8'
 ```
+
+`--python 3.12` is required: without it uv installs under the newest interpreter it can fetch
+(3.15 when this was written), and `confluent-kafka`, which `omnimarket` depends on, has no wheel
+for it, so the build fails. Python 3.12 and 3.13 both install cleanly; 3.12 is the floor the
+packages declare.
 
 All three come from PyPI. There is no source checkout to clone and no workspace variable to
 set. The version floors are the oldest releases supported; the command installs the newest
@@ -83,7 +88,7 @@ Claude Code again from that new window so it can find `onex`.
 With `pipx` instead of `uv`:
 
 ```bash
-pipx install 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.67' 'omnimarket>=0.4.205'
+pipx install --python 3.12 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.67' 'omnimarket>=0.4.205'
 ```
 
 Then, once per machine, give it an identity and a model (quickstart steps 2 and 3):

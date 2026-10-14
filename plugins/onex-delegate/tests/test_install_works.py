@@ -97,7 +97,8 @@ def _hint_requirements(hint: str) -> list[str]:
     """The requirement strings a `uv tool install` hint installs, in order.
 
     Parsed with shell quoting rules, exactly as a terminal would split the line:
-    every `--with <req>` value, then the positional tool requirement.
+    every `--with <req>` value, then the positional tool requirement. The
+    `--python <version>` pin is not a requirement; `_hint_python` reads it.
     """
     argv = shlex.split(hint)
     assert argv[:3] == ["uv", "tool", "install"], (
@@ -110,6 +111,8 @@ def _hint_requirements(hint: str) -> list[str]:
         if rest[i] == "--with":
             requirements.append(rest[i + 1])
             i += 2
+        elif rest[i] == "--python":
+            i += 2
         elif rest[i].startswith("-"):
             raise AssertionError(
                 f"unexpected option {rest[i]!r} in install_hint {hint!r}"
@@ -118,6 +121,13 @@ def _hint_requirements(hint: str) -> list[str]:
             requirements.append(rest[i])
             i += 1
     return requirements
+
+
+def _hint_python(hint: str) -> str:
+    """The interpreter version the hint pins with `--python <version>` (OMN-16632)."""
+    argv = shlex.split(hint)
+    assert "--python" in argv, f"install_hint does not pin the interpreter: {hint!r}"
+    return argv[argv.index("--python") + 1]
 
 
 def _declared_requirements(cli: dict) -> list[str]:
@@ -154,7 +164,7 @@ def test_declared_pins_install_and_delegate_runs(tmp_path: Path) -> None:
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
 
     subprocess.run(  # nosec B603
-        [uv, "venv", "--python", "3.12", str(venv)],
+        [uv, "venv", "--python", _hint_python(cli["install_hint"]), str(venv)],
         cwd=scratch,
         env=env,
         check=True,
