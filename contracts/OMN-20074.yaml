@@ -84,6 +84,13 @@ requirements:
       - id: "AC13"
         statement: |-
           AC13: dod_evidence_runner.py has no resolve_evidence_root import and writes its receipt to <working_dir>/.evidence/<ticket>, pre_tool_use_dod_completion_guard.sh reads <cwd>/.evidence/<ticket>/dod_report.json with no ONEX_EVIDENCE_ROOT, and a writer then guard round trip passes with no onex_change_control on disk -- falsifier: uv run pytest tests/hooks/test_dod_round_trip.py tests/hooks/test_dod_completion_guard.py -q --no-cov fails at the merge base
+  - id: "req-omn20074-boundary-parity-repin"
+    statement: |-
+      The boundary-parity caller must consume the omnibase_core manifest that removed the onex_change_control producer, and omit that retired repository from its peers.
+    acceptance:
+      - id: "AC11"
+        statement: |-
+          AC11: ci.yml has the only validate-boundaries caller, pinned to c1f8e8fe0c513c0ac70ad666433a3ce1cec136c1, with repos exactly omniclaude,omnidash,omniintelligence,omnibase_infra,omnibase_core,omnimemory,omnimarket -- falsifier: uv run pytest tests/ci/test_boundary_parity_repin_omn20074.py -q --no-cov fails at the merge base on the pin and repos assertions
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -115,6 +122,9 @@ evidence_requirements:
   - kind: tests
     description: "The writer and the completion guard share the repo-local .evidence/<ticket> and the round trip passes with no change-control path."
     command: "uv run pytest tests/hooks/test_dod_round_trip.py tests/hooks/test_dod_completion_guard.py -q --no-cov"
+  - kind: tests
+    description: "The boundary-parity caller uses the core manifest after OCC producer retirement and the matching peer list."
+    command: "uv run pytest tests/ci/test_boundary_parity_repin_omn20074.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -207,3 +217,11 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_dod_round_trip.py tests/hooks/test_dod_completion_guard.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC13"]
+  - id: dod-omn20074-boundary-parity-repin
+    description: "The existing repin tests check the unique boundary-parity caller, its omnibase_core action pin, and its peers without onex_change_control."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_boundary_parity_repin_omn20074.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC11"]

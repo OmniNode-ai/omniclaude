@@ -4171,11 +4171,11 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     steps:
-      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@b05c7d6f6336659d4965123bbc78a5d5b8822d70 # omnibase_core dev (OMN-20964)
+      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@c1f8e8fe0c513c0ac70ad666433a3ce1cec136c1 # omnibase_core dev (OMN-20074)
         with:
           checks: "boundary-parity"
           warn-only: "false"
-          repos: "omniclaude,omnidash,omniintelligence,omnibase_infra,omnibase_core,omnimemory,omnimarket,onex_change_control"
+          repos: "omniclaude,omnidash,omniintelligence,omnibase_infra,omnibase_core,omnimemory,omnimarket"
 
   # ============================================================================
   # CI SUMMARY (OMN-4501) — single branch-protection check
