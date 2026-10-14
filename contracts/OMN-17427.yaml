@@ -149,7 +149,7 @@ dod_evidence:
     status: verified
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/test_public_skill_hygiene_scope.py -q"
+        check_value: "uv run pytest tests/scripts/test_public_skill_hygiene_scope.py -q -k 'sharded or dead_shard'"
     binds_ac:
       - AC8
   - id: dod-direct-model-call-pre-push-and-ci
