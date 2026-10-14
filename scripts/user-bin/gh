@@ -1588,7 +1588,9 @@ fi
 #     verb="<group>-<sub>" replacing "gh <group> <sub>" (an install from before the command
 #     has the contract and no command, and refuses nothing);
 #   - write_config puts the call's repository (--repo, a PR URL, else the origin remote) in
-#     enforce mode: in dry_run the node plans the write and sends nothing.
+#     enforce mode: in dry_run the node plans the write and sends nothing. A
+#     github_mode_by_repository row wins over its owner's github_mode_by_owner row, which
+#     wins over github_mode (the contract's own precedence).
 # So `gh pr merge`, `gh run rerun|cancel` and `gh api` with a non-GET method stay allowed:
 # onex scm has no operation for them (it refuses merge, arm, rerun and update-branch,
 # naming the landing controller).
@@ -1641,7 +1643,7 @@ _lw_covered() {
   [ "$_method" = "WRITE" ] || return 1
   case "$_cls" in *" "*) ;; *) return 1 ;; esac
   local venv="${ONEX_DISPATCH_VENV:-}" pkg="" d contract dispatch table kind k v
-  local op="" mode="" repo_mode="" target=""
+  local op="" mode="" repo_mode="" owner_mode="" target="" owner=""
   if [ -z "$venv" ]; then
     [ -n "${OMNI_HOME:-}" ] || return 1
     venv="$OMNI_HOME/.onex-dispatch-venv"
@@ -1654,9 +1656,19 @@ _lw_covered() {
   dispatch="$pkg/handlers/scm/handler_scm_dispatch.py"
   [ -r "$contract" ] && [ -r "$dispatch" ] || return 1
   # One line per operation ("op<TAB><name><TAB><group sub>") and per mode ("default<TAB>
-  # <mode>", "repo<TAB><owner/repo><TAB><mode>"), from the two top-level blocks only.
+  # <mode>", "repo<TAB><owner/repo><TAB><mode>", "owner<TAB><owner><TAB><mode>"), from the
+  # two top-level blocks only.
   table="$(awk '
-    /^[^[:space:]#]/ { sect = $1 }
+    /^[^[:space:]#]/ { sect = $1; sub_sect = "" }
+    sect == "write_config:" && /^  [A-Za-z0-9_]+:/ {
+      sub_sect = $1
+    }
+    sect == "write_config:" && sub_sect == "github_mode_by_owner:" \
+      && /^[[:space:]][[:space:]][[:space:]]+[A-Za-z0-9_.-]+:/ {
+      k = $0; sub(/^[[:space:]]+/, "", k); m = k; sub(/:.*/, "", k)
+      sub(/^[^:]*:[[:space:]]*/, "", m); gsub(/["[:space:]]/, "", m)
+      printf "owner\t%s\t%s\n", k, m; next
+    }
     sect == "operations:" && /^[[:space:]]*-[[:space:]]*name:/ {
       op = $0; sub(/^[^:]*:[[:space:]]*/, "", op); gsub(/["[:space:]]/, "", op); next
     }
@@ -1679,7 +1691,8 @@ _lw_covered() {
   [ -n "$table" ] || return 1
   _prs_resolve "$@"
   [ -n "$_rs_owner" ] && [ -n "$_rs_repo" ] && \
-    target="$(printf '%s/%s' "$_rs_owner" "$_rs_repo" | tr '[:upper:]' '[:lower:]')"
+    target="$(printf '%s/%s' "$_rs_owner" "$_rs_repo" | tr '[:upper:]' '[:lower:]')" && \
+    owner="${target%%/*}"
   while IFS="$(printf '\t')" read -r kind k v; do
     case "$kind" in
       op) [ "$v" = "$_cls" ] && op="$k" ;;
@@ -1689,12 +1702,17 @@ _lw_covered() {
            [ "$(printf '%s' "$k" | tr '[:upper:]' '[:lower:]')" = "$target" ]; then
           repo_mode="$v"
         fi ;;
+      owner)
+        if [ -n "$owner" ] && \
+           [ "$(printf '%s' "$k" | tr '[:upper:]' '[:lower:]')" = "$owner" ]; then
+          owner_mode="$v"
+        fi ;;
     esac
   done <<EOF_LW
 $table
 EOF_LW
   [ -n "$op" ] || return 1
-  [ "${repo_mode:-$mode}" = "enforce" ] || return 1
+  [ "${repo_mode:-${owner_mode:-$mode}}" = "enforce" ] || return 1
   v="${_cls% *}-${_cls#* }"
   grep -qF "verb=\"$v\"" "$dispatch" 2>/dev/null || return 1
   grep -qF "replaces=\"gh $_cls\"" "$dispatch" 2>/dev/null || return 1

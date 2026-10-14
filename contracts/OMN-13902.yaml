@@ -20,6 +20,11 @@ requirements:
     acceptance:
       - id: AC2
         statement: 'AC2: uv.lock resolves the declared dependencies and git source revs without rewriting. -- falsifier: grep -Eq "omnimarket[.]git[?]rev=[0-9a-f]{40}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov'
+  - id: req-lane-write-guard-tracks-refreshed-write-config
+    statement: The lane write guard honours a github_mode_by_owner row of the write_config contract that the sibling-refreshed omnimarket carries, and a github_mode_by_repository row wins over its owner row.
+    acceptance:
+      - id: AC3
+        statement: 'AC3: The lane write guard honours a github_mode_by_owner row of the write_config contract that the sibling-refreshed omnimarket carries, and a github_mode_by_repository row wins over its owner row. -- falsifier: uv lock --check && uv run pytest tests/scripts/test_gh_lane_write_guard.py -q --no-cov'
 evidence_requirements:
   - kind: tests
     command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
@@ -27,6 +32,9 @@ evidence_requirements:
   - kind: ci
     command: grep -Eq "omnimarket[.]git[?]rev=[0-9a-f]{40}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
     description: Verifies that uv.lock resolves the declared dependencies and git source revs without rewriting.
+  - kind: tests
+    command: uv lock --check && uv run pytest tests/scripts/test_gh_lane_write_guard.py -q --no-cov
+    description: Verifies the lane write guard follows the owner-level write_config rows that the refreshed omnimarket contract carries.
 dod_evidence:
   - id: dod-omniclaude-sibling-refresh-behavior
     source: manual
@@ -44,3 +52,11 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: grep -Eq "omnimarket[.]git[?]rev=[0-9a-f]{40}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+  - id: dod-omniclaude-lane-write-guard-owner-rows
+    source: manual
+    binds_ac:
+      - AC3
+    description: Verifies the lane write guard follows the owner-level write_config rows that the refreshed omnimarket contract carries.
+    checks:
+      - check_type: command
+        check_value: uv lock --check && uv run pytest tests/scripts/test_gh_lane_write_guard.py -q --no-cov
