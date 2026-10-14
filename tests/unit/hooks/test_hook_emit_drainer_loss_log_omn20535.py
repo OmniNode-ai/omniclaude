@@ -96,6 +96,9 @@ def test_drainer_dead_letter_row_id_recorded_on_quarantine(jdir: Path) -> None:
 
 
 def test_drainer_dead_letter_row_id_recorded_on_bound_eviction(jdir: Path) -> None:
+    # A ledger row is exempt from the bound (OMN-20735), so the eviction that
+    # carries a row id is the one for a record the bound cannot read as a
+    # ledger row. Ledger rows past the bound are spared, not logged as lost.
     _ledger(jdir, ROW_A)
     _ledger(jdir, ROW_B)
     for i in range(3):
@@ -105,11 +108,10 @@ def test_drainer_dead_letter_row_id_recorded_on_bound_eviction(jdir: Path) -> No
 
     assert journal.enforce_bound(jdir, 3) == 2
 
-    losses = _losses(jdir)
-    assert [(x["disposition"], x["row_id"]) for x in losses] == [
-        ("dropped-over-bound", ROW_A),
-        ("dropped-over-bound", ROW_B),
-    ]
+    assert _losses(jdir) != []
+    assert {x["event_type"] for x in _losses(jdir)} == {"tool.executed"}
+    assert {x["row_id"] for x in _losses(jdir)} == {None}
+    assert len(journal.list_pending(jdir)) == 3
 
 
 def test_drainer_dead_letter_row_id_null_for_non_ledger_records(jdir: Path) -> None:
@@ -210,9 +212,12 @@ def test_drainer_dead_letter_row_id_unwritable_log_is_reported_not_silent(
         journal.LOSS_LOG_ENV, str(jdir)
     )  # a directory cannot be appended to
     _ledger(jdir, ROW_A)
-    _ledger(jdir, ROW_B)
+    record = journal.list_pending(jdir)[0].record
 
-    assert journal.enforce_bound(jdir, 1) == 1, "the bound still holds"
+    # Not an eviction: a ledger row is exempt from the bound (OMN-20735).
+    assert not journal.record_loss(
+        jdir, disposition="dropped-unpublishable", record=record, journal_file="f.json"
+    )
     err = capsys.readouterr().err
     assert "not written" in err
     assert ROW_A in err, "the row the loss line could not record is named on stderr"

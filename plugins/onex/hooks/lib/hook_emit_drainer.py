@@ -117,7 +117,7 @@ import signal
 import stat
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -848,6 +848,7 @@ def drain_once(
     refused_event_types: dict[str, str] | None = None,
     quarantine_after: int = DEFAULT_QUARANTINE_AFTER_FAILURES,
     preserve_backlog: bool = False,
+    publishable: Collection[str] | None = None,
 ) -> tuple[int, int, int]:
     """Drain up to ``batch_limit`` records. Return (published, failed, dead_lettered).
 
@@ -890,6 +891,12 @@ def drain_once(
     but not another five failures per record. Otherwise a continuously emitted
     refused class pays the same threshold for every record (OMN-19913).
     """
+    # OMN-20735: a ledger row the writer deferred because this drainer did not yet
+    # list its type moves into the journal once it does. Before the bound, so a
+    # released row is counted by it (and, being a ledger row, spared by it).
+    released = journal.release_deferred(journal_dir, publishable)
+    if released:
+        logger.info("released %d deferred ledger row(s) into the journal", released)
     counts = failure_counts if failure_counts is not None else {}
     refused = refused_event_types if refused_event_types is not None else {}
     # The bound is enforced here, once per cycle by the one drainer, and never
@@ -1090,6 +1097,7 @@ def run(
                 failure_counts=failure_counts,
                 refused_event_types=refused_event_types,
                 preserve_backlog=preserve_backlog,
+                publishable=publishable,
             )
             if published:
                 # The cycle time makes the publish rate readable from this log
