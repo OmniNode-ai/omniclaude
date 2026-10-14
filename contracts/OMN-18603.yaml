@@ -1,11 +1,14 @@
 schema_version: "1.0.0"
 ticket_id: OMN-18603
-title: "The h202 hook-emit drainer unit reaches uv, so its ledger alarm can land"
+title: "The h202 hook-emit drainer unit reaches uv, and a dispatched lane with no repository checkout is captured"
 summary: >-
   The hook-emit drainer's systemd user unit names a PATH that reaches ~/.local/bin, where uv lives, so
   the drainer's own ledger ALERT append (uv run onex-ledger) runs instead of failing with
   "No such file or directory: 'uv'". The drainer itself was restored on h202 through
   scripts/install-hook-emit-drainer.sh; this change makes that installer render a unit whose alarm path works.
+  claude_hook_capture.sh skips the repo guard when the launcher declared a lane in ONEX_LANE, so a lane whose
+  working directory is a scratch directory (the merge sweep's diagnose lane, planned with repo None) journals its
+  hook events like every other lane. A session with no lane and no OmniNode repository is still left alone.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -15,10 +18,18 @@ requirements:
     acceptance:
       - id: AC1
         statement: 'AC1: the unit template names PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin and the installer renders and loads it; falsifier: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -k unit_path fails against the template without the line.'
+  - id: req-omn18603-repoless-lane-capture
+    statement: The all-hooks capture journals a hook event for a lane declared in ONEX_LANE even when its working directory holds no OmniNode marker, and still exits without journalling for a session that has neither a lane nor an OmniNode repository.
+    acceptance:
+      - id: AC3
+        statement: 'AC3: the capture wrapper reaches its interpreter for a repo-less cwd when ONEX_LANE is set and does not when it is unset -- falsifier: `uv run pytest tests/unit/hooks/test_hook_claude_capture_repoless_lane_omn18603.py -q --no-cov` fails against the wrapper without the ONEX_LANE exemption.'
 evidence_requirements:
   - kind: tests
     description: The systemd installer tests, including the PATH test, pass.
     command: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -q --no-cov
+  - kind: tests
+    description: The repo-less lane test and the existing capture suites pass.
+    command: uv run pytest tests/unit/hooks/test_hook_claude_capture_repoless_lane_omn18603.py tests/unit/hooks/test_hook_claude_capture_omn19513.py tests/unit/hooks/test_session_end_detach_omn19537.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ""
@@ -31,3 +42,10 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -q --no-cov
+  - id: dod-omn18603-ac3
+    description: The repo-less lane capture test passes, with its positive control for a repository session.
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_claude_capture_repoless_lane_omn18603.py -q --no-cov

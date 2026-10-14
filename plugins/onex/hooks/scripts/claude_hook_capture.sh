@@ -59,7 +59,13 @@ _OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
 . "${_ONEX_HOOK_SELF_DIR}/../lib/repo_guard.sh" 2>/dev/null || true
-if declare -F is_omninode_repo >/dev/null 2>&1; then
+# OMN-18603: a lane the launcher declared (ONEX_LANE) is this workspace's process whatever
+# its cwd holds. The merge sweep's diagnose lane is planned with no repository, so it runs in a
+# scratch directory that carries no OmniNode marker; the repo question below answered "not ours"
+# for it, and none of its hook events was ever captured (65 lanes in the ledger on 2026-10-13,
+# no row in claude_hook_events for any). The environment is the launcher's, not the model's:
+# nothing a tool call runs can change what this hook inherits.
+if [[ -z "${ONEX_LANE:-}" ]] && declare -F is_omninode_repo >/dev/null 2>&1; then
     CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
         is_omninode_repo || {
         cat >/dev/null 2>/dev/null || true
