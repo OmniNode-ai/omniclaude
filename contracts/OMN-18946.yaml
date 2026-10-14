@@ -1,0 +1,83 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-18946"
+title: "A refused call names its guard; hook events carry failed-call content and token use"
+summary: >-
+  The omniclaude half. The hook refusal recorder journals one GuardRefusal event
+  per refused call (guard and normalised reason class, joined to the call by
+  tool_use_id, no refusal text) before its ledger rate limit. PostToolUseFailure
+  now stores a failed call's tool input and error text as content records under
+  the completed call's redaction. Stop, SubagentStop and SessionEnd read the
+  transcript they name and journal one AssistantUsage event per model with
+  input, output and cache tokens, counting each API message once. The projection
+  half is omnimarket node_projection_claude_hook_events.
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - "the omniclaude hook-event metadata topic gains two derived hook_event_name values, GuardRefusal and AssistantUsage"
+requirements:
+  - id: "req-omn18946-refusal-identity"
+    statement: "Every refused call has one event naming the guard that refused it, joined to the call by tool_use_id, and no secret text."
+    acceptance:
+      - id: "AC1"
+        statement: >-
+          AC1: A guard refusal journals one GuardRefusal event naming the guard and its normalised reason class, with the refused call's tool_use_id as lineage and causation, no content reference and no refusal text; a refusal whose ledger row is rate-limited is still journalled -- falsifier: uv run pytest tests/unit/hooks/test_guard_refusal_event_omn18946.py fails on the head without this change
+  - id: "req-omn18946-failed-call-content"
+    statement: "A failed tool call's input and error text reach session_content under the redaction a completed call gets."
+    acceptance:
+      - id: "AC2"
+        statement: >-
+          AC2: PostToolUseFailure stores the tool input and the error text as content.captured records keyed by tool_use_id, a planted token in either never reaches the record, and the opt-out switch stops it -- falsifier: uv run pytest tests/unit/hooks/test_failed_call_content_capture_omn18946.py fails on the head without this change
+  - id: "req-omn18946-token-use"
+    statement: "Token use and model per assistant message are recorded where Claude Code exposes them, counted once."
+    acceptance:
+      - id: "AC3"
+        statement: >-
+          AC3: Stop, SubagentStop and SessionEnd journal one AssistantUsage event per model with input, output, cache-creation and cache-read tokens read from the transcript, each API message counted once across content blocks and across Stop events, and usage not journalled is counted by the next Stop -- falsifier: uv run pytest tests/unit/hooks/test_assistant_usage_event_omn18946.py fails on the head without this change
+      - id: "AC4"
+        statement: >-
+          AC4: The capture contract, wire schema, generated fixtures and the 33-hook coverage agree with the two derived events -- falsifier: uv run pytest tests/unit/hooks/test_claude_hook_capture_contract.py tests/unit/hooks/test_hook_claude_capture_omn19513.py and uv run python scripts/generate_claude_hook_capture_fixtures.py --check fail on the head without this change
+evidence_requirements:
+  - kind: "tests"
+    description: "The refusal event, the failed-call content, the token-use reader and the contract coverage."
+    command: "uv run pytest tests/unit/hooks/test_guard_refusal_event_omn18946.py tests/unit/hooks/test_failed_call_content_capture_omn18946.py tests/unit/hooks/test_assistant_usage_event_omn18946.py tests/unit/hooks/test_claude_hook_capture_contract.py tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn18946-ac1-refusal-event"
+    description: "A refusal journals a GuardRefusal event naming the guard and reason class, joined by tool_use_id, before the ledger rate limit."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_guard_refusal_event_omn18946.py -q --no-cov"
+    binds_ac: ["AC1"]
+  - id: "dod-omn18946-ac2-failed-call-content"
+    description: "A failed call's input and error text are stored redacted."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_failed_call_content_capture_omn18946.py -q --no-cov"
+    binds_ac: ["AC2"]
+  - id: "dod-omn18946-ac3-token-use"
+    description: "Token use and model per assistant message are journalled once per message."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_assistant_usage_event_omn18946.py -q --no-cov"
+    binds_ac: ["AC3"]
+  - id: "dod-omn18946-ac4-contract-coverage"
+    description: "The capture contract, wire schema and generated fixtures agree with the derived events."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_claude_hook_capture_contract.py tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov"
+      - check_type: "command"
+        check_value: "uv run python scripts/generate_claude_hook_capture_fixtures.py --check"
+    binds_ac: ["AC4"]
+  - id: "dod-omn18946-deploy-probe"
+    description: "Deploy probe: the token-use reader read from GitHub at the checked-out commit defines read_new_usage. A head without this change has no such file and the probe finds no match."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/hooks/lib/hook_transcript_usage.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -c '^def read_new_usage('"

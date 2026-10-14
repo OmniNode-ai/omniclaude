@@ -110,7 +110,9 @@ from omniclaude.nodes.node_hook_refusal_record_effect.models import (
 try:
     from omnimarket.nodes.node_hook_refusal_row_compute.handlers.handler_hook_refusal_row import (
         MAX_DETAIL_CHARS,
+        MAX_GUARD_CHARS,
         HandlerHookRefusalRowCompute,
+        normalise_reason,
         redact,
     )
     from omnimarket.nodes.node_hook_refusal_row_compute.models import (
@@ -478,10 +480,61 @@ def extract_detail(raw: str) -> str:
     return redact(redact_secrets(detail))[:MAX_DETAIL_CHARS]
 
 
+def journal_refusal_event(request: ModelHookRefusalRecordRequest) -> tuple[str, ...]:
+    """Journal the ``GuardRefusal`` event for this refusal (OMN-18946).
+
+    One event per refused call, whatever the ledger rate limit decided: the
+    ledger row is deliberately one per ``(guard, reason, lane)`` per hour, and a
+    row nobody can join to a call names no guard on the call. The event carries
+    the guard and the normalised reason class the row node would write (the
+    same redaction and slug, no detail) and the refused call's ``tool_use_id``.
+
+    Returns diagnostics for the caller's stderr and never changes the guard's
+    verdict: the call is already refused. It runs after the ledger work, so a
+    failure here cannot cost the friction row.
+    """
+    payload = request.payload
+    if not payload:
+        return ()
+    try:
+        # A plugin hook-library sibling, on sys.path through --hooks-lib.
+        capture = importlib.import_module("hook_claude_capture")
+    except ImportError:
+        return ()
+    try:
+        capture.capture_guard_refusal(
+            payload,
+            guard=redact(request.guard)[:MAX_GUARD_CHARS] or "unknown-guard",
+            reason_class=normalise_reason(redact(request.reason)),
+        )
+    except (
+        OSError,
+        ValueError,
+        RuntimeError,
+        KeyError,
+        TypeError,
+        AttributeError,
+    ) as exc:
+        return (
+            "hook refusal recorder: refusal event NOT journalled: "
+            + type(exc).__name__,
+        )
+    return ()
+
+
 class HandlerHookRefusalRecord:
     """Record one refusal: decide the row, rate-limit it, append it."""
 
     def handle(
+        self, request: ModelHookRefusalRecordRequest
+    ) -> ModelHookRefusalRecordResult:
+        result = self._record(request)
+        notes = journal_refusal_event(request)
+        if not notes:
+            return result
+        return result.model_copy(update={"messages": (*result.messages, *notes)})
+
+    def _record(
         self, request: ModelHookRefusalRecordRequest
     ) -> ModelHookRefusalRecordResult:
         payload = request.payload

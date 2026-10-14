@@ -13,6 +13,10 @@ What this does, per hook call
 * ``--kind prompt`` (UserPromptSubmit): the prompt text.
 * ``--kind tool`` (PostToolUse): two items, the tool input and the tool
   result, each keyed by ``tool_use_id``.
+* ``--kind tool_failure`` (PostToolUseFailure, OMN-18946): the same two items
+  for a call that failed, the tool result being the harness's ``error`` text
+  (``content_kind`` ``tool_error``). A failed call fires PostToolUseFailure and
+  never PostToolUse, so before this its command and error were stored nowhere.
 * ``--kind stop`` (Stop): the assistant reply of the turn that just ended,
   read from the harness's own ``last_assistant_message`` when it sends one,
   else from ``transcript_path``. Also, from the same transcript, every prompt
@@ -279,6 +283,24 @@ def items_for_tool(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
                 "content": _as_text(hook_input.get("tool_response")),
             }
         )
+    return items
+
+
+def items_for_tool_failure(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
+    """The tool input and the harness's error text for a failed call (OMN-18946).
+
+    Same ``tool_use_id`` and matcher ``command`` as a completed call, so the
+    contract's output classes hash a failed ``cat .env`` as they hash a
+    completed one, and the pair joins on ``tool_use_id``.
+    """
+    items = [
+        item
+        for item in items_for_tool({**hook_input, "tool_response": None})
+        if item["content_kind"] == "tool_input"
+    ]
+    error = hook_input.get("error")
+    if items and isinstance(error, str) and error:
+        items.append({**items[0], "content_kind": "tool_error", "content": error})
     return items
 
 
@@ -563,10 +585,16 @@ class StoreSink:
 # entrypoint
 # ---------------------------------------------------------------------------
 
-_ITEMS = {"prompt": items_for_prompt, "tool": items_for_tool, "stop": items_for_stop}
+_ITEMS = {
+    "prompt": items_for_prompt,
+    "tool": items_for_tool,
+    "tool_failure": items_for_tool_failure,
+    "stop": items_for_stop,
+}
 _HOOK_SOURCE = {
     "prompt": "user_prompt_submit",
     "tool": "post_tool_use",
+    "tool_failure": "post_tool_use_failure",
     "stop": "stop",
 }
 

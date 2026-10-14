@@ -67,13 +67,19 @@ def _pretty(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
-def test_enum_contract_and_discriminated_union_cover_exactly_33_hooks() -> None:
+def test_enum_contract_and_discriminated_union_cover_33_hooks_and_the_derived() -> None:
     enum_names = {name.value for name in EnumClaudeHookEventName}
-    assert len(enum_names) == 33
+    derived = {name.value for name in EnumClaudeHookEventName.derived()}
+    # OMN-18946: 33 harness hooks plus the two events a plugin hook derives.
+    assert len(enum_names - derived) == 33
+    assert derived == {"GuardRefusal", "AssistantUsage"}
 
     contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
     coverage_names = {row["hook"] for row in contract["coverage"]}
     assert coverage_names == enum_names
+    assert {
+        row["hook"] for row in contract["coverage"] if row.get("derived")
+    } == derived
 
     annotated_args = get_args(ModelHookPayload)
     assert annotated_args and isinstance(annotated_args[1], object)
@@ -82,7 +88,7 @@ def test_enum_contract_and_discriminated_union_cover_exactly_33_hooks() -> None:
         get_args(member.model_fields["hook_event_name"].annotation)[0]
         for member in union_members
     }
-    assert len(union_members) == 33
+    assert len(union_members) == 33 + len(derived)
     assert member_names == enum_names
     assert isinstance(HOOK_PAYLOAD_ADAPTER, object)
 

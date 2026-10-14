@@ -121,6 +121,11 @@ KNOWN_SAFE_NAMES: Final[frozenset[str]] = frozenset(
     {
         "prompt_tokens",
         "completion_tokens",
+        # OMN-18946: the Anthropic usage block's token COUNTS (AssistantUsage).
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
         "total_tokens",
         "max_tokens",
         "tokens_per_minute",

@@ -8,7 +8,8 @@ schema_version: "1.0.0"
 ticket: "OMN-19513"
 description: >
   One discriminated metadata envelope for all 33 Claude Code 2.1.283 hook
-  events. Full content is represented only by deterministic references.
+  events, plus the two events a plugin hook derives (OMN-18946: GuardRefusal,
+  AssistantUsage). Full content is represented only by deterministic references.
 
 producer:
   repo: "omniclaude"
@@ -45,8 +46,10 @@ optional_fields:
     nullable: true
     description: "OMN-17427: hostname of the emitting machine. Omitted when unknown."
 
-# OMN-20031: payload keys present only on one event. Both are ids, never content;
-# the consumer allowlist (ALLOWED_PAYLOAD_KEYS) must declare them or dead-letters.
+# OMN-20031: payload keys present only on one event. Every one is an id, name,
+# count or flag, never content; the consumer allowlist (ALLOWED_PAYLOAD_KEYS)
+# must declare them or the event dead-letters. OMN-18946 adds the keys of the
+# two derived events (GuardRefusal, AssistantUsage).
 payload_optional_fields:
   - hook: PreToolUse
     name: goal_id
@@ -72,6 +75,39 @@ payload_optional_fields:
     description: >
       OMN-17427: the n of the harness's "Exit code <n>" Bash failure text.
       Absent for every other tool and failure.
+
+  - hook: GuardRefusal
+    name: guard
+    type: string
+    description: >
+      OMN-18946: required on this event. The refusing guard's script name,
+      scrubbed and cut to 64 characters.
+  - hook: GuardRefusal
+    name: reason_class
+    type: string
+    description: >
+      OMN-18946: required on this event. The guard's normalised reason token,
+      never the refusal's text.
+  - hook: GuardRefusal
+    name: refused_hook_event_name
+    type: string
+    description: "OMN-18946: the harness hook the guard was refusing at, e.g. PreToolUse."
+  - hook: AssistantUsage
+    name: model
+    type: string
+    description: "OMN-18946: required on this event. The model id the API ran."
+  - hook: AssistantUsage
+    name: message_count
+    type: integer
+    description: "OMN-18946: required. Distinct API messages counted."
+  - hook: AssistantUsage
+    name: usage_source_hook
+    type: string
+    description: "OMN-18946: required. Stop, SubagentStop or SessionEnd."
+  - hook: AssistantUsage
+    name: partial_window
+    type: boolean
+    description: "OMN-18946: required. True when the first read took only a transcript tail."
 
 content_topic:
   name: "onex.cmd.omniintelligence.content-captured.v1"  # onex-topic-sot
