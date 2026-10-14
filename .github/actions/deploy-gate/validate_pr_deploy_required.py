@@ -26,11 +26,9 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import shlex
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -288,36 +286,17 @@ GRANDFATHER_FILE = Path(__file__).parent / "deploy_gate_legacy_grandfather.yaml"
 # word to type — the whole defect was that the gate advertised a magic substring,
 # so authors supplied the substring instead of the evidence.
 DEPLOY_EVIDENCE_GUIDANCE = (
-    "Add a dod_evidence item to onex_change_control/contracts/OMN-XXXX.yaml whose "
+    "Add a dod_evidence item to contracts/OMN-XXXX.yaml in this repository whose "
     "check_value is a FALSIFIABLE deploy probe: it must execute a command against a "
     "live surface (docker/kubectl/rpk/psql/curl/ssh/onex/gh) so that its exit status "
     "depends on the state of the deployed system. It must NOT read back the receipt "
     "or contract your own PR authors (drift/dod_receipts/..., $CONTRACT_REPO_DIR) — "
     "such a check greps text you wrote and can never go RED. "
     "Good: docker exec ${RUNTIME_CONTAINER:-omninode-runtime} python -c 'import <changed_module>'. "
-    "Good (compute-only/no-live-deploy tickets, hermetic under onex_change_control's "
-    "OMN-14051 guard): gh api repos/OWNER/REPO/contents/<changed_path>?ref=<merge_sha> "
+    "Good (compute-only/no-live-deploy tickets, hermetic): gh api repos/OWNER/REPO/contents/<changed_path>?ref=<merge_sha> "
     "--jq .content | base64 -d | grep -q '<symbol the fix introduces>'. "
     "Rejected: grep -q '^status: PASS$' drift/dod_receipts/OMN-XXXX/dod-deploy/command.yaml."
 )
-
-# OMN-20074: where the cited ticket's contract is read from. "occ" is the
-# change control repository (the default, for callers not yet cut over);
-# "caller" is the calling repository's own contracts/ at the pull request head,
-# the file its repo-evidence / dod-verify gate reads. Only the directory and the
-# wording that names it differ; the evidence rule is the same in both.
-CONTRACT_SOURCES = ("occ", "caller")
-CALLER_CONTRACT_PATH = "contracts/OMN-XXXX.yaml in this repository"
-
-
-def evidence_guidance(contract_source: str = "occ") -> str:
-    """Author guidance naming the contract file the gate actually reads."""
-    if contract_source == "caller":
-        return DEPLOY_EVIDENCE_GUIDANCE.replace(
-            "onex_change_control/contracts/OMN-XXXX.yaml", CALLER_CONTRACT_PATH, 1
-        )
-    return DEPLOY_EVIDENCE_GUIDANCE
-
 
 _CMD_SUBST_RE = re.compile(r"\$\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
 _BACKTICK_RE = re.compile(r"`([^`]*)`")
@@ -563,8 +542,6 @@ EVIDENCE_TICKET_PATTERN = re.compile(
     r"^Evidence-Ticket:\s*(OMN-\d+)\s*$", re.IGNORECASE | re.MULTILINE
 )
 
-DEFAULT_OCC_REF = "dev"
-
 
 @dataclass
 class DeployGateResult:
@@ -579,17 +556,6 @@ class DeployGateResult:
 class EvidenceMetadata:
     source: str | None = None
     ticket: str | None = None
-
-
-@dataclass(frozen=True)
-class OccEvidenceResolution:
-    passed: bool
-    occ_ref: str = DEFAULT_OCC_REF
-    deploy_gate_required: bool = False
-    skipped: bool = False
-    source_kind: str = "canonical"
-    evidence_ticket: str | None = None
-    message: str = ""
 
 
 def _cli_file_has_deploy_signal(path: str) -> bool:
@@ -930,172 +896,6 @@ def parse_evidence_metadata(pr_body: str) -> EvidenceMetadata:
     )
 
 
-def _run_gh_json(args: list[str]) -> dict | list | str | int | float | bool | None:
-    """Run gh and parse JSON output. Separated for focused unit tests."""
-    completed = subprocess.run(
-        ["gh", *args],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        return None
-    output = completed.stdout.strip()
-    if not output:
-        return None
-    try:
-        return json.loads(output)
-    except json.JSONDecodeError:
-        return None
-
-
-def _resolve_occ_pr_source(source: str) -> tuple[str | None, str]:
-    occ_pr_num = re.sub(r"^OCC#", "", source, flags=re.IGNORECASE)
-    pr_json = _run_gh_json(
-        [
-            "pr",
-            "view",
-            occ_pr_num,
-            "--repo",
-            "OmniNode-ai/onex_change_control",
-            "--json",
-            "state,headRefOid,mergeCommit",
-        ]
-    )
-    if not isinstance(pr_json, dict):
-        return None, "open-pr"
-    if pr_json.get("state") == "MERGED":
-        merge_commit = pr_json.get("mergeCommit")
-        if isinstance(merge_commit, dict):
-            return merge_commit.get("oid"), "merged"
-        return None, "merged"
-    head_ref_oid = pr_json.get("headRefOid")
-    return head_ref_oid if isinstance(head_ref_oid, str) else None, "open-pr"
-
-
-def _resolve_occ_sha_source(source: str) -> tuple[str | None, str]:
-    compare_json = _run_gh_json(
-        [
-            "api",
-            f"repos/OmniNode-ai/onex_change_control/compare/HEAD...{source}",
-        ]
-    )
-    if isinstance(compare_json, dict) and compare_json.get("status") in {
-        "behind",
-        "identical",
-    }:
-        commit_json = _run_gh_json(
-            ["api", f"repos/OmniNode-ai/onex_change_control/commits/{source}"]
-        )
-        if isinstance(commit_json, dict):
-            commit_sha = commit_json.get("sha")
-            return commit_sha if isinstance(commit_sha, str) else None, "merged"
-        return None, "merged"
-
-    open_prs_json = _run_gh_json(
-        [
-            "pr",
-            "list",
-            "--repo",
-            "OmniNode-ai/onex_change_control",
-            "--state",
-            "open",
-            "--json",
-            "headRefOid",
-        ]
-    )
-    if isinstance(open_prs_json, list):
-        for item in open_prs_json:
-            if not isinstance(item, dict):
-                continue
-            head_ref_oid = item.get("headRefOid")
-            if isinstance(head_ref_oid, str) and head_ref_oid.startswith(source):
-                return head_ref_oid, "open-pr"
-    return None, "unknown"
-
-
-def resolve_occ_evidence_source(
-    changed_files: list[str],
-    pr_body: str,
-    default_occ_ref: str = DEFAULT_OCC_REF,
-) -> OccEvidenceResolution:
-    """Resolve deploy-gate OCC checkout ref from PR Evidence-* metadata."""
-    runtime_hits = find_runtime_paths(changed_files)
-    metadata = parse_evidence_metadata(pr_body)
-
-    if not runtime_hits:
-        return OccEvidenceResolution(
-            passed=True,
-            occ_ref=default_occ_ref,
-            skipped=True,
-            deploy_gate_required=False,
-            message="No runtime paths touched — deploy-gate OCC checkout skipped.",
-        )
-
-    if not metadata.source:
-        return OccEvidenceResolution(
-            passed=True,
-            occ_ref=default_occ_ref,
-            deploy_gate_required=True,
-            message=(
-                "Evidence-Source not present — using canonical OCC contract source."
-            ),
-        )
-
-    if not metadata.ticket:
-        return OccEvidenceResolution(
-            passed=False,
-            deploy_gate_required=True,
-            source_kind="invalid",
-            message=(
-                "DEPLOY GATE FAILED: PR body has Evidence-Source but is missing "
-                "Evidence-Ticket: OMN-XXXX. Add Evidence-Ticket so deploy-gate "
-                "can validate the contract at the pinned OCC source."
-            ),
-        )
-
-    if re.match(r"^OCC#[0-9]+$", metadata.source, re.IGNORECASE):
-        occ_ref, source_kind = _resolve_occ_pr_source(metadata.source)
-    elif re.match(r"^[0-9a-f]{7,40}$", metadata.source, re.IGNORECASE):
-        occ_ref, source_kind = _resolve_occ_sha_source(metadata.source.lower())
-    else:
-        return OccEvidenceResolution(
-            passed=False,
-            deploy_gate_required=True,
-            source_kind="invalid",
-            evidence_ticket=metadata.ticket,
-            message=(
-                f"DEPLOY GATE FAILED: Evidence-Source value {metadata.source!r} "
-                "is not valid. Accepted forms: OCC#<number> or a 7-40 "
-                "character OCC commit SHA."
-            ),
-        )
-
-    if not occ_ref:
-        return OccEvidenceResolution(
-            passed=False,
-            deploy_gate_required=True,
-            source_kind=source_kind,
-            evidence_ticket=metadata.ticket,
-            message=(
-                f"DEPLOY GATE FAILED: Evidence-Source {metadata.source!r} "
-                "could not be resolved to an OCC PR head or merged OCC commit."
-            ),
-        )
-
-    return OccEvidenceResolution(
-        passed=True,
-        occ_ref=occ_ref,
-        deploy_gate_required=True,
-        source_kind=source_kind,
-        evidence_ticket=metadata.ticket,
-        message=(
-            f"Evidence-Source resolved to OCC ref {occ_ref} "
-            f"for {metadata.ticket} ({source_kind})."
-        ),
-    )
-
-
 def iter_check_values(contract_path: Path) -> list[tuple[str, object]]:
     """Yield (evidence_item_id, check_value) for every check in a ticket contract."""
     if not contract_path.exists():
@@ -1229,7 +1029,6 @@ def validate_pr_deploy_gate(
     contracts_dir: Path,
     repository: str | None = None,
     package_only_file: Path | None = None,
-    contract_source: str = "occ",
 ) -> DeployGateResult:
     """Check runtime-change PRs for deploy evidence in cited ticket contracts.
 
@@ -1237,14 +1036,10 @@ def validate_pr_deploy_gate(
     library repository whose tree corroborates the declaration. Omitting it
     grants no exemption; nothing in `pr_body` can grant one either.
 
-    `contract_source` (OMN-20074) names where `contracts_dir` came from, so
-    the failure text points the author at that file. It changes no verdict.
+    `contracts_dir` is the calling repository's own contracts/ directory at the
+    pull request head (OMN-20074).
     """
-    if contract_source not in CONTRACT_SOURCES:
-        raise ValueError(
-            f"contract_source must be one of {CONTRACT_SOURCES}, got {contract_source!r}"
-        )
-    guidance = evidence_guidance(contract_source)
+    guidance = DEPLOY_EVIDENCE_GUIDANCE
     runtime_hits = find_runtime_paths(
         changed_files,
         repository=repository,
@@ -1266,7 +1061,7 @@ def validate_pr_deploy_gate(
             message=(
                 "DEPLOY GATE FAILED: PR body has Evidence-Source but is missing "
                 "Evidence-Ticket: OMN-XXXX. Add Evidence-Ticket so deploy-gate "
-                "can validate the contract at the pinned OCC source."
+                "can validate the contract."
             ),
         )
 
@@ -1317,17 +1112,12 @@ def validate_pr_deploy_gate(
         "DEPLOY GATE FAILED: PR touches runtime paths but no cited ticket has deploy DoD evidence.",
         f"Runtime paths: {runtime_hits}.",
     ]
-    if missing and contract_source == "caller":
+    if missing:
         parts.append(
             "Tickets with no contract file in this repository's contracts/ at the "
             f"pull request head: {missing}. Add "
             + ", ".join(f"contracts/{t}.yaml" for t in missing)
             + " to this pull request; a change control companion is not read."
-        )
-    elif missing:
-        parts.append(
-            f"Tickets with no contract file in onex_change_control/contracts/: {missing}. "
-            "Create the contract YAML in the onex_change_control repo, not in the caller repo."
         )
     if no_deploy:
         parts.append(
@@ -1377,34 +1167,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Directory containing OMN-XXXX.yaml ticket contracts (default: contracts/)",
     )
     parser.add_argument(
-        "--contract-source",
-        choices=CONTRACT_SOURCES,
-        default="occ",
-        help=(
-            "Where --contracts-dir came from (OMN-20074): occ (change control, "
-            "the default) or caller (the calling repository's contracts/ at the "
-            "pull request head). Changes the failure wording only."
-        ),
-    )
-    parser.add_argument(
-        "--resolve-occ-ref",
-        action="store_true",
-        help=(
-            "Resolve deploy-gate Evidence-Source metadata to an OCC checkout ref "
-            "and exit without validating contracts."
-        ),
-    )
-    parser.add_argument(
-        "--default-occ-ref",
-        default=DEFAULT_OCC_REF,
-        help="Fallback OCC ref when no Evidence-Source is present (default: dev).",
-    )
-    parser.add_argument(
-        "--github-output",
-        default="",
-        help="Optional path to append GitHub Actions output values.",
-    )
-    parser.add_argument(
         "--repository",
         default=os.environ.get("GITHUB_REPOSITORY", ""),
         help=(
@@ -1418,34 +1180,11 @@ def main(argv: list[str] | None = None) -> int:
     changed = [f for f in args.changed_files.split() if f]
     contracts_dir = Path(args.contracts_dir)
 
-    if args.resolve_occ_ref:
-        resolution = resolve_occ_evidence_source(
-            changed_files=changed,
-            pr_body=args.pr_body,
-            default_occ_ref=args.default_occ_ref,
-        )
-        if args.github_output:
-            with Path(args.github_output).open("a", encoding="utf-8") as fh:
-                fh.write(f"occ_ref={resolution.occ_ref}\n")
-                fh.write(
-                    "deploy_gate_required="
-                    f"{str(resolution.deploy_gate_required).lower()}\n"
-                )
-                fh.write(f"occ_source_kind={resolution.source_kind}\n")
-                if resolution.evidence_ticket:
-                    fh.write(f"evidence_ticket={resolution.evidence_ticket}\n")
-        if resolution.passed:
-            print(f"::notice::{resolution.message}")
-        else:
-            print(f"::error::{resolution.message}")
-        return 0 if resolution.passed else 1
-
     result = validate_pr_deploy_gate(
         changed_files=changed,
         pr_body=args.pr_body,
         contracts_dir=contracts_dir,
         repository=args.repository or None,
-        contract_source=args.contract_source,
     )
 
     if result.passed:

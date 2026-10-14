@@ -7,10 +7,9 @@
 #
 # Canonical validator: OMN-9685 (omnibase_core PR #902, 2026-04-25).
 # Centralised: OMN-9734 (DGM-Phase6). Supersedes DGM-Phase2.
-# OCC contract resolution: OMN-11423 — contracts read from onex_change_control, not caller repo.
-# OMN-20074: a caller that is cut over passes contract-source: caller, and the
-# contract is read from its own contracts/OMN-<n>.yaml at the pull request head
-# (the file its repo-evidence / dod-verify reads). The default stays "occ".
+# OMN-20074: the cited ticket's contract is read from the caller's own
+# contracts/OMN-<n>.yaml at the pull request head (the file its repo-evidence /
+# dod-verify reads). No other repository's tree is checked out.
 #
 # Usage in caller repos:
 #   jobs:
@@ -30,36 +29,25 @@ on:
         default: 0
       contracts-dir:
         description: >
-          Deprecated (OMN-11423). Contracts are now read from onex_change_control;
-          this input is ignored. Remove it from your caller workflow.
+          Ignored. The contracts are read from the caller's own contracts/ at the
+          pull request head. Kept so a caller that still passes it keeps resolving.
         type: string
         required: false
         default: contracts
       contract-source:
         description: >
-          OMN-20074. "occ" (default): the cited ticket's contract is read from
-          onex_change_control, for callers not yet cut over. "caller": it is
-          read from the caller's own contracts/OMN-<n>.yaml at the pull request
-          head, and no change control tree is checked out. Any other value
-          fails the job. The validator and its strictness are the same in both.
+          OMN-20074. Only "caller" is valid and it is the default: the cited
+          ticket's contract is read from the caller's own contracts/OMN-<n>.yaml
+          at the pull request head. Any other value fails the job.
         type: string
         required: false
-        default: occ
+        default: caller
 
 jobs:
-  # OMN-14260: the nested cross-repo occ-preflight job added by #1879 (OMN-14249)
-  # is REVERTED here. It ran in a reusable-within-reusable context (caller
-  # deploy-gate.yml -> this reusable -> nested occ-preflight) and requested
-  # job-level `permissions: pull-requests: read`. A nested reusable can only
-  # narrow the token its caller job passed down; the caller `deploy-gate` job
-  # grants no permissions block, so the request was a compile-time permissions
-  # escalation -> the whole Deploy Gate workflow startup-failed (0 jobs) on every
-  # infra/core/market caller, taking down the required `deploy-gate` context
-  # org-wide. OCC-preflight gating is NOT lost: every caller repo already gates
-  # its own `deploy-gate` job behind a top-level `occ-preflight` job
-  # (infra #2229/OMN-14104, core local occ-preflight.yml, market inline), so the
-  # nested job was redundant. Do NOT re-add it without granting pull-requests to
-  # the caller deploy-gate jobs first (tracked in OMN-14260 follow-up).
+  # OMN-14260: a nested occ-preflight job here once escalated the caller
+  # token's permissions and startup-failed every caller's deploy-gate. It stays
+  # out; do not add a nested reusable without granting the caller job its
+  # permissions first.
   deploy-gate:
     name: deploy-gate
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
@@ -87,14 +75,9 @@ jobs:
       - name: Checkout caller repo
         uses: actions/checkout@v7
 
-      # OMN-12564: the OCC checkout logic lives in omniclaude (this repo), but
-      # the job's GITHUB_WORKSPACE holds the *caller* repo's tree. Pull the
-      # hardened checkout script and the composite action from omniclaude at the
-      # workflow pin into a side path.
-      # The pin is validated `job.workflow_sha`: the commit of THIS workflow file,
-      # exactly what the caller pinned in its `uses:` (same pattern as
-      # kb-doc-gate-reusable.yml). omniclaude's live dev/main is never read, so a
-      # merge here cannot change what a downstream caller's required check runs.
+      # The composite action lives in omniclaude (this repo), but the job's
+      # GITHUB_WORKSPACE holds the *caller* repo's tree. Pull the composite
+      # action from omniclaude at the workflow pin into a side path.
       - name: Resolve the deploy-gate pin
         id: pin
         env:
@@ -119,14 +102,11 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          case "$CONTRACT_SOURCE" in
-            occ|caller) ;;
-            *)
-              echo "::error::contract-source is '$CONTRACT_SOURCE'; expected occ or caller. THE GATE DID NOT RUN."
-              exit 1
-              ;;
-          esac
-          if [ "$CONTRACT_SOURCE" = "caller" ] && [ "$EVENT_NAME" != "merge_group" ] && [[ ! "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+          if [ "$CONTRACT_SOURCE" != "caller" ]; then
+            echo "::error::contract-source is '$CONTRACT_SOURCE'; expected caller. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          if [ "$EVENT_NAME" != "merge_group" ] && [[ ! "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::contract-source caller reads the pull request head's contracts, but this '$EVENT_NAME' event carries no pull request head sha. THE GATE DID NOT RUN."
             exit 1
           fi
@@ -141,9 +121,7 @@ jobs:
           path: .omniclaude-deploy-gate
           persist-credentials: false
           sparse-checkout: |
-            scripts/deploy-gate/checkout-occ-contracts.sh
             .github/actions/deploy-gate
-            .github/actions/deploy-gate/validate_pr_deploy_required.py
           sparse-checkout-cone-mode: false
 
       - name: Assert the deploy-gate checkout is at the pin and carries its files
@@ -160,82 +138,14 @@ jobs:
             echo "::error::deploy-gate checkout is at $checked_out_sha, expected $GATE_PIN. THE GATE DID NOT RUN."
             exit 1
           fi
-          if [ ! -f ".omniclaude-deploy-gate/scripts/deploy-gate/checkout-occ-contracts.sh" ]; then
-            echo "::error::.omniclaude-deploy-gate/scripts/deploy-gate/checkout-occ-contracts.sh is missing from the deploy-gate checkout at $GATE_PIN. THE GATE DID NOT RUN."
-            exit 1
-          fi
           if [ ! -f ".omniclaude-deploy-gate/.github/actions/deploy-gate/action.yml" ]; then
             echo "::error::.omniclaude-deploy-gate/.github/actions/deploy-gate/action.yml is missing from the deploy-gate checkout at $GATE_PIN. THE GATE DID NOT RUN."
             exit 1
           fi
 
-      - name: Resolve deploy-gate OCC evidence source
-        if: github.event_name != 'merge_group' && inputs.contract-source == 'occ'
-        id: resolve_occ_evidence
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ inputs.pr-number != 0 && inputs.pr-number || github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${GH_TOKEN}" ]; then
-            echo "::error::OCC evidence-source resolution requires GITHUB_TOKEN"
-            exit 1
-          fi
-
-          if ! changed_files="$(gh pr diff "$PR_NUMBER" --name-only 2>/tmp/deploy-gate-gh-diff.err | tr '\n' ' ')"; then
-            base_ref="${GITHUB_BASE_REF:-main}"
-            echo "::notice::gh pr diff failed; falling back to local git diff against origin/${base_ref}"
-            cat /tmp/deploy-gate-gh-diff.err || true
-            git fetch origin "$base_ref" --no-tags
-            changed_files="$(git diff --name-only "origin/${base_ref}" HEAD | tr '\n' ' ')"
-          fi
-          pr_body="$(gh pr view "$PR_NUMBER" --json body -q '.body')"
-
-          python -m pip install pyyaml
-
-          python "${GITHUB_WORKSPACE}/.omniclaude-deploy-gate/.github/actions/deploy-gate/validate_pr_deploy_required.py" \
-            --changed-files "$changed_files" \
-            --pr-body "$pr_body" \
-            --resolve-occ-ref \
-            --default-occ-ref dev \
-            --github-output "$GITHUB_OUTPUT"
-
-      - name: Checkout onex_change_control contracts (canonical contract source)
-        if: github.event_name != 'merge_group' && inputs.contract-source == 'occ' && steps.resolve_occ_evidence.outputs.deploy_gate_required == 'true'
-        shell: bash
-        # OMN-12564: the OCC checkout is delegated to a standalone, unit-tested
-        # script that bounds BOTH the fetch AND the checkout with a hard
-        # `timeout`. The old inline step only bounded the fetch, so a wedged
-        # blobless-partial-clone checkout (`git -C _occ checkout --force
-        # FETCH_HEAD`) spun until the 25-min job timeout on #1786/#1788. The
-        # script drops `--filter=blob:none` for a deterministic full-ref
-        # checkout and, on stall, emits a diagnostic block (ref, fetch command,
-        # elapsed, last git subprocess, process tree) so future hangs are
-        # diagnosable from the log alone. The step-level `timeout-minutes` below
-        # is the outer bound; the script is the inner, self-diagnosing
-        # git-level bound.
-        timeout-minutes: 12
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OCC_REF: ${{ steps.resolve_occ_evidence.outputs.occ_ref }}
-          OCC_REPO_URL: https://github.com/OmniNode-ai/onex_change_control.git
-        run: |
-          set -euo pipefail
-
-          if [ -z "${GH_TOKEN}" ]; then
-            echo "::error::OCC contracts checkout requires GITHUB_TOKEN"
-            exit 1
-          fi
-
-          bash "${GITHUB_WORKSPACE}/.omniclaude-deploy-gate/scripts/deploy-gate/checkout-occ-contracts.sh"
-
-      # OMN-20074: a cut-over caller's contract is its own, at the pull
-      # request head. No change control tree is checked out on this path, so
-      # a companion's evidence there does not count.
+      # OMN-20074: the caller's contract is its own, at the pull request head.
       - name: Checkout the caller's pull request head contracts
-        if: github.event_name != 'merge_group' && inputs.contract-source == 'caller'
+        if: github.event_name != 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -256,8 +166,7 @@ jobs:
         with:
           pr-number: ${{ inputs.pr-number != 0 && inputs.pr-number || github.event.pull_request.number }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          contracts-dir: ${{ inputs.contract-source == 'caller' && '.pr-head/contracts' || '_occ/contracts' }}
-          contract-source: ${{ inputs.contract-source }}
+          contracts-dir: .pr-head/contracts
           # OMN-14505: composite actions cannot read `vars` directly, so the
           # org variable is resolved here (job scope, where `vars` is valid)
           # and threaded through as an input.

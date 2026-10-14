@@ -598,19 +598,6 @@ def build_day_open(
     }
 
 
-def validate_day_open(data: dict[str, Any]) -> Any:
-    """Validate data against ModelDayOpen. Raises ValidationError on failure."""
-    try:
-        from onex_change_control import ModelDayOpen  # type: ignore[import-not-found]
-    except ImportError as exc:
-        raise ImportError(
-            "onex_change_control is required for ModelDayOpen validation. "
-            "Install it or set ONEX_CC_REPO_PATH."
-        ) from exc
-
-    return ModelDayOpen.model_validate(data)
-
-
 def serialize_day_open(data: dict[str, Any]) -> str:
     """Serialize a day-open dict to YAML string."""
     return yaml.dump(data, default_flow_style=False, sort_keys=False)

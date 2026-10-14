@@ -172,7 +172,7 @@ def resolve_uses_ref(
 ) -> ParsedWorkflow | None:
     """Resolve a job's `uses:` reference to a locally-parseable ParsedWorkflow,
     or None if the reference points outside this repo (cross-repo reusable —
-    e.g. omnibase_core's occ-preflight.yml, onex_change_control's
+    e.g. omnibase_core's validate-boundaries action or another repository's
     pr-title-check-reusable.yml)."""
     local_match = _LOCAL_USES_RE.match(uses_ref)
     if local_match:

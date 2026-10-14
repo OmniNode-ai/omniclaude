@@ -536,7 +536,6 @@ scripts/cron-unstick-queue.sh
 scripts/db-credentials.sh
 scripts/debug_loop_cli.py
 scripts/demo_runner.py
-scripts/deploy-gate/checkout-occ-contracts.sh
 scripts/detect_secrets_ci_diff.py
 scripts/detect_secrets_guard.py
 scripts/doctrine_claim_gate.py
