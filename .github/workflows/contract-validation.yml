@@ -3,8 +3,8 @@
 
 # Contract Validation Gate
 #
-# Validates ONEX ticket contracts for PRs in omniclaude with the
-# onex_change_control validators, checked out at the sha pinned below.
+# Validates ONEX ticket contracts for PRs in omniclaude against omnibase_core's
+# ModelTicketContract, at the omnibase-core version uv.lock pins (OMN-20074).
 #
 # Required status check: "contract-validation"
 # Must pass (or skip) before merging to main.
@@ -49,20 +49,6 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - name: Auth preflight — confirm onex_change_control action is accessible
-        id: auth-preflight
-        env:
-          GH_TOKEN: ${{ github.token }}
-        working-directory: ${{ github.workspace }}
-        run: |
-          echo "Checking visibility of OmniNode-ai/onex_change_control..."
-          if gh api repos/OmniNode-ai/onex_change_control --silent; then
-            echo "::notice::onex_change_control repo is accessible."
-          else
-            echo "::error::Cannot reach OmniNode-ai/onex_change_control. Composite action will not resolve."
-            exit 1
-          fi
-
       - name: Resolve branch name
         id: resolve-branch
         env:
@@ -100,19 +86,6 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-
-      # OMN-20071: the OCC composite action this job used to call reads OCC main,
-      # whose schema refused `binds_ac`, the field repo-evidence / dod-verify needs
-      # on every contract. The validators are read at this sha; bump it in this
-      # repo's own PR to move validator versions.
-      - name: Check out pinned contract validators
-        if: steps.resolve-branch.outputs.skip_validation != 'true'
-        run: |
-          set -euo pipefail
-          occ_sha=802b5f7101f4c49f8b30e8deda3d4c5d024c5710
-          git init -q .onex_change_control_validators
-          git -C .onex_change_control_validators fetch -q --depth 1 https://github.com/OmniNode-ai/onex_change_control.git "$occ_sha"
-          git -C .onex_change_control_validators checkout -q --detach FETCH_HEAD
 
       - name: Set up uv
         if: steps.resolve-branch.outputs.skip_validation != 'true'
@@ -152,20 +125,19 @@ jobs:
             exit 0
           fi
 
-          cd .onex_change_control_validators
-          for attempt in 1 2 3; do
-            if uv sync --no-group dev; then
-              break
-            fi
-            if [[ "$attempt" -eq 3 ]]; then
-              echo "validation-status=failed" >> "$GITHUB_OUTPUT"
-              echo "::error::Failed to sync contract validators after 3 attempts."
-              exit 1
-            fi
-            sleep "$((10 * attempt))"
-          done
-
-          if uv run validate-yaml "../$CONTRACT_PATH"; then
+          core_version="$(awk '/^name = "omnibase-core"$/ {getline; gsub(/[^0-9.]/, "", $0); print; exit}' uv.lock)"
+          [[ -n "$core_version" ]] || { echo "validation-status=failed" >> "$GITHUB_OUTPUT"; echo "::error::omnibase-core version not found in uv.lock"; exit 1; }
+          if uv run --no-project --python 3.12 --with "omnibase-core==${core_version}" --with pyyaml python - "$CONTRACT_PATH" <<'PY'
+          import sys
+          import yaml
+          from omnibase_core.models.ticket.model_ticket_contract import ModelTicketContract
+          path = sys.argv[1]
+          with open(path, encoding="utf-8") as fh:
+              data = yaml.safe_load(fh)
+          ModelTicketContract.model_validate(data)
+          print(f"[OK] {path} validates against ModelTicketContract")
+          PY
+          then
             echo "validation-status=passed" >> "$GITHUB_OUTPUT"
           else
             echo "validation-status=failed" >> "$GITHUB_OUTPUT"

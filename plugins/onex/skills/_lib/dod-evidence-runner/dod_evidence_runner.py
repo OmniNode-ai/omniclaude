@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 import time
 from dataclasses import asdict, dataclass, field
@@ -40,26 +41,15 @@ try:
 except ImportError:
     resolve_evidence_root = None  # type: ignore[assignment]
 
-# <TICKET>: import the inert-check detector from the hosted Contract
-# Compliance engine instead of forking a second copy of the regex patterns.
-# Before this, a check_value that only reads ``drift/dod_receipts/`` or
-# ``contracts/OMN-*`` (structurally incapable of observing the product) would
-# locally report whatever its raw glob/grep/exit code happened to be -- often
-# a false "verified" -- while the hosted CI gate demoted the identical check
-# to WARN. That divergence is exactly what let OCC PRs look valid locally and
-# fail remotely. Guarded because an omniclaude build pinned to an
-# onex-change-control release that predates <TICKET> (no
-# ``contract_compliance_check`` module yet) must not crash -- it degrades to
-# "no demotion" rather than reintroducing a duplicate.
-try:
-    from onex_change_control.scripts.contract_compliance_check import (
-        _is_inert_check as _occ_is_inert_check,
-    )
-
-    _OCC_COMPLIANCE_ENGINE_AVAILABLE = True
-except ImportError:
-    _occ_is_inert_check = None  # type: ignore[assignment]
-    _OCC_COMPLIANCE_ENGINE_AVAILABLE = False
+# A check_value that can only read the receipt or contract store the
+# evidence author writes (``drift/dod_receipts/...``, ``contracts/OMN-...``)
+# is structurally incapable of observing the product. The detector used to be
+# imported from the change control compliance engine; its two patterns live
+# here now that no gate outside this repository applies them.
+_INERT_CHECK_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"drift/dod_receipts/"),
+    re.compile(r"(?<![\w/])contracts/OMN-"),
+)
 
 _DEFAULT_TIMEOUT_SECONDS = 30
 
@@ -99,24 +89,13 @@ class EvidenceRunResult:
 
 
 def is_inert_check(check_value: str | dict[str, str]) -> bool:
-    """True if check_value can only observe the OCC receipt/contract store.
+    """True if check_value can only observe the receipt/contract store.
 
-    Delegates to the same ``_is_inert_check`` the hosted Contract Compliance
-    gate enforces (onex_change_control.scripts.contract_compliance_check),
-    so a check that is inert is treated identically local vs hosted rather
-    than maintained as a second copy of the pattern list. When the shared
-    engine is unavailable (stale onex-change-control pin), degrades to "not
-    inert" -- i.e. no local demotion -- rather than reimplementing the
-    regex, so the hosted gate remains the single source of truth for what
-    counts as inert.
+    Such a check proves nothing about the product, whatever its raw result
+    was, so the runner never lets it count as verified.
     """
-    if not _OCC_COMPLIANCE_ENGINE_AVAILABLE:
-        logger.debug(
-            "onex_change_control.scripts.contract_compliance_check unavailable; "
-            "inert-check demotion skipped locally (hosted gate still enforces it)"
-        )
-        return False
-    return bool(_occ_is_inert_check(check_value))
+    text = str(check_value)
+    return any(pattern.search(text) for pattern in _INERT_CHECK_PATTERNS)
 
 
 def _run_check_test_exists(
@@ -370,12 +349,13 @@ def run_dod_evidence(
             cr.duration_ms = (time.monotonic() - start) * 1000
 
             if is_inert_check(check_value):
-                # <TICKET> parity with the hosted demotion rule: a check
-                # that can only observe the OCC receipt/contract store
+                # A check that can only observe the receipt/contract store
                 # proves nothing about this product, whatever its raw result
                 # was. Never let it launder as "verified".
                 cr.status = "skipped"
-                cr.message = f"INERT (reads OCC store, not the product): {cr.message}"
+                cr.message = (
+                    f"INERT (reads the receipt store, not the product): {cr.message}"
+                )
 
             check_results.append(cr)
 

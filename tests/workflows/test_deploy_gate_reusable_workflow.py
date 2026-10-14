@@ -40,27 +40,17 @@ def _step(job: dict[str, Any], name: str) -> dict[str, Any]:
     return cast("dict[str, Any]", step)
 
 
-CHECKOUT_SCRIPT = REPO_ROOT / "scripts" / "deploy-gate" / "checkout-occ-contracts.sh"
+def test_reusable_deploy_gate_reads_only_the_caller_contracts() -> None:
+    """OMN-20074: the gate fetches only its composite action and the caller's contracts.
 
-
-def test_reusable_deploy_gate_delegates_occ_checkout_to_bounded_script() -> None:
-    """OMN-12564: the OCC checkout is delegated to the hardened, bounded script.
-
-    The previous inline block only bounded the fetch (``timeout 90 git ... &&
-    git ... checkout``), letting a wedged blobless-partial-clone checkout spin
-    until the job timeout. The workflow must now (a) sparse-fetch the script
-    from omniclaude, (b) run it under a step-level timeout, and (c) carry no
-    inline lazy-filter fetch/checkout sequence.
+    No change control tree, checkout script or evidence-source resolution step
+    remains; the contracts come from the caller's pull request head.
     """
     workflow = _load_workflow()
     job = _deploy_gate_job(workflow)
 
     assert job["timeout-minutes"] == 25
 
-    # The hardened checkout script must be present and referenced by name.
-    assert CHECKOUT_SCRIPT.is_file(), f"checkout script missing: {CHECKOUT_SCRIPT}"
-
-    # A dedicated sparse checkout of the omniclaude script is wired in.
     fetch_step = _step(job, "Fetch deploy-gate support scripts (omniclaude)")
     assert fetch_step["if"] == "github.event_name != 'merge_group'"
     assert (
@@ -70,70 +60,15 @@ def test_reusable_deploy_gate_delegates_occ_checkout_to_bounded_script() -> None
     assert fetch_step["with"]["repository"] == "OmniNode-ai/omniclaude"
     assert fetch_step["with"]["persist-credentials"] is False
     sparse_checkout = fetch_step["with"]["sparse-checkout"]
-    assert "scripts/deploy-gate/checkout-occ-contracts.sh" in sparse_checkout
-    assert (
-        ".github/actions/deploy-gate/validate_pr_deploy_required.py" in sparse_checkout
-    )
+    assert ".github/actions/deploy-gate" in sparse_checkout
 
-    resolve_step = _step(job, "Resolve deploy-gate OCC evidence source")
-    # OMN-20074: the OCC path runs only for the default "occ" contract source.
-    assert (
-        resolve_step["if"]
-        == "github.event_name != 'merge_group' && inputs.contract-source == 'occ'"
-    )
-    assert resolve_step["id"] == "resolve_occ_evidence"
-    assert "--resolve-occ-ref" in resolve_step["run"]
-    assert '--github-output "$GITHUB_OUTPUT"' in resolve_step["run"]
+    head_step = _step(job, "Checkout the caller's pull request head contracts")
+    assert head_step["if"] == "github.event_name != 'merge_group'"
+    assert head_step["with"]["path"] == ".pr-head"
 
-    step = _step(
-        job, "Checkout onex_change_control contracts (canonical contract source)"
-    )
-    assert (
-        step["if"]
-        == "github.event_name != 'merge_group' && inputs.contract-source == 'occ' && steps.resolve_occ_evidence.outputs.deploy_gate_required == 'true'"
-    )
-    assert "uses" not in step
-    # Step-level hard timeout (outer bound) is present.
-    assert step["timeout-minutes"] == 12
-    assert step["env"]["OCC_REF"] == "${{ steps.resolve_occ_evidence.outputs.occ_ref }}"
-    assert (
-        step["env"]["OCC_REPO_URL"]
-        == "https://github.com/OmniNode-ai/onex_change_control.git"
-    )
+    gate_step = _step(job, "Run deploy gate (canonical composite action)")
+    assert gate_step["with"]["contracts-dir"] == ".pr-head/contracts"
+    assert "contract-source" not in gate_step["with"]
 
-    run = step["run"]
-    # Still fail-fast on a missing token.
-    assert "OCC contracts checkout requires GITHUB_TOKEN" in run
-    # Delegates to the bounded script — no inline fetch/checkout loop.
-    assert "scripts/deploy-gate/checkout-occ-contracts.sh" in run
-    assert "--filter=blob:none" not in run
-    assert "checkout --force FETCH_HEAD" not in run
-    assert "retry_delays=(0 10 20 30 45)" not in run
-
-
-def test_checkout_script_is_bounded_and_self_diagnosing() -> None:
-    """The hardened script bounds fetch + checkout and emits diagnostics."""
-    text = CHECKOUT_SCRIPT.read_text(encoding="utf-8")
-
-    # Hard timeout binary is resolved and used (git-level inner bound).
-    assert 'TIMEOUT_BIN="timeout"' in text
-    assert 'TIMEOUT_BIN="gtimeout"' in text
-    assert "run_git_bounded" in text
-
-    # Both phases (fetch and checkout) run under the bounded helper.
-    assert 'run_git_bounded "$OCC_FETCH_TIMEOUT_SECS"' in text
-    assert 'run_git_bounded "$OCC_CHECKOUT_TIMEOUT_SECS"' in text
-
-    # Deterministic full-ref checkout — no lazy blob filter in an active command.
-    active = "\n".join(
-        line for line in text.splitlines() if not line.lstrip().startswith("#")
-    )
-    assert "--filter=blob:none" not in active
-
-    # Diagnostic block fields required by the acceptance criteria.
-    assert "OCC checkout diagnostics" in text
-    assert "OCC ref:" in text
-    assert "Fetch command:" in text
-    assert "Elapsed:" in text
-    assert "Last git subprocess:" in text
-    assert "emit_process_tree" in text
+    names = [str(step.get("name", "")) for step in job["steps"]]
+    assert not [n for n in names if "OCC" in n or "onex_change_control" in n]

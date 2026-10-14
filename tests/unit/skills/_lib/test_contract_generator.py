@@ -64,7 +64,9 @@ class TestGenerateSkeletonContract:
             is_seam_ticket=False,
         )
         parsed = yaml.safe_load(result)
-        from onex_change_control.models.model_ticket_contract import ModelTicketContract
+        from omnibase_core.models.ticket.model_ticket_contract import (
+            ModelTicketContract,
+        )
 
         contract = ModelTicketContract.model_validate(parsed)
         assert contract.ticket_id == "OMN-7777"

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -84,35 +83,33 @@ def test_contract_proof_resolution_gate_is_blocking() -> None:
     assert "Phase 1" not in step["name"]
 
 
-def test_contract_validation_reads_a_pinned_validator_that_accepts_binds_ac() -> None:
-    """The composite action reads OCC main, whose schema refused `binds_ac`.
+def test_contract_validation_validates_against_the_locked_omnibase_core_model() -> None:
+    """OMN-20074: the contract is checked against omnibase_core's ModelTicketContract.
 
-    A contract that binds its criteria (which repo-evidence / dod-verify requires)
-    was refused as `dod_evidence.N.binds_ac: Extra inputs are not permitted`. The
-    validators are fetched at a full sha instead, as omnimarket and
-    omnibase_infra do.
+    The job used to fetch onex_change_control's validators at a pinned sha. It
+    now runs omnibase_core's model at the version uv.lock pins, so no other
+    repository is read and the schema moves with this repository's own lock.
     """
     workflow = _load_workflow(CONTRACT_VALIDATION_WORKFLOW_PATH)
     job = _job(workflow, "contract-validation")
     steps = [item for item in job["steps"] if isinstance(item, dict)]
 
+    assert "onex_change_control" not in yaml.safe_dump(workflow)
     assert not [
         item
         for item in steps
-        if "onex_change_control/.github/actions/validate-contract"
-        in str(item.get("uses", ""))
-    ], "the OCC composite action resolves OCC main; fetch the validators at a sha"
-
-    fetch = _step(job, "Check out pinned contract validators")
-    run = str(fetch.get("run", ""))
-    match = re.search(r"^\s*occ_sha=([0-9a-f]{40})$", run, re.MULTILINE)
-    assert match, "the validators must be fetched at a full sha"
-    assert "https://github.com/OmniNode-ai/onex_change_control.git" in run
-    assert '"$occ_sha"' in run
+        if "Check out pinned contract validators" in str(item.get("name", ""))
+    ]
 
     validate = _step(job, "Run contract validation")
     assert validate.get("id") == "validate-contract"
-    assert "validate-yaml" in str(validate.get("run", ""))
+    run = str(validate.get("run", ""))
+    assert (
+        "omnibase_core.models.ticket.model_ticket_contract import ModelTicketContract"
+        in run
+    )
+    assert "uv.lock" in run
+    assert "validate-yaml" not in run
 
 
 # ---------------------------------------------------------------------------

@@ -97,7 +97,7 @@ class TestEnrichContract:
             repo="omniclaude",
         )
         parsed = yaml.safe_load(result)
-        from onex_change_control.models.model_ticket_contract import (
+        from omnibase_core.models.ticket.model_ticket_contract import (
             ModelTicketContract,
         )
 

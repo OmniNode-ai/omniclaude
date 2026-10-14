@@ -51,8 +51,8 @@ class TestContractPipelineRoundtrip:
             repo="test-repo",
         )
 
-        # Step 3: Validate contract base fields against onex_change_control schema
-        from onex_change_control.models.model_ticket_contract import (
+        # Step 3: Validate contract base fields against the omnibase_core ticket contract schema
+        from omnibase_core.models.ticket.model_ticket_contract import (
             ModelTicketContract,
         )
 
@@ -90,7 +90,7 @@ class TestContractPipelineRoundtrip:
             path = Path(f.name)
 
         try:
-            from onex_change_control.models.model_ticket_contract import (
+            from omnibase_core.models.ticket.model_ticket_contract import (
                 ModelTicketContract,
             )
 

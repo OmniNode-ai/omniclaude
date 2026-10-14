@@ -23,7 +23,7 @@
 # This is the enforcement surface; widening this list defeats the ratchet.
 #
 generated_at: "2026-07-20"
-source_repo: "onex_change_control"
+source_repo: "the change control contracts corpus, swept once on generated_at"
 source_ref: "0e189228d4065334074889568ec0707ccddd8025"
 source_branch: "dev"
 # Population: 7189 contracts swept; 1340 satisfied the legacy substring
