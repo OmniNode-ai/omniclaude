@@ -14,7 +14,7 @@ requirements:
   - id: req-ci-summary-judges-a-concluded-job
     statement: CI Summary judges a job GitHub has concluded on its conclusion, not its lagging status.
     acceptance:
-      - id: AC-ci-summary-concluded-job
+      - id: AC1
         statement: "a job row with conclusion and completed_at set counts as completed while its status reads in_progress; a concluded failure still fails and a row missing either field still holds PENDING -- falsifier: uv run pytest tests/ci/test_ci_summary_gate.py -q -k TestConcludedJobWithLaggingStatusOmn17427"
 evidence_requirements:
   - kind: tests
@@ -57,4 +57,4 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/ci/test_ci_summary_gate.py -q -k TestConcludedJobWithLaggingStatusOmn17427"
     binds_ac:
-      - AC-ci-summary-concluded-job
+      - AC1
