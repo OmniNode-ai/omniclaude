@@ -1,0 +1,45 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20977
+title: "The worktree prune tools decide merged from onex scm pr-heads, not gh"
+summary: >-
+  prune-worktrees.sh and worktree_auto_prune.py decide a worktree is merged from
+  `onex scm pr-heads OWNER/REPO --source local` (the PR watcher state plus the canonical
+  clone) instead of a gh merged-PR listing that lanes may no longer make.
+  worktree_reaper.py drives prune-worktrees.sh and needs no code change.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20977-prune-from-pr-heads
+    statement: The prune tools read merged and open PR state from onex scm pr-heads and never remove an open PR's worktree or a dirty worktree.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: worktree_auto_prune.py maps a MERGED pr-heads row to (MERGED, head oid), an OPEN row to NOT_MERGED, and holds the open-PR fence on a stale, truncated or failed answer; falsifier: uv run pytest tests/scripts/test_worktree_auto_prune_pr_heads_omn20977.py fails against the gh-based reader.'
+      - id: AC2
+        statement: 'AC2: prune-worktrees.sh makes one pr-heads call per repo slug, classifies merged by head branch or head oid, makes no gh read, and the reaper drives the real script; falsifier: uv run pytest tests/scripts/test_prune_worktrees_batch.py tests/scripts/test_worktree_reaper.py fails against the gh-based reader.'
+evidence_requirements:
+  - kind: tests
+    description: The pr-heads consumer contract of worktree_auto_prune.py, the open-PR fence and the end-to-end prune over real throwaway repos.
+    command: uv run pytest tests/scripts/test_worktree_auto_prune_pr_heads_omn20977.py -q --no-cov
+  - kind: tests
+    description: The batch prune script, the reaper and the stub-seam suites agree with the pr-heads reader.
+    command: uv run pytest tests/scripts/test_prune_worktrees_batch.py tests/scripts/test_worktree_reaper.py tests/scripts/test_prune_worktrees_disposable_state.py tests/scripts/test_worktree_auto_prune_open_pr_fence.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20977-ac1
+    description: The consumer contract and fence tests pass.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_worktree_auto_prune_pr_heads_omn20977.py -q --no-cov
+  - id: dod-omn20977-ac2
+    description: The batch script, reaper and stub-seam suites pass.
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_prune_worktrees_batch.py tests/scripts/test_worktree_reaper.py -q --no-cov

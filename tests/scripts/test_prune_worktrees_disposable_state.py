@@ -31,7 +31,8 @@ repositories: a bare "origin", a canonical clone, and real linked worktrees.
 Only two things are faked, and both are faked to keep the test hermetic rather
 than to fake the behaviour under test:
 
-* ``gh`` is stubbed to report the branch as having a merged PR, which is what
+* ``onex`` is stubbed to answer ``scm pr-heads`` with a MERGED row naming the
+  branch (OMN-20977), which is what
   makes the worktree STALE and gets it into the removal loop at all;
 * ``git`` is wrapped so ``fetch`` and ``ls-remote origin`` never touch the
   network. Every other git call -- including the ``status --porcelain`` under
@@ -43,6 +44,7 @@ afterwards.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -80,12 +82,46 @@ fi
 exec "$REAL_GIT" "$@"
 """
 
-# `gh` stub: report the fixture branch as a merged PR so the worktree is STALE.
-_GH_STUB = r"""#!/usr/bin/env bash
+# `onex` stub (OMN-20977): answer `scm pr-heads` with a recorded-shape JSON
+# whose MERGED row names the fixture branch, so the worktree is STALE. The
+# answer file is seeded per run by the harness below.
+_ONEX_STUB = r"""#!/usr/bin/env bash
 set -euo pipefail
-printf '%s\t%s\n' "4242" "BRANCH_PLACEHOLDER"
+cat "$ONEX_PR_HEADS_JSON"
 exit 0
 """
+
+
+def _pr_heads_json(branch: str) -> str:
+    return json.dumps(
+        {
+            "verb": "pr-heads",
+            "node": "node_github_repo_gateway_effect",
+            "operation": "pr_heads",
+            "repo": SLUG,
+            "source": "clone",
+            "outcome": "completed",
+            "watcher_tick": None,
+            "bus": None,
+            "result": {
+                "total_count": None,
+                "truncated": False,
+                "operation": "pr_heads",
+                "repo": SLUG,
+                "prs": [
+                    {
+                        "number": 4242,
+                        "state": "MERGED",
+                        "head_oid": "e" * 40,
+                        "head_ref": branch,
+                        "base_ref": "dev",
+                        "merge_commit_sha": "d" * 40,
+                        "merged_at": None,
+                    }
+                ],
+            },
+        }
+    )
 
 
 def _resolve_bash() -> str:
@@ -217,7 +253,9 @@ def harness(tmp_path: Path) -> Harness:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _write_exec(bin_dir / "git", _GIT_WRAPPER)
-    _write_exec(bin_dir / "gh", _GH_STUB.replace("BRANCH_PLACEHOLDER", BRANCH))
+    _write_exec(bin_dir / "onex", _ONEX_STUB)
+    pr_heads_fixture = tmp_path / "pr_heads.json"
+    pr_heads_fixture.write_text(_pr_heads_json(BRANCH), encoding="utf-8")
 
     real_git = shutil.which("git")
     assert real_git, "git not on PATH"
@@ -226,6 +264,7 @@ def harness(tmp_path: Path) -> Harness:
         **env,
         "REAL_GIT": real_git,
         "PATH": f"{bin_dir}:{env.get('PATH', '')}",
+        "ONEX_PR_HEADS_JSON": str(pr_heads_fixture),
     }
     # A scratch registry, never the real one: every removal saves the worktree
     # under $OMNI_HOME/.onex_state first (OMN-19539), and the script's closing

@@ -63,9 +63,13 @@ is NEVER hardcoded here.
 Safety
 ------
 The reaper does NOT re-implement worktree GC safety. It drives the canonical
-``scripts/prune-worktrees.sh``, which removes a worktree ONLY when its PR is MERGED
-(or the remote branch is gone) AND the working tree is clean AND there are no
-unpushed commits; dirty / no-upstream / detached worktrees are SKIPPED. The reaper
+``scripts/prune-worktrees.sh``, which removes a worktree ONLY when its PR is
+MERGED (or the remote branch is gone) AND the working tree is clean AND there
+are no unpushed commits; dirty / no-upstream / detached worktrees are SKIPPED.
+Since OMN-20977 the prune script decides MERGED from ``onex scm pr-heads
+OWNER/REPO --source local`` output — a branch whose name matches a MERGED PR's
+head branch, or whose HEAD matches a MERGED PR's head oid — never from a gh
+read, so this reaper's merged decision rides the same local answer. The reaper
 passes the prune script the worktrees root for the matched row across ALL roots
 ($OMNI_HOME/omni_worktrees + the legacy /Users/<user>/Code/omni_worktrees +
 .onex_state worktrees); it never weakens the prune script's checks. Salvage of dirty

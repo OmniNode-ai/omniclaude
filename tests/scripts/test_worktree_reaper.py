@@ -8,6 +8,11 @@ the canonical prune-worktrees.sh (this repo) for each newly-merged PR since a
 persisted cursor. All HTTP and subprocess I/O is injected, so these tests make no
 network calls and spawn no real subprocesses.
 
+The OMN-20977 section at the end is the exception: it drives the REAL
+prune-worktrees.sh over a real throwaway git registry, with the onex CLI
+stubbed, so the reaper's merged decision is proven to ride
+``onex scm pr-heads OWNER/REPO --source local`` (never ``gh``) end to end.
+
 DoD coverage (per the T4 ticket):
   (a) a merged-PR-with-clean-worktree row is passed to prune-worktrees.sh,
   (b) a dirty/unpushed worktree is SKIPPED (prune reports non-zero; the reaper does
@@ -20,10 +25,16 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 _MODULE_PATH = Path(__file__).resolve().parents[2] / "scripts" / "worktree_reaper.py"
 
@@ -598,3 +609,274 @@ def test_main_catch_up_oneshot_needs_no_projection_url(
         ]
     )
     assert rc == 0
+
+
+# ---------------------------------------------------------------------------
+# OMN-20977 — the reaper's merged decision rides `onex scm pr-heads`
+# ---------------------------------------------------------------------------
+# The reaper never reads PR state itself: it drives prune-worktrees.sh, whose
+# merged-PR limb used to be `gh pr list --state merged` — a read lanes are no
+# longer allowed to make, so it found nothing merged and deleted nothing. These
+# tests drive the REAL prune-worktrees.sh through run_reaper over a real
+# throwaway registry, stubbing only the onex CLI, and assert the merged
+# decision came from pr-heads output (one call per repo slug, matched by head
+# branch OR head oid) and that the safety fences still hold.
+_REAL_PRUNE = Path(__file__).resolve().parents[2] / "scripts" / "prune-worktrees.sh"
+
+SLUG = "OmniNode-ai/omniclaude"
+REMOTE_URL = f"https://github.com/{SLUG}.git"
+BRANCH = "lane/omn-20977-reaped"
+
+# `git` wrapper: real git except the two calls that would reach the network
+# (fetch is a no-op; ls-remote of the https origin returns nothing, which is
+# what the script sees for an unreachable remote and sends it down its
+# canonical-clone fallback).
+_PRUNE_GIT_WRAPPER = r"""#!/usr/bin/env bash
+set -uo pipefail
+LS=0
+for a in "$@"; do
+  case "$a" in
+    fetch) exit 0 ;;
+    ls-remote) LS=1 ;;
+  esac
+done
+if [[ "$LS" == 1 ]]; then
+  for a in "$@"; do
+    [[ "$a" == "origin" ]] && exit 0
+  done
+fi
+exec "$REAL_GIT" "$@"
+"""
+
+# `onex` stub: logs its argv, then emits the recorded-style pr-heads answer
+# the test seeded (or fails with the exit code the test chose).
+_PRUNE_ONEX_STUB = r"""#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$ONEX_PR_HEADS_LOG"
+if [[ "${ONEX_PR_HEADS_EXIT:-0}" != 0 ]]; then
+  echo "local: stubbed refusal" >&2
+  exit "$ONEX_PR_HEADS_EXIT"
+fi
+cat "$ONEX_PR_HEADS_JSON"
+exit 0
+"""
+
+
+def _pr_heads_answer(rows: list[dict[str, object]]) -> str:
+    return json.dumps(
+        {
+            "verb": "pr-heads",
+            "node": "node_github_repo_gateway_effect",
+            "operation": "pr_heads",
+            "repo": SLUG,
+            "source": "clone",
+            "outcome": "completed",
+            "watcher_tick": None,
+            "bus": None,
+            "result": {
+                "total_count": None,
+                "truncated": False,
+                "operation": "pr_heads",
+                "repo": SLUG,
+                "prs": rows,
+            },
+        }
+    )
+
+
+def _write_exec(path: Path, body: str) -> None:
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o755)
+
+
+class _PrHeadsRegistry:
+    """A real throwaway registry: bare origin, canonical clone, one worktree."""
+
+    def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._monkeypatch = monkeypatch
+        git_env = {
+            **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+            "GIT_AUTHOR_NAME": "omn20977",
+            "GIT_COMMITTER_NAME": "omn20977",
+            "GIT_AUTHOR_EMAIL": "omn20977@example.invalid",
+            "GIT_COMMITTER_EMAIL": "omn20977@example.invalid",
+        }
+
+        def git(cwd: Path, *args: str) -> str:
+            proc = subprocess.run(
+                ["git", "-C", str(cwd), *args],
+                capture_output=True,
+                text=True,
+                env=scrub_git_location_env(git_env),
+                check=False,
+                timeout=60,
+            )
+            assert proc.returncode == 0, f"git {args} failed: {proc.stderr}"
+            return proc.stdout.strip()
+
+        self._git = git
+        bare = tmp_path / "origin.git"
+        git(tmp_path, "init", "-q", "--bare", "-b", "dev", str(bare))
+        canonical = tmp_path / "canonical"
+        git(tmp_path, "init", "-q", "-b", "dev", str(canonical))
+        git(canonical, "remote", "add", "origin", REMOTE_URL)
+        (canonical / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+        git(canonical, "add", "-A")
+        git(canonical, "commit", "-q", "-m", "init")
+        git(canonical, "branch", BRANCH)
+        # Push both refs into the bare repo and wire remote-tracking, so the
+        # unpushed-commits probe (`log @{u}..HEAD`) resolves offline and the
+        # canonical-clone fallback's local ls-remote finds the branch.
+        git(
+            canonical,
+            "push",
+            "-q",
+            str(bare),
+            "refs/heads/dev:refs/heads/dev",
+            f"refs/heads/{BRANCH}:refs/heads/{BRANCH}",
+        )
+        git(
+            canonical,
+            "update-ref",
+            f"refs/remotes/origin/{BRANCH}",
+            f"refs/heads/{BRANCH}",
+        )
+
+        self.root = tmp_path / "omni_worktrees"
+        self.worktree = self.root / "OMN-20977" / "omniclaude"
+        self.worktree.parent.mkdir(parents=True)
+        git(canonical, "worktree", "add", "-q", str(self.worktree), BRANCH)
+        git(
+            self.worktree,
+            "branch",
+            f"--set-upstream-to=origin/{BRANCH}",
+            BRANCH,
+        )
+        self.head_oid = git(self.worktree, "rev-parse", "HEAD")
+
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        self.onex_stub = bin_dir / "onex"
+        _write_exec(bin_dir / "git", _PRUNE_GIT_WRAPPER)
+        _write_exec(self.onex_stub, _PRUNE_ONEX_STUB)
+        real_git = shutil.which("git")
+        assert real_git, "git not on PATH"
+
+        self.log = tmp_path / "pr_heads_calls.log"
+        self.log.write_text("", encoding="utf-8")
+        monkeypatch.setenv("REAL_GIT", real_git)
+        monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ.get('PATH', '')}")
+        monkeypatch.setenv("ONEX_SCM_CLI", str(self.onex_stub))
+        monkeypatch.setenv("ONEX_PR_HEADS_LOG", str(self.log))
+        monkeypatch.setenv("OMNI_HOME", str(tmp_path / "scratch_registry"))
+
+    def seed_pr_heads(self, rows: list[dict[str, object]]) -> None:
+        path = self.onex_stub.parent / "pr_heads.json"
+        path.write_text(_pr_heads_answer(rows), encoding="utf-8")
+        self._monkeypatch.setenv("ONEX_PR_HEADS_JSON", str(path))
+
+    def reap(self, tmp_path: Path) -> object:
+        body = json.dumps(
+            {
+                "rows": [
+                    {
+                        "repo": SLUG,
+                        "branch": BRANCH,
+                        "pr_number": 4242,
+                        "ticket": "OMN-20977",
+                        "merged_at": "2026-10-13T12:00:00Z",
+                        "projection_cursor": 7,
+                    }
+                ],
+                "next_cursor": 7,
+            }
+        )
+        return worktree_reaper.run_reaper(
+            base_url="http://projection.test",
+            state_dir=tmp_path / "state",
+            roots=[self.root],
+            prune_script=_REAL_PRUNE,
+            execute=True,
+            opener=lambda _url, _timeout: body,
+        )
+
+
+def _merged_row(head_ref: str | None, oid: str) -> dict[str, object]:
+    return {
+        "number": 4242,
+        "state": "MERGED",
+        "head_oid": oid,
+        "head_ref": head_ref,
+        "base_ref": "dev",
+        "merge_commit_sha": "d" * 40,
+        "merged_at": None,
+    }
+
+
+def test_reaper_removes_a_worktree_pr_heads_names_merged_by_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = _PrHeadsRegistry(tmp_path, monkeypatch)
+    registry.seed_pr_heads([_merged_row(BRANCH, registry.head_oid)])
+
+    outcome = registry.reap(tmp_path)
+
+    assert outcome, outcome.error
+    assert not registry.worktree.exists()
+    calls = registry.log.read_text().splitlines()
+    # One pr-heads call for the one repo slug, with the canonical clone the
+    # worktree's own .git pointer names.
+    canonical = registry.worktree.parent.parent.parent / "canonical"
+    assert calls == [f"scm pr-heads {SLUG} --source local --clone {canonical}"]
+
+
+def test_reaper_removes_a_worktree_pr_heads_names_merged_by_head_oid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The common squash-merge shape: the merged PR's branch is gone and only
+    its head oid names it."""
+    registry = _PrHeadsRegistry(tmp_path, monkeypatch)
+    registry.seed_pr_heads([_merged_row(None, registry.head_oid)])
+
+    outcome = registry.reap(tmp_path)
+
+    assert outcome, outcome.error
+    assert not registry.worktree.exists()
+
+
+def test_reaper_never_removes_a_worktree_whose_pr_is_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = _PrHeadsRegistry(tmp_path, monkeypatch)
+    registry.seed_pr_heads(
+        [
+            {
+                "number": 4242,
+                "state": "OPEN",
+                "head_oid": registry.head_oid,
+                "head_ref": BRANCH,
+                "base_ref": "dev",
+                "merge_commit_sha": None,
+                "merged_at": None,
+            }
+        ]
+    )
+
+    outcome = registry.reap(tmp_path)
+
+    assert outcome, outcome.error
+    assert registry.worktree.is_dir()
+
+
+def test_reaper_never_removes_a_merged_worktree_with_uncommitted_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = _PrHeadsRegistry(tmp_path, monkeypatch)
+    (registry.worktree / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+    registry.seed_pr_heads([_merged_row(BRANCH, registry.head_oid)])
+
+    outcome = registry.reap(tmp_path)
+
+    assert outcome, outcome.error
+    assert registry.worktree.is_dir()
+    assert (registry.worktree / "app.py").read_text(encoding="utf-8") == "VALUE = 2\n"

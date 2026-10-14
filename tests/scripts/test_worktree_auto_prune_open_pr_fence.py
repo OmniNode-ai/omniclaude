@@ -177,28 +177,15 @@ def test_the_flag_releases_a_row_the_open_listing_does_not_name(
     assert row["disposition"] == "prune"
 
 
-def test_a_truncated_open_listing_is_not_a_resolved_answer(
+def test_a_failed_pr_heads_answer_is_none_never_empty(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A listing that came back AT its limit may have dropped the branch."""
+    """OMN-20977: a pr-heads call that cannot answer (exit 3, the --source
+    local unanswered code) holds the fence, never releases it."""
 
-    class _Done:
-        returncode = 0
-        stderr = ""
-        stdout = json.dumps(
-            [{"headRefName": f"b{i}"} for i in range(mod.GH_OPEN_PR_LIMIT)]
-        )
-
-    monkeypatch.setattr(mod.subprocess, "run", lambda *_a, **_k: _Done())
-    assert mod.collect_open_pr_branches(tmp_path) is None
-
-
-def test_a_failed_open_listing_is_none_never_empty(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
     class _Failed:
-        returncode = 1
-        stderr = "API rate limit exceeded"
+        returncode = 3
+        stderr = "local: no canonical clone"
         stdout = ""
 
     monkeypatch.setattr(mod.subprocess, "run", lambda *_a, **_k: _Failed())
