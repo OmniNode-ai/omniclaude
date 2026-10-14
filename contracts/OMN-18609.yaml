@@ -1,0 +1,34 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18609
+title: "A dispatched lane with no repository checkout keeps its mirrored hook events"
+summary: >-
+  The bus-mirror hooks (user_prompt_submit_bus_mirror.sh, session_start_bus_mirror.sh, post_tool_use_bus_mirror.sh,
+  session_end_bus_mirror.sh) and stop_content_capture.sh skip their repo guard when the launcher declared a lane in
+  ONEX_LANE, as claude_hook_capture.sh already does. The merge sweep's diagnose lane runs in a scratch directory with
+  no OmniNode marker, so these hooks exited before journalling, and its UserPromptSubmit row never reached
+  claude_hook_events. A session with no lane and no OmniNode repository is still left alone.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn18609-repoless-lane-mirror
+    statement: Each bus-mirror hook and the stop content capture reach their interpreter for a lane declared in ONEX_LANE even when its working directory holds no OmniNode marker, and still exit without journalling for a session that has neither a lane nor an OmniNode repository.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: the five hooks reach their interpreter for a repo-less cwd when ONEX_LANE is set and do not when it is unset -- falsifier: `uv run pytest tests/unit/hooks/test_bus_mirror_repoless_lane_omn18609.py -q --no-cov` fails against the hooks without the ONEX_LANE exemption.'
+evidence_requirements:
+  - kind: tests
+    description: The repo-less lane mirror test and the repo-less lane capture test pass.
+    command: uv run pytest tests/unit/hooks/test_bus_mirror_repoless_lane_omn18609.py tests/unit/hooks/test_hook_claude_capture_repoless_lane_omn18603.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn18609-ac1
+    description: The repo-less lane mirror test passes, with its positive control for a repository session.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_bus_mirror_repoless_lane_omn18609.py -q --no-cov
