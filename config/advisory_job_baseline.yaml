@@ -105,8 +105,8 @@ repos:
   OmniNode-ai/omnibase_infra:
     advisory:
     - path: .github/workflows/branch-protection-audit.yml
-      line: 171
-      key: .github/workflows/branch-protection-audit.yml::audit::step[6]
+      line: 126
+      key: .github/workflows/branch-protection-audit.yml::audit::step[4]
     - path: .github/workflows/ci.yml
       line: 765
       key: .github/workflows/ci.yml::onex-validation::step[8]

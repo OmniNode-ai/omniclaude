@@ -455,6 +455,53 @@ class TestAC4BaselineNamesEveryLine:
         }
         assert sum(per_repo.values()) == 64
 
+    BRANCH_PROTECTION_AUDIT = """\
+name: Branch Protection Audit
+on:
+  pull_request:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint onexbot App token
+        run: echo mint
+      - name: Checkout code
+        run: echo checkout
+      - name: Orphaned required-context audit
+        run: echo audit
+      - name: Fail if the audit reported violations
+        run: echo fail
+      - name: Required-context parity report (REPORT-ONLY, non-blocking)
+        continue-on-error: true
+        run: echo parity
+"""
+
+    def test_the_infra_branch_protection_audit_parity_step_is_keyed_at_its_current_position(
+        self, tmp_path: Path
+    ) -> None:
+        """OMN-20955: omnibase_infra dropped the change-control fetch and the
+        shared-audit step from branch-protection-audit.yml, which moved its
+        report-only parity step from step 6 to step 4. The baseline keys that
+        step by position, so the old key left the step unnamed and the gate red
+        on omnibase_infra. The committed baseline must name the step where it
+        now sits, and must not keep the old key as a second entry."""
+        root = _repo(
+            tmp_path, {"branch-protection-audit.yml": self.BRANCH_PROTECTION_AUDIT}
+        )
+        occurrences, _ = gate.scan_workflow(
+            root / ".github" / "workflows" / "branch-protection-audit.yml", root
+        )
+        assert [o.key for o in occurrences] == [
+            ".github/workflows/branch-protection-audit.yml::audit::step[4]"
+        ]
+        payload = yaml.safe_load(BASELINE.read_text(encoding="utf-8"))
+        keys = {
+            entry["key"]
+            for entry in payload["repos"]["OmniNode-ai/omnibase_infra"]["advisory"]
+            if entry["path"] == ".github/workflows/branch-protection-audit.yml"
+        }
+        assert keys == {occurrences[0].key}
+
 
 class TestAC5UnenforcedVerificationJobFails:
     """AC5 -- falsifier: adding one reproducing the fresh-deploy-fitness shape
