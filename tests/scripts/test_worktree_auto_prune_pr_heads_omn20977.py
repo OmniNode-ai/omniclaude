@@ -274,6 +274,7 @@ def _run_main(
 ) -> tuple[dict[str, object], Path]:
     root, ledger = clean_worktree
     worktree = root / "OMN-20977" / "omniclaude"
+    monkeypatch.setenv("OMNI_HOME", str(tmp_path / "scratch_registry"))
     monkeypatch.setattr(mod, "run_pr_heads", lambda _canonical: answer)
     report = tmp_path / "report.json"
     argv = [
