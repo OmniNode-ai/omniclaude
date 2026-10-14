@@ -59,8 +59,10 @@ Usage
         --rescue-only-claim-fence-days <the declared fence> \
         --rescue-only-hand-held <the declared hand_held_worktrees.yaml>
 
-Pull-request state is resolved once per canonical clone with ``gh pr list``;
-an unresolvable PR state simply makes limb (b) unavailable for that row, which
+Pull-request state is resolved once per canonical clone with one ``onex scm
+pr-heads OWNER/REPO --source local`` call (OMN-20977), answered from the PR
+watcher state and the canonical clone with no GitHub API request; an
+unresolvable PR state simply makes limb (b) unavailable for that row, which
 falls back to limb (a).
 
 Ticket-state resolution reads ``LINEAR_API_KEY`` from the environment, falling
@@ -76,6 +78,7 @@ import json
 import math
 import os
 import re
+import shlex
 import shutil
 import subprocess  # noqa: S404 — fixed git argv lists, never shell-interpolated
 import sys
@@ -152,9 +155,20 @@ WORKTREE_CLASSIFY_BUDGET_SECONDS = 180
 """Default wall-clock budget for classifying one worktree; 0 disables it."""
 BUDGET_EXHAUSTED_STDERR = "per-worktree classification budget exhausted"
 
-GH_TIMEOUT_SECONDS = 300
-GH_MERGED_PR_LIMIT = 5000
-GH_OPEN_PR_LIMIT = 500
+# --- pull-request state from onex scm pr-heads [OMN-20977] -------------------
+# Lanes may no longer make the merged-PR listing read this script used to make
+# through gh; the guards had reduced it to finding nothing merged. pr-heads
+# answers the same question from the PR watcher state and the canonical clone,
+# with no GitHub API request.
+PR_HEADS_TIMEOUT_SECONDS = 300
+"""Budget for one `onex scm pr-heads --source local` call (one git ls-remote
+over the git transport plus local git logs)."""
+PR_HEADS_WATCHER_MAX_AGE = timedelta(minutes=8)
+"""A pr-heads answer names a PR OPEN only while the watcher state behind it is
+at most this old (omnimarket's handler_scm_local_state.WATCHER_MAX_AGE, the
+same rule pr_state_local.py applies). An older tick downgrades every OPEN row
+to UNMERGED, which the open-PR fence must never read as "no open pull
+request"."""
 
 _TICKET_RE = re.compile(r"OMN-\d+")
 _CLAIM_MARKERS: tuple[str, ...] = ("| CLAIM |", "(CLAIM)", "**Status:** IN PROGRESS")
@@ -721,8 +735,145 @@ def select_blocking_claim(
 
 
 # ---------------------------------------------------------------------------
-# pull-request state (GitHub) — the fact limb (b) of the ruling turns on
+# pull-request state (onex scm pr-heads) — the fact limb (b) of the ruling
+# turns on [OMN-20977]
 # ---------------------------------------------------------------------------
+
+
+def resolve_onex_command() -> list[str]:
+    """The argv prefix that runs the onex CLI.
+
+    ``$ONEX_SCM_CLI`` (a full command line, e.g. ``uv run --project <dir>
+    onex``) wins. Otherwise prefer the canonical omnibase_internal clone's own
+    venv entry point — the project whose dependencies register the ``scm``
+    verb group — and otherwise a bare ``onex`` from PATH.
+    """
+    declared = os.environ.get("ONEX_SCM_CLI", "").strip()
+    if declared:
+        return shlex.split(declared)
+    registry_root = os.environ.get("OMNI_HOME", "").strip()
+    if registry_root:
+        candidate = (
+            Path(registry_root).parent / "omnibase_internal" / ".venv" / "bin" / "onex"
+        )
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return [str(candidate)]
+    return ["onex"]
+
+
+def _remote_slug(canonical: Path) -> str | None:
+    """The ``OWNER/REPO`` slug of a clone's ``origin`` remote, or None."""
+    code, out = _git(canonical, "remote", "get-url", "origin")
+    if code != 0 or not out:
+        return None
+    url = out[:-4] if out.endswith(".git") else out
+    for prefix in (
+        "git@github.com:",
+        "ssh://git@github.com/",
+        "https://github.com/",
+    ):
+        if url.startswith(prefix):
+            owner, _, name = url[len(prefix) :].partition("/")
+            return f"{owner}/{name}" if owner and name else None
+    return None
+
+
+def run_pr_heads(canonical: Path) -> dict[str, Any] | None:
+    """One ``onex scm pr-heads OWNER/REPO --source local --clone <canonical>``
+    answer, parsed — the single pull-request read this script makes.
+
+    The repository is resolved from the clone's own ``origin`` remote and the
+    clone is handed to the command explicitly, so a registry root this script
+    walks is the one pr-heads reads. Returns the parsed answer dict, or ``None``
+    when the command failed, exited non-zero (``--source local`` exits 3 when
+    it cannot answer) or printed something that is not a completed answer. A
+    ``None`` is never read as "no pull requests exist".
+    """
+    slug = _remote_slug(canonical)
+    if slug is None:
+        print(
+            f"  pr-heads: {canonical.name}: no parsable GitHub origin remote",
+            file=sys.stderr,
+        )
+        return None
+    argv = [
+        *resolve_onex_command(),
+        "scm",
+        "pr-heads",
+        slug,
+        "--source",
+        "local",
+        "--clone",
+        str(canonical),
+    ]
+    try:
+        proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=PR_HEADS_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(
+            f"  pr-heads: {canonical.name}: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return None
+    if proc.returncode != 0:
+        print(
+            f"  pr-heads: {canonical.name}: exit {proc.returncode}: "
+            f"{proc.stderr.strip()[:200]}",
+            file=sys.stderr,
+        )
+        return None
+    try:
+        answer = json.loads(proc.stdout)
+    except ValueError as exc:
+        print(
+            f"  pr-heads: {canonical.name}: unparseable JSON: {exc}", file=sys.stderr
+        )
+        return None
+    if not isinstance(answer, dict) or answer.get("outcome") != "completed":
+        print(
+            f"  pr-heads: {canonical.name}: answer is not a completed answer",
+            file=sys.stderr,
+        )
+        return None
+    return answer
+
+
+def _pr_heads_rows(answer: dict[str, Any] | None) -> list[dict[str, Any]]:
+    result = (answer or {}).get("result")
+    rows = result.get("prs") if isinstance(result, dict) else None
+    return [row for row in rows or [] if isinstance(row, dict)]
+
+
+def collect_branch_pr_states_from_answer(
+    answer: dict[str, Any] | None,
+) -> dict[str, tuple[EnumBranchPrState, str | None]]:
+    """Map branches to ``(pr_state, merged_head_oid)`` from one pr-heads answer.
+
+    A MERGED row names its head branch MERGED at its head oid; an OPEN row
+    names its branch NOT_MERGED. Rows are walked open-first, merged-second —
+    the precedence the two gh listings had — so a branch reused after its
+    merge reads MERGED at the merged head oid, and the oid (not the state)
+    then decides limb (b). A row whose branch is gone (``head_ref`` null, the
+    squash-merge shape) maps nothing by name.
+    """
+    states: dict[str, tuple[EnumBranchPrState, str | None]] = {}
+    for row in _pr_heads_rows(answer):
+        name = row.get("head_ref")
+        if row.get("state") == "OPEN" and isinstance(name, str) and name:
+            states[name] = (EnumBranchPrState.NOT_MERGED, None)
+    for row in _pr_heads_rows(answer):
+        name = row.get("head_ref")
+        if row.get("state") == "MERGED" and isinstance(name, str) and name:
+            states[name] = (
+                EnumBranchPrState.MERGED,
+                row.get("head_oid") if isinstance(row.get("head_oid"), str) else None,
+            )
+    return states
 
 
 def collect_branch_pr_states(
@@ -730,86 +881,52 @@ def collect_branch_pr_states(
 ) -> dict[str, tuple[EnumBranchPrState, str | None]]:
     """Map every branch in one repository to ``(pr_state, merged_head_oid)``.
 
-    One ``gh`` call per repository, not per worktree: a registry-scale root
-    holds ~750 worktrees across ~15 clones, and a per-branch ``gh pr view``
-    would be 750 API round trips.
+    One ``onex scm pr-heads --source local`` call per repository, not per
+    worktree: a registry-scale root holds ~750 worktrees across ~15 clones,
+    and a per-branch PR read would be one round trip each.
 
-    ``gh`` is run with ``cwd`` inside the clone so it resolves the repository
-    from that clone's own ``origin`` remote — never from a repo slug this
-    script guesses from a directory name.
-
-    A failure of either call leaves the affected branches absent from the map,
-    which the caller reads as :data:`EnumBranchPrState.UNKNOWN`: limb (b) is
-    then unavailable and the row falls back to limb (a). An empty result is
-    never read as "no PR exists".
+    A failure leaves the map empty, which the caller reads as
+    :data:`EnumBranchPrState.UNKNOWN`: limb (b) is then unavailable and the row
+    falls back to limb (a). An empty result is never read as "no PR exists".
     """
-    states: dict[str, tuple[EnumBranchPrState, str | None]] = {}
+    return collect_branch_pr_states_from_answer(run_pr_heads(canonical))
 
-    def _gh(*args: str) -> list[dict[str, Any]] | None:
-        try:
-            proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
-                ["gh", *args],
-                cwd=str(canonical),
-                capture_output=True,
-                text=True,
-                timeout=GH_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except (subprocess.TimeoutExpired, OSError) as exc:
-            print(
-                f"  gh: {canonical.name}: {type(exc).__name__}: {exc}", file=sys.stderr
-            )
-            return None
-        if proc.returncode != 0:
-            print(
-                f"  gh: {canonical.name}: exit {proc.returncode}: "
-                f"{proc.stderr.strip()[:200]}",
-                file=sys.stderr,
-            )
-            return None
-        try:
-            parsed = json.loads(proc.stdout or "[]")
-        except ValueError as exc:
-            print(f"  gh: {canonical.name}: unparseable JSON: {exc}", file=sys.stderr)
-            return None
-        return parsed if isinstance(parsed, list) else None
 
-    # Open first, merged second: a branch that was reused after its PR merged
-    # should read MERGED only when the merged head is still its HEAD, and the
-    # merged entry carries the oid that decides that.
-    open_rows = _gh(
-        "pr",
-        "list",
-        "--state",
-        "open",
-        "--limit",
-        str(GH_OPEN_PR_LIMIT),
-        "--json",
-        "headRefName",
+def collect_open_pr_branches_from_answer(
+    answer: dict[str, Any] | None,
+) -> frozenset[str] | None:
+    """Every branch with an OPEN pull request, from one pr-heads answer.
+
+    OPEN rows exist only behind a fresh watcher state: pr-heads downgrades them
+    to UNMERGED once the watcher tick passes :data:`PR_HEADS_WATCHER_MAX_AGE`,
+    which would read as "no open pull request" — the one reading a fence must
+    never make. Returns ``None`` — never an empty set — when the answer is
+    missing, truncated, or its watcher tick is absent or stale. The fence reads
+    ``None`` as held.
+    """
+    if answer is None:
+        return None
+    result = answer.get("result")
+    if not isinstance(result, dict) or result.get("truncated"):
+        return None
+    tick = answer.get("watcher_tick")
+    if not isinstance(tick, str) or not tick:
+        return None
+    try:
+        stamp = datetime.fromisoformat(tick.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=UTC)
+    if datetime.now(UTC) - stamp > PR_HEADS_WATCHER_MAX_AGE:
+        return None
+    return frozenset(
+        str(row["head_ref"])
+        for row in _pr_heads_rows(answer)
+        if row.get("state") == "OPEN"
+        and isinstance(row.get("head_ref"), str)
+        and row["head_ref"]
     )
-    for row in open_rows or []:
-        name = row.get("headRefName")
-        if name:
-            states[name] = (EnumBranchPrState.NOT_MERGED, None)
-
-    merged_rows = _gh(
-        "pr",
-        "list",
-        "--state",
-        "merged",
-        "--limit",
-        str(GH_MERGED_PR_LIMIT),
-        "--json",
-        "headRefName,headRefOid",
-    )
-    for row in merged_rows or []:
-        name = row.get("headRefName")
-        if name:
-            states[name] = (EnumBranchPrState.MERGED, row.get("headRefOid") or None)
-
-    if open_rows is None and merged_rows is None:
-        return {}
-    return states
 
 
 def collect_open_pr_branches(canonical: Path) -> frozenset[str] | None:
@@ -817,57 +934,11 @@ def collect_open_pr_branches(canonical: Path) -> frozenset[str] | None:
 
     Feeds the opt-in open-PR fence, so it answers a narrower question than
     :func:`collect_branch_pr_states` and answers it on its own: that map lets a
-    MERGED entry overwrite an OPEN one for a reused branch name, and it treats a
-    failure of the open listing as absence whenever the merged listing
+    MERGED entry overwrite an OPEN one for a reused branch name, and it treats
+    a failure of the open listing as absence whenever the merged listing
     succeeded. Neither is acceptable for a fence.
-
-    Returns ``None`` — never an empty set — when the listing failed, did not
-    parse, or came back AT its limit (it may have dropped the branch). The fence
-    reads ``None`` as held.
     """
-    try:
-        proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
-            [
-                "gh",
-                "pr",
-                "list",
-                "--state",
-                "open",
-                "--limit",
-                str(GH_OPEN_PR_LIMIT),
-                "--json",
-                "headRefName",
-            ],
-            cwd=str(canonical),
-            capture_output=True,
-            text=True,
-            timeout=GH_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        print(
-            f"  gh open: {canonical.name}: {type(exc).__name__}: {exc}", file=sys.stderr
-        )
-        return None
-    if proc.returncode != 0:
-        print(
-            f"  gh open: {canonical.name}: exit {proc.returncode}: "
-            f"{proc.stderr.strip()[:200]}",
-            file=sys.stderr,
-        )
-        return None
-    try:
-        rows = json.loads(proc.stdout or "[]")
-    except ValueError as exc:
-        print(f"  gh open: {canonical.name}: unparseable JSON: {exc}", file=sys.stderr)
-        return None
-    if not isinstance(rows, list) or len(rows) >= GH_OPEN_PR_LIMIT:
-        return None
-    return frozenset(
-        str(row["headRefName"])
-        for row in rows
-        if isinstance(row, dict) and row.get("headRefName")
-    )
+    return collect_open_pr_branches_from_answer(run_pr_heads(canonical))
 
 
 # ---------------------------------------------------------------------------
@@ -2762,9 +2833,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-pr-state",
         action="store_true",
         help=(
-            "Skip `gh pr list` resolution. Limb (b) of the ruling (clean plus a "
-            "MERGED pull request) becomes unavailable and every row falls back "
-            "to limb (a): fewer removals, never more."
+            "Skip the `onex scm pr-heads` resolution. Limb (b) of the ruling "
+            "(clean plus a MERGED pull request) becomes unavailable and every "
+            "row falls back to limb (a): fewer removals, never more."
         ),
     )
     parser.add_argument(
@@ -3030,7 +3101,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dict[Path, dict[str, tuple[EnumBranchPrState, str | None]]] | None
     ) = None if args.no_pr_state else {}
     # The open-PR fence [OMN-19399]: collected only when asked for, so a run
-    # without the flag makes no extra `gh` call.
+    # without the flag makes no extra pr-heads call.
     open_pr_cache: dict[Path, frozenset[str] | None] | None = (
         {} if args.hold_open_pr else None
     )
@@ -3069,7 +3140,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # indistinguishable from a hung one.
     # The rescue-only pass rides along on the SAME fact collection [OMN-18442
     # AC6]: it asks a different question of the same observations, and paying
-    # twice for `git branch`/`gh pr list`/`git stash list` at registry scale
+    # twice for `git branch`/`pr-heads`/`git stash list` at registry scale
     # would also let the two classes disagree about what they saw.
     rescue_hand_held: tuple[ModelHandHeldEntry, ...] | None = None
     if args.rescue_only:

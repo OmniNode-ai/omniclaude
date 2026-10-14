@@ -4,8 +4,13 @@
 
 # prune-worktrees.sh — Detect and remove stale git worktrees
 #
-# A worktree is considered stale when its branch's PR has been merged
-# (state=MERGED via gh pr list) or its remote branch no longer exists.
+# A worktree is considered stale when its branch's PR has been merged or its
+# remote branch no longer exists. "Merged" is decided from
+# `onex scm pr-heads OWNER/REPO --source local` output (OMN-20977): a worktree
+# is merged when its branch name matches a MERGED PR's head branch, or its
+# HEAD oid matches a MERGED PR's head oid. Lanes are no longer allowed to make
+# the GitHub merged-PR listing read this script used to make — and which the
+# guards had reduced to finding nothing.
 #
 # Usage:
 #   ./scripts/prune-worktrees.sh                   # dry-run (default): report stale worktrees
@@ -14,16 +19,21 @@
 #   ./scripts/prune-worktrees.sh --execute --worktrees-root /path/to/worktrees
 #
 # Requirements:
-#   - gh (GitHub CLI) authenticated
+#   - the onex CLI (scm pr-heads): $ONEX_SCM_CLI wins, else the canonical
+#     omnibase_internal clone's venv entry point
+#     ($OMNI_HOME/../omnibase_internal/.venv/bin/onex), else `onex` on PATH
 #   - git
+#   - python3 (parses the pr-heads JSON; also the pre-removal snapshot)
 #
 # The script scans for git worktrees (files/dirs named .git that are worktree
-# pointers) under WORKTREES_ROOT, extracts branch + remote info, then queries
-# GitHub PR state to classify each as stale or active.
+# pointers) under WORKTREES_ROOT, extracts branch + remote info, then reads the
+# merged-PR table to classify each as stale or active.
 #
-# Merged-PR lookups are batched: ONE `gh pr list --state merged` call per unique
-# repo slug (not two calls per worktree), so a 50+ worktree run stays well under
-# the GitHub API rate/timeout budget that previously killed overnight sweeps.
+# pr-heads lookups are batched: ONE `onex scm pr-heads <slug> --source local`
+# call per unique repo slug (not per worktree), answered from the PR watcher
+# state and the canonical clone with no GitHub API request at all — one
+# `git ls-remote` over the git transport, the same read the canonical-clone
+# refresh makes.
 
 set -euo pipefail
 
@@ -89,6 +99,27 @@ remote_to_slug() {
 }
 
 # ---------------------------------------------------------------------------
+# The onex CLI that answers `scm pr-heads` (OMN-20977). $ONEX_SCM_CLI holds a
+# full command line (e.g. "uv run --project /path onex"); otherwise prefer the
+# canonical omnibase_internal clone's own venv entry point, which carries the
+# omnimarket that serves the verb; otherwise a bare `onex` from PATH.
+# ---------------------------------------------------------------------------
+resolve_onex_command() {
+  if [[ -n "${ONEX_SCM_CLI:-}" ]]; then
+    printf '%s' "$ONEX_SCM_CLI"
+    return
+  fi
+  if [[ -n "${OMNI_HOME:-}" ]]; then
+    local candidate="${OMNI_HOME%/}/../omnibase_internal/.venv/bin/onex"
+    if [[ -x "$candidate" ]]; then
+      printf '%s' "$candidate"
+      return
+    fi
+  fi
+  printf '%s' "onex"
+}
+
+# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
 if [[ -z "$WORKTREES_ROOT" ]]; then
@@ -101,13 +132,22 @@ if [[ ! -d "$WORKTREES_ROOT" ]]; then
   exit 1
 fi
 
-if ! command -v gh &>/dev/null; then
-  echo "ERROR: gh (GitHub CLI) not found. Install it and authenticate first." >&2
+if ! command -v git &>/dev/null; then
+  echo "ERROR: git not found." >&2
   exit 1
 fi
 
-if ! command -v git &>/dev/null; then
-  echo "ERROR: git not found." >&2
+if ! command -v python3 &>/dev/null; then
+  echo "ERROR: python3 not found (the pr-heads JSON parser needs it)." >&2
+  exit 1
+fi
+
+ONEX_COMMAND="$(resolve_onex_command)"
+# Word-split the resolved command line into an argv array.
+read -r -a ONEX_CMD <<< "$ONEX_COMMAND"
+if [[ "${ONEX_CMD[0]}" == "onex" ]] && ! command -v onex &>/dev/null; then
+  echo "ERROR: the onex CLI was not found. Set ONEX_SCM_CLI, or point OMNI_HOME at the" >&2
+  echo "registry root holding omnibase_internal, or install onex on PATH." >&2
   exit 1
 fi
 
@@ -141,14 +181,34 @@ log "Found ${#GIT_FILES[@]} worktree(s) to check."
 log ""
 
 # ---------------------------------------------------------------------------
-# Pass 1: extract (branch, repo_slug) for every worktree exactly once.
-# Worktrees that cannot be resolved (detached HEAD, no remote, unparseable
-# remote) are skipped here with the same reasons as before.
+# Pass 1: extract (branch, head oid, repo_slug, canonical clone) for every
+# worktree exactly once. Worktrees that cannot be resolved (detached HEAD, no
+# remote, unparseable remote) are skipped here with the same reasons as before.
 # ---------------------------------------------------------------------------
 WT_DIRS=()
 declare -A WT_BRANCH=()
 declare -A WT_SLUG=()
+declare -A WT_OID=()
+declare -A WT_CLONE=()
 declare -A REPO_SLUGS=()
+
+# The canonical clone backing a linked worktree, read from its .git pointer
+# file (`gitdir: <canonical>/.git/worktrees/<name>`). Empty when the pointer
+# names no canonical root; pr-heads then resolves its own default clone.
+canonical_root_of_git_file() {
+  local gitdir line
+  line="$(head -n1 "$1" 2>/dev/null || true)"
+  gitdir="${line#gitdir: }"
+  gitdir="${gitdir%/}"
+  [[ -z "$gitdir" ]] && { echo ""; return; }
+  case "$gitdir" in
+    */worktrees/*) gitdir="${gitdir%/worktrees/*}" ;;
+  esac
+  case "$gitdir" in
+    */.git) echo "${gitdir%/.git}" ;;
+    *) echo "" ;;
+  esac
+}
 
 for git_file in "${GIT_FILES[@]}"; do
   worktree_dir="$(dirname "$git_file")"
@@ -178,41 +238,78 @@ for git_file in "${GIT_FILES[@]}"; do
     continue
   fi
 
+  # HEAD oid: the second half of the merged decision (OMN-20977). A squash
+  # merge deletes the head branch, so most MERGED rows carry no head_ref —
+  # the oid is then the only thing that names the merged PR.
+  head_oid="$(git -C "$worktree_dir" rev-parse HEAD 2>/dev/null || true)"
+
   WT_DIRS+=("$worktree_dir")
   WT_BRANCH["$worktree_dir"]="$branch"
   WT_SLUG["$worktree_dir"]="$repo_slug"
+  WT_OID["$worktree_dir"]="$head_oid"
   REPO_SLUGS["$repo_slug"]=1
+  if [[ -z "${WT_CLONE[$repo_slug]:-}" ]]; then
+    WT_CLONE["$repo_slug"]="$(canonical_root_of_git_file "$git_file")"
+  fi
 done
 
 # ---------------------------------------------------------------------------
-# Pass 2: batch the merged-PR lookup — ONE `gh pr list` per unique repo slug.
-# Previously this was two `gh pr list` calls per worktree; at 50+ worktrees that
-# meant 100+ sequential gh API calls and frequent overnight timeouts. The batch
-# collapses that to one-call-per-repo. Map key: "<slug>::<branch>" -> PR number.
+# Pass 2: batch the merged-PR lookup — ONE `onex scm pr-heads <slug> --source
+# local` call per unique repo slug (OMN-20977), answered from the PR watcher
+# state and the canonical clone with no GitHub API request. The answer's MERGED
+# rows feed two maps: "<slug>::<head branch>" -> PR number and
+# "<slug>::<head oid>" -> PR number. A call that cannot answer leaves both maps
+# empty for that slug (nothing is deleted through the merged path; the
+# remote-branch-gone check is unaffected), exactly as a failed gh call did.
 # ---------------------------------------------------------------------------
 declare -A MERGED_PR_BY_KEY=()
+declare -A MERGED_PR_BY_OID=()
+
+# Reads one pr-heads JSON answer on stdin, writes one "number<TAB>head_oid<TAB>
+# head_ref" line per MERGED row (head_ref empty when the source cannot name it).
+_PR_HEADS_PARSER='
+import json
+import sys
+
+try:
+    answer = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+if not isinstance(answer, dict) or answer.get("outcome") != "completed":
+    sys.exit(0)
+for row in (answer.get("result") or {}).get("prs") or []:
+    if isinstance(row, dict) and row.get("state") == "MERGED":
+        oid = row.get("head_oid") or ""
+        if oid:
+            number = row.get("number")
+            ref = row.get("head_ref") or ""
+            print(f"{number}\t{oid}\t{ref}")
+'
 
 if [[ ${#REPO_SLUGS[@]} -gt 0 ]]; then
   for slug in "${!REPO_SLUGS[@]}"; do
-    verbose "Fetching merged PRs for $slug"
-    while IFS=$'\t' read -r pr_number head_ref; do
-      [[ -z "$head_ref" ]] && continue
-      key="${slug}::${head_ref}"
-      # gh returns most-recent-first; keep the first (newest) merged PR seen for
-      # a branch to match the previous `.[0]` selection.
-      [[ -n "${MERGED_PR_BY_KEY[$key]:-}" ]] || MERGED_PR_BY_KEY["$key"]="$pr_number"
-    done < <(gh pr list \
-      --repo "$slug" \
-      --state merged \
-      --json number,headRefName \
-      --limit 200 \
-      --jq '.[] | "\(.number)\t\(.headRefName)"' \
-      2>/dev/null || true)
+    verbose "Reading merged PR heads for $slug"
+    clone="${WT_CLONE[$slug]:-}"
+    pr_heads_argv=("${ONEX_CMD[@]}" scm pr-heads "$slug" --source local)
+    if [[ -n "$clone" ]]; then
+      pr_heads_argv+=(--clone "$clone")
+    fi
+    if ! pr_heads_json="$("${pr_heads_argv[@]}" 2>/dev/null)"; then
+      verbose "  pr-heads could not answer for $slug; no merged-PR decisions for it"
+      continue
+    fi
+    while IFS=$'\t' read -r pr_number pr_oid pr_head_ref; do
+      [[ -n "$pr_oid" ]] || continue
+      if [[ -n "$pr_head_ref" ]]; then
+        MERGED_PR_BY_KEY["${slug}::${pr_head_ref}"]="$pr_number"
+      fi
+      MERGED_PR_BY_OID["${slug}::${pr_oid}"]="$pr_number"
+    done < <(printf '%s' "$pr_heads_json" | python3 -c "$_PR_HEADS_PARSER" || true)
   done
 fi
 
 # ---------------------------------------------------------------------------
-# Pass 3: classify each worktree using local map lookups (no live gh calls).
+# Pass 3: classify each worktree using local map lookups (no live calls).
 # Classification order is unchanged from prior behaviour: the remote-branch-gone
 # check runs before the merged-PR check.
 # ---------------------------------------------------------------------------
@@ -245,13 +342,25 @@ for worktree_dir in "${WT_DIRS[@]}"; do
   fi
 
   # ---------------------------------------------------------------------------
-  # Staleness check 2: Is there a merged PR for this branch? (local map lookup)
+  # Staleness check 2: is there a MERGED PR for this worktree? (local map
+  # lookups; OMN-20977). Merged means: a MERGED row's head branch is this
+  # worktree's branch, OR a MERGED row's head oid is its HEAD — the oid half
+  # is what covers the squash-merge shape, where the head branch is gone and
+  # only the commit names the merged PR.
   # ---------------------------------------------------------------------------
   pr_number="${MERGED_PR_BY_KEY[${repo_slug}::${branch}]:-}"
+  matched_by="branch"
+  if [[ -z "$pr_number" ]]; then
+    head_oid="${WT_OID[$worktree_dir]:-}"
+    if [[ -n "$head_oid" ]]; then
+      pr_number="${MERGED_PR_BY_OID[${repo_slug}::${head_oid}]:-}"
+      matched_by="head oid"
+    fi
+  fi
   if [[ -n "$pr_number" ]]; then
     log "  STALE (PR merged): $worktree_dir"
     log "         branch: $branch"
-    log "         repo:   $repo_slug  PR #${pr_number}"
+    log "         repo:   $repo_slug  PR #${pr_number} (matched by ${matched_by})"
     STALE+=("$worktree_dir")
     continue
   fi
