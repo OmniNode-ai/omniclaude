@@ -114,10 +114,12 @@ Whole-tree invariant, no changed-files mode.
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 from pathlib import Path
 
 import yaml
@@ -446,6 +448,95 @@ def _repo_root() -> Path:
     return Path(result.stdout.strip())
 
 
+# Reading and matching the ~3,900 tracked files is single-core regex work, 5 s
+# of every commit (OMN-17427). Past this many files the scan is split into
+# shards, one interpreter each, and the verdict is assembled in file order.
+_PARALLEL_MIN_FILES = 400
+_MAX_SHARDS = 8
+
+_ShardResult = list[tuple[int, list[Hit], list[Hit]]]
+
+
+def _scan_shard(root: Path, files: list[Path], shard: int, shards: int) -> _ShardResult:
+    """The hits of every ``shards``-th file starting at ``shard``, by file index."""
+    entries, person_names = _load_allowlist(root / ALLOWLIST_PATH)
+    class_patterns = _build_class_patterns(person_names)
+    results: _ShardResult = []
+    for index in range(shard, len(files), shards):
+        rel = files[index].relative_to(root).as_posix()
+        file_blocked, file_allowlisted = _scan_file(
+            files[index], class_patterns, entries, rel_path=rel
+        )
+        results.append((index, file_blocked, file_allowlisted))
+    return results
+
+
+def _run_shard_worker(root: Path, shard: int, shards: int) -> int:
+    """``--scan-shard`` entry: print this shard's hits as JSON for the parent."""
+    files = _tracked_files(root)
+    payload = {
+        "files": len(files),
+        "results": [
+            [
+                index,
+                [list(astuple(h)) for h in blocked],
+                [list(astuple(h)) for h in allowed],
+            ]
+            for index, blocked, allowed in _scan_shard(root, files, shard, shards)
+        ],
+    }
+    sys.stdout.write(json.dumps(payload))
+    return 0
+
+
+def _scan_in_shards(root: Path, files: list[Path], shards: int) -> _ShardResult | None:
+    """Scan ``files`` in ``shards`` subprocesses, or None if any of them failed.
+
+    None sends the caller to the serial scan: a shard that dies must never
+    shrink the scanned surface.
+    """
+    procs = [
+        subprocess.Popen(
+            [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "--scan-shard",
+                f"{shard}/{shards}",
+                "--scan-root",
+                str(root),
+            ],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        for shard in range(shards)
+    ]
+    merged: _ShardResult = []
+    ok = True
+    for proc in procs:
+        out, _ = proc.communicate()
+        if proc.returncode != 0:
+            ok = False
+            continue
+        try:
+            payload = json.loads(out)
+            if payload["files"] != len(files):
+                ok = False
+                continue
+            for index, blocked, allowed in payload["results"]:
+                merged.append(
+                    (
+                        index,
+                        [Hit(*fields) for fields in blocked],
+                        [Hit(*fields) for fields in allowed],
+                    )
+                )
+        except (ValueError, KeyError, TypeError):
+            ok = False
+    if not ok or len(merged) != len(files):
+        return None
+    return sorted(merged, key=lambda item: item[0])
+
+
 def scan_tree(root: Path) -> tuple[list[Hit], list[Hit], int]:
     """Scan the tracked set under ``root``.
 
@@ -453,21 +544,23 @@ def scan_tree(root: Path) -> tuple[list[Hit], list[Hit], int]:
     every non-allowlisted hit on both surfaces; the caller applies the
     surface policy.
     """
-    entries, person_names = _load_allowlist(root / ALLOWLIST_PATH)
-    class_patterns = _build_class_patterns(person_names)
+    # Load once here so a malformed allowlist fails the run in this process.
+    _load_allowlist(root / ALLOWLIST_PATH)
+    files = _tracked_files(root)
+    results: _ShardResult | None = None
+    if len(files) >= _PARALLEL_MIN_FILES:
+        shards = min(os.cpu_count() or 1, _MAX_SHARDS)
+        if shards > 1:
+            results = _scan_in_shards(root, files, shards)
+    if results is None:
+        results = _scan_shard(root, files, 0, 1)
 
     blocked: list[Hit] = []
     allowlisted: list[Hit] = []
-    files_scanned = 0
-    for path in _tracked_files(root):
-        files_scanned += 1
-        rel = path.relative_to(root).as_posix()
-        file_blocked, file_allowlisted = _scan_file(
-            path, class_patterns, entries, rel_path=rel
-        )
+    for _index, file_blocked, file_allowlisted in results:
         blocked.extend(file_blocked)
         allowlisted.extend(file_allowlisted)
-    return blocked, allowlisted, files_scanned
+    return blocked, allowlisted, len(files)
 
 
 def _counts_by_class(hits: list[Hit]) -> dict[str, int]:
@@ -478,6 +571,11 @@ def _counts_by_class(hits: list[Hit]) -> dict[str, int]:
 
 
 def main(argv: list[str]) -> int:
+    if "--scan-shard" in argv:
+        shard, _, shards = argv[argv.index("--scan-shard") + 1].partition("/")
+        return _run_shard_worker(
+            Path(argv[argv.index("--scan-root") + 1]), int(shard), int(shards)
+        )
     tighten = "--tighten" in argv[1:]
     list_all = "--list" in argv[1:]
 

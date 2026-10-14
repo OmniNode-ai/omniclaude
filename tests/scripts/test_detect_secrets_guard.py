@@ -596,3 +596,150 @@ def test_committed_repo_baseline_is_normalized(mod):
     # conflict two pull requests later.
     parsed = json.loads(text)
     assert text == mod.serialize_baseline(mod.normalize_baseline(parsed))
+
+
+# ---------------------------------------------------------------------------
+# OMN-17427: a commit rescans its staged files, not the whole tracked set
+# ---------------------------------------------------------------------------
+
+
+def _track(repo: Path, *names: str) -> None:
+    for name in names:
+        path = repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x = 1\n")
+    _git("add", *names, cwd=repo)
+    _git("commit", "-q", "-m", "track files", cwd=repo)
+
+
+def _run_guard_recording_scan(
+    mod, repo: Path, argv: list[str], scan_result: dict
+) -> tuple[int, list[str]]:
+    """Run mod.main(argv) with the scan mocked the way detect-secrets behaves
+    when it is given files: it writes ONLY their findings and returns the command
+    it was asked to run."""
+    real_run = subprocess.run
+    seen: list[str] = []
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd and cmd[0] == "detect-secrets":
+            seen.extend(cmd)
+            (repo / ".secrets.baseline").write_text(json.dumps(scan_result, indent=2))
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        return real_run(cmd, *args, **kwargs)
+
+    with (
+        patch.object(mod.shutil, "which", return_value="/usr/bin/detect-secrets"),
+        patch.object(mod.subprocess, "run", side_effect=fake_run),
+    ):
+        return mod.main(argv), seen
+
+
+def test_staged_files_are_the_only_files_rescanned(mod, tmp_path, monkeypatch):
+    known = _finding("aa" * 20, line=1, is_secret=False)
+    repo = _init_repo(tmp_path, baseline={"results": {"app/old.py": [known]}})
+    _track(repo, "app/old.py", "app/new.py", "app/other.py")
+    monkeypatch.chdir(repo)
+
+    code, cmd = _run_guard_recording_scan(mod, repo, ["app/new.py"], {"results": {}})
+
+    assert code == 0
+    assert cmd[cmd.index("--") + 1 :] == ["app/new.py"]
+    # The file nobody touched keeps its entry although the scan did not return it.
+    written = json.loads((repo / ".secrets.baseline").read_text())
+    assert [f["hashed_secret"] for f in written["results"]["app/old.py"]] == [
+        known["hashed_secret"]
+    ]
+    assert ".secrets.baseline" in _staged_files(repo)
+
+
+def test_new_unaudited_finding_in_a_staged_file_still_blocks(
+    mod, tmp_path, monkeypatch
+):
+    known = _finding("aa" * 20, line=1, is_secret=False)
+    repo = _init_repo(tmp_path, baseline={"results": {"app/old.py": [known]}})
+    _track(repo, "app/old.py", "app/new.py")
+    monkeypatch.chdir(repo)
+
+    leaked = {"results": {"app/new.py": [_finding("deadbeef" * 5, line=2)]}}
+    code, _ = _run_guard_recording_scan(mod, repo, ["app/new.py"], leaked)
+
+    assert code == 1
+    assert ".secrets.baseline" not in _staged_files(repo)
+    # A blocked commit leaves the whole tree's findings behind, not only the
+    # staged file's, so `detect-secrets audit` still has the full baseline.
+    left = json.loads((repo / ".secrets.baseline").read_text())
+    assert set(left["results"]) == {"app/old.py", "app/new.py"}
+
+
+def test_a_finding_that_left_a_staged_file_leaves_the_baseline(
+    mod, tmp_path, monkeypatch
+):
+    repo = _init_repo(
+        tmp_path,
+        baseline={"results": {"app/a.py": [_finding("aa" * 20, 1, is_secret=False)]}},
+    )
+    _track(repo, "app/a.py", "app/b.py")
+    monkeypatch.chdir(repo)
+
+    code, _ = _run_guard_recording_scan(mod, repo, ["app/a.py"], {"results": {}})
+
+    assert code == 0
+    assert json.loads((repo / ".secrets.baseline").read_text())["results"] == {}
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        pytest.param([], id="no-staged-files"),
+        pytest.param(["app/a.py", "app/b.py"], id="every-tracked-file"),
+        pytest.param(["app/a.py", "scripts/detect_secrets_guard.py"], id="guard-edit"),
+        pytest.param(["app/a.py", ".pre-commit-config.yaml"], id="hook-wiring-edit"),
+    ],
+)
+def test_whole_tree_rescan_cases_pass_no_files_to_the_scan(
+    mod, tmp_path, monkeypatch, argv
+):
+    repo = _init_repo(tmp_path, baseline={"results": {}})
+    _track(
+        repo,
+        "app/a.py",
+        "app/b.py",
+        "scripts/detect_secrets_guard.py",
+        ".pre-commit-config.yaml",
+    )
+    # `every-tracked-file` means the whole tracked set, whatever it holds.
+    if argv == ["app/a.py", "app/b.py"]:
+        argv = sorted(
+            _git("ls-files", cwd=repo).stdout.split(),
+        )
+    monkeypatch.chdir(repo)
+
+    code, cmd = _run_guard_recording_scan(mod, repo, argv, {"results": {}})
+
+    assert code == 0
+    assert "--" not in cmd
+
+
+def test_merge_keeps_only_tracked_unexcluded_untouched_entries(mod):
+    entry = _finding("aa" * 20, 1, is_secret=False)
+    prior = {
+        "results": {
+            "kept.py": [entry],
+            "rescanned.py": [entry],
+            "deleted.py": [entry],
+            "tests/excluded.py": [entry],
+        }
+    }
+    scanned = {"results": {"rescanned.py": [_finding("bb" * 20, 4)]}}
+
+    merged = mod.merge_incremental_results(
+        prior,
+        scanned,
+        files={"rescanned.py"},
+        tracked={"kept.py", "rescanned.py", "tests/excluded.py"},
+    )
+
+    assert set(merged) == {"kept.py", "rescanned.py"}
+    assert merged["rescanned.py"] == scanned["results"]["rescanned.py"]
+    assert merged["kept.py"] == [entry]
