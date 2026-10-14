@@ -94,6 +94,7 @@ a second copy of the rule.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -117,6 +118,14 @@ EXCLUDE_PATTERNS: list[str] = [
     r"security-report\.json$",
     r"^config/hardcoded_model_config_baseline\.yaml$",
 ]
+
+# Staged paths that change what a scan means, not only what it reads. A commit
+# that touches one rescans the whole tracked set instead of the staged files
+# (OMN-17427): the guard's own exclude list lives in this file, and the hook
+# wiring lives in the pre-commit configuration.
+FULL_RESCAN_TRIGGERS = frozenset(
+    {"scripts/detect_secrets_guard.py", ".pre-commit-config.yaml"}
+)
 
 # Substrings in `git show`'s stderr that mean "there is no prior committed
 # baseline to compare against" (first commit in the repo, or the baseline
@@ -250,7 +259,51 @@ def _load_committed_baseline() -> dict | None:
     return load_baseline_at_ref("HEAD", treat_missing_as_empty=True)
 
 
-def main() -> int:
+def _tracked_paths() -> set[str] | None:
+    """The tracked set, per `git ls-files`, or None when git cannot answer."""
+    proc = subprocess.run(
+        ["git", "ls-files", "-z"], capture_output=True, text=True, check=False
+    )
+    if proc.returncode != 0:
+        return None
+    return {path for path in proc.stdout.split("\0") if path}
+
+
+def _is_excluded(filename: str) -> bool:
+    return any(re.search(pattern, filename) for pattern in EXCLUDE_PATTERNS)
+
+
+def merge_incremental_results(
+    prior: dict, scanned: dict, files: set[str], tracked: set[str]
+) -> dict:
+    """Findings of the whole tree after rescanning only `files` (OMN-17427).
+
+    `detect-secrets scan --baseline <b> <files>` replaces the baseline's results
+    with the findings of the files it was given and drops every other file's
+    entry. A full scan reaches the same end state for a file nobody touched: its
+    entries are carried over unchanged, and an entry whose file is no longer
+    tracked or is now excluded falls out. So: a rescanned file takes the scan's
+    findings (a finding that left the file leaves the baseline, and the audit
+    markers the scan carried over from the baseline stay), every other file keeps
+    its prior entries while it is still tracked and not excluded.
+    """
+    merged = {
+        filename: findings
+        for filename, findings in prior.get("results", {}).items()
+        if filename not in files and filename in tracked and not _is_excluded(filename)
+    }
+    merged.update(scanned.get("results", {}))
+    return merged
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Guard the baseline. `argv` names the staged files pre-commit passes.
+
+    With files, only those are rescanned (OMN-17427: the whole-tree scan was
+    18 s of every commit, and CI's `detect-secrets` job scans the whole tree on
+    every pull request). With none, or with every tracked file, or when the
+    commit touches `FULL_RESCAN_TRIGGERS`, the whole tracked set is rescanned.
+    """
     if shutil.which("detect-secrets") is None:
         return _block("`detect-secrets` is not installed / not on PATH.")
 
@@ -265,9 +318,25 @@ def main() -> int:
     # Regenerate the baseline in place. This absorbs pure line-number churn on
     # already-known findings exactly like the old hook did -- that half of the
     # old behavior was never the problem.
+    files = set(argv or [])
+    tracked = _tracked_paths() if files else None
+    incremental = (
+        tracked is not None
+        and not tracked <= files
+        and not files & FULL_RESCAN_TRIGGERS
+    )
+    prior_baseline: dict = {}
+    if incremental:
+        loaded = load_json(BASELINE.read_text(), "working-tree .secrets.baseline")
+        if loaded is None:
+            return _block("working-tree .secrets.baseline is unreadable or corrupt.")
+        prior_baseline = loaded
+
     scan_cmd = ["detect-secrets", "scan", "--baseline", str(BASELINE)]
     for pattern in EXCLUDE_PATTERNS:
         scan_cmd += ["--exclude-files", pattern]
+    if incremental:
+        scan_cmd += ["--", *sorted(files)]
     scan_proc = subprocess.run(scan_cmd, capture_output=True, text=True, check=False)
     if scan_proc.returncode != 0:
         return _block(
@@ -283,6 +352,18 @@ def main() -> int:
     new_baseline = load_json(new_text, "regenerated .secrets.baseline")
     if new_baseline is None:
         return _block("regenerated .secrets.baseline is corrupt.")
+
+    if incremental and tracked is not None:
+        new_baseline["results"] = merge_incremental_results(
+            prior_baseline, new_baseline, files, tracked
+        )
+        # The scan left only the rescanned files' findings in the file. Put the
+        # whole tree's back, so a blocked commit still leaves a complete
+        # baseline for `detect-secrets audit` to work on.
+        try:
+            BASELINE.write_text(serialize_baseline(new_baseline))
+        except OSError as exc:
+            return _block(f"could not write merged {BASELINE}: {exc}")
 
     unaudited_new: list[tuple[str, int | None, str | None]] = []
     for filename, findings in new_baseline.get("results", {}).items():
@@ -343,4 +424,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

@@ -4334,6 +4334,11 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: uv run --frozen --with 'pre-commit==4.6.2' --with 'detect-secrets==1.5.0' pre-commit run --all-files --show-diff-on-failure
+      # OMN-17427: `--all-files` runs the pre-commit stage only. The direct-model-call
+      # gate is a whole-repository scan that left that stage so a commit does not
+      # pay 14 s for it; this step is its whole-tree run on every pull request.
+      - name: Run the direct-model-call gate (pre-push stage, whole tree)
+        run: uv run --frozen --with 'pre-commit==4.6.2' pre-commit run check-direct-model-call --all-files --hook-stage pre-push --show-diff-on-failure
 
   runtime-profiles:
     if: always()

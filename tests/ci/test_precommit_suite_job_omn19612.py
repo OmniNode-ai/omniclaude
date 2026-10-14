@@ -166,3 +166,29 @@ def test_whole_tree_job_provides_omnimarket_nodes_at_the_lock_pin() -> None:
     assert "omnimarket\\.git\\?rev=" in runs
     assert "sparse-checkout set src/omnimarket/nodes" in runs
     assert '"$OMNI_HOME/omnimarket"' in runs
+
+
+def _pre_push_only_hook_ids(*, among: set[str]) -> set[str]:
+    config = _load_yaml(PRECOMMIT_CONFIG)
+    return {
+        str(hook["id"])
+        for repo in config["repos"]
+        for hook in repo.get("hooks", [])
+        if hook.get("stages") == ["pre-push"] and str(hook["id"]) in among
+    }
+
+
+def test_direct_model_call_gate_runs_whole_tree_in_ci_from_the_pre_push_stage() -> None:
+    """OMN-17427: the gate left the commit stage, so `--all-files` no longer runs it.
+
+    `pre-commit run --all-files` runs the default (pre-commit) stage only. The gate
+    must therefore have its own whole-tree step in this job, or it runs nowhere on
+    a pull request.
+    """
+    hook_id = "check-direct-model-call"
+    assert _pre_push_only_hook_ids(among={hook_id}) == {hook_id}
+    commands = [str(step.get("run", "")) for step in _job()["steps"]]
+    assert any(
+        f"pre-commit run {hook_id} --all-files --hook-stage pre-push" in command
+        for command in commands
+    ), f"{hook_id} is pre-push only and has no whole-tree step in {JOB_ID}"
