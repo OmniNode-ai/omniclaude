@@ -1535,11 +1535,13 @@ repos:
         stages: [pre-commit]
 
       # OMN-5063: Block untyped metadata dict fields
-      # Centralized in onex_change_control (OMN-5135)
+      # OMN-20074: runs omnibase_core's COMPUTE node through the locked omnibase-core,
+      # not the onex_change_control console script of the same name.
       - id: no-untyped-metadata
         name: No untyped metadata dict fields
         language: system
-        entry: bash scripts/uv-run-worktree-safe.sh check-no-untyped-metadata
+        entry: bash scripts/uv-run-worktree-safe.sh python -m omnibase_core.nodes.node_no_untyped_metadata_check_compute.runtime_no_untyped_metadata_check
+        require_serial: true
         types: [python]
         exclude: ^tests/|^examples/|^scripts/
 

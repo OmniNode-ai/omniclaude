@@ -56,6 +56,13 @@ requirements:
       - id: "AC7"
         statement: |-
           AC7: no event-triggered workflow calls an OCC reusable or waits on occ-preflight, call-occ-preflight.yml, call-occ-autobind.yml, call-occ-companion-effect.yml, call-receipt-gate.yml and occ-companion-merge-heal.yml are deleted, ci.yml has no dod-evidence-check, contract-compliance or occ-companion-merged job, the caller sets shadow and compare-with-occ to "false", and CI Summary and .github/required-checks.yaml name no OCC context while CI Summary expects repo-evidence / dod-verify -- falsifier: uv run pytest tests/ci/test_no_occ_callers_omn20074.py -q --no-cov fails at the merge base
+  - id: "req-omn20074-untyped-metadata-core-node"
+    statement: |-
+      omniclaude's no-untyped-metadata pre-commit hook must run omnibase_core's no-untyped-metadata COMPUTE node through the locked omnibase-core, not the onex_change_control console script of the same name.
+    acceptance:
+      - id: "AC8"
+        statement: |-
+          AC8: the no-untyped-metadata hook entry runs python -m omnibase_core.nodes.node_no_untyped_metadata_check_compute.runtime_no_untyped_metadata_check, no hook entry runs check-no-untyped-metadata, and the locked omnibase-core is 0.47.35 or newer -- falsifier: uv run pytest tests/ci/test_precommit_untyped_metadata_core_node_omn20074.py -q --no-cov fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -78,6 +85,9 @@ evidence_requirements:
   - kind: tests
     description: "No OCC caller, preflight edge, companion job or OCC context is left, and the caller enforces without OCC."
     command: "uv run pytest tests/ci/test_no_occ_callers_omn20074.py -q --no-cov"
+  - kind: tests
+    description: "The no-untyped-metadata hook runs the omnibase_core node, no hook runs the OCC console script, and the locked omnibase-core carries the node."
+    command: "uv run pytest tests/ci/test_precommit_untyped_metadata_core_node_omn20074.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -138,3 +148,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_no_occ_callers_omn20074.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC7"]
+  - id: dod-omn20074-untyped-metadata-core-node
+    description: "The hook test proves the no-untyped-metadata hook runs the omnibase_core node and no hook runs the OCC console script."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_precommit_untyped_metadata_core_node_omn20074.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC8"]
