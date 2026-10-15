@@ -1,0 +1,33 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20702
+title: "omniclaude refuses a new ONEX node outside omnimarket, against a shrink-only baseline of today's nodes"
+summary: >-
+  The node-home gate lives in omnibase_core as the check-node-home hook. This change turns it on in omniclaude: a baseline
+  of the 148 node directories that exist here today, the check-node-home pre-commit hook, and a CI step in the Canonical
+  File Shape job that plants a node directory and fails unless the check refuses it, then runs the check against the pull
+  request or merge-group base and fails closed when no base resolves.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20702-omniclaude-node-home
+    statement: omniclaude runs the node-home check in pre-commit and in CI, and a node directory absent from .onex_ratchets/node_home_baseline.txt is refused by both.
+    acceptance:
+      - id: AC4
+        statement: 'AC4 (omniclaude): the pre-commit hook and the CI step run the check, the baseline lists only existing node directories, and the check accepts the tree; falsifier: uv run pytest tests/ci/test_node_home_activation_omn20702.py fails.'
+evidence_requirements:
+  - kind: tests
+    description: The node-home activation tests pass.
+    command: uv run pytest tests/ci/test_node_home_activation_omn20702.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20702-omniclaude-ac4
+    description: The node-home activation tests pass, including the check against the committed baseline.
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_node_home_activation_omn20702.py -q --no-cov
