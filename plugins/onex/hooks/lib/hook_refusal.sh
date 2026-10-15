@@ -107,7 +107,12 @@ _hook_refusal_fallback_row() {
     local guard="$1" lane="" lane_source="unresolved" root project ledger row ts
     root="${OMNI_HOME:-${ONEX_REGISTRY_ROOT:-}}"
     [[ "$root" == /* ]] || return 0
-    project="${OMNIBASE_INTERNAL_HOME:-${root%/*}/omnibase_internal}"
+    # The writer is deployment configuration, not a repository-name default.
+    project="${OMNIBASE_INTERNAL_HOME:-}"
+    if [[ "$project" != /* ]]; then
+        printf '%s\n' 'hook refusal fallback: set OMNIBASE_INTERNAL_HOME to the absolute ledger writer project' >&2
+        return 0
+    fi
     ledger="${ONEX_LEDGER_PATH:-${root}/docs/tracking/ROLLING_WORK_LEDGER.md}"
     [[ -f "$project/pyproject.toml" && -f "$ledger" ]] || return 0
     lane="${ONEX_LANE:-${ONEX_LANE_ID:-${ONEX_AGENT_NAME:-${CLAUDE_AGENT_NAME:-}}}}"

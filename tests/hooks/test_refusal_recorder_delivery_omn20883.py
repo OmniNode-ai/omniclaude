@@ -86,7 +86,7 @@ class Box:
         self.ledger = self.home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
         self.ledger.parent.mkdir(parents=True)
         self.ledger.write_text("# ledger\n", encoding="utf-8")
-        project = tmp_path / "omnibase_internal"
+        project = tmp_path / "ledger_writer"
         project.mkdir()
         (project / "pyproject.toml").write_text("")
         uv = tmp_path / "uv"
@@ -220,7 +220,7 @@ def test_hook_refusal_rejected_row_alerts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """AC3: a row the ledger writer rejects raises a STATUS ALERT row."""
-    project = tmp_path / "omnibase_internal"
+    project = tmp_path / "ledger_writer"
     project.mkdir()
     (project / "pyproject.toml").write_text("")
     ledger = tmp_path / "ledger.md"
@@ -266,7 +266,7 @@ def test_hook_refusal_rejected_alert_does_not_recurse(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A rejected ALERT row is reported on stderr, never alerted on again."""
-    project = tmp_path / "omnibase_internal"
+    project = tmp_path / "ledger_writer"
     project.mkdir()
     (project / "pyproject.toml").write_text("")
     ledger = tmp_path / "ledger.md"

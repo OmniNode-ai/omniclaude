@@ -12,6 +12,16 @@ summary: >
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
+requirements:
+  - id: req-refusal-recorder-delivery
+    statement: Refusals remain observable when the recorder cannot import, the lane includes dispatch routing, or the ledger writer rejects a row.
+    acceptance:
+      - id: AC1
+        statement: The shell seam prefers the plugin interpreter and records a FRICTION row through the configured writer when the recorder cannot import.
+      - id: AC2
+        statement: The lane cell contains only a sanitized lane name, with dispatch ROUTE text removed.
+      - id: AC3
+        statement: A rejected refusal row produces a STATUS ALERT row without advancing dedupe state or recursing on a rejected alert.
 evidence_requirements:
   - kind: tests
     description: "The recorder leaves a row on an import failure, strips the ROUTE line from the lane cell, and alerts on a rejected row"
@@ -25,17 +35,34 @@ dod_evidence:
     description: "AC1: the recorder runs under the plugin interpreter first, and an import failure writes a typed FRICTION row through the shell fallback writer"
     source: manual
     checks:
-      - check_type: command
-        check_value: "uv run pytest tests/hooks/test_refusal_recorder_delivery_omn20883.py -q -k hook_refusal_recorder_import_failure_recorded"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_refusal_recorder_delivery_omn20883.py -q --no-cov -k 'hook_refusal_recorder_import_failure_recorded or hook_refusal_recorder_prefers_plugin_python'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
   - id: dod-ac2-lane-cell-strips-route
     description: "AC2: the lane cell is the lane name only, with the ROUTE line stripped, so the row grammar accepts it"
     source: manual
     checks:
-      - check_type: command
-        check_value: "uv run pytest tests/hooks/test_refusal_recorder_delivery_omn20883.py -q -k hook_refusal_lane_cell_strips_route"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_refusal_recorder_delivery_omn20883.py -q --no-cov -k 'hook_refusal_lane_cell_strips_route or hook_refusal_lane_cell_route_only_is_unresolved'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
   - id: dod-ac3-rejected-row-alerts
     description: "AC3: a recorder append the ledger writer rejects raises a STATUS ALERT row instead of being dropped"
     source: manual
     checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_refusal_recorder_delivery_omn20883.py -q --no-cov -k 'hook_refusal_rejected_row_alerts or hook_refusal_rejected_alert_does_not_recurse'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
+  - id: dod-deploy-refusal-lane-runtime
+    description: A hosted runner starts an isolated Python runtime container with the changed handler mounted and verifies dispatch routing is removed from its lane result. No fleet service or private endpoint is required.
+    source: manual
+    checks:
       - check_type: command
-        check_value: "uv run pytest tests/hooks/test_refusal_recorder_delivery_omn20883.py -q -k hook_refusal_rejected_row_alerts"
+        check_value: >-
+          docker run --rm --network none
+          --mount "type=bind,src=${OMNI_HOME}/omniclaude/src,dst=/runtime,readonly"
+          python:3.13-slim python -c
+          'import runpy; m = runpy.run_path("/runtime/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_lane.py"); assert m["resolve_refusal_lane"](None, env={"ONEX_LANE": "sample-lane\nROUTE: dest=sample"}, ledger=None) == ("sample-lane", "env")'
+        cwd: "${OMNI_HOME}/omniclaude"
