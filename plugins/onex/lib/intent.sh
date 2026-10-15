@@ -145,3 +145,68 @@ omniclaude_session_intent_is_silent() {
 omniclaude_session_intent_is_quiet() {
     [[ "$(omniclaude_session_intent "${1:-}")" == "quiet" ]]
 }
+
+# ---------------------------------------------------------------------------
+# Session-start opt-in#
+# Operator ruling (OMN-21149): "Session start should be optional and manual
+# instead of automatically getting wired in when I start the session." A
+# session that is not running the orchestration process -- an article review,
+# a question, work outside the coding loop -- gets none of the session-start
+# surfaces: the session goal, the workspace-sync and host-drift banners and the
+# hook-inventory report. They print only for a session that opted in.
+#
+# A session opts in in one of two ways:
+#
+#   1. a marker file named by its session id in the opt-in directory
+#      (onex_session_optin_dir), written by the session-start skill when the
+#      operator runs it, so a resume, clear or compact of that session keeps
+#      its banners; or
+#   2. ONEX_SESSION_OPTIN=1 in the environment that launches the session, which
+#      opts in before the first SessionStart hook runs.
+#
+# ONEX_SESSION_OPTIN=0 forces a session out even when a marker exists.
+#
+# This governs startup OUTPUT only. Guards (worktree, canonical clone, gh,
+# secret redaction, prod gate) and event capture never consult it.
+#
+# The default is OFF: an unreadable payload, a missing session id or a missing
+# directory all resolve to "not opted in". A wrongly-quiet session costs the
+# operator one run of the session-start skill; a wrongly-loud one is the noise
+# this ruling removed from every session.
+#
+# This is a separate question from the intent above. Intent decides whether a
+# session hears a blocker and whether its events are captured, and never
+# resolves to quiet by inference. The opt-in decides only whether the
+# orchestrator's startup surfaces print, and its default is off by ruling.
+#
+# Pure bash, no interpreter and no fork, so every SessionStart hook can afford it.
+
+onex_session_optin_dir() {
+    printf '%s' "${ONEX_SESSION_OPTIN_DIR:-${HOME}/.local/state/onex/session-opt-in}"
+}
+
+# Echoes the session id a hook payload names, or nothing. The id must be a
+# plain token, because it becomes a file name.
+onex_session_id_from_payload() {
+    local payload="${1:-}"
+    if [[ "$payload" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([A-Za-z0-9._-]+)\" ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+    fi
+}
+
+# True when the session named by $1 opted in to session-start output.
+onex_session_opted_in() {
+    local sid="${1:-}"
+    case "${ONEX_SESSION_OPTIN:-}" in
+        1|on|true) return 0 ;;
+        0|off|false) return 1 ;;
+    esac
+    [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    [[ -f "$(onex_session_optin_dir)/${sid}" ]]
+}
+
+# The one gate a SessionStart hook calls with its raw stdin payload. Returns 0
+# when the hook should print, 1 when it should exit silently.
+onex_session_start_output_enabled() {
+    onex_session_opted_in "$(onex_session_id_from_payload "${1:-}")"
+}

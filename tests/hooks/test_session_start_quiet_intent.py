@@ -113,6 +113,8 @@ def _base_env(tmp_path: Path) -> dict[str, str]:
     env["ONEX_STATE_DIR"] = str(state)
     # Pin mode so a lite-mode early exit cannot be mistaken for intent working.
     env["OMNICLAUDE_MODE"] = "full"
+    # OMN-21149: session-start output is opt-in; these cases test the output.
+    env["ONEX_SESSION_OPTIN"] = "1"
     return env
 
 

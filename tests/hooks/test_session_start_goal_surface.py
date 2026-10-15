@@ -84,6 +84,8 @@ def _run(
     # Pin mode so the lite-mode early exit cannot swallow the output depending on
     # the invoking cwd or a developer's ~/.config/omniclaude/mode.
     env["OMNICLAUDE_MODE"] = "full"
+    # OMN-21149: session-start output is opt-in; these cases test the output.
+    env["ONEX_SESSION_OPTIN"] = "1"
     if kb_path is not None:
         env["KNOWLEDGE_BASE_INTERNAL_PATH"] = kb_path
     return subprocess.run(

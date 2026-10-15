@@ -999,6 +999,8 @@ def _run_hook(
     env = dict(os.environ)
     env["HOME"] = str(home)
     env["CLAUDE_PLUGIN_ROOT"] = str(_REPO_ROOT / "plugins" / "onex")
+    # OMN-21149: session-start output is opt-in; these cases test the output.
+    env["ONEX_SESSION_OPTIN"] = "1"
     # Force the mask open so the gate is not what makes the test pass.
     env.pop("OMNICLAUDE_HOOKS_DISABLED", None)
     env.pop("ONEX_HOOKS_MASK", None)

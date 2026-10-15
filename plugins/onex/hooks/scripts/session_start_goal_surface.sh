@@ -119,9 +119,20 @@ _TICK_NOTICE_REL=".onex_state/morning-workflows/notifications/${_WORKFLOW_NAME}.
 # them apart is the difference between waiting and re-baselining by hand.
 _TICK_DEFERRAL_REL=".onex_state/morning-workflows/deferred/${_WORKFLOW_NAME}.json"
 
-# SessionStart delivers a JSON payload on stdin. Nothing here needs it, but an
-# unread stdin can hand the caller an EPIPE, so drain it unconditionally.
-cat >/dev/null 2>&1 || true
+# SessionStart delivers a JSON payload on stdin; it is read whole (so the
+# caller never sees an EPIPE) for the session id the opt-in gate needs.
+# OMN-21149: session start is opt-in. This hook prints only for a session that
+# opted in (onex_session_start_output_enabled in lib/intent.sh); every other
+# session gets nothing from it.
+_ONEX_SS_PAYLOAD=""
+IFS= read -r -d '' _ONEX_SS_PAYLOAD 2>/dev/null || true
+_ONEX_SS_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_SS_DIR=.
+# shellcheck source=../../lib/intent.sh
+if ! source "${_ONEX_SS_DIR}/../../lib/intent.sh" 2>/dev/null \
+    || ! onex_session_start_output_enabled "$_ONEX_SS_PAYLOAD"; then
+    exit 0
+fi
+unset _ONEX_SS_PAYLOAD _ONEX_SS_DIR
 
 say() { printf '%s %s\n' "$_PREFIX" "$*"; }
 
