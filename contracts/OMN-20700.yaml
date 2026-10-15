@@ -1,0 +1,35 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-20700
+title: "The onboarding guide names the runtime config owner for a developer install and a registry install"
+summary: >-
+  The code half of the ticket is merged in omnibase_infra: a developer workspace finds its runtime config under
+  .onex/workspace-config without the private sibling repository. This change is the documentation half, AC3 only.
+  plugins/onex/ONBOARDING.md gains a section that states the order onex delegate tries the config owners in and
+  which owner applies to a developer install and which to a registry install, and a test pins that statement.
+  AC1 needs a walk on a fresh Mac and AC4 needs a scheduled onboarding verification; neither is changed here.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20700-config-owner-documented
+    statement: A reader of the onboarding guide finds which runtime config owner applies to a developer install and which to a registry install, and the order they are tried in.
+    acceptance:
+      - id: AC3
+        statement: "The resolution order is stated where a reader of the onboarding will find it, naming which config owner applies to a developer install and which to a registry install -- falsifier: a grep of the onboarding documentation that returns no statement of the config owner for a developer install"
+evidence_requirements:
+  - kind: tests
+    description: The onboarding guide carries the config owner section, in the order the resolver tries the owners.
+    command: "uv run pytest tests/skills/test_onboarding_config_owner_omn20700.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20700-ac3-config-owner-section
+    description: The guide's section names the developer install owner, the registry install owner and the order; the test fails on the guide without the section.
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_config_owner_omn20700.py -q --no-cov"
