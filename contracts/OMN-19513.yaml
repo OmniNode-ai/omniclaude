@@ -25,6 +25,11 @@ requirements:
         statement: 'AC4: content.captured records carry the raw prompt, tool input, tool result and error with no producer redaction, no in-place hash and no secret-store swap -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_omn19551.py tests/unit/hooks/test_failed_call_content_capture_omn18946.py -q --no-cov -k "raw or secret_store" fails against the pre-change producer'
       - id: AC5
         statement: 'AC5: payload encryption is one contract setting, off by default, and the omniclaude registry projects the omnimarket publish transform for hook.event and content.captured -- falsifier: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k "encryption or publish_transform" fails against the pre-change contract'
+  - id: req-hook-capture-encryption
+    statement: With the payload_encryption setting on, both capture producers journal an encrypted payload under a key read from the secret store, the same key opens it, and an unreadable key journals nothing; with it off nothing changes. The setting stays off.
+    acceptance:
+      - id: AC6
+        statement: 'AC6: hook.event and content.captured payloads are AES-256-GCM sealed with a key read by key_secret_ref, open to the plaintext payload with the same key, and are not journalled when the key cannot be read -- falsifier: uv run pytest tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov fails against the pre-change producers'
 evidence_requirements:
   - kind: tests
     description: Selected configuration survives launchd rendering and missing overlays preserve the previous agent.
@@ -35,6 +40,9 @@ evidence_requirements:
   - kind: tests
     description: Hook events and content records carry raw values with no scrub and no hash; encryption is one setting, off.
     command: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py tests/unit/hooks/test_claude_hook_capture_contract.py tests/unit/hooks/test_hook_content_capture_omn19551.py tests/unit/hooks/test_failed_call_content_capture_omn18946.py -q --no-cov
+  - kind: tests
+    description: Payload encryption seals both capture classes with a throwaway key, opens them with the same key, journals nothing without a key and changes nothing when off.
+    command: uv run pytest tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ''
@@ -80,3 +88,11 @@ dod_evidence:
         check_value: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k "encryption or publish_transform"
     binds_ac:
       - AC5
+  - id: dod-omn19513-payload-encryption
+    description: The payload encryption tests seal both capture classes under a generated throwaway key, open them with it, refuse an unreadable key and leave the off path untouched.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov
+    binds_ac:
+      - AC6

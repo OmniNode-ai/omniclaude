@@ -105,10 +105,12 @@ content_reference:
     content record carry the raw value, and neither carries a digest or a
     redaction state.
 
-# OMN-19513: payload encryption, one setting, off by default. When on, the
-# producer refuses to journal until the encryption step reads its key from the
-# secret store by key_secret_ref; content never crosses in the clear while the
-# setting asks for encryption. The lab runs it off.
+# OMN-19513: payload encryption, one setting, off by default. When on, both
+# capture producers read the key from the secret store by key_secret_ref and
+# journal each payload sealed (AES-256-GCM, plugins/onex/hooks/lib/
+# hook_payload_encryption.py); a key that cannot be read journals nothing, so
+# content never crosses in the clear while the setting asks for encryption.
+# The key is 32 random bytes as base64 text. The lab runs it off.
 payload_encryption:
   enabled: false
   # The secret-store reference of the key. Unset until a key is provisioned;
