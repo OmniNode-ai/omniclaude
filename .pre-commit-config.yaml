@@ -37,6 +37,14 @@ repos:
         files: '^(\.github/(imperative-contract-allowlist\.yaml|workflows/(imperative-contract-guard|ci)\.yml)|\.pre-commit-config\.yaml|contracts/OMN-21006\.yaml|tests/ci/test_imperative_contract_guard_caller_omn21006\.py)$'
         stages: [pre-commit]
 
+      - id: mod-file-growth-pin
+        name: Shape pin refuses growth of a baselined mod script (OMN-18531)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_mod_file_growth_pin_omn18531.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/ci\.yml|\.pre-commit-config\.yaml|contracts/OMN-18531\.yaml|tests/ci/test_mod_file_growth_pin_omn18531\.py)$'
+        stages: [pre-commit]
+
       - id: plugin-version-bump-tests
         name: Bad plugin version refused, one bot bump PR (OMN-20710)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov
@@ -117,7 +125,7 @@ repos:
   # this block keeps check-stub-implementations only, because that
   # validator's source differs between 63635097 and the OMN-20304 commit.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 70f7ceda44af968ccf26264ecd429cfd27503971 # pragma: allowlist secret
+    rev: d7ed23f1e89b8b6ce6079d303f8599c661c7f191 # pragma: allowlist secret
     hooks:
       # Shape-gate independence (OMN-20298): a shape-gate detector job never waits on
       # the change-control preflight and never reads its result. BLOCKING, zero
@@ -132,6 +140,35 @@ repos:
       # .github/workflows/ci.yml, same omnibase_core commit.
       - id: check-node-home
       - id: check-stub-implementations
+      # OMN-18531: this rev carries the canonical-file-shape mod-file-growth rule
+      # (ruling 2026-10-15T08:14:15Z): a baselined script under plugins/, .claude/
+      # or a hooks/ directory only shrinks. The ci.yml pins move with it.
+      - id: canonical-file-shape
+      # OMN-20295: direct-model-call gate, BLOCKING. A model call must sit in a
+      # sanctioned delegation node package named in omnibase_core's policy.yaml.
+      # Shrink-only baseline, declared here so the shape ratchet accepts it. No
+      # suppression marker. Server-side backstop: OMN-20299.
+      # OMN-17427: a whole-repository AST and call-graph scan, 14 s of every
+      # commit, so it runs at pre-push and in the precommit-suite CI job
+      # (`pre-commit run check-direct-model-call --all-files --hook-stage
+      # pre-push`) instead. Still the omnibase_core hook, so the shape ratchet
+      # still finds its `--baseline`. The entry takes its `--base` from the
+      # branch point: a pre-push tree equals HEAD, so `--base HEAD` would judge
+      # nothing, while the merge-base makes "the baseline only shrinks" cover
+      # everything the push adds. Without an `origin/dev` to branch from (CI's
+      # shallow checkout) it falls back to HEAD, as the commit-stage hook did.
+      - id: check-direct-model-call
+        require_serial: true
+        stages: [pre-push]
+        entry: |-
+          bash -c '
+          base="$(git merge-base origin/dev HEAD 2>/dev/null || echo HEAD)";
+          exec python -m omnibase_core.nodes.node_direct_model_call_check_effect.runtime_direct_model_call "$@" --base "$base"
+          ' check-direct-model-call
+        args: [--repo, omniclaude, --baseline, .onex_ratchets/direct_model_call_baseline.yaml]
+      - id: no-noncanonical-lifecycle-classes
+        args: [--allowlist, .onex_ratchets/noncanonical_class_allowlist.yaml, src/omniclaude]
+        files: ^src/omniclaude/.*\.py$
 
   # Shared ONEX governance hooks (omnibase_core; moved from onex_change_control
   # under the same hook ids, OMN-20074 OCC retirement S8)
@@ -189,36 +226,14 @@ repos:
   # OMN-21006: the old shape validator refuses the caller-owned guard allowlist.
   # The new pin reads allowlist-path from core's shrink-only reusable; CI and
   # the shared validator pins move together to satisfy the pin-parity check.
+  # OMN-18531: check-hardcoded-model-config-compute stays at 70f7ceda, the rev
+  # .github/workflows/hardcoded-model-config.yml pins; core d7ed23f1 carries
+  # the tightened model guard (OMN-21147) and reports 228 findings in this
+  # tree. Move this rev with that workflow once those findings are cleared.
   - repo: https://github.com/OmniNode-ai/omnibase_core
     rev: 70f7ceda44af968ccf26264ecd429cfd27503971  # pragma: allowlist secret
     hooks:
       - id: check-hardcoded-model-config-compute
-      - id: canonical-file-shape
-      # OMN-20295: direct-model-call gate, BLOCKING. A model call must sit in a
-      # sanctioned delegation node package named in omnibase_core's policy.yaml.
-      # Shrink-only baseline, declared here so the shape ratchet accepts it. No
-      # suppression marker. Server-side backstop: OMN-20299.
-      # OMN-17427: a whole-repository AST and call-graph scan, 14 s of every
-      # commit, so it runs at pre-push and in the precommit-suite CI job
-      # (`pre-commit run check-direct-model-call --all-files --hook-stage
-      # pre-push`) instead. Still the omnibase_core hook, so the shape ratchet
-      # still finds its `--baseline`. The entry takes its `--base` from the
-      # branch point: a pre-push tree equals HEAD, so `--base HEAD` would judge
-      # nothing, while the merge-base makes "the baseline only shrinks" cover
-      # everything the push adds. Without an `origin/dev` to branch from (CI's
-      # shallow checkout) it falls back to HEAD, as the commit-stage hook did.
-      - id: check-direct-model-call
-        require_serial: true
-        stages: [pre-push]
-        entry: |-
-          bash -c '
-          base="$(git merge-base origin/dev HEAD 2>/dev/null || echo HEAD)";
-          exec python -m omnibase_core.nodes.node_direct_model_call_check_effect.runtime_direct_model_call "$@" --base "$base"
-          ' check-direct-model-call
-        args: [--repo, omniclaude, --baseline, .onex_ratchets/direct_model_call_baseline.yaml]
-      - id: no-noncanonical-lifecycle-classes
-        args: [--allowlist, .onex_ratchets/noncanonical_class_allowlist.yaml, src/omniclaude]
-        files: ^src/omniclaude/.*\.py$
 
   # URL Authority Gate (OMN-13298, child of OMN-12803). OMN-20177: the CI job
   # had no pre-commit twin here. Ratchet against the shared baseline in the
