@@ -31,6 +31,9 @@ args:
   - name: --workspace
     description: "Workspace directory (default: $OMNIBASE_PATH, else ~/Code/omnibase; OMNI_HOME is never read). A directory holding clones this setup did not create is refused"
     required: false
+  - name: --set-aside
+    description: "Answer yes in advance to setting aside what an earlier setup left (an onex alias or function, old variables in the shell profile, a published onex, a local-model routes file, clones holding work): moved or commented out, never deleted. Without a terminal, a run that finds any stops unless this is passed"
+    required: false
   - name: --restart
     description: "Run every phase again instead of resuming"
     required: false
@@ -54,7 +57,7 @@ each task; the developer never picks one per run. Nothing connects to the lab.
 
 | # | Phase | Changes the machine? |
 |---|---|---|
-| 0 | Preflight: macOS version, CPU, RAM, disk, VM or physical, admin rights, ports, shell profile; then every question the run has (models and keys, Docker and its terms, the Mac password), before anything installs | no |
+| 0 | Preflight: macOS version, CPU, RAM, disk, VM or physical, admin rights, ports; what an earlier setup left (the onex the developer's shell runs and its version, published onex installs, old variables and profile lines, a local-model routes file, the workspace clones' state); then every question the run has (set those aside or stop, models and keys, Docker and its terms, the Mac password), before anything installs | only what the developer agreed to set aside |
 | 1 | Base tools: Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv | yes |
 | 2 | Workspace: the canonical clones, and OMNIBASE_PATH and PATH in the shell profile | yes |
 | 3 | onex, the local identity, then each chosen model set up with `onex models add` (Ollama installed with one model downloaded) and tested with one delegation pinned to it; one result line per model; fails only if none passed | yes |
@@ -165,8 +168,8 @@ On `result=COMPLETE`, tell the developer to open a new terminal (so `OMNIBASE_PA
 and `PATH` apply) and to open Claude Code and sign in with their Anthropic account
 (the first time it asks). In a new session the `/onex:` skills
 (and `/omni:` ones, if phase 5 installed them) are loaded. A running session keeps
-the plugins it started with. If phase 0 or phase 6 printed a warning about shell-profile exports,
-repeat it.
+the plugins it started with. If phase 0 set anything aside, tell the developer
+the file that lists each item and how to put it back.
 
 ## What this skill does NOT do
 

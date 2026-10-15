@@ -13,8 +13,10 @@
 # terminal, as a macOS notification, and as a line in the status file, so a
 # failure is never discovered at the end of a long run.
 #
-#   0 Preflight          reads the machine; changes nothing; every question is asked here:
-#                        your models and their keys, Docker, and the Mac password
+#   0 Preflight          reads the machine, and runs the onex your shell already has; every
+#                        question is asked here: what an earlier setup left (set aside, or
+#                        stop), your models and their keys, Docker, and the Mac password.
+#                        Changes nothing unless you agree to set leftovers aside
 #   1 Base tools         Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv
 #   2 Workspace          the canonical clones, OMNIBASE_PATH, PATH
 #   3 onex + models      dispatch venv, onex, local identity, then each model you chose set up
@@ -43,6 +45,10 @@
 #   --ollama-model NAME  the model Ollama downloads (default: chosen from this Mac's memory)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else ~/Code/omnibase). A directory
 #                        that already holds clones this setup did not create is refused
+#   --set-aside          answer yes in advance to setting aside what an earlier setup left
+#                        (an onex alias, old variables in your profile, a published onex,
+#                        a local-model routes file, clones holding work); each is moved or
+#                        commented out, never deleted
 #   --restart            forget completed phases and run every phase again
 #   -h, --help           this text
 #
@@ -100,7 +106,7 @@ fi
 # What an earlier setup leaves in the environment silently redirects onex: a
 # workspace or internal clone, a lab tenant, a state directory, an event bus, a
 # routing overlay. This run and everything it starts inherit none of it, on
-# every run including a resumed one; the names are kept in INHERITED_ENV.
+# every run including a resumed one; the names are kept for preflight's report.
 INHERITED_ENV=""
 for _v in $(compgen -e); do
   case "$_v" in
@@ -110,6 +116,7 @@ for _v in $(compgen -e); do
 done
 unset OMNI_HOME
 RESTART=0
+SET_ASIDE_FLAG=0
 OLLAMA_MODEL=""
 
 usage() { sed -n '2,/^set -uo pipefail$/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; }
@@ -126,6 +133,7 @@ while [ $# -gt 0 ]; do
     --workspace) shift; WORKSPACE="${1:-}"; WORKSPACE_FROM="from --workspace" ;;
     --workspace=*) WORKSPACE="${1#*=}"; WORKSPACE_FROM="from --workspace" ;;
     --restart) RESTART=1 ;;
+    --set-aside) SET_ASIDE_FLAG=1 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'omninode-dev-setup: unknown option: %s (see --help)\n' "$1" >&2; exit 2 ;;
   esac
@@ -625,7 +633,10 @@ ask_keys() {
     fi
     while :; do
       say ""
-      if is_stored "$p"; then
+      if is_stored "$p" && [ "$RESUMING" -eq 1 ]; then
+        say "  $label key ($n of $total): stored by your last run; kept."
+        break
+      elif is_stored "$p"; then
         read_secret "  $label key ($n of $total) — stored; press Enter to keep it, or paste a new one (input is hidden):"
         if [ -z "$SECRET" ]; then say "  Keeping your stored $label key."; break; fi
       else
@@ -701,35 +712,6 @@ settle_models_unattended() {
   say "  No terminal to ask on, so these models are used: $(labels "$MODELS")."
 }
 
-settle_models() {
-  STORED="$(stored_key_providers 2>/dev/null | tr '\n' ' ')"; STORED="${STORED% }"
-  [ -z "$PROVIDER" ] || MODELS="$(in_menu_order "$(printf '%s' "$PROVIDER" | tr ',' ' ')")"
-  if [ "$PROMPT_TTY" -eq 0 ]; then settle_models_unattended; else
-    local asked_by_flag=0
-    [ -n "$MODELS" ] && asked_by_flag=1
-    while :; do
-      if [ "$asked_by_flag" -eq 1 ]; then
-        asked_by_flag=0
-        say ""
-        say "  Your models (from --provider): $(labels "$MODELS")"
-      else
-        ask_models
-      fi
-      SKIPPED=""; set_result openrouter ""
-      ask_keys
-      if [ -z "$MODELS" ]; then
-        say ""
-        say "  Every model was skipped. Choose at least one."
-        continue
-      fi
-      confirm_models && break
-    done
-    # Keys for models dropped at the summary are forgotten here.
-    local p
-    for p in gemini openrouter openai; do has_model "$p" || set_pending_key "$p" ""; done
-  fi
-  if has_model ollama; then settle_ollama; fi
-}
 
 # ---------------------------------------------------------------------------
 # Ollama: a model served on this Mac, with no key. onex reaches it through its
@@ -843,19 +825,34 @@ backends:
 YAML
 }
 
-# ===========================================================================
-# Phase 0: preflight. Reads only.
-# ===========================================================================
-MODE1_OK=1
-MODE2_OK=1
-MODE2_WHY=""
-MODE1_WHY=""
-
-row() { printf '  %-22s %-16s %-14s %s\n' "$1" "$2" "$3" "$4" | tee -a "$LOG"; }
+# The node's bootstrap handler runs on stock macOS Bash before Python exists.
+# Prefer the checkout beside this entrypoint; downloaded copies fetch the same
+# checksum-pinned handler into the run directory. Never source unchecked bytes.
+load_onboarding_preflight() {
+  local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
+  local digest="ce2b:2452:f52c:a37f:1824:a319:563b:113d:8fa3:55a2:38fd:561a:204c:7854:2c6c:90f7" root candidate
+  digest="${digest//:/}"
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
+  for candidate in "$root/$rel" "$PWD/$rel" "$WORKSPACE/omniclaude/$rel"; do
+    [ -f "$candidate" ] || continue
+    if printf '%s  %s\n' "$digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
+      . "$candidate"
+      return 0
+    fi
+  done
+  candidate="$RUN_DIR/handler_onboarding_preflight.sh"
+  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/b2ceaacf4bae07142ab25abf4e3d0abd308810a4/$rel" ||
+     ! printf '%s  %s\n' "$digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
+    printf 'omninode-dev-setup: cannot load the checksum-pinned onboarding preflight handler\n' >&2
+    return 1
+  fi
+  . "$candidate"
+}
+load_onboarding_preflight || exit 1
 
 phase0() {
-  phase_start 0 "Preflight (reads this Mac; changes nothing)" "under a minute"
-  local mv major cpus ram disk vm="physical Mac" p busy="" ambient dstate m2disk a
+  phase_start 0 "Preflight (reads this Mac; changes nothing you have not agreed to)" "under a minute"
+  local mv major cpus ram disk vm="physical Mac" p busy="" dstate m2disk a
   mv="$(macos_version)"; major="${mv%%.*}"
   case "$major" in ''|*[!0-9]*) major=0 ;; esac
   cpus="$(cpu_count)"; ram="$(ram_gb)"; disk="$(disk_free_gb)"
@@ -866,6 +863,7 @@ phase0() {
 
   say "  Log file: $LOG"
   say "  Workspace: $WORKSPACE ($WORKSPACE_FROM)"
+  resume_banner
   refuse_foreign_workspace
   say ""
   row "Requirement" "This Mac" "Mode 1 needs" "Mode 2 (containers) needs"
@@ -911,14 +909,9 @@ phase0() {
     phase_fail "run this from an administrator account, or ask your Mac's administrator to add you to the admin group"
   fi
 
-  ambient="$(grep -nE '^[[:space:]]*(export[[:space:]]+)?(BIFROST_[A-Z_]+|DELEGATION_ROUTING_TIERS_PATH|POSTGRES_PASSWORD|VALKEY_PASSWORD)=|^[[:space:]]*(source|\.)[[:space:]]+.*\.omnibase/\.env' \
-    "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.zshenv" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.profile" 2>/dev/null || true)"
-  if [ -n "$ambient" ]; then
-    AMBIENT_FOUND="$ambient"
-    say "  ⚠ Your shell profile exports configuration that silently redirects onex. This run"
-    say "    ignores it, but your own shells will not. Remove these lines:"
-    printf '%s\n' "$ambient" | sed 's/=.*$/=…/' | sed 's/^/      /' | tee -a "$LOG"
-  fi
+  # Before anything installs: what an earlier setup left, run as your shell runs it.
+  survey_leftovers
+  report_leftovers
 
   MODE1_WHY="${MODE1_WHY%;}"; MODE2_WHY="${MODE2_WHY%;}"
   if [ "$MODE1_OK" -eq 0 ]; then
@@ -933,6 +926,7 @@ phase0() {
   # first (every run needs at least one), then Docker, asked only when this Mac
   # can run it (the flags answer it in advance), then its licence terms, then
   # the administrator password.
+  settle_leftovers
   if [ "$PREFLIGHT_ONLY" -eq 0 ] && is_vm; then vm_notice; fi
   [ "$PREFLIGHT_ONLY" -eq 1 ] || settle_models
 
@@ -942,10 +936,15 @@ phase0() {
     "installed, not running") docker_note="We found Docker Desktop on this Mac, but it isn't running. If you want the stack, we'll start it for you." ;;
     *) docker_note="Docker Desktop isn't installed on this Mac. If you want the stack, we'll install it for you (it may ask you to accept Docker's terms)." ;;
   esac
+  if [ "$MODE2_OK" -eq 1 ] && [ -z "$WANT_CONTAINERS" ] && [ "$RESUMING" -eq 1 ] && [ -n "$(saved_choice containers)" ]; then
+    WANT_CONTAINERS="$(saved_choice containers)"
+    if [ "$WANT_CONTAINERS" = 1 ]; then say "  Docker: yes, as in your last run (--no-containers changes it)."
+    else say "  Docker: no, as in your last run (--containers changes it)."; NO_CONTAINERS_WHY="you said no in your last run"; fi
+  fi
   if [ "$MODE2_OK" -eq 1 ]; then
     case "$WANT_CONTAINERS" in
       1) ;;
-      0) MODE2_OK=0; MODE2_WHY=" --no-containers was passed" ;;
+      0) MODE2_OK=0; MODE2_WHY=" ${NO_CONTAINERS_WHY:---no-containers was passed}" ;;
       *)
         if [ "$PREFLIGHT_ONLY" -eq 1 ]; then
           MODE2_OFFERED=1
@@ -975,16 +974,14 @@ phase0() {
     ensure_sudo || { FAILED_STEP="administrator password"; LAST_ERR="sudo was not given the password"
       phase_fail "run this again and enter your Mac password when asked. Nothing was installed"; }
   fi
+  [ "$PREFLIGHT_ONLY" -eq 1 ] || set_aside_leftovers
   say ""
   say "  Will set up: $SELECTED"
   [ "$PREFLIGHT_ONLY" -eq 1 ] || say "  Models: $(labels "$MODELS")"
   say "  Everything from here runs without questions."
   phase_pass "$SELECTED"
 }
-AMBIENT_FOUND=""
-SELECTED=""
-STACK_RUNNING=0
-MODE2_OFFERED=0
+
 
 # ===========================================================================
 # Phase 1: base tools
@@ -2059,6 +2056,7 @@ phase6() {
   check "onex starts ($(onex_run --version 2>/dev/null | tail -n 1))" onex_run --version
   check "local identity minted" onex_run local identity
   check "onex is the workspace wrapper, not a PyPI copy" no_shadow
+  check "a new terminal runs the workspace onex (no alias, function or other install)" shell_runs_workspace_onex
   check "workspace floor proven (the onex wrapper delegates)" retry "delegate through the workspace wrapper" workspace_floor
   check "a delegation row in the local store" sqlite_rows
   check "onex metering reads it" onex_run metering
@@ -2068,9 +2066,6 @@ phase6() {
   fi
   check "the full onex plugin installed in Claude Code" plugin_installed onex@omninode-tools-dev
   if [ "$MODE2_OK" -eq 1 ]; then check "local stack healthy" stack_healthy; fi
-  if [ -n "$AMBIENT_FOUND" ]; then
-    say "  ⚠ Your shell profile still exports settings that redirect onex (listed in phase 0)."
-  fi
   if [ "$CHECKS_FAILED" -gt 0 ]; then
     FAILED_STEP="$CHECKS_FAILED check(s) failed"
     phase_fail "the ✘ lines above name what is wrong; fix them and run this again"
@@ -2086,6 +2081,7 @@ main() {
   bind_workspace_env
   phase0
   [ "$PREFLIGHT_ONLY" -eq 1 ] && { say "Preflight only: nothing was changed."; exit 0; }
+  save_choices
   phase1
   phase2
   phase3

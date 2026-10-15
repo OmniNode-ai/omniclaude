@@ -10,8 +10,13 @@ summary: >
   holds work, how far behind it is and the command that moves it aside. The
   workspace config root is a git repository the runtime-config materialiser
   reads. Phase 3 skips a venv rebuild the reconciler reports current, and a failed
-  model test prints the error that caused it. A second change adds the preflight
-  survey of what an earlier setup left and the question to set it aside.
+  model test prints the error that caused it. Preflight then runs the existing
+  install as the developer's shell does, reports what an earlier setup left (an
+  onex alias or function, onex installs on PATH, uv or pipx tool installs, old
+  variables in the profile, a local-model routes file, clones holding work) in
+  one table, and asks once, before anything installs, to set those aside
+  (commented out or moved, never deleted) or stop. A resumed run says where it
+  picks up and reuses its answers.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -36,6 +41,21 @@ requirements:
     acceptance:
       - id: AC4
         statement: 'AC4: phase 2 makes the workspace config root a git repository whose origin/main carries config/onex/runtime/runtime_config.yaml, idempotently, and phase2_verified requires it; falsifier: uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -k materialiser fails against the dev script.'
+  - id: req-omn21087-preflight-survey
+    statement: Preflight reports what an earlier setup left, as the developer's shell runs it, before anything installs.
+    acceptance:
+      - id: AC5
+        statement: 'AC5: preflight runs onex in a new interactive shell of the developer''s kind and reports an alias or function, its --version output, onex installs on PATH, profile lines setting old variables or an onex alias or function, and a local-model routes file this setup did not write, in one table, changing nothing; phase 6 checks a new terminal runs the workspace onex; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "preflight_reports or developers_shell or new_terminal" fails against the part-1 script.'
+  - id: req-omn21087-set-aside
+    statement: The developer is asked once to set the leftovers aside or stop, and setting aside never deletes.
+    acceptance:
+      - id: AC6
+        statement: 'AC6: when something interferes the run asks once before installing; q stops with nothing changed; with no terminal it stops unless --set-aside is passed; setting aside comments out profile lines behind a no-op marker (a multi-line onex function whole, by brace depth, after copying the file), parses every edited profile with its shell before any file changes and changes nothing when one would not parse, stops before asking when an onex alias or function is defined in a file it does not read, moves files and clones beside where they were, and lists each item with how to restore it; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "no_terminal or q_at or setting_aside or clone_holding or parseable or would_break or does_not_read" fails against the part-1 script.'
+  - id: req-omn21087-resume
+    statement: A resumed run says where it picks up and reuses its answers.
+    acceptance:
+      - id: AC7
+        statement: 'AC7: a resumed run names the completed phases and the phase it picks up at (or that every phase passed and is only checked) and reuses the last run''s Docker answer, and --restart ignores the last run''s answers; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "picks_up or only_checks" fails against the part-1 script.'
 evidence_requirements:
   - kind: tests
     description: "Onboarding script tests pass"
@@ -73,3 +93,40 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -q --no-cov -k materialiser"
+  - id: dod-omn21087-preflight-survey
+    description: "Preflight reports what an earlier setup left, as the developer's shell runs it"
+    source: manual
+    binds_ac: [AC5]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'preflight_reports or developers_shell or new_terminal'"
+  - id: dod-omn21087-set-aside
+    description: "Asked once; set aside never deletes; no terminal stops without --set-aside"
+    source: manual
+    binds_ac: [AC6]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'no_terminal or q_at or setting_aside or clone_holding or parseable or would_break or does_not_read'"
+  - id: dod-omn21087-resume
+    description: "A resumed run says where it picks up and reuses its answers"
+    source: manual
+    binds_ac: [AC7]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'picks_up or only_checks'"
+  - id: dod-omn21087-deploy-bootstrap
+    description: The published bootstrap handler at the checked-out commit matches the checksum required by the entrypoint; the hosted runner needs only HTTPS and git.
+    source: manual
+    binds_ac: [AC5, AC6, AC7]
+    checks:
+      - check_type: command
+        check_value: >-
+          curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
+          | sha256sum | grep -q '^ce2b2452f52ca37f1824a319563b113d8fa355a238fd561a204c78542c6c90f7  -$'
+  - id: dod-omn21087-bootstrap-loading
+    description: The entrypoint uses the node's declared handler, works without Python, and refuses a downloaded handler whose checksum differs before sourcing it.
+    source: manual
+    binds_ac: [AC5, AC6, AC7]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/skills/test_onboarding_bootstrap_handler_omn21087.py -q --no-cov

@@ -82,8 +82,11 @@ are graded against.
 
 ### What it asks you
 
-Two questions, both before anything is installed:
+Every question comes before anything is installed:
 
+0. **Only on a Mac that ran an earlier setup: set its leftovers aside?** See
+   [A Mac that ran an earlier setup](#a-mac-that-ran-an-earlier-setup). Asked only when
+   preflight found something that would interfere.
 1. **Which model.** Gemini, OpenRouter, OpenAI or Ollama. Then your key, with the input
    hidden. If this Mac already has a key stored you are offered it rather than asked again.
    OpenRouter always runs Qwen3.8 27B (`qwen/qwen3.8-27b`), so you are not asked for a model.
@@ -104,7 +107,7 @@ find out something failed.
 
 | | Phase | What it does |
 |---|---|---|
-| 0 | Preflight | Reads the machine. Changes nothing. Asks the two questions above. |
+| 0 | Preflight | Reads the machine and what an earlier setup left. Changes nothing unless you agree to set leftovers aside. Asks the questions above. |
 | 1 | Base tools | Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv. |
 | 2 | Workspace | The canonical clones, `OMNIBASE_PATH`, your `PATH`. |
 | 3 | onex + model key | The dispatch venv, onex, a local identity, your key, and **one delegation run on it**. |
@@ -195,11 +198,39 @@ machine, so do the setup first.
 
 ---
 
+## A Mac that ran an earlier setup
+
+An earlier install leaves things behind that quietly take over: an `onex` alias or function
+in your shell profile, variables such as `OMNI_HOME`, `ONEX_STATE_DIR` or
+`ONEX_LAB_TENANT_STATE_DIR`, a published `onex` installed as a uv or pipx tool, a
+local-model routes file under `~/.omninode/delegation`, or clones with local changes.
+
+Before installing anything, preflight runs `onex` the way a new terminal of yours would and
+lists what it found in one table. Each row marked ✗ would interfere; rows marked · are
+noted and handled by the run itself (for example, a clean clone that is behind is brought up
+to date in phase 2). If anything is marked ✗, you are asked once:
+
+- **Set them aside.** Profile lines are commented out (the whole file is copied first), files
+  and clones are moved beside where they were, and published installs are uninstalled with
+  the command to reinstall them. Nothing is deleted. Every item and how to put it back is
+  listed in `~/.omninode/onboarding/set-aside.<time>.txt`.
+- **Stop.** Nothing is installed or changed.
+
+A run with no terminal to ask on stops at preflight in this case, unless you pass
+`--set-aside`.
+
+The run itself never inherits those variables, on a first run or a resumed one. Open a new
+terminal when it finishes: the one you started it from still has the old settings loaded.
+
 ## Running it again
 
 Re-running is safe and expected. Completed phases are verified and skipped, and a failed
-phase restarts from its own beginning rather than from the top. Nothing already installed
-is moved to a different version.
+phase restarts from its own beginning rather than from the top. This holds for a freshly
+downloaded copy of the script too, because the record of completed phases lives under
+`~/.omninode/onboarding`. Preflight always runs first; on a resumed run it says which phase
+the run picks up at, reuses your earlier answers (your models, your stored keys and the
+Docker answer) and asks only whether to continue. Nothing already installed is moved to a
+different version.
 
 To force every phase to run again:
 
@@ -217,8 +248,9 @@ bash lab-onboarding.sh --restart
 | `--containers` / `--no-containers` | Answer the Docker question in advance |
 | `--provider NAME` | `gemini`, `openrouter`, `openai` or `ollama` |
 | `--ollama-model NAME` | The model Ollama downloads; the default is sized to this Mac |
-| `--workspace DIR` | Where the clones go; defaults to `$OMNIBASE_PATH`, else `~/code/omni` |
-| `--restart` | Forget completed phases and run them all again |
+| `--workspace DIR` | Where the clones go; defaults to `$OMNIBASE_PATH`, else `~/Code/omnibase`. `OMNI_HOME` is never read |
+| `--set-aside` | Answer yes in advance to setting aside what an earlier setup left |
+| `--restart` | Forget completed phases and your earlier answers, and run every phase again |
 | `-h`, `--help` | The full option list |
 
 ---
