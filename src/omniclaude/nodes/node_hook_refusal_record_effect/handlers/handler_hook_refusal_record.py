@@ -358,28 +358,12 @@ def resolve_lane_fields(
         return "", "unresolved"
 
 
-def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
-    """Append through packaged ``onex-ledger``. Never a direct ledger write.
-
-    The ledger is a shared append-only file many lanes write concurrently;
-    the locked writer is the only sanctioned path and it also carries the
-    dedupe-on-retry behaviour this caller would otherwise need itself.
-    """
-    if not project.is_absolute() or not (project / "pyproject.toml").is_file():
-        _say(
-            "hook refusal recorder: ledger writer project is unavailable: "
-            + redact(str(project)),
-            err=True,
-        )
-        return False
-    if not ledger.is_file():
-        _say(
-            "hook refusal recorder: ledger is unavailable: " + redact(str(ledger)),
-            err=True,
-        )
-        return False
+def _run_writer(
+    row: str, *, ledger: Path, project: Path, timeout: str
+) -> subprocess.CompletedProcess[str] | None:
+    """One ``onex-ledger --append`` run, or ``None`` when it could not start."""
     try:
-        completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
+        return subprocess.run(  # noqa: S603 - fixed argv, no shell
             [
                 "uv",
                 "run",
@@ -402,13 +386,78 @@ def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
         _say(
             "hook refusal recorder: ledger writer failed: " + redact(str(exc)), err=True
         )
-        return False
-    if completed.returncode != 0:
+        return None
+
+
+def _row_cell(row: str, key: str) -> str:
+    found = re.search(rf"\| {re.escape(key)}=([^|]*?) \|", row)
+    return found.group(1) if found else "unknown"
+
+
+def _alert_rejected_row(
+    row: str, why: str, *, ledger: Path, project: Path, timeout: str
+) -> None:
+    """Record, as a STATUS ``state=ALERT`` row, a refusal row the writer rejected (OMN-20883).
+
+    The guard has already refused the call; a rejected row would otherwise be
+    one stderr line in hooks.log. The alert names the guard and the dedupe key
+    so the refusal can be found, and carries the writer's reason. A rejected
+    alert is not alerted on again: it is reported on stderr.
+    """
+    cleaned = " ".join(why.replace("|", "/").split())[:300]
+    alert = (
+        f"{datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')} | STATUS | "
+        "lane=hook-refusal-recorder | state=ALERT | "
+        "category=refusal-row-rejected | "
+        f"guard={_row_cell(row, 'guard')} | dedupe={_row_cell(row, 'dedupe')} | "
+        f"detail={cleaned}"
+    )
+    done = _run_writer(alert, ledger=ledger, project=project, timeout=timeout)
+    if done is None or done.returncode != 0:
         _say(
-            f"hook refusal recorder: ledger writer exited {completed.returncode}: "
-            + redact(completed.stderr or "no stderr reason")[:MAX_DETAIL_CHARS],
+            "hook refusal recorder: ALERT row for a rejected refusal row NOT "
+            "recorded: " + redact((done.stderr if done else "") or cleaned),
             err=True,
         )
+
+
+def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
+    """Append through packaged ``onex-ledger``. Never a direct ledger write.
+
+    The ledger is a shared append-only file many lanes write concurrently;
+    the locked writer is the only sanctioned path and it also carries the
+    dedupe-on-retry behaviour this caller would otherwise need itself.
+
+    A row the writer rejects (the row grammar refuses it) is not dropped: a
+    STATUS ``state=ALERT`` row records the rejection (OMN-20883).
+    """
+    if not project.is_absolute() or not (project / "pyproject.toml").is_file():
+        _say(
+            "hook refusal recorder: ledger writer project is unavailable: "
+            + redact(str(project)),
+            err=True,
+        )
+        return False
+    if not ledger.is_file():
+        _say(
+            "hook refusal recorder: ledger is unavailable: " + redact(str(ledger)),
+            err=True,
+        )
+        return False
+    completed = _run_writer(row, ledger=ledger, project=project, timeout=timeout)
+    if completed is None:
+        return False
+    if completed.returncode != 0:
+        why = redact(completed.stderr or "no stderr reason")[:MAX_DETAIL_CHARS]
+        _say(
+            f"hook refusal recorder: ledger writer exited {completed.returncode}: "
+            + why,
+            err=True,
+        )
+        if "| STATUS |" not in row:
+            _alert_rejected_row(
+                row, why, ledger=ledger, project=project, timeout=timeout
+            )
         return False
     return True
 
