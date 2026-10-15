@@ -114,3 +114,19 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'picks_up or only_checks'"
+  - id: dod-omn21087-deploy-bootstrap
+    description: The published bootstrap handler at the checked-out commit matches the checksum required by the entrypoint; the hosted runner needs only HTTPS and git.
+    source: manual
+    binds_ac: [AC5, AC6, AC7]
+    checks:
+      - check_type: command
+        check_value: >-
+          curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
+          | sha256sum | grep -q '^ce2b2452f52ca37f1824a319563b113d8fa355a238fd561a204c78542c6c90f7  -$'
+  - id: dod-omn21087-bootstrap-loading
+    description: The entrypoint uses the node's declared handler, works without Python, and refuses a downloaded handler whose checksum differs before sourcing it.
+    source: manual
+    binds_ac: [AC5, AC6, AC7]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/skills/test_onboarding_bootstrap_handler_omn21087.py -q --no-cov

@@ -264,29 +264,6 @@ phase_fail() { # next-step
   exit 1
 }
 
-# A resumed run (after a failure, or with a freshly downloaded script: the record
-# lives under $HOME, not beside the script) checks completed phases rather than
-# redoing them, and keeps the last run's answers so it asks one question, not all.
-CHOICES_FILE="$STATE_DIR/choices"
-RESUMING=0
-saved_choice() { [ "$RESTART" -eq 0 ] && sed -n "s/^$1=//p" "$CHOICES_FILE" 2>/dev/null | tail -n 1; }
-save_choices() {
-  mkdir -p "$STATE_DIR" && printf 'models=%s\ncontainers=%s\n' "$MODELS" "$MODE2_OK" >"$CHOICES_FILE"
-}
-resume_banner() {
-  local n done_list="" next=""
-  [ "$RESTART" -eq 0 ] && [ -s "$DONE_FILE" ] || return 0
-  for n in 1 2 3 4 5 6; do
-    if grep -qx "$n" "$DONE_FILE" 2>/dev/null; then done_list="${done_list}${done_list:+, }$n"
-    elif [ -z "$next" ]; then next="$n"; fi
-  done
-  [ -n "$done_list" ] || return 0
-  RESUMING=1
-  say "  Resuming an earlier run: phase(s) $done_list passed then; each is checked, not redone,"
-  if [ -n "$next" ]; then say "  so this run picks up at phase $next. (--restart runs every phase again.)"
-  else say "  and every phase passed, so this run only checks them. (--restart runs every phase again.)"; fi
-}
-
 mark_done() { mkdir -p "$STATE_DIR" && { grep -qx "$1" "$DONE_FILE" 2>/dev/null || echo "$1" >>"$DONE_FILE"; }; }
 is_done() { [ "$RESTART" -eq 0 ] && grep -qx "$1" "$DONE_FILE" 2>/dev/null; }
 
@@ -735,39 +712,6 @@ settle_models_unattended() {
   say "  No terminal to ask on, so these models are used: $(labels "$MODELS")."
 }
 
-settle_models() {
-  STORED="$(stored_key_providers 2>/dev/null | tr '\n' ' ')"; STORED="${STORED% }"
-  local models_from="--provider"
-  [ -z "$PROVIDER" ] || MODELS="$(in_menu_order "$(printf '%s' "$PROVIDER" | tr ',' ' ')")"
-  if [ -z "$MODELS" ] && [ "$RESUMING" -eq 1 ]; then
-    MODELS="$(in_menu_order "$(saved_choice models)")"; models_from="your last run"
-  fi
-  if [ "$PROMPT_TTY" -eq 0 ]; then settle_models_unattended; else
-    local asked_by_flag=0
-    [ -n "$MODELS" ] && asked_by_flag=1
-    while :; do
-      if [ "$asked_by_flag" -eq 1 ]; then
-        asked_by_flag=0
-        say ""
-        say "  Your models (from $models_from): $(labels "$MODELS")"
-      else
-        ask_models
-      fi
-      SKIPPED=""; set_result openrouter ""
-      ask_keys
-      if [ -z "$MODELS" ]; then
-        say ""
-        say "  Every model was skipped. Choose at least one."
-        continue
-      fi
-      confirm_models && break
-    done
-    # Keys for models dropped at the summary are forgotten here.
-    local p
-    for p in gemini openrouter openai; do has_model "$p" || set_pending_key "$p" ""; done
-  fi
-  if has_model ollama; then settle_ollama; fi
-}
 
 # ---------------------------------------------------------------------------
 # Ollama: a model served on this Mac, with no key. onex reaches it through its
@@ -881,395 +825,30 @@ backends:
 YAML
 }
 
-# ===========================================================================
-# What an earlier setup left on this Mac. Preflight runs the
-# existing install the way the developer's own shell does, before anything
-# installs, and reports one table: the onex the shell runs and its version,
-# other onex installs, variables and profile lines, a local-model routes file
-# and the workspace's clones. Whatever would interfere is set aside only with the
-# developer's yes: moved or commented out, never deleted, each listed with how to
-# put it back. The run itself never inherits the variables (see INHERITED_ENV).
-# ===========================================================================
-LEFTOVERS=""        # one record per line: interferes<TAB>kind<TAB>key<TAB>found<TAB>effect
-SET_ASIDE=""        # 1 once the developer said yes (or passed --set-aside)
-[ "$SET_ASIDE_FLAG" -eq 1 ] && SET_ASIDE=1
-SET_ASIDE_LOG=""
-TAB="$(printf '\t')"
-PROFILE_FILES=".zshrc .zprofile .zshenv .zlogin .bash_profile .bashrc .profile .aliases .zsh_aliases .bash_aliases"
-# A set-aside profile line becomes `: # [set aside ...] <the line>`: the `:` keeps
-# an if/then or a loop whose only line it was valid in bash, which refuses an
-# empty body where a bare comment would leave one.
-SET_ASIDE_MARK=": # [set aside by omninode-dev-setup"
-SHELL_ONEX_ELSEWHERE=0   # 1: an onex alias or function is defined in no file this setup reads
-
-leftover() { # interferes kind key found effect
-  LEFTOVERS="${LEFTOVERS}$1${TAB}$2${TAB}$3${TAB}$4${TAB}$5
-"
-}
-leftovers_interfering() { printf '%s' "$LEFTOVERS" | grep -c "^1${TAB}" | tr -d ' '; }
-
-user_shell() {
-  case "${SHELL:-}" in
-    */zsh) echo zsh ;;
-    */bash) echo bash ;;
-    *) if command -v zsh >/dev/null 2>&1; then echo zsh; else echo bash; fi ;;
-  esac
-}
-
-# in_user_shell SECONDS COMMAND -> its stdout, run by a new interactive shell of
-# the developer's kind, so their profile, aliases and functions apply exactly as
-# in their own terminal. Bounded: an old alias may start a long environment sync.
-in_user_shell() {
-  local t="$1"; shift
-  [ "${ONBOARD_TEST_NO_USER_SHELL:-0}" = "1" ] && return 1
-  command -v "$(user_shell)" >/dev/null 2>&1 || return 1
-  perl -e 'alarm shift; exec @ARGV' "$t" "$(user_shell)" -ic "$*" </dev/null 2>/dev/null
-}
-
-# What `onex` is to the developer's shell: alias, function, or the file it runs.
-shell_onex_kind() {
-  case "$(user_shell)" in
-    zsh) in_user_shell 15 'whence -w onex' | sed -n 's/^onex: //p' | head -n 1 ;;
-    *) in_user_shell 15 'type -t onex' | head -n 1 ;;
-  esac
-}
-shell_onex_path() {
-  case "$(user_shell)" in
-    zsh) in_user_shell 15 'whence -p onex' | head -n 1 ;;
-    *) in_user_shell 15 'type -P onex' | head -n 1 ;;
-  esac
-}
-shell_onex_version() { # what `onex --version` prints in a new terminal, errors included
-  local v
-  v="$(in_user_shell 30 'onex --version 2>&1' | grep -v '^[[:space:]]*$' | tail -n 1 | cut -c1-70)"
-  printf '%s' "${v:-nothing within 30 seconds}"
-}
-tilde() { case "$1" in "$HOME"/*) printf '%s/%s' '~' "${1#"$HOME"/}" ;; *) printf '%s' "$1" ;; esac; }
-real_path() { # path -> the file it finally names, through every symlink
-  local p="$1" l
-  while [ -L "$p" ]; do
-    l="$(readlink "$p")"
-    case "$l" in /*) p="$l" ;; *) p="$(dirname "$p")/$l" ;; esac
+# The node's bootstrap handler runs on stock macOS Bash before Python exists.
+# Prefer the checkout beside this entrypoint; downloaded copies fetch the same
+# checksum-pinned handler into the run directory. Never source unchecked bytes.
+load_onboarding_preflight() {
+  local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
+  local digest="ce2b:2452:f52c:a37f:1824:a319:563b:113d:8fa3:55a2:38fd:561a:204c:7854:2c6c:90f7" root candidate
+  digest="${digest//:/}"
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
+  for candidate in "$root/$rel" "$PWD/$rel" "$WORKSPACE/omniclaude/$rel"; do
+    [ -f "$candidate" ] || continue
+    if printf '%s  %s\n' "$digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
+      . "$candidate"
+      return 0
+    fi
   done
-  printf '%s' "$p"
-}
-is_workspace_onex() { [ "$(real_path "$1")" = "$WORKSPACE/omnibase_infra/scripts/onex" ]; }
-masked() { printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/=.*$/=…/' | cut -c1-70; }
-
-# Profile lines outside this setup's own block that redirect onex in the
-# developer's shells: a variable an earlier setup exported, an onex alias or
-# function, or sourcing the operator env file.
-profile_leftover_lines() { # file -> "lineno<TAB>text" for each
-  awk -v b="$PROFILE_BEGIN" -v e="$PROFILE_END" -v mark="$SET_ASIDE_MARK" '
-    $0 == b { inblock = 1 } $0 == e { inblock = 0; next }
-    inblock || index($0, mark) == 1 || $0 ~ /^[[:space:]]*#/ { next }
-    $0 ~ /^[[:space:]]*(export[[:space:]]+)?(OMNI_HOME|OMNIBASE_[A-Z_]+|ONEX_[A-Z_]+|BIFROST_[A-Z_]+|KAFKA_[A-Z_]+|DELEGATION_ROUTING_TIERS_PATH|POSTGRES_PASSWORD|VALKEY_PASSWORD)=/ ||
-    $0 ~ /^[[:space:]]*alias[[:space:]]+onex=/ ||
-    $0 ~ /^[[:space:]]*(function[[:space:]]+onex([[:space:]]|\(|$)|onex[[:space:]]*\(\))/ ||
-    $0 ~ /^[[:space:]]*(source|\.)[[:space:]]+.*\.omnibase\/\.env/ { printf "%d\t%s\n", NR, $0 }
-  ' "$1" 2>/dev/null
-}
-
-uv_tool_dir() { printf '%s' "${UV_TOOL_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/uv/tools}"; }
-pipx_home() { # pipx's home when one exists; empty when pipx has never installed here
-  local d
-  for d in "${PIPX_HOME:-}" "$HOME/.local/pipx" "${XDG_DATA_HOME:-$HOME/.local/share}/pipx" \
-    "$HOME/Library/Application Support/pipx"; do
-    [ -n "$d" ] && [ -d "$d/venvs" ] && { printf '%s' "$d"; return 0; }
-  done
-}
-
-survey_leftovers() {
-  local f n text kind path version first="" d r state problem uvb names
-  LEFTOVERS=""
-
-  # 1. onex as the developer's shell runs it, and what it answers.
-  kind="$(shell_onex_kind)"
-  case "$kind" in
-    alias|function)
-      version="$(shell_onex_version)"
-      leftover 1 shell onex "onex is a shell $kind (onex --version: $version)" \
-        "shadows the onex this setup installs, in every terminal" ;;
-    command|file)
-      path="$(shell_onex_path)"
-      if [ -n "$path" ] && ! is_workspace_onex "$path"; then
-        version="$(shell_onex_version)"
-        leftover 0 shell "$path" "your shell runs $(tilde "$path") (onex --version: $version)" \
-          "replaced by the workspace onex (see the rows below)"
-      fi ;;
-  esac
-
-  # 2. Every onex on PATH. ~/.local/bin/onex is replaced in phase 3 (kept as a
-  # .pre-onboarding copy); one earlier on PATH than ~/.local/bin shadows it.
-  local seen_local=0 ipath
-  ipath="$(in_user_shell 15 'printf "%s" "$PATH"')"
-  [ -n "$ipath" ] || ipath="$PATH"
-  while IFS= read -r d; do
-    [ -n "$d" ] || continue
-    [ "$d" = "$HOME/.local/bin" ] && seen_local=1
-    [ -x "$d/onex" ] && ! is_workspace_onex "$d/onex" || continue
-    case " $first " in *" $d/onex "*) continue ;; esac
-    first="$first $d/onex"
-    if [ "$d" = "$HOME/.local/bin" ]; then
-      leftover 0 bin "$d/onex" "$(tilde "$d/onex") (not the workspace onex)" "replaced in phase 3; the old one is kept beside it"
-    elif [ "$seen_local" -eq 0 ]; then
-      leftover 1 bin "$d/onex" "$(tilde "$d/onex"), ahead of ~/.local/bin on PATH" "shadows the onex this setup installs"
-    fi
-  done <<EOF
-$(printf '%s' "$ipath" | tr ':' '\n')
-EOF
-
-  # 3. Tool installs of the packages that carry onex. Each tool is asked only
-  # when its tool directory exists: a first `pipx list` creates its own
-  # directories under $HOME, and preflight writes nothing there.
-  uvb="$(uv_bin)"
-  if [ -n "$uvb" ] && [ -d "$(uv_tool_dir)" ]; then
-    names="$("$uvb" tool list 2>/dev/null | grep -E '^(omnibase-core|omnimarket|omnibase-infra) ' | cut -d' ' -f1,2)"
-    while IFS= read -r n; do
-      [ -n "$n" ] || continue
-      leftover 1 uvtool "${n%% *}" "$n, installed as a uv tool" "a published onex that outranks the workspace one"
-    done <<EOF
-$names
-EOF
+  candidate="$RUN_DIR/handler_onboarding_preflight.sh"
+  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/dev/$rel" ||
+     ! printf '%s  %s\n' "$digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
+    printf 'omninode-dev-setup: cannot load the checksum-pinned onboarding preflight handler\n' >&2
+    return 1
   fi
-  if command -v pipx >/dev/null 2>&1 && [ -n "$(pipx_home)" ]; then
-    while IFS= read -r n; do
-      [ -n "$n" ] || continue
-      leftover 1 pipx "${n%% *}" "$n, installed with pipx" "a published onex that outranks the workspace one"
-    done <<EOF
-$(pipx list --short 2>/dev/null | grep -E '^(omnibase-core|omnimarket|omnibase-infra) ')
-EOF
-  fi
-
-  # 4. Variables this shell exported (this run ignores them) and the profile
-  # lines that set them.
-  [ -n "$INHERITED_ENV" ] && leftover 0 env environment "exported in this terminal: $INHERITED_ENV" \
-    "ignored by this run; your profile lines below set them in new terminals"
-  local onex_defined=0
-  for f in $PROFILE_FILES; do
-    [ -f "$HOME/$f" ] || continue
-    while IFS="$TAB" read -r n text; do
-      [ -n "$n" ] || continue
-      case "$text" in *"alias onex="*|*"onex()"*|*"onex ()"*|*"function onex"*) onex_defined=1 ;; esac
-      leftover 1 profile "$HOME/$f:$n" "$(tilde "$HOME/$f") line $n: $(masked "$text")" "redirects onex in every new terminal"
-    done <<EOF
-$(profile_leftover_lines "$HOME/$f")
-EOF
-  done
-
-  SHELL_ONEX_ELSEWHERE=0
-  case "$kind" in
-    alias|function)
-      if [ "$onex_defined" -eq 0 ]; then
-        SHELL_ONEX_ELSEWHERE=1
-        leftover 1 shell elsewhere "the onex $kind is defined in a file this setup does not read" \
-          "remove it there by hand ('$(user_shell) -ic \"type onex\"' names it), then run this again"
-      fi ;;
-  esac
-
-  # 5. A local-model routes file this setup did not write: routing takes a
-  # declared local model before a key, so every key's test would go to it.
-  f="$HOME/$OVERRIDES_FILE_REL"
-  if [ -f "$f" ]; then
-    if head -n 1 "$f" | grep -qE '^# Written by (lab-onboarding|omninode-dev-setup)'; then
-      ollama_overrides_ours || leftover 0 routes "$f" "$(tilde "$f") from an earlier run" "moved aside in phase 3 unless you choose Ollama"
-    else
-      leftover 1 routes "$f" "$(tilde "$f") (not written by this setup)" "sends your keys' delegations to a local model"
-    fi
-  fi
-
-  # 6. The workspace's clones, as last fetched (phase 2 fetches).
-  if [ -d "$WORKSPACE" ]; then
-    for r in $REPOS; do
-      state="$(clone_state "$r")"
-      [ "$state" = missing ] && continue
-      problem="$(clone_problem "$r" "$state")"
-      if [ -n "$problem" ]; then
-        leftover 1 clone "$r" "$(tilde "$WORKSPACE/$r"): $problem" "holds work phase 2 will not move"
-      else
-        local where behind def
-        IFS='|' read -r where _ behind _ def <<EOF
-$state
-EOF
-        [ "${behind:-0}" -gt 0 ] || [ "$where" != "$def" ] || continue
-        leftover 0 clone "$r" "$(tilde "$WORKSPACE/$r"): $(clone_where "$where"), $behind commit(s) behind origin/$def" \
-          "brought up to date in phase 2"
-      fi
-    done
-  fi
+  . "$candidate"
 }
-
-report_leftovers() {
-  [ -n "$LEFTOVERS" ] || return 0
-  local interferes kind key found effect
-  say ""
-  say "  What an earlier setup left on this Mac"
-  say ""
-  while IFS="$TAB" read -r interferes kind key found effect; do
-    [ -n "$kind" ] || continue
-    if [ "$interferes" = 1 ]; then say "  ✗ $found"; else say "  · $found"; fi
-    say "      $effect"
-  done <<EOF
-$LEFTOVERS
-EOF
-}
-
-# Asked once, before anything installs. With no terminal, --set-aside answers it.
-settle_leftovers() {
-  local count a
-  count="$(leftovers_interfering)"
-  [ "$count" -gt 0 ] || return 0
-  if [ "$PREFLIGHT_ONLY" -eq 1 ]; then
-    say ""
-    say "  $count of these (✗) would interfere. A full run asks whether to set them aside."
-    return 0
-  fi
-  if [ "$SHELL_ONEX_ELSEWHERE" -eq 1 ]; then
-    FAILED_STEP="find the onex alias or function"
-    LAST_ERR="onex is a shell alias or function defined outside the files this setup reads"
-    phase_fail "remove it by hand ('$(user_shell) -ic \"type onex\"' names where it is), then run this again. Nothing was installed or changed"
-  fi
-  if [ "$SET_ASIDE" != 1 ]; then
-    if [ "$PROMPT_TTY" -eq 0 ]; then
-      FAILED_STEP="set aside what an earlier setup left"
-      LAST_ERR="$count item(s) above would interfere, and there is no terminal to ask on"
-      phase_fail "run this in Terminal to choose, or pass --set-aside. Nothing was installed or changed"
-    fi
-    say ""
-    say "  The $count marked ✗ would interfere with this setup. Setting one aside moves it or"
-    say "  comments it out; nothing is deleted, and each is listed with how to put it back."
-    printf '  Set them aside now? [Y = set aside, q = stop here; nothing has been installed] '
-    IFS= read -r a || quit_setup
-    case "$a" in q|Q|quit|QUIT|n|N|no|NO) quit_setup ;; esac
-    SET_ASIDE=1
-  fi
-}
-
-# profile_comment_out file "lines" -> stdout: the file with each listed line
-# (and, for a multi-line onex function, its whole body, by brace depth) behind
-# the set-aside marker. Nothing is written.
-profile_comment_out() {
-  awk -v lines=" $2 " -v mark="$SET_ASIDE_MARK $STAMP] " '
-    function braces(t,  o, c) { o = gsub(/\{/, "{", t); c = gsub(/\}/, "}", t); return o - c }
-    index(lines, " " NR " ") {
-      if (!depth && $0 ~ /^[[:space:]]*(function[[:space:]]+onex|onex[[:space:]]*\(\))/) depth = braces($0)
-      if (depth < 0) depth = 0
-      print mark $0; next }
-    depth > 0 { depth += braces($0); print mark $0; if (depth <= 0) depth = 0; next }
-    { print }
-  ' "$1"
-}
-
-# profile_syntax_ok file -> 0 when the shell that reads it parses it
-profile_syntax_ok() {
-  local sh=bash
-  case "$(basename "$1")" in .z*) sh=zsh ;; esac
-  command -v "$sh" >/dev/null 2>&1 || return 0
-  "$sh" -n "$1" >/dev/null 2>&1
-}
-
-# Every profile edit is made in a copy and parsed before any file is touched,
-# so a run that cannot set a line aside safely stops with nothing changed.
-PROFILE_EDITS=""   # one "file<TAB>edited copy" per line
-prepare_profile_edits() {
-  local interferes kind key found effect f lines tmp
-  PROFILE_EDITS=""
-  for f in $(printf '%s' "$LEFTOVERS" | awk -F "$TAB" '$1 == 1 && $2 == "profile" { sub(/:[0-9]+$/, "", $3); print $3 }' | sort -u); do
-    lines="$(printf '%s' "$LEFTOVERS" | awk -F "$TAB" -v f="$f" '$1 == 1 && $2 == "profile" { n = $3; sub(/.*:/, "", n); k = $3; sub(/:[0-9]+$/, "", k); if (k == f) print n }' | tr '\n' ' ')"
-    tmp="$(mktemp "$RUN_DIR/profile.XXXXXX")" || return 1
-    profile_comment_out "$f" "$lines" >"$tmp" || return 1
-    if profile_syntax_ok "$f" && ! profile_syntax_ok "$tmp"; then
-      rm -f "$tmp"
-      FAILED_STEP="set aside lines in $f"
-      LAST_ERR="commenting them out would leave $(tilde "$f") unreadable by its shell"
-      return 1
-    fi
-    PROFILE_EDITS="${PROFILE_EDITS}$f${TAB}$tmp
-"
-  done
-}
-
-# profile_set_aside file: write the checked copy over the file, the original
-# copied beside it first. The copy and the marker are how it is put back.
-profile_set_aside() {
-  local f="$1" tmp
-  tmp="$(printf '%s' "$PROFILE_EDITS" | awk -F "$TAB" -v f="$f" '$1 == f { print $2 }')"
-  [ -f "$tmp" ] || return 0   # this file's lines were already written
-  [ -f "$f.pre-onboarding.$STAMP" ] || cp -p "$f" "$f.pre-onboarding.$STAMP" || return 1
-  cat "$tmp" >"$f" && rm -f "$tmp"
-}
-
-set_aside_one() { # kind key -> moves or comments out one item; prints where it went
-  local kind="$1" key="$2" dest
-  case "$kind" in
-    profile)
-      profile_set_aside "${key%:*}" || return 1
-      echo "commented out (copy of the file: ${key%:*}.pre-onboarding.$STAMP; to restore, delete the '$SET_ASIDE_MARK $STAMP] ' prefix)" ;;
-    bin|routes)
-      dest="$key.pre-onboarding.$STAMP"
-      mv "$key" "$dest" || return 1
-      echo "moved to $dest (move it back to restore)" ;;
-    clone)
-      mkdir -p "$WORKSPACE/.set-aside" || return 1
-      dest="$WORKSPACE/.set-aside/$key.$STAMP"
-      mv "$WORKSPACE/$key" "$dest" || return 1
-      echo "moved to $dest (phase 2 clones it fresh; your work is there)" ;;
-    uvtool)
-      "$(uv_bin)" tool uninstall "$key" >>"$LOG" 2>&1 || return 1
-      echo "uninstalled with 'uv tool uninstall $key' (install it again the way you did before)" ;;
-    pipx)
-      pipx uninstall "$key" >>"$LOG" 2>&1 || return 1
-      echo "uninstalled with 'pipx uninstall $key' (install it again the way you did before)" ;;
-    *) echo "nothing to move" ;;
-  esac
-}
-
-set_aside_leftovers() {
-  [ "$SET_ASIDE" = 1 ] || return 0
-  [ "$(leftovers_interfering)" -gt 0 ] || return 0
-  local interferes kind key found effect where failed=""
-  mkdir -p "$STATE_DIR" || return 1
-  SET_ASIDE_LOG="$STATE_DIR/set-aside.$STAMP.txt"
-  prepare_profile_edits ||
-    phase_fail "set those lines aside by hand (the table above names each), then run this again. Nothing was installed or changed"
-  say ""
-  say "  Setting aside what would interfere (listed in $SET_ASIDE_LOG):"
-  # The shell's own view is checked last, once the profile lines are out of the way.
-  while IFS="$TAB" read -r interferes kind key found effect; do
-    [ "$interferes" = 1 ] && [ "$kind" != shell ] || continue
-    if where="$(set_aside_one "$kind" "$key")"; then
-      say "    ✓ $found: $where"
-      printf '%s\t%s\n' "$found" "$where" >>"$SET_ASIDE_LOG"
-    else
-      say "    ✗ $found: could not be set aside (see the log)"
-      failed="$failed; $found"
-    fi
-  done <<EOF
-$LEFTOVERS
-EOF
-  case "$(shell_onex_kind)" in
-    alias|function)
-      say "    ✗ onex is still a shell $(shell_onex_kind) in a new terminal: it is defined in a file this"
-      say "      setup does not read. '$(user_shell) -ic \"type onex\"' names it; remove it there."
-      failed="$failed; the onex shell $(shell_onex_kind)" ;;
-  esac
-  if [ -n "$failed" ]; then
-    FAILED_STEP="set aside what an earlier setup left"; LAST_ERR="${failed#; }"
-    phase_fail "set those aside by hand (the lines above say what each is), then run this again. Nothing was installed"
-  fi
-  say "  This terminal still has the old settings loaded; the run ignores them, and new"
-  say "  terminals will not have them."
-}
-
-# ===========================================================================
-# Phase 0: preflight. Reads only, until you agree to set leftovers aside.
-# ===========================================================================
-MODE1_OK=1
-MODE2_OK=1
-MODE2_WHY=""
-MODE1_WHY=""
-
-row() { printf '  %-22s %-16s %-14s %s\n' "$1" "$2" "$3" "$4" | tee -a "$LOG"; }
+load_onboarding_preflight || exit 1
 
 phase0() {
   phase_start 0 "Preflight (reads this Mac; changes nothing you have not agreed to)" "under a minute"
@@ -1402,10 +981,7 @@ phase0() {
   say "  Everything from here runs without questions."
   phase_pass "$SELECTED"
 }
-SELECTED=""
-STACK_RUNNING=0
-MODE2_OFFERED=0
-NO_CONTAINERS_WHY=""
+
 
 # ===========================================================================
 # Phase 1: base tools
@@ -2458,18 +2034,6 @@ check() { # label cmd...
 }
 sqlite_rows() {
   [ "$(sqlite3 -readonly "$HOME/.omninode/delegation/delegation.sqlite" 'select count(*) from delegation_events;' 2>/dev/null || echo 0)" -ge 1 ]
-}
-# A new terminal, with the developer's own profile, runs the workspace onex: no
-# alias, function or earlier install answers in its place.
-shell_runs_workspace_onex() {
-  local kind path
-  kind="$(shell_onex_kind)"
-  case "$kind" in
-    command|file) ;;
-    *) echo "in a new terminal onex is: ${kind:-not found}"; return 1 ;;
-  esac
-  path="$(shell_onex_path)"
-  is_workspace_onex "$path" || { echo "a new terminal runs $path"; return 1; }
 }
 no_shadow() { [ "$(readlink "$HOME/.local/bin/onex")" = "$WORKSPACE/omnibase_infra/scripts/onex" ]; }
 
