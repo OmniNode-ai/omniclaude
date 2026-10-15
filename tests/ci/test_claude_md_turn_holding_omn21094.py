@@ -42,7 +42,7 @@ REPLACEMENT_RULING_WORDS = (
 ADDITIVE_RULING_STAMP = "2026-10-02T14:58:44Z"
 
 # Every command topic that the T0.6 content transport audit
-# (knowledge-base-internal beta/deep-dives/2026-10-15-content-transport-audit.md,
+# (knowledge-base beta/deep-dives/2026-10-15-content-transport-audit.md,
 # sections 4.1 to 4.3 and 11.4) lists as carrying a prompt, a request text or a
 # full ledger row today. "content-captured" is the one the old rule named.
 CONTENT_COMMAND_TOPICS = (
@@ -122,6 +122,11 @@ def ac1_failures(text: str) -> list[str]:
 def ac2_failures(text: str) -> list[str]:
     found: list[str] = []
     section = _section(text, TURN_HOLDING_HEADING)
+    if not section:
+        return [
+            "the turn-holding section is absent, so its separation from the "
+            "journal-failure rule cannot be shown"
+        ]
     if "OMN-20110" in section:
         found.append("the turn-holding section cites OMN-20110")
     outside = text.replace(section, "") if section else text

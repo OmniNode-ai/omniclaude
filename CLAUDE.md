@@ -239,7 +239,7 @@ the ledger path also carry full text on other command families. This list is rea
 transport audit (knowledge-base `beta/deep-dives/2026-10-15-content-transport-audit.md`, T0.6, sections
 4.1 to 4.3 and 11.4), whose broker reads were taken on the dev lane on 2026-10-15. Access control is the
 ACL entry per topic: "superuser only" means no ACL entry for any other principal, and the superuser
-(`onex-dev-lane`) is the one identity of every lab Kafka client. The `omniintelligence` family name
+(the lab's one broker principal) is the one identity of every lab Kafka client. The `omniintelligence` family name
 restricts nothing by itself. The broker authenticates each operator device and enforces ACLs, but no
 consumer receives the producing principal, so there is no per-user read check downstream.
 
@@ -516,7 +516,7 @@ access) or `cmd` (commands, restricted). Authoritative list: `src/omniclaude/hoo
 The privacy split is the invariant to protect: previews/metrics on `onex.evt.omniclaude.*`;
 full prompts and file contents on command topics only, as listed under *Command topics that carry full
 prompts*. The dev-lane broker requires SASL and enforces per-topic ACLs (756 entries read 2026-10-15), over
-a plaintext listener; other lanes differ (`stability-test` runs without SASL, per `hook_edge_lane.yaml`).
+a plaintext listener; other lanes differ (one lab lane runs without SASL, per `hook_edge_lane.yaml`).
 
 Event payload models (`ModelHook*Payload`): `src/omniclaude/hooks/schemas.py`. Treat
 `working_directory`, `git_branch`, and `summary` fields as privacy-sensitive in analytics.
