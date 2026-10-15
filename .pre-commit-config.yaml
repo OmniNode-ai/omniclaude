@@ -45,6 +45,14 @@ repos:
         files: '^(\.github/workflows/(plugin-version-bump|ci)\.yml|scripts/validation/validate_plugin_version_bump\.py|tests/ci/test_plugin_version_bump_gate\.py|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
+      - id: raw-capture-guard
+        name: Hook and content capture stays raw (OMN-19513)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/hooks/(model_claude_hook_event\.py|contracts/contract_hook_claude_capture\.yaml)|plugins/onex/hooks/lib/(hook_claude_capture|hook_content_capture)\.py|tests/ci/test_raw_capture_guard_omn19513\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: anthropic-key-prefix-workflows
         name: No Anthropic key value in a workflow (OMN-20967)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_anthropic_key_prefix_workflows_omn20967.py -q --no-cov
