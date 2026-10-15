@@ -27,6 +27,11 @@ a read of an ``OmniNode-ai`` repository runs on the operator unchanged:
 
   The bare repository object (``gh api repos/OmniNode-ai/<repo>``) stays on the
   operator: the App's answer nulls the merge-settings fields without an error.
+  So do the admin-only resources under it (rulesets, branch protection, Actions
+  variables, secrets and permissions, collaborators, hooks, deploy keys) and a GraphQL
+  document naming rulesets, branch protection rules or the merge-settings fields
+  (OMN-20043): the App answers them WITHOUT an error and without the admin-only fields
+  (a ruleset with no ``bypass_actors`` key reads as bypass-free).
 
   Anything that resolves the viewer (``@me``, ``viewer``, ``pr status``) stays
   on the operator, because on an installation token it would answer as the bot
@@ -118,6 +123,16 @@ _OWNER_REPO = re.compile(r"^([A-Za-z0-9][A-Za-z0-9-]*)/([A-Za-z0-9._-]+)$")
 _SEARCH_SCOPE = re.compile(r"\b(?:org|user|repo):([A-Za-z0-9-]+)", re.IGNORECASE)
 _GQL_OWNER_LITERAL = re.compile(r"\b(?:owner|login)\s*:\s*\"([^\"]*)\"", re.IGNORECASE)
 _GQL_OWNER_VARS = {"owner", "org", "login", "organization"}
+# Admin-only reads (OMN-20043). An installation token without administration access gets these
+# answered WITHOUT an error and with the admin-only fields missing: a ruleset comes back with no
+# bypass_actors key, so a merge-queue ruleset reads as bypass-free when it is not. Absence reads as
+# empty, so these stay on the operator, like the bare repository object. REST paths are matched by
+# ``_admin_only_path`` on whole segments, so ``contents/protection`` and ``rules/branches`` still route;
+# the GraphQL pattern names the same resources and the merge-settings fields.
+_GQL_ADMIN_ONLY = re.compile(
+    r"\b(?:rulesets?|branchProtectionRules?|autoMergeAllowed|deleteBranchOnMerge"
+    r"|mergeCommitAllowed|squashMergeAllowed|rebaseMergeAllowed)\b"
+)
 
 READ_SUBCOMMANDS: frozenset[tuple[str, str]] = frozenset(
     {
@@ -271,6 +286,20 @@ def _search_scoped(texts: Sequence[str], owners: Sequence[str]) -> bool:
     return bool(scopes) and all(_is_org(s) for s in scopes)
 
 
+def _admin_only_path(segments: Sequence[str]) -> bool:
+    """Whether the path below ``repos/<owner>/<repo>`` names an admin-only resource."""
+    sub = [seg for seg in segments[3:] if seg]
+    if not sub:
+        return False
+    if sub[0] in {"rulesets", "collaborators", "hooks", "keys"}:
+        return True
+    if sub[0] == "branches":
+        return "protection" in sub[2:]
+    if sub[0] in {"actions", "environments"}:
+        return any(seg in {"variables", "secrets", "permissions"} for seg in sub[1:])
+    return False
+
+
 def _classify_subcommand(args: Sequence[str], env: Mapping[str, str]) -> Classification:
     group, verb = args[0], (args[1] if len(args) > 1 else "")
     cmd_class = f"{group} {verb}".strip()
@@ -364,6 +393,8 @@ def _classify_api(args: Sequence[str], env: Mapping[str, str]) -> Classification
             return _operator("graphql", "graphql-mutation", "POST")
         if re.search(r"\bviewer\b", query):
             return _operator("graphql", "viewer-resolving", "POST")
+        if _GQL_ADMIN_ONLY.search(query):
+            return _operator("graphql", "admin-only-fields", "POST")
         owners = [m.group(1) for m in _GQL_OWNER_LITERAL.finditer(query)]
         owners += [v for k, v, _ in fields if k.lower() in _GQL_OWNER_VARS]
         if any(not _is_org(o) for o in owners):
@@ -403,6 +434,8 @@ def _classify_api(args: Sequence[str], env: Mapping[str, str]) -> Classification
             # allow_auto_merge probe read '' and refused every arm (OMN-19852), so this read
             # stays on the operator, like an unscoped search.
             return _operator("api", "repo-settings-fields", effective, repo)
+        if _is_org(segments[1]) and _admin_only_path(segments):
+            return _operator("api", "admin-only-fields", effective, repo)
         if _is_org(segments[1]):
             return Classification(True, "api", effective, repo, "read-rest")
         return _operator("api", "repo-outside-org", effective, repo)
