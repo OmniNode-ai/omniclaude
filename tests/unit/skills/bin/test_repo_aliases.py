@@ -35,7 +35,6 @@ class TestResolve:
         assert resolve("memory") == "OmniNode-ai/omnimemory"
         assert resolve("dash") == "OmniNode-ai/omnidash"
         assert resolve("web") == "OmniNode-ai/omniweb"
-        assert resolve("change_control") == "OmniNode-ai/onex_change_control"
 
     def test_full_name_alias(self) -> None:
         assert resolve("omnibase_core") == "OmniNode-ai/omnibase_core"

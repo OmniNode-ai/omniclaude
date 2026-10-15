@@ -41,6 +41,11 @@ requirements:
         statement: "The public-repo hygiene scan splits a large tracked set across subprocesses and returns the serial scan's hits in the same order, and a shard that dies sends it back to the serial scan -- falsifier: uv run pytest tests/scripts/test_public_skill_hygiene_scope.py -q -k 'sharded or dead_shard'"
       - id: AC9
         statement: "The direct-model-call gate runs at pre-push and as its own whole-tree step of the precommit-suite job, not at the commit stage -- falsifier: uv run pytest tests/ci/test_precommit_suite_job_omn19612.py -q -k direct_model_call"
+  - id: req-refusal-row-names-forked-skill
+    statement: A hook refusal by a forked skill's executor names the skill instead of reading lane=unresolved.
+    acceptance:
+      - id: AC10
+        statement: "A refusal whose agent sidecar carries only the generic agent type and whose own transcript opens with the harness's skill base-directory line resolves to lane skill:<name> with lane_source skill; a later message quoting that line, an ordinary first message and a named sidecar do not -- falsifier: uv run pytest tests/hooks/test_refusal_row_lane_omn19381.py -q -k 'forked_skill or named_sidecar_wins' fails against the resolver without the skill step"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -161,3 +166,57 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_precommit_suite_job_omn19612.py -q"
     binds_ac:
       - AC9
+  - id: dod-refusal-row-names-forked-skill
+    description: A forked skill executor's refusal row carries lane=skill:<name>; the near misses stay unresolved or sidecar-named.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_refusal_row_lane_omn19381.py -q -k 'forked_skill or named_sidecar_wins'"
+    binds_ac:
+      - AC10
+  - id: dod-deploy-refusal-lane-container
+    description: >
+      Run this checkout's refusal resolver and hook attribution library in an
+      isolated Python container on a hosted Docker runner. A generic sidecar
+      resolves from its first skill message; a later quote stays unresolved,
+      and a named sidecar wins. No fleet service or credentials are required.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --mount "type=bind,src=$(pwd),dst=/workspace,readonly" --workdir /workspace python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 python -c '
+          import json
+          import runpy
+          import tempfile
+          from pathlib import Path
+          handler = runpy.run_path("src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_lane.py")
+          handler["use_hooks_lib"](str(Path("plugins/onex/hooks/lib").resolve()))
+          resolve = handler["resolve_refusal_lane"]
+          skill = {"type": "user", "message": {"role": "user", "content": "Base directory for this skill: /plugins/onex/skills/ledger-write"}}
+          ordinary = {"type": "user", "message": {"role": "user", "content": "Search the hooks."}}
+          with tempfile.TemporaryDirectory() as directory:
+              root = Path(directory)
+              transcript = root / "session.jsonl"
+              transcript.write_text("")
+              agents = root / "session" / "subagents"
+              agents.mkdir(parents=True)
+              meta = agents / "agent-probe.meta.json"
+              own = agents / "agent-probe.jsonl"
+              meta.write_text(json.dumps({"agentType": "general-purpose"}))
+              own.write_text(json.dumps(skill) + "\n")
+              payload = {"transcript_path": str(transcript), "agent_id": "probe"}
+              actual = resolve(payload, env={})
+              assert actual == ("skill:ledger-write", "skill"), actual
+              own.write_text(json.dumps(ordinary) + "\n" + json.dumps(skill) + "\n")
+              actual = resolve(payload, env={})
+              assert actual == ("", "unresolved"), actual
+              own.write_text(json.dumps(skill) + "\n")
+              meta.write_text(json.dumps({"name": "named-lane"}))
+              actual = resolve(payload, env={})
+              assert actual == ("named-lane", "sidecar"), actual
+          print("PASS: container refusal lane skill, later-quote refusal, sidecar precedence")
+          '
+    binds_ac:
+      - AC10

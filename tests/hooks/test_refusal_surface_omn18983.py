@@ -149,8 +149,11 @@ def test_real_registered_refusal_reaches_declared_surface(surface, guard, attrib
     assert ledger_rows[0] == row
 
 
-@pytest.mark.parametrize("root", ["", "relative-root"])
-def test_missing_or_relative_registry_refuses_path_resolution(surface, root):
+# An empty OMNI_HOME is an unset one, which now resolves to the per-user XDG state
+# dir (OMN-16632, tests/hooks/test_native_user_state_dir_omn16632.py); a relative one
+# is a mistake and still refuses.
+@pytest.mark.parametrize("root", ["relative-root"])
+def test_relative_registry_refuses_path_resolution(surface, root):
     box, plugin, env = surface
     env["OMNI_HOME"] = root
     proc = subprocess.run(

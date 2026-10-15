@@ -216,6 +216,22 @@ if [[ "$_JUDGE" -eq 1 ]]; then
         fi
     fi
 
+    # OMN-16632: a user outside our workspace has no registry root, hence no canonical
+    # worktree root to judge a destination against. The guard cannot apply: say so
+    # once, then allow. Only the defaulted state dir (onex-paths.sh) counts as that
+    # user; our own session with OMNI_HOME unset still reaches the fail-closed core.
+    if [[ -z "$CANONICAL_ROOT" && "${ONEX_STATE_DIR_DEFAULTED:-}" == "1" ]]; then
+        _notice="${ONEX_HOOKS_STATE_DIR}/notices/worktree_guard_no_workspace"
+        if [[ ! -e "$_notice" ]]; then
+            mkdir -p "${_notice%/*}" 2>/dev/null && : > "$_notice" 2>/dev/null || true
+            printf '%s\n' "onex worktree guard: no OMNI_HOME or worktree root is set, so there is no workspace worktree root to judge against; worktree destinations are not checked. Set OMNI_HOME to enable it." >&2
+        fi
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Worktree add ALLOWED: no workspace worktree root (OMN-16632)" >> "$LOG_FILE"
+        _hook_status "PASS" "worktree guard has no workspace root" "0"
+        echo "$TOOL_INFO"
+        exit 0
+    fi
+
     GUARD_PY="${HOOKS_DIR}/lib/worktree_add_guard.py"
     if [[ ! -f "$GUARD_PY" ]]; then
         _block "decision core missing" \

@@ -4145,7 +4145,7 @@ jobs:
 
   # ============================================================================
   # CROSS-REPO BOUNDARY PARITY (OMN-5771)
-  # Validates Kafka topic boundaries against onex_change_control manifest.
+  # Validates Kafka topic boundaries across the peer repositories' seams.
   # DIRECTLY REQUIRED on branch protection (live-verified 2026-08-13) and a CI
   # Summary GATE_JOB (scripts/ci/ci_summary_gate.py). NOT warn-only despite the
   # historical comment below this job used to carry -- see the OMN-16000 fix
@@ -4171,11 +4171,11 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
     steps:
-      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@b05c7d6f6336659d4965123bbc78a5d5b8822d70 # omnibase_core dev (OMN-20964)
+      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@c1f8e8fe0c513c0ac70ad666433a3ce1cec136c1 # omnibase_core dev (OMN-20074)
         with:
           checks: "boundary-parity"
           warn-only: "false"
-          repos: "omniclaude,omnidash,omniintelligence,omnibase_infra,omnibase_core,omnimemory,omnimarket,onex_change_control"
+          repos: "omniclaude,omnidash,omniintelligence,omnibase_infra,omnibase_core,omnimemory,omnimarket"
 
   # ============================================================================
   # CI SUMMARY (OMN-4501) — single branch-protection check
@@ -4276,16 +4276,9 @@ jobs:
           OMNI_HOME="${RUNNER_TEMP}/sibling-clones"
           echo "OMNI_HOME=${OMNI_HOME}" >> "$GITHUB_ENV"
           mkdir -p "$OMNI_HOME"
-          # OCC is read at the rev uv.lock pins (ruling 2026-10-01), as in Skill
-          # Contracts CI. omnibase_core tracks the uv.lock-pinned version tag so
+          # omnibase_core tracks the uv.lock-pinned version tag so
           # hook-bits-drift checks hook_bits.sh against the EnumHookBit version
           # omniclaude actually runs.
-          occ_rev="$(grep -oE 'onex_change_control\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
-          [[ -n "$occ_rev" ]] || { echo "::error::onex_change_control rev not found in uv.lock"; exit 1; }
-          git init --quiet "$OMNI_HOME/onex_change_control"
-          git -C "$OMNI_HOME/onex_change_control" sparse-checkout set scripts/validation
-          git -C "$OMNI_HOME/onex_change_control" fetch --quiet --depth 1 --filter=blob:none https://github.com/OmniNode-ai/onex_change_control.git "$occ_rev"
-          git -C "$OMNI_HOME/onex_change_control" checkout --quiet FETCH_HEAD
           core_version="$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("omnibase-core"))')"
           git clone --quiet --depth 1 --branch "v${core_version}" https://github.com/OmniNode-ai/omnibase_core.git "$OMNI_HOME/omnibase_core"
           # omnimarket node tree at the uv.lock pin, so the skill backing-node
@@ -4453,6 +4446,52 @@ jobs:
             echo "no base revision on this event; checking the tree against the baseline only"
             uv run --no-project --with "$CANONICAL_FILE_SHAPE_CORE" \
               python -m omnibase_core.validators.canonical_file_shape --head HEAD
+          fi
+
+      - name: Node-home positive control (planted node refused, clean tree accepted)
+        run: |
+          set -u
+          node_home() {
+            uv run --no-project --with "$CANONICAL_FILE_SHAPE_CORE" \
+              python -m omnibase_core.nodes.node_node_home_check_compute.runtime_node_home_check "$@"
+          }
+          planted=src/omniclaude/nodes/node_zz_canary_planted_compute
+          mkdir -p "$planted"
+          printf 'name: node_zz_canary_planted_compute\n' > "$planted/contract.yaml"
+          printf 'class NodeZzCanaryPlantedCompute:\n    pass\n' > "$planted/handler.py"
+          git add "$planted"
+          if node_home; then
+            echo "POSITIVE CONTROL FAILED: planted $planted was accepted"
+            exit 1
+          fi
+          echo "positive control: planted node refused"
+          git rm -q -r --cached "$planted"
+          rm -r "$planted"
+          node_home
+          echo "positive control: clean tree accepted"
+
+      - name: Refuse new ONEX nodes outside omnimarket (OMN-20702)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          MQ_BASE: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -u
+          node_home() {
+            uv run --no-project --with "$CANONICAL_FILE_SHAPE_CORE" \
+              python -m omnibase_core.nodes.node_node_home_check_compute.runtime_node_home_check "$@"
+          }
+          base="${PR_BASE:-${MQ_BASE:-${PUSH_BEFORE:-}}}"
+          if [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git merge-base "$base" HEAD)"
+            node_home --base "$base"
+          elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "merge_group" ]; then
+            echo "node-home ratchet: no resolvable base revision on $EVENT_NAME; refusing"
+            exit 1
+          else
+            echo "no base revision on this event; checking the tree against HEAD"
+            node_home --base HEAD
           fi
 
   # ============================================================================
@@ -5888,7 +5927,7 @@ jobs:
   # Agent Config Schema Validation (OMN-8910)
   #
   # Validates all agent configuration YAMLs against ModelAgentConfig from
-  # onex_change_control. Runs on PRs that touch agent config files and on
+  # omnibase_core. Runs on PRs that touch agent config files and on
   # merge_group events.
   validate-agent-configs:
     name: validate-agent-configs
@@ -5915,34 +5954,36 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
-      - name: Resolve the pinned onex_change_control rev
-        id: occ_pin
-        run: |
-          set -euo pipefail
-          # A sibling is read at the rev this repo's uv.lock pins, never its live
-          # branch (ruling 2026-10-01).
-          rev="$(grep -oE 'onex_change_control\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
-          [[ -n "$rev" ]] || { echo "::error::onex_change_control rev not found in uv.lock"; exit 1; }
-          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout onex_change_control
-        uses: actions/checkout@v7
-        with:
-          repository: OmniNode-ai/onex_change_control
-          ref: ${{ steps.occ_pin.outputs.rev }}
-          path: _onex_change_control
-          token: ${{ github.token }}
-
-      - name: Install onex_change_control
-        working-directory: ${{ github.workspace }}
-        run: |
-          cd _onex_change_control
-          uv pip install --system .
-
       - name: Validate agent configs
         working-directory: ${{ github.workspace }}
+        env:
+          UV_HTTP_TIMEOUT: "600"
         run: |
-          validate-agent-yaml plugins/onex/agents/configs/*.yaml
+          set -euo pipefail
+          # OMN-20074: omnibase_core owns the agent config schema; read it at the
+          # version uv.lock pins.
+          core_version="$(awk '/^name = "omnibase-core"$/ {getline; gsub(/[^0-9.]/, "", $0); print; exit}' uv.lock)"
+          [[ -n "$core_version" ]] || { echo "::error::omnibase-core version not found in uv.lock"; exit 1; }
+          uv run --no-project --python 3.12 --with "omnibase-core==${core_version}" --with pyyaml python - plugins/onex/agents/configs/*.yaml <<'PY'
+          import sys
+
+          import yaml
+          from omnibase_core.models.agents.model_agent_yaml_config import ModelAgentConfig
+
+          failed = 0
+          for path in sys.argv[1:]:
+              with open(path, encoding="utf-8") as fh:
+                  data = yaml.safe_load(fh)
+              try:
+                  if not isinstance(data, dict):
+                      raise ValueError(f"expected a mapping, got {type(data).__name__}")
+                  ModelAgentConfig.model_validate(data)
+              except Exception as exc:
+                  failed += 1
+                  print(f"[ERROR] {path}: {exc}", file=sys.stderr)
+          print(f"{len(sys.argv) - 1 - failed} valid, {failed} invalid")
+          sys.exit(1 if failed else 0)
+          PY
 
   # Folded from .github/workflows/validate-skill-aspiration.yml (OMN-20074); runs when its original `paths:` change.
   validate-skill-aspiration:

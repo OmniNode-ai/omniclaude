@@ -24,7 +24,7 @@ requirements:
       - id: AC4
         statement: 'AC4: content.captured records carry the raw prompt, tool input, tool result and error with no producer redaction, no in-place hash and no secret-store swap -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_omn19551.py tests/unit/hooks/test_failed_call_content_capture_omn18946.py -q --no-cov -k "raw or secret_store" fails against the pre-change producer'
       - id: AC5
-        statement: 'AC5: payload encryption is one contract setting, off by default, and the omniclaude registry passes hook.event and content.captured through untransformed -- falsifier: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k "encryption or untransformed" fails against the pre-change contract'
+        statement: 'AC5: payload encryption is one contract setting, off by default, and the omniclaude registry projects the omnimarket publish transform for hook.event and content.captured -- falsifier: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k "encryption or publish_transform" fails against the pre-change contract'
 evidence_requirements:
   - kind: tests
     description: Selected configuration survives launchd rendering and missing overlays preserve the previous agent.
@@ -73,10 +73,10 @@ dod_evidence:
     binds_ac:
       - AC4
   - id: dod-omn19513-encryption-setting
-    description: The capture contract declares payload_encryption off by default and the registry passes both classes through untransformed.
+    description: The capture contract declares payload_encryption off by default and the registry projects the omnimarket publish transform for both classes.
     source: manual
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k "encryption or untransformed"
+        check_value: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k "encryption or publish_transform"
     binds_ac:
       - AC5

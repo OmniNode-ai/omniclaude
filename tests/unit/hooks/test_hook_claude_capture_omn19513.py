@@ -662,16 +662,22 @@ def test_session_end_returns_at_once_too(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# the fan-out: hook.event crosses the emit seam untransformed
+# the fan-out: the publish transform is omnimarket's, projected here
 # ---------------------------------------------------------------------------
 
 
-def test_the_registry_passes_hook_event_and_content_through_untransformed() -> None:
-    from omniclaude.hooks.event_registry import EVENT_REGISTRY
+def test_the_registry_projects_omnimarkets_publish_transform() -> None:
+    """The producer journals raw; the transform mirrors omnimarket's registry.
+
+    omnimarket's emit registry owns the publish transform for both topics and
+    still declares ``redact_capture``; the Registry Consistency check refuses
+    any other projection here.
+    """
+    from omniclaude.hooks.event_registry import EVENT_REGISTRY, redact_capture
 
     for event_type in ("hook.event", "content.captured"):
         rules = EVENT_REGISTRY[event_type].fan_out
-        assert [rule.transform for rule in rules] == [None]
+        assert [rule.transform for rule in rules] == [redact_capture]
 
 
 # ---------------------------------------------------------------------------

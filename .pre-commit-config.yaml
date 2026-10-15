@@ -117,6 +117,12 @@ repos:
       # shape-gate-independence job in .github/workflows/ci.yml (CI Summary
       # GATE_JOBS + STRICT_SUCCESS_JOBS).
       - id: check-shape-gate-independence
+      # Node-home ratchet (OMN-20702): a new ONEX node directory or onex.nodes
+      # entry point outside omnimarket is refused against the shrink-only
+      # .onex_ratchets/node_home_baseline.txt. BLOCKING, no allowlist, no
+      # suppression comment. CI twin: the Canonical File Shape job in
+      # .github/workflows/ci.yml, same omnibase_core commit.
+      - id: check-node-home
       - id: check-stub-implementations
 
   # Shared ONEX governance hooks (omnibase_core; moved from onex_change_control
