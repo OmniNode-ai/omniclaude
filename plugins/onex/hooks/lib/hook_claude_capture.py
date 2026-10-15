@@ -33,7 +33,10 @@ nothing is hashed.
 
 Payload encryption is one contract setting, ``payload_encryption`` in
 ``contract_hook_claude_capture.yaml``, off by default; see
-:func:`payload_encryption_enabled`.
+:func:`payload_encryption_enabled`. With it on, the payload is journalled
+sealed under a key read from the secret store
+(``omniclaude.handlers.handler_hook_payload_encryption``), and nothing is journalled when that
+key cannot be read.
 
 The refusals, each fail-closed
 ------------------------------
@@ -94,7 +97,7 @@ import os
 import re
 import socket
 import sys
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
@@ -238,41 +241,13 @@ def load_contract() -> ModuleType | None:
     return None
 
 
-_CAPTURE_CONTRACT_YAML = (
-    Path(__file__).resolve().parents[4]
-    / "src"
-    / "omniclaude"
-    / "hooks"
-    / "contracts"
-    / "contract_hook_claude_capture.yaml"
-)
-
-
 def payload_encryption_enabled(contract_path: Path | None = None) -> bool:
     """The contract's ``payload_encryption.enabled`` setting (default off).
 
-    Read with a line scan, not PyYAML, so the hook path stays standard-library.
-    An unreadable contract, or one that does not set the key to ``true``, is
-    off. When it is on, the capture refuses to journal until the encryption
-    step is wired (:func:`capture`), so content never crosses in the clear
-    while the operator asked for it encrypted.
+    The reader, and the sealer it turns on, live in ``hook_content_capture``
+    beside the content producer that shares them (OMN-19513).
     """
-    path = contract_path or _CAPTURE_CONTRACT_YAML
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return False
-    inside = False
-    for line in lines:
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        if not line.startswith(" "):
-            inside = line.rstrip() == "payload_encryption:"
-            continue
-        if inside and line.strip().startswith("enabled:"):
-            value = line.split(":", 1)[1].split("#", 1)[0].strip().lower()
-            return value == "true"
-    return False
+    return content_capture.payload_encryption_setting(contract_path)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -519,8 +494,13 @@ def capture(
     cwd: str | None = None,
     actor: str | None = None,
     now: datetime | None = None,
+    key_reader: Callable[[str], str | None] | None = None,
 ) -> int:
-    """Journal the ``hook.event`` record for one hook call. Returns 0 or 1."""
+    """Journal the ``hook.event`` record for one hook call. Returns 0 or 1.
+
+    ``key_reader`` reads the payload key by its secret-store reference; it is
+    consulted only when the ``payload_encryption`` setting is on.
+    """
     hook_name = hook_input.get("hook_event_name")
     if not isinstance(hook_name, str) or not hook_name:
         _log("skipped: stdin carries no hook_event_name")
@@ -546,10 +526,12 @@ def capture(
     if contract is None:
         _log("skipped: the capture contract could not be loaded")
         return 0
-    if payload_encryption_enabled():
+    try:
+        sealer = content_capture.payload_sealer(key_reader=key_reader)
+    except content_capture.PayloadSealRefusedError as exc:
         _log(
-            f"skipped {hook_name}: payload_encryption is on and the encryption "
-            "step is not wired; nothing crosses in the clear"
+            f"skipped {hook_name}: payload_encryption is on and {exc}; "
+            "nothing crosses in the clear"
         )
         return 0
 
@@ -570,6 +552,8 @@ def capture(
         _log(f"skipped {hook_name}: the contract refused the input: {exc}")
         return 0
     lineage = payload["lineage"]
+    if sealer is not None:
+        payload = sealer(HOOK_EVENT_TYPE, payload)
     appender.append_event(
         # The literal, not the constant: validate_hook_edge_lane.py finds the
         # classes this edge emits by scanning call sites for it.

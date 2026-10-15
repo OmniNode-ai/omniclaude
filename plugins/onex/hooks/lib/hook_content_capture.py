@@ -85,11 +85,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import importlib.util
 import json
 import os
 import sys
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
@@ -521,6 +523,119 @@ def record_operator_marker(turn_dir: Path, session_id: str, ids: list[str]) -> N
 
 
 # ---------------------------------------------------------------------------
+# payload encryption (OMN-19513)
+# ---------------------------------------------------------------------------
+
+#: The capture contract; its ``payload_encryption`` block is the setting.
+CAPTURE_CONTRACT_YAML = (
+    Path(__file__).resolve().parents[4]
+    / "src"
+    / "omniclaude"
+    / "hooks"
+    / "contracts"
+    / "contract_hook_claude_capture.yaml"
+)
+_ENCRYPTION_HANDLER = "omniclaude.handlers.handler_hook_payload_encryption"
+_ENCRYPTION_BLOCK = "payload_encryption:"
+
+#: ``(payload class, payload) -> sealed payload``.
+Sealer = Callable[[str, dict[str, Any]], dict[str, Any]]
+
+
+class PayloadSealRefusedError(RuntimeError):
+    """The setting is on and the payload cannot be sealed. Nothing is journalled."""
+
+
+def _setting_scalar(raw: str) -> str | None:
+    value = raw.split("#", 1)[0].strip().strip("'\"")
+    return None if value.lower() in {"", "null", "~"} else value
+
+
+def payload_encryption_setting(
+    contract_path: Path | None = None,
+) -> tuple[bool, str | None]:
+    """The contract's ``payload_encryption`` block: ``(enabled, key_secret_ref)``.
+
+    Read with a line scan, not PyYAML, so the hook path stays standard-library
+    and costs nothing while the setting is off (the default). An unreadable
+    contract, or one that does not set ``enabled`` to ``true``, is off.
+    """
+    try:
+        lines = (
+            (contract_path or CAPTURE_CONTRACT_YAML)
+            .read_text(encoding="utf-8")
+            .splitlines()
+        )
+    except OSError:
+        return False, None
+    enabled = False
+    key_ref: str | None = None
+    inside = False
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line.startswith(" "):
+            inside = line.rstrip() == _ENCRYPTION_BLOCK
+            continue
+        if not inside:
+            continue
+        name, _, rest = line.strip().partition(":")
+        if name == "enabled":
+            enabled = (_setting_scalar(rest) or "").lower() == "true"
+        elif name == "key_secret_ref":
+            key_ref = _setting_scalar(rest)
+    return enabled, key_ref
+
+
+def payload_sealer(
+    *,
+    key_reader: Callable[[str], str | None] | None = None,
+    contract_path: Path | None = None,
+) -> Sealer | None:
+    """``None`` while the setting is off; else a sealer holding the resolved key.
+
+    The encryption handler is imported only here, so a capture with the setting
+    off never pays for ``omniclaude``. Raises :class:`PayloadSealRefusedError`
+    when the setting is on and the handler, the secret store or the key is not
+    usable: the caller journals nothing.
+    """
+    enabled, key_ref = payload_encryption_setting(contract_path)
+    if not enabled:
+        return None
+    try:
+        enc = importlib.import_module(_ENCRYPTION_HANDLER)
+    except ImportError as exc:
+        raise PayloadSealRefusedError(
+            f"the encryption handler did not import ({type(exc).__name__})"
+        ) from exc
+    handler = enc.HandlerHookPayloadEncryption(key_ref=key_ref, key_reader=key_reader)
+    operation = enc.EnumHookPayloadEncryptionOperation
+    outcome = enc.EnumHookPayloadEncryptionOutcome
+
+    def run(op: Any, payload_class: str, payload: dict[str, Any]) -> Any:
+        return handler.handle(
+            enc.ModelHookPayloadEncryptionRequest(
+                operation=op,
+                payload_class=enc.EnumHookPayloadClass(payload_class),
+                payload=payload,
+            )
+        )
+
+    checked = run(operation.CHECK, "hook.event", {})
+    if checked.outcome is outcome.REFUSED:
+        raise PayloadSealRefusedError(checked.reason)
+
+    def seal(payload_class: str, payload: dict[str, Any]) -> dict[str, Any]:
+        result = run(operation.SEAL, payload_class, payload)
+        if result.outcome is outcome.REFUSED:
+            raise PayloadSealRefusedError(result.reason)
+        sealed: dict[str, Any] = result.payload
+        return sealed
+
+    return seal
+
+
+# ---------------------------------------------------------------------------
 # entrypoint
 # ---------------------------------------------------------------------------
 
@@ -584,11 +699,14 @@ def capture(
     session_id: str | None = None,
     transcript_path: str | None = None,
     now: datetime | None = None,
+    key_reader: Callable[[str], str | None] | None = None,
 ) -> int:
     """Journal every content record for one hook call. Returns how many.
 
     ``now`` anchors the first Stop's operator-prompt lookback; ``main`` passes
-    the wall clock.
+    the wall clock. ``key_reader`` reads the payload key by its secret-store
+    reference; it is consulted only when the ``payload_encryption`` setting is
+    on (OMN-19513), and a key that cannot be read journals nothing.
     """
     if not capture_enabled_by_operator():
         return 0
@@ -606,6 +724,13 @@ def capture(
 
     session = session_id or hook_input.get("session_id") or hook_input.get("sessionId")
     if not isinstance(session, str) or not session:
+        return 0
+    try:
+        sealer = payload_sealer(key_reader=key_reader)
+    except PayloadSealRefusedError as exc:
+        _log(
+            f"skipped: payload_encryption is on and {exc}; nothing crosses in the clear"
+        )
         return 0
     items = _ITEMS[kind](hook_input)
     operator_ids: list[str] = []
@@ -633,6 +758,8 @@ def capture(
     for item in items:
         record = {"session_id": session, "hook_source": _HOOK_SOURCE[kind], **item}
         for chunk in raw_chunks(resolver, record, topic=topic):
+            if sealer is not None:
+                chunk = sealer("content.captured", chunk)
             appender.append_event(
                 # A literal, not CONTENT_EVENT_TYPE, on purpose (OMN-19913):
                 # validate_hook_edge_lane.py resolves only literal classes at
