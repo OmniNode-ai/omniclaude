@@ -42,7 +42,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py::test_banner_is_silent_for_a_session_that_never_opted_in -q"
+        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py -q -k test_banner_is_silent_for_a_session_that_never_opted_in"
     binds_ac:
       - AC1
   - id: dod-omn21149-ac2
@@ -50,7 +50,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py::test_another_sessions_marker_does_not_opt_this_one_in -q"
+        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py -q -k test_another_sessions_marker_does_not_opt_this_one_in"
     binds_ac:
       - AC2
   - id: dod-omn21149-ac3
@@ -58,7 +58,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py::test_launch_env_opts_in_and_zero_forces_out -q"
+        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py -q -k test_launch_env_opts_in_and_zero_forces_out"
     binds_ac:
       - AC3
   - id: dod-omn21149-ac4
@@ -66,7 +66,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py::test_a_payload_id_that_is_not_a_plain_token_never_opts_in -q"
+        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py -q -k test_a_payload_id_that_is_not_a_plain_token_never_opts_in"
     binds_ac:
       - AC4
   - id: dod-omn21149-ac5
@@ -74,6 +74,6 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py::test_observer_hook_exits_zero_when_no_python_resolves -q"
+        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py -q -k test_observer_hook_exits_zero_when_no_python_resolves"
     binds_ac:
       - AC5
