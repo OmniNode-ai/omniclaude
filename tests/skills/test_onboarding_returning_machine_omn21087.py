@@ -423,7 +423,7 @@ NESTED_ZSHRC = (
 )
 
 
-@pytest.mark.skipif(shutil.which("zsh") is None, reason="needs zsh")
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
 def test_setting_aside_keeps_every_profile_parseable(tmp_path: Path) -> None:
     """A nested function body is commented out whole; an alias alone in an if stays valid."""
     home = tmp_path / "home"
@@ -447,7 +447,8 @@ def test_setting_aside_keeps_every_profile_parseable(tmp_path: Path) -> None:
         "fi",
         mark + "onex() { echo one-line; }",
     ]
-    subprocess.run(["zsh", "-n", str(home / ".zshrc")], check=True)
+    if shutil.which("zsh"):
+        subprocess.run(["zsh", "-n", str(home / ".zshrc")], check=True)
     subprocess.run(["bash", "-n", str(home / ".bashrc")], check=True)
 
 
