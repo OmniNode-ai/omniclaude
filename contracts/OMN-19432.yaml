@@ -1,0 +1,41 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-19432
+title: The plugin agent config no longer lists the retired gpt-oss model as a serving tier
+summary: The smart-responder agent config named gpt-oss 20B and 120B as its large and huge local tiers. gpt-oss-120b left the lab on 2026-10-08, so the two tiers now name the lab backends that serve those roles, the four baseline entries for the old lines are removed, and a test pins that no plugin YAML value names gpt-oss.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn19432-no-retired-model-in-plugin-yaml
+    statement: No plugin YAML names the retired gpt-oss model, and the hardcoded-model-config baseline only shrinks.
+    acceptance:
+      - id: AC1
+        statement: "AC1: no key or value in plugins/**/*.yaml names gpt-oss in any spelling, and the detector finds a spelling in a value but not in a comment -- falsifier: uv run pytest tests/routing/test_no_gpt_oss_in_plugin_yaml_omn19432.py -q --no-cov"
+      - id: AC2
+        statement: "AC2: the hardcoded-model-config gate reports no new finding and no stale baseline entry against the shrunk baseline -- falsifier: uv run python -m omnibase_core.validation.hardcoded_model_config.runtime_hardcoded_model_config --all --baseline config/hardcoded_model_config_baseline.yaml"
+evidence_requirements:
+  - kind: tests
+    description: The plugin YAML check passes at the head and fails at the merge base, where the smart-responder config names gpt-oss.
+    command: uv run pytest tests/routing/test_no_gpt_oss_in_plugin_yaml_omn19432.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn19432-ac1-plugin-yaml
+    description: No plugin YAML value names gpt-oss and the detector finds a spelling in a value but not in a comment.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/routing/test_no_gpt_oss_in_plugin_yaml_omn19432.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac: [AC1]
+  - id: dod-omn19432-ac2-baseline
+    description: The hardcoded-model-config gate passes against the baseline with its four smart-responder entries removed.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: uv run python -m omnibase_core.validation.hardcoded_model_config.runtime_hardcoded_model_config --all --baseline config/hardcoded_model_config_baseline.yaml
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac: [AC2]

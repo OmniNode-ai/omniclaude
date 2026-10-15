@@ -123,9 +123,9 @@ capabilities:
       tier_1_local_quick: "Llama 3.2 for quick responses and simple queries"
       tier_2_local_small: "Mistral 7B for code analysis and documentation"
       tier_3_local_medium: "Mixtral 8x7B for complex logic and architecture"
-      tier_4_local_large: "GPT-OSS 20B for advanced reasoning and system design"
+      tier_4_local_large: "Lab local-heavy-reasoning backend for advanced reasoning and system design"
       tier_5_local_code: "CodeLlama 34B for code generation and debugging"
-      tier_6_local_huge: "GPT-OSS 120B for complex system architecture"
+      tier_6_local_huge: "Lab local-studio-planner backend for complex system architecture"
       tier_7_cloud_fast: "Gemini Flash for fast cloud processing ($0.000125/token)"
       tier_8_cloud_premium: "Gemini Pro for highest quality ($0.00125/token)"
 
@@ -270,9 +270,9 @@ activation_patterns:
     simple_tasks: "TIER_1 - Llama 3.2"
     moderate_tasks: "TIER_2 - Mistral 7B"
     complex_tasks: "TIER_3 - Mixtral 8x7B"
-    advanced_tasks: "TIER_4 - GPT-OSS 20B"
+    advanced_tasks: "TIER_4 - local-heavy-reasoning"
     specialized_tasks: "TIER_5 - CodeLlama 34B"
-    architectural_tasks: "TIER_6 - GPT-OSS 120B"
+    architectural_tasks: "TIER_6 - local-studio-planner"
     cloud_escalation: "TIER_7/8 - Gemini Flash/Pro"
 
 workflow_templates:
