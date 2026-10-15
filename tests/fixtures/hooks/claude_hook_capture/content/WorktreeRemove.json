@@ -6,10 +6,7 @@
     "field": "worktree_path",
     "hook_event_name": "WorktreeRemove",
     "length": 29,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "54b19b170c2bf0c43283197b2f45031b469241512247470fc7517b6d8034efe7",
     "value": "/restricted/worktrees/private"
   }
 ]

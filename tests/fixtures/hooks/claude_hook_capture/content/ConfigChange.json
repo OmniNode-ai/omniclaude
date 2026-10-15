@@ -6,10 +6,7 @@
     "field": "file_path",
     "hook_event_name": "ConfigChange",
     "length": 25,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "954d0c90bd4822083ef04e1054d7359e9f632cd7ab6b5ed39513722afe1a861c",
     "value": "/restricted/settings.json"
   }
 ]

@@ -6,7 +6,7 @@
       "content_record_id": "300f077c-5fd6-5b9b-b055-5eaf19f119c0",
       "field": "directory",
       "length": 25,
-      "sha256": "9dc066f318853dbc3757c002728afe8dc771216f61b225db13ddf9b877424a41"
+      "value": "/restricted/new-directory"
     }
   ],
   "emitted_at": "2026-09-26T12:00:31Z",
@@ -34,7 +34,7 @@
       "content_record_id": "300f077c-5fd6-5b9b-b055-5eaf19f119c0",
       "field": "directory",
       "length": 25,
-      "sha256": "9dc066f318853dbc3757c002728afe8dc771216f61b225db13ddf9b877424a41"
+      "value": "/restricted/new-directory"
     },
     "hook_event_name": "DirectoryAdded",
     "source": "slash_command"

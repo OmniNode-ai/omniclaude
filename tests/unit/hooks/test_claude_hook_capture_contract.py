@@ -52,7 +52,6 @@ def _load_generator() -> ModuleType:
 
 
 GENERATOR = _load_generator()
-SCRUB = GENERATOR.mock_content_scrubber
 
 
 def _load_json(path: Path) -> object:
@@ -114,7 +113,6 @@ def test_each_stdin_fixture_maps_and_reserializes_byte_identically(
         sidecar=None,
         claude_code_version="2.1.283",
         turn_id=lineage["turn_id"] if isinstance(lineage["turn_id"], str) else None,
-        content_scrubber=SCRUB,
     )
     validated = ModelClaudeHookEvent.model_validate(
         result.event.model_dump(mode="json")
@@ -125,57 +123,46 @@ def test_each_stdin_fixture_maps_and_reserializes_byte_identically(
     )
 
 
-def test_content_values_and_planted_secret_never_enter_metadata_events() -> None:
-    all_event_text = "".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted((FIXTURE_ROOT / "events").glob("*.json"))
-    )
-    for content_path in sorted((FIXTURE_ROOT / "content").glob("*.json")):
-        records = _load_json(content_path)
-        assert isinstance(records, list)
-        for record in records:
-            assert isinstance(record, dict)
-            value = record["value"]
-            assert isinstance(value, str)
-            assert value not in all_event_text
-
-    for scenario_events in sorted((FIXTURE_ROOT / "scenarios").glob("*.events.jsonl")):
-        content_path = scenario_events.with_name(
-            scenario_events.name.replace(".events.jsonl", ".content.jsonl")
+def test_content_values_ride_the_event_raw() -> None:
+    """OMN-19513: every content record's value is in its event, verbatim."""
+    for hook_name in EnumClaudeHookEventName:
+        event = ModelClaudeHookEvent.model_validate(
+            _load_json(FIXTURE_ROOT / "events" / f"{hook_name.value}.json")
         )
-        event_text = scenario_events.read_text(encoding="utf-8")
-        for record in _load_jsonl(content_path):
-            value = record["value"]
-            assert isinstance(value, str)
-            assert value not in event_text
+        raw_records = _load_json(FIXTURE_ROOT / "content" / f"{hook_name.value}.json")
+        assert isinstance(raw_records, list)
+        refs = {ref.content_record_id: ref for ref in event.content_refs}
+        for raw in raw_records:
+            record = ModelHookContentRecord.model_validate(raw)
+            assert refs[record.content_record_id].value == record.value
 
 
-def test_planted_secret_survives_only_in_stdin_fixtures() -> None:
-    """Scrub-before-hash: the secret reaches no event and no content record."""
+def test_planted_secret_rides_raw_into_events_and_content() -> None:
+    """No scrub: the planted secret-shaped value reaches the event unchanged."""
 
-    carriers = []
-    for path in sorted(FIXTURE_ROOT.rglob("*")):
-        if path.is_file() and FAKE_SECRET in path.read_text(encoding="utf-8"):
-            carriers.append(path.relative_to(FIXTURE_ROOT).as_posix())
-    assert carriers, "positive control: the stdin fixtures must plant the secret"
-    for carrier in carriers:
-        assert carrier.startswith("stdin/") or carrier.endswith(".stdin.jsonl"), carrier
-
-
-def test_scrubbed_content_record_carries_its_redaction_state() -> None:
-    raw = _load_json(FIXTURE_ROOT / "content" / "UserPromptSubmit.json")
-    assert isinstance(raw, list)
-    records = [ModelHookContentRecord.model_validate(value) for value in raw]
-    prompt = next(record for record in records if record.field == "prompt")
-    assert prompt.redaction_state == "secret_detected"
-    assert prompt.matched_pattern_names == ("anthropic_api_key",)
-    assert "[REDACTED:anthropic_api_key]" in prompt.value
-    title = next(record for record in records if record.field == "session_title")
-    assert title.redaction_state == "clean"
-    assert title.matched_pattern_names == ()
+    carriers = {
+        path.relative_to(FIXTURE_ROOT).as_posix()
+        for path in sorted(FIXTURE_ROOT.rglob("*"))
+        if path.is_file() and FAKE_SECRET in path.read_text(encoding="utf-8")
+    }
+    assert "stdin/UserPromptSubmit.json" in carriers
+    assert "events/UserPromptSubmit.json" in carriers
+    assert "content/UserPromptSubmit.json" in carriers
+    assert not any(
+        "[REDACTED" in path.read_text(encoding="utf-8")
+        for path in FIXTURE_ROOT.rglob("*")
+        if path.is_file()
+    )
 
 
-def test_mapper_requires_an_explicit_scrubber() -> None:
+def test_no_reference_or_record_carries_a_digest_or_redaction_state() -> None:
+    for path in sorted(FIXTURE_ROOT.rglob("*.json*")):
+        text = path.read_text(encoding="utf-8")
+        for key in ('"sha256"', '"redaction_state"', '"matched_pattern_names"'):
+            assert key not in text, (path.name, key)
+
+
+def test_mapper_takes_no_scrubber() -> None:
     raw = _load_json(FIXTURE_ROOT / "stdin" / "UserPromptSubmit.json")
     assert isinstance(raw, dict)
     with pytest.raises(TypeError):
@@ -185,6 +172,7 @@ def test_mapper_requires_an_explicit_scrubber() -> None:
             sidecar=None,
             claude_code_version="2.1.283",
             turn_id=None,
+            content_scrubber=lambda value: value,
         )
 
 
@@ -202,7 +190,7 @@ def test_every_content_ref_has_one_matching_record() -> None:
         assert set(by_id) == {ref.content_record_id for ref in event.content_refs}
         for ref in event.content_refs:
             record = by_id[ref.content_record_id]
-            assert record.sha256 == ref.sha256
+            assert record.value == ref.value
             assert record.length == ref.length
 
 
@@ -288,7 +276,6 @@ def test_event_id_is_deterministic_and_agent_sensitive() -> None:
         sidecar=None,
         claude_code_version="2.1.283",
         turn_id="turn-fixed-1",
-        content_scrubber=SCRUB,
     )
     second = map_hook_stdin(
         raw,
@@ -296,7 +283,6 @@ def test_event_id_is_deterministic_and_agent_sensitive() -> None:
         sidecar=None,
         claude_code_version="2.1.283",
         turn_id="turn-fixed-1",
-        content_scrubber=SCRUB,
     )
     agent_raw = {**raw, "agent_id": "different-agent"}
     agent = map_hook_stdin(
@@ -305,7 +291,6 @@ def test_event_id_is_deterministic_and_agent_sensitive() -> None:
         sidecar=None,
         claude_code_version="2.1.283",
         turn_id="turn-fixed-1",
-        content_scrubber=SCRUB,
     )
     assert first.event.event_id == second.event.event_id
     assert first.event.event_id != agent.event.event_id
@@ -322,7 +307,6 @@ def test_unknown_hook_name_fails_closed() -> None:
             sidecar=None,
             claude_code_version="2.1.283",
             turn_id=None,
-            content_scrubber=SCRUB,
         )
 
 
@@ -353,7 +337,6 @@ def _map_subagent_start(sidecar: object | None) -> ModelClaudeHookEvent:
         sidecar=sidecar,  # type: ignore[arg-type]
         claude_code_version="2.1.283",
         turn_id=None,
-        content_scrubber=SCRUB,
     ).event
 
 
@@ -387,14 +370,12 @@ def test_subagent_sidecar_model_absent_without_a_sidecar_and_on_the_main_thread(
     assert lineage["agent_description"] is None
 
 
-def test_subagent_sidecar_model_description_is_scrubbed_and_length_capped() -> None:
-    """A description is a short label: a secret in it is scrubbed, a long one cut."""
+def test_subagent_sidecar_model_description_is_raw_and_length_capped() -> None:
+    """A description is a short label: never scrubbed (OMN-19513), a long one cut."""
     sidecar = GENERATOR._sidecar(agent_type="Explore", spawn_depth=1, tool_use_id="t1")
     leaky = sidecar.model_copy(update={"description": f"use {FAKE_SECRET} now"})
     described = _map_subagent_start(leaky).lineage.agent_description
-    assert described is not None
-    assert FAKE_SECRET not in described
-    assert "[REDACTED" in described
+    assert described == f"use {FAKE_SECRET} now"
 
     long = sidecar.model_copy(update={"description": "x" * 5000})
     capped = _map_subagent_start(long).lineage.agent_description
@@ -443,7 +424,6 @@ def _map_stdin(
         sidecar=None,
         claude_code_version="2.1.283",
         turn_id=None,
-        content_scrubber=SCRUB,
         host=host,
     ).event
 

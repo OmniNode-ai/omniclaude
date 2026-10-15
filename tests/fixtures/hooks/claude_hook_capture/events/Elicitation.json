@@ -6,7 +6,7 @@
       "content_record_id": "7826502f-151e-52ca-8b9a-1e2a7b4d5df8",
       "field": "message",
       "length": 27,
-      "sha256": "a4c17af9eabc071c5c66c8bb4cc55a1f00844f5d14de8ef27edfbf4c28a1caa4"
+      "value": "private elicitation message"
     }
   ],
   "emitted_at": "2026-09-26T12:00:23Z",
@@ -37,7 +37,7 @@
       "content_record_id": "7826502f-151e-52ca-8b9a-1e2a7b4d5df8",
       "field": "message",
       "length": 27,
-      "sha256": "a4c17af9eabc071c5c66c8bb4cc55a1f00844f5d14de8ef27edfbf4c28a1caa4"
+      "value": "private elicitation message"
     },
     "mode": "form",
     "requested_schema_keys": [

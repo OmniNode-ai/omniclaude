@@ -6,10 +6,7 @@
     "field": "error_details",
     "hook_event_name": "StopFailure",
     "length": 26,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "f00316117c52ec74086aa5703cf98119fc91ece3afe538408c2c55f57f80ebb9",
     "value": "private stop error details"
   },
   {
@@ -19,10 +16,7 @@
     "field": "last_assistant_message",
     "hook_event_name": "StopFailure",
     "length": 28,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "de5ca7f63b7beb496d79e07972511eaa908f49562494d2596dcfa43038573dbc",
     "value": "private final assistant text"
   }
 ]

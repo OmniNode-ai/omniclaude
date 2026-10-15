@@ -399,17 +399,12 @@ def _usage_stdin(**over: Any) -> dict[str, Any]:
 
 
 def _map(stdin: dict[str, Any]) -> ModelClaudeHookEvent:
-    from omniclaude.hooks.model_claude_hook_event import ModelContentScrubResult
-
     return map_hook_stdin(
         stdin,
         emitted_at=_NOW,
         sidecar=None,
         claude_code_version="2.1.283",
         turn_id="turn-1",
-        content_scrubber=lambda v: ModelContentScrubResult(
-            value=v, redaction_state="clean", matched_pattern_names=()
-        ),
     ).event
 
 

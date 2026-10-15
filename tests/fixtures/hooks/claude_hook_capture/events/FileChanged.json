@@ -6,7 +6,7 @@
       "content_record_id": "ed49d709-cb69-5136-b55b-2805890fd6a4",
       "field": "file_path",
       "length": 22,
-      "sha256": "faf8b4f003afeadd1d7592328e5b33aa9ce5174b667dcd42e195c1d55dbe6093"
+      "value": "/restricted/private.py"
     }
   ],
   "emitted_at": "2026-09-26T12:00:30Z",
@@ -35,7 +35,7 @@
       "content_record_id": "ed49d709-cb69-5136-b55b-2805890fd6a4",
       "field": "file_path",
       "length": 22,
-      "sha256": "faf8b4f003afeadd1d7592328e5b33aa9ce5174b667dcd42e195c1d55dbe6093"
+      "value": "/restricted/private.py"
     },
     "hook_event_name": "FileChanged"
   },

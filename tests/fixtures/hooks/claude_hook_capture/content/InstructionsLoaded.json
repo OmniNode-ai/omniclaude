@@ -6,10 +6,7 @@
     "field": "file_path",
     "hook_event_name": "InstructionsLoaded",
     "length": 21,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "646efb8c7a3eec329240f7bbabf3d919f0a7019388a57fa46b75727ba4ecfddb",
     "value": "/restricted/CLAUDE.md"
   }
 ]

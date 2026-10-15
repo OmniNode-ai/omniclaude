@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -17,7 +16,6 @@ from pydantic import BaseModel, ConfigDict
 from omniclaude.hooks.model_claude_hook_event import (
     EnumClaudeHookEventName,
     ModelClaudeHookEvent,
-    ModelContentScrubResult,
     ModelHookCaptureResult,
     ModelHookContentRecord,
     ModelSubagentSidecar,
@@ -36,7 +34,6 @@ CONTRACT_PATH = (
     REPO_ROOT / "src/omniclaude/hooks/contracts/contract_hook_claude_capture.yaml"
 )
 # secret-ok: the next line is a detection regex, not a secret
-_MOCK_SECRET_PATTERN = re.compile(r"sk-ant-[A-Za-z0-9_-]{8,}")  # secret-ok: regex
 
 
 def _source_topic() -> str:
@@ -47,27 +44,6 @@ def _source_topic() -> str:
     if not isinstance(name, str) or not name:
         raise AssertionError("contract topics.metadata.name must be a string")
     return name
-
-
-def mock_content_scrubber(value: str) -> ModelContentScrubResult:
-    """MOCK span scrub for fixtures only -- NOT a production control.
-
-    It stands in for the restricted content family's span scrub
-    (capture_redaction.yaml secret_patterns, applied by the producer) so the
-    fixtures show the required order: scrub first, then hash. It knows one
-    pattern, the one the fixtures plant.
-    """
-
-    scrubbed, count = _MOCK_SECRET_PATTERN.subn("[REDACTED:anthropic_api_key]", value)
-    if count:
-        return ModelContentScrubResult(
-            value=scrubbed,
-            redaction_state="secret_detected",
-            matched_pattern_names=("anthropic_api_key",),
-        )
-    return ModelContentScrubResult(
-        value=value, redaction_state="clean", matched_pattern_names=()
-    )
 
 
 class ScenarioInput(BaseModel):
@@ -631,7 +607,6 @@ def _map_sequence(
                 sidecar=value.sidecar,
                 claude_code_version="2.1.283",
                 turn_id=value.turn_id,
-                content_scrubber=mock_content_scrubber,
             )
         )
     return results
@@ -802,7 +777,6 @@ def _goal_outputs(start: datetime) -> dict[Path, str]:
         sidecar=None,
         claude_code_version="2.1.283",
         turn_id="turn-fixed-1",
-        content_scrubber=mock_content_scrubber,
     )
     event = cast("dict[str, JsonValue]", _event_json(result.event))
     payload = cast("dict[str, JsonValue]", event["payload"])
@@ -833,7 +807,6 @@ def build_outputs() -> dict[Path, str]:
             sidecar=None,
             claude_code_version="2.1.283",
             turn_id="turn-fixed-1",
-            content_scrubber=mock_content_scrubber,
         )
         outputs[FIXTURE_ROOT / "stdin" / f"{name.value}.json"] = _pretty(stdin)
         outputs[FIXTURE_ROOT / "events" / f"{name.value}.json"] = _pretty(

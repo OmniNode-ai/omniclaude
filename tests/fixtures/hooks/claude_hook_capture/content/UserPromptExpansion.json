@@ -6,10 +6,7 @@
     "field": "command_args",
     "hook_event_name": "UserPromptExpansion",
     "length": 25,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "dfeed4d2d012968ac0f69f32f16c2e747cb83d46d52464b23f9d31c16b0adbff",
     "value": "private command arguments"
   },
   {
@@ -19,10 +16,7 @@
     "field": "prompt",
     "hook_event_name": "UserPromptExpansion",
     "length": 23,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "8345f9e839fd721a68b5447770ecd0919cf71177d6b5083b358dd6af69174905",
     "value": "private expanded prompt"
   }
 ]
