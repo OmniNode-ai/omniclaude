@@ -1,0 +1,65 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-18531
+title: "Claude Code context service: compaction first"
+summary: >
+  Plan task TA.20a, the omniclaude half: hook_content_capture.py accepts the
+  checkpoint kind, so the session checkpoint JSON omni.session-checkpoint/1
+  reaches the content-captured topic through the capture-redaction contract.
+  The checkpoint_hook.py caller and the downstream
+  projection models are separate PRs of the same task.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-checkpoint-capture-kind
+    statement: A written session checkpoint is journalled as one checkpoint content item through the existing capture path.
+    acceptance:
+      - id: AC1
+        statement: "A checkpoint write yields one checkpoint row whose reassembled content's sha256 equals the written file's, for a single chunk and for a file larger than one chunk -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'matching_the_written_file or larger_than_one_chunk or verbatim' fails with no checkpoint row or a hash mismatch"
+      - id: AC2
+        statement: "With OMNICLAUDE_CONTENT_CAPTURE=0 the checkpoint kind journals nothing -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'opt_out or matching_the_written_file' fails when a record is journalled or enabled checkpoint capture fails"
+      - id: AC3
+        statement: "The fail-closed refusal when the drainer cannot publish content.captured covers the checkpoint kind, and a credential in the checkpoint never crosses -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'cannot_publish or credential' fails when a record is journalled or the planted value crosses"
+evidence_requirements:
+  - kind: tests
+    description: "The checkpoint capture kind tests pass beside the existing content capture tests"
+    command: "uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py tests/unit/hooks/test_hook_content_capture_omn19551.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-checkpoint-row-matches-file
+    binds_ac:
+      - AC1
+    description: >
+      A checkpoint write yields one checkpoint row whose reassembled content
+      hashes to the written file, including a file split across chunks.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'matching_the_written_file or larger_than_one_chunk or verbatim'"
+  - id: dod-checkpoint-opt-out-journals-nothing
+    binds_ac:
+      - AC2
+    description: >
+      OMNICLAUDE_CONTENT_CAPTURE=0 stops the checkpoint kind like every other
+      kind; the enabled checkpoint write is the positive control.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'opt_out or matching_the_written_file'"
+  - id: dod-checkpoint-refusals-fail-closed
+    binds_ac:
+      - AC3
+    description: >
+      A drainer that cannot publish content.captured stops the checkpoint
+      kind, and a credential-shaped span never crosses.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'cannot_publish or credential'"

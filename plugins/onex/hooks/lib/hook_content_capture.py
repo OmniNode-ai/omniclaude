@@ -22,6 +22,12 @@ What this does, per hook call
   else from ``transcript_path``. Also, from the same transcript, every prompt
   the OPERATOR typed that this session has not yet recorded, one
   ``operator_prompt`` item each (OMN-20905, below).
+* ``--kind checkpoint`` (OMN-18531, plan task TA.20a): the session checkpoint
+  JSON ``omni.session-checkpoint/1``, journalled as one ``checkpoint`` item.
+  The checkpoint writer pipes the written file to stdin; ``main`` hands the
+  raw text over untouched, so the reassembled content hashes to the file's own
+  sha256 (a parse and re-serialise would not). Same redaction contract, size
+  policy, refusals and topic as every other kind.
 
 Operator prompts (OMN-20905)
 ----------------------------
@@ -260,6 +266,14 @@ def items_for_prompt(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(prompt, str):
         return []
     return [{"content_kind": "prompt", "content": prompt}]
+
+
+def items_for_checkpoint(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
+    """The written session checkpoint, verbatim (OMN-18531, TA.20a)."""
+    checkpoint = hook_input.get("checkpoint")
+    if not isinstance(checkpoint, str) or not checkpoint:
+        return []
+    return [{"content_kind": "checkpoint", "content": checkpoint}]
 
 
 def items_for_tool(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
@@ -590,12 +604,14 @@ _ITEMS = {
     "tool": items_for_tool,
     "tool_failure": items_for_tool_failure,
     "stop": items_for_stop,
+    "checkpoint": items_for_checkpoint,
 }
 _HOOK_SOURCE = {
     "prompt": "user_prompt_submit",
     "tool": "post_tool_use",
     "tool_failure": "post_tool_use_failure",
     "stop": "stop",
+    "checkpoint": "checkpoint",
 }
 
 
@@ -777,6 +793,13 @@ def _report_store_fallback(
     )
 
 
+def _loads_or_none(raw: str) -> Any:
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Journal full hook content (OMN-19551)."
@@ -796,8 +819,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     try:
         raw = sys.stdin.read()
-        parsed = json.loads(raw) if raw.strip() else {}
-        hook_input = parsed if isinstance(parsed, dict) else {}
+        if args.kind == "checkpoint":
+            # The checkpoint file is the content: keep its bytes, and read the
+            # session id off it only when the caller did not pass one.
+            hook_input = {"checkpoint": raw}
+            parsed = _loads_or_none(raw)
+            if isinstance(parsed, dict):
+                for key in ("session_id", "sessionId"):
+                    if isinstance(parsed.get(key), str):
+                        hook_input[key] = parsed[key]
+        else:
+            parsed = json.loads(raw) if raw.strip() else {}
+            hook_input = parsed if isinstance(parsed, dict) else {}
         journal_dir = (
             Path(args.journal_dir)
             if args.journal_dir
