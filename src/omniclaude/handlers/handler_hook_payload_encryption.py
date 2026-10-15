@@ -8,6 +8,10 @@ should have the option of encrypting the payload. The option is the
 producers read it and, with it on, route every payload they journal through
 this handler.
 
+The handler, its models and its enums sit in omniclaude's package-level
+``handlers``, ``models`` and ``enums``: the node-home ratchet (OMN-20702)
+keeps new node directories out of omniclaude.
+
 What a sealed payload is
 ------------------------
 The routing fields the emit registry needs stay readable (``session_id``,
@@ -49,13 +53,17 @@ from typing import TYPE_CHECKING
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from omniclaude.nodes.node_hook_payload_encryption_effect.enums import (
-    EnumHookPayloadClass,
+from omniclaude.enums.enum_hook_payload_class import EnumHookPayloadClass
+from omniclaude.enums.enum_hook_payload_encryption_operation import (
     EnumHookPayloadEncryptionOperation,
+)
+from omniclaude.enums.enum_hook_payload_encryption_outcome import (
     EnumHookPayloadEncryptionOutcome,
 )
-from omniclaude.nodes.node_hook_payload_encryption_effect.models import (
+from omniclaude.models.model_hook_payload_encryption_request import (
     ModelHookPayloadEncryptionRequest,
+)
+from omniclaude.models.model_hook_payload_encryption_result import (
     ModelHookPayloadEncryptionResult,
 )
 
@@ -279,8 +287,13 @@ class HandlerHookPayloadEncryption:
 __all__ = [
     "ALGORITHM",
     "ENVELOPE_FIELD",
+    "EnumHookPayloadClass",
+    "EnumHookPayloadEncryptionOperation",
+    "EnumHookPayloadEncryptionOutcome",
     "HandlerHookPayloadEncryption",
     "KeyReader",
+    "ModelHookPayloadEncryptionRequest",
+    "ModelHookPayloadEncryptionResult",
     "PayloadEncryptionError",
     "default_key_reader",
     "key_from_text",

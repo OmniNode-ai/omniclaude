@@ -535,7 +535,7 @@ CAPTURE_CONTRACT_YAML = (
     / "contracts"
     / "contract_hook_claude_capture.yaml"
 )
-_ENCRYPTION_NODE = "omniclaude.nodes.node_hook_payload_encryption_effect"
+_ENCRYPTION_HANDLER = "omniclaude.handlers.handler_hook_payload_encryption"
 _ENCRYPTION_BLOCK = "payload_encryption:"
 
 #: ``(payload class, payload) -> sealed payload``.
@@ -594,35 +594,29 @@ def payload_sealer(
 ) -> Sealer | None:
     """``None`` while the setting is off; else a sealer holding the resolved key.
 
-    The encryption node is imported only here, so a capture with the setting
+    The encryption handler is imported only here, so a capture with the setting
     off never pays for ``omniclaude``. Raises :class:`PayloadSealRefusedError`
-    when the setting is on and the node, the secret store or the key is not
+    when the setting is on and the handler, the secret store or the key is not
     usable: the caller journals nothing.
     """
     enabled, key_ref = payload_encryption_setting(contract_path)
     if not enabled:
         return None
     try:
-        handler_module = importlib.import_module(
-            f"{_ENCRYPTION_NODE}.handlers.handler_hook_payload_encryption"
-        )
-        models = importlib.import_module(f"{_ENCRYPTION_NODE}.models")
-        enums = importlib.import_module(f"{_ENCRYPTION_NODE}.enums")
+        enc = importlib.import_module(_ENCRYPTION_HANDLER)
     except ImportError as exc:
         raise PayloadSealRefusedError(
-            f"the encryption node did not import ({type(exc).__name__})"
+            f"the encryption handler did not import ({type(exc).__name__})"
         ) from exc
-    handler = handler_module.HandlerHookPayloadEncryption(
-        key_ref=key_ref, key_reader=key_reader
-    )
-    operation = enums.EnumHookPayloadEncryptionOperation
-    outcome = enums.EnumHookPayloadEncryptionOutcome
+    handler = enc.HandlerHookPayloadEncryption(key_ref=key_ref, key_reader=key_reader)
+    operation = enc.EnumHookPayloadEncryptionOperation
+    outcome = enc.EnumHookPayloadEncryptionOutcome
 
     def run(op: Any, payload_class: str, payload: dict[str, Any]) -> Any:
         return handler.handle(
-            models.ModelHookPayloadEncryptionRequest(
+            enc.ModelHookPayloadEncryptionRequest(
                 operation=op,
-                payload_class=enums.EnumHookPayloadClass(payload_class),
+                payload_class=enc.EnumHookPayloadClass(payload_class),
                 payload=payload,
             )
         )

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SecretStr
 
-from omniclaude.nodes.node_hook_payload_encryption_effect.enums import (
-    EnumHookPayloadClass,
+from omniclaude.enums.enum_hook_payload_class import EnumHookPayloadClass
+from omniclaude.enums.enum_hook_payload_encryption_operation import (
     EnumHookPayloadEncryptionOperation,
 )
 

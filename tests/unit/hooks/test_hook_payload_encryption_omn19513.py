@@ -29,15 +29,15 @@ from typing import Any
 import pytest
 from pydantic import SecretStr
 
-from omniclaude.nodes.node_hook_payload_encryption_effect.enums import (
-    EnumHookPayloadClass,
+from omniclaude.enums.enum_hook_payload_class import EnumHookPayloadClass
+from omniclaude.enums.enum_hook_payload_encryption_operation import (
     EnumHookPayloadEncryptionOperation,
+)
+from omniclaude.enums.enum_hook_payload_encryption_outcome import (
     EnumHookPayloadEncryptionOutcome,
 )
-from omniclaude.nodes.node_hook_payload_encryption_effect.handlers import (
-    handler_hook_payload_encryption as enc,
-)
-from omniclaude.nodes.node_hook_payload_encryption_effect.models import (
+from omniclaude.handlers import handler_hook_payload_encryption as enc
+from omniclaude.models.model_hook_payload_encryption_request import (
     ModelHookPayloadEncryptionRequest,
 )
 

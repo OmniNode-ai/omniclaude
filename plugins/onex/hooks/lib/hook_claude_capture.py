@@ -35,7 +35,7 @@ Payload encryption is one contract setting, ``payload_encryption`` in
 ``contract_hook_claude_capture.yaml``, off by default; see
 :func:`payload_encryption_enabled`. With it on, the payload is journalled
 sealed under a key read from the secret store
-(``node_hook_payload_encryption_effect``), and nothing is journalled when that
+(``omniclaude.handlers.handler_hook_payload_encryption``), and nothing is journalled when that
 key cannot be read.
 
 The refusals, each fail-closed
