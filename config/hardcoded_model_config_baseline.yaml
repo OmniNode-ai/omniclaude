@@ -15,18 +15,6 @@
 
 schema_version: 1
 entries:
-  - path: plugins/onex/agents/configs/omniagent-smart-responder.yaml
-    family: M
-    content_sha1: 199be5452e8aeac55ca0916cf142ee1e2d829974
-  - path: plugins/onex/agents/configs/omniagent-smart-responder.yaml
-    family: M
-    content_sha1: 5648f4815171ab5174067eb79f228464a25b96f5
-  - path: plugins/onex/agents/configs/omniagent-smart-responder.yaml
-    family: M
-    content_sha1: b9f8e6a110cb996d2416e09c4dd59920e8c86f97
-  - path: plugins/onex/agents/configs/omniagent-smart-responder.yaml
-    family: M
-    content_sha1: e525c4b269ec45b64ffff94b7eaafd04501552b7
   - path: plugins/onex/hooks/config/model_router_hook.yaml
     family: M
     content_sha1: 1e0041e12656d3c8946c84be778adfd0f4bd89e2

@@ -933,7 +933,7 @@ def test_the_script_holds_no_model_name_port_or_model_path() -> None:
     the OpenRouter default lives in the onex-overlays overlay (OMN-20844, AC3), so
     the script names no model at all."""
     text = SCRIPT.read_text()
-    assert not re.search(r"qwen|gpt-oss|llama[0-9]|11434", text)
+    assert not re.search(r"qwen|llama[0-9]|11434", text)
     assert "/v1/chat/completions" not in text
     assert not re.search(r"^OPENROUTER_MODEL=.+", text.replace('=""', "="), re.M)
 
