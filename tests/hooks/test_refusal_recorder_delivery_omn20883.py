@@ -77,6 +77,12 @@ exit 0
 """
 
 
+#: How long a refusal's backgrounded recorder gets to land its row. A row lands
+#: in well under a second; the bound stays short so the AC1 must-fail control
+#: at the merge base, where no row ever lands, fits the 30s per-check budget.
+_ROW_WAIT_S = 3
+
+
 class Box:
     """A scratch registry root with a ledger and a stand-in locked writer."""
 
@@ -123,7 +129,7 @@ class Box:
             timeout=30,
         )
         assert result.returncode == 0, result.stderr
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + _ROW_WAIT_S
         while time.monotonic() < deadline:
             rows = [
                 line
@@ -133,7 +139,9 @@ class Box:
             if rows:
                 return rows
             time.sleep(0.05)
-        raise AssertionError("no FRICTION row reached the ledger within 20s")
+        raise AssertionError(
+            f"no FRICTION row reached the ledger within {_ROW_WAIT_S}s"
+        )
 
 
 def _cell(row: str, key: str) -> str:
