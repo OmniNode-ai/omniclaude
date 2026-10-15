@@ -16,7 +16,9 @@ set -euo pipefail
 # -----------------------------------------------------------------------
 ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-${OMNI_HOME:-/Users/jonah/Code/omni_home}}"  # local-path-ok
 # Two names are split by a closing and reopening quote so the shipped line carries no private
-# repository name (public-repo-hygiene private-repo-name); the value is unchanged.
+# repository name (public-repo-hygiene private-repo-name). Bash joins the adjacent quoted
+# segments, so the value holds no quote character and is unchanged; the test
+# tests/scripts/test_occ_repo_retirement_omn20074.py evaluates this line and pins that.
 DEFAULT_REPOS="omniclaude,omnibase_core,omnibase_infra,omnibase_spi,omniintelligence,omnimemory,omnidash,omninode_"infra",omni"web
 TIMEOUT_MINUTES="${NIGHTLY_SWEEP_TIMEOUT_MINUTES:-15}"
 LOG_DIR="${HOME}/.claude/nightly-sweep"

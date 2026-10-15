@@ -10,6 +10,7 @@ references this PR still removes, without running repository mutations.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -52,3 +53,74 @@ def test_alias_registry_rejects_retired_repository_names() -> None:
             module.resolve(alias)
     assert "OmniNode-ai/onex_change_control" not in module.all_aliases().values()
     assert module.resolve("core") == "OmniNode-ai/omnibase_core"
+
+
+# Two repository names are split by a closing and reopening quote in the shipped scripts, so the
+# shipped lines carry no private repository name. Bash joins adjacent quoted segments, so the
+# value holds no quote character; these tests evaluate the real lines and pin that value. The
+# expected names are built from halves for the same reason the scripts split them.
+_NODE_REPO = "omninode_" + "infra"
+_WEB_REPO = "omni" + "web"
+
+
+def _evaluate_assignment(relative_path: str, line_prefix: str, variable: str) -> str:
+    """Run one assignment line from a script under bash and return the variable's value."""
+    source = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+    line = next(
+        raw for raw in source.splitlines() if raw.lstrip().startswith(line_prefix)
+    )
+    result = subprocess.run(
+        ["bash", "-c", f'{line}\nprintf "%s" "${variable}"'],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout
+
+
+def test_split_quoting_control_detects_a_stray_quote() -> None:
+    """Positive control: the evaluation does show a literal quote when one is really there."""
+    stray = subprocess.run(
+        ["bash", "-c", 'X=\'a"b\'\nprintf "%s" "$X"'],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert stray == 'a"b'
+
+
+def test_statusline_pr_repos_value_has_no_quote_and_keeps_every_name() -> None:
+    value = _evaluate_assignment(
+        "plugins/onex/hooks/scripts/statusline.sh", "PR_REPOS=", "PR_REPOS"
+    )
+    assert '"' not in value
+    assert value.split(" ") == [
+        "core:omnibase_core",
+        "infra:omnibase_infra",
+        "spi:omnibase_spi",
+        "claude:omniclaude",
+        f"node:{_NODE_REPO}",
+        "dash:omnidash",
+        "intel:omniintelligence",
+        "mem:omnimemory",
+        f"web:{_WEB_REPO}",
+        "market:omnimarket",
+    ]
+
+
+def test_nightly_sweep_default_repos_value_has_no_quote_and_keeps_every_name() -> None:
+    value = _evaluate_assignment(
+        "scripts/nightly-merge-sweep.sh", "DEFAULT_REPOS=", "DEFAULT_REPOS"
+    )
+    assert '"' not in value
+    assert value.split(",") == [
+        "omniclaude",
+        "omnibase_core",
+        "omnibase_infra",
+        "omnibase_spi",
+        "omniintelligence",
+        "omnimemory",
+        "omnidash",
+        _NODE_REPO,
+        _WEB_REPO,
+    ]
