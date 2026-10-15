@@ -17,6 +17,7 @@ a scratch ledger written through a stand-in for the locked writer.
 The resolution order under test, first hit wins:
 
     sidecar   the harness's ``agent-<id>.meta.json`` (Agent-tool and Workflow)
+    skill     a forked skill executor's first message, ``skills/<name>`` (OMN-17427)
     env       the session's lane variables, only when the payload has no agent id
     registry  the lane registry, for the cwd and every worktree path the tool names
     claim     exactly one open CLAIM row naming that worktree (or its ticket)
@@ -122,6 +123,16 @@ class Sandbox:
         base.mkdir(parents=True, exist_ok=True)
         path = base / f"agent-{AGENT_ID}.meta.json"
         path.write_text(json.dumps(meta), encoding="utf-8")
+        return path
+
+    def agent_transcript(self, *entries: dict[str, object]) -> Path:
+        """The agent's own transcript, beside its sidecar (OMN-17427)."""
+        base = self.session_dir / "subagents"
+        base.mkdir(parents=True, exist_ok=True)
+        path = base / f"agent-{AGENT_ID}.jsonl"
+        path.write_text(
+            "".join(json.dumps(entry) + "\n" for entry in entries), encoding="utf-8"
+        )
         return path
 
     def register(self, worktree: Path, lane: str, ticket: str = "OMN-1") -> None:
@@ -299,6 +310,72 @@ class TestEachOperand:
         )
         row = box.refuse(box.payload(agent_id=AGENT_ID))
         assert _cell(row, "lane") == "unresolved"
+
+    def test_forked_skill_executor_is_named_by_its_skill(self, box: Sandbox) -> None:
+        """OMN-17427: a forked skill's sidecar carries only the generic type, so
+        every refusal of its executor read ``lane=unresolved`` (45 report-contract
+        refusals in 13 hours, none attributable). The executor's own first
+        message begins ``Base directory for this skill: <dir>/skills/<name>``;
+        that line is a fact the harness wrote, so the row names the skill.
+        """
+        box.sidecar(
+            {"agentType": "general-purpose", "model": "sonnet", "spawnDepth": 1},
+            workflow_run=None,
+        )
+        box.agent_transcript(
+            {"type": "attachment", "attachment": {"type": "date"}},
+            {
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": (
+                        "Base directory for this skill: "
+                        "/plugins/omni/skills/ledger-write\n\n# Ledger write\n"
+                    ),
+                },
+            },
+        )
+        row = box.refuse(box.payload("git status", agent_id=AGENT_ID))
+        assert _cell(row, "lane") == "skill:ledger-write"
+        assert _cell(row, "lane_source") == "skill"
+
+    def test_forked_skill_name_is_read_from_the_first_message_only(
+        self, box: Sandbox
+    ) -> None:
+        """Negative control: a later message that quotes the same line, and a
+        first message that is ordinary task text, name nothing."""
+        box.sidecar({"agentType": "general-purpose"}, workflow_run=None)
+        box.agent_transcript(
+            {
+                "type": "user",
+                "message": {"role": "user", "content": "Search the hooks for X."},
+            },
+            {
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": "Base directory for this skill: /p/skills/ledger-write",
+                },
+            },
+        )
+        row = box.refuse(box.payload("git status", agent_id=AGENT_ID))
+        assert _cell(row, "lane") == "unresolved"
+        assert _cell(row, "lane_source") == "unresolved"
+
+    def test_a_named_sidecar_wins_over_the_forked_skill(self, box: Sandbox) -> None:
+        box.sidecar({"name": "the-dispatched-lane"}, workflow_run=None)
+        box.agent_transcript(
+            {
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": "Base directory for this skill: /p/skills/ledger-write",
+                },
+            }
+        )
+        row = box.refuse(box.payload("git status", agent_id=AGENT_ID))
+        assert _cell(row, "lane") == "the-dispatched-lane"
+        assert _cell(row, "lane_source") == "sidecar"
 
     def test_lane_env_names_the_lane_when_no_agent_id(self, box: Sandbox) -> None:
         """The operator's own session (or a headless lane) declares its lane."""

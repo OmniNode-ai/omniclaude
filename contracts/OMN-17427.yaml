@@ -41,6 +41,11 @@ requirements:
         statement: "The public-repo hygiene scan splits a large tracked set across subprocesses and returns the serial scan's hits in the same order, and a shard that dies sends it back to the serial scan -- falsifier: uv run pytest tests/scripts/test_public_skill_hygiene_scope.py -q -k 'sharded or dead_shard'"
       - id: AC9
         statement: "The direct-model-call gate runs at pre-push and as its own whole-tree step of the precommit-suite job, not at the commit stage -- falsifier: uv run pytest tests/ci/test_precommit_suite_job_omn19612.py -q -k direct_model_call"
+  - id: req-refusal-row-names-forked-skill
+    statement: A hook refusal by a forked skill's executor names the skill instead of reading lane=unresolved.
+    acceptance:
+      - id: AC10
+        statement: "A refusal whose agent sidecar carries only the generic agent type and whose own transcript opens with the harness's skill base-directory line resolves to lane skill:<name> with lane_source skill; a later message quoting that line, an ordinary first message and a named sidecar do not -- falsifier: uv run pytest tests/hooks/test_refusal_row_lane_omn19381.py -q -k 'forked_skill or named_sidecar_wins' fails against the resolver without the skill step"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -161,3 +166,12 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_precommit_suite_job_omn19612.py -q"
     binds_ac:
       - AC9
+  - id: dod-refusal-row-names-forked-skill
+    description: A forked skill executor's refusal row carries lane=skill:<name>; the near misses stay unresolved or sidecar-named.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_refusal_row_lane_omn19381.py -q -k 'forked_skill or named_sidecar_wins'"
+    binds_ac:
+      - AC10
