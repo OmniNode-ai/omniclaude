@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: NodeCaptureItemIdentityCompute (OMN-18531, plan task TA.21)
+#
+# Two hooks capture one Claude Code hook call: the lineage hook journals the
+# event with a reference per full-content field, and the content hook journals
+# the content. This node is what both call so that the two share one identity
+# (the content_record_id of a reference and of the record that fulfils it), so
+# that each stream numbers its records (the producer sequence), and so that a
+# barrier can state a stream's high-water. The hooks reach the handler module
+# in-process by file path: a hook process cannot pay the package import (22 s
+# cold, OMN-17224) and cannot wait on a bus round-trip, so the module imports
+# the standard library only. The pydantic models below serve the runtime.
+
+name: node_capture_item_identity_compute
+version: "1.0.0"
+contract_name: node_capture_item_identity_compute
+node_name: node_capture_item_identity_compute
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: COMPUTE_GENERIC
+
+description: >
+  Shared item identity, per-session per-stream producer sequence and barrier
+  records for the two Claude Code capture streams. Content record ids are a
+  uuid5 over the lineage event id and the field name; an event id is settled
+  between the two hooks of one call through a per-session item state under an
+  flock; a producer sequence is issued from a flock-guarded counter.
+
+runtime_profiles: [main]
+
+input_model:
+  name: ModelCaptureItemIdentityRequest
+  module: omniclaude.nodes.node_capture_item_identity_compute.models
+
+output_model:
+  name: ModelCaptureItemIdentityResult
+  module: omniclaude.nodes.node_capture_item_identity_compute.models
+
+handler:
+  module: omniclaude.nodes.node_capture_item_identity_compute.handlers.handler_item_identity
+  class: HandlerCaptureItemIdentity
+  input_model: omniclaude.nodes.node_capture_item_identity_compute.models.ModelCaptureItemIdentityRequest
+  output_model: omniclaude.nodes.node_capture_item_identity_compute.models.ModelCaptureItemIdentityResult
+
+handler_routing:
+  routing_strategy: operation_match
+  handlers:
+    - operation: capture_item_identity
+      handler:
+        name: HandlerCaptureItemIdentity
+        module: omniclaude.nodes.node_capture_item_identity_compute.handlers.handler_item_identity
+
+execution:
+  backend: claude_code
+  model_purpose: null

@@ -1,0 +1,88 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-18531"
+title: "TA.21 producer half: shared item identity, session sequence and barrier across the two capture streams"
+summary: >-
+  The omniclaude half of plan task TA.21. The lineage hook and the content hook
+  settle one event id per hook call through the session's item state, so a
+  content record carries the content_record_id of the lineage reference it
+  fulfils. Both hooks stamp each record with a per-session, per-stream producer
+  sequence number from one flock-guarded counter, and journal_session_barrier
+  journals a barrier record per stream stating the sequence high-water, with
+  the lineage barrier recording whether content capture is enabled. The
+  barrier rides the content.captured event type, so no event type is added.
+  The new fields are classified verbatim in the capture-redaction contract,
+  whose owner is omnimarket; the projection half (store content_record_id,
+  producer_seq and tenant_id, the contiguous high-water, the barrier read
+  model) is omnimarket's.
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - "events"
+requirements:
+  - id: "req-omn18531-ta21-item-identity"
+    statement: "Every full-capture lineage reference resolves by content_record_id to exactly one content record, and identical prompts resolve to different records."
+    acceptance:
+      - id: "AC1"
+        statement: >-
+          AC1: over a 50-turn session whose two hooks run in either order, every full-capture lineage reference (prompt, a tool call's input, its result, the assistant reply) resolves by content_record_id to exactly one content record, a chunked item's chunks share its id, and two byte-identical prompts resolve to two different records -- falsifier: uv run pytest tests/unit/hooks/test_hook_item_identity_omn18531.py fails on the head without this change
+  - id: "req-omn18531-ta21-sequence"
+    statement: "A stream's producer sequence has no duplicate and no gap under concurrent writers."
+    acceptance:
+      - id: "AC2"
+        statement: >-
+          AC2: eight concurrent writers issue 1,000 sequence numbers on one stream of one session with no duplicate and no skipped number -- falsifier: uv run pytest tests/unit/hooks/test_hook_item_identity_omn18531.py fails on the head without this change
+  - id: "req-omn18531-ta21-barrier"
+    statement: "A barrier states each stream's high-water, and a session with content capture off says so."
+    acceptance:
+      - id: "AC3"
+        statement: >-
+          AC3: with OMNICLAUDE_CONTENT_CAPTURE=0 the lineage barrier records content_capture disabled and the content stream journals no content record and no barrier; with it on, each stream's barrier names the high-water the producer had issued -- falsifier: uv run pytest tests/unit/hooks/test_hook_item_identity_omn18531.py fails on the head without this change
+  - id: "req-omn18531-ta21-registry"
+    statement: "The new record fields cross the redaction fan-out verbatim and the event registry does not drift."
+    acceptance:
+      - id: "AC4"
+        statement: >-
+          AC4: the capture-redaction mirror matches its omnimarket owner and classifies content_record_id, producer_seq, stream and the barrier fields verbatim, and EVENT_REGISTRY does not drift for the changed record schemas -- falsifier: uv run pytest tests/hooks/test_capture_redaction_omn17959.py tests/hooks/test_generate_event_registry.py fails on the head without this change
+evidence_requirements:
+  - kind: "tests"
+    description: "The item identity, the sequence, the barrier, the redaction fan-out and the registry drift gate."
+    command: "uv run pytest tests/unit/hooks/test_hook_item_identity_omn18531.py tests/hooks/test_capture_redaction_omn17959.py tests/hooks/test_generate_event_registry.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn18531-ta21-ac1-item-identity"
+    description: "A full-capture reference resolves to one content record; identical prompts differ."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_item_identity_omn18531.py -q --no-cov"
+    binds_ac: ["AC1"]
+  - id: "dod-omn18531-ta21-ac2-sequence"
+    description: "Eight concurrent writers issue 1,000 gap-free sequence numbers."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_item_identity_omn18531.py -q --no-cov"
+    binds_ac: ["AC2"]
+  - id: "dod-omn18531-ta21-ac3-barrier"
+    description: "The barrier names each stream's high-water; capture off is marked and journals no content."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_item_identity_omn18531.py -q --no-cov"
+    binds_ac: ["AC3"]
+  - id: "dod-omn18531-ta21-ac4-registry"
+    description: "The redaction mirror and the event registry agree with the owner."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_capture_redaction_omn17959.py tests/hooks/test_generate_event_registry.py -q --no-cov"
+    binds_ac: ["AC4"]
+  - id: "dod-omn18531-ta21-deploy-probe"
+    description: "Deploy probe: the item identity handler read from GitHub at the checked-out commit defines claim_event_id. A head without this change has no such file and the probe finds no match."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_capture_item_identity_compute/handlers/handler_item_identity.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -c '^def claim_event_id('"

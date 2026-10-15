@@ -214,6 +214,52 @@ def load_resolver() -> ModuleType | None:
     return None
 
 
+_ITEM_IDENTITY_MODULE_NAME = "omniclaude_capture_item_identity_by_path"
+
+#: Where node_capture_item_identity_compute keeps the stdlib-only module the
+#: two capture hooks share (OMN-18531, TA.21), relative to ``src/omniclaude``.
+_ITEM_IDENTITY_PARTS = (
+    "nodes",
+    "node_capture_item_identity_compute",
+    "handlers",
+    "handler_item_identity.py",
+)
+
+
+def load_item_identity() -> ModuleType | None:
+    """Load the item-identity module by file path, or return ``None``.
+
+    By path for the reason the resolver is: importing it through the package
+    would run the omniclaude package ``__init__`` on every hook call.
+    """
+    loaded = sys.modules.get(_ITEM_IDENTITY_MODULE_NAME)
+    if loaded is not None:
+        return loaded
+    candidates = [Path(__file__).resolve().parents[4] / "src" / "omniclaude"]
+    spec = importlib.util.find_spec("omniclaude")
+    if spec is not None and spec.submodule_search_locations:
+        candidates.extend(Path(loc) for loc in spec.submodule_search_locations)
+    for root in candidates:
+        candidate = root.joinpath(*_ITEM_IDENTITY_PARTS)
+        if not candidate.is_file():
+            continue
+        module_spec = importlib.util.spec_from_file_location(
+            _ITEM_IDENTITY_MODULE_NAME, candidate
+        )
+        if module_spec is None or module_spec.loader is None:
+            continue
+        module = importlib.util.module_from_spec(module_spec)
+        sys.modules[_ITEM_IDENTITY_MODULE_NAME] = module
+        try:
+            module_spec.loader.exec_module(module)
+        except (ImportError, SyntaxError, OSError):
+            # An unloadable module is a refusal, never a half-loaded one.
+            sys.modules.pop(_ITEM_IDENTITY_MODULE_NAME, None)
+            continue
+        return module
+    return None
+
+
 def content_topic(resolver: ModuleType) -> str:
     """The one governed topic that declares a content size policy."""
     contract = resolver.load_contract()
@@ -631,6 +677,10 @@ def capture(
         _log("skipped: the capture-redaction resolver could not be loaded")
         return 0
     topic = content_topic(resolver)
+    item_identity = load_item_identity()
+    if item_identity is None:
+        _log("skipped: the item-identity module could not be loaded")
+        return 0
 
     session = session_id or hook_input.get("session_id") or hook_input.get("sessionId")
     if not isinstance(session, str) or not session:
@@ -666,6 +716,27 @@ def capture(
         else StoreSink(session_id=session)
     )
 
+    # OMN-18531 (TA.21): settle the event id with the lineage hook of this call,
+    # so each record carries the content_record_id of the reference it fulfils.
+    item_dir = item_identity.item_dir_for(journal_dir)
+    raw_agent = agent_id or hook_input.get("agent_id")
+    event_ids: dict[str, uuid.UUID] = {}
+
+    def lineage_event_id(lineage_hook: str) -> uuid.UUID:
+        if lineage_hook not in event_ids:
+            event_ids[lineage_hook] = item_identity.claim_event_id(
+                item_dir,
+                session_id=session,
+                agent_id=raw_agent if isinstance(raw_agent, str) else None,
+                hook_event_name=lineage_hook,
+                discriminator=item_identity.item_discriminator(
+                    lineage_hook, hook_input
+                ),
+                stream=item_identity.STREAM_CONTENT,
+                minted=uuid.uuid4(),
+            )
+        return event_ids[lineage_hook]
+
     written = 0
     fallback = 0
     for item in items:
@@ -684,7 +755,21 @@ def capture(
         outcome = chunks[0].get(STORE_OUTCOME_FIELD) if chunks else None
         if isinstance(outcome, dict):
             fallback += int(outcome.get("fallback") or 0)
+        fulfils = item_identity.FULL_CAPTURE_BY_KIND.get(str(item.get("content_kind")))
+        record_id = (
+            item_identity.content_record_id(lineage_event_id(fulfils[0]), fulfils[1])
+            if fulfils is not None
+            else None
+        )
         for chunk in chunks:
+            if record_id is not None:
+                # Every chunk of an item carries the item's id; a reader
+                # reassembles by it and by chunk_index.
+                chunk["content_record_id"] = str(record_id)
+            chunk["stream"] = item_identity.STREAM_CONTENT
+            chunk["producer_seq"] = item_identity.next_producer_seq(
+                item_dir, session, item_identity.STREAM_CONTENT
+            )
             appender.append_event(
                 # A literal, not CONTENT_EVENT_TYPE, on purpose (OMN-19913):
                 # validate_hook_edge_lane.py resolves only literal classes at

@@ -93,6 +93,7 @@ import os
 import re
 import socket
 import sys
+import uuid
 from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -463,6 +464,8 @@ def build_event_payload(
     version: str | None,
     sidecar_index_dir: Path | None = None,
     host: str | None = None,
+    item_dir: Path | None = None,
+    item_identity: ModuleType | None = None,
 ) -> dict[str, Any]:
     """Map one hook's stdin to the journal payload of its ``hook.event``.
 
@@ -470,6 +473,11 @@ def build_event_payload(
     ``session_id``: the emit registry's partition key and required field are
     top-level names, and partitioning by session keeps every hook type of one
     session in order, which the lineage fold requires.
+
+    ``item_dir`` (OMN-18531, TA.21) is the session item state the two capture
+    hooks share. For a hook whose content ``hook_content_capture`` also records,
+    the event id is settled with that hook there, so the content record carries
+    the ``content_record_id`` of the reference it fulfils.
 
     Raises the contract's ``InvalidHookInputError`` or ``UnknownHookEventError``
     for input the mapper refuses; :func:`capture` logs and drops those.
@@ -488,6 +496,27 @@ def build_event_payload(
         agent_id=agent_id if isinstance(agent_id, str) else None,
         index_dir=sidecar_index_dir,
     )
+    resolver: Callable[[Any], Any] | None = None
+    if (
+        item_dir is not None
+        and item_identity is not None
+        and isinstance(session_id, str)
+        and isinstance(hook_name, str)
+        and hook_name in item_identity.LINEAGE_FULL_CAPTURE_HOOKS
+    ):
+        discriminator = item_identity.item_discriminator(hook_name, hook_input)
+
+        def resolver(minted: Any) -> Any:
+            return item_identity.claim_event_id(
+                item_dir,
+                session_id=session_id,
+                agent_id=agent_id if isinstance(agent_id, str) else None,
+                hook_event_name=hook_name,
+                discriminator=discriminator,
+                stream=item_identity.STREAM_LINEAGE,
+                minted=minted,
+            )
+
     result = contract.map_hook_stdin(
         hook_input,
         emitted_at=emitted_at,
@@ -496,6 +525,7 @@ def build_event_payload(
         turn_id=turn_id,
         content_scrubber=scrubber,
         host=host,
+        event_id_resolver=resolver,
     )
     payload: dict[str, Any] = result.event.model_dump(mode="json")
     payload["session_id"] = result.event.lineage.session_id
@@ -541,6 +571,10 @@ def capture(
     if scrubber is None:
         _log("skipped: no capture-redaction span scrub could be loaded")
         return 0
+    item_identity = content_capture.load_item_identity()
+    if item_identity is None:
+        _log("skipped: the item-identity module could not be loaded")
+        return 0
 
     target = journal_dir
     try:
@@ -553,6 +587,8 @@ def capture(
             version=claude_code_version(),
             sidecar_index_dir=sidecar_index_dir_for(target),
             host=socket.gethostname(),
+            item_dir=item_identity.item_dir_for(target),
+            item_identity=item_identity,
         )
     except (contract.InvalidHookInputError, contract.UnknownHookEventError) as exc:
         health.record_contract_refusal(target)
@@ -560,6 +596,14 @@ def capture(
         _log(f"skipped {hook_name}: the contract refused the input: {exc}")
         return 0
     lineage = payload["lineage"]
+    # OMN-18531 (TA.21): the producer sequence of the lineage stream, one number
+    # per journalled record, issued under a lock shared by every hook process.
+    payload["stream"] = item_identity.STREAM_LINEAGE
+    payload["producer_seq"] = item_identity.next_producer_seq(
+        item_identity.item_dir_for(target),
+        lineage["session_id"],
+        item_identity.STREAM_LINEAGE,
+    )
     appender.append_event(
         # The literal, not the constant: validate_hook_edge_lane.py finds the
         # classes this edge emits by scanning call sites for it.
@@ -771,12 +815,90 @@ def capture_failure_content(
     )
 
 
+def journal_session_barrier(
+    session_id: str,
+    *,
+    journal_dir: Path,
+    barrier_id: str | None = None,
+    cwd: str | None = None,
+    actor: str | None = None,
+    now: datetime | None = None,
+) -> int:
+    """Journal one barrier record on each stream of a session (OMN-18531, TA.21).
+
+    The adapter calls this before it publishes a command that must see the
+    session's earlier records. A barrier states the producer's sequence
+    high-water for its stream; it consumes no sequence number itself. The
+    lineage barrier also records whether content capture is enabled, because
+    when the operator turned it off the content stream journals nothing, and a
+    consumer must be able to tell that from a stream that is merely behind.
+
+    Returns the number of barrier records journalled (0 to 2). A stream whose
+    producer is switched off, or whose drainer does not list the barrier event
+    type as publishable, journals none: an unpublishable class at the journal
+    head would hold every record behind it.
+    """
+    item_identity = content_capture.load_item_identity()
+    if item_identity is None:
+        _log("skipped barrier: the item-identity module could not be loaded")
+        return 0
+    status = health.read_status(content_capture.status_path_for(journal_dir))
+    publishable = None if status is None else status.publishable_event_types
+    if publishable is None or item_identity.BARRIER_EVENT_TYPE not in publishable:
+        _log(
+            f"skipped barrier: the local drainer does not list "
+            f"{item_identity.BARRIER_EVENT_TYPE} as publishable"
+        )
+        return 0
+    content_enabled = content_capture.capture_enabled_by_operator()
+    streams = []
+    if capture_enabled_by_operator():
+        streams.append(item_identity.STREAM_LINEAGE)
+    if content_enabled:
+        streams.append(item_identity.STREAM_CONTENT)
+    chosen_id = barrier_id or str(uuid.uuid4())
+    emitted_at = (now or datetime.now(UTC)).isoformat()
+    item_dir = item_identity.item_dir_for(journal_dir)
+    written = 0
+    for stream in streams:
+        payload = item_identity.build_barrier_payload(
+            session_id=session_id,
+            barrier_id=chosen_id,
+            stream=stream,
+            high_water_value=item_identity.high_water(item_dir, session_id, stream),
+            content_capture_enabled=content_enabled,
+            emitted_at=emitted_at,
+        )
+        appender.append_event(
+            # A literal: validate_hook_edge_lane.py resolves only literal classes. A
+            # barrier is a content.captured record with content_kind "barrier".
+            event_type="content.captured",
+            payload=payload,
+            correlation_id=session_id,
+            cwd=cwd,
+            actor=actor,
+            host_turn_id=None,
+            agent_id=None,
+            transcript_path=None,
+            session_id=session_id,
+            journal_dir=str(journal_dir),
+        )
+        written += 1
+    return written
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Journal one lineage-carrying hook event (OMN-19513)."
     )
     parser.add_argument("--actor", default=None)
     parser.add_argument("--journal-dir", default=None)
+    parser.add_argument(
+        "--barrier",
+        action="store_true",
+        help="journal a session barrier on each stream; stdin is "
+        '{"session_id": ..., "barrier_id": ...} (OMN-18531, TA.21)',
+    )
     try:
         args = parser.parse_args(argv)
     except SystemExit:
@@ -791,6 +913,22 @@ def main(argv: list[str] | None = None) -> int:
             else journal.default_journal_dir()
         )
         actor = args.actor or None
+        if args.barrier:
+            barrier_session = _str(hook_input.get("session_id"))
+            if barrier_session is None:
+                print(
+                    "hook_claude_capture: barrier NOT journalled: no session_id",
+                    file=sys.stderr,
+                )
+                return 1
+            journal_session_barrier(
+                barrier_session,
+                journal_dir=journal_dir,
+                barrier_id=_str(hook_input.get("barrier_id")),
+                actor=actor,
+            )
+            journal.emit_done()
+            return 0
         if capture(hook_input, journal_dir=journal_dir, actor=actor):
             lineage_note = "subagent" if hook_input.get("agent_id") else "main"
             _log(

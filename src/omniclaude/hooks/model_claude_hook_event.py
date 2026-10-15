@@ -744,6 +744,15 @@ def make_correlation_id(session_id: str) -> UUID:
     return uuid5(HOOK_CAPTURE_NAMESPACE, session_id)
 
 
+def make_content_record_id(event_id: UUID, field: str) -> UUID:
+    """The id of the content record that fulfils ``field`` of event ``event_id``.
+
+    ``handler_item_identity.content_record_id`` is the stdlib-only twin the content
+    hook calls (OMN-18531, TA.21); a test pins the two to the same value.
+    """
+    return uuid5(HOOK_CAPTURE_NAMESPACE, f"{event_id}|{field}")
+
+
 def make_tool_call_key(session_id: str, tool_use_id: str) -> UUID:
     return uuid5(HOOK_CAPTURE_NAMESPACE, f"{session_id}|{tool_use_id}")
 
@@ -1373,10 +1382,7 @@ class _ContentCapture:
         scrubbed = self._scrubber(serialised)
         value = scrubbed.value
         digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
-        content_record_id = uuid5(
-            HOOK_CAPTURE_NAMESPACE,
-            f"{self._event_id}|{field}",
-        )
+        content_record_id = make_content_record_id(self._event_id, field)
         ref = ModelHookContentRef(
             field=field,
             sha256=digest,
@@ -1420,12 +1426,18 @@ def map_hook_stdin(
     turn_id: str | None,
     content_scrubber: ContentScrubber,
     host: str | None = None,
+    event_id_resolver: Callable[[UUID], UUID] | None = None,
 ) -> ModelHookCaptureResult:
     """Map one decoded Claude Code hook stdin object without performing I/O.
 
     ``content_scrubber`` is required with no default: a producer must pass the
     production span scrub of the restricted content family explicitly, so no
     caller can publish unscrubbed content by forgetting an argument.
+
+    ``event_id_resolver`` (OMN-18531, TA.21) receives the event id this call
+    minted and returns the id to use. The content hook cannot recompute an id
+    that hashes a wall-clock ``emitted_at``, so the two hooks of one call settle
+    on one id through the resolver, and every content reference derives from it.
     """
 
     raw_name = stdin.get("hook_event_name")
@@ -1464,6 +1476,8 @@ def map_hook_stdin(
         emitted_at=emitted_at,
         discriminator=discriminator,
     )
+    if event_id_resolver is not None:
+        event_id = event_id_resolver(event_id)
     capture = _ContentCapture(
         event_id=event_id,
         session_id=session_id,
@@ -1538,6 +1552,7 @@ def map_hook_stdin(
 __all__ = [
     "MAX_AGENT_DESCRIPTION",
     "HOOK_CAPTURE_NAMESPACE",
+    "make_content_record_id",
     "HOOK_EVENT_SCHEMA_VERSION",
     "HOOK_PAYLOAD_ADAPTER",
     "ContentScrubber",
