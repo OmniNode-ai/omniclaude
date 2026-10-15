@@ -72,7 +72,8 @@ def _banner_env(tmp_path: Path, optin_dir: Path) -> dict[str, str]:
     registry = tmp_path / "registry"
     registry.mkdir(exist_ok=True)
     env["OMNI_HOME"] = str(registry)
-    env.pop("KNOWLEDGE_BASE_INTERNAL_PATH", None)
+    for key in [name for name in env if name.startswith("KNOWLEDGE_BASE")]:
+        del env[key]
     # The hook-inventory hook then reports SKIPPED, a line it always prints.
     env["CLAUDE_PLUGIN_ROOT"] = str(tmp_path / "elsewhere")
     return env

@@ -1,0 +1,79 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21149
+title: "Make session-start banners opt-in and stop observer hooks failing silently"
+summary: >
+  The session-goal, workspace-sync and hook-inventory SessionStart hooks print only for a session that
+  opted in, through a marker named by its session id or ONEX_SESSION_OPTIN=1 at launch. The all-hooks
+  capture, Stop content capture and output metadata observer hooks exit 0 when no interpreter resolves
+  instead of exiting 1 with nothing on stderr.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21149-session-start-opt-in
+    statement: "Session-start banners are opt-in per session, and observer hooks never fail silently."
+    acceptance:
+      - id: AC1
+        statement: |-
+          AC1: each of the three session-start banner hooks prints nothing for a session that never opted in -- falsifier: a banner hook that prints for a session with no marker and no ONEX_SESSION_OPTIN.
+      - id: AC2
+        statement: |-
+          AC2: a marker written for another session does not opt this session in -- falsifier: a banner hook that prints because some other session's marker exists.
+      - id: AC3
+        statement: |-
+          AC3: ONEX_SESSION_OPTIN=1 at launch opts a session in, and ONEX_SESSION_OPTIN=0 forces it out even when its own marker exists -- falsifier: a banner hook that prints with ONEX_SESSION_OPTIN=0, or stays silent with ONEX_SESSION_OPTIN=1.
+      - id: AC4
+        statement: |-
+          AC4: a session id that is not a plain token never opts a session in -- falsifier: a payload session id such as a relative path that makes a banner hook print.
+      - id: AC5
+        statement: |-
+          AC5: the all-hooks capture, Stop content capture and output metadata observer hooks exit 0 when no interpreter resolves -- falsifier: any of them exiting non-zero with no interpreter.
+evidence_requirements:
+  - kind: tests
+    description: "Each acceptance criterion's falsifier, run against the real hook scripts"
+    command: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21149-ac1
+    description: "Each session-start banner hook is silent for a session that never opted in."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py::test_banner_is_silent_for_a_session_that_never_opted_in -q"
+    binds_ac:
+      - AC1
+  - id: dod-omn21149-ac2
+    description: "Another session's marker does not opt this session in."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py::test_another_sessions_marker_does_not_opt_this_one_in -q"
+    binds_ac:
+      - AC2
+  - id: dod-omn21149-ac3
+    description: "ONEX_SESSION_OPTIN=1 opts a banner in and ONEX_SESSION_OPTIN=0 forces it out despite a marker."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py::test_launch_env_opts_in_and_zero_forces_out -q"
+    binds_ac:
+      - AC3
+  - id: dod-omn21149-ac4
+    description: "A session id that is not a plain token never opts a session in."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py::test_a_payload_id_that_is_not_a_plain_token_never_opts_in -q"
+    binds_ac:
+      - AC4
+  - id: dod-omn21149-ac5
+    description: "Each observer hook exits 0 when no interpreter resolves."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_session_start_optin_omn21149.py::test_observer_hook_exits_zero_when_no_python_resolves -q"
+    binds_ac:
+      - AC5
