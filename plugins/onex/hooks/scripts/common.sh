@@ -289,6 +289,14 @@ if [[ -z "${PYTHON_CMD}" ]]; then
         # same best-effort direct-dispatch hand-off pattern, extended to the
         # prompt-submitted/tool-executed topics.
         user_prompt_submit_bus_mirror.sh|post_tool_use_bus_mirror.sh) _advisory_ok=true ;;
+        # OMN-21149: the observer hooks that declare advisory criticality. Each
+        # sources this file with stderr discarded, so before they were listed
+        # here the hard-fail below became a silent exit 1 on every tool call,
+        # Stop and PostToolBatch ("Failed with non-blocking status code: No
+        # stderr output") whenever no interpreter resolved.
+        claude_hook_capture.sh|stop_content_capture.sh) _advisory_ok=true ;;
+        post_tool_use_output_capture_metadata.sh|pre_tool_use_skill_started.sh) _advisory_ok=true ;;
+        post_tool_use_return_path_auditor.sh|pre_tool_use_context_scope_auditor.sh) _advisory_ok=true ;;
     esac
 
     if [[ "${OMNICLAUDE_HOOK_CRITICALITY:-critical}" == "advisory" && "$_advisory_ok" == "true" ]]; then

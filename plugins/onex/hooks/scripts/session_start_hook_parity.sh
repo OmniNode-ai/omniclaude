@@ -33,6 +33,19 @@
 
 set -uo pipefail
 
+# OMN-21149: session start is opt-in. This hook prints only for a session that
+# opted in (onex_session_start_output_enabled in lib/intent.sh); every other
+# session gets nothing from it.
+_ONEX_SS_PAYLOAD=""
+IFS= read -r -d '' _ONEX_SS_PAYLOAD 2>/dev/null || true
+_ONEX_SS_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_SS_DIR=.
+# shellcheck source=../../lib/intent.sh
+if ! source "${_ONEX_SS_DIR}/../../lib/intent.sh" 2>/dev/null \
+    || ! onex_session_start_output_enabled "$_ONEX_SS_PAYLOAD"; then
+    exit 0
+fi
+unset _ONEX_SS_PAYLOAD _ONEX_SS_DIR
+
 # OMN-20109: this script's directory, resolved once without a dirname exec.
 _ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
 _SELF="$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)"
