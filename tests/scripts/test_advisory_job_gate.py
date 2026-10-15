@@ -828,6 +828,83 @@ class TestLandingControllerContextCache:
             gate.resolve_required_contexts("AnotherOrg/fixture", root)
 
 
+class TestAdvisoryJobGateRoutingOn:
+    """OMN-20043 AC3: with the gh read router on, the gate's branch-protection read yields
+    one JSON document. The App token is refused with a 403 body on stdout; the gate still
+    parses the operator's answer."""
+
+    APP_TOKEN = "ghs_" + "A" * 36
+
+    def _install(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        route = REPO_ROOT / "scripts" / "user-bin" / "gh_route.py"
+        calls = tmp_path / "calls.log"
+        real_dir = tmp_path / "realbin"
+        shim_dir = tmp_path / "shimbin"
+        real_dir.mkdir()
+        shim_dir.mkdir()
+        fake = real_dir / "gh"
+        fake.write_text(
+            f"#!{sys.executable}\n"
+            "import os, sys\n"
+            f"with open({str(calls)!r}, 'a') as fh:\n"
+            "    fh.write(os.environ.get('GH_TOKEN', '') + ' ' + ' '.join(sys.argv[1:]) + '\\n')\n"
+            f"if os.environ.get('GH_TOKEN') == {self.APP_TOKEN!r}:\n"
+            '    sys.stdout.write(\'{"message":"Resource not accessible by integration"}\')\n'
+            "    sys.stderr.write('Resource not accessible by integration\\n')\n"
+            "    sys.exit(1)\n"
+            "if 'protection' in ' '.join(sys.argv):\n"
+            "    sys.stdout.write('[\"unit-tests\"]')\n"
+            "else:\n"
+            '    sys.stdout.write(\'{"b":"dev"}\')\n'
+        )
+        fake.chmod(0o755)
+        mint = real_dir / "mint"
+        mint.write_text(f"#!/bin/sh\necho {self.APP_TOKEN}\n")
+        mint.chmod(0o755)
+        shim = shim_dir / "gh"
+        shim.write_text(
+            f'#!/bin/sh\n# ONEX_GH_USER_SHIM test double\nexec {sys.executable} {route} exec -- "$@"\n'
+        )
+        shim.chmod(0o755)
+        monkeypatch.setenv(
+            "PATH", os.pathsep.join([str(shim_dir), str(real_dir), "/usr/bin", "/bin"])
+        )
+        monkeypatch.setenv("ONEX_GH_READ_ROUTING", "1")
+        monkeypatch.setenv("GH_READ_TOKEN_CMD", str(mint))
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("GH_TOKEN", "operator-token")
+        monkeypatch.setattr(gate, "landing_controller_contexts", lambda *_a: None)
+        return calls
+
+    def test_advisory_job_gate_routing_on_parses_the_protection_read(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._install(tmp_path, monkeypatch)
+        root = tmp_path / "repo"
+        root.mkdir()
+        contexts, source = gate.resolve_required_contexts("OmniNode-ai/fixture", root)
+        assert contexts == ["unit-tests"]
+        assert "live" in source
+        assert calls.read_text()
+
+    def test_advisory_job_gate_routing_on_never_asks_the_app_for_the_protection(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The branch-protection read is admin-only: it is served by the operator at once,
+        not tried on the App first."""
+        calls = self._install(tmp_path, monkeypatch)
+        root = tmp_path / "repo"
+        root.mkdir()
+        gate.resolve_required_contexts("OmniNode-ai/fixture", root)
+        protection = [
+            line for line in calls.read_text().splitlines() if "protection" in line
+        ]
+        assert protection and all(
+            line.startswith("operator-token ") for line in protection
+        )
+
+
 class TestAC6TheGateIsItselfRequired:
     """AC6 -- falsifier: the gate's own workflow carries `continue-on-error`,
     which would be self-refuting."""

@@ -428,12 +428,9 @@ def test_fallback_refused_attempt_leaves_stdout_exactly_one_document(
     operator_document = {"contexts": ["Quality Gate"]}
     env["FAKE_GH_REFUSE_TOKEN"] = APP_TOKEN
     env["FAKE_GH_STDOUT"] = json.dumps(operator_document)
-    argv = [
-        "api",
-        "repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks",
-        "--jq",
-        ".contexts",
-    ]
+    # A protection read no longer reaches the App at all (OMN-20043: admin-only fields), so the
+    # refused attempt is made on a pull request read, which still routes to the App first.
+    argv = ["api", "repos/OmniNode-ai/omniclaude/pulls/12", "--jq", ".contexts"]
     proc = subprocess.run(
         [sys.executable, str(_MODULE_PATH), "exec", "--result-file", str(result), "--"]
         + argv,
@@ -635,3 +632,101 @@ def test_bare_repository_object_stays_on_operator_but_its_subpaths_route() -> No
     assert not cls.read and cls.reason == "repo-settings-fields"
     sub = gr.classify(["api", "repos/OmniNode-ai/omnimarket/pulls/1"], {})
     assert sub.read and sub.reason == "read-rest"
+
+
+# --------------------------------------------------------------------------- #
+# OMN-20043 -- admin-only reads stay on the operator; a refused attempt leaves one document
+# --------------------------------------------------------------------------- #
+
+ADMIN_ONLY_ENDPOINTS: list[str] = [
+    "repos/OmniNode-ai/omniclaude/rulesets",
+    "repos/OmniNode-ai/omniclaude/rulesets/123",
+    "repos/OmniNode-ai/omniclaude/branches/dev/protection",
+    "repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks",
+    "repos/OmniNode-ai/omniclaude/branches/feat/x/protection/required_pull_request_reviews",
+    "repos/OmniNode-ai/omniclaude/actions/variables",
+    "repos/OmniNode-ai/omniclaude/actions/variables/SOME_NAME",
+    "repos/OmniNode-ai/omniclaude/environments/prod/variables",
+    "repos/OmniNode-ai/omniclaude/actions/secrets",
+    "repos/OmniNode-ai/omniclaude/actions/permissions",
+    "repos/OmniNode-ai/omniclaude/collaborators",
+    "repos/OmniNode-ai/omniclaude/hooks",
+    "repos/OmniNode-ai/omniclaude/keys",
+    "https://api.github.com/repos/OmniNode-ai/omniclaude/rulesets?per_page=100",
+]
+
+ADMIN_ONLY_GRAPHQL: list[str] = [
+    (
+        'query={ repository(owner: "OmniNode-ai", name: "omniclaude") '
+        "{ rulesets(first: 10) { nodes { name } } } }"
+    ),
+    (
+        'query={ repository(owner: "OmniNode-ai", name: "omniclaude") '
+        "{ branchProtectionRules(first: 10) { nodes { pattern } } } }"
+    ),
+    (
+        'query={ repository(owner: "OmniNode-ai", name: "omniclaude") '
+        "{ autoMergeAllowed deleteBranchOnMerge } }"
+    ),
+]
+
+
+@pytest.mark.parametrize("endpoint", ADMIN_ONLY_ENDPOINTS)
+def test_admin_only_fields_endpoint_is_not_routed_to_the_app(endpoint: str) -> None:
+    """OMN-20043: the App answers these WITHOUT an error and with the admin-only fields
+    missing (a ruleset with no bypass_actors reads as bypass-free), so they stay on the operator."""
+    cls = gr.classify(["api", endpoint], {})
+    assert not cls.read and cls.reason == "admin-only-fields"
+
+
+@pytest.mark.parametrize("query", ADMIN_ONLY_GRAPHQL)
+def test_admin_only_fields_graphql_is_not_routed_to_the_app(query: str) -> None:
+    cls = gr.classify(["api", "graphql", "-f", query], {})
+    assert not cls.read and cls.reason == "admin-only-fields"
+
+
+def test_admin_only_fields_ruleset_read_runs_on_the_operator_without_minting(
+    fake_gh: Path, env: dict[str, str], records: list[object]
+) -> None:
+    argv = ["api", "repos/OmniNode-ai/omniclaude/rulesets/123"]
+    assert _run(argv, fake_gh, env, records) == 0
+    assert _calls(env) == [{"argv": argv, "gh_token": OPERATOR_TOKEN}]
+    assert _mint_count(env) == 0
+    assert records == [
+        gr.RouteRecord(
+            gr.IDENTITY_OPERATOR,
+            "admin-only-fields",
+            "api",
+            "GET",
+            "OmniNode-ai/omniclaude",
+            0,
+        )
+    ]
+
+
+def test_admin_only_fields_neighbours_still_route_to_the_app() -> None:
+    for endpoint in (
+        "repos/OmniNode-ai/omniclaude/branches",
+        "repos/OmniNode-ai/omniclaude/branches/dev",
+        "repos/OmniNode-ai/omniclaude/rules/branches/dev",
+        "repos/OmniNode-ai/omniclaude/contents/protection",
+    ):
+        cls = gr.classify(["api", endpoint], {})
+        assert cls.read and cls.reason == "read-rest", endpoint
+
+
+def test_refused_attempt_stdout_is_only_the_fallback_document(
+    fake_gh: Path,
+    env: dict[str, str],
+    records: list[object],
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """OMN-20043 AC1: a caller that json-parses stdout sees exactly the fallback's document."""
+    operator_document = {"number": 12, "state": "open"}
+    env["FAKE_GH_REFUSE_TOKEN"] = APP_TOKEN
+    env["FAKE_GH_STDOUT"] = json.dumps(operator_document)
+    argv = ["api", "repos/OmniNode-ai/omniclaude/pulls/12"]
+    assert _run(argv, fake_gh, env, records) == 0
+    out, _ = capfd.readouterr()
+    assert json.loads(out) == operator_document
+    _assert_fallback(env, records, "integration-refused")
