@@ -97,6 +97,17 @@ if [ -n "${OMNIBASE_PATH:-}" ]; then
 else
   WORKSPACE="$DEFAULT_WORKSPACE"; WORKSPACE_FROM="the default; OMNIBASE_PATH is not set"
 fi
+# What an earlier setup leaves in the environment silently redirects onex: a
+# workspace or internal clone, a lab tenant, a state directory, an event bus, a
+# routing overlay. This run and everything it starts inherit none of it, on
+# every run including a resumed one; the names are kept in INHERITED_ENV.
+INHERITED_ENV=""
+for _v in $(compgen -e); do
+  case "$_v" in
+    OMNI_HOME|OMNIBASE_*|ONEX_*|BIFROST_*|KAFKA_*|DELEGATION_ROUTING_TIERS_PATH|POSTGRES_PASSWORD|VALKEY_PASSWORD|PYTHONPATH)
+      INHERITED_ENV="${INHERITED_ENV}${INHERITED_ENV:+ }$_v"; unset "$_v" ;;
+  esac
+done
 unset OMNI_HOME
 RESTART=0
 OLLAMA_MODEL=""
@@ -163,11 +174,6 @@ export PATH
 
 IS_TTY=0
 [ -t 0 ] && [ -t 1 ] && IS_TTY=1
-
-# Ambient configuration that silently redirects onex (local-dev guide, section 2).
-# This run and everything it starts never inherit it.
-unset BIFROST_CONTRACT_PATH BIFROST_OVERLAY_PATH DELEGATION_ROUTING_TIERS_PATH \
-  POSTGRES_PASSWORD VALKEY_PASSWORD PYTHONPATH 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Output
@@ -1120,21 +1126,89 @@ refuse_foreign_workspace() {
   phase_fail "choose an empty or new directory with --workspace DIR (or set OMNIBASE_PATH to one); nothing was changed in $WORKSPACE"
 }
 
+# Clone or fetch only; what an existing clone needs is decided by bring_clone_current.
 sync_clone() { # repo
-  local d="$WORKSPACE/$1" def
-  if [ -d "$d/.git" ]; then
-    git -C "$d" fetch --quiet origin || return 1
-    def="$(git -C "$d" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')"
-    [ -n "$def" ] || return 0
-    # A canonical clone is read-only: fast-forward it only when it sits clean
-    # on its default branch; anything else is the developer's and is left alone.
-    if [ "$(git -C "$d" rev-parse --abbrev-ref HEAD)" = "$def" ] && [ -z "$(git -C "$d" status --porcelain)" ]; then
-      git -C "$d" merge --ff-only --quiet "origin/$def" || true
-    fi
-    return 0
+  local d="$WORKSPACE/$1"
+  if [ -e "$d/.git" ]; then
+    git -C "$d" fetch --quiet origin
+    return
   fi
-  rm -rf "$d"
+  # Something that is not a clone stands where one goes: moved aside, never deleted.
+  if [ -e "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
+    mkdir -p "$WORKSPACE/.set-aside" && mv "$d" "$WORKSPACE/.set-aside/$1.$STAMP" || return 1
+    echo "moved $d (not a clone) to $WORKSPACE/.set-aside/$1.$STAMP"
+  fi
+  rm -rf "$d"   # an empty directory, or what a failed clone attempt left
   git clone --quiet --filter=blob:none "$GITHUB_ORG_URL/$1.git" "$d"
+}
+
+clone_default_branch() { # repo -> origin's default branch, as last fetched
+  local def
+  def="$(git -C "$WORKSPACE/$1" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
+  def="${def#origin/}"
+  if [ -z "$def" ]; then
+    for def in dev main master; do
+      git -C "$WORKSPACE/$1" rev-parse --verify --quiet "refs/remotes/origin/$def" >/dev/null && break
+      def=""
+    done
+  fi
+  printf '%s' "$def"
+}
+
+# clone_state repo -> one line describing the clone, measured against origin as
+# last fetched: "missing", or "<where>|<changed>|<behind>|<unique>|<default>",
+# where <where> is a branch name or "detached", <changed> counts tracked files
+# changed or deleted (untracked files never block a checkout of a clean tree),
+# <behind> is how far HEAD is behind origin's default branch, and <unique> counts
+# commits at HEAD that origin does not have.
+clone_state() { # repo
+  local d="$WORKSPACE/$1" def where changed behind=0 unique=0
+  [ -d "$d/.git" ] || [ -f "$d/.git" ] || { printf 'missing'; return 0; }
+  def="$(clone_default_branch "$1")"
+  where="$(git -C "$d" symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached)"
+  changed="$(git -C "$d" status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ')"
+  if [ -n "$def" ]; then
+    behind="$(git -C "$d" rev-list --count "HEAD..origin/$def" 2>/dev/null || echo 0)"
+    unique="$(git -C "$d" rev-list --count "origin/$def..HEAD" 2>/dev/null || echo 0)"
+  fi
+  printf '%s|%s|%s|%s|%s' "$where" "$changed" "$behind" "$unique" "$def"
+}
+
+# clone_problem repo state -> empty when setup can bring the clone current by
+# itself; else what is wrong with it, in words. Setup never discards work: tracked
+# changes and commits origin does not have are the developer's.
+clone_problem() { # repo state
+  local where changed behind unique def
+  IFS='|' read -r where changed behind unique def <<EOF
+$2
+EOF
+  local why=""
+  [ "${changed:-0}" -gt 0 ] && why="$changed tracked file(s) changed or deleted"
+  [ "${unique:-0}" -gt 0 ] && why="${why}${why:+; }$unique commit(s) that origin does not have"
+  [ -n "$why" ] || return 0
+  printf '%s (%s, %s commit(s) behind origin/%s)' "$why" "$(clone_where "$where")" "${behind:-0}" "${def:-?}"
+}
+
+clone_where() { case "$1" in detached) echo "detached HEAD" ;; *) echo "on branch $1" ;; esac; }
+
+# The command that clears clone_problem without losing anything: the clone moves
+# aside whole, and the next run clones it fresh.
+clone_fix() { # repo
+  printf 'mkdir -p "%s" && mv "%s" "%s"' "$WORKSPACE/.set-aside" "$WORKSPACE/$1" "$WORKSPACE/.set-aside/$1.$STAMP"
+}
+
+# A clean clone is brought to origin's default branch, so a returning machine
+# never fails later on a file newer than its checkout. Pinned clones are then
+# checked out at their pin by pin_clone_to_proven.
+bring_clone_current() { # repo
+  local d="$WORKSPACE/$1" def
+  def="$(clone_default_branch "$1")"
+  [ -n "$def" ] || { echo "origin has no default branch" >&2; return 1; }
+  if [ "$(git -C "$d" symbolic-ref --quiet --short HEAD 2>/dev/null)" != "$def" ]; then
+    git -C "$d" checkout --quiet "$def" 2>/dev/null ||
+      git -C "$d" checkout --quiet -b "$def" "origin/$def" || return 1
+  fi
+  git -C "$d" merge --ff-only --quiet "origin/$def"
 }
 
 proven_pin() { # repo -> the CI-proven commit, empty when the repo has no pin
@@ -1214,6 +1288,31 @@ event_bus:
 YAML
 }
 
+# The materialiser reads the config from git (origin/main of the config root), and
+# warns "Could not locate runtime config repository" on every delegation when the
+# root is a plain directory. So the root is a repository whose main, and the local
+# ref origin/main beside it, carry the file. It has no remote and never pushes.
+config_git() { # git in the workspace config root, with an identity of its own
+  git -C "$WORKSPACE_CONFIG_ROOT" -c user.name=omninode-dev-setup \
+    -c user.email=dev-setup@omninode.invalid -c commit.gpgsign=false "$@"
+}
+
+commit_workspace_runtime_config() {
+  if [ ! -d "$WORKSPACE_CONFIG_ROOT/.git" ]; then
+    config_git init --quiet && config_git symbolic-ref HEAD refs/heads/main || return 1
+  fi
+  config_git add "$WORKSPACE_RUNTIME_CONFIG_REL" || return 1
+  config_git diff --cached --quiet || config_git commit --quiet -m "workspace runtime config (omninode-dev-setup)" || return 1
+  config_git update-ref refs/remotes/origin/main HEAD
+}
+
+# Bound for every run, not inside phase 2 alone: a resumed run skips phase 2,
+# and its later phases must still run against this workspace.
+bind_workspace_env() {
+  export OMNIBASE_PATH="$WORKSPACE"
+  export ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
+}
+
 workspace_runtime_config_present() {
   grep -qF "$WORKSPACE_RUNTIME_CONFIG_MARK" \
     "$WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL" 2>/dev/null
@@ -1227,6 +1326,7 @@ phase2_verified() {
     pin_clone_at_proven "$r" || return 1
   done
   workspace_runtime_config_present || return 1
+  git -C "$WORKSPACE_CONFIG_ROOT" rev-parse --verify --quiet "origin/main:$WORKSPACE_RUNTIME_CONFIG_REL" >/dev/null || return 1
   [ -f "$WORKSPACE_MARKER" ] || return 1
   grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null || return 1
   # A V1 block still exports OMNI_HOME: redo the phase so the block is rewritten.
@@ -1246,22 +1346,45 @@ phase2() {
   mkdir -p "$WORKSPACE" || { FAILED_STEP="create $WORKSPACE"; phase_fail "choose another directory with --workspace"; }
   [ -f "$WORKSPACE_MARKER" ] || printf 'This workspace was created by omninode-dev-setup.\n' >"$WORKSPACE_MARKER" ||
     { FAILED_STEP="mark the workspace"; phase_fail "could not write $WORKSPACE_MARKER; check the directory is writable"; }
-  local r pin default_repos=""
+  local r pin default_repos="" problem problems=""
   for r in $REPOS; do
-    if [ -d "$WORKSPACE/$r/.git" ]; then say "  $r: present, fetching"; else say "  $r: cloning"; fi
+    if [ -e "$WORKSPACE/$r/.git" ]; then say "  $r: present, fetching"; else say "  $r: cloning"; fi
     retry "clone or fetch $r" sync_clone "$r" || phase_fail "check that github.com is reachable, then run this again"
   done
+  # Every clone is measured against origin before any of them moves, so one stop
+  # names every clone that holds work, with how far behind it is and the command
+  # that moves it aside. Nothing is changed in any clone when one is named.
+  for r in $REPOS; do
+    problem="$(clone_problem "$r" "$(clone_state "$r")")"
+    [ -n "$problem" ] || continue
+    say "  ✗ $r: $problem"
+    say "      to move it aside: $(clone_fix "$r")"
+    problems="${problems}${problems:+ }$r"
+  done
+  if [ -n "$problems" ]; then
+    FAILED_STEP="bring the clones up to date with origin"
+    LAST_ERR="these clones hold work setup will not move: $problems"
+    phase_fail "commit or stash that work, or move each clone aside with the command under it (the next run clones it fresh), then run this again"
+  fi
+  # The proven set lives in omnibase_infra, so it is brought current first: an old
+  # checkout that predates the pins file is updated, never reported as missing one.
+  step "bring omnibase_infra up to date with origin" bring_clone_current omnibase_infra ||
+    phase_fail "run 'git -C $WORKSPACE/omnibase_infra status' to see why it cannot fast-forward"
   [ -f "$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml" ] ||
     { FAILED_STEP="read the proven set (omnibase_infra/.github/sibling-pins.yaml)"
-      phase_fail "restore the pins file in the omnibase_infra clone, or choose another --workspace"; }
+      LAST_ERR="omnibase_infra is current with origin/$(clone_default_branch omnibase_infra), and origin has no .github/sibling-pins.yaml"
+      phase_fail "nothing on this Mac is wrong: origin's omnibase_infra lacks its proven set; report it and run this again once it is restored"; }
   for r in $REPOS; do
-    pin_clone_to_proven "$r" ||
-      { FAILED_STEP="check out the proven commit of $r"
-        phase_fail "move your changes out of the $r clone, or choose another --workspace; if the pin is missing, check origin and fetch it"; }
     pin="$(proven_pin "$r")"
     if [ -n "$pin" ]; then
+      pin_clone_to_proven "$r" ||
+        { FAILED_STEP="check out the proven commit of $r"
+          phase_fail "check that origin has commit $pin in $r ('git -C $WORKSPACE/$r fetch origin'), then run this again"; }
       say "  $r: proven ${pin:0:12}"
     else
+      [ "$r" = omnibase_infra ] ||
+        step "bring $r up to date with origin" bring_clone_current "$r" ||
+        phase_fail "run 'git -C $WORKSPACE/$r status' to see why it cannot fast-forward"
       default_repos="${default_repos}${default_repos:+ }$r"
     fi
   done
@@ -1269,11 +1392,12 @@ phase2() {
   write_workspace_runtime_config ||
     { FAILED_STEP="declare the workspace runtime config"
       phase_fail "could not write $WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL; check the directory is writable"; }
+  step "commit the workspace runtime config" commit_workspace_runtime_config ||
+    phase_fail "see the log; $WORKSPACE_CONFIG_ROOT must be a git repository holding the config"
   say "  Workspace transport declared in $WORKSPACE_RUNTIME_CONFIG_REL (in-memory: everything runs on this Mac)."
   write_profile_block "$HOME/.zshrc"
   case "${SHELL:-}" in */bash) write_profile_block "$HOME/.bash_profile" ;; esac
-  export OMNIBASE_PATH="$WORKSPACE"
-  export ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
+  bind_workspace_env
   say "  OMNIBASE_PATH, Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
   phase_pass
 }
@@ -1349,6 +1473,13 @@ stamp_proven_floor() {
     --output "$WORKSPACE/.onex-workspace-floor.json"
 }
 
+# A resumed phase 3 does not rebuild a dispatch venv that already holds the
+# proven set: the reconciler's --check mutates nothing and exits 0 when it does.
+dispatch_venv_current() {
+  [ -x "$WORKSPACE/.onex-dispatch-venv/bin/onex" ] || return 1
+  env -u PYTHONPATH bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --check
+}
+
 # Phase 3 hands each key to `onex models add` on stdin and tests the rest with
 # `onex models test`: both run one delegation pinned to that model's backend,
 # and a pin answered by any other backend fails. Through the dispatch venv's
@@ -1406,8 +1537,16 @@ openrouter_default_model() {
   return 1
 }
 
+# cause_of < text -> the line that says why a delegation failed: the last
+# "Error: ..." line, else the last refusal, else nothing. A summary such as "the
+# test delegation exited with status 1" is never the whole message on its own.
+cause_of() {
+  awk '/^Error: /{e=substr($0, 8)} /REFUSED|refused/{r=$0} END{if (e != "") print e; else if (r != "") print r}' |
+    cut -c1-300
+}
+
 setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason>
-  local p="$1" key out err line status model=""
+  local p="$1" key out err line status model="" reason cause
   err="$RUN_DIR/models.err"
   key="$(pending_key "$p")"; set_pending_key "$p" ""
   if [ "$p" = "openrouter" ] && [ -n "$key" ]; then
@@ -1427,11 +1566,17 @@ setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason
   cat "$err" >>"$LOG" 2>/dev/null
   line="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
   status="$(receipt_field "$line" status)"
+  cause="$({ printf '%s\n' "$out" | grep -vE '^\{'; cat "$err" 2>/dev/null; } | cause_of)"
   case "$status" in
     passed) set_result "$p" "pass:$(receipt_field "$line" model)" ;;
-    failed) set_result "$p" "fail:$(receipt_field "$line" reason | cut -c1-300)" ;;
+    failed)
+      reason="$(receipt_field "$line" reason | cut -c1-300)"
+      case "$reason" in
+        ""|*"exited with status"*) [ -n "$cause" ] && reason="${reason:+$reason: }$cause" ;;
+      esac
+      set_result "$p" "fail:$reason" ;;
     not_set_up) set_result "$p" "fail:no key is stored for it" ;;
-    *) set_result "$p" "fail:$(sed -n 's/^Error: //p' "$err" | tail -n 1 | cut -c1-300)" ;;
+    *) set_result "$p" "fail:$cause" ;;
   esac
   [ "$(result_of "$p")" = "fail:" ] && set_result "$p" "fail:onex models gave no result; see the log"
   rm -f "$err"
@@ -1441,9 +1586,13 @@ phase3() {
   phase_start 3 "onex, local identity and your models" "3-10 minutes, more when Ollama downloads a model"
   local p passed
 
-  say "  Building the workspace dispatch environment (onex)…"
-  retry "build the dispatch venv" nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --proven ||
-    phase_fail "see the log; the script names the exact command to run by hand"
+  if dispatch_venv_current >>"$LOG" 2>&1; then
+    say "  The workspace dispatch environment (onex) already holds the proven set; not rebuilt."
+  else
+    say "  Building the workspace dispatch environment (onex)…"
+    retry "build the dispatch venv" nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --proven ||
+      phase_fail "see the log; the script names the exact command to run by hand"
+  fi
   step "point ~/.local/bin/onex at the workspace wrapper" link_onex ||
     phase_fail "remove ~/.local/bin/onex by hand, then run this again"
   ONEX="$HOME/.local/bin/onex"
@@ -1492,7 +1641,8 @@ phase3() {
   # developer's own work.
   say "  Running one delegation without choosing a model…"
   retry_capture "one onex delegate" delegate_hello ||
-    phase_fail "run 'onex delegate \"Reply with exactly one word: hello\"' to see the error"
+    { LAST_ERR="$(tail -n 60 "$LOG" | cause_of)"; LAST_ERR="${LAST_ERR:-$(last_log_lines)}"
+      phase_fail "run 'onex delegate \"Reply with exactly one word: hello\"' in a new terminal to see the whole error"; }
   say "  Delegation chose $(receipt_field "$CAPTURED" model) ($(receipt_field "$CAPTURED" backend_id))."
   CAPTURED=""
   [ "$OLLAMA_HEADLESS" -eq 1 ] && say "  Ollama is running without its app here; after a restart, start it with 'ollama serve'."
@@ -1933,6 +2083,7 @@ main() {
   local p
   say "OmniNode developer onboarding (local runtime). Status file: $STATUS"
   [ "$RESTART" -eq 1 ] && rm -f "$DONE_FILE"
+  bind_workspace_env
   phase0
   [ "$PREFLIGHT_ONLY" -eq 1 ] && { say "Preflight only: nothing was changed."; exit 0; }
   phase1
