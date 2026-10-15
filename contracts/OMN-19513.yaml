@@ -96,3 +96,11 @@ dod_evidence:
         check_value: uv run pytest tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov
     binds_ac:
       - AC6
+  - id: dod-omn19513-encryption-container-smoke
+    description: Run the payload encryption smoke tests in a fresh Python container against the checked-out runtime. Both capture classes must seal and open with a throwaway key, refuse unavailable keys and leave the off path unchanged. No production key or service is used.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: 'docker run --rm --volume "$PWD:/workspace:ro" --workdir /workspace --env CI=true ghcr.io/astral-sh/uv:python3.12-bookworm-slim uv run --no-project --with pytest==9.1.1 --with pytest-asyncio==1.3.0 --with pytest-cov==7.1.0 --with python-dotenv==1.2.2 --with pydantic==2.13.4 --with cryptography==50.0.1 --with pyyaml==6.0.3 pytest tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov -p no:cacheprovider'
+    binds_ac:
+      - AC6
