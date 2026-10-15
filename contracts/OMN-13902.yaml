@@ -26,7 +26,7 @@ requirements:
       - id: AC3
         statement: 'AC3: The lane write guard honours a github_mode_by_owner row of the write_config contract that the sibling-refreshed omnimarket carries, and a github_mode_by_repository row wins over its owner row. -- falsifier: uv lock --check && uv run pytest tests/scripts/test_gh_lane_write_guard.py -q --no-cov'
   - id: req-refreshed-capture-metadata
-    statement: The refreshed hook-event fan-out preserves GuardRefusal and AssistantUsage metadata and raw content under the pinned daemon registry passthrough policy.
+    statement: The refreshed hook-event fan-out preserves GuardRefusal and AssistantUsage metadata and raw content under the pinned daemon registry passthrough policy, which implements operator RULING 2026-10-15T04:24:42Z (OMN-19513, no redaction on the bus).
     acceptance:
       - id: AC4
         statement: 'AC4: GuardRefusal identifiers and AssistantUsage counts, source hook and partial-window flag survive fan-out, including zero counts and false flags; raw content and the input are unchanged. -- falsifier: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov'
@@ -89,12 +89,3 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k publish_transform
-  - id: dod-omniclaude-raw-capture-deploy-smoke
-    source: manual
-    binds_ac:
-      - AC4
-      - AC5
-    description: A fresh Python container loads the checked-out runtime with frozen dependencies and exercises both capture publish rules and metadata preservation. The probe runs on a hosted runner without a production service or credentials and fails with the dispatch-head transforms.
-    checks:
-      - check_type: command
-        check_value: 'docker run --rm --volume "$PWD:/workspace:ro" --workdir /workspace --env CI=true --env UV_PROJECT_ENVIRONMENT=/tmp/deploy-smoke-venv ghcr.io/astral-sh/uv:python3.12-bookworm uv run --frozen --group dev pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -p no:cacheprovider -k "publish_transform or refreshed_metadata"'

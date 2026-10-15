@@ -769,9 +769,14 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # OMN-19551 (topic and contract owned by omnimarket, OMN-19550): full
     # session content -- the complete prompt, tool input, tool result and
     # assistant reply -- one item or one chunk per record. OMN-19513: the
-    # producer journals it raw (operator RULING 2026-10-15T04:24:42Z: no
-    # redaction); the refreshed omnimarket emit registry declares passthrough
-    # for this topic, so the projection preserves those bytes on the bus too.
+    # producer journals it raw and the bus carries it raw (operator RULING
+    # 2026-10-15T04:24:42Z: capture everything raw, no scrub and no hash on
+    # the bus). The refreshed omnimarket emit registry declares passthrough
+    # for this topic, and the Registry Consistency CI job (OMN-13092) refuses
+    # any projection here that differs from the omnimarket rev uv.lock pins.
+    # Confidentiality is held by the topic's ACL (a command topic, see
+    # CLAUDE.md) and, in production, by the ``payload_encryption`` setting of
+    # contract_hook_claude_capture.yaml, which encrypts the journalled payload.
     "content.captured": EventRegistration(
         event_type="content.captured",
         fan_out=[
@@ -788,8 +793,10 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # registry): the all-hooks capture. One lineage-carrying event per Claude
     # Code hook call, every hook type on one topic, content fields raw from the
     # producer; the publish transform is projected from omnimarket's emit
-    # registry's passthrough policy. Partitioned by session so a session's
-    # hooks stay ordered.
+    # registry's passthrough policy, which implements the same raw-capture
+    # RULING 2026-10-15T04:24:42Z and is held by the same Registry
+    # Consistency check and ``payload_encryption`` option as content.captured
+    # above. Partitioned by session so a session's hooks stay ordered.
     "hook.event": EventRegistration(
         event_type="hook.event",
         fan_out=[
