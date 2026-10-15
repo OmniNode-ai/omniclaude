@@ -344,23 +344,20 @@ def test_route_refused_app_call_leaves_stdout_with_only_the_fallbacks_document(
     json.loads saw two documents, commits were refused, and lanes escaped with
     ONEX_GH_READ_ROUTING=0.
     """
-    argv = [
-        "api",
-        "repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks",
-        "--jq",
-        ".contexts",
-    ]
+    # Branch-protection reads stay on the operator (OMN-20043). Use a routed
+    # resource so this regression still exercises a refused App attempt.
+    argv = ["api", "repos/OmniNode-ai/omniclaude/pulls/12"]
     result = _run(
         routed_env,
         *argv,
         extra={
             "ONEX_GH_READ_ROUTING": "1",
             "FAKE_GH_REFUSE_TOKEN": APP_TOKEN,
-            "FAKE_GH_STDOUT": '{"contexts": ["Quality Gate"]}',
+            "FAKE_GH_STDOUT": '{"number": 12, "state": "open"}',
         },
     )
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {"contexts": ["Quality Gate"]}
+    assert json.loads(result.stdout) == {"number": 12, "state": "open"}
     calls = _gh_calls(routed_env)
     assert len(calls) == 2
     assert [call["gh_token"] for call in calls] == [APP_TOKEN, OPERATOR_TOKEN]
