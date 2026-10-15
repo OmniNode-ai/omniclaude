@@ -50,3 +50,15 @@ dod_evidence:
     check_value: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov -k single_bump_pr
   binds_ac:
   - AC2
+- id: dod-omn20710-required-ci-umbrella
+  description: This PR moves the validator into the required CI Summary umbrella. The checks read
+    the actual Refusal Surface step and CI Summary policy, reject conditional or soft-allowed
+    enforcement, and require the separate gate workflow to be absent. At the merge base the validator
+    step is missing from Refusal Surface, so these checks fail.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov -k "gate_runs_in_the_ci_summary_umbrella or cases_run_in_ci_and_precommit"
+  binds_ac:
+  - AC1
+  - AC2
