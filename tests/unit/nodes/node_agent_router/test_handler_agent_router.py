@@ -288,3 +288,94 @@ class TestProtocolConformance:
 
         handler = HandlerAgentRouter()
         assert isinstance(handler, ProtocolAgentRouter)
+
+
+def _canonical_requests() -> list[ModelAgentRouterRequest]:
+    """The replay corpus shared by parity execution and the adequacy recorder."""
+    from uuid import UUID
+
+    return [
+        ModelAgentRouterRequest(
+            user_request=case,
+            context=context,
+            max_recommendations=7,
+            correlation_id=UUID("00000000-0000-0000-0000-000000000001"),
+        )
+        for case in ["recommendations", "empty", "raises", "unavailable"]
+        for context in [None, {"domain": "testing"}]
+    ]
+
+
+class TestCanonicalHandle:
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "request_model",
+        _canonical_requests(),
+        ids=[
+            f"{r.user_request}-{'with' if r.context else 'without'}-context"
+            for r in _canonical_requests()
+        ],
+    )
+    async def test_handle_matches_route(
+        self, request_model: ModelAgentRouterRequest
+    ) -> None:
+        """The runtime entrypoint keeps legacy results and forwarding behavior."""
+        import importlib
+        from pathlib import Path
+        from typing import get_type_hints
+
+        import yaml
+
+        contract_path = (
+            Path(__file__).resolve().parents[4]
+            / "src/omniclaude/nodes/node_agent_router/contract.yaml"
+        )
+        contract = yaml.safe_load(contract_path.read_text())
+        binding = contract["handler_routing"]["handlers"][0]["handler"]
+        handler_class = getattr(
+            importlib.import_module(binding["module"]), binding["name"]
+        )
+        handler = handler_class()
+        assert handler_class is HandlerAgentRouter
+        assert callable(getattr(handler, "handle", None)), "canonical handle is missing"
+        annotations = get_type_hints(handler.handle)
+        assert annotations["request"] is ModelAgentRouterRequest
+        assert annotations["return"] is ModelAgentRouterResult
+        case = request_model.user_request
+        fake = FakeAgentRouter()
+        if case == "recommendations":
+            fake.recommendations = [
+                _StubRecommendation(agent_name="agent-a"),
+                _StubRecommendation(agent_name="agent-b"),
+            ]
+        elif case == "raises":
+            fake.route_exc = RuntimeError("registry broken")
+        if case == "unavailable":
+            handler._init_failed = True
+        else:
+            handler._router = fake
+
+        result = await handler.handle(request_model)
+        legacy = await handler.route(
+            request_model, correlation_id=request_model.correlation_id
+        )
+
+        assert isinstance(result, ModelAgentRouterResult)
+        assert result == legacy
+        assert result.routed is (case == "recommendations")
+        assert tuple(r.agent_name for r in result.recommendations) == (
+            ("agent-a", "agent-b") if case == "recommendations" else ()
+        )
+        if case != "unavailable":
+            assert fake.route_call_count == 2
+            assert (
+                fake.route_calls
+                == [
+                    {
+                        "user_request": request_model.user_request,
+                        "context": request_model.context or {},
+                        "max_recommendations": request_model.max_recommendations,
+                    }
+                ]
+                * 2
+            )
