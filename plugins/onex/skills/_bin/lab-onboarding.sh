@@ -1145,12 +1145,11 @@ settle_leftovers() {
   fi
 }
 
-# profile_comment_out file lines... -> stdout: the file with each listed line
+# profile_comment_out file "lines" -> stdout: the file with each listed line
 # (and, for a multi-line onex function, its whole body, by brace depth) behind
 # the set-aside marker. Nothing is written.
 profile_comment_out() {
-  local f="$1"; shift
-  awk -v lines=" $* " -v mark="$SET_ASIDE_MARK $STAMP] " '
+  awk -v lines=" $2 " -v mark="$SET_ASIDE_MARK $STAMP] " '
     function braces(t,  o, c) { o = gsub(/\{/, "{", t); c = gsub(/\}/, "}", t); return o - c }
     index(lines, " " NR " ") {
       if (!depth && $0 ~ /^[[:space:]]*(function[[:space:]]+onex|onex[[:space:]]*\(\))/) depth = braces($0)
@@ -1158,7 +1157,7 @@ profile_comment_out() {
       print mark $0; next }
     depth > 0 { depth += braces($0); print mark $0; if (depth <= 0) depth = 0; next }
     { print }
-  ' "$f"
+  ' "$1"
 }
 
 # profile_syntax_ok file -> 0 when the shell that reads it parses it
@@ -1178,8 +1177,7 @@ prepare_profile_edits() {
   for f in $(printf '%s' "$LEFTOVERS" | awk -F "$TAB" '$1 == 1 && $2 == "profile" { sub(/:[0-9]+$/, "", $3); print $3 }' | sort -u); do
     lines="$(printf '%s' "$LEFTOVERS" | awk -F "$TAB" -v f="$f" '$1 == 1 && $2 == "profile" { n = $3; sub(/.*:/, "", n); k = $3; sub(/:[0-9]+$/, "", k); if (k == f) print n }' | tr '\n' ' ')"
     tmp="$(mktemp "$RUN_DIR/profile.XXXXXX")" || return 1
-    # shellcheck disable=SC2086  # line numbers, one word each
-    profile_comment_out "$f" $lines >"$tmp" || return 1
+    profile_comment_out "$f" "$lines" >"$tmp" || return 1
     if profile_syntax_ok "$f" && ! profile_syntax_ok "$tmp"; then
       rm -f "$tmp"
       FAILED_STEP="set aside lines in $f"
