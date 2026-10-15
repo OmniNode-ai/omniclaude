@@ -180,7 +180,7 @@ Precedence: kill-switch (where the script honors one) → mask bit → hook logi
 ## Repo Boundaries
 
 This repo owns Claude Code hooks, agent YAML definitions (`plugins/onex/agents/configs/`),
-skills (`plugins/onex/skills/`), event emission via the Unix-socket daemon, context injection,
+skills (`plugins/onex/skills/`), event emission through the hook-emit journal, context injection,
 and agent routing. Intelligence processing → omniintelligence; ONEX runtime/contracts →
 omnibase_core; deploy/infra → omnibase_infra. Full charter: knowledge-base `architecture/omniclaude-repo-charter.md`.
 
@@ -193,9 +193,9 @@ interfaces change without deprecation periods.
 
 | Invariant | Rationale |
 |-----------|-----------|
-| Hook scripts must **never block** on Kafka | Blocking hooks freeze Claude Code UI |
+| Hook scripts must **never block** on Kafka (the replacing and additive exceptions are under *Turn-holding*, below) | Blocking hooks freeze Claude Code UI |
 | Only preview-safe data goes to `onex.evt.*` topics | Observability topics have broad access |
-| Full prompts go **only** to `onex.cmd.omniintelligence.*` | Intelligence topics are access-restricted |
+| Full prompts ride command topics only, and the table under *Command topics that carry full prompts* is the list | Access is the broker's per-topic ACL entry, not the topic family name |
 | All event schemas are **frozen** (`frozen=True`, `extra="ignore"`, `from_attributes=True`) | Events are immutable after emission |
 | `emitted_at` timestamps **explicitly injected** — no `datetime.now()` defaults | Deterministic testing |
 | SessionStart must be **idempotent** | May be called multiple times on reconnect |
@@ -204,6 +204,71 @@ interfaces change without deprecation periods.
 
 `prompt_preview` auto-redacts secrets (OpenAI/AWS/GitHub/Slack keys, PEM, Bearer tokens,
 passwords in URLs) and caps at 100 chars.
+
+### Turn-holding
+
+The rule stays: a hook never blocks on Kafka, because a blocking hook freezes the Claude Code UI.
+Three kinds of hook are told apart: one that replaces a turn-holding operation, one that only observes,
+and one that is additive.
+
+**Replacing.** Operator ruling 2026-10-02T11:28:23Z (lane=context-service-plan, decision D2 of the context
+service plan), on holding the turn for remote work: "yes, for compact absolutely. the current compact
+already does this." A hook that replaces an operation which already holds the turn (native compaction;
+a foreground Agent call, which holds the turn for its whole native run) may hold it for that operation's
+contracted deadline, with a fixed fallback when the deadline passes. It is equivalent to the operation it
+replaces, and it adds no wait the operation did not already have.
+
+**Observing.** A hook that only observes replaces nothing, so it adds work to an operation it does not
+hold, and it never waits on Kafka. An observe-mode hook journals its command through the non-blocking
+route and returns at once.
+
+**Additive.** Operator ruling stamped 2026-10-02T14:58:44Z (decision D8, "OK let's go with your
+recommendations"): an additive hook, one that injects a context package and replaces nothing, may wait on
+the lab bus for its package within its profile's latency budget (`session_start` at most 5 s at p95,
+`agent_spawn` at most 3 s, `per_prompt` at most 500 ms). When the budget runs out it injects nothing and
+writes one journalled miss record. `per_prompt` is promoted only after its measured p95 is within 500 ms.
+No additive hook waits without its budget.
+
+The foreground, time-boxed journal emit and its fail-loud block are a separate rule, under *Failure
+Modes*. They are not the authority for any of the above.
+
+### Command topics that carry full prompts
+
+The old rule ("Full prompts go only to `onex.cmd.omniintelligence.*`") was false: the delegation chain and
+the ledger path also carry full text on other command families. This list is read from the content
+transport audit (knowledge-base `beta/deep-dives/2026-10-15-content-transport-audit.md`, T0.6, sections
+4.1 to 4.3 and 11.4), whose broker reads were taken on the dev lane on 2026-10-15. Access control is the
+ACL entry per topic: "superuser only" means no ACL entry for any other principal, and the superuser
+(`onex-dev-lane`) is the one identity of every lab Kafka client. The `omniintelligence` family name
+restricts nothing by itself. The broker authenticates each operator device and enforces ACLs, but no
+consumer receives the producing principal, so there is no per-user read check downstream.
+
+| Command topic | Carries | Access control as read |
+|---|---|---|
+| `onex.cmd.omniintelligence.content-captured.v1` | operator prompt, tool input and result, assistant reply (65,536-char chunks) | WRITE: 3 operator-device principals; READ and WRITE: the studio CLI principal; superuser only otherwise |
+| `onex.cmd.omniintelligence.tool-content.v1` | 2,000-char preview of Read, Write, Edit content and Bash commands (0 records) | superuser only |
+| `onex.cmd.omniintelligence.compliance-evaluate.v1` | text of the file just written, up to 32,768 bytes, no scrub (0 records) | superuser only |
+| `onex.cmd.omnimarket.delegate-skill.v1` | full prompt and system prompt | WRITE: 4 operator-device principals, studio CLI, 2 lab principals; READ: the readback principal |
+| `onex.cmd.omnibase-infra.delegation-request.v1` | full prompt, system prompt, context pack | READ: the readback principal; superuser only otherwise |
+| `onex.cmd.omnibase-infra.delegation-routing-request.v1` | the whole delegation request: prompt, system prompt, context pack | READ: the readback principal |
+| `onex.cmd.omnibase-infra.delegation-inference-request.v1` | full prompt with the context pack prepended, system prompt | superuser only |
+| `onex.cmd.omnibase-infra.delegation-quality-gate-request.v1` | the full answer and the prompt as grounding source | superuser only |
+| `onex.cmd.omnimarket.delegation-acceptance-judge-requested.v1` | `task_text` and `answer_text` (text fields not found in the sampled record) | superuser only |
+| `onex.cmd.omnimarket.delegation-execute.v1` | prompt and system prompt (0 records) | superuser only |
+| `onex.cmd.omnimarket.delegation-fanout-requested.v1` | `items[].prompt` (0 records) | superuser only |
+| `onex.cmd.omnibase-infra.llm-inference-request.v1` | `messages` and optional `prompt` (0 records) | superuser only |
+| `onex.cmd.omnibase-infra.remote-agent-invoke.v1` | free `payload` dict (0 records retained) | superuser only |
+| `onex.cmd.omninode.routing-requested.v1` | the operator's request text (0 records) | superuser only |
+| `onex.cmd.omnimarket.operator-capture-decision-requested.v1` | one operator message | topic absent from the broker; no ACL entry |
+| `onex.cmd.omnimarket.work-ledger-append-requested.v1` | full ledger rows, including the operator's words on ruling and consent rows | writer topic `work-ledger-append-from-<principal>`: WRITE by its own principal only, studio CLI READ by prefix (the audit gives one reading for the pair) |
+| `onex.cmd.omnimarket.work-ledger-emit.v1` | the full ledger row (0 records) | superuser only |
+| `onex.cmd.omniclaude.delegate-task.v1` | skill request `args`, `prompt` among them (0 records; legacy stub) | superuser only |
+
+Not covered by the table: the same audit reads full prompts and answers on `onex.evt.*` topics as well
+(the delegation terminals, `inference-response.v1`, and, after the raw-capture ruling of 2026-10-15T04:24:42Z,
+`onex.evt.omniclaude.hook-event.v1`), so the `evt` row above states the design target, not the measured
+state. `onex.cmd.omnimarket.node-generation-requested.v1` (a context pack) and the `cloud_delegate`
+payloads were not read by the audit.
 
 ### Naming conventions
 
@@ -366,14 +431,14 @@ part of this repository. The two things people get wrong:
 ## Debugging
 
 ```bash
-python plugins/onex/hooks/lib/emit_client_wrapper.py status --json  # Daemon status
+python plugins/onex/hooks/lib/hook_emit_health.py                    # Journal backlog + drainer state
 jq . plugins/onex/hooks/hooks.json                                  # Validate hook config
 ls -la plugins/onex/hooks/scripts/*.sh                              # Script permissions
 ```
 
 | Symptom | Likely cause / fix |
 |---------|--------------------|
-| Events not emitting | Daemon not started — SessionStart hook starts it |
+| Events not emitting | Journal backlog rising or drainer stalled — run `hook_emit_health.py` |
 | Hook fails exit 1 | Wrong Python — see `find_python()`; set `PLUGIN_PYTHON_BIN` |
 | Routing returns no match | Routing service timeout (fail-fast, no fallback) |
 | Context injection empty | No `INTELLIGENCE_SERVICE_URL`/`OMNICLAUDE_CONTEXT_API_URL` configured (API auto-disables), or timeout |
@@ -439,12 +504,8 @@ Hooks receive JSON on stdin (`sessionId` + event-specific fields) and return JSO
 (`hookSpecificOutput.additionalContext` for UserPromptSubmit). UserPromptSubmit sync path:
 agent detection → routing candidates (`route_via_events_wrapper.py`) → context injection
 (`context_injection_wrapper.py`); Kafka dual-emission is async (preview → `onex.evt.*`, full
-prompt → `onex.cmd.omniintelligence.*`). Agent YAML loading is NOT on the sync path — Claude
+prompt → the command topics under *Command topics that carry full prompts*). Agent YAML loading is NOT on the sync path — Claude
 loads the selected agent's YAML on demand.
-
-Emit daemon: hook → `emit_via_daemon()` → Unix socket `~/.claude/emit.sock` → daemon → Kafka.
-Started by SessionStart if not running; buffers briefly; drops events (with log) if Kafka is
-unavailable.
 
 ---
 
@@ -453,8 +514,9 @@ unavailable.
 Naming: `onex.{kind}.{producer}.{event-name}.v{n}` — `kind` is `evt` (observability, broad
 access) or `cmd` (commands, restricted). Authoritative list: `src/omniclaude/hooks/topics.py`.
 The privacy split is the invariant to protect: previews/metrics on `onex.evt.omniclaude.*`;
-full prompts and file contents ONLY on `onex.cmd.omniintelligence.*`. Access control is
-currently honor-system (no Kafka ACLs configured).
+full prompts and file contents on command topics only, as listed under *Command topics that carry full
+prompts*. The dev-lane broker requires SASL and enforces per-topic ACLs (756 entries read 2026-10-15), over
+a plaintext listener; other lanes differ (`stability-test` runs without SASL, per `hook_edge_lane.yaml`).
 
 Event payload models (`ModelHook*Payload`): `src/omniclaude/hooks/schemas.py`. Treat
 `working_directory`, `git_branch`, and `summary` fields as privacy-sensitive in analytics.
