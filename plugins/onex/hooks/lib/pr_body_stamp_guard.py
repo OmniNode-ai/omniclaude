@@ -47,11 +47,12 @@ is the same argument, and the same primitive, as
 One vocabulary, not a second spelling
 -------------------------------------
 The stamp pattern is config (``pr_body_stamp_policy.json``) and is pinned
-byte-for-byte against ``scripts/ci/check_occ_companion_merged.EVIDENCE_SOURCE_RE``
--- the omniclaude-side authority the OCC companion gate already reads a product
-pull-request body with, and the same shape onex_change_control's ``occ-preflight``
-and receipt-gate callers grep for. A gate that owned its own regex would drift
-from the producers and start refusing edits that lose nothing.
+byte-for-byte by ``tests/hooks/test_pr_body_stamp_guard.py`` to the shape the
+OCC companion gate read a product pull-request body with (its omniclaude copy,
+``scripts/ci/check_occ_companion_merged.py``, had no caller left and was deleted
+under OMN-20074) and that the remaining receipt-gate callers grep for. A gate
+that owned its own regex would drift from the producers and start refusing
+edits that lose nothing.
 
 Non-canonical regions are stripped from BOTH bodies first: a stamp quoted inside
 a fenced block or a blockquote is documentation, never a declaration (OMN-15615
@@ -200,8 +201,7 @@ _DEFAULT_POLICY = (
     Path(__file__).resolve().parents[1] / "config" / ("pr_body_stamp_policy.json")
 )
 
-#: Mirror of ``check_occ_companion_merged.FENCE_LINE_RE``, itself a mirror of
-#: ``validator_receipt_gate`` (OMN-14682). Copied rather than imported because
+#: Mirror of ``validator_receipt_gate``'s fence pattern (OMN-14682). Copied rather than imported because
 #: this module must run under any resolved interpreter with no project path.
 _FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 
@@ -446,8 +446,7 @@ def load_policy(path: Path | None = None) -> Policy:
 def strip_noncanonical_regions(pr_body: str) -> str:
     """Blank out body regions that cannot carry a *canonical* stamp.
 
-    Mirror of ``check_occ_companion_merged.strip_noncanonical_regions``, itself
-    a mirror of ``validator_receipt_gate.strip_noncanonical_regions``
+    Mirror of ``validator_receipt_gate.strip_noncanonical_regions``
     (OMN-14682). Excluded lines become empty lines rather than disappearing, so
     line positions survive and the MULTILINE anchors behave identically for
     every surviving canonical line. An unterminated opening fence blanks
@@ -1164,9 +1163,8 @@ def watcher_record_reader(
     return _read
 
 
-#: The repository every ``OCC#<n>`` evidence-source value names. Mirror of
-#: ``check_occ_companion_merged.OCC_REPO_DEFAULT`` (copied, not imported: this
-#: module runs under any resolved interpreter with no project path).
+#: The repository every ``OCC#<n>`` evidence-source value names (a literal:
+#: this module runs under any resolved interpreter with no project path).
 _OCC_REPO = "OmniNode-ai/onex_change_control"
 
 #: ``OCC#<number>``, the only stamp value whose merge state can be read live.

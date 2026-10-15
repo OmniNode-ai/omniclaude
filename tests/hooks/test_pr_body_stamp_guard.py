@@ -373,16 +373,16 @@ def test_non_string_command_is_refused(policy: Policy) -> None:
 def test_stamp_pattern_is_the_repo_canonical_one() -> None:
     """The gate may not own a second spelling of the stamp line.
 
-    Pinned byte-for-byte against ``check_occ_companion_merged.EVIDENCE_SOURCE_RE``,
-    the omniclaude-side authority the OCC companion gate already reads with.
-    Changing one without the other turns this red.
+    Pinned byte-for-byte to the pattern and flags the OCC companion gate read
+    a product pull-request body with. Its omniclaude copy was deleted with no
+    caller left (OMN-20074), so the pin is a literal here: changing the policy
+    turns this red.
     """
-    sys.path.insert(0, str(REPO_ROOT / "scripts" / "ci"))
-    from check_occ_companion_merged import EVIDENCE_SOURCE_RE  # noqa: PLC0415
+    canonical = re.compile(r"^Evidence-Source:\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
 
     policy = load_policy(POLICY_PATH)
-    assert policy.stamp_line.pattern == EVIDENCE_SOURCE_RE.pattern
-    assert policy.stamp_line.flags == EVIDENCE_SOURCE_RE.flags
+    assert policy.stamp_line.pattern == canonical.pattern
+    assert policy.stamp_line.flags == canonical.flags
 
 
 def test_every_canonical_rendered_stamp_matches_the_pattern() -> None:
