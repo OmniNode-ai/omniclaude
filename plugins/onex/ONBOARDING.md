@@ -125,6 +125,24 @@ outcome, not a failure.** Everything the setup is for works without them.
 Phase 3 is the one that matters: it ends by running a real delegation and reading back the
 receipt. If phase 3 passes, the machine works.
 
+### Where `onex` finds its runtime config
+
+`onex delegate` reads its runtime config from a config owner. It tries these in order and
+uses the first that exists:
+
+1. **`ONEX_WORKSPACE_CONFIG_ROOT`**, when it is set to a non-blank path.
+2. **A sibling `omnibase_internal` checkout**, next to your workspace. This is the owner of
+   a **registry install**, a workspace operated by the OmniNode team, which keeps its config
+   in that private repository.
+3. **`.onex/workspace-config`** inside your workspace. This is the owner of a **developer
+   install**, the one this guide builds. Phase 2 writes it and exports
+   `ONEX_WORKSPACE_CONFIG_ROOT` to point at it, so a developer install needs no private
+   repository and no GitHub account.
+
+If none of the three exists, `onex delegate` refuses before dispatching. The message names
+`ONEX_WORKSPACE_CONFIG_ROOT` and phase 2 of this script: re-run the script so phase 2 writes
+the config, rather than pointing the variable somewhere else.
+
 ---
 
 ## When it is done
