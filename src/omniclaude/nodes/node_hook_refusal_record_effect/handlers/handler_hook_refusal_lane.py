@@ -444,6 +444,29 @@ def _ledger_path(explicit: str | None, env: Mapping[str, str]) -> Path | None:
 # ---------------------------------------------------------------------------
 
 
+#: A dispatch ROUTE line (OMN-17427): ``ROUTE: band=... model=... effort=...``.
+#: A sidecar ``description`` or a lane variable can carry it, and it is not a lane.
+_ROUTE_LINE = re.compile(r"ROUTE:.*")
+
+
+def lane_cell(value: str) -> str:
+    """*value* reduced to a lane name a ledger row cell can carry, or ``""``.
+
+    The ROUTE line a dispatch prompt carries is dropped wherever it sits, only
+    the first remaining line is kept, and the same character set the registry
+    uses for lane names is enforced (OMN-20883). A lane cell holding the ROUTE
+    line is rejected by the row grammar, and the refusal is then lost.
+    """
+    kept = [
+        line.strip()
+        for line in _ROUTE_LINE.sub("", value or "").splitlines()
+        if line.strip()
+    ]
+    if not kept:
+        return ""
+    return _LANE_SANITIZE.sub("-", kept[0]).strip("-")[:_LANE_CHARS]
+
+
 def resolve_refusal_lane(
     payload: Mapping[str, object] | None,
     *,
@@ -456,7 +479,33 @@ def resolve_refusal_lane(
 ) -> tuple[str, str]:
     """``(lane, lane_source)`` for one refusal. Payload values win over the
     keyword fallbacks. ``lane`` is ``""`` exactly when the source is
-    :data:`LANE_SOURCE_UNRESOLVED`. Never raises."""
+    :data:`LANE_SOURCE_UNRESOLVED`. Never raises. The lane is always a
+    :func:`lane_cell`."""
+    lane, source = _resolve_refusal_lane(
+        payload,
+        cwd=cwd,
+        transcript_path=transcript_path,
+        session_id=session_id,
+        agent_id=agent_id,
+        env=env,
+        ledger=ledger,
+    )
+    cleaned = lane_cell(lane)
+    if not cleaned:
+        return "", LANE_SOURCE_UNRESOLVED
+    return cleaned, source
+
+
+def _resolve_refusal_lane(
+    payload: Mapping[str, object] | None,
+    *,
+    cwd: str | None = None,
+    transcript_path: str | None = None,
+    session_id: str | None = None,
+    agent_id: str | None = None,
+    env: Mapping[str, str] | None = None,
+    ledger: str | None = None,
+) -> tuple[str, str]:
     environment: Mapping[str, str] = os.environ if env is None else env
     data: Mapping[str, object] = payload or {}
 
