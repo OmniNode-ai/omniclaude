@@ -111,6 +111,8 @@ dod_evidence:
       - check_type: command
         check_value: >-
           uv run python -c "from pathlib import Path; import yaml; contract = yaml.safe_load(Path('contracts/OMN-21157.yaml').read_text()); text = next(item['description'] for item in contract['dod_evidence'] if item['id'] == 'dod-agent-router-ac3-attempt-accounting'); assert '| node_agent_router | 1 | 1 | 0 |' in text; assert '70%' in text; assert '30-day' in text"
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/nodes/node_agent_router/test_handler_agent_router.py -q --no-cov -k TestCanonicalHandle
     binds_ac: [AC3]
   - id: dod-agent-router-deploy-contract-dispatch
     description: A fresh process resolves the deployed contract binding and exercises its typed handler with recommendations, empty results, routing exceptions and unavailable initialization, without external services.
