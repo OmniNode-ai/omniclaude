@@ -535,11 +535,13 @@ key_looks_like() {
   esac
 }
 
-# OpenRouter: every OpenRouter key runs one fixed model, so onboarding asks no
-# model question and the developer never needs a model id. It is a paid model,
-# so the key needs credit on openrouter.ai. Another model is one command later:
+# OpenRouter: every OpenRouter key runs the default model the onex overlay
+# declares, so onboarding asks no model question and the developer never needs a
+# model id. This script names no model: `onex models default-model openrouter`
+# reads it from the node_model_setup_effect overlay (setup_model, phase 3). The
+# model may be a paid one, so the key needs credit on openrouter.ai. Another
+# model is one command later:
 # onex models add openrouter --model <id>
-OPENROUTER_MODEL="qwen/qwen3.8-27b"
 
 stored_key_providers() { # every provider an earlier run already stored a key for, one per line
   [ -x "$HOME/.local/bin/onex" ] || return 1
@@ -640,7 +642,7 @@ ask_keys() {
       fi
       set_pending_key "$p" "$value"; value=""
       say "  $label key received."
-      [ "$p" = "openrouter" ] && say "  OpenRouter model: $OPENROUTER_MODEL"
+      [ "$p" = "openrouter" ] && say "  OpenRouter model: the default the onex overlay declares (change it any time: onex models add openrouter --model <model id>)"
       break
     done
   done
@@ -655,7 +657,7 @@ confirm_models() { # 0 continue, 1 change the choice; q quits
       if ollama_overrides_ours; then say "    Ollama      already set up on this Mac"
       else say "    Ollama      no key; downloads a model sized to this Mac's $(ram_gb) GB of memory"; fi
     elif [ "$p" = "openrouter" ] && [ -n "$(pending_key "$p")" ]; then
-      say "    $(printf '%-11s' "$(provider_label "$p")") key received, model $OPENROUTER_MODEL"
+      say "    $(printf '%-11s' "$(provider_label "$p")") key received, default model from the overlay"
     elif [ -n "$(pending_key "$p")" ]; then
       say "    $(printf '%-11s' "$(provider_label "$p")") key received"
     else
@@ -1377,11 +1379,44 @@ record_model_status() { # provider
   printf 'model=%s result=%s detail="%s"\n' "$1" "$verdict" "$(printf '%s' "${r#*:}" | tr '"' "'")" >>"$STATUS"
 }
 
+# The OpenRouter default model is a deployment fact kept in the onex-overlays
+# plugin, not here. An overlay the developer's ONEX_SKILL_OVERLAY_ROOTS already
+# reaches is used as it is; otherwise the one overlay file is read from the
+# private repository for this GitHub login, the way phase 5 reaches its plugins.
+MODEL_OVERLAY_REPO="OmniNode-ai/omniclaude-internal"
+MODEL_OVERLAY_FILE="plugins/onex-overlays/overlays/node_model_setup_effect/overlay.yaml"
+
+fetch_model_overlay() { # -> 0 when $RUN_DIR/overlay-roots holds the overlay
+  local dest="$RUN_DIR/overlay-roots/node_model_setup_effect"
+  mkdir -p "$dest" || return 1
+  gh api "repos/$MODEL_OVERLAY_REPO/contents/$MODEL_OVERLAY_FILE" -H "Accept: application/vnd.github.raw" >"$dest/overlay.yaml" 2>>"$LOG" && [ -s "$dest/overlay.yaml" ] && return 0
+  rm -f "$dest/overlay.yaml"
+  return 1
+}
+
+# stdout: the overlay's model (return 0), or the reason (return 1)
+openrouter_default_model() {
+  local out roots="${ONEX_SKILL_OVERLAY_ROOTS:-}"
+  out="$(models_cmd default-model openrouter 2>&1)" && { printf '%s\n' "$out" | tail -n 1; return 0; }
+  if fetch_model_overlay; then
+    out="$(export ONEX_SKILL_OVERLAY_ROOTS="$RUN_DIR/overlay-roots${roots:+:$roots}"; models_cmd default-model openrouter 2>&1)" &&
+      { printf '%s\n' "$out" | tail -n 1; return 0; }
+  fi
+  printf '%s\n' "$out" | sed -n 's/^Error: //p' | tail -n 1
+  return 1
+}
+
 setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason>
   local p="$1" key out err line status model=""
   err="$RUN_DIR/models.err"
   key="$(pending_key "$p")"; set_pending_key "$p" ""
-  [ "$p" = "openrouter" ] && model="$OPENROUTER_MODEL"
+  if [ "$p" = "openrouter" ] && [ -n "$key" ]; then
+    if ! model="$(openrouter_default_model)"; then
+      key=""
+      set_result "$p" "fail:$(printf '%s' "${model:-no overlay declares a default OpenRouter model}" | cut -c1-240) Nothing was stored. To choose a model yourself: onex models add openrouter --model <model id>"
+      return 0
+    fi
+  fi
   if [ -n "$key" ]; then
     out="$(printf '%s' "$key" | models_cmd add "$p" --json ${model:+--model "$model"} 2>"$err")"
   else
