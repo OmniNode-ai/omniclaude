@@ -126,7 +126,7 @@ Count workers spawned this tick. If 0 AND backlog has unworked tickets: write a 
 CONTRACT_VERIFY_PROMPT='CONTRACT VERIFICATION + BACKFILL — every ticket must have a ModelTicketContract
 
 **Step 1 — Scan**
-Use mcp__linear-server__list_issues to pull all tickets in states: Todo, In Progress, In Review. For each, check if `onex_change_control/contracts/<OMN-num>.yaml` exists.
+Use mcp__linear-server__list_issues to pull all tickets in states: Todo, In Progress, In Review. For each, check if `contracts/<OMN-num>.yaml` exists in the repository the ticket names.
 
 **Step 2 — Backfill**
 For each ticket missing a contract, generate a minimal default:

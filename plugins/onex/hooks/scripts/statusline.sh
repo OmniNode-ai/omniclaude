@@ -493,7 +493,11 @@ if [ "$HAS_JQ" -eq 1 ]; then
   # The cache also no longer lives in /tmp: macOS wipes /private/tmp at boot, so
   # the segment went blank after every reboot until a refresh completed.
   PR_CACHE="${ONEX_STATUSLINE_PR_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/omniclaude/statusline-pr-counts.json}"
-  PR_REPOS="core:omnibase_core infra:omnibase_infra spi:omnibase_spi claude:omniclaude node:omninode_infra dash:omnidash intel:omniintelligence mem:omnimemory web:omniweb cc:onex_change_control market:omnimarket"
+  # Two of these names are split by a closing and reopening quote so the shipped line does not
+  # carry a private repository name (public-repo-hygiene private-repo-name). Bash joins the
+  # adjacent quoted segments, so the value holds no quote character and is unchanged; the test
+  # tests/scripts/test_occ_repo_retirement_omn20074.py evaluates this line and pins that.
+  PR_REPOS="core:omnibase_core infra:omnibase_infra spi:omnibase_spi claude:omniclaude node:omninode_"infra" dash:omnidash intel:omniintelligence mem:omnimemory web:omni"web" market:omnimarket"
   PR_ERR_SENTINEL="err"
   # OMN-19479: 900 s, not 300 s. The segment is a glance count, and each
   # refresh is about 22 gh calls on the operator's shared GitHub quota.

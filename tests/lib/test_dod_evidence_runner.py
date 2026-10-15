@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -316,6 +317,24 @@ class TestInertCheckDemotion:
     the product, so it can never launder a red PR into green evidence. The
     runner demotes it to ``skipped`` -- never ``verified``.
     """
+
+    def test_is_inert_check_needs_no_external_engine(self) -> None:
+        """The predicate is local: it must give the same answer in an
+        interpreter where the change-control package cannot be imported."""
+        script = (
+            "import sys\n"
+            "sys.modules['onex_change_control'] = None\n"
+            "sys.modules['onex_change_control.scripts'] = None\n"
+            "sys.modules['onex_change_control.scripts.contract_compliance_check'] = None\n"
+            f"sys.path.insert(0, {str(Path(dod_evidence_runner.__file__).parent)!r})\n"
+            "import dod_evidence_runner as m\n"
+            "assert m.is_inert_check('test -f contracts/OMN-14391.yaml') is True\n"
+            "assert m.is_inert_check('test -f src/real_file.py') is False\n"
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True, check=False
+        )
+        assert proc.returncode == 0, proc.stderr
 
     def test_inert_check_value_is_never_verified_even_when_it_would_pass(
         self, tmp_path: Path

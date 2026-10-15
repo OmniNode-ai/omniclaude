@@ -84,7 +84,6 @@ REPOS=(
   "OmniNode-ai/omnimemory"
   "OmniNode-ai/omninode_infra"
   "OmniNode-ai/omniweb"
-  "OmniNode-ai/onex_change_control"
   "OmniNode-ai/omnimarket"
 )
 
