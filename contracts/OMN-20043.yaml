@@ -6,18 +6,16 @@ summary: >
   (rulesets, branch protection, Actions variables, secrets and permissions, collaborators, hooks,
   deploy keys, and GraphQL rulesets and merge-settings fields) to the App, which returned them without
   the admin-only fields and without an error. The router now classifies those reads as operator reads
-  (reason admin-only-fields). The refused-attempt stdout defect was fixed earlier by omniclaude#2494
-  and is pinned here by a router-level test; the advisory-job-gate read is pinned with routing on.
+  (reason admin-only-fields). The refused-attempt stdout defect was fixed earlier by omniclaude#2494;
+  its router-level regression test is kept but not bound as this pull request's evidence, because it
+  passes at the merge base. The advisory-job-gate read is pinned with routing on.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
   - id: req-omn20043-gh-read-router
-    statement: "The gh read router writes one document to stdout and never answers an admin-only read from the App."
+    statement: "The gh read router never answers an admin-only read from the App."
     acceptance:
-      - id: "AC1"
-        statement: |-
-          AC1: A refused App attempt writes nothing to the caller's stdout; the fallback answer is the only stdout document -- falsifier: uv run pytest tests/scripts/test_gh_read_routing.py -k refused_attempt_stdout in omniclaude, red on dev today with a stub gh that prints a 403 body
       - id: "AC2"
         statement: |-
           AC2: Endpoints whose App answer omits admin-only fields (rulesets, repository settings, branch protection, repository variables) are routed to the operator credential, or the router refuses to return a partial answer -- falsifier: uv run pytest tests/scripts/test_gh_read_routing.py -k admin_only_fields with a ruleset fixture carrying no bypass_actors key
@@ -41,14 +39,6 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
-  - id: dod-omn20043-refused-attempt-stdout
-    description: "A refused App attempt leaves exactly the fallback's document on stdout (router entry, in-process and through the exec entry point)."
-    source: manual
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/test_gh_read_routing.py -q -k 'refused_attempt_stdout or fallback_refused_attempt'"
-    binds_ac:
-      - AC1
   - id: dod-omn20043-admin-only-fields
     description: "Rulesets, branch protection, Actions variables, secrets and permissions, collaborators, hooks, deploy keys and GraphQL ruleset and merge-settings fields classify as operator reads (admin-only-fields) and run on the operator without minting an App token; neighbouring non-admin paths still route to the App."
     source: manual
