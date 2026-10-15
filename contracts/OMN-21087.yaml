@@ -50,12 +50,12 @@ requirements:
     statement: The developer is asked once to set the leftovers aside or stop, and setting aside never deletes.
     acceptance:
       - id: AC6
-        statement: 'AC6: when something interferes the run asks once before installing; q stops with nothing changed; with no terminal it stops unless --set-aside is passed; setting aside comments out profile lines (a multi-line onex function whole, after copying the file), moves files and clones beside where they were, and lists each item with how to restore it; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "no_terminal or q_at or setting_aside or clone_holding" fails against the part-1 script.'
+        statement: 'AC6: when something interferes the run asks once before installing; q stops with nothing changed; with no terminal it stops unless --set-aside is passed; setting aside comments out profile lines behind a no-op marker (a multi-line onex function whole, by brace depth, after copying the file), parses every edited profile with its shell before any file changes and changes nothing when one would not parse, stops before asking when an onex alias or function is defined in a file it does not read, moves files and clones beside where they were, and lists each item with how to restore it; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "no_terminal or q_at or setting_aside or clone_holding or parseable or would_break or does_not_read" fails against the part-1 script.'
   - id: req-omn21087-resume
     statement: A resumed run says where it picks up and reuses its answers.
     acceptance:
       - id: AC7
-        statement: 'AC7: a resumed run names the completed phases and the phase it picks up at and reuses the last run''s Docker answer, and --restart ignores the last run''s answers; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k picks_up fails against the part-1 script.'
+        statement: 'AC7: a resumed run names the completed phases and the phase it picks up at (or that every phase passed and is only checked) and reuses the last run''s Docker answer, and --restart ignores the last run''s answers; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "picks_up or only_checks" fails against the part-1 script.'
 evidence_requirements:
   - kind: tests
     description: "Onboarding script tests pass"
@@ -106,11 +106,11 @@ dod_evidence:
     binds_ac: [AC6]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'no_terminal or q_at or setting_aside or clone_holding'"
+        check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'no_terminal or q_at or setting_aside or clone_holding or parseable or would_break or does_not_read'"
   - id: dod-omn21087-resume
     description: "A resumed run says where it picks up and reuses its answers"
     source: manual
     binds_ac: [AC7]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k picks_up"
+        check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'picks_up or only_checks'"

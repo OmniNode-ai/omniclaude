@@ -260,7 +260,7 @@ def test_setting_aside_comments_out_and_moves_never_deletes(tmp_path: Path) -> N
     out = result.stdout
     assert result.returncode == 0, out + result.stderr
     zshrc = (home / ".zshrc").read_text().splitlines()
-    mark = "# [set aside by omninode-dev-setup T1] "
+    mark = ": # [set aside by omninode-dev-setup T1] "
     assert zshrc == [
         "alias ll='ls -l'",
         mark + "export OMNI_HOME=/old/omni",
@@ -408,6 +408,119 @@ def test_a_resumed_phase_3_checks_the_venv_before_rebuilding_it() -> None:
     assert "--check" in check and "--proven" not in check
 
 
-def test_phase_6_checks_what_a_new_terminal_runs() -> None:
-    phase6 = SCRIPT.read_text().split("phase6() {", 1)[1].split("\n}", 1)[0]
-    assert "shell_runs_workspace_onex" in phase6
+NESTED_ZSHRC = (
+    "onex() {\n"
+    "  if true; then\n"
+    "    { echo a; }\n"
+    "  fi\n"
+    "  for x in 1; do\n"
+    "    inner() {\n"
+    "      echo b\n"
+    "    }\n"
+    "  done\n"
+    "}\n"
+    "export EDITOR=vim\n"
+)
+
+
+@pytest.mark.skipif(shutil.which("zsh") is None, reason="needs zsh")
+def test_setting_aside_keeps_every_profile_parseable(tmp_path: Path) -> None:
+    """A nested function body is commented out whole; an alias alone in an if stays valid."""
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".zshrc").write_text(NESTED_ZSHRC)
+    (home / ".bashrc").write_text(
+        "if true; then\n  alias onex='old'\nfi\nonex() { echo one-line; }\n"
+    )
+    result = _sourced(
+        tmp_path, "STAMP=T3; survey_leftovers; SET_ASIDE=1; set_aside_leftovers"
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    mark = ": # [set aside by omninode-dev-setup T3] "
+    zshrc = (home / ".zshrc").read_text().splitlines()
+    assert all(line.startswith(mark) for line in zshrc[:10]), zshrc
+    assert zshrc[10] == "export EDITOR=vim"
+    bashrc = (home / ".bashrc").read_text().splitlines()
+    assert bashrc == [
+        "if true; then",
+        mark + "  alias onex='old'",
+        "fi",
+        mark + "onex() { echo one-line; }",
+    ]
+    subprocess.run(["zsh", "-n", str(home / ".zshrc")], check=True)
+    subprocess.run(["bash", "-n", str(home / ".bashrc")], check=True)
+
+
+def test_an_edit_that_would_break_a_profile_changes_nothing(tmp_path: Path) -> None:
+    """A brace inside a string ends the body early; the broken copy is refused."""
+    home = tmp_path / "home"
+    home.mkdir()
+    text = 'onex() {\n  echo "}"\n  echo hi\n}\n'
+    (home / ".bashrc").write_text(text)
+    routes = home / ".omninode" / "delegation" / "bifrost_overrides.yaml"
+    routes.parent.mkdir(parents=True)
+    routes.write_text("backends: []\n")
+    result = _sourced(
+        tmp_path, "STAMP=T4; survey_leftovers; SET_ASIDE=1; set_aside_leftovers"
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unreadable by its shell" in result.stdout
+    assert "Nothing was installed or changed" in result.stdout
+    assert (home / ".bashrc").read_text() == text
+    assert routes.exists()
+    assert not list(home.glob(".bashrc.pre-onboarding.*"))
+
+
+def test_an_alias_in_a_file_setup_does_not_read_stops_before_asking(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    (home / ".config").mkdir(parents=True)
+    (home / ".config" / "extra.sh").write_text("alias onex='old'\n")
+    (home / ".bashrc").write_text(". ~/.config/extra.sh\n")
+    before = _snapshot(home)
+    result = _run(tmp_path, "--no-containers", "--set-aside", SHELL="/bin/bash")
+    out = result.stdout
+    assert result.returncode == 1, out + result.stderr
+    assert "✗ the onex alias is defined in a file this setup does not read" in out
+    assert "remove it by hand" in out
+    assert "Nothing was installed or changed" in out
+    assert _snapshot(home) == before
+
+
+def test_a_run_whose_phases_all_passed_says_it_only_checks_them(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "home" / ".omninode" / "onboarding"
+    state.mkdir(parents=True)
+    (state / "phases.v2.done").write_text("1\n2\n3\n4\n5\n6\n")
+    result = _run(tmp_path, "--preflight-only", ONBOARD_TEST_NO_USER_SHELL="1")
+    assert "every phase passed, so this run only checks them" in result.stdout
+    assert "picks up at phase" not in result.stdout
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+def test_phase_6_checks_what_a_new_terminal_runs(tmp_path: Path) -> None:
+    """Run with the developer's shell: an alias fails it; the workspace onex passes it."""
+    home = tmp_path / "home"
+    ws = tmp_path / "ws"
+    wrapper = ws / "omnibase_infra" / "scripts" / "onex"
+    wrapper.parent.mkdir(parents=True)
+    wrapper.write_text("#!/bin/sh\necho workspace\n")
+    wrapper.chmod(0o755)
+    (home / ".local" / "bin").mkdir(parents=True)
+    (home / ".local" / "bin" / "onex").symlink_to(wrapper)
+    bashrc = home / ".bashrc"
+    bashrc.write_text(f'export PATH="{home}/.local/bin:$PATH"\nalias onex=old\n')
+    probe = "shell_runs_workspace_onex; echo rc=$?"
+    env = {
+        "SHELL": "/bin/bash",
+        "OMNIBASE_PATH": str(ws),
+        "ONBOARD_TEST_NO_USER_SHELL": "0",
+    }
+    shadowed = _sourced(tmp_path, probe, **env)
+    assert "in a new terminal onex is: alias" in shadowed.stdout, shadowed.stderr
+    assert "rc=1" in shadowed.stdout
+    bashrc.write_text(f'export PATH="{home}/.local/bin:$PATH"\n')
+    clean = _sourced(tmp_path, probe, **env)
+    assert "rc=0" in clean.stdout, clean.stdout + clean.stderr

@@ -283,7 +283,8 @@ resume_banner() {
   [ -n "$done_list" ] || return 0
   RESUMING=1
   say "  Resuming an earlier run: phase(s) $done_list passed then; each is checked, not redone,"
-  say "  so this run picks up at phase ${next:-6}. (--restart runs every phase again.)"
+  if [ -n "$next" ]; then say "  so this run picks up at phase $next. (--restart runs every phase again.)"
+  else say "  and every phase passed, so this run only checks them. (--restart runs every phase again.)"; fi
 }
 
 mark_done() { mkdir -p "$STATE_DIR" && { grep -qx "$1" "$DONE_FILE" 2>/dev/null || echo "$1" >>"$DONE_FILE"; }; }
@@ -895,7 +896,11 @@ SET_ASIDE=""        # 1 once the developer said yes (or passed --set-aside)
 SET_ASIDE_LOG=""
 TAB="$(printf '\t')"
 PROFILE_FILES=".zshrc .zprofile .zshenv .zlogin .bash_profile .bashrc .profile .aliases .zsh_aliases .bash_aliases"
-SET_ASIDE_MARK="# [set aside by omninode-dev-setup"
+# A set-aside profile line becomes `: # [set aside ...] <the line>`: the `:` keeps
+# an if/then or a loop whose only line it was valid in bash, which refuses an
+# empty body where a bare comment would leave one.
+SET_ASIDE_MARK=": # [set aside by omninode-dev-setup"
+SHELL_ONEX_ELSEWHERE=0   # 1: an onex alias or function is defined in no file this setup reads
 
 leftover() { # interferes kind key found effect
   LEFTOVERS="${LEFTOVERS}$1${TAB}$2${TAB}$3${TAB}$4${TAB}$5
@@ -1040,15 +1045,27 @@ EOF
   # lines that set them.
   [ -n "$INHERITED_ENV" ] && leftover 0 env environment "exported in this terminal: $INHERITED_ENV" \
     "ignored by this run; your profile lines below set them in new terminals"
+  local onex_defined=0
   for f in $PROFILE_FILES; do
     [ -f "$HOME/$f" ] || continue
     while IFS="$TAB" read -r n text; do
       [ -n "$n" ] || continue
+      case "$text" in *"alias onex="*|*"onex()"*|*"onex ()"*|*"function onex"*) onex_defined=1 ;; esac
       leftover 1 profile "$HOME/$f:$n" "$(tilde "$HOME/$f") line $n: $(masked "$text")" "redirects onex in every new terminal"
     done <<EOF
 $(profile_leftover_lines "$HOME/$f")
 EOF
   done
+
+  SHELL_ONEX_ELSEWHERE=0
+  case "$kind" in
+    alias|function)
+      if [ "$onex_defined" -eq 0 ]; then
+        SHELL_ONEX_ELSEWHERE=1
+        leftover 1 shell elsewhere "the onex $kind is defined in a file this setup does not read" \
+          "remove it there by hand ('$(user_shell) -ic \"type onex\"' names it), then run this again"
+      fi ;;
+  esac
 
   # 5. A local-model routes file this setup did not write: routing takes a
   # declared local model before a key, so every key's test would go to it.
@@ -1107,6 +1124,11 @@ settle_leftovers() {
     say "  $count of these (✗) would interfere. A full run asks whether to set them aside."
     return 0
   fi
+  if [ "$SHELL_ONEX_ELSEWHERE" -eq 1 ]; then
+    FAILED_STEP="find the onex alias or function"
+    LAST_ERR="onex is a shell alias or function defined outside the files this setup reads"
+    phase_fail "remove it by hand ('$(user_shell) -ic \"type onex\"' names where it is), then run this again. Nothing was installed or changed"
+  fi
   if [ "$SET_ASIDE" != 1 ]; then
     if [ "$PROMPT_TTY" -eq 0 ]; then
       FAILED_STEP="set aside what an earlier setup left"
@@ -1123,27 +1145,67 @@ settle_leftovers() {
   fi
 }
 
-# profile_set_aside file line: the line (and, for a multi-line onex function,
-# its body through the closing brace) is commented out with a marker. The file
-# is copied whole first; the copy and the marker are how it is put back.
-profile_set_aside() {
-  local f="$1" n="$2" tmp
-  [ -f "$f.pre-onboarding.$STAMP" ] || cp -p "$f" "$f.pre-onboarding.$STAMP" || return 1
-  tmp="$(mktemp "$RUN_DIR/profile.XXXXXX")" || return 1
-  awk -v n="$n" -v mark="$SET_ASIDE_MARK $STAMP] " '
-    NR == n { open = ($0 ~ /^[[:space:]]*(function[[:space:]]+onex|onex[[:space:]]*\(\))/ && $0 !~ /}[[:space:]]*;?[[:space:]]*$/)
-              print mark $0; next }
-    open { print mark $0; if ($0 ~ /^[[:space:]]*}[[:space:]]*$/) open = 0; next }
+# profile_comment_out file lines... -> stdout: the file with each listed line
+# (and, for a multi-line onex function, its whole body, by brace depth) behind
+# the set-aside marker. Nothing is written.
+profile_comment_out() {
+  local f="$1"; shift
+  awk -v lines=" $* " -v mark="$SET_ASIDE_MARK $STAMP] " '
+    function braces(t,  o, c) { o = gsub(/\{/, "{", t); c = gsub(/\}/, "}", t); return o - c }
+    index(lines, " " NR " ") {
+      if (!depth && $0 ~ /^[[:space:]]*(function[[:space:]]+onex|onex[[:space:]]*\(\))/) depth = braces($0)
+      if (depth < 0) depth = 0
+      print mark $0; next }
+    depth > 0 { depth += braces($0); print mark $0; if (depth <= 0) depth = 0; next }
     { print }
-  ' "$f" >"$tmp" && cat "$tmp" >"$f"
-  local rc=$?; rm -f "$tmp"; return $rc
+  ' "$f"
+}
+
+# profile_syntax_ok file -> 0 when the shell that reads it parses it
+profile_syntax_ok() {
+  local sh=bash
+  case "$(basename "$1")" in .z*) sh=zsh ;; esac
+  command -v "$sh" >/dev/null 2>&1 || return 0
+  "$sh" -n "$1" >/dev/null 2>&1
+}
+
+# Every profile edit is made in a copy and parsed before any file is touched,
+# so a run that cannot set a line aside safely stops with nothing changed.
+PROFILE_EDITS=""   # one "file<TAB>edited copy" per line
+prepare_profile_edits() {
+  local interferes kind key found effect f lines tmp
+  PROFILE_EDITS=""
+  for f in $(printf '%s' "$LEFTOVERS" | awk -F "$TAB" '$1 == 1 && $2 == "profile" { sub(/:[0-9]+$/, "", $3); print $3 }' | sort -u); do
+    lines="$(printf '%s' "$LEFTOVERS" | awk -F "$TAB" -v f="$f" '$1 == 1 && $2 == "profile" { n = $3; sub(/.*:/, "", n); k = $3; sub(/:[0-9]+$/, "", k); if (k == f) print n }' | tr '\n' ' ')"
+    tmp="$(mktemp "$RUN_DIR/profile.XXXXXX")" || return 1
+    # shellcheck disable=SC2086  # line numbers, one word each
+    profile_comment_out "$f" $lines >"$tmp" || return 1
+    if profile_syntax_ok "$f" && ! profile_syntax_ok "$tmp"; then
+      rm -f "$tmp"
+      FAILED_STEP="set aside lines in $f"
+      LAST_ERR="commenting them out would leave $(tilde "$f") unreadable by its shell"
+      return 1
+    fi
+    PROFILE_EDITS="${PROFILE_EDITS}$f${TAB}$tmp
+"
+  done
+}
+
+# profile_set_aside file: write the checked copy over the file, the original
+# copied beside it first. The copy and the marker are how it is put back.
+profile_set_aside() {
+  local f="$1" tmp
+  tmp="$(printf '%s' "$PROFILE_EDITS" | awk -F "$TAB" -v f="$f" '$1 == f { print $2 }')"
+  [ -f "$tmp" ] || return 0   # this file's lines were already written
+  [ -f "$f.pre-onboarding.$STAMP" ] || cp -p "$f" "$f.pre-onboarding.$STAMP" || return 1
+  cat "$tmp" >"$f" && rm -f "$tmp"
 }
 
 set_aside_one() { # kind key -> moves or comments out one item; prints where it went
   local kind="$1" key="$2" dest
   case "$kind" in
     profile)
-      profile_set_aside "${key%:*}" "${key##*:}" || return 1
+      profile_set_aside "${key%:*}" || return 1
       echo "commented out (copy of the file: ${key%:*}.pre-onboarding.$STAMP; to restore, delete the '$SET_ASIDE_MARK $STAMP] ' prefix)" ;;
     bin|routes)
       dest="$key.pre-onboarding.$STAMP"
@@ -1170,6 +1232,8 @@ set_aside_leftovers() {
   local interferes kind key found effect where failed=""
   mkdir -p "$STATE_DIR" || return 1
   SET_ASIDE_LOG="$STATE_DIR/set-aside.$STAMP.txt"
+  prepare_profile_edits ||
+    phase_fail "set those lines aside by hand (the table above names each), then run this again. Nothing was installed or changed"
   say ""
   say "  Setting aside what would interfere (listed in $SET_ASIDE_LOG):"
   # The shell's own view is checked last, once the profile lines are out of the way.
