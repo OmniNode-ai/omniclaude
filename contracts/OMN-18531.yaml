@@ -8,6 +8,8 @@ summary: >
   reaches the content-captured topic through the capture-redaction contract.
   The checkpoint_hook.py caller and the downstream
   projection models are separate PRs of the same task.
+  Plan task T0.3 AC8 adds the hook-inventory gate over the adapter contract's
+  client_bindings in the installed omnimarket package.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -21,10 +23,19 @@ requirements:
         statement: "With OMNICLAUDE_CONTENT_CAPTURE=0 the checkpoint kind journals nothing -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'opt_out or matching_the_written_file' fails when a record is journalled or enabled checkpoint capture fails"
       - id: AC3
         statement: "The fail-closed refusal when the drainer cannot publish content.captured covers the checkpoint kind, and a credential in the checkpoint never crosses -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'cannot_publish or credential' fails when a record is journalled or the planted value crosses"
+  - id: req-omn18531-t03-inventory-gate
+    statement: The hook-inventory gate checks an installed Claude Code binding against the adapter contract's client_bindings section.
+    acceptance:
+    - id: AC8
+      statement: 'AC8: the hook-inventory gate fails when the installed binding registers an event absent from `client_bindings`, and runs in the existing
+        required `hook-inventory-gate` check -- falsifier: the gate exits 0 on that fixture, or the workflow does not call it.'
 evidence_requirements:
   - kind: tests
     description: "The checkpoint capture kind tests pass beside the existing content capture tests"
     command: "uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py tests/unit/hooks/test_hook_content_capture_omn19551.py -q"
+  - kind: tests
+    description: Inventory gate over client_bindings
+    command: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ""
@@ -63,3 +74,13 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'cannot_publish or credential'"
+  - id: dod-omn-18531-t03-ac8
+    description: The hook-inventory gate reports an installed binding or event absent from client_bindings, exits 1, and is run by the required hook-inventory-gate
+      workflow.
+    source: manual
+    checks:
+    - check_type: test_passes
+      check_value: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -k ac8 -q --no-cov
+      cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+    - AC8
