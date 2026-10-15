@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: NodeClaudeCodeBindingRenderCompute (OMN-18531, plan task T0.3)
+
+name: node_claude_code_binding_render_compute
+version: "1.0.0"
+contract_name: node_claude_code_binding_render_compute
+node_name: node_claude_code_binding_render_compute
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: COMPUTE_GENERIC
+runtime_profiles: [main]
+
+description: >
+  Pure render of the adapter contract's client_bindings.claude_code rows into the Claude Code mod module text (replacing rows) and the user-settings command-hook registrations (additive rows). Deterministic; no branching beyond the verdict-table lookup and the fixed failure table.
+
+input_model:
+  name: ModelBindingRenderRequest
+  module: omniclaude.nodes.node_claude_code_binding_render_compute.models
+
+output_model:
+  name: ModelBindingRenderResult
+  module: omniclaude.nodes.node_claude_code_binding_render_compute.models
+
+handler:
+  module: omniclaude.nodes.node_claude_code_binding_render_compute.handlers.handler_binding_render
+  class: HandlerClaudeCodeBindingRender
+  input_model: omniclaude.nodes.node_claude_code_binding_render_compute.models.ModelBindingRenderRequest
+
+handler_routing:
+  routing_strategy: payload_type_match
+  handlers:
+    - handler:
+        name: HandlerClaudeCodeBindingRender
+        module: omniclaude.nodes.node_claude_code_binding_render_compute.handlers.handler_binding_render
+      event_model:
+        name: ModelBindingRenderRequest
+        module: omniclaude.nodes.node_claude_code_binding_render_compute.models
+
+descriptor:
+  node_archetype: compute
+  purity: pure
+  idempotent: true
+  timeout_ms: 5000
+
+capabilities:
+  - name: hook.claude_code.binding_render
+    description: Render client_bindings into the mod module
+    version: 1.0.0
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omniclaude.claude-code-binding-render.v1
+  publish_topics:
+    - onex.evt.omniclaude.claude-code-binding-rendered.v1
+
+runtime_dispatch:
+  command_topic: onex.cmd.omniclaude.claude-code-binding-render.v1
+  terminal_events:
+    success: onex.evt.omniclaude.claude-code-binding-rendered.v1
+
+terminal_event: onex.evt.omniclaude.claude-code-binding-rendered.v1
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-18531
+  maturity: alpha
+  tags:
+    - claude-code
+    - hooks

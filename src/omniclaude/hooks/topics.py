@@ -569,6 +569,31 @@ class TopicBase(StrEnum):
     """Terminal event: the allow or refuse verdict for the call."""
 
     # ==========================================================================
+    # Claude Code mod bindings (OMN-18531)
+    # node_claude_code_hook_adapter_effect, node_claude_code_binding_render_compute
+    # and node_claude_code_binding_install_effect commands and terminal events.
+    # ==========================================================================
+    CLAUDE_CODE_HOOK_ADAPT = "onex.cmd.omniclaude.claude-code-hook-adapt.v1"
+    """Command: adapt one Claude Code hook call to a typed command and back."""
+
+    CLAUDE_CODE_HOOK_ADAPTED = "onex.evt.omniclaude.claude-code-hook-adapted.v1"
+    """Terminal event: the client verdict for the hook call."""
+
+    CLAUDE_CODE_BINDING_RENDER = "onex.cmd.omniclaude.claude-code-binding-render.v1"
+    """Command: render client_bindings into the mod module text."""
+
+    CLAUDE_CODE_BINDING_RENDERED = "onex.evt.omniclaude.claude-code-binding-rendered.v1"
+    """Terminal event: the rendered module's hash and registrations."""
+
+    CLAUDE_CODE_BINDING_INSTALL = "onex.cmd.omniclaude.claude-code-binding-install.v1"
+    """Command: install the rendered binding for this host."""
+
+    CLAUDE_CODE_BINDING_INSTALLED = (
+        "onex.evt.omniclaude.claude-code-binding-installed.v1"
+    )
+    """Terminal event: the installed hashes and registrations."""
+
+    # ==========================================================================
     # Delegation pipeline topics (OMN-7103)
     # Node-based delegation orchestrator command/event bus topics.
     # ==========================================================================

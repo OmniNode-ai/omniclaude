@@ -1,0 +1,157 @@
+# Acceptance criteria are plan task T0.3's, verbatim from the plan (knowledge_base_internal
+# beta/plans/2026-10-01-claude-code-context-and-delegation-adapter-plan.md, section 9).
+schema_version: 1.0.0
+ticket_id: OMN-18531
+title: 'Claude Code mod: the adapter node, its generated binding, the render compute and the install effect (plan task T0.3)'
+summary: 'Plan task T0.3 of the context and delegation adapter plan, built in omniclaude: node_claude_code_hook_adapter_effect (contract with client_bindings.claude_code, generic handler, console entry onex-claude-code-hook), node_claude_code_binding_render_compute (deterministic render of the mod module), node_claude_code_binding_install_effect (write, read back, register), and the hook-inventory gate reading client_bindings. The omnibase_infra half (skill mapping entry, receipt-mode library call) is a separate PR in that repository.'
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn18531-t03-adapter-binding
+  statement: Claude Code hooks reach the bus through one generic adapter and a generated, untracked binding that holds no logic.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: the exact rendered command, run with recorded hook JSON piped on stdin (one fixture per hook event the bindings name), publishes one command whose payload is built from that JSON, hosts no handler (the receipt-mode run reports `host_handlers=False`, and no node module is imported in the adapter process), and prints only the hook''s output shape (`{result}`, `{deny}`, `{messages}`, `hookSpecificOutput.additionalContext`, or nothing) -- falsifier: a payload not drawn from stdin, a hosted handler, or a `ModelSkillResult` on stdout.'
+  - id: AC2
+    statement: 'AC2: the rendered failure table for a host whose client-section maximum is `required` maps "adapter never started" to `{deny}`, and for `observe` or `selective` to `next(e)`; a change of that maximum changes only the rendered table literal -- falsifier: a required-host render whose missing-executable branch calls `next(e)`.'
+  - id: AC3
+    statement: 'AC3: the same contract renders a byte-identical module; changing one deadline in the contract changes only that literal in the output -- falsifier: golden diff beyond the literal.'
+  - id: AC4
+    statement: 'AC4: the rendered module contains no branching other than the verdict-table lookup and the fixed failure table, measured by an allowlist of AST node kinds over the rendered output, and a contract data field containing code is rendered as a string literal -- falsifier: a fixture whose rendered output contains a conditional on request content, or executes a data field.'
+  - id: AC5
+    statement: 'AC5: the binding passes the adapter nothing but the hook input and the binding name -- falsifier: a rendered argument carrying a mode or any value not drawn from the hook input.'
+  - id: AC6
+    statement: 'AC6: `claude_code_binding_install` writes the rendered module and records its sha256, and the installed file''s sha256 equals the render''s -- falsifier: a mismatch, or an installed file differing from a fresh render.'
+  - id: AC7
+    statement: 'AC7: no rendered module is tracked in any repository -- falsifier: `git ls-files` in omniclaude or omnimarket lists one.'
+  - id: AC8
+    statement: 'AC8: the hook-inventory gate fails when the installed binding registers an event absent from `client_bindings`, and runs in the existing required `hook-inventory-gate` check -- falsifier: the gate exits 0 on that fixture, or the workflow does not call it.'
+  - id: AC9
+    statement: 'AC9: the PR''s `canonical-file-shape` check passes with `.onex_ratchets/canonical_file_shape_baseline.txt` unchanged -- falsifier: a baseline line added or the check red.'
+  - id: AC10
+    statement: 'AC10: a reply split into chunks is reassembled by content-record id and its sha256 checked against the echoed hash -- falsifier: a fixture reply delivered out of order, or with one chunk missing, returned as anything but `native` or `{deny}`.'
+  - id: AC11
+    statement: 'AC11: an `additive` row renders a command-hook registration whose command is exactly `onex-claude-code-hook --binding <name>` (v6; v5 named `onex skill`), byte-identical across renders, and the adapter maps `inject` to `hookSpecificOutput.additionalContext` only when the package''s sha256 equals the echoed hash, and every other outcome to no output -- falsifier: a rendered registration carrying any other argument, or a hash-mismatch fixture that produces `additionalContext`.'
+  - id: AC12
+    statement: 'AC12: `claude_code_binding_install` writes additive registrations into the user settings only, renders only rows whose probe rows (P16-P19) the capability report marks supported, and a re-install with a row removed removes its registration -- falsifier: a registration surviving its row''s removal, an unsupported row installed, or `git ls-files` listing a rendered registration.'
+evidence_requirements:
+- kind: tests
+  description: Adapter, render and install tests
+  command: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect -q --no-cov
+- kind: tests
+  description: Inventory gate over client_bindings
+  command: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn-18531-t03-ac1
+  description: 'The rendered command is run through the adapter''s real console entry with recorded hook JSON on stdin: the payload is built only from that JSON, no other node module is imported in the adapter process, and stdout is only the hook''s output shape. Scope of this PR: the omnibase_infra receipt-mode library call (host_handlers=False in a receipt-mode run) is not built here; the adapter publishes through ProtocolReceiptModeClient.'
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect/test_adapter.py -k ac1 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC1
+- id: dod-omn-18531-t03-ac2
+  description: 'Rendering for required, observe and selective maximums: never-started is a literal deny only on required, next(e) on the others, and only the failure-table lines change.'
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect/test_render.py -k ac2 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC2
+- id: dod-omn-18531-t03-ac3
+  description: Two renders are byte-identical; changing one deadline changes exactly one line.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect/test_render.py -k ac3 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC3
+- id: dod-omn-18531-t03-ac4
+  description: An allowlist scan over the rendered text finds no branching token; hostile data fields render as string literals and leave the code residue unchanged.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect/test_render.py -k ac4 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC4
+- id: dod-omn-18531-t03-ac5
+  description: A binding argument whose source is not a $.path into the hook input fails the render; the rendered argv is exactly the adapter command, --binding and the name.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect/test_render.py -k ac5 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC5
+- id: dod-omn-18531-t03-ac6
+  description: The install writes the module, reads it back and compares sha256 with the fresh render, and records it in install_record.json.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect/test_install.py -k ac6 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC6
+- id: dod-omn-18531-t03-ac7
+  description: The install refuses a target inside a git work tree; git ls-files lists no rendered module.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect/test_install.py -k ac7 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC7
+- id: dod-omn-18531-t03-ac8
+  description: The hook-inventory gate reports an installed binding or event absent from client_bindings, exits 1, and is run by the required hook-inventory-gate workflow.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -k ac8 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC8
+- id: dod-omn-18531-t03-ac9
+  description: The canonical-file-shape pre-commit hook passes over the PR's diff with .onex_ratchets/canonical_file_shape_baseline.txt unchanged.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: uv run pre-commit run canonical-file-shape --from-ref origin/dev --to-ref HEAD
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC9
+- id: dod-omn-18531-t03-ac10
+  description: Chunked replies are reassembled by record id in index order and checked against the echoed sha256; a missing chunk or a hash mismatch is native or deny.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect/test_adapter.py -k ac10 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC10
+- id: dod-omn-18531-t03-ac11
+  description: 'An additive row renders the exact registration command, byte-identical across renders; inject becomes additionalContext only on a sha256 match. Scope: the omnibase_infra skill mapping is not in this PR.'
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect/test_adapter.py tests/unit/nodes/node_claude_code_hook_adapter_effect/test_render.py -k ac11 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC11
+- id: dod-omn-18531-t03-ac12
+  description: 'Install writes additive registrations into the user settings.json only, skips rows whose probe rows are unsupported, and a re-install without a row removes its registration. Scope: the claude_code_binding_install skill_mapping.yaml entry (omnibase_infra) is not in this PR.'
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_claude_code_hook_adapter_effect/test_install.py -k ac12 -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC12

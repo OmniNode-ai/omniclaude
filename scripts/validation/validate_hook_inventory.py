@@ -115,6 +115,16 @@ def main(argv: list[str] | None = None) -> int:
         help="report findings but always exit 0 (session-bootstrap posture)",
     )
     parser.add_argument(
+        "--installed-binding-artifact",
+        type=Path,
+        action="append",
+        default=[],
+        help=(
+            "an install_record.json or the user's settings.json; fails when it registers "
+            "a binding or event absent from the adapter contract's client_bindings (OMN-18531)"
+        ),
+    )
+    parser.add_argument(
         "--generate",
         action="store_true",
         help="emit the mechanical half of expected_hooks from the live hooks.json",
@@ -144,7 +154,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         inventory = lib.load_inventory(repo_root / _INVENTORY_REL)
         today = args.today or datetime.now(UTC).date()
-        findings = list(lib.check_parity(inventory, repo_root, today))
+        findings = list(
+            lib.check_parity(
+                inventory,
+                repo_root,
+                today,
+                tuple(args.installed_binding_artifact),
+            )
+        )
         if args.live:
             findings.extend(
                 lib.mask_findings(

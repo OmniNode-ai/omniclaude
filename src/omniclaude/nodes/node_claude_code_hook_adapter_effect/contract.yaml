@@ -1,0 +1,114 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: NodeClaudeCodeHookAdapterEffect (OMN-18531, plan task T0.3)
+#
+# The one edge behaviour behind every generated Claude Code binding. Handler: build the
+# typed command named by a client_bindings row from the hook input, publish it through
+# the receipt-mode client (hosting no handler), await the named events, call the pure
+# verdict compute and return client_verdict with the hook's own output shape. The
+# console entry point onex-claude-code-hook (pyproject.toml) reads one hook JSON document
+# from stdin and writes exactly that shape to stdout, never a ModelSkillResult wrapper.
+#
+# client_bindings.claude_code is the inventory of binding hooks: the hook-inventory gate
+# reads it, node_claude_code_binding_render_compute renders it, and the install effect
+# writes the rendered module (replacing rows) or user-settings command hooks (additive
+# rows). The rows ship empty: each binding ticket (delegation, compaction, additive
+# profiles) adds its own row beside the probe rows it depends on.
+
+name: node_claude_code_hook_adapter_effect
+version: "1.0.0"
+contract_name: node_claude_code_hook_adapter_effect
+node_name: node_claude_code_hook_adapter_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: EFFECT_GENERIC
+runtime_profiles: [main]
+
+description: >
+  Generic edge adapter for Claude Code hook bindings. Builds the typed command a
+  binding names from the hook input only, publishes it through the receipt-mode
+  client, awaits the correlated events (reassembling chunked replies by content-record
+  id and checking their sha256 against the echoed hash), and returns a typed
+  client_verdict mapped by table lookup to the hook's output shape.
+
+input_model:
+  name: ModelHookAdapterRequest
+  module: omniclaude.nodes.node_claude_code_hook_adapter_effect.models
+
+output_model:
+  name: ModelHookAdapterResult
+  module: omniclaude.nodes.node_claude_code_hook_adapter_effect.models
+
+handler:
+  module: omniclaude.nodes.node_claude_code_hook_adapter_effect.handlers.handler_claude_code_hook_adapter
+  class: HandlerClaudeCodeHookAdapter
+  input_model: omniclaude.nodes.node_claude_code_hook_adapter_effect.models.ModelHookAdapterRequest
+
+handler_routing:
+  routing_strategy: payload_type_match
+  handlers:
+    - handler:
+        name: HandlerClaudeCodeHookAdapter
+        module: omniclaude.nodes.node_claude_code_hook_adapter_effect.handlers.handler_claude_code_hook_adapter
+      event_model:
+        name: ModelHookAdapterRequest
+        module: omniclaude.nodes.node_claude_code_hook_adapter_effect.models
+
+descriptor:
+  node_archetype: effect
+  purity: effectful
+  idempotent: false
+  timeout_ms: 30000
+
+capabilities:
+  - name: hook.claude_code.adapt
+    description: Adapt one Claude Code hook call to a typed command and back to the hook's output shape
+    version: 1.0.0
+
+entry_point:
+  console_script: onex-claude-code-hook
+  module: omniclaude.nodes.node_claude_code_hook_adapter_effect.handlers.handler_claude_code_hook_cli
+  function: main
+  stdin: one hook JSON document
+  stdout: only the hook's output shape ({result}, {deny}, {messages}, hookSpecificOutput.additionalContext, or nothing)
+
+event_bus:
+  subscribe_topics:
+    - onex.cmd.omniclaude.claude-code-hook-adapt.v1
+  publish_topics:
+    - onex.evt.omniclaude.claude-code-hook-adapted.v1
+
+runtime_dispatch:
+  command_topic: onex.cmd.omniclaude.claude-code-hook-adapt.v1
+  terminal_events:
+    success: onex.evt.omniclaude.claude-code-hook-adapted.v1
+
+terminal_event: onex.evt.omniclaude.claude-code-hook-adapted.v1
+
+client_bindings:
+  claude_code:
+    default_max_mode: observe
+    host_max_modes: {}
+    bindings: []
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-18531
+  maturity: alpha
+  tags:
+    - effect
+    - hooks
+    - claude-code
+    - adapter
