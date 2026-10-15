@@ -1,0 +1,49 @@
+schema_version: "1.0.0"
+ticket_id: OMN-19998
+title: "Hostile Reviewer: the job validates the CI overlay's retry budget and its ceiling holds two review attempts"
+summary: >
+  The Hostile Reviewer's voter timeouts come from the CI overlay, not this repository. A voter given
+  more time in the overlay could push the review past the job's 20-minute ceiling, which then cancels
+  the job with no named cause; the review step also runs cli_review up to twice, which the ceiling did
+  not account for. The job now runs omniintelligence's retry_budget check against the fetched overlay
+  before the review, with each attempt's share of the ceiling, and fails closed with the sum and the
+  voter when the roster cannot finish. The ceiling rises to 75 minutes so the overlay's current voters
+  fit. No voter is dropped and the gate stays required.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn19998-retry-budget
+    statement: "The Hostile Reviewer job cannot be cancelled at its ceiling by a voter roster that cannot finish inside it."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: The hostile-review job runs omniintelligence.review_pairing.retry_budget against REVIEW_VOTERS_OVERLAY before the review step, and a violated budget fails the step closed -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -k "before_the_review or fails_the_step_closed" with the step removed
+      - id: "AC2"
+        statement: |-
+          AC2: The per-attempt budget is the job ceiling less setup and the pause, split across the review step's attempts, and the ceiling the step reads equals timeout-minutes -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -k "job_ceiling or share_of_the_ceiling" with HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS changed alone
+evidence_requirements:
+  - kind: tests
+    description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
+    command: "uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py tests/hooks/test_hostile_reviewer_workflow.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn19998-budget-step
+    description: "The hostile-review job validates the fetched overlay's retry budget before the review and fails closed when it is violated."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -q -k \"before_the_review or fails_the_step_closed\""
+    binds_ac:
+      - AC1
+  - id: dod-omn19998-budget-arithmetic
+    description: "Each cli_review attempt is checked against its share of the job ceiling, and that ceiling equals timeout-minutes."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -q -k \"job_ceiling or share_of_the_ceiling\""
+    binds_ac:
+      - AC2
