@@ -1,0 +1,32 @@
+{
+  "base_ref": "ad7861d77053d701cdac37f764bcc00d5845bb87^{commit}",
+  "canonical_handler_module": "omniclaude.nodes.node_agent_router.handlers.handler_agent_router",
+  "legacy_handler_module": "omniclaude.nodes.node_agent_router.handlers.handler_agent_router",
+  "node_id": "omniclaude.nodes.node_agent_router",
+  "parity": {
+    "selected_input_hashes": [
+      "sha256:dcecd62fd3045cd6efc62ed8b80794cf0063d0be3f381eed5be6fc78246f80de",
+      "sha256:fa433e238daffd27005e2e17ce0a3ff376b2ade67fe82f2a340fd59593ea05e2",
+      "sha256:c90c0fd6bc499635d55fada31ca98acfc9bccad4ea5f95ddb0f92e206574d3f9"
+    ],
+    "status": "pass",
+    "test_ids": [
+      "tests/unit/nodes/node_agent_router/test_handler_agent_router.py::TestCanonicalHandle::test_handle_matches_route[recommendations-without-context]",
+      "tests/unit/nodes/node_agent_router/test_handler_agent_router.py::TestCanonicalHandle::test_handle_matches_route[recommendations-with-context]",
+      "tests/unit/nodes/node_agent_router/test_handler_agent_router.py::TestCanonicalHandle::test_handle_matches_route[empty-without-context]",
+      "tests/unit/nodes/node_agent_router/test_handler_agent_router.py::TestCanonicalHandle::test_handle_matches_route[empty-with-context]",
+      "tests/unit/nodes/node_agent_router/test_handler_agent_router.py::TestCanonicalHandle::test_handle_matches_route[raises-without-context]",
+      "tests/unit/nodes/node_agent_router/test_handler_agent_router.py::TestCanonicalHandle::test_handle_matches_route[raises-with-context]",
+      "tests/unit/nodes/node_agent_router/test_handler_agent_router.py::TestCanonicalHandle::test_handle_matches_route[unavailable-without-context]",
+      "tests/unit/nodes/node_agent_router/test_handler_agent_router.py::TestCanonicalHandle::test_handle_matches_route[unavailable-with-context]"
+    ]
+  },
+  "preserved_symbols": [
+    "HandlerAgentRouter.__init__",
+    "HandlerAgentRouter.route",
+    "HandlerAgentRouter._get_router",
+    "HandlerAgentRouter._convert_recommendation",
+    "_safe_float"
+  ],
+  "receipt_schema": "handflip_proof.v1"
+}

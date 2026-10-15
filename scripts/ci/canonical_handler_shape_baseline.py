@@ -16,7 +16,6 @@ RSD canonical rewrite regenerating these handlers, each with an adequacy receipt
 
 NON_CANONICAL: tuple[str, ...] = (
     "omniclaude.nodes.node_agent_inbox_effect",
-    "omniclaude.nodes.node_agent_router",
     "omniclaude.nodes.node_agent_routing_compute",
     "omniclaude.nodes.node_channel_discord_adapter",
     "omniclaude.nodes.node_channel_email_adapter",

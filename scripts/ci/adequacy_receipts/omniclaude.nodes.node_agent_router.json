@@ -1,0 +1,20 @@
+{
+  "branch_coverage_pct": 81.36,
+  "candidate_count": 8,
+  "coverage_target": 80.0,
+  "handler_module": "omniclaude.nodes.node_agent_router.handlers.handler_agent_router",
+  "handler_module_sha256": "sha256:94fed968d55c71212c9b0d1d5c463b47ea36cf213e5ca6e23647e477d3219b7d",
+  "meets_target": true,
+  "node_id": "omniclaude.nodes.node_agent_router",
+  "receipt_schema": "adequacy_receipt.v1",
+  "recorded_at": "2026-10-15T15:50:02.089161+00:00",
+  "recorder_schema": "adequacy_receipt.v1",
+  "selected_count": 3,
+  "selected_input_hashes": [
+    "sha256:dcecd62fd3045cd6efc62ed8b80794cf0063d0be3f381eed5be6fc78246f80de",
+    "sha256:fa433e238daffd27005e2e17ce0a3ff376b2ade67fe82f2a340fd59593ea05e2",
+    "sha256:c90c0fd6bc499635d55fada31ca98acfc9bccad4ea5f95ddb0f92e206574d3f9"
+  ],
+  "uncovered_waiver": null,
+  "volatile_mask": []
+}
