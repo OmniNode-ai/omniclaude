@@ -42,7 +42,7 @@ repos:
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov
         language: system
         pass_filenames: false
-        files: '^(\.github/workflows/(plugin-version-bump|plugin-version-bump-gate|ci)\.yml|scripts/validation/validate_plugin_version_bump\.py|tests/ci/test_plugin_version_bump_gate\.py|\.pre-commit-config\.yaml)$'
+        files: '^(\.github/workflows/(plugin-version-bump|ci)\.yml|scripts/validation/validate_plugin_version_bump\.py|tests/ci/test_plugin_version_bump_gate\.py|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
       - id: anthropic-key-prefix-workflows

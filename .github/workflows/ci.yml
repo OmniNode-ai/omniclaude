@@ -138,6 +138,20 @@ jobs:
           tests/scripts/test_gh_lane_write_guard.py
           tests/scripts/test_gh_shim_refusal_row_omn21020.py
           -q --no-cov
+      # OMN-20710 (RULING 2026-10-08T03:53:09Z): the per-PR gate runs here, in a job
+      # CI Summary anchors, so it blocks a merge without a branch-protection edit. No
+      # `if:` and no `continue-on-error`: a skipped or soft step is skip-vector 5.
+      # Resolve a version-line conflict by taking dev's value in both files.
+      - name: Plugin Version Bump Gate (OMN-20710)
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # A push to dev/main has no base beyond the previous head; a new branch
+          # push reports an all-zero `before`, and a merge group reports none.
+          if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
+            BASE_REF="HEAD"
+          fi
+          uv run python scripts/validation/validate_plugin_version_bump.py --base "$BASE_REF"
       - name: Verify a bad plugin version is refused and one bot bump PR is kept (OMN-20710)
         run: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov
       - name: Verify advisory gate controller cache and refusal controls (OMN-21006)

@@ -296,14 +296,14 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Exit 0 when running under GitHub Actions. The whole-tree pre-commit "
             "job checks out one commit with no base ref to compare against; the "
-            "dedicated Plugin Version Bump Gate workflow is the blocking verdict "
-            "there. Local runs are unaffected."
+            "Plugin Version Bump Gate step of the Refusal Surface CI job is the "
+            "blocking verdict there. Local runs are unaffected."
         ),
     )
     args = parser.parse_args(argv)
     if args.defer_to_workflow_in_ci and os.environ.get("GITHUB_ACTIONS") == "true":
         print(
-            "plugin-version-bump: deferred to the Plugin Version Bump Gate workflow",
+            "plugin-version-bump: deferred to the Plugin Version Bump Gate CI step",
             file=sys.stderr,
         )
         return 0
