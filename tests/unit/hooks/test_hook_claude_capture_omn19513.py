@@ -666,18 +666,30 @@ def test_session_end_returns_at_once_too(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_registry_projects_omnimarkets_publish_transform() -> None:
+@pytest.mark.parametrize("event_type", ["hook.event", "content.captured"])
+def test_the_registry_projects_omnimarkets_publish_transform(event_type: str) -> None:
     """The producer journals raw; the transform mirrors omnimarket's registry.
 
     omnimarket's emit registry owns the publish transform for both topics and
-    still declares ``redact_capture``; the Registry Consistency check refuses
-    any other projection here.
+    declares ``passthrough`` at the refreshed pin (OMN-13902), preserving raw
+    content on the bus under the OMN-19513 ruling.
     """
-    from omniclaude.hooks.event_registry import EVENT_REGISTRY, redact_capture
+    from copy import deepcopy
 
-    for event_type in ("hook.event", "content.captured"):
-        rules = EVENT_REGISTRY[event_type].fan_out
-        assert [rule.transform for rule in rules] == [redact_capture]
+    from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+    rules = EVENT_REGISTRY[event_type].fan_out
+    assert [rule.transform for rule in rules] == [None]
+    payload: dict[str, object] = {
+        "session_id": "raw-capture-session",
+        "content_kind": "tool_result",
+        "content": "full tool result\nwith unicode: \u03bb",
+        "payload": {"prompt": "full prompt", "tool_input": {"command": "pwd"}},
+        "lineage": {"tool_use_id": "tool-1"},
+    }
+    original = deepcopy(payload)
+    assert rules[0].apply_transform(payload) == original
+    assert payload == original
 
 
 # ---------------------------------------------------------------------------

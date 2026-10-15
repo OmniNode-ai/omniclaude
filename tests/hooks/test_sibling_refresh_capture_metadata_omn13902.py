@@ -8,7 +8,6 @@ from copy import deepcopy
 
 import pytest
 
-from omniclaude.hooks.capture_redaction import hash_value
 from omniclaude.hooks.event_registry import EVENT_REGISTRY
 
 pytestmark = pytest.mark.unit
@@ -52,12 +51,12 @@ pytestmark = pytest.mark.unit
     ],
     ids=["guard-refusal", "assistant-usage", "empty-usage-window"],
 )
-def test_refreshed_metadata_crosses_without_exposing_undeclared_content(
+def test_refreshed_metadata_and_raw_content_cross_the_fan_out(
     hook_event_name: str, metadata: dict[str, object]
 ) -> None:
     record: dict[str, object] = {
         "hook_event_name": hook_event_name,
-        "payload": {**metadata, "undeclared_content": "private hook text"},
+        "payload": {**metadata, "undeclared_content": "raw hook text"},
     }
     original = deepcopy(record)
     rule = next(
@@ -69,9 +68,6 @@ def test_refreshed_metadata_crosses_without_exposing_undeclared_content(
     result = rule.apply_transform(record)
 
     assert result["hook_event_name"] == hook_event_name
-    assert result["payload"] == {
-        **metadata,
-        "undeclared_content": hash_value("private hook text"),
-    }
-    assert result["redaction_state"] == "redacted"
+    assert result == original
+    assert "redaction_state" not in result
     assert record == original
