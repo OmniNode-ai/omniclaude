@@ -42,26 +42,22 @@ def sha256_text(text: str) -> str:
 def reassemble_chunks(
     events: tuple[ModelReceiptEvent, ...], record_id: str
 ) -> str | None:
-    """Join a record's chunks in chunk_index order; None when one is missing or duplicated."""
-    chunks = [
-        e.payload
-        for e in events
-        if e.payload.get("record_id") == record_id and "chunk_index" in e.payload
-    ]
-    if not chunks:
+    """Join a record's chunks in chunk_index order; None when one is missing, duplicated or disagrees."""
+    indexed: list[tuple[int, str]] = []
+    totals: set[int] = set()
+    for event in events:
+        payload = event.payload
+        index, total = payload.get("chunk_index"), payload.get("chunk_total")
+        if payload.get("record_id") != record_id or index is None:
+            continue
+        if not isinstance(index, int) or not isinstance(total, int):
+            return None
+        indexed.append((index, str(payload.get("data", ""))))
+        totals.add(total)
+    indexed.sort()
+    if len(totals) != 1 or [i for i, _ in indexed] != list(range(totals.pop())):
         return None
-    totals = {c.get("chunk_total") for c in chunks}
-    if len(totals) != 1:
-        return None
-    (total,) = totals
-    indexed = sorted(
-        (c["chunk_index"], c.get("data", ""))
-        for c in chunks
-        if isinstance(c["chunk_index"], int)
-    )
-    if not isinstance(total, int) or [i for i, _ in indexed] != list(range(total)):
-        return None
-    return "".join(str(d) for _, d in indexed)
+    return "".join(data for _, data in indexed)
 
 
 def compute_client_verdict(

@@ -22,12 +22,12 @@ from omniclaude.nodes.node_claude_code_binding_render_compute.models import (
     ModelBindingRenderRequest,
     ModelBindingRenderResult,
 )
+from omniclaude.nodes.node_claude_code_hook_adapter_effect.binding_render_error import (
+    BindingRenderError,
+)
 from omniclaude.nodes.node_claude_code_hook_adapter_effect.enums import (
     EnumBindingKind,
     EnumClientMaxMode,
-)
-from omniclaude.nodes.node_claude_code_hook_adapter_effect.errors import (
-    BindingRenderError,
 )
 from omniclaude.nodes.node_claude_code_hook_adapter_effect.models import (
     ModelClientBinding,

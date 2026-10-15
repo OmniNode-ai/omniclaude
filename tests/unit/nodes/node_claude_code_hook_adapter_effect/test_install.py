@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from omniclaude.nodes.node_claude_code_binding_install_effect.errors import (
+from omniclaude.nodes.node_claude_code_binding_install_effect.binding_install_error import (
     BindingInstallError,
 )
 from omniclaude.nodes.node_claude_code_binding_install_effect.handlers.handler_binding_install import (

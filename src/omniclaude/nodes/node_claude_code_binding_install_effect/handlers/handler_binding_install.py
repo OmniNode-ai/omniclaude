@@ -17,7 +17,7 @@ import json
 import shutil
 from pathlib import Path
 
-from omniclaude.nodes.node_claude_code_binding_install_effect.errors import (
+from omniclaude.nodes.node_claude_code_binding_install_effect.binding_install_error import (
     BindingInstallError,
 )
 from omniclaude.nodes.node_claude_code_binding_install_effect.models import (

@@ -14,11 +14,11 @@ from omniclaude.nodes.node_claude_code_binding_render_compute.handlers.handler_b
 from omniclaude.nodes.node_claude_code_binding_render_compute.models import (
     ModelBindingRenderRequest,
 )
+from omniclaude.nodes.node_claude_code_hook_adapter_effect.binding_render_error import (
+    BindingRenderError,
+)
 from omniclaude.nodes.node_claude_code_hook_adapter_effect.enums import (
     EnumClientMaxMode,
-)
-from omniclaude.nodes.node_claude_code_hook_adapter_effect.errors import (
-    BindingRenderError,
 )
 from omniclaude.nodes.node_claude_code_hook_adapter_effect.models import (
     ModelClientArgument,
