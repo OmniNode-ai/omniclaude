@@ -46,6 +46,11 @@ requirements:
     acceptance:
       - id: AC10
         statement: "A refusal whose agent sidecar carries only the generic agent type and whose own transcript opens with the harness's skill base-directory line resolves to lane skill:<name> with lane_source skill; a later message quoting that line, an ordinary first message and a named sidecar do not -- falsifier: uv run pytest tests/hooks/test_refusal_row_lane_omn19381.py -q -k 'forked_skill or named_sidecar_wins' fails against the resolver without the skill step"
+  - id: req-lock-refresh-syncs-capture-mirror
+    statement: The sibling-lock refresh re-derives the capture-contract mirror at the omnimarket rev it pins and commits it with the lock.
+    acceptance:
+      - id: AC11
+        statement: "sibling-lock-refresh.yml runs generate_event_registry.py --sync-capture-contract against the omnimarket clone checked out at the rev read back from uv.lock with ci.yml's om_pin grep, after uv lock and before the delta check, and the mirror is in the delta check and the bot commit -- falsifier: uv run pytest tests/workflows/test_sibling_lock_refresh_syncs_capture_mirror.py -q fails over the merge base"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -220,3 +225,15 @@ dod_evidence:
           '
     binds_ac:
       - AC10
+  - id: dod-lock-refresh-syncs-capture-mirror
+    description: >
+      The sibling-lock refresh re-derives src/omniclaude/hooks/contracts/capture_redaction.yaml
+      at the omnimarket rev the lock pins, so a pin bump across an omnimarket change to
+      the owning contract no longer opens a bot PR that fails Registry Consistency.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/workflows/test_sibling_lock_refresh_syncs_capture_mirror.py -q"
+    binds_ac:
+      - AC11
