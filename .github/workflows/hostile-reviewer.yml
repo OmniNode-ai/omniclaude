@@ -149,8 +149,18 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_HOSTILE_REVIEW_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    timeout-minutes: 20
+    # OMN-19998: sized for the voters' worst case, which the CI overlay sets,
+    # not this file. 20 minutes held the roster pinned on 2026-10-11 (one
+    # cli_review run: 1094 s with setup) but not the overlay's later voter
+    # timeouts (1994 s for ONE run), and the review step runs cli_review up to
+    # twice. The "Validate retry-budget invariant" step re-derives the sum from
+    # the fetched overlay on every run, so a roster that cannot finish inside
+    # this ceiling fails in seconds with a named cause instead of being
+    # cancelled at the ceiling with none. Keep HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS
+    # below equal to this value times 60.
+    timeout-minutes: 75
     env:
+      HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS: "4500"
       UV_HTTP_TIMEOUT: "900"
       # Same fork/non-fork test as `runs-on:` above, threaded into the steps so
       # the fork path can refuse loudly instead of attempting a LAN call it
@@ -411,6 +421,47 @@ jobs:
             sleep "$sleep_seconds"
             attempt=$((attempt + 1))
           done
+
+      - name: Validate retry-budget invariant (OMN-19998)
+        id: retry-budget
+        # No model is called: retry_budget reads the fetched overlay's voters
+        # and the installed transport's retry default, and asserts that one
+        # cli_review run's sequential worst case (every attempt, backoff and
+        # overflow endpoint of every voter) fits the share of this job's
+        # ceiling that one attempt of the review step below gets. omnimarket
+        # runs the same check (OMN-15066). A voter given more time in the
+        # overlay than this job can hold fails here, naming the voter and the
+        # sum, rather than outrunning timeout-minutes with no log line.
+        working-directory: ../omniintelligence
+        run: |
+          set -uo pipefail  # NOT -e: this step classifies its own exit code below.
+
+          # Allowance for the clone, install and overlay steps before the review.
+          SETUP_OVERHEAD_SECONDS=300
+          # Must match the review step's attempt loop and its pause between attempts.
+          REVIEW_ATTEMPTS=2
+          RETRY_PAUSE_SECONDS=15
+          ATTEMPT_BUDGET_SECONDS=$(( (HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS - SETUP_OVERHEAD_SECONDS - RETRY_PAUSE_SECONDS * (REVIEW_ATTEMPTS - 1)) / REVIEW_ATTEMPTS ))
+
+          # The substitution is an if condition so an inherited bash -e cannot
+          # abort the step before its output is printed (see omnimarket's
+          # OMN-15066 post-mortem on the same step).
+          if OUTPUT=$(uv run python -m omniintelligence.review_pairing.retry_budget \
+            --voters-overlay "$REVIEW_VOTERS_OVERLAY" \
+            --job-timeout-seconds "$ATTEMPT_BUDGET_SECONDS" \
+            --setup-overhead-seconds 0 2>&1); then
+            STATUS=0
+          else
+            STATUS=$?
+          fi
+
+          echo "Per-attempt budget: ${ATTEMPT_BUDGET_SECONDS}s of a ${HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS}s job (${REVIEW_ATTEMPTS} attempts, ${SETUP_OVERHEAD_SECONDS}s setup, ${RETRY_PAUSE_SECONDS}s pause)"
+          echo "$OUTPUT"
+
+          if [ "$STATUS" -ne 0 ]; then
+            echo "::error title=Hostile Reviewer retry budget::the CI overlay's voters cannot finish one cli_review run inside ${ATTEMPT_BUDGET_SECONDS}s, so ${REVIEW_ATTEMPTS} attempts cannot finish inside this job's timeout-minutes (OMN-19998). Lower a voter's timeout in the overlay or raise timeout-minutes and HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS together; do not bypass this check."
+            exit 1
+          fi
 
       - name: Run adversarial review
         id: review
