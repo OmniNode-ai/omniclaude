@@ -36,7 +36,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/routing/test_no_gpt_oss_in_plugin_yaml_omn19432.py::test_retired_smart_responder_baseline_entries_are_removed -q --no-cov
+        check_value: uv run pytest tests/routing/test_no_gpt_oss_in_plugin_yaml_omn19432.py -k test_retired_smart_responder_baseline_entries_are_removed -q --no-cov
         cwd: ${OMNI_HOME}/omniclaude
       - check_type: command
         check_value: uv run python -m omnibase_core.validation.hardcoded_model_config.runtime_hardcoded_model_config --all --baseline config/hardcoded_model_config_baseline.yaml
