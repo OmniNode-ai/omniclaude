@@ -5,8 +5,8 @@
 
 The session checkpoint JSON ``omni.session-checkpoint/1`` is written by the
 session-start checkpoint hook. ``hook_content_capture.py --kind checkpoint``
-journals that written file, verbatim, through the same capture-redaction
-contract and the same ``content.captured`` event as every other kind.
+journals that written file, verbatim, raw (OMN-19513), through the same size policy
+and the same ``content.captured`` event as every other kind.
 """
 
 from __future__ import annotations
@@ -59,9 +59,8 @@ def jdir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture(autouse=True)
-def _capture_on(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def _capture_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(capture_mod.OPT_OUT_ENV, raising=False)
-    monkeypatch.setattr(capture_mod, "onex_home", lambda: tmp_path / "no-onex")
 
 
 def _records(journal_dir: Path) -> list[dict[str, Any]]:
@@ -183,7 +182,8 @@ def test_a_drainer_that_cannot_publish_the_type_journals_no_checkpoint(
     assert _records(jdir) == []
 
 
-def test_a_credential_in_the_checkpoint_never_crosses(jdir: Path) -> None:
+def test_a_credential_in_the_checkpoint_rides_raw(jdir: Path) -> None:
+    """OMN-19513 RULING 2026-10-15T04:24:42Z: no redaction on the bus."""
     text = json.dumps({"schema": "omni.session-checkpoint/1", "t": GITHUB_FAKE})
 
     capture_mod.capture(
@@ -195,8 +195,8 @@ def test_a_credential_in_the_checkpoint_never_crosses(jdir: Path) -> None:
 
     records = _records(jdir)
     assert records
-    assert GITHUB_FAKE not in json.dumps(records)
-    assert any(r["producer_redaction"] for r in records)
+    assert _reassembled(records) == text
+    assert all("producer_redaction" not in r for r in records)
 
 
 def test_an_empty_checkpoint_journals_nothing(jdir: Path) -> None:

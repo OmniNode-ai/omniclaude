@@ -26,11 +26,14 @@ correlation and causation ids. Subagents share their parent's ``session_id``,
 so ``agent_id`` is the only discriminator between a subagent's tool calls and
 the main thread's.
 
-Content never rides this event. Each content field is scrubbed by the
-capture-redaction contract's span scrub FIRST, and the event carries only its
-reference: the field name, the scrubbed value's sha256 and length, and a
-deterministic content-record id. The full content itself is the restricted
-``content.captured`` family's job (OMN-19550/OMN-19551).
+Every content field rides this event raw (operator RULING
+2026-10-15T04:24:42Z): the field name, the value exactly as the harness sent
+it, its length and a deterministic content-record id. Nothing is scrubbed and
+nothing is hashed.
+
+Payload encryption is one contract setting, ``payload_encryption`` in
+``contract_hook_claude_capture.yaml``, off by default; see
+:func:`payload_encryption_enabled`.
 
 The refusals, each fail-closed
 ------------------------------
@@ -42,9 +45,7 @@ Nothing is journalled, and the hook log says why, when:
    drainer cannot resolve holds the journal head until it is dead-lettered
    (the OMN-19074 outage shape), so an older drainer, or one on an omnimarket
    without the registry entry, leaves capture off.
-3. The capture contract or the redaction resolver cannot be loaded, or the
-   resolver has no span scrub. No hash on the bus may come from unscrubbed
-   text.
+3. The capture contract cannot be loaded.
 4. The hook is one this module must never observe: see ``NEVER_REGISTERED``.
 5. The hook-edge lane contract still lists ``hook.event`` under
    ``produce_grant_pending``: the lane has no produce grant for its topic, and
@@ -79,7 +80,7 @@ because the facts they state are in no hook's stdin:
 A failed tool call's content is captured here too
 (:func:`capture_failure_content`): PostToolUseFailure already reaches this
 script, and its tool input and error text go to ``content.captured`` under the
-same redaction as a completed call's.
+same path as a completed call's.
 
 Fail-open like every hook on this path: always exits 0, never writes stdout.
 """
@@ -93,7 +94,7 @@ import os
 import re
 import socket
 import sys
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
@@ -237,30 +238,41 @@ def load_contract() -> ModuleType | None:
     return None
 
 
-def make_scrubber(
-    resolver: ModuleType, contract: ModuleType
-) -> Callable[[str], Any] | None:
-    """The production span scrub, shaped as the contract's ``ContentScrubber``.
+_CAPTURE_CONTRACT_YAML = (
+    Path(__file__).resolve().parents[4]
+    / "src"
+    / "omniclaude"
+    / "hooks"
+    / "contracts"
+    / "contract_hook_claude_capture.yaml"
+)
 
-    ``None`` when the loaded resolver predates the span scrub (OMN-19551): a
-    whole-value hash is not the scrub the contract requires, and no hash on
-    the metadata topic may be derived from unscrubbed text.
+
+def payload_encryption_enabled(contract_path: Path | None = None) -> bool:
+    """The contract's ``payload_encryption.enabled`` setting (default off).
+
+    Read with a line scan, not PyYAML, so the hook path stays standard-library.
+    An unreadable contract, or one that does not set the key to ``true``, is
+    off. When it is on, the capture refuses to journal until the encryption
+    step is wired (:func:`capture`), so content never crosses in the clear
+    while the operator asked for it encrypted.
     """
-    scrub_text = getattr(resolver, "scrub_text", None)
-    if scrub_text is None:
-        return None
-    result_model = contract.ModelContentScrubResult
-
-    def scrub(value: str) -> Any:
-        scrubbed, hits = scrub_text(value)
-        names = tuple(sorted(name for name, count in hits.items() if count))
-        return result_model(
-            value=scrubbed,
-            redaction_state="secret_detected" if names else "clean",
-            matched_pattern_names=names,
-        )
-
-    return scrub
+    path = contract_path or _CAPTURE_CONTRACT_YAML
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    inside = False
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line.startswith(" "):
+            inside = line.rstrip() == "payload_encryption:"
+            continue
+        if inside and line.strip().startswith("enabled:"):
+            value = line.split(":", 1)[1].split("#", 1)[0].strip().lower()
+            return value == "true"
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +469,6 @@ def build_event_payload(
     hook_input: Mapping[str, object],
     *,
     contract: ModuleType,
-    scrubber: Callable[[str], Any],
     turn_dir: Path,
     emitted_at: datetime,
     version: str | None,
@@ -494,7 +505,6 @@ def build_event_payload(
         sidecar=sidecar,
         claude_code_version=version,
         turn_id=turn_id,
-        content_scrubber=scrubber,
         host=host,
     )
     payload: dict[str, Any] = result.event.model_dump(mode="json")
@@ -536,10 +546,11 @@ def capture(
     if contract is None:
         _log("skipped: the capture contract could not be loaded")
         return 0
-    resolver = content_capture.load_resolver()
-    scrubber = make_scrubber(resolver, contract) if resolver is not None else None
-    if scrubber is None:
-        _log("skipped: no capture-redaction span scrub could be loaded")
+    if payload_encryption_enabled():
+        _log(
+            f"skipped {hook_name}: payload_encryption is on and the encryption "
+            "step is not wired; nothing crosses in the clear"
+        )
         return 0
 
     target = journal_dir
@@ -547,7 +558,6 @@ def capture(
         payload = build_event_payload(
             hook_input,
             contract=contract,
-            scrubber=scrubber,
             turn_dir=hook_turn_id.turn_dir_for(target),
             emitted_at=now or datetime.now(UTC),
             version=claude_code_version(),

@@ -6,10 +6,7 @@
     "field": "last_assistant_message",
     "hook_event_name": "Stop",
     "length": 26,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "25c7f5eb83d3f83720e3840e69fac7cc1aee97d86058d5bab985399e07c8d520",
     "value": "private assistant response"
   }
 ]

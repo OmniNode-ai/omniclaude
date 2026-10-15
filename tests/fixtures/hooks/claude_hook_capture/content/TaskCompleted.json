@@ -6,10 +6,7 @@
     "field": "task_subject",
     "hook_event_name": "TaskCompleted",
     "length": 20,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "1d365ffc38cfb0673339a590b5644f4f5e99697bc5f7ed00966e3721284f63e1",
     "value": "private task subject"
   },
   {
@@ -19,10 +16,7 @@
     "field": "task_description",
     "hook_event_name": "TaskCompleted",
     "length": 24,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "ba52d9259a9165fbf1e8ae9c5c6985c8737bcd70bd62f588e05084428bea82a7",
     "value": "private task description"
   }
 ]

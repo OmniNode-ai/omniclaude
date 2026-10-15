@@ -4,10 +4,9 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -27,8 +26,8 @@ from pydantic import (
 
 HOOK_CAPTURE_NAMESPACE = UUID("9449178f-fb63-5b0d-b17d-379aafbcfe67")
 HOOK_EVENT_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
-#: The sidecar description is the spawning call's short task label. It is
-#: scrubbed and cut here so a long value can never carry a prompt.
+#: The sidecar description is the spawning call's short task label, cut to
+#: the lineage column's bound. It is never scrubbed (OMN-19513).
 MAX_AGENT_DESCRIPTION = 200
 
 
@@ -104,34 +103,18 @@ _EVENT_MODEL_CONFIG = ConfigDict(frozen=True, extra="ignore", from_attributes=Tr
 _STRICT_MODEL_CONFIG = ConfigDict(frozen=True, extra="forbid")
 
 
-class ModelContentScrubResult(BaseModel):
-    """Output of the producer's span scrub over one serialised content value."""
-
-    model_config = _STRICT_MODEL_CONFIG
-
-    value: str
-    redaction_state: Literal["clean", "secret_detected"]
-    matched_pattern_names: tuple[str, ...]
-
-    @model_validator(mode="after")
-    def validate_state(self) -> ModelContentScrubResult:
-        if (self.redaction_state == "secret_detected") != bool(
-            self.matched_pattern_names
-        ):
-            raise ValueError(
-                "redaction_state is secret_detected exactly when a pattern matched"
-            )
-        return self
-
-
-ContentScrubber = Callable[[str], ModelContentScrubResult]
-
-
 class ModelHookContentRef(BaseModel):
+    """One content field exactly as the harness sent it (OMN-19513).
+
+    ``value`` is the raw string, or the canonical JSON of a non-string value.
+    Nothing is scrubbed and nothing is hashed (operator RULING
+    2026-10-15T04:24:42Z on the rolling work ledger).
+    """
+
     model_config = _EVENT_MODEL_CONFIG
 
     field: str = Field(min_length=1)
-    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    value: str
     length: int = Field(ge=0)
     content_record_id: UUID
 
@@ -145,10 +128,7 @@ class ModelHookContentRecord(BaseModel):
     agent_id: str | None
     hook_event_name: EnumClaudeHookEventName
     field: str = Field(min_length=1)
-    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     length: int = Field(ge=0)
-    redaction_state: Literal["clean", "secret_detected"]
-    matched_pattern_names: tuple[str, ...]
     value: str
 
 
@@ -964,9 +944,8 @@ def parse_goal_binding(
     """Return ``(goal_id, parent_goal_id)`` when this event binds a goal.
 
     Only a PreToolUse of the Bash tool whose raw command starts with the
-    ``ONEX_GOAL=<uuid>`` assignment binds one. The ids are read from the raw
-    command before the scrub hashes it; the command itself still rides only as
-    its scrubbed reference.
+    ``ONEX_GOAL=<uuid>`` assignment binds one. The command itself rides raw in
+    the event's ``tool_input`` content reference.
     """
     if hook_name is not EnumClaudeHookEventName.PRE_TOOL_USE:
         return None, None
@@ -1354,9 +1333,7 @@ class _ContentCapture:
         session_id: str,
         agent_id: str | None,
         hook_event_name: EnumClaudeHookEventName,
-        scrubber: ContentScrubber,
     ) -> None:
-        self._scrubber = scrubber
         self._event_id = event_id
         self._session_id = session_id
         self._agent_id = agent_id
@@ -1365,21 +1342,15 @@ class _ContentCapture:
         self.records: list[ModelHookContentRecord] = []
 
     def required(self, field: str, raw_value: object) -> ModelHookContentRef:
-        serialised = (
-            raw_value if isinstance(raw_value, str) else canonical_json(raw_value)
-        )
-        # The scrub runs BEFORE hashing, so neither the restricted content record
-        # nor the sha256 on the metadata topic is ever derived from a secret.
-        scrubbed = self._scrubber(serialised)
-        value = scrubbed.value
-        digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+        # The harness's value, unscrubbed and unhashed (OMN-19513).
+        value = raw_value if isinstance(raw_value, str) else canonical_json(raw_value)
         content_record_id = uuid5(
             HOOK_CAPTURE_NAMESPACE,
             f"{self._event_id}|{field}",
         )
         ref = ModelHookContentRef(
             field=field,
-            sha256=digest,
+            value=value,
             length=len(value),
             content_record_id=content_record_id,
         )
@@ -1392,10 +1363,7 @@ class _ContentCapture:
                 agent_id=self._agent_id,
                 hook_event_name=self._hook_event_name,
                 field=field,
-                sha256=digest,
                 length=len(value),
-                redaction_state=scrubbed.redaction_state,
-                matched_pattern_names=scrubbed.matched_pattern_names,
                 value=value,
             )
         )
@@ -1407,8 +1375,8 @@ class _ContentCapture:
         return self.required(field, raw_value)
 
     def label(self, value: str) -> str:
-        """A short metadata label, scrubbed then cut: never raw hook text."""
-        return self._scrubber(value).value[:MAX_DERIVED_LABEL]
+        """A short metadata label, cut to its column's bound."""
+        return value[:MAX_DERIVED_LABEL]
 
 
 def map_hook_stdin(
@@ -1418,14 +1386,11 @@ def map_hook_stdin(
     sidecar: ModelSubagentSidecar | None,
     claude_code_version: str | None,
     turn_id: str | None,
-    content_scrubber: ContentScrubber,
     host: str | None = None,
 ) -> ModelHookCaptureResult:
     """Map one decoded Claude Code hook stdin object without performing I/O.
 
-    ``content_scrubber`` is required with no default: a producer must pass the
-    production span scrub of the restricted content family explicitly, so no
-    caller can publish unscrubbed content by forgetting an argument.
+    Every content field rides raw: no scrub and no hash (OMN-19513).
     """
 
     raw_name = stdin.get("hook_event_name")
@@ -1469,7 +1434,6 @@ def map_hook_stdin(
         session_id=session_id,
         agent_id=agent_id,
         hook_event_name=hook_name,
-        scrubber=content_scrubber,
     )
     payload = _payload_from_stdin(
         stdin=stdin,
@@ -1494,11 +1458,7 @@ def map_hook_stdin(
 
     agent_description: str | None = None
     if sidecar is not None and sidecar.description:
-        # A description is free text the operator or a model typed, so it takes
-        # the same scrub as content before it is journaled as metadata.
-        agent_description = content_scrubber(sidecar.description).value[
-            :MAX_AGENT_DESCRIPTION
-        ]
+        agent_description = sidecar.description[:MAX_AGENT_DESCRIPTION]
 
     lineage = ModelHookLineage(
         session_id=session_id,
@@ -1540,14 +1500,12 @@ __all__ = [
     "HOOK_CAPTURE_NAMESPACE",
     "HOOK_EVENT_SCHEMA_VERSION",
     "HOOK_PAYLOAD_ADAPTER",
-    "ContentScrubber",
     "EnumClaudeHookEventName",
     "InvalidHookInputError",
     "MissingHookFieldError",
     "ModelClaudeHookEvent",
     "MAX_DERIVED_LABEL",
     "ModelAssistantUsagePayload",
-    "ModelContentScrubResult",
     "ModelGuardRefusalPayload",
     "ModelHookCaptureResult",
     "ModelHookContentRecord",

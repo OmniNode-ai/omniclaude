@@ -6,7 +6,7 @@
       "content_record_id": "035f8b9b-91cf-5ded-9900-36a8e5d8edf3",
       "field": "worktree_path",
       "length": 29,
-      "sha256": "54b19b170c2bf0c43283197b2f45031b469241512247470fc7517b6d8034efe7"
+      "value": "/restricted/worktrees/private"
     }
   ],
   "emitted_at": "2026-09-26T12:00:27Z",
@@ -35,7 +35,7 @@
       "content_record_id": "035f8b9b-91cf-5ded-9900-36a8e5d8edf3",
       "field": "worktree_path",
       "length": 29,
-      "sha256": "54b19b170c2bf0c43283197b2f45031b469241512247470fc7517b6d8034efe7"
+      "value": "/restricted/worktrees/private"
     }
   },
   "schema_version": "1.0.0"

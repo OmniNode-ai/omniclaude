@@ -46,8 +46,6 @@ def jdir(tmp_path: Path) -> Path:
 @pytest.fixture(autouse=True)
 def _capture_on(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv(capture_mod.OPT_OUT_ENV, raising=False)
-    # OMN-20926: never reach this machine's own captured-secret store.
-    monkeypatch.setattr(capture_mod, "onex_home", lambda: tmp_path / "no-onex")
 
 
 def _write_status(journal_dir: Path, types: tuple[str, ...] | None) -> None:
@@ -147,21 +145,19 @@ def test_content_capture_tool_input_and_result_carry_tool_use_id_and_turn(
     assert "nothing to commit" in by_kind["tool_response"]["content"]
 
 
-def test_content_capture_redacts_a_planted_secret_before_journalling(
-    jdir: Path,
-) -> None:
+def test_content_capture_journals_a_planted_secret_raw(jdir: Path) -> None:
+    """OMN-19513 RULING 2026-10-15T04:24:42Z: no redaction on the bus."""
     capture_mod.capture(
         {"session_id": SESSION, "prompt": "use " + GITHUB_FAKE + " to push"},
         kind="prompt",
         journal_dir=jdir,
     )
     (record,) = _records(jdir)
-    assert record["content"] == "use [REDACTED:github_token] to push"
-    assert record["producer_redaction"] == {"github_token": 1}
-    assert "FAKE" not in json.dumps(_records(jdir))
+    assert record["content"] == "use " + GITHUB_FAKE + " to push"
+    assert "producer_redaction" not in record
 
 
-def test_content_capture_output_class_hashes_the_result_whole(jdir: Path) -> None:
+def test_content_capture_journals_an_output_class_result_raw(jdir: Path) -> None:
     capture_mod.capture(
         {
             "session_id": SESSION,
@@ -173,25 +169,40 @@ def test_content_capture_output_class_hashes_the_result_whole(jdir: Path) -> Non
         kind="tool",
         journal_dir=jdir,
     )
-    for record in _records(jdir):
-        assert str(record["content"]).startswith("sha256:")
-        assert str(record["command"]).startswith("sha256:")
-    assert "plain looking output" not in json.dumps(_records(jdir))
+    by_kind = {r["content_kind"]: r for r in _records(jdir)}
+    assert "plain looking output" in by_kind["tool_response"]["content"]
+    for record in by_kind.values():
+        assert not str(record["content"]).startswith("sha256:")
+        assert record["command"] == "kubectl get secret app -o json"
+
+
+def test_content_capture_needs_no_secret_store(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(_home: Path) -> Any:
+        raise AssertionError("the secret store is never opened (OMN-19513)")
+
+    monkeypatch.setattr(capture_mod, "build_store_handler", refuse, raising=False)
+    capture_mod.capture(
+        {"session_id": SESSION, "prompt": "token " + GITHUB_FAKE},
+        kind="prompt",
+        journal_dir=jdir,
+    )
+    (record,) = _records(jdir)
+    assert GITHUB_FAKE in record["content"]
 
 
 # ---------------------------------------------------------------------------
-# AC3 -- redaction runs before chunking
+# chunking is a size bound only: the joined chunks are the raw item
 # ---------------------------------------------------------------------------
 
 
-def test_chunk_boundary_secret_is_redacted_in_every_chunk(jdir: Path) -> None:
+def test_chunks_join_back_to_the_raw_item(jdir: Path) -> None:
     topic = TopicBase.CONTENT_CAPTURED.value
     chunk = load_contract().topics[topic].content_policy.chunk_chars
     key_body = ("FAKEKEYBODY" * 20 + "\n") * 4
     label = "RSA PRIVATE" + " KEY"
     pem = "-----BEGIN " + label + "-----\n" + key_body + "-----END " + label + "-----"
-    # The block starts 100 characters before the first chunk boundary, so a
-    # split-then-scrub would leave the key body alone in the second chunk.
     prompt = "a" * (chunk - 100) + pem + "\nafter"
 
     capture_mod.capture(
@@ -199,9 +210,8 @@ def test_chunk_boundary_secret_is_redacted_in_every_chunk(jdir: Path) -> None:
     )
 
     records = sorted(_records(jdir), key=lambda r: r["chunk_index"])
-    assert all("FAKEKEYBODY" not in r["content"] for r in records)
-    joined = "".join(r["content"] for r in records)
-    assert joined == "a" * (chunk - 100) + "[REDACTED:pem_private_key_block]\nafter"
+    assert len(records) == 2
+    assert "".join(r["content"] for r in records) == prompt
     assert len({r["content_sha256"] for r in records}) == 1
 
 

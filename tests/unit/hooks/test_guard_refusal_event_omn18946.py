@@ -51,20 +51,6 @@ ANTHROPIC_FAKE = "sk-" + "ant-" + "FAKE" + "0" * 28
 _NOW = datetime(2026, 10, 14, 5, 0, 0, tzinfo=UTC)
 
 
-def _scrub(value: str) -> Any:
-    from omniclaude.hooks.model_claude_hook_event import ModelContentScrubResult
-
-    if ANTHROPIC_FAKE in value:
-        return ModelContentScrubResult(
-            value=value.replace(ANTHROPIC_FAKE, "[REDACTED]"),
-            redaction_state="secret_detected",
-            matched_pattern_names=("anthropic_api_key",),
-        )
-    return ModelContentScrubResult(
-        value=value, redaction_state="clean", matched_pattern_names=()
-    )
-
-
 def _refusal_stdin(**over: Any) -> dict[str, Any]:
     stdin: dict[str, Any] = {
         "hook_event_name": "GuardRefusal",
@@ -87,7 +73,6 @@ def _map(stdin: dict[str, Any]) -> ModelClaudeHookEvent:
         sidecar=None,
         claude_code_version="2.1.283",
         turn_id="turn-1",
-        content_scrubber=_scrub,
     ).event
 
 
@@ -142,10 +127,11 @@ def test_a_refusal_event_carries_no_content_reference() -> None:
     assert not any(key.endswith("_ref") for key in event.payload.model_dump())
 
 
-def test_a_secret_in_a_reason_never_reaches_the_event() -> None:
+def test_a_reason_class_rides_raw_cut_to_its_bound() -> None:
+    """OMN-19513: no scrub; the label is only cut to its column's bound."""
     event = _map(_refusal_stdin(reason_class=f"bad token {ANTHROPIC_FAKE}"))
 
-    assert ANTHROPIC_FAKE not in event.model_dump_json()
+    assert event.payload.model_dump()["reason_class"] == f"bad token {ANTHROPIC_FAKE}"
 
 
 def test_two_guards_refusing_one_call_get_distinct_event_ids() -> None:

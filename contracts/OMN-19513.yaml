@@ -16,6 +16,15 @@ requirements:
     acceptance:
       - id: AC2
         statement: 'AC2: preserve_backlog retains every queued record after failed publication, then publishes every record in order without overflow loss -- falsifier: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k recovery_retains_overflow_then_publishes_every_record fails against the pre-fix drainer'
+  - id: req-hook-capture-raw
+    statement: Every captured hook event and content record carries the raw field values the harness sent, with no scrub and no hash (operator RULING 2026-10-15T04:24:42Z).
+    acceptance:
+      - id: AC3
+        statement: 'AC3: each hook.event content reference carries the raw value and no sha256, and map_hook_stdin takes no scrubber -- falsifier: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py tests/unit/hooks/test_claude_hook_capture_contract.py -q --no-cov -k "raw or digest or no_scrubber" fails against the pre-change producer'
+      - id: AC4
+        statement: 'AC4: content.captured records carry the raw prompt, tool input, tool result and error with no producer redaction, no in-place hash and no secret-store swap -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_omn19551.py tests/unit/hooks/test_failed_call_content_capture_omn18946.py -q --no-cov -k "raw or secret_store" fails against the pre-change producer'
+      - id: AC5
+        statement: 'AC5: payload encryption is one contract setting, off by default, and the omniclaude registry projects the omnimarket publish transform for hook.event and content.captured -- falsifier: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k "encryption or publish_transform" fails against the pre-change contract'
 evidence_requirements:
   - kind: tests
     description: Selected configuration survives launchd rendering and missing overlays preserve the previous agent.
@@ -23,6 +32,9 @@ evidence_requirements:
   - kind: tests
     description: Recovery retains overflowing queued records through failure and publishes them in FIFO order without a loss log.
     command: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k recovery_retains_overflow_then_publishes_every_record
+  - kind: tests
+    description: Hook events and content records carry raw values with no scrub and no hash; encryption is one setting, off.
+    command: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py tests/unit/hooks/test_claude_hook_capture_contract.py tests/unit/hooks/test_hook_content_capture_omn19551.py tests/unit/hooks/test_failed_call_content_capture_omn18946.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ''
@@ -44,3 +56,27 @@ dod_evidence:
         check_value: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k recovery_retains_overflow_then_publishes_every_record
     binds_ac:
       - AC2
+  - id: dod-omn19513-raw-hook-event
+    description: The hook.event producer journals raw content values with no digest and needs no scrubber.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py tests/unit/hooks/test_claude_hook_capture_contract.py -q --no-cov -k "raw or digest or no_scrubber"
+    binds_ac:
+      - AC3
+  - id: dod-omn19513-raw-content
+    description: The content.captured producer journals raw content with no redaction, in-place hash or secret-store swap.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_content_capture_omn19551.py tests/unit/hooks/test_failed_call_content_capture_omn18946.py -q --no-cov -k "raw or secret_store"
+    binds_ac:
+      - AC4
+  - id: dod-omn19513-encryption-setting
+    description: The capture contract declares payload_encryption off by default and the registry projects the omnimarket publish transform for both classes.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k "encryption or publish_transform"
+    binds_ac:
+      - AC5

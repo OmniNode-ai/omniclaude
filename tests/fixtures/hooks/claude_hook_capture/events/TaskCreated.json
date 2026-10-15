@@ -6,13 +6,13 @@
       "content_record_id": "55160983-51fd-5947-8a9e-4cae97731f7f",
       "field": "task_subject",
       "length": 20,
-      "sha256": "1d365ffc38cfb0673339a590b5644f4f5e99697bc5f7ed00966e3721284f63e1"
+      "value": "private task subject"
     },
     {
       "content_record_id": "9609ee5f-87fe-5648-bfcd-d26e9d3ce60f",
       "field": "task_description",
       "length": 24,
-      "sha256": "ba52d9259a9165fbf1e8ae9c5c6985c8737bcd70bd62f588e05084428bea82a7"
+      "value": "private task description"
     }
   ],
   "emitted_at": "2026-09-26T12:00:21Z",
@@ -41,14 +41,14 @@
       "content_record_id": "9609ee5f-87fe-5648-bfcd-d26e9d3ce60f",
       "field": "task_description",
       "length": 24,
-      "sha256": "ba52d9259a9165fbf1e8ae9c5c6985c8737bcd70bd62f588e05084428bea82a7"
+      "value": "private task description"
     },
     "task_id": "task-fixture-1",
     "task_subject_ref": {
       "content_record_id": "55160983-51fd-5947-8a9e-4cae97731f7f",
       "field": "task_subject",
       "length": 20,
-      "sha256": "1d365ffc38cfb0673339a590b5644f4f5e99697bc5f7ed00966e3721284f63e1"
+      "value": "private task subject"
     },
     "team_name": "team-fixture",
     "teammate_name": "teammate-fixture"
