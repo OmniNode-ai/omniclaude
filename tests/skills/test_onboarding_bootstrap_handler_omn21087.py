@@ -30,6 +30,10 @@ def test_node_declares_the_bootstrap_handler_and_its_verified_bytes() -> None:
     fingerprint = bootstrap["sha256_fingerprint"]
     assert fingerprint.replace(":", "") == digest
     assert f'local digest="{fingerprint}"' in SCRIPT.read_text()
+    assert re.search(
+        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/[0-9a-f]{40}/\$rel",
+        SCRIPT.read_text(),
+    )
     for entrypoint in bootstrap["entrypoints"]:
         assert re.search(rf"^{entrypoint}\(\) \{{", HANDLER.read_text(), re.M)
     subprocess.run(["/bin/bash", "-n", str(HANDLER)], check=True)
