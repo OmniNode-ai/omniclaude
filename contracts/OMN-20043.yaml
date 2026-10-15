@@ -1,0 +1,33 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20043
+title: "gh read router: exercise App refusal on a routed resource"
+summary: >
+  Branch-protection reads intentionally stay on the operator under OMN-20043.
+  The shim stdout regression must use a pulls read that still reaches the App,
+  keeping the two-attempt, credential-order and fallback-record assertions.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20043-shim-refusal-check
+    statement: "The shim regression exercises App refusal independently of admin-only routing."
+    acceptance:
+      - id: AC4
+        statement: "A pulls read refused by the App emits exactly the operator document, attempts App then operator, and records integration-refused."
+evidence_requirements:
+  - kind: tests
+    description: "Hermetic shim regression with local fake executables and credentials."
+    command: "uv run pytest tests/scripts/test_gh_shim_read_routing.py -q -k route_refused_app_call"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20043-shim-refused-routed-resource
+    description: "The shim retries an App-refused pulls read once on the operator, emits one JSON document and records integration-refused."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_gh_shim_read_routing.py -q -k route_refused_app_call"
+    binds_ac:
+      - AC4
