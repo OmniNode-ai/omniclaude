@@ -11,6 +11,11 @@ points at the repo's own contract instead.
 
 The reusables other repositories still call stay hosted here until their last
 caller is gone, including the minting pair and the deploy gate.
+
+``scripts/ci/check_occ_companion_merged.py`` lost its last omniclaude caller
+when the S6 cutover deleted ci.yml's occ-companion-merged job; omninode_infra
+runs its own copy, so no repository runs this one. The PR-body stamp guard that
+mirrored its stamp pattern now pins that pattern itself.
 """
 
 from __future__ import annotations
@@ -29,6 +34,8 @@ _DELETED = (
     "tests/scripts/test_scaffold_occ_receipt.py",
     "scripts/materialize-dod-evidence-from-occ.sh",
     "tests/unit/test_dod_occ_materialization.py",
+    "scripts/ci/check_occ_companion_merged.py",
+    "tests/ci/test_check_occ_companion_merged.py",
 )
 
 _STILL_CALLED = (

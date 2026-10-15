@@ -506,7 +506,6 @@ scripts/ci/canonical_handler_shape_baseline.py
 scripts/ci/check_auto_merge_hold.py
 scripts/ci/check_canonical_inference_baseline_growth.py
 scripts/ci/check_env_var_registry.py
-scripts/ci/check_occ_companion_merged.py
 scripts/ci/check_workflow_expression_contexts.py
 scripts/ci/ci_summary_gate.py
 scripts/ci/detect_test_paths.py
