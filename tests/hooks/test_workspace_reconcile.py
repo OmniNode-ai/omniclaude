@@ -895,13 +895,9 @@ def test_host_drift_prints_when_workspace_status_is_absent(ws: _Workspace) -> No
 def test_host_drift_respects_silent_intent(
     ws: _Workspace, tmp_path: Path, intent: str
 ) -> None:
-    import shutil
-
-    # The planted healthy tree controls the independent load-path alarm.
+    # The planted healthy tree (lib included, OMN-21149) controls the
+    # independent load-path alarm.
     clone, _ = _plant_hook_tree(tmp_path, "omniclaude")
-    shutil.copytree(
-        _REPO_ROOT / "plugins" / "onex" / "lib", clone / "plugins" / "onex" / "lib"
-    )
     _write_host_status(ws, _HOST_ALERT, 40)
     result = subprocess.run(
         [
