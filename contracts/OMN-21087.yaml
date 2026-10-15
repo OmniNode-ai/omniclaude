@@ -1,0 +1,75 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21087
+title: "Onboarding handles a Mac that ran an earlier setup"
+summary: >
+  lab-onboarding.sh on a machine that ran an earlier setup. Every run unsets
+  inherited OMNI*/ONEX_*/KAFKA_*/BIFROST_* variables and binds the onboarding
+  workspace before phase 0, so a resumed run is clean too. Phase 2 brings clean
+  clones to origin (omnibase_infra first) and stops once, naming every clone that
+  holds work, how far behind it is and the command that moves it aside. The
+  workspace config root is a git repository the runtime-config materialiser
+  reads. Phase 3 skips a venv rebuild the reconciler reports current, and a failed
+  model test prints the error that caused it. A second change adds the preflight
+  survey of what an earlier setup left and the question to set it aside.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21087-clones
+    statement: Phase 2 brings every clean clone to origin and stops, naming each clone that holds work, before any clone moves.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: a clean clone that is behind or detached is brought to origin (omnibase_infra first, so a checkout older than the pins file is updated rather than reported as missing it); a clone with tracked changes or commits origin lacks is named with its state, its distance behind origin and the command that moves it aside, and no clone moves; a non-clone directory at a repo path is moved aside, never deleted; falsifier: uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -k "dirty_clone or detached_unpinned or one_stop or not_a_clone or missing_pins" fails against the dev script.'
+  - id: req-omn21087-run-environment
+    statement: No leftover variable reaches the run, and every run, resumed or not, is bound to the onboarding workspace.
+    acceptance:
+      - id: AC2
+        statement: 'AC2: the run and its children inherit none of OMNI_HOME, OMNIBASE_INTERNAL_PATH, ONEX_EVENT_BUS_TYPE, ONEX_LAB_TENANT_STATE_DIR, ONEX_STATE_DIR, ONEX_DISPATCH_VENV, ONEX_CONTRACTS_DIR or KAFKA_BOOTSTRAP_SERVERS, and a resumed run that skips phase 2 runs phase 3 with OMNIBASE_PATH and ONEX_WORKSPACE_CONFIG_ROOT naming the onboarding workspace; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "leftover_variable or binds_the_workspace" fails against the dev script.'
+  - id: req-omn21087-phase3
+    statement: Phase 3 does not rebuild a current dispatch venv, and a failed model test prints its cause.
+    acceptance:
+      - id: AC3
+        statement: 'AC3: phase 3 checks the dispatch venv with the reconciler''s --check before rebuilding it, and a failed model test whose summary is an exit status prints the Error line that caused it; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "failed_model_test or checks_the_venv" fails against the dev script.'
+  - id: req-omn21087-runtime-config-repo
+    statement: The workspace runtime config is readable by onex's materialiser without a warning.
+    acceptance:
+      - id: AC4
+        statement: 'AC4: phase 2 makes the workspace config root a git repository whose origin/main carries config/onex/runtime/runtime_config.yaml, idempotently, and phase2_verified requires it; falsifier: uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -k materialiser fails against the dev script.'
+evidence_requirements:
+  - kind: tests
+    description: "Onboarding script tests pass"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_lab_onboarding_proven_set_omn20381.py tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21087-clones
+    description: "Phase 2 brings clean clones to origin and names every clone holding work before any moves"
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -q --no-cov -k 'dirty_clone or detached_unpinned or one_stop or not_a_clone or missing_pins'"
+  - id: dod-omn21087-run-environment
+    description: "No leftover variable reaches the run; a resumed run is bound to the onboarding workspace"
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'leftover_variable or binds_the_workspace'"
+  - id: dod-omn21087-phase3
+    description: "Phase 3 checks the venv before rebuilding it; a failed model test prints its cause"
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'failed_model_test or checks_the_venv'"
+  - id: dod-omn21087-runtime-config-repo
+    description: "The workspace config root is a repository the materialiser reads"
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -q --no-cov -k materialiser"
