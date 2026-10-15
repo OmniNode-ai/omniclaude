@@ -32,9 +32,12 @@ dod_evidence:
         cwd: ${OMNI_HOME}/omniclaude
     binds_ac: [AC1]
   - id: dod-omn19432-ac2-baseline
-    description: The hardcoded-model-config gate passes against the baseline with its four smart-responder entries removed.
+    description: The four retired smart-responder exemptions are absent and the hardcoded-model-config gate passes against the shrunk baseline.
     source: manual
     checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/routing/test_no_gpt_oss_in_plugin_yaml_omn19432.py::test_retired_smart_responder_baseline_entries_are_removed -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
       - check_type: command
         check_value: uv run python -m omnibase_core.validation.hardcoded_model_config.runtime_hardcoded_model_config --all --baseline config/hardcoded_model_config_baseline.yaml
         cwd: ${OMNI_HOME}/omniclaude
