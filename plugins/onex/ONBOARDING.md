@@ -41,8 +41,8 @@ Fetch the script, check it is the one this page was written against, then run it
 
 ```bash
 curl -fsSL -o lab-onboarding.sh \
-  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/c522d72ab1a48b02cedde5a5bb3709df911c421e/plugins/onex/skills/_bin/lab-onboarding.sh
-echo "83b1235b729a3e97a2926fa0d4db45035eb899b960bdcfa98aa7d8219deb5294  lab-onboarding.sh" | shasum -a 256 -c -
+  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/467e0c2c0d21d23e3bc479d558e38d70851ee2f0/plugins/onex/skills/_bin/lab-onboarding.sh
+echo "b648c55d4155168e82f2c8f0583d385934be0de889780a49d5e0a3b4bdd5c4b5  lab-onboarding.sh" | shasum -a 256 -c -
 bash lab-onboarding.sh
 ```
 
@@ -89,8 +89,9 @@ Every question comes before anything is installed:
    preflight found something that would interfere.
 1. **Which model.** Gemini, OpenRouter, OpenAI or Ollama. Then your key, with the input
    hidden. If this Mac already has a key stored you are offered it rather than asked again.
-   OpenRouter always runs Qwen3.8 27B (`qwen/qwen3.8-27b`), so you are not asked for a model.
-   It is a paid model: the key needs credit on its openrouter.ai account.
+   OpenRouter runs the default model onex's overlay declares, so you are not asked for a
+   model; change it any time with `onex models add openrouter --model <model id>`. The key
+   needs credit on its openrouter.ai account for a paid model.
 2. **Whether to run the local stack in Docker.** "Not now" is a complete setup — you can
    add it later. In a macOS VM the question is skipped, because Docker cannot run there.
 

@@ -111,17 +111,35 @@ def test_pinned_digest_is_the_script_at_the_pinned_commit() -> None:
     assert hashlib.sha256(shown.stdout).hexdigest() == _pinned_digest()
 
 
-# OMN-21075 AC5: the pinned script sets up OpenRouter on the fixed model, so a
-# developer following the guide is never asked to choose one.
-FIXED_OPENROUTER_MODEL_LINE = 'OPENROUTER_MODEL="qwen/qwen3.8-27b"'
+# OMN-20844 AC3 (amended): the pinned script names no OpenRouter model; phase 3
+# asks onex for the default its overlay declares, so the guide never goes stale
+# on a model id.
+OVERLAY_DEFAULT_MODEL_CALL = "models_cmd default-model openrouter"
 
 
-def test_pinned_script_sets_up_openrouter_on_the_fixed_model() -> None:
+def test_pinned_script_takes_the_openrouter_model_from_the_overlay() -> None:
     pinned = _pinned_commit()
     _require_commit(pinned)
     shown = _git("show", f"{pinned}:{SCRIPT_PATH}")
     assert shown.returncode == 0, shown.stderr.decode(errors="replace")
-    assert FIXED_OPENROUTER_MODEL_LINE in shown.stdout.decode().splitlines(), (
-        f"ONBOARDING.md pins {pinned}, whose script does not carry "
-        f"{FIXED_OPENROUTER_MODEL_LINE}"
+    text = shown.stdout.decode()
+    assert OVERLAY_DEFAULT_MODEL_CALL in text, (
+        f"ONBOARDING.md pins {pinned}, whose script does not ask onex for the "
+        "overlay's default OpenRouter model"
+    )
+    assert "OPENROUTER_MODEL=" not in text
+
+
+# The merge commit of omniclaude#2789, the second half of OMN-21087: a Mac that
+# ran an earlier setup is surveyed and its leftovers set aside before installing.
+RETURNING_MACHINE_SCRIPT_COMMIT = "467e0c2c0d21d23e3bc479d558e38d70851ee2f0"
+
+
+def test_pin_carries_the_returning_machine_fixes() -> None:
+    pinned = _pinned_commit()
+    _require_commit(pinned)
+    _require_commit(RETURNING_MACHINE_SCRIPT_COMMIT)
+    assert _is_ancestor(RETURNING_MACHINE_SCRIPT_COMMIT, pinned), (
+        f"ONBOARDING.md pins {pinned}, which does not contain "
+        f"{RETURNING_MACHINE_SCRIPT_COMMIT} (omniclaude#2789, OMN-21087)"
     )
