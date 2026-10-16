@@ -39,7 +39,7 @@ requirements:
     statement: Raw capture publish stays under the guard that enforces RULING 2026-10-15T04:24:42Z, which keeps the producer payload_encryption option in the capture contract.
     acceptance:
       - id: AC6
-        statement: 'AC6: The capture contract keeps its payload_encryption block with enabled and key_secret_ref, and no scrub, content hash or redaction field returns to the hook and content capture producer. -- falsifier: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov'
+        statement: 'AC6: The capture contract keeps its payload_encryption block with enabled and key_secret_ref, and no scrub, content hash or redaction field returns to the hook and content capture producer. Both producers refuse unreadable or malformed encryption configuration; enabled encryption survives the refreshed raw fan-out and decrypts to the captured content. -- falsifier: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov'
 evidence_requirements:
   - kind: tests
     command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
@@ -54,7 +54,7 @@ evidence_requirements:
     command: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov
     description: Exercises explicit redaction of metadata and raw runtime fan-out, including input immutability.
   - kind: tests
-    command: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
+    command: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov
     description: Verifies the raw-capture guard keeps the payload_encryption option and refuses redaction returning to the capture producer.
 dod_evidence:
   - id: dod-omniclaude-sibling-refresh-behavior
@@ -101,7 +101,7 @@ dod_evidence:
     source: manual
     binds_ac:
       - AC6
-    description: The raw-capture guard refuses a capture contract without the payload_encryption block and refuses redaction returning to the producer.
+    description: The raw-capture guard stays enforced alongside producer refusal on invalid encryption settings and encrypted capture round trips through the refreshed fan-out. The configuration refusal and round-trip tests fail against the merge base.
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
+        check_value: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov

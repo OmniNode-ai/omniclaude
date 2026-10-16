@@ -37,6 +37,7 @@ from omniclaude.enums.enum_hook_payload_encryption_outcome import (
     EnumHookPayloadEncryptionOutcome,
 )
 from omniclaude.handlers import handler_hook_payload_encryption as enc
+from omniclaude.hooks.event_registry import EVENT_REGISTRY
 from omniclaude.models.model_hook_payload_encryption_request import (
     ModelHookPayloadEncryptionRequest,
 )
@@ -176,11 +177,34 @@ def test_the_setting_reads_enabled_and_the_key_reference(tmp_path: Path) -> None
     assert read(_contract(tmp_path, enabled="false", ref="null")) == (False, None)
 
 
-def test_an_unreadable_contract_is_off(tmp_path: Path) -> None:
-    assert content_capture.payload_encryption_setting(tmp_path / "none.yaml") == (
-        False,
-        None,
-    )
+def test_an_unreadable_contract_refuses_plaintext(tmp_path: Path) -> None:
+    with pytest.raises(content_capture.PayloadSealRefusedError):
+        content_capture.payload_encryption_setting(tmp_path / "none.yaml")
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [
+        "",
+        "payload_encryption: {}\n",
+        'payload_encryption:\n  enabled: false\n  key_secret_ref: null\n"payload_encryption": {}\n',
+        "payload_encryption:\n  key_secret_ref: null\n",
+        "payload_encryption:\n  enabled: false\n",
+        "payload_encryption:\n  enabled: typo\n  key_secret_ref: null\n",
+        'payload_encryption:\n  enabled: "false"\n  key_secret_ref: null\n',
+        "payload_encryption:\n  enabled: true\n  enabled: false\n  key_secret_ref: null\n",
+        "payload_encryption:\n  enabled: false\n  key_secret_ref: null\npayload_encryption:\n",
+        "payload_encryption:\n    enabled: false\n    key_secret_ref: null\n",
+        "payload_encryption:\n  enabled: false\n  key_secret_ref: null\npayload_encryption: {}\n",
+    ],
+)
+def test_malformed_encryption_setting_refuses_plaintext(
+    tmp_path: Path, setting: str
+) -> None:
+    path = tmp_path / "bad.yaml"
+    path.write_text(setting, encoding="utf-8")
+    with pytest.raises(content_capture.PayloadSealRefusedError):
+        content_capture.payload_sealer(contract_path=path)
 
 
 def test_the_hook_event_module_keeps_its_setting_reader(tmp_path: Path) -> None:
@@ -460,3 +484,59 @@ def test_content_record_off_changes_nothing(jdir: Path) -> None:
     (record,) = _journalled(jdir, "content.captured")
     assert record["content"] == MARKER
     assert enc.ENVELOPE_FIELD not in record
+
+
+@pytest.mark.parametrize("event_type", ["hook.event", "content.captured"])
+@pytest.mark.parametrize(
+    "setting", [None, "", "payload_encryption:\n  enabled: typo\n"]
+)
+def test_invalid_encryption_config_journals_neither_capture_class(
+    tmp_path: Path,
+    jdir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    event_type: str,
+    setting: str | None,
+) -> None:
+    path = tmp_path / "invalid-contract.yaml"
+    if setting is not None:
+        path.write_text(setting, encoding="utf-8")
+    monkeypatch.setattr(content_capture, "CAPTURE_CONTRACT_YAML", path)
+    if event_type == "hook.event":
+        written = claude_capture.capture(_stdin_with_marker(), journal_dir=jdir)
+    else:
+        written = content_capture.capture(
+            {"session_id": SESSION, "prompt": MARKER}, kind="prompt", journal_dir=jdir
+        )
+    assert written == 0
+    assert journal.list_pending(jdir) == []
+
+
+@pytest.mark.parametrize("event_type", ["hook.event", "content.captured"])
+@pytest.mark.usefixtures("encryption_on")
+def test_encrypted_capture_survives_refreshed_fan_out(
+    jdir: Path, event_type: str
+) -> None:
+    key_text = _throwaway_key()
+    store = FakeStore(key_text)
+    if event_type == "hook.event":
+        written = claude_capture.capture(
+            _stdin_with_marker(), journal_dir=jdir, key_reader=store
+        )
+    else:
+        written = content_capture.capture(
+            {"session_id": SESSION, "prompt": MARKER},
+            kind="prompt",
+            journal_dir=jdir,
+            key_reader=store,
+        )
+    assert written == 1
+    (sealed,) = _journalled(jdir, event_type)
+    original = json.loads(json.dumps(sealed))
+    rule = EVENT_REGISTRY[event_type].fan_out[0]
+    published = rule.apply_transform(sealed)
+    assert published is not sealed
+    assert published == sealed == original
+    assert MARKER not in json.dumps(published)
+    opened = _open(published, key_text, EnumHookPayloadClass(event_type))
+    assert MARKER in json.dumps(opened)
+    assert store.seen == [KEY_REF]

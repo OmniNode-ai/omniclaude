@@ -536,55 +536,49 @@ CAPTURE_CONTRACT_YAML = (
     / "contract_hook_claude_capture.yaml"
 )
 _ENCRYPTION_HANDLER = "omniclaude.handlers.handler_hook_payload_encryption"
-_ENCRYPTION_BLOCK = "payload_encryption:"
 
 #: ``(payload class, payload) -> sealed payload``.
 Sealer = Callable[[str, dict[str, Any]], dict[str, Any]]
 
 
 class PayloadSealRefusedError(RuntimeError):
-    """The setting is on and the payload cannot be sealed. Nothing is journalled."""
-
-
-def _setting_scalar(raw: str) -> str | None:
-    value = raw.split("#", 1)[0].strip().strip("'\"")
-    return None if value.lower() in {"", "null", "~"} else value
+    """Encryption policy cannot be read or satisfied. Nothing is journalled."""
 
 
 def payload_encryption_setting(
     contract_path: Path | None = None,
 ) -> tuple[bool, str | None]:
-    """The contract's ``payload_encryption`` block: ``(enabled, key_secret_ref)``.
+    """Read the explicit setting; invalid policy refuses plaintext capture.
 
-    Read with a line scan, not PyYAML, so the hook path stays standard-library
-    and costs nothing while the setting is off (the default). An unreadable
-    contract, or one that does not set ``enabled`` to ``true``, is off.
+    Load the stdlib-only setting model by file so disabled capture encryption
+    does not import the package's model initializers or cryptography.
     """
-    try:
-        lines = (
-            (contract_path or CAPTURE_CONTRACT_YAML)
-            .read_text(encoding="utf-8")
-            .splitlines()
+    for resolver_path in _resolver_candidates():
+        model_path = (
+            resolver_path.parents[1]
+            / "models"
+            / "model_hook_payload_encryption_setting.py"
         )
-    except OSError:
-        return False, None
-    enabled = False
-    key_ref: str | None = None
-    inside = False
-    for line in lines:
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        if not line.startswith(" "):
-            inside = line.rstrip() == _ENCRYPTION_BLOCK
-            continue
-        if not inside:
-            continue
-        name, _, rest = line.strip().partition(":")
-        if name == "enabled":
-            enabled = (_setting_scalar(rest) or "").lower() == "true"
-        elif name == "key_secret_ref":
-            key_ref = _setting_scalar(rest)
-    return enabled, key_ref
+        if model_path.is_file():
+            break
+    else:
+        raise PayloadSealRefusedError("the encryption setting model is unavailable")
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "capture_encryption_setting", model_path
+        )
+        if spec is None or spec.loader is None:
+            raise ValueError("the encryption setting model could not be loaded")
+        model = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(model)
+        setting = model.ModelHookPayloadEncryptionSetting.from_contract(
+            (contract_path or CAPTURE_CONTRACT_YAML).read_text(encoding="utf-8")
+        )
+        return setting.enabled, setting.key_secret_ref
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise PayloadSealRefusedError(
+            "the encryption setting could not be read or is invalid"
+        ) from exc
 
 
 def payload_sealer(
@@ -592,12 +586,12 @@ def payload_sealer(
     key_reader: Callable[[str], str | None] | None = None,
     contract_path: Path | None = None,
 ) -> Sealer | None:
-    """``None`` while the setting is off; else a sealer holding the resolved key.
+    """``None`` only when explicitly off; else a sealer holding the resolved key.
 
     The encryption handler is imported only here, so a capture with the setting
     off never pays for ``omniclaude``. Raises :class:`PayloadSealRefusedError`
-    when the setting is on and the handler, the secret store or the key is not
-    usable: the caller journals nothing.
+    when the setting is invalid, or encryption is on and the handler, secret
+    store or key is not usable: the caller journals nothing.
     """
     enabled, key_ref = payload_encryption_setting(contract_path)
     if not enabled:
@@ -729,7 +723,7 @@ def capture(
         sealer = payload_sealer(key_reader=key_reader)
     except PayloadSealRefusedError as exc:
         _log(
-            f"skipped: payload_encryption is on and {exc}; nothing crosses in the clear"
+            f"skipped: payload encryption refused: {exc}; nothing crosses in the clear"
         )
         return 0
     items = _ITEMS[kind](hook_input)

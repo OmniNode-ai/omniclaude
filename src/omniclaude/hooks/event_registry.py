@@ -775,6 +775,10 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # Raw publish is the ruled policy, not a dropped control: production's
     # option is payload encryption at the producer (``payload_encryption`` in
     # contract_hook_claude_capture.yaml, handler_hook_payload_encryption.py).
+    # Both producers call hook_content_capture.payload_sealer before journalling:
+    # only explicit enabled:false permits plaintext, invalid settings refuse
+    # capture, and enabled:true requires a usable secret-store key. Passthrough
+    # preserves the sealed envelope; redaction would corrupt its ciphertext.
     "content.captured": EventRegistration(
         event_type="content.captured",
         fan_out=[
