@@ -35,6 +35,11 @@ requirements:
     acceptance:
       - id: AC7
         statement: 'AC7: the raw-capture guard passes on the producer and fails on each of a digest or redaction field on the content models, a scrub parameter on map_hook_stdin, a retired scrub name in either producer, a digest in the contract content reference and a missing payload_encryption block -- falsifier: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov -k raw_today fails against the producer sources before omniclaude#2767'
+  - id: req-hostile-reviewer-standing-rulings
+    statement: The Hostile Reviewer prepends the standing rulings file, read from the pull request's base commit, to its system prompt, so it does not block the passthrough that RULING 2026-10-15T04:24:42Z mandates, and a pull request cannot supply the rulings that review it.
+    acceptance:
+      - id: AC8
+        statement: 'AC8: the rulings step hands the reviewer the base commit''s standing-rulings.md and not the head''s rewrite, hands on no path when the base lacks the file, and the review passes it to cli_review as --system-prompt -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_standing_rulings_omn19513.py -q --no-cov fails against a workflow that reads the file from the head or omits the argument'
 evidence_requirements:
   - kind: tests
     description: Selected configuration survives launchd rendering and missing overlays preserve the previous agent.
@@ -51,6 +56,9 @@ evidence_requirements:
   - kind: tests
     description: The raw-capture guard accepts the raw producer and refuses each reintroduced scrub, digest or redaction field.
     command: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
+  - kind: tests
+    description: The Hostile Reviewer reads the standing rulings from the base commit and passes them as a system prompt prefix.
+    command: uv run pytest tests/hooks/test_hostile_reviewer_standing_rulings_omn19513.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ''
@@ -137,3 +145,11 @@ dod_evidence:
           assert not guards[0].get("continue-on-error", False) and "if" not in guards[0]'
     binds_ac:
       - AC7
+  - id: dod-omn19513-hostile-reviewer-standing-rulings
+    description: The rulings step runs against a real git remote whose head rewrites the rulings file and must hand the reviewer the base content; the review step must pass it to cli_review as --system-prompt.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_hostile_reviewer_standing_rulings_omn19513.py -q --no-cov
+    binds_ac:
+      - AC8

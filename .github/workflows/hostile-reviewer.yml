@@ -463,12 +463,41 @@ jobs:
             exit 1
           fi
 
+      # OMN-19513: the reviewer reads only the diff, so it cannot know a
+      # standing operator ruling, and it blocked by quorum the very passthrough
+      # RULING 2026-10-15T04:24:42Z mandates (omniclaude#2798). The rulings the
+      # reviewer must treat as decided behaviour are stated in
+      # .github/hostile-review/standing-rulings.md and prepended to its system
+      # prompt. The file is read from the BASE commit, never the PR head, so a
+      # pull request cannot write the context that reviews it; a base without
+      # the file runs the reviewer exactly as before.
+      - name: Read standing rulings from the base commit
+        id: rulings
+        working-directory: ${{ github.workspace }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RULINGS_PATH: .github/hostile-review/standing-rulings.md
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/hostile-review-standing-rulings.md"
+          rm -f "$OUT"
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if [ -n "$(git ls-tree --name-only "$BASE_SHA" -- "$RULINGS_PATH")" ]; then
+            git show "${BASE_SHA}:${RULINGS_PATH}" > "$OUT"
+            echo "path=${OUT}" >> "$GITHUB_OUTPUT"
+            echo "Standing rulings read from ${RULINGS_PATH} at base ${BASE_SHA}"
+          else
+            echo "path=" >> "$GITHUB_OUTPUT"
+            echo "No ${RULINGS_PATH} at base ${BASE_SHA}; the reviewer runs without standing rulings"
+          fi
+
       - name: Run adversarial review
         id: review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          STANDING_RULINGS: ${{ steps.rulings.outputs.path }}
           # OMN-20910: no voter endpoint is set here. Every voter, its endpoint,
           # model, sampling and focus come from REVIEW_VOTERS_OVERLAY (job env).
         working-directory: ../omniintelligence
@@ -523,6 +552,13 @@ jobs:
           ATTEMPT_ERR="${RUNNER_TEMP}/hostile-review-stderr-attempt.log"
           : > "$STDERR_LOG"
 
+          # OMN-19513: the base commit's standing rulings, when it has them,
+          # are prepended to the reviewer's system prompt.
+          RULINGS_ARGS=()
+          if [ -n "${STANDING_RULINGS:-}" ]; then
+            RULINGS_ARGS=(--system-prompt "$STANDING_RULINGS")
+          fi
+
           REVIEW_EXIT=1
           for attempt in 1 2; do
             : > "$ATTEMPT_ERR"
@@ -531,6 +567,7 @@ jobs:
               --pr "$PR_NUMBER" \
               --repo "$REPO" \
               --voters-overlay "$REVIEW_VOTERS_OVERLAY" \
+              "${RULINGS_ARGS[@]}" \
               2>"$ATTEMPT_ERR")
             REVIEW_EXIT=$?
             set -e
