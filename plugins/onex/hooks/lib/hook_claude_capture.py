@@ -26,11 +26,17 @@ correlation and causation ids. Subagents share their parent's ``session_id``,
 so ``agent_id`` is the only discriminator between a subagent's tool calls and
 the main thread's.
 
-Content never rides this event. Each content field is scrubbed by the
-capture-redaction contract's span scrub FIRST, and the event carries only its
-reference: the field name, the scrubbed value's sha256 and length, and a
-deterministic content-record id. The full content itself is the restricted
-``content.captured`` family's job (OMN-19550/OMN-19551).
+Every content field rides this event raw (operator RULING
+2026-10-15T04:24:42Z): the field name, the value exactly as the harness sent
+it, its length and a deterministic content-record id. Nothing is scrubbed and
+nothing is hashed.
+
+Payload encryption is one contract setting, ``payload_encryption`` in
+``contract_hook_claude_capture.yaml``, off by default; see
+:func:`payload_encryption_enabled`. With it on, the payload is journalled
+sealed under a key read from the secret store
+(``omniclaude.handlers.handler_hook_payload_encryption``), and nothing is journalled when that
+key cannot be read.
 
 The refusals, each fail-closed
 ------------------------------
@@ -42,9 +48,7 @@ Nothing is journalled, and the hook log says why, when:
    drainer cannot resolve holds the journal head until it is dead-lettered
    (the OMN-19074 outage shape), so an older drainer, or one on an omnimarket
    without the registry entry, leaves capture off.
-3. The capture contract or the redaction resolver cannot be loaded, or the
-   resolver has no span scrub. No hash on the bus may come from unscrubbed
-   text.
+3. The capture contract cannot be loaded.
 4. The hook is one this module must never observe: see ``NEVER_REGISTERED``.
 5. The hook-edge lane contract still lists ``hook.event`` under
    ``produce_grant_pending``: the lane has no produce grant for its topic, and
@@ -79,7 +83,7 @@ because the facts they state are in no hook's stdin:
 A failed tool call's content is captured here too
 (:func:`capture_failure_content`): PostToolUseFailure already reaches this
 script, and its tool input and error text go to ``content.captured`` under the
-same redaction as a completed call's.
+same path as a completed call's.
 
 Fail-open like every hook on this path: always exits 0, never writes stdout.
 """
@@ -237,30 +241,13 @@ def load_contract() -> ModuleType | None:
     return None
 
 
-def make_scrubber(
-    resolver: ModuleType, contract: ModuleType
-) -> Callable[[str], Any] | None:
-    """The production span scrub, shaped as the contract's ``ContentScrubber``.
+def payload_encryption_enabled(contract_path: Path | None = None) -> bool:
+    """The contract's ``payload_encryption.enabled`` setting (default off).
 
-    ``None`` when the loaded resolver predates the span scrub (OMN-19551): a
-    whole-value hash is not the scrub the contract requires, and no hash on
-    the metadata topic may be derived from unscrubbed text.
+    The reader, and the sealer it turns on, live in ``hook_content_capture``
+    beside the content producer that shares them (OMN-19513).
     """
-    scrub_text = getattr(resolver, "scrub_text", None)
-    if scrub_text is None:
-        return None
-    result_model = contract.ModelContentScrubResult
-
-    def scrub(value: str) -> Any:
-        scrubbed, hits = scrub_text(value)
-        names = tuple(sorted(name for name, count in hits.items() if count))
-        return result_model(
-            value=scrubbed,
-            redaction_state="secret_detected" if names else "clean",
-            matched_pattern_names=names,
-        )
-
-    return scrub
+    return content_capture.payload_encryption_setting(contract_path)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +444,6 @@ def build_event_payload(
     hook_input: Mapping[str, object],
     *,
     contract: ModuleType,
-    scrubber: Callable[[str], Any],
     turn_dir: Path,
     emitted_at: datetime,
     version: str | None,
@@ -494,7 +480,6 @@ def build_event_payload(
         sidecar=sidecar,
         claude_code_version=version,
         turn_id=turn_id,
-        content_scrubber=scrubber,
         host=host,
     )
     payload: dict[str, Any] = result.event.model_dump(mode="json")
@@ -509,8 +494,13 @@ def capture(
     cwd: str | None = None,
     actor: str | None = None,
     now: datetime | None = None,
+    key_reader: Callable[[str], str | None] | None = None,
 ) -> int:
-    """Journal the ``hook.event`` record for one hook call. Returns 0 or 1."""
+    """Journal the ``hook.event`` record for one hook call. Returns 0 or 1.
+
+    ``key_reader`` reads the payload key by its secret-store reference; it is
+    consulted only when the ``payload_encryption`` setting is on.
+    """
     hook_name = hook_input.get("hook_event_name")
     if not isinstance(hook_name, str) or not hook_name:
         _log("skipped: stdin carries no hook_event_name")
@@ -536,10 +526,13 @@ def capture(
     if contract is None:
         _log("skipped: the capture contract could not be loaded")
         return 0
-    resolver = content_capture.load_resolver()
-    scrubber = make_scrubber(resolver, contract) if resolver is not None else None
-    if scrubber is None:
-        _log("skipped: no capture-redaction span scrub could be loaded")
+    try:
+        sealer = content_capture.payload_sealer(key_reader=key_reader)
+    except content_capture.PayloadSealRefusedError as exc:
+        _log(
+            f"skipped {hook_name}: payload_encryption is on and {exc}; "
+            "nothing crosses in the clear"
+        )
         return 0
 
     target = journal_dir
@@ -547,7 +540,6 @@ def capture(
         payload = build_event_payload(
             hook_input,
             contract=contract,
-            scrubber=scrubber,
             turn_dir=hook_turn_id.turn_dir_for(target),
             emitted_at=now or datetime.now(UTC),
             version=claude_code_version(),
@@ -560,6 +552,8 @@ def capture(
         _log(f"skipped {hook_name}: the contract refused the input: {exc}")
         return 0
     lineage = payload["lineage"]
+    if sealer is not None:
+        payload = sealer(HOOK_EVENT_TYPE, payload)
     appender.append_event(
         # The literal, not the constant: validate_hook_edge_lane.py finds the
         # classes this edge emits by scanning call sites for it.

@@ -5,14 +5,14 @@
     {
       "content_record_id": "05795d81-8652-54a7-8f9d-a2236e250a24",
       "field": "prompt",
-      "length": 54,
-      "sha256": "f3594d99da397432796470e5f39b1d625d0473f33fe79c9a2a71d16076a33bb6"
+      "length": 65,
+      "value": "fixture prompt containing sk-ant-FAKE0000000000000000000000000000"
     },
     {
       "content_record_id": "d6a5753d-6759-5737-af9f-70834cd1fe08",
       "field": "session_title",
       "length": 21,
-      "sha256": "c932fb466a69c9a72b5abf9b5a947d6ce3f05696ae6d8187c7b0ba8b425372ed"
+      "value": "private session title"
     }
   ],
   "emitted_at": "2026-09-26T12:00:05Z",
@@ -41,14 +41,14 @@
     "prompt_ref": {
       "content_record_id": "05795d81-8652-54a7-8f9d-a2236e250a24",
       "field": "prompt",
-      "length": 54,
-      "sha256": "f3594d99da397432796470e5f39b1d625d0473f33fe79c9a2a71d16076a33bb6"
+      "length": 65,
+      "value": "fixture prompt containing sk-ant-FAKE0000000000000000000000000000"
     },
     "session_title_ref": {
       "content_record_id": "d6a5753d-6759-5737-af9f-70834cd1fe08",
       "field": "session_title",
       "length": 21,
-      "sha256": "c932fb466a69c9a72b5abf9b5a947d6ce3f05696ae6d8187c7b0ba8b425372ed"
+      "value": "private session title"
     },
     "source": "user"
   },

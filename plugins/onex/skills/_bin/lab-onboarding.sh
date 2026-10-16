@@ -13,8 +13,10 @@
 # terminal, as a macOS notification, and as a line in the status file, so a
 # failure is never discovered at the end of a long run.
 #
-#   0 Preflight          reads the machine; changes nothing; every question is asked here:
-#                        your models and their keys, Docker, and the Mac password
+#   0 Preflight          reads the machine, and runs the onex your shell already has; every
+#                        question is asked here: what an earlier setup left (set aside, or
+#                        stop), your models and their keys, Docker, and the Mac password.
+#                        Changes nothing unless you agree to set leftovers aside
 #   1 Base tools         Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv
 #   2 Workspace          the canonical clones, OMNIBASE_PATH, PATH
 #   3 onex + models      dispatch venv, onex, local identity, then each model you chose set up
@@ -43,6 +45,10 @@
 #   --ollama-model NAME  the model Ollama downloads (default: chosen from this Mac's memory)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else ~/Code/omnibase). A directory
 #                        that already holds clones this setup did not create is refused
+#   --set-aside          answer yes in advance to setting aside what an earlier setup left
+#                        (an onex alias, old variables in your profile, a published onex,
+#                        a local-model routes file, clones holding work); each is moved or
+#                        commented out, never deleted
 #   --restart            forget completed phases and run every phase again
 #   -h, --help           this text
 #
@@ -97,8 +103,20 @@ if [ -n "${OMNIBASE_PATH:-}" ]; then
 else
   WORKSPACE="$DEFAULT_WORKSPACE"; WORKSPACE_FROM="the default; OMNIBASE_PATH is not set"
 fi
+# What an earlier setup leaves in the environment silently redirects onex: a
+# workspace or internal clone, a lab tenant, a state directory, an event bus, a
+# routing overlay. This run and everything it starts inherit none of it, on
+# every run including a resumed one; the names are kept for preflight's report.
+INHERITED_ENV=""
+for _v in $(compgen -e); do
+  case "$_v" in
+    OMNI_HOME|OMNIBASE_*|ONEX_*|BIFROST_*|KAFKA_*|DELEGATION_ROUTING_TIERS_PATH|POSTGRES_PASSWORD|VALKEY_PASSWORD|PYTHONPATH)
+      INHERITED_ENV="${INHERITED_ENV}${INHERITED_ENV:+ }$_v"; unset "$_v" ;;
+  esac
+done
 unset OMNI_HOME
 RESTART=0
+SET_ASIDE_FLAG=0
 OLLAMA_MODEL=""
 
 usage() { sed -n '2,/^set -uo pipefail$/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; }
@@ -115,6 +133,7 @@ while [ $# -gt 0 ]; do
     --workspace) shift; WORKSPACE="${1:-}"; WORKSPACE_FROM="from --workspace" ;;
     --workspace=*) WORKSPACE="${1#*=}"; WORKSPACE_FROM="from --workspace" ;;
     --restart) RESTART=1 ;;
+    --set-aside) SET_ASIDE_FLAG=1 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'omninode-dev-setup: unknown option: %s (see --help)\n' "$1" >&2; exit 2 ;;
   esac
@@ -163,11 +182,6 @@ export PATH
 
 IS_TTY=0
 [ -t 0 ] && [ -t 1 ] && IS_TTY=1
-
-# Ambient configuration that silently redirects onex (local-dev guide, section 2).
-# This run and everything it starts never inherit it.
-unset BIFROST_CONTRACT_PATH BIFROST_OVERLAY_PATH DELEGATION_ROUTING_TIERS_PATH \
-  POSTGRES_PASSWORD VALKEY_PASSWORD PYTHONPATH 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Output
@@ -535,11 +549,13 @@ key_looks_like() {
   esac
 }
 
-# OpenRouter: every OpenRouter key runs one fixed model, so onboarding asks no
-# model question and the developer never needs a model id. It is a paid model,
-# so the key needs credit on openrouter.ai. Another model is one command later:
+# OpenRouter: every OpenRouter key runs the default model the onex overlay
+# declares, so onboarding asks no model question and the developer never needs a
+# model id. This script names no model: `onex models default-model openrouter`
+# reads it from the node_model_setup_effect overlay (setup_model, phase 3). The
+# model may be a paid one, so the key needs credit on openrouter.ai. Another
+# model is one command later:
 # onex models add openrouter --model <id>
-OPENROUTER_MODEL="qwen/qwen3.8-27b"
 
 stored_key_providers() { # every provider an earlier run already stored a key for, one per line
   [ -x "$HOME/.local/bin/onex" ] || return 1
@@ -617,7 +633,10 @@ ask_keys() {
     fi
     while :; do
       say ""
-      if is_stored "$p"; then
+      if is_stored "$p" && [ "$RESUMING" -eq 1 ]; then
+        say "  $label key ($n of $total): stored by your last run; kept."
+        break
+      elif is_stored "$p"; then
         read_secret "  $label key ($n of $total) — stored; press Enter to keep it, or paste a new one (input is hidden):"
         if [ -z "$SECRET" ]; then say "  Keeping your stored $label key."; break; fi
       else
@@ -640,7 +659,7 @@ ask_keys() {
       fi
       set_pending_key "$p" "$value"; value=""
       say "  $label key received."
-      [ "$p" = "openrouter" ] && say "  OpenRouter model: $OPENROUTER_MODEL"
+      [ "$p" = "openrouter" ] && say "  OpenRouter model: the default the onex overlay declares (change it any time: onex models add openrouter --model <model id>)"
       break
     done
   done
@@ -655,7 +674,7 @@ confirm_models() { # 0 continue, 1 change the choice; q quits
       if ollama_overrides_ours; then say "    Ollama      already set up on this Mac"
       else say "    Ollama      no key; downloads a model sized to this Mac's $(ram_gb) GB of memory"; fi
     elif [ "$p" = "openrouter" ] && [ -n "$(pending_key "$p")" ]; then
-      say "    $(printf '%-11s' "$(provider_label "$p")") key received, model $OPENROUTER_MODEL"
+      say "    $(printf '%-11s' "$(provider_label "$p")") key received, default model from the overlay"
     elif [ -n "$(pending_key "$p")" ]; then
       say "    $(printf '%-11s' "$(provider_label "$p")") key received"
     else
@@ -693,35 +712,6 @@ settle_models_unattended() {
   say "  No terminal to ask on, so these models are used: $(labels "$MODELS")."
 }
 
-settle_models() {
-  STORED="$(stored_key_providers 2>/dev/null | tr '\n' ' ')"; STORED="${STORED% }"
-  [ -z "$PROVIDER" ] || MODELS="$(in_menu_order "$(printf '%s' "$PROVIDER" | tr ',' ' ')")"
-  if [ "$PROMPT_TTY" -eq 0 ]; then settle_models_unattended; else
-    local asked_by_flag=0
-    [ -n "$MODELS" ] && asked_by_flag=1
-    while :; do
-      if [ "$asked_by_flag" -eq 1 ]; then
-        asked_by_flag=0
-        say ""
-        say "  Your models (from --provider): $(labels "$MODELS")"
-      else
-        ask_models
-      fi
-      SKIPPED=""; set_result openrouter ""
-      ask_keys
-      if [ -z "$MODELS" ]; then
-        say ""
-        say "  Every model was skipped. Choose at least one."
-        continue
-      fi
-      confirm_models && break
-    done
-    # Keys for models dropped at the summary are forgotten here.
-    local p
-    for p in gemini openrouter openai; do has_model "$p" || set_pending_key "$p" ""; done
-  fi
-  if has_model ollama; then settle_ollama; fi
-}
 
 # ---------------------------------------------------------------------------
 # Ollama: a model served on this Mac, with no key. onex reaches it through its
@@ -835,19 +825,34 @@ backends:
 YAML
 }
 
-# ===========================================================================
-# Phase 0: preflight. Reads only.
-# ===========================================================================
-MODE1_OK=1
-MODE2_OK=1
-MODE2_WHY=""
-MODE1_WHY=""
-
-row() { printf '  %-22s %-16s %-14s %s\n' "$1" "$2" "$3" "$4" | tee -a "$LOG"; }
+# The node's bootstrap handler runs on stock macOS Bash before Python exists.
+# Prefer the checkout beside this entrypoint; downloaded copies fetch the same
+# checksum-pinned handler into the run directory. Never source unchecked bytes.
+load_onboarding_preflight() {
+  local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
+  local digest="ce2b:2452:f52c:a37f:1824:a319:563b:113d:8fa3:55a2:38fd:561a:204c:7854:2c6c:90f7" root candidate
+  digest="${digest//:/}"
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
+  for candidate in "$root/$rel" "$PWD/$rel" "$WORKSPACE/omniclaude/$rel"; do
+    [ -f "$candidate" ] || continue
+    if printf '%s  %s\n' "$digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
+      . "$candidate"
+      return 0
+    fi
+  done
+  candidate="$RUN_DIR/handler_onboarding_preflight.sh"
+  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/b2ceaacf4bae07142ab25abf4e3d0abd308810a4/$rel" ||
+     ! printf '%s  %s\n' "$digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
+    printf 'omninode-dev-setup: cannot load the checksum-pinned onboarding preflight handler\n' >&2
+    return 1
+  fi
+  . "$candidate"
+}
+load_onboarding_preflight || exit 1
 
 phase0() {
-  phase_start 0 "Preflight (reads this Mac; changes nothing)" "under a minute"
-  local mv major cpus ram disk vm="physical Mac" p busy="" ambient dstate m2disk a
+  phase_start 0 "Preflight (reads this Mac; changes nothing you have not agreed to)" "under a minute"
+  local mv major cpus ram disk vm="physical Mac" p busy="" dstate m2disk a
   mv="$(macos_version)"; major="${mv%%.*}"
   case "$major" in ''|*[!0-9]*) major=0 ;; esac
   cpus="$(cpu_count)"; ram="$(ram_gb)"; disk="$(disk_free_gb)"
@@ -858,6 +863,7 @@ phase0() {
 
   say "  Log file: $LOG"
   say "  Workspace: $WORKSPACE ($WORKSPACE_FROM)"
+  resume_banner
   refuse_foreign_workspace
   say ""
   row "Requirement" "This Mac" "Mode 1 needs" "Mode 2 (containers) needs"
@@ -903,14 +909,9 @@ phase0() {
     phase_fail "run this from an administrator account, or ask your Mac's administrator to add you to the admin group"
   fi
 
-  ambient="$(grep -nE '^[[:space:]]*(export[[:space:]]+)?(BIFROST_[A-Z_]+|DELEGATION_ROUTING_TIERS_PATH|POSTGRES_PASSWORD|VALKEY_PASSWORD)=|^[[:space:]]*(source|\.)[[:space:]]+.*\.omnibase/\.env' \
-    "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.zshenv" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.profile" 2>/dev/null || true)"
-  if [ -n "$ambient" ]; then
-    AMBIENT_FOUND="$ambient"
-    say "  ⚠ Your shell profile exports configuration that silently redirects onex. This run"
-    say "    ignores it, but your own shells will not. Remove these lines:"
-    printf '%s\n' "$ambient" | sed 's/=.*$/=…/' | sed 's/^/      /' | tee -a "$LOG"
-  fi
+  # Before anything installs: what an earlier setup left, run as your shell runs it.
+  survey_leftovers
+  report_leftovers
 
   MODE1_WHY="${MODE1_WHY%;}"; MODE2_WHY="${MODE2_WHY%;}"
   if [ "$MODE1_OK" -eq 0 ]; then
@@ -925,6 +926,7 @@ phase0() {
   # first (every run needs at least one), then Docker, asked only when this Mac
   # can run it (the flags answer it in advance), then its licence terms, then
   # the administrator password.
+  settle_leftovers
   if [ "$PREFLIGHT_ONLY" -eq 0 ] && is_vm; then vm_notice; fi
   [ "$PREFLIGHT_ONLY" -eq 1 ] || settle_models
 
@@ -934,10 +936,15 @@ phase0() {
     "installed, not running") docker_note="We found Docker Desktop on this Mac, but it isn't running. If you want the stack, we'll start it for you." ;;
     *) docker_note="Docker Desktop isn't installed on this Mac. If you want the stack, we'll install it for you (it may ask you to accept Docker's terms)." ;;
   esac
+  if [ "$MODE2_OK" -eq 1 ] && [ -z "$WANT_CONTAINERS" ] && [ "$RESUMING" -eq 1 ] && [ -n "$(saved_choice containers)" ]; then
+    WANT_CONTAINERS="$(saved_choice containers)"
+    if [ "$WANT_CONTAINERS" = 1 ]; then say "  Docker: yes, as in your last run (--no-containers changes it)."
+    else say "  Docker: no, as in your last run (--containers changes it)."; NO_CONTAINERS_WHY="you said no in your last run"; fi
+  fi
   if [ "$MODE2_OK" -eq 1 ]; then
     case "$WANT_CONTAINERS" in
       1) ;;
-      0) MODE2_OK=0; MODE2_WHY=" --no-containers was passed" ;;
+      0) MODE2_OK=0; MODE2_WHY=" ${NO_CONTAINERS_WHY:---no-containers was passed}" ;;
       *)
         if [ "$PREFLIGHT_ONLY" -eq 1 ]; then
           MODE2_OFFERED=1
@@ -967,16 +974,14 @@ phase0() {
     ensure_sudo || { FAILED_STEP="administrator password"; LAST_ERR="sudo was not given the password"
       phase_fail "run this again and enter your Mac password when asked. Nothing was installed"; }
   fi
+  [ "$PREFLIGHT_ONLY" -eq 1 ] || set_aside_leftovers
   say ""
   say "  Will set up: $SELECTED"
   [ "$PREFLIGHT_ONLY" -eq 1 ] || say "  Models: $(labels "$MODELS")"
   say "  Everything from here runs without questions."
   phase_pass "$SELECTED"
 }
-AMBIENT_FOUND=""
-SELECTED=""
-STACK_RUNNING=0
-MODE2_OFFERED=0
+
 
 # ===========================================================================
 # Phase 1: base tools
@@ -1118,21 +1123,89 @@ refuse_foreign_workspace() {
   phase_fail "choose an empty or new directory with --workspace DIR (or set OMNIBASE_PATH to one); nothing was changed in $WORKSPACE"
 }
 
+# Clone or fetch only; what an existing clone needs is decided by bring_clone_current.
 sync_clone() { # repo
-  local d="$WORKSPACE/$1" def
-  if [ -d "$d/.git" ]; then
-    git -C "$d" fetch --quiet origin || return 1
-    def="$(git -C "$d" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')"
-    [ -n "$def" ] || return 0
-    # A canonical clone is read-only: fast-forward it only when it sits clean
-    # on its default branch; anything else is the developer's and is left alone.
-    if [ "$(git -C "$d" rev-parse --abbrev-ref HEAD)" = "$def" ] && [ -z "$(git -C "$d" status --porcelain)" ]; then
-      git -C "$d" merge --ff-only --quiet "origin/$def" || true
-    fi
-    return 0
+  local d="$WORKSPACE/$1"
+  if [ -e "$d/.git" ]; then
+    git -C "$d" fetch --quiet origin
+    return
   fi
-  rm -rf "$d"
+  # Something that is not a clone stands where one goes: moved aside, never deleted.
+  if [ -e "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
+    mkdir -p "$WORKSPACE/.set-aside" && mv "$d" "$WORKSPACE/.set-aside/$1.$STAMP" || return 1
+    echo "moved $d (not a clone) to $WORKSPACE/.set-aside/$1.$STAMP"
+  fi
+  rm -rf "$d"   # an empty directory, or what a failed clone attempt left
   git clone --quiet --filter=blob:none "$GITHUB_ORG_URL/$1.git" "$d"
+}
+
+clone_default_branch() { # repo -> origin's default branch, as last fetched
+  local def
+  def="$(git -C "$WORKSPACE/$1" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
+  def="${def#origin/}"
+  if [ -z "$def" ]; then
+    for def in dev main master; do
+      git -C "$WORKSPACE/$1" rev-parse --verify --quiet "refs/remotes/origin/$def" >/dev/null && break
+      def=""
+    done
+  fi
+  printf '%s' "$def"
+}
+
+# clone_state repo -> one line describing the clone, measured against origin as
+# last fetched: "missing", or "<where>|<changed>|<behind>|<unique>|<default>",
+# where <where> is a branch name or "detached", <changed> counts tracked files
+# changed or deleted (untracked files never block a checkout of a clean tree),
+# <behind> is how far HEAD is behind origin's default branch, and <unique> counts
+# commits at HEAD that origin does not have.
+clone_state() { # repo
+  local d="$WORKSPACE/$1" def where changed behind=0 unique=0
+  [ -d "$d/.git" ] || [ -f "$d/.git" ] || { printf 'missing'; return 0; }
+  def="$(clone_default_branch "$1")"
+  where="$(git -C "$d" symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached)"
+  changed="$(git -C "$d" status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ')"
+  if [ -n "$def" ]; then
+    behind="$(git -C "$d" rev-list --count "HEAD..origin/$def" 2>/dev/null || echo 0)"
+    unique="$(git -C "$d" rev-list --count "origin/$def..HEAD" 2>/dev/null || echo 0)"
+  fi
+  printf '%s|%s|%s|%s|%s' "$where" "$changed" "$behind" "$unique" "$def"
+}
+
+# clone_problem repo state -> empty when setup can bring the clone current by
+# itself; else what is wrong with it, in words. Setup never discards work: tracked
+# changes and commits origin does not have are the developer's.
+clone_problem() { # repo state
+  local where changed behind unique def
+  IFS='|' read -r where changed behind unique def <<EOF
+$2
+EOF
+  local why=""
+  [ "${changed:-0}" -gt 0 ] && why="$changed tracked file(s) changed or deleted"
+  [ "${unique:-0}" -gt 0 ] && why="${why}${why:+; }$unique commit(s) that origin does not have"
+  [ -n "$why" ] || return 0
+  printf '%s (%s, %s commit(s) behind origin/%s)' "$why" "$(clone_where "$where")" "${behind:-0}" "${def:-?}"
+}
+
+clone_where() { case "$1" in detached) echo "detached HEAD" ;; *) echo "on branch $1" ;; esac; }
+
+# The command that clears clone_problem without losing anything: the clone moves
+# aside whole, and the next run clones it fresh.
+clone_fix() { # repo
+  printf 'mkdir -p "%s" && mv "%s" "%s"' "$WORKSPACE/.set-aside" "$WORKSPACE/$1" "$WORKSPACE/.set-aside/$1.$STAMP"
+}
+
+# A clean clone is brought to origin's default branch, so a returning machine
+# never fails later on a file newer than its checkout. Pinned clones are then
+# checked out at their pin by pin_clone_to_proven.
+bring_clone_current() { # repo
+  local d="$WORKSPACE/$1" def
+  def="$(clone_default_branch "$1")"
+  [ -n "$def" ] || { echo "origin has no default branch" >&2; return 1; }
+  if [ "$(git -C "$d" symbolic-ref --quiet --short HEAD 2>/dev/null)" != "$def" ]; then
+    git -C "$d" checkout --quiet "$def" 2>/dev/null ||
+      git -C "$d" checkout --quiet -b "$def" "origin/$def" || return 1
+  fi
+  git -C "$d" merge --ff-only --quiet "origin/$def"
 }
 
 proven_pin() { # repo -> the CI-proven commit, empty when the repo has no pin
@@ -1212,6 +1285,31 @@ event_bus:
 YAML
 }
 
+# The materialiser reads the config from git (origin/main of the config root), and
+# warns "Could not locate runtime config repository" on every delegation when the
+# root is a plain directory. So the root is a repository whose main, and the local
+# ref origin/main beside it, carry the file. It has no remote and never pushes.
+config_git() { # git in the workspace config root, with an identity of its own
+  git -C "$WORKSPACE_CONFIG_ROOT" -c user.name=omninode-dev-setup \
+    -c user.email=dev-setup@omninode.invalid -c commit.gpgsign=false "$@"
+}
+
+commit_workspace_runtime_config() {
+  if [ ! -d "$WORKSPACE_CONFIG_ROOT/.git" ]; then
+    config_git init --quiet && config_git symbolic-ref HEAD refs/heads/main || return 1
+  fi
+  config_git add "$WORKSPACE_RUNTIME_CONFIG_REL" || return 1
+  config_git diff --cached --quiet || config_git commit --quiet -m "workspace runtime config (omninode-dev-setup)" || return 1
+  config_git update-ref refs/remotes/origin/main HEAD
+}
+
+# Bound for every run, not inside phase 2 alone: a resumed run skips phase 2,
+# and its later phases must still run against this workspace.
+bind_workspace_env() {
+  export OMNIBASE_PATH="$WORKSPACE"
+  export ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
+}
+
 workspace_runtime_config_present() {
   grep -qF "$WORKSPACE_RUNTIME_CONFIG_MARK" \
     "$WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL" 2>/dev/null
@@ -1225,6 +1323,7 @@ phase2_verified() {
     pin_clone_at_proven "$r" || return 1
   done
   workspace_runtime_config_present || return 1
+  git -C "$WORKSPACE_CONFIG_ROOT" rev-parse --verify --quiet "origin/main:$WORKSPACE_RUNTIME_CONFIG_REL" >/dev/null || return 1
   [ -f "$WORKSPACE_MARKER" ] || return 1
   grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null || return 1
   # A V1 block still exports OMNI_HOME: redo the phase so the block is rewritten.
@@ -1244,22 +1343,45 @@ phase2() {
   mkdir -p "$WORKSPACE" || { FAILED_STEP="create $WORKSPACE"; phase_fail "choose another directory with --workspace"; }
   [ -f "$WORKSPACE_MARKER" ] || printf 'This workspace was created by omninode-dev-setup.\n' >"$WORKSPACE_MARKER" ||
     { FAILED_STEP="mark the workspace"; phase_fail "could not write $WORKSPACE_MARKER; check the directory is writable"; }
-  local r pin default_repos=""
+  local r pin default_repos="" problem problems=""
   for r in $REPOS; do
-    if [ -d "$WORKSPACE/$r/.git" ]; then say "  $r: present, fetching"; else say "  $r: cloning"; fi
+    if [ -e "$WORKSPACE/$r/.git" ]; then say "  $r: present, fetching"; else say "  $r: cloning"; fi
     retry "clone or fetch $r" sync_clone "$r" || phase_fail "check that github.com is reachable, then run this again"
   done
+  # Every clone is measured against origin before any of them moves, so one stop
+  # names every clone that holds work, with how far behind it is and the command
+  # that moves it aside. Nothing is changed in any clone when one is named.
+  for r in $REPOS; do
+    problem="$(clone_problem "$r" "$(clone_state "$r")")"
+    [ -n "$problem" ] || continue
+    say "  ✗ $r: $problem"
+    say "      to move it aside: $(clone_fix "$r")"
+    problems="${problems}${problems:+ }$r"
+  done
+  if [ -n "$problems" ]; then
+    FAILED_STEP="bring the clones up to date with origin"
+    LAST_ERR="these clones hold work setup will not move: $problems"
+    phase_fail "commit or stash that work, or move each clone aside with the command under it (the next run clones it fresh), then run this again"
+  fi
+  # The proven set lives in omnibase_infra, so it is brought current first: an old
+  # checkout that predates the pins file is updated, never reported as missing one.
+  step "bring omnibase_infra up to date with origin" bring_clone_current omnibase_infra ||
+    phase_fail "run 'git -C $WORKSPACE/omnibase_infra status' to see why it cannot fast-forward"
   [ -f "$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml" ] ||
     { FAILED_STEP="read the proven set (omnibase_infra/.github/sibling-pins.yaml)"
-      phase_fail "restore the pins file in the omnibase_infra clone, or choose another --workspace"; }
+      LAST_ERR="omnibase_infra is current with origin/$(clone_default_branch omnibase_infra), and origin has no .github/sibling-pins.yaml"
+      phase_fail "nothing on this Mac is wrong: origin's omnibase_infra lacks its proven set; report it and run this again once it is restored"; }
   for r in $REPOS; do
-    pin_clone_to_proven "$r" ||
-      { FAILED_STEP="check out the proven commit of $r"
-        phase_fail "move your changes out of the $r clone, or choose another --workspace; if the pin is missing, check origin and fetch it"; }
     pin="$(proven_pin "$r")"
     if [ -n "$pin" ]; then
+      pin_clone_to_proven "$r" ||
+        { FAILED_STEP="check out the proven commit of $r"
+          phase_fail "check that origin has commit $pin in $r ('git -C $WORKSPACE/$r fetch origin'), then run this again"; }
       say "  $r: proven ${pin:0:12}"
     else
+      [ "$r" = omnibase_infra ] ||
+        step "bring $r up to date with origin" bring_clone_current "$r" ||
+        phase_fail "run 'git -C $WORKSPACE/$r status' to see why it cannot fast-forward"
       default_repos="${default_repos}${default_repos:+ }$r"
     fi
   done
@@ -1267,11 +1389,12 @@ phase2() {
   write_workspace_runtime_config ||
     { FAILED_STEP="declare the workspace runtime config"
       phase_fail "could not write $WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL; check the directory is writable"; }
+  step "commit the workspace runtime config" commit_workspace_runtime_config ||
+    phase_fail "see the log; $WORKSPACE_CONFIG_ROOT must be a git repository holding the config"
   say "  Workspace transport declared in $WORKSPACE_RUNTIME_CONFIG_REL (in-memory: everything runs on this Mac)."
   write_profile_block "$HOME/.zshrc"
   case "${SHELL:-}" in */bash) write_profile_block "$HOME/.bash_profile" ;; esac
-  export OMNIBASE_PATH="$WORKSPACE"
-  export ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
+  bind_workspace_env
   say "  OMNIBASE_PATH, Homebrew and ~/.local/bin are set in your shell profile (new terminals pick them up)."
   phase_pass
 }
@@ -1347,6 +1470,13 @@ stamp_proven_floor() {
     --output "$WORKSPACE/.onex-workspace-floor.json"
 }
 
+# A resumed phase 3 does not rebuild a dispatch venv that already holds the
+# proven set: the reconciler's --check mutates nothing and exits 0 when it does.
+dispatch_venv_current() {
+  [ -x "$WORKSPACE/.onex-dispatch-venv/bin/onex" ] || return 1
+  env -u PYTHONPATH bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --check
+}
+
 # Phase 3 hands each key to `onex models add` on stdin and tests the rest with
 # `onex models test`: both run one delegation pinned to that model's backend,
 # and a pin answered by any other backend fails. Through the dispatch venv's
@@ -1377,11 +1507,52 @@ record_model_status() { # provider
   printf 'model=%s result=%s detail="%s"\n' "$1" "$verdict" "$(printf '%s' "${r#*:}" | tr '"' "'")" >>"$STATUS"
 }
 
+# The OpenRouter default model is a deployment fact kept in the onex-overlays
+# plugin, not here. An overlay the developer's ONEX_SKILL_OVERLAY_ROOTS already
+# reaches is used as it is; otherwise the one overlay file is read from the
+# private repository for this GitHub login, the way phase 5 reaches its plugins.
+MODEL_OVERLAY_REPO="OmniNode-ai/omniclaude-internal"
+MODEL_OVERLAY_FILE="plugins/onex-overlays/overlays/node_model_setup_effect/overlay.yaml"
+
+fetch_model_overlay() { # -> 0 when $RUN_DIR/overlay-roots holds the overlay
+  local dest="$RUN_DIR/overlay-roots/node_model_setup_effect"
+  mkdir -p "$dest" || return 1
+  gh api "repos/$MODEL_OVERLAY_REPO/contents/$MODEL_OVERLAY_FILE" -H "Accept: application/vnd.github.raw" >"$dest/overlay.yaml" 2>>"$LOG" && [ -s "$dest/overlay.yaml" ] && return 0
+  rm -f "$dest/overlay.yaml"
+  return 1
+}
+
+# stdout: the overlay's model (return 0), or the reason (return 1)
+openrouter_default_model() {
+  local out roots="${ONEX_SKILL_OVERLAY_ROOTS:-}"
+  out="$(models_cmd default-model openrouter 2>&1)" && { printf '%s\n' "$out" | tail -n 1; return 0; }
+  if fetch_model_overlay; then
+    out="$(export ONEX_SKILL_OVERLAY_ROOTS="$RUN_DIR/overlay-roots${roots:+:$roots}"; models_cmd default-model openrouter 2>&1)" &&
+      { printf '%s\n' "$out" | tail -n 1; return 0; }
+  fi
+  printf '%s\n' "$out" | sed -n 's/^Error: //p' | tail -n 1
+  return 1
+}
+
+# cause_of < text -> the line that says why a delegation failed: the last
+# "Error: ..." line, else the last refusal, else nothing. A summary such as "the
+# test delegation exited with status 1" is never the whole message on its own.
+cause_of() {
+  awk '/^Error: /{e=substr($0, 8)} /REFUSED|refused/{r=$0} END{if (e != "") print e; else if (r != "") print r}' |
+    cut -c1-300
+}
+
 setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason>
-  local p="$1" key out err line status model=""
+  local p="$1" key out err line status model="" reason cause
   err="$RUN_DIR/models.err"
   key="$(pending_key "$p")"; set_pending_key "$p" ""
-  [ "$p" = "openrouter" ] && model="$OPENROUTER_MODEL"
+  if [ "$p" = "openrouter" ] && [ -n "$key" ]; then
+    if ! model="$(openrouter_default_model)"; then
+      key=""
+      set_result "$p" "fail:$(printf '%s' "${model:-no overlay declares a default OpenRouter model}" | cut -c1-240) Nothing was stored. To choose a model yourself: onex models add openrouter --model <model id>"
+      return 0
+    fi
+  fi
   if [ -n "$key" ]; then
     out="$(printf '%s' "$key" | models_cmd add "$p" --json ${model:+--model "$model"} 2>"$err")"
   else
@@ -1392,11 +1563,17 @@ setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason
   cat "$err" >>"$LOG" 2>/dev/null
   line="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
   status="$(receipt_field "$line" status)"
+  cause="$({ printf '%s\n' "$out" | grep -vE '^\{'; cat "$err" 2>/dev/null; } | cause_of)"
   case "$status" in
     passed) set_result "$p" "pass:$(receipt_field "$line" model)" ;;
-    failed) set_result "$p" "fail:$(receipt_field "$line" reason | cut -c1-300)" ;;
+    failed)
+      reason="$(receipt_field "$line" reason | cut -c1-300)"
+      case "$reason" in
+        ""|*"exited with status"*) [ -n "$cause" ] && reason="${reason:+$reason: }$cause" ;;
+      esac
+      set_result "$p" "fail:$reason" ;;
     not_set_up) set_result "$p" "fail:no key is stored for it" ;;
-    *) set_result "$p" "fail:$(sed -n 's/^Error: //p' "$err" | tail -n 1 | cut -c1-300)" ;;
+    *) set_result "$p" "fail:$cause" ;;
   esac
   [ "$(result_of "$p")" = "fail:" ] && set_result "$p" "fail:onex models gave no result; see the log"
   rm -f "$err"
@@ -1406,9 +1583,13 @@ phase3() {
   phase_start 3 "onex, local identity and your models" "3-10 minutes, more when Ollama downloads a model"
   local p passed
 
-  say "  Building the workspace dispatch environment (onex)…"
-  retry "build the dispatch venv" nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --proven ||
-    phase_fail "see the log; the script names the exact command to run by hand"
+  if dispatch_venv_current >>"$LOG" 2>&1; then
+    say "  The workspace dispatch environment (onex) already holds the proven set; not rebuilt."
+  else
+    say "  Building the workspace dispatch environment (onex)…"
+    retry "build the dispatch venv" nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --proven ||
+      phase_fail "see the log; the script names the exact command to run by hand"
+  fi
   step "point ~/.local/bin/onex at the workspace wrapper" link_onex ||
     phase_fail "remove ~/.local/bin/onex by hand, then run this again"
   ONEX="$HOME/.local/bin/onex"
@@ -1457,7 +1638,8 @@ phase3() {
   # developer's own work.
   say "  Running one delegation without choosing a model…"
   retry_capture "one onex delegate" delegate_hello ||
-    phase_fail "run 'onex delegate \"Reply with exactly one word: hello\"' to see the error"
+    { LAST_ERR="$(tail -n 60 "$LOG" | cause_of)"; LAST_ERR="${LAST_ERR:-$(last_log_lines)}"
+      phase_fail "run 'onex delegate \"Reply with exactly one word: hello\"' in a new terminal to see the whole error"; }
   say "  Delegation chose $(receipt_field "$CAPTURED" model) ($(receipt_field "$CAPTURED" backend_id))."
   CAPTURED=""
   [ "$OLLAMA_HEADLESS" -eq 1 ] && say "  Ollama is running without its app here; after a restart, start it with 'ollama serve'."
@@ -1874,6 +2056,7 @@ phase6() {
   check "onex starts ($(onex_run --version 2>/dev/null | tail -n 1))" onex_run --version
   check "local identity minted" onex_run local identity
   check "onex is the workspace wrapper, not a PyPI copy" no_shadow
+  check "a new terminal runs the workspace onex (no alias, function or other install)" shell_runs_workspace_onex
   check "workspace floor proven (the onex wrapper delegates)" retry "delegate through the workspace wrapper" workspace_floor
   check "a delegation row in the local store" sqlite_rows
   check "onex metering reads it" onex_run metering
@@ -1883,9 +2066,6 @@ phase6() {
   fi
   check "the full onex plugin installed in Claude Code" plugin_installed onex@omninode-tools-dev
   if [ "$MODE2_OK" -eq 1 ]; then check "local stack healthy" stack_healthy; fi
-  if [ -n "$AMBIENT_FOUND" ]; then
-    say "  ⚠ Your shell profile still exports settings that redirect onex (listed in phase 0)."
-  fi
   if [ "$CHECKS_FAILED" -gt 0 ]; then
     FAILED_STEP="$CHECKS_FAILED check(s) failed"
     phase_fail "the ✘ lines above name what is wrong; fix them and run this again"
@@ -1898,8 +2078,10 @@ main() {
   local p
   say "OmniNode developer onboarding (local runtime). Status file: $STATUS"
   [ "$RESTART" -eq 1 ] && rm -f "$DONE_FILE"
+  bind_workspace_env
   phase0
   [ "$PREFLIGHT_ONLY" -eq 1 ] && { say "Preflight only: nothing was changed."; exit 0; }
+  save_choices
   phase1
   phase2
   phase3

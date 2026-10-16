@@ -16,17 +16,21 @@ THE ORDER, first hit wins, each with its own ``lane_source``:
    ``name`` counts; its ``agentType`` or ``description`` count only when they
    are not a generic agent TYPE (``general-purpose``, ``workflow-subagent``,
    ...), which names a kind of agent, not a lane.
-2. ``env``      -- the session's lane variables, and ONLY when the payload has
+2. ``skill``    -- a forked skill's executor: its sidecar carries only the
+   generic agent type, but its own first message begins ``Base directory for
+   this skill: <dir>/skills/<name>``, which names ``skill:<name>`` (OMN-17427;
+   without it every refusal of a forked ``ledger-write`` read ``unresolved``).
+3. ``env``      -- the session's lane variables, and ONLY when the payload has
    no agent id: a subagent inherits its session's environment, so for a
    child's refusal the env names the parent lane.
-3. ``registry`` -- the lane registry (OMN-18260) for the payload cwd and for
+4. ``registry`` -- the lane registry (OMN-18260) for the payload cwd and for
    every worktree path the tool call names.
-4. ``claim``    -- an open CLAIM row in a bounded tail of the ledger whose
+5. ``claim``    -- an open CLAIM row in a bounded tail of the ledger whose
    ``worktree=`` names that worktree, or failing that whose ``ticket=``
    matches the worktree directory's ticket; used only when exactly ONE lane
    matches.
-5. ``worktree`` -- ``wt:<dir>/<repo>``, spelled as ``pr_ownership_guard`` does.
-6. ``unresolved``.
+6. ``worktree`` -- ``wt:<dir>/<repo>``, spelled as ``pr_ownership_guard`` does.
+7. ``unresolved``.
 
 NEVER A GUESS. Every operand above is a fact somebody recorded: the harness,
 the session that declared its lane, the lane that registered or claimed its
@@ -58,6 +62,7 @@ __all__ = [
     "LANE_SOURCE_ENV",
     "LANE_SOURCE_REGISTRY",
     "LANE_SOURCE_SIDECAR",
+    "LANE_SOURCE_SKILL",
     "LANE_SOURCE_UNRESOLVED",
     "LANE_SOURCE_WORKTREE",
     "LEDGER_TAIL_BYTES",
@@ -65,11 +70,13 @@ __all__ = [
     "claim_lane",
     "resolve_refusal_lane",
     "sidecar_lane",
+    "skill_lane",
     "use_hooks_lib",
     "worktree_of",
 ]
 
 LANE_SOURCE_SIDECAR = "sidecar"
+LANE_SOURCE_SKILL = "skill"
 LANE_SOURCE_ENV = "env"
 LANE_SOURCE_REGISTRY = "registry"
 LANE_SOURCE_CLAIM = "claim"
@@ -112,6 +119,10 @@ _TICKET = re.compile(r"(?i)\bomn-?(\d+)")
 _VAR = re.compile(r"\$\{?(OMNI_HOME|HOME|ONEX_WORKTREES_ROOT|OMNI_WORKTREES_DIR)\}?")
 _TRAILING_SHELL = ";&|)"
 _SIDECAR_KEYS = ("name", "agentType", "description")
+#: The first line the harness writes into a forked skill executor's transcript.
+_SKILL_FIRST_LINE = re.compile(
+    r"\A\s*Base directory for this skill: \S*/skills/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\s*(?:\n|\Z)"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +154,16 @@ def sidecar_lane(meta: Mapping[str, object] | None) -> str:
             continue
         return value.strip()[:_LANE_CHARS]
     return ""
+
+
+def skill_lane(first_message: str) -> str:
+    """``skill:<name>`` when *first_message* opens as a forked skill's prompt, else ``""``.
+
+    Only the first line counts: a later quote of the same words in task text
+    is not the harness naming the skill.
+    """
+    found = _SKILL_FIRST_LINE.match(first_message or "")
+    return f"skill:{found.group(1)}" if found else ""
 
 
 # ---------------------------------------------------------------------------
@@ -423,6 +444,29 @@ def _ledger_path(explicit: str | None, env: Mapping[str, str]) -> Path | None:
 # ---------------------------------------------------------------------------
 
 
+#: A dispatch ROUTE line (OMN-17427): ``ROUTE: band=... model=... effort=...``.
+#: A sidecar ``description`` or a lane variable can carry it, and it is not a lane.
+_ROUTE_LINE = re.compile(r"ROUTE:.*")
+
+
+def lane_cell(value: str) -> str:
+    """*value* reduced to a lane name a ledger row cell can carry, or ``""``.
+
+    The ROUTE line a dispatch prompt carries is dropped wherever it sits, only
+    the first remaining line is kept, and the same character set the registry
+    uses for lane names is enforced (OMN-20883). A lane cell holding the ROUTE
+    line is rejected by the row grammar, and the refusal is then lost.
+    """
+    kept = [
+        line.strip()
+        for line in _ROUTE_LINE.sub("", value or "").splitlines()
+        if line.strip()
+    ]
+    if not kept:
+        return ""
+    return _LANE_SANITIZE.sub("-", kept[0]).strip("-")[:_LANE_CHARS]
+
+
 def resolve_refusal_lane(
     payload: Mapping[str, object] | None,
     *,
@@ -435,7 +479,33 @@ def resolve_refusal_lane(
 ) -> tuple[str, str]:
     """``(lane, lane_source)`` for one refusal. Payload values win over the
     keyword fallbacks. ``lane`` is ``""`` exactly when the source is
-    :data:`LANE_SOURCE_UNRESOLVED`. Never raises."""
+    :data:`LANE_SOURCE_UNRESOLVED`. Never raises. The lane is always a
+    :func:`lane_cell`."""
+    lane, source = _resolve_refusal_lane(
+        payload,
+        cwd=cwd,
+        transcript_path=transcript_path,
+        session_id=session_id,
+        agent_id=agent_id,
+        env=env,
+        ledger=ledger,
+    )
+    cleaned = lane_cell(lane)
+    if not cleaned:
+        return "", LANE_SOURCE_UNRESOLVED
+    return cleaned, source
+
+
+def _resolve_refusal_lane(
+    payload: Mapping[str, object] | None,
+    *,
+    cwd: str | None = None,
+    transcript_path: str | None = None,
+    session_id: str | None = None,
+    agent_id: str | None = None,
+    env: Mapping[str, str] | None = None,
+    ledger: str | None = None,
+) -> tuple[str, str]:
     environment: Mapping[str, str] = os.environ if env is None else env
     data: Mapping[str, object] = payload or {}
 
@@ -460,6 +530,16 @@ def resolve_refusal_lane(
             lane = ""
         if lane:
             return lane, LANE_SOURCE_SIDECAR
+        lane = skill_lane(
+            attribution.read_agent_first_message(
+                t_path or None,
+                s_id or None,
+                a_id,
+                agent_transcript_path=pick("agent_transcript_path", None) or None,
+            )
+        )
+        if lane:
+            return lane, LANE_SOURCE_SKILL
 
     if not a_id:
         for name in LANE_ENV_VARS:

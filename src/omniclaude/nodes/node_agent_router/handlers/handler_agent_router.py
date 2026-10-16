@@ -63,6 +63,10 @@ class HandlerAgentRouter:
         self._init_lock = threading.Lock()
         self._init_failed = False
 
+    async def handle(self, request: ModelAgentRouterRequest) -> ModelAgentRouterResult:
+        """Route the request through the agent router."""
+        return await self.route(request, correlation_id=request.correlation_id)
+
     # ------------------------------------------------------------------
     # ProtocolAgentRouter implementation
     # ------------------------------------------------------------------

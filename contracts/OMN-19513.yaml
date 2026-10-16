@@ -16,6 +16,25 @@ requirements:
     acceptance:
       - id: AC2
         statement: 'AC2: preserve_backlog retains every queued record after failed publication, then publishes every record in order without overflow loss -- falsifier: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k recovery_retains_overflow_then_publishes_every_record fails against the pre-fix drainer'
+  - id: req-hook-capture-raw
+    statement: Every captured hook event and content record carries the raw field values the harness sent, with no scrub and no hash (operator RULING 2026-10-15T04:24:42Z).
+    acceptance:
+      - id: AC3
+        statement: 'AC3: each hook.event content reference carries the raw value and no sha256, and map_hook_stdin takes no scrubber -- falsifier: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py tests/unit/hooks/test_claude_hook_capture_contract.py -q --no-cov -k "raw or digest or no_scrubber" fails against the pre-change producer'
+      - id: AC4
+        statement: 'AC4: content.captured records carry the raw prompt, tool input, tool result and error with no producer redaction, no in-place hash and no secret-store swap -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_omn19551.py tests/unit/hooks/test_failed_call_content_capture_omn18946.py -q --no-cov -k "raw or secret_store" fails against the pre-change producer'
+      - id: AC5
+        statement: 'AC5: payload encryption is one contract setting, off by default, and the omniclaude registry projects the omnimarket publish transform for hook.event and content.captured -- falsifier: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k "encryption or publish_transform" fails against the pre-change contract'
+  - id: req-hook-capture-encryption
+    statement: With the payload_encryption setting on, both capture producers journal an encrypted payload under a key read from the secret store, the same key opens it, and an unreadable key journals nothing; with it off nothing changes. The setting stays off.
+    acceptance:
+      - id: AC6
+        statement: 'AC6: hook.event and content.captured payloads are AES-256-GCM sealed with a key read by key_secret_ref, open to the plaintext payload with the same key, and are not journalled when the key cannot be read -- falsifier: uv run pytest tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov fails against the pre-change producers'
+  - id: req-hook-capture-raw-guard
+    statement: A change that brings a scrub, a content digest or a redaction field back into the hook and content capture producers is refused in CI and in pre-commit (operator RULING 2026-10-15T04:24:42Z).
+    acceptance:
+      - id: AC7
+        statement: 'AC7: the raw-capture guard passes on the producer and fails on each of a digest or redaction field on the content models, a scrub parameter on map_hook_stdin, a retired scrub name in either producer, a digest in the contract content reference and a missing payload_encryption block -- falsifier: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov -k raw_today fails against the producer sources before omniclaude#2767'
 evidence_requirements:
   - kind: tests
     description: Selected configuration survives launchd rendering and missing overlays preserve the previous agent.
@@ -23,6 +42,15 @@ evidence_requirements:
   - kind: tests
     description: Recovery retains overflowing queued records through failure and publishes them in FIFO order without a loss log.
     command: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k recovery_retains_overflow_then_publishes_every_record
+  - kind: tests
+    description: Hook events and content records carry raw values with no scrub and no hash; encryption is one setting, off.
+    command: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py tests/unit/hooks/test_claude_hook_capture_contract.py tests/unit/hooks/test_hook_content_capture_omn19551.py tests/unit/hooks/test_failed_call_content_capture_omn18946.py -q --no-cov
+  - kind: tests
+    description: Payload encryption seals both capture classes with a throwaway key, opens them with the same key, journals nothing without a key and changes nothing when off.
+    command: uv run pytest tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov
+  - kind: tests
+    description: The raw-capture guard accepts the raw producer and refuses each reintroduced scrub, digest or redaction field.
+    command: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ''
@@ -44,3 +72,68 @@ dod_evidence:
         check_value: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k recovery_retains_overflow_then_publishes_every_record
     binds_ac:
       - AC2
+  - id: dod-omn19513-raw-hook-event
+    description: The hook.event producer journals raw content values with no digest and needs no scrubber.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py tests/unit/hooks/test_claude_hook_capture_contract.py -q --no-cov -k "raw or digest or no_scrubber"
+    binds_ac:
+      - AC3
+  - id: dod-omn19513-raw-content
+    description: The content.captured producer journals raw content with no redaction, in-place hash or secret-store swap.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_content_capture_omn19551.py tests/unit/hooks/test_failed_call_content_capture_omn18946.py -q --no-cov -k "raw or secret_store"
+    binds_ac:
+      - AC4
+  - id: dod-omn19513-encryption-setting
+    description: The capture contract declares payload_encryption off by default and the registry projects the omnimarket publish transform for both classes.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k "encryption or publish_transform"
+    binds_ac:
+      - AC5
+  - id: dod-omn19513-payload-encryption
+    description: The payload encryption tests seal both capture classes under a generated throwaway key, open them with it, refuse an unreadable key and leave the off path untouched.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov
+    binds_ac:
+      - AC6
+  - id: dod-omn19513-encryption-container-smoke
+    description: Run the payload encryption smoke tests in a fresh Python container against the checked-out runtime. Both capture classes must seal and open with a throwaway key, refuse unavailable keys and leave the off path unchanged. No production key or service is used.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: 'docker run --rm --volume "$PWD:/workspace:ro" --workdir /workspace --env CI=true ghcr.io/astral-sh/uv:python3.12-bookworm-slim uv run --no-project --with pytest==9.1.1 --with pytest-asyncio==1.3.0 --with pytest-cov==7.1.0 --with python-dotenv==1.2.2 --with pydantic==2.13.4 --with cryptography==50.0.1 --with pyyaml==6.0.3 pytest tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov -p no:cacheprovider'
+    binds_ac:
+      - AC6
+  - id: dod-omn19513-raw-capture-guard
+    description: The guard test passes on the raw producer and its negative controls refuse each reintroduced scrub, digest or redaction field. Registration checks require its pre-commit hook and its unconditional, fail-closed CI refusal-surface step; either registration missing at the merge base fails the evidence.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
+      - check_type: command
+        check_value: >-
+          python -c 'from pathlib import Path; import yaml;
+          config = yaml.safe_load(Path(".pre-commit-config.yaml").read_text());
+          hooks = [h for repo in config["repos"] for h in repo["hooks"] if h["id"] == "raw-capture-guard"];
+          assert len(hooks) == 1, "raw-capture-guard must be registered once";
+          hook = hooks[0];
+          assert hook["entry"] == "bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov";
+          assert hook["language"] == "system" and hook["pass_filenames"] is False and "pre-commit" in hook["stages"]'
+      - check_type: command
+        check_value: >-
+          python -c 'from pathlib import Path; import yaml;
+          workflow = yaml.safe_load(Path(".github/workflows/ci.yml").read_text());
+          steps = workflow["jobs"]["refusal-surface"]["steps"];
+          guards = [s for s in steps if s.get("run") == "uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov"];
+          assert len(guards) == 1, "CI refusal-surface must run the raw-capture guard once";
+          assert not guards[0].get("continue-on-error", False) and "if" not in guards[0]'
+    binds_ac:
+      - AC7

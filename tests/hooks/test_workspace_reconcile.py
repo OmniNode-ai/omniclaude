@@ -208,6 +208,8 @@ class _Workspace:
             # Pin mode resolution so the result never depends on where pytest
             # was invoked from.
             "OMNICLAUDE_MODE": "full",
+            # OMN-21149: session-start output is opt-in; these cases test it.
+            "ONEX_SESSION_OPTIN": "1",
         }
         env.update(overrides)
         return env
@@ -893,13 +895,9 @@ def test_host_drift_prints_when_workspace_status_is_absent(ws: _Workspace) -> No
 def test_host_drift_respects_silent_intent(
     ws: _Workspace, tmp_path: Path, intent: str
 ) -> None:
-    import shutil
-
-    # The planted healthy tree controls the independent load-path alarm.
+    # The planted healthy tree (lib included, OMN-21149) controls the
+    # independent load-path alarm.
     clone, _ = _plant_hook_tree(tmp_path, "omniclaude")
-    shutil.copytree(
-        _REPO_ROOT / "plugins" / "onex" / "lib", clone / "plugins" / "onex" / "lib"
-    )
     _write_host_status(ws, _HOST_ALERT, 40)
     result = subprocess.run(
         [
@@ -1014,6 +1012,10 @@ def _plant_hook_tree(root: Path, name: str) -> tuple[Path, Path]:
     (seed / "plugins" / "onex").mkdir(parents=True)
     shutil.copytree(
         _REPO_ROOT / "plugins" / "onex" / "hooks", seed / "plugins" / "onex" / "hooks"
+    )
+    # OMN-21149: the session-start opt-in gate lives in plugins/onex/lib.
+    shutil.copytree(
+        _REPO_ROOT / "plugins" / "onex" / "lib", seed / "plugins" / "onex" / "lib"
     )
     _git("init", "--quiet", "-b", "dev", cwd=seed)
     _git("config", "user.email", "test@example.com", cwd=seed)

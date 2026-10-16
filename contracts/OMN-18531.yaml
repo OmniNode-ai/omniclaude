@@ -1,0 +1,103 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-18531
+title: "Claude Code context service: compaction first"
+summary: >
+  Plan task TA.20a, the omniclaude half: hook_content_capture.py accepts the
+  checkpoint kind, so the session checkpoint JSON omni.session-checkpoint/1
+  reaches the content-captured topic through the capture-redaction contract.
+  The checkpoint_hook.py caller and the downstream
+  projection models are separate PRs of the same task.
+  Plan task T0.3 AC8 adds the hook-inventory gate over the adapter contract's
+  client_bindings in the installed omnimarket package.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-checkpoint-capture-kind
+    statement: A written session checkpoint is journalled as one checkpoint content item through the existing capture path.
+    acceptance:
+      - id: AC1
+        statement: "A checkpoint write yields one checkpoint row whose reassembled content's sha256 equals the written file's, for a single chunk and for a file larger than one chunk -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'matching_the_written_file or larger_than_one_chunk or verbatim' fails with no checkpoint row or a hash mismatch"
+      - id: AC2
+        statement: "With OMNICLAUDE_CONTENT_CAPTURE=0 the checkpoint kind journals nothing -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'opt_out or matching_the_written_file' fails when a record is journalled or enabled checkpoint capture fails"
+      - id: AC3
+        statement: "The fail-closed refusal when the drainer cannot publish content.captured covers the checkpoint kind, and a credential in the checkpoint never crosses -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'cannot_publish or credential' fails when a record is journalled or the planted value crosses"
+  - id: req-omn18531-t03-inventory-gate
+    statement: The hook-inventory gate checks an installed Claude Code binding against the adapter contract's client_bindings section.
+    acceptance:
+    - id: AC8
+      statement: 'AC8: the hook-inventory gate fails when the installed binding registers an event absent from `client_bindings`, and runs in the existing
+        required `hook-inventory-gate` check -- falsifier: the gate exits 0 on that fixture, or the workflow does not call it.'
+  - id: req-omn18531-mod-file-growth-pin
+    statement: A baselined script on a mod surface cannot gain code lines in this repository (operator ruling 2026-10-15T08:14:15Z, canonical shapes for all mod work).
+    acceptance:
+    - id: AC9
+      statement: 'AC9: the canonical-file-shape pre-commit hook and the required canonical-file-shape CI job run omnibase_core at a commit carrying the mod-file-growth rule, so a code line added to a baselined script under plugins/, .claude/ or a hooks/ directory is refused -- falsifier: with the pin at 70f7ceda44af968ccf26264ecd429cfd27503971 the planted growth is accepted and tests/ci/test_mod_file_growth_pin_omn18531.py fails.'
+evidence_requirements:
+  - kind: tests
+    description: "The checkpoint capture kind tests pass beside the existing content capture tests"
+    command: "uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py tests/unit/hooks/test_hook_content_capture_omn19551.py -q"
+  - kind: tests
+    description: Inventory gate over client_bindings
+    command: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov
+  - kind: tests
+    description: Pinned ratchet refuses code growth and accepts comment growth in a baselined mod script
+    command: uv run pytest tests/ci/test_mod_file_growth_pin_omn18531.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-checkpoint-row-matches-file
+    binds_ac:
+      - AC1
+    description: >
+      A checkpoint write yields one checkpoint row whose reassembled content
+      hashes to the written file, including a file split across chunks.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'matching_the_written_file or larger_than_one_chunk or verbatim'"
+  - id: dod-checkpoint-opt-out-journals-nothing
+    binds_ac:
+      - AC2
+    description: >
+      OMNICLAUDE_CONTENT_CAPTURE=0 stops the checkpoint kind like every other
+      kind; the enabled checkpoint write is the positive control.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'opt_out or matching_the_written_file'"
+  - id: dod-checkpoint-refusals-fail-closed
+    binds_ac:
+      - AC3
+    description: >
+      A drainer that cannot publish content.captured stops the checkpoint
+      kind, and a credential-shaped span never crosses.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py -q -k 'cannot_publish or credential'"
+  - id: dod-omn-18531-t03-ac8
+    description: The hook-inventory gate reports an installed binding or event absent from client_bindings, exits 1, and is run by the required hook-inventory-gate
+      workflow.
+    source: manual
+    checks:
+    - check_type: test_passes
+      check_value: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -k ac8 -q --no-cov
+      cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+    - AC8
+  - id: dod-omn-18531-ac9
+    description: The pinned canonical-file-shape ratchet refuses a code line added to a baselined mod script, accepts a comment line, and the hook and CI job pin one commit.
+    source: manual
+    checks:
+    - check_type: test_passes
+      check_value: uv run pytest tests/ci/test_mod_file_growth_pin_omn18531.py -q --no-cov
+      cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+    - AC9

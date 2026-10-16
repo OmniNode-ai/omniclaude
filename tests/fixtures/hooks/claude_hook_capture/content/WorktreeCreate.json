@@ -6,10 +6,7 @@
     "field": "name",
     "hook_event_name": "WorktreeCreate",
     "length": 21,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "3773bf33cbd0057b28e15fbfef7549e578ce97546891581d44c6d3c6582e640e",
     "value": "private-worktree-name"
   }
 ]

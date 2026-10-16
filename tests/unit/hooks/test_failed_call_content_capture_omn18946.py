@@ -55,7 +55,6 @@ def jdir(tmp_path: Path) -> Path:
 def _capture_on(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv(capture_mod.OPT_OUT_ENV, raising=False)
     monkeypatch.delenv(claude_capture.OPT_OUT_ENV, raising=False)
-    monkeypatch.setattr(capture_mod, "onex_home", lambda: tmp_path / "no-onex")
     monkeypatch.setattr(claude_capture, "lane_grant_pending", lambda: False)
 
 
@@ -100,7 +99,8 @@ def test_a_failed_call_stores_its_input_and_error_text(jdir: Path) -> None:
         assert record["command"] == "git push origin dev"
 
 
-def test_a_failed_call_is_redacted_like_a_completed_one(jdir: Path) -> None:
+def test_a_failed_call_is_captured_raw_like_a_completed_one(jdir: Path) -> None:
+    """OMN-19513: no producer redaction on a failed call either."""
     capture_mod.capture(
         _failure_stdin(
             session_id=SESSION,
@@ -113,9 +113,13 @@ def test_a_failed_call_is_redacted_like_a_completed_one(jdir: Path) -> None:
 
     records = _records(jdir)
     assert len(records) == 2
-    assert GITHUB_FAKE not in json.dumps(records)
-    # The producer's pass names what it removed; the fan-out stamps the state.
-    assert any(r["producer_redaction"] for r in records)
+    by_kind = {r["content_kind"]: r for r in records}
+    assert GITHUB_FAKE in by_kind["tool_input"]["content"]
+    assert (
+        by_kind["tool_error"]["content"]
+        == f"Exit code 22\nrejected token {GITHUB_FAKE}"
+    )
+    assert not any("producer_redaction" in r for r in records)
 
 
 def test_a_failed_call_without_an_error_text_stores_the_input_only(

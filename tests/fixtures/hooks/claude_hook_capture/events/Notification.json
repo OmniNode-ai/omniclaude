@@ -6,13 +6,13 @@
       "content_record_id": "94f83b1c-ca9d-5f2f-865f-5d8da038d679",
       "field": "title",
       "length": 26,
-      "sha256": "c07ecaccdee760f3850cd2fcd290159fa16738aedc8bcef69211504f55587e7d"
+      "value": "private notification title"
     },
     {
       "content_record_id": "ea9776b8-dee4-5a7f-84bb-401da01eb6b4",
       "field": "message",
       "length": 28,
-      "sha256": "a540603da8d458cf0f7ed30db40d64156418c7724a83b705eda0f607346d3f6b"
+      "value": "private notification message"
     }
   ],
   "emitted_at": "2026-09-26T12:00:04Z",
@@ -41,14 +41,14 @@
       "content_record_id": "ea9776b8-dee4-5a7f-84bb-401da01eb6b4",
       "field": "message",
       "length": 28,
-      "sha256": "a540603da8d458cf0f7ed30db40d64156418c7724a83b705eda0f607346d3f6b"
+      "value": "private notification message"
     },
     "notification_type": "permission_prompt",
     "title_ref": {
       "content_record_id": "94f83b1c-ca9d-5f2f-865f-5d8da038d679",
       "field": "title",
       "length": 26,
-      "sha256": "c07ecaccdee760f3850cd2fcd290159fa16738aedc8bcef69211504f55587e7d"
+      "value": "private notification title"
     }
   },
   "schema_version": "1.0.0"

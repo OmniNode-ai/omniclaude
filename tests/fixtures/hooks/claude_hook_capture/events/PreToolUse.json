@@ -6,7 +6,7 @@
       "content_record_id": "6087be50-80f5-50a7-b242-f5fcbf9b977f",
       "field": "tool_input",
       "length": 41,
-      "sha256": "833d79ffb6a168f98c361eb614e79e4be7bbf0701edcfa5c02d7ecb54ab865d9"
+      "value": "{\"command\":\"printf fixture\",\"timeout\":30}"
     }
   ],
   "emitted_at": "2026-09-26T12:00:00Z",
@@ -41,7 +41,7 @@
       "content_record_id": "6087be50-80f5-50a7-b242-f5fcbf9b977f",
       "field": "tool_input",
       "length": 41,
-      "sha256": "833d79ffb6a168f98c361eb614e79e4be7bbf0701edcfa5c02d7ecb54ab865d9"
+      "value": "{\"command\":\"printf fixture\",\"timeout\":30}"
     },
     "tool_name": "Bash"
   },

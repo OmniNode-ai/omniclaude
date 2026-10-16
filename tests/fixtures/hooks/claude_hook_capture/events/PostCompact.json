@@ -6,7 +6,7 @@
       "content_record_id": "463fcb81-b4fb-5997-af0c-88a6463ac70e",
       "field": "compact_summary",
       "length": 23,
-      "sha256": "d9a5b651e3a6436253f52f0f8ccdf0f0adbf439324674a1da0d770af94770a49"
+      "value": "private compact summary"
     }
   ],
   "emitted_at": "2026-09-26T12:00:14Z",
@@ -34,7 +34,7 @@
       "content_record_id": "463fcb81-b4fb-5997-af0c-88a6463ac70e",
       "field": "compact_summary",
       "length": 23,
-      "sha256": "d9a5b651e3a6436253f52f0f8ccdf0f0adbf439324674a1da0d770af94770a49"
+      "value": "private compact summary"
     },
     "hook_event_name": "PostCompact",
     "trigger": "manual"

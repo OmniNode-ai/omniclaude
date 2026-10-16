@@ -98,6 +98,20 @@ requirements:
       - id: "AC14"
         statement: |-
           AC14: ci.yml, contract-validation.yml, the deploy gate workflows and the deploy gate action and validator carry no non-comment line naming onex_change_control, nothing imports onex_change_control, and scripts/deploy-gate/checkout-occ-contracts.sh is absent -- falsifier: uv run pytest tests/ci/test_workflow_dependency_refs_off_occ_omn20074.py -q --no-cov fails at the merge base
+  - id: "req-omn20074-code-off-occ"
+    statement: |-
+      No Python module in omniclaude imports the onex_change_control package, and the script and code references to the change-control repository that no live caller needs are gone.
+    acceptance:
+      - id: "AC12"
+        statement: |-
+          AC12: no Python module under src, plugins, scripts or tests imports onex_change_control, the DoD evidence runner demotes an inert check with no change-control engine importable, the OCC materialization script and its test are deleted, script defaults no longer target the change-control repository, and the alias registry rejects its retired names -- falsifier: uv run pytest tests/ci/test_no_occ_code_imports_omn20074.py tests/lib/test_dod_evidence_runner.py tests/scripts/test_occ_repo_retirement_omn20074.py -q --no-cov
+  - id: "req-omn20074-dead-companion-gate"
+    statement: |-
+      omniclaude must not host the OCC companion-merged gate script once no workflow runs it, and the PR-body stamp guard that mirrored its stamp pattern must pin that pattern itself.
+    acceptance:
+      - id: "AC16"
+        statement: |-
+          AC16: scripts/ci/check_occ_companion_merged.py and tests/ci/test_check_occ_companion_merged.py are absent, the canonical-file-shape baseline lists neither, and the stamp guard policy pattern and flags equal the literal pin in tests/hooks/test_pr_body_stamp_guard.py -- falsifier: uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py tests/hooks/test_pr_body_stamp_guard.py -q --no-cov fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -135,6 +149,12 @@ evidence_requirements:
   - kind: tests
     description: "No workflow, deploy gate file or import names the change control repository or package."
     command: "uv run pytest tests/ci/test_workflow_dependency_refs_off_occ_omn20074.py -q --no-cov"
+  - kind: tests
+    description: "No module imports the change-control package, the inert-check predicate is local, and script defaults and aliases no longer target the retired repository."
+    command: "uv run pytest tests/ci/test_no_occ_code_imports_omn20074.py tests/lib/test_dod_evidence_runner.py tests/scripts/test_occ_repo_retirement_omn20074.py -q --no-cov"
+  - kind: tests
+    description: "The dead companion-merged gate script and its test are gone and the stamp guard pins its own pattern."
+    command: "uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py tests/hooks/test_pr_body_stamp_guard.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -243,3 +263,19 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_workflow_dependency_refs_off_occ_omn20074.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC14"]
+  - id: dod-omn20074-code-off-occ
+    description: "The AST scan finds no onex_change_control import in src, plugins, scripts or tests, the DoD evidence runner demotes an inert check with the change-control package unimportable, and script defaults and aliases no longer target the retired repository."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_no_occ_code_imports_omn20074.py tests/lib/test_dod_evidence_runner.py tests/scripts/test_occ_repo_retirement_omn20074.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC12"]
+  - id: dod-omn20074-dead-companion-gate
+    description: "The structural test proves the companion-merged gate script and its test are deleted and unlisted, and the stamp guard test pins the policy pattern as a literal."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py tests/hooks/test_pr_body_stamp_guard.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC16"]

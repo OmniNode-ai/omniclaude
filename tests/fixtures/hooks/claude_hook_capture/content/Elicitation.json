@@ -6,10 +6,7 @@
     "field": "message",
     "hook_event_name": "Elicitation",
     "length": 27,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "a4c17af9eabc071c5c66c8bb4cc55a1f00844f5d14de8ef27edfbf4c28a1caa4",
     "value": "private elicitation message"
   }
 ]

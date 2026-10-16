@@ -929,16 +929,13 @@ def test_a_model_config_without_the_ollama_block_is_refused(tmp_path: Path) -> N
 
 
 def test_the_script_holds_no_model_name_port_or_model_path() -> None:
-    """The hardcoded-model-config gate's rule: those live in the model config.
-    The one exception is the fixed OpenRouter model (team decision 2026-10-13),
-    which omnibase_core's policy admits as a VENDOR_DEFAULT file."""
-    text = "\n".join(
-        ln
-        for ln in SCRIPT.read_text().splitlines()
-        if ln != f'OPENROUTER_MODEL="{_OR_FIXED}"'
-    )
-    assert not re.search(r"qwen|gpt-oss|llama[0-9]|11434", text)
+    """The hardcoded-model-config gate's rule: those live in the model config, and
+    the OpenRouter default lives in the onex-overlays overlay (OMN-20844, AC3), so
+    the script names no model at all."""
+    text = SCRIPT.read_text()
+    assert not re.search(r"qwen|llama[0-9]|11434", text)
     assert "/v1/chat/completions" not in text
+    assert not re.search(r"^OPENROUTER_MODEL=.+", text.replace('=""', "="), re.M)
 
 
 def test_ollama_routes_are_written_and_a_foreign_file_is_kept(tmp_path: Path) -> None:
@@ -1308,11 +1305,20 @@ def _phase3_harness(
     answers: dict[str, str],
     skipped: str = "",
     preamble: str = 'KEY_GEMINI="AIza-g"\n',
+    overlay: str | None = None,
+    own_roots: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Phase 3's model loop with `onex models` and the delegation faked.
 
     ``answers`` maps a provider to the JSON line the fake `onex models` prints.
     Each call's arguments, and whether a key came on stdin, land in ``calls``.
+
+    ``overlay`` is the text of the node_model_setup_effect overlay the faked
+    ``gh`` serves (``None``: the login cannot read it). The fake ``onex models
+    default-model`` reads ``openrouter_default_model`` from the overlay under
+    ``ONEX_SKILL_OVERLAY_ROOTS``, as the real command does, and refuses without it.
+    ``own_roots`` points ``ONEX_SKILL_OVERLAY_ROOTS`` at an overlay the developer
+    already has, so the script must not fetch one.
     """
     fake = tmp_path / "onex-models"
     calls = tmp_path / "calls"
@@ -1320,9 +1326,32 @@ def _phase3_harness(
     fake.write_text(
         "#!/bin/bash\n"
         f'stdin="$(cat)"; echo "$* stdin=${{#stdin}}" >>"{calls}"\n'
+        'if [ "$1" = default-model ]; then\n'
+        '  for r in $(echo "$ONEX_SKILL_OVERLAY_ROOTS" | tr : " "); do\n'
+        '    f="$r/node_model_setup_effect/overlay.yaml"\n'
+        '    [ -f "$f" ] && { sed -n "s/^openrouter_default_model: *//p" "$f"; exit 0; }\n'
+        "  done\n"
+        '  echo "Error: node_model_setup_effect: openrouter_default_model is not configured" >&2; exit 1\n'
+        "fi\n"
         f'case " $* " in\n{cases}esac\n'
     )
     fake.chmod(0o755)
+    gh_calls = tmp_path / "gh-calls"
+    served = tmp_path / "overlay-served.yaml"
+    if overlay is not None:
+        served.write_text(overlay)
+    own = tmp_path / "own-roots"
+    if own_roots:
+        (own / "node_model_setup_effect").mkdir(parents=True)
+        (own / "node_model_setup_effect" / "overlay.yaml").write_text(
+            "openrouter_default_model: fixture-vendor/developers-own-model\n"
+        )
+    roots = f'export ONEX_SKILL_OVERLAY_ROOTS="{own}"\n' if own_roots else ""
+    gh_fn = (
+        f'gh() {{ echo "$*" >>"{gh_calls}"; '
+        + (f'cat "{served}"' if overlay is not None else "return 1")
+        + "; }\n"
+    )
     snippet = (
         f'LOG=/dev/null; STATUS={tmp_path}/status; RUN_DIR={tmp_path}; MODELS="{" ".join(answers)}"; SKIPPED="{skipped}"\n'
         "say() { printf '%s\\n' \"$*\"; }\n"
@@ -1338,12 +1367,17 @@ def _phase3_harness(
             "passed_models",
             "result_line",
             "record_model_status",
+            "fetch_model_overlay",
+            "openrouter_default_model",
             "setup_model",
             "count_words",
             "labels",
         )
         + f'\nmodels_cmd() {{ "{fake}" "$@"; }}\n'
-        + 'KEY_OPENROUTER=""; KEY_OPENAI=""; OPENROUTER_MODEL=""\n'
+        + 'KEY_OPENROUTER=""; KEY_OPENAI=""\n'
+        + 'MODEL_OVERLAY_REPO="fixture/overlay-repo"; MODEL_OVERLAY_FILE="fixture/overlay.yaml"\n'
+        + roots
+        + gh_fn
         + preamble
         + 'for p in $MODELS; do setup_model "$p"; say "$(result_line "$p")"; done\n'
         + 'for p in $SKIPPED; do say "$(result_line "$p")"; done\n'
@@ -1405,28 +1439,24 @@ def test_phase_4_accepts_an_answer_from_any_key_that_passed_and_nothing_else() -
 
 
 # ---------------------------------------------------------------------------
-# OpenRouter runs one fixed model: onboarding asks no model question, and
-# `onex models add openrouter --model` always gets qwen/qwen3.8-27b.
+# OpenRouter runs the default model the onex overlay declares (OMN-20844, AC3):
+# onboarding asks no model question, the script names no model, and
+# `onex models add openrouter --model` gets what `onex models default-model
+# openrouter` reads from the overlay. Every model id below is a fixture.
 # ---------------------------------------------------------------------------
 
 # The merge-base control runs these against a script that asks for a model:
 # fail inside the verifier's 30 s per-check ceiling, not after 120 s.
 _OR_TIMEOUT = 10.0
 _OR_KEY = "sk-or-v1-test"
-_OR_FIXED = "qwen/qwen3.8-27b"
+_OR_DEFAULT = "fixture-vendor/default-model-a"
+_OR_OVERLAY = f"openrouter_default_model: {_OR_DEFAULT}\n"
+_OR_CHANGE = "onex models add openrouter --model"
 
 
-def _openrouter_model_line() -> str:
-    """The script's own OPENROUTER_MODEL assignment, as phase 3 sees it."""
-    return next(
-        ln
-        for ln in SCRIPT.read_text().splitlines()
-        if ln.startswith("OPENROUTER_MODEL=")
-    )
-
-
-def test_openrouter_fixed_model_asks_no_model_question(tmp_path: Path) -> None:
-    """After the OpenRouter key, no model list and no question: the fixed model is named."""
+def test_openrouter_overlay_model_asks_no_model_question(tmp_path: Path) -> None:
+    """After the OpenRouter key, no model list, no question and no model id in the
+    script's words: the default comes from the overlay, and the change command is named."""
     out, _ = _preflight(
         tmp_path,
         [
@@ -1437,29 +1467,85 @@ def test_openrouter_fixed_model_asks_no_model_question(tmp_path: Path) -> None:
         timeout=_OR_TIMEOUT,
     )
     assert "Choose one OpenRouter model" not in out
-    assert f"OpenRouter model: {_OR_FIXED}" in out
+    assert "OpenRouter model: the default the onex overlay declares" in out
+    assert _OR_CHANGE in out
     summary = out.split("Ready to set up:")[1]
-    assert f"OpenRouter  key received, model {_OR_FIXED}" in summary
+    assert "OpenRouter  key received, default model from the overlay" in summary
     assert _OR_KEY not in out  # never echoed
 
 
-def test_openrouter_fixed_model_reaches_onex_models_add(tmp_path: Path) -> None:
-    """`onex models add openrouter --model qwen/qwen3.8-27b`, key on stdin; the
-    pinned test delegation answers on that model."""
+def test_openrouter_overlay_model_reaches_onex_models_add(tmp_path: Path) -> None:
+    """The overlay's model is read with `onex models default-model openrouter` and
+    passed to `onex models add openrouter --model`, key on stdin; the pinned test
+    delegation answers on that model. The overlay is fetched once, for this login."""
     result = _phase3_harness(
         tmp_path,
         {
-            "openrouter": f'{{"provider": "openrouter", "status": "passed", "model": "{_OR_FIXED}"}}'
+            "openrouter": f'{{"provider": "openrouter", "status": "passed", "model": "{_OR_DEFAULT}"}}'
         },
-        preamble=f'KEY_OPENROUTER="{_OR_KEY}"; {_openrouter_model_line()}\n',
+        preamble=f'KEY_OPENROUTER="{_OR_KEY}"\n',
+        overlay=_OR_OVERLAY,
     )
     calls = (tmp_path / "calls").read_text().splitlines()
-    assert calls == [f"add openrouter --json --model {_OR_FIXED} stdin={len(_OR_KEY)}"]
-    assert f"OpenRouter  ✓ answered ({_OR_FIXED})" in result.stdout, result.stderr
+    assert calls == [
+        "default-model openrouter stdin=0",
+        "default-model openrouter stdin=0",
+        f"add openrouter --json --model {_OR_DEFAULT} stdin={len(_OR_KEY)}",
+    ]
+    assert len((tmp_path / "gh-calls").read_text().splitlines()) == 1
+    assert f"OpenRouter  ✓ answered ({_OR_DEFAULT})" in result.stdout, result.stderr
     assert "passed: openrouter" in result.stdout
 
 
-def test_openrouter_fixed_model_unattended_with_a_stored_key_asks_nothing(
+def test_openrouter_overlay_model_uses_an_overlay_the_developer_already_has(
+    tmp_path: Path,
+) -> None:
+    result = _phase3_harness(
+        tmp_path,
+        {
+            "openrouter": '{"provider": "openrouter", "status": "passed", "model": "fixture-vendor/developers-own-model"}'
+        },
+        preamble=f'KEY_OPENROUTER="{_OR_KEY}"\n',
+        overlay=_OR_OVERLAY,
+        own_roots=True,
+    )
+    calls = (tmp_path / "calls").read_text().splitlines()
+    assert calls == [
+        "default-model openrouter stdin=0",
+        f"add openrouter --json --model fixture-vendor/developers-own-model stdin={len(_OR_KEY)}",
+    ]
+    assert not (tmp_path / "gh-calls").exists()
+    assert "passed: openrouter" in result.stdout, result.stderr
+
+
+def test_openrouter_overlay_model_without_an_overlay_stores_nothing_and_names_the_way_out(
+    tmp_path: Path,
+) -> None:
+    """No overlay declares a default: OpenRouter ends with the reason and the
+    command that names a model, no key reaches `onex models add`, and the other
+    models carry on."""
+    result = _phase3_harness(
+        tmp_path,
+        {
+            "gemini": '{"provider": "gemini", "status": "passed", "model": "fixture-vendor/gemini-a"}',
+            "openrouter": '{"provider": "openrouter", "status": "passed", "model": "x"}',
+        },
+        preamble=f'KEY_GEMINI="AIza-g"; KEY_OPENROUTER="{_OR_KEY}"\n',
+        overlay=None,
+    )
+    calls = (tmp_path / "calls").read_text().splitlines()
+    assert not [c for c in calls if c.startswith("add openrouter")]
+    out = result.stdout
+    assert "OpenRouter  ✗ " in out, result.stderr
+    assert "openrouter_default_model is not configured" in out
+    assert _OR_CHANGE in out
+    assert "OpenRouter  ✓" not in out
+    assert "Gemini      ✓ answered (fixture-vendor/gemini-a)" in out
+    assert "passed: gemini" in out
+    assert _OR_KEY not in out
+
+
+def test_openrouter_overlay_model_unattended_with_a_stored_key_asks_nothing(
     tmp_path: Path,
 ) -> None:
     """--provider openrouter, no terminal, a stored key: no question, and

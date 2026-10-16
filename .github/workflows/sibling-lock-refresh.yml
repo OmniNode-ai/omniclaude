@@ -138,7 +138,6 @@ jobs:
             --package omnimarket
 
       - name: Refresh sibling package locks
-        id: refresh
         env:
           REQUESTED_PACKAGES: ${{ github.event.inputs.packages }}
         run: |
@@ -155,21 +154,47 @@ jobs:
           done
           echo "Refreshing: ${ARGS[*]}"
           uv lock "${ARGS[@]}"
+
+      # OMN-17427: the omnimarket rev this lock now pins is the rev Registry
+      # Consistency reads omnimarket at (ci.yml `om_pin`, OMN-20001), and at
+      # that rev it compares the capture-redaction mirror against omnimarket's
+      # owning copy (OMN-18357). Moving the pin without re-deriving the mirror
+      # opened a bot PR that was red by construction whenever the bump crossed
+      # an omnimarket change to that contract (omniclaude#2770, OMN-18946).
+      # The rev is read back out of uv.lock with ci.yml's own grep, never taken
+      # from the clone head: relock_git_sources.py leaves the pin where it was
+      # when it refuses a non-descendant, and the mirror must match the pin.
+      - name: Re-derive the capture-contract mirror at the pinned omnimarket rev
+        run: |
+          set -euo pipefail
+          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
+          git -C .clones/omnimarket -c advice.detachedHead=false checkout --quiet "$rev"
+          uv run python scripts/validation/generate_event_registry.py \
+            --daemon-registry .clones/omnimarket/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml \
+            --sync-capture-contract
+
+      - name: Detect the refresh delta
+        id: delta
+        run: |
+          set -euo pipefail
           # pyproject.toml moves only when a clone-governed rev advanced; the
-          # lock then follows it through this same `uv lock`. Both are part of
+          # lock then follows it through the same `uv lock`. Both are part of
           # one change and neither is committable alone — uv refuses to resolve
           # a tree where the dependency string and [tool.uv.sources] disagree.
-          if git diff --quiet -- uv.lock pyproject.toml; then
+          # The capture-contract mirror is derived from that rev and rides with
+          # it (OMN-17427).
+          if git diff --quiet -- uv.lock pyproject.toml src/omniclaude/hooks/contracts/capture_redaction.yaml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "uv.lock unchanged — all sibling pins already fresh."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "Sibling lock delta:"
-            git --no-pager diff --stat -- uv.lock pyproject.toml
+            git --no-pager diff --stat -- uv.lock pyproject.toml src/omniclaude/hooks/contracts/capture_redaction.yaml
           fi
 
       - name: Open refresh PR
-        if: steps.refresh.outputs.changed == 'true'
+        if: steps.delta.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -191,7 +216,7 @@ jobs:
           git config user.name "onexbot-occ-writer[bot]"
           git config user.email "307849072+onexbot-occ-writer[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
-          git add uv.lock pyproject.toml
+          git add uv.lock pyproject.toml src/omniclaude/hooks/contracts/capture_redaction.yaml
           git commit -m "chore(deps, OMN-13902): refresh omninode sibling locks [bot]" \
             --trailer "Onex-Workflow: ${GITHUB_WORKFLOW}" \
             --trailer "Onex-Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

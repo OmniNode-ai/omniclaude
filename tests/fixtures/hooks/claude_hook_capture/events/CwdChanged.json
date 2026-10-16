@@ -6,13 +6,13 @@
       "content_record_id": "8f479a4b-c217-5b8e-a38d-70ecf27234a2",
       "field": "old_cwd",
       "length": 15,
-      "sha256": "af660145d7e252b12f6730ae89170f71cde00eee2d156ac5319065c466448bca"
+      "value": "/restricted/old"
     },
     {
       "content_record_id": "546900a4-34dd-550c-969c-763ea4b17aaa",
       "field": "new_cwd",
       "length": 15,
-      "sha256": "5621147e22c0ba6c22f34b903d778f9d1a7ce281e014b84e68be2058877a50ed"
+      "value": "/restricted/new"
     }
   ],
   "emitted_at": "2026-09-26T12:00:29Z",
@@ -41,13 +41,13 @@
       "content_record_id": "546900a4-34dd-550c-969c-763ea4b17aaa",
       "field": "new_cwd",
       "length": 15,
-      "sha256": "5621147e22c0ba6c22f34b903d778f9d1a7ce281e014b84e68be2058877a50ed"
+      "value": "/restricted/new"
     },
     "old_cwd_ref": {
       "content_record_id": "8f479a4b-c217-5b8e-a38d-70ecf27234a2",
       "field": "old_cwd",
       "length": 15,
-      "sha256": "af660145d7e252b12f6730ae89170f71cde00eee2d156ac5319065c466448bca"
+      "value": "/restricted/old"
     }
   },
   "schema_version": "1.0.0"

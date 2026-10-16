@@ -1,0 +1,38 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20844
+title: "Onboarding takes the OpenRouter default model from the onex overlay"
+summary: >
+  The onboarding script named an OpenRouter model itself. It now names none:
+  phase 3 reads the default with `onex models default-model openrouter`, which
+  resolves it from the node_model_setup_effect overlay (fetched once for the
+  developer's GitHub login when no overlay is reachable), passes it to
+  `onex models add openrouter --model`, and with no overlay declaring a default
+  ends OpenRouter with the reason and nothing stored while the other models carry
+  on. The developer changes the model afterwards with one command.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20844-onboarding-overlay-model
+    statement: "Onboarding selects the default OpenRouter model declared in the onboarding overlay, with no model id in code."
+    acceptance:
+      - id: "AC3"
+        statement: |-
+          AC3: onboarding selects the default OpenRouter model declared in the onboarding overlay, with no model id in code, and the customer can change it with one documented command (`onex models add openrouter --model <id>`) -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k "openrouter_overlay_model or holds_no_model_name"
+evidence_requirements:
+  - kind: tests
+    description: "The overlay's fixture model reaches onex models add, a developer's own overlay is used unfetched, no overlay ends OpenRouter with the reason and nothing stored, the script holds no model id, and no model question is asked"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k \"openrouter_overlay_model or holds_no_model_name\""
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20844-onboarding-overlay-model
+    description: "The OpenRouter model is read from the overlay with `onex models default-model openrouter` and passed to `onex models add openrouter --model`; with no overlay reachable OpenRouter ends with the reason and nothing is stored; the script names no model; the change command is shown. The provider and the overlay are stand-ins (fixture ids); the live walk is the onboarding walk."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k \"openrouter_overlay_model or holds_no_model_name\""
+    binds_ac:
+      - AC3

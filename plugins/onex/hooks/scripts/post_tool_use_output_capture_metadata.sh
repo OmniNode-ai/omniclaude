@@ -14,6 +14,8 @@ HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
 LOG_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/logs/post-tool-use-output-capture-metadata.log"
 [[ -d "${LOG_FILE%/*}" ]] || mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
+# OMN-21149: an observer; a missing interpreter is a skip, never a failed hook.
+export OMNICLAUDE_HOOK_CRITICALITY="advisory"
 source "${HOOKS_DIR}/scripts/common.sh" 2>/dev/null || { cat >/dev/null; exit 0; }
 onex_hook_gate POST_TOOL_OUTPUT_SUPPRESSOR || { cat >/dev/null; exit 0; }
 INPUT="$(cat)"

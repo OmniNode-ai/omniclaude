@@ -464,6 +464,8 @@ def test_workflow_shape_has_one_app_authenticated_dev_bump() -> None:
 
 VALIDATOR = REPO_ROOT / "scripts/validation/validate_plugin_version_bump.py"
 GATE_WORKFLOW = REPO_ROOT / ".github/workflows/plugin-version-bump-gate.yml"
+GATE_JOB_ID = "refusal-surface"
+GATE_STEP_NAME = "Plugin Version Bump Gate (OMN-20710)"
 
 
 def _run_validator(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -511,6 +513,51 @@ def test_bad_version_refused(
         assert "PRs no longer bump" in proc.stderr
 
 
+def _gate_step(jobs: dict | None = None) -> dict:
+    """The step of the CI Summary aggregate job that runs the validator on the PR."""
+    jobs = jobs if jobs is not None else yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]
+    return next(
+        s
+        for s in jobs[GATE_JOB_ID]["steps"]
+        if "validate_plugin_version_bump.py" in s.get("run", "")
+        and "pytest" not in s["run"]
+    )
+
+
+def _enforced_by_ci_summary(jobs: dict, job_id: str, soft: frozenset[str]) -> bool:
+    """A ci.yml job the CI Summary poller default-denies: not on its soft allowlist."""
+    job = jobs[job_id]
+    return job_id not in soft and job.get("name", job_id) not in soft
+
+
+@pytest.mark.unit
+def test_gate_runs_in_the_ci_summary_umbrella_not_a_free_standing_workflow() -> None:
+    """RULING 2026-10-08T03:53:09Z: the version gate is a required-context job.
+
+    A separate workflow's job is required only by a branch-protection edit nobody
+    on a lane can make, so the validator step lives in a ci.yml job that CI Summary
+    default-denies and anchors (GATE_JOBS), which is a required context today.
+    """
+    from scripts.ci import ci_summary_gate as summary
+
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]
+    step = _gate_step(jobs)
+    assert step["name"] == GATE_STEP_NAME
+    assert _enforced_by_ci_summary(jobs, GATE_JOB_ID, summary.SOFT_ALLOWLIST)
+    assert jobs[GATE_JOB_ID]["name"] in summary.GATE_JOBS
+    assert not GATE_WORKFLOW.exists(), "the free-standing gate workflow is retired"
+
+
+@pytest.mark.unit
+def test_enforcement_check_refuses_a_soft_listed_or_missing_gate_step() -> None:
+    """Negative controls: the check above fails on the shapes it exists to catch."""
+    jobs = {"a": {"name": "Soft Job", "steps": [{"run": "true"}]}}
+    assert not _enforced_by_ci_summary(jobs, "a", frozenset({"Soft Job"}))
+    assert _enforced_by_ci_summary(jobs, "a", frozenset())
+    with pytest.raises(StopIteration):
+        _gate_step({GATE_JOB_ID: {"steps": [{"run": "uv run pytest x.py"}]}})
+
+
 @pytest.mark.unit
 def test_bad_version_refused_and_single_bump_pr_cases_run_in_ci_and_precommit() -> None:
     """The cases above are wired: a named required-umbrella CI step plus a check-only hook.
@@ -519,16 +566,13 @@ def test_bad_version_refused_and_single_bump_pr_cases_run_in_ci_and_precommit() 
     so it fails on a tree where the step or the hook is absent. The gate and the
     bot themselves are unchanged by OMN-20710: they already ran on dev.
     """
-    gate = yaml.safe_load(GATE_WORKFLOW.read_text())
-    gate_job = gate["jobs"]["plugin-version-bump-gate"]
-    run = next(
-        s["run"]
-        for s in gate_job["steps"]
-        if "validate_plugin_version_bump" in s.get("run", "")
+    gate_step = _gate_step()
+    assert (
+        "scripts/validation/validate_plugin_version_bump.py --base" in gate_step["run"]
     )
-    assert "scripts/validation/validate_plugin_version_bump.py --base" in run
-    assert "--bump-to-base" not in run
-    assert gate_job["name"] == "Plugin Version Bump Gate"
+    assert "--bump-to-base" not in gate_step["run"]
+    assert "continue-on-error" not in gate_step
+    assert "if" not in gate_step
 
     ci_steps = yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]["refusal-surface"][
         "steps"
@@ -564,7 +608,7 @@ def test_bad_version_refused_and_single_bump_pr_cases_run_in_ci_and_precommit() 
         "tests/ci/test_plugin_version_bump_gate.py",
         "scripts/validation/validate_plugin_version_bump.py",
         ".github/workflows/plugin-version-bump.yml",
-        ".github/workflows/plugin-version-bump-gate.yml",
+        ".github/workflows/ci.yml",
     ):
         assert re.search(tests_hook["files"], touched), touched
 

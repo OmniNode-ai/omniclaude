@@ -1,0 +1,80 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21094
+title: "Record the turn-holding ruling, the additive-binding rule and the true content-topic list in CLAUDE.md"
+summary: >
+  CLAUDE.md keeps "never block on Kafka" and gains a turn-holding section: the 2026-10-02 ruling
+  (verbatim) for a hook that replaces an operation which already holds the turn, the rule that an
+  observing hook never waits on Kafka, and the additive-binding rule citing the row stamped
+  2026-10-02T14:58:44Z. The emit-daemon description is removed. The single-family claim about full
+  prompts is replaced by the command topics the T0.6 audit lists, each with the access control it read.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21094-claude-md-turn-holding
+    statement: "CLAUDE.md states the turn-holding ruling, the additive-binding rule and the true content-topic list."
+    acceptance:
+      - id: AC1
+        statement: |-
+          AC1: line 193 keeps "never block on Kafka" and adds, citing the 2026-10-02 ruling verbatim, that a hook which replaces an operation that already holds the turn may hold it for that operation's contracted deadline with a fixed fallback, and that a hook which only observes never waits on Kafka -- falsifier: the added text absent, uncited, or permitting an observing hook to wait.
+      - id: AC2
+        statement: |-
+          AC2: the bounded journal-failure rule (OMN-20110) is stated separately and not cited as the authority for the ruling -- falsifier: the turn-holding text cites OMN-20110.
+      - id: AC3
+        statement: |-
+          AC3: the emit-daemon description is removed -- falsifier: `grep -n 'emit.sock' CLAUDE.md` matches.
+      - id: AC4
+        statement: |-
+          AC4: the line 193 region also states the additive-binding rule as D8 words it (a bounded wait on the lab bus for the profile's latency budget, no injection and one journalled miss record on a miss), citing the ruling row stamped 2026-10-02T14:58:44Z -- falsifier: additive text that permits a wait without citing that row, that leaves any additive hook unbounded, or that cites D2 as its authority.
+      - id: AC5
+        statement: |-
+          AC5: the line 195 region ("Full prompts go only to `onex.cmd.omniintelligence.*`") is amended to name, from T0.6's report, every other command topic that carries full prompts today and the access control T0.6 read for each, so the rule states what is true -- falsifier: the rule left claiming a single family while T0.6 lists another content-bearing topic.
+evidence_requirements:
+  - kind: tests
+    description: "Each acceptance criterion's falsifier, read off the checked-in CLAUDE.md, with a positive control per check"
+    command: "uv run pytest tests/ci/test_claude_md_turn_holding_omn21094.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21094-ac1
+    description: "Turn-holding section keeps the never-block rule and cites the 2026-10-02T11:28:23Z ruling verbatim for a replacing hook; an observing hook never waits on Kafka."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_claude_md_turn_holding_omn21094.py -q -k 'test_claude_md_meets_criterion and AC1'"
+    binds_ac:
+      - AC1
+  - id: dod-omn21094-ac2
+    description: "The turn-holding section does not cite OMN-20110; the bounded journal-failure rule is stated elsewhere in CLAUDE.md."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_claude_md_turn_holding_omn21094.py -q -k 'test_claude_md_meets_criterion and AC2'"
+    binds_ac:
+      - AC2
+  - id: dod-omn21094-ac3
+    description: "CLAUDE.md has no emit.sock match."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_claude_md_turn_holding_omn21094.py -q -k 'test_claude_md_meets_criterion and AC3'"
+    binds_ac:
+      - AC3
+  - id: dod-omn21094-ac4
+    description: "The additive paragraph cites the 2026-10-02T14:58:44Z row, bounds session_start, agent_spawn and per_prompt, and does not cite the replacement decision."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_claude_md_turn_holding_omn21094.py -q -k 'test_claude_md_meets_criterion and AC4'"
+    binds_ac:
+      - AC4
+  - id: dod-omn21094-ac5
+    description: "Every command topic the T0.6 audit lists as carrying full prompts is in CLAUDE.md with its access-control reading; the single-family claim is gone."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_claude_md_turn_holding_omn21094.py -q -k 'test_claude_md_meets_criterion and AC5'"
+    binds_ac:
+      - AC5

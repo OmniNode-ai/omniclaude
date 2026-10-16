@@ -707,7 +707,7 @@ def test_lock_two_stale_renders_refresh_once(
 
     calls = refresh_log.read_text().splitlines() if refresh_log.exists() else []
     list_calls = [c for c in calls if c.startswith("pr list")]
-    assert len(list_calls) == 11, calls
+    assert len(list_calls) == 10, calls
     assert json.loads(cache.read_text())["status"] == "ok"
     assert not lock.exists()
 

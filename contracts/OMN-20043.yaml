@@ -1,0 +1,65 @@
+schema_version: "1.0.0"
+ticket_id: OMN-20043
+title: "gh read router: admin-only reads stay on the operator and a refused App attempt leaves one stdout document"
+summary: >
+  With read routing on, the gh read router sent reads the App token can answer but not see in full
+  (rulesets, branch protection, Actions variables, secrets and permissions, collaborators, hooks,
+  deploy keys, and GraphQL rulesets and merge-settings fields) to the App, which returned them without
+  the admin-only fields and without an error. The router now classifies those reads as operator reads
+  (reason admin-only-fields). The refused-attempt stdout defect was fixed earlier by omniclaude#2494;
+  its router-level regression test is kept but not bound as this pull request's evidence, because it
+  passes at the merge base. The advisory-job-gate read is pinned with routing on.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20043-gh-read-router
+    statement: "The gh read router never answers an admin-only read from the App."
+    acceptance:
+      - id: "AC2"
+        statement: |-
+          AC2: Endpoints whose App answer omits admin-only fields (rulesets, repository settings, branch protection, repository variables) are routed to the operator credential, or the router refuses to return a partial answer -- falsifier: uv run pytest tests/scripts/test_gh_read_routing.py -k admin_only_fields with a ruleset fixture carrying no bypass_actors key
+      - id: "AC3"
+        statement: |-
+          AC3: The advisory-job-gate pre-commit hook parses its branch-protection read with routing on -- falsifier: uv run pytest tests/scripts -k advisory_job_gate_routing_on in omniclaude, run under the omniclaude CI tests job
+  - id: req-omn20043-shim-refusal-check
+    statement: "The shim regression exercises App refusal independently of admin-only routing."
+    acceptance:
+      - id: AC4
+        statement: "A pulls read refused by the App emits exactly the operator document, attempts App then operator, and records integration-refused."
+evidence_requirements:
+  - kind: tests
+    description: "Router classification, operator routing of admin-only reads, one-document stdout after a refused attempt, and the advisory-job-gate read with routing on"
+    command: "uv run pytest tests/scripts/test_gh_read_routing.py tests/scripts/test_advisory_job_gate.py -q"
+  - kind: tests
+    description: "Hermetic shim regression with local fake executables and credentials."
+    command: "uv run pytest tests/scripts/test_gh_shim_read_routing.py -q -k route_refused_app_call"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20043-admin-only-fields
+    description: "Rulesets, branch protection, Actions variables, secrets and permissions, collaborators, hooks, deploy keys and GraphQL ruleset and merge-settings fields classify as operator reads (admin-only-fields) and run on the operator without minting an App token; neighbouring non-admin paths still route to the App."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_gh_read_routing.py -q -k admin_only_fields"
+    binds_ac:
+      - AC2
+  - id: dod-omn20043-advisory-job-gate-routing-on
+    description: "With routing on, the advisory-job-gate branch-protection read yields one parseable document and is served by the operator, never the App."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q -k advisory_job_gate_routing_on"
+    binds_ac:
+      - AC3
+  - id: dod-omn20043-shim-refused-routed-resource
+    description: "The shim retries an App-refused pulls read once on the operator, emits one JSON document and records integration-refused."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_gh_shim_read_routing.py -q -k route_refused_app_call"
+    binds_ac:
+      - AC4

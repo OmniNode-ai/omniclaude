@@ -145,34 +145,73 @@ def test_every_registered_hook_type_journals_one_contract_event(
     assert payload["turn_id"] == event.lineage.turn_id
 
 
-def test_no_content_reaches_the_metadata_event(jdir: Path) -> None:
+def test_the_event_carries_the_raw_tool_response(jdir: Path) -> None:
+    """OMN-19513 RULING 2026-10-15T04:24:42Z: raw content, no scrub, no hash."""
     stdin = _stdin("PostToolUse")
-    stdin["tool_response"] = {"output": "private output " + ANTHROPIC_FAKE}
-    stdin["tool_input"] = {"command": "printf private-input"}
-
-    capture_mod.capture(stdin, journal_dir=jdir)
-
-    raw = json.dumps(_events(jdir))
-    assert "FAKE" not in raw
-    assert "private output" not in raw
-    assert "private-input" not in raw
-    (payload,) = _events(jdir)
-    # PostToolUse references the result; the input is PreToolUse's reference.
-    assert [ref["field"] for ref in payload["content_refs"]] == ["tool_response"]
-
-
-def test_content_is_scrubbed_before_it_is_hashed(jdir: Path) -> None:
-    import hashlib
-
-    clean = "value " + ANTHROPIC_FAKE
-    stdin = _stdin("Stop")
-    stdin["last_assistant_message"] = clean
+    response = {"output": "private output " + ANTHROPIC_FAKE}
+    stdin["tool_response"] = response
 
     capture_mod.capture(stdin, journal_dir=jdir)
 
     (payload,) = _events(jdir)
     (ref,) = payload["content_refs"]
-    assert ref["sha256"] != hashlib.sha256(clean.encode()).hexdigest()
+    assert ref["field"] == "tool_response"
+    assert json.loads(ref["value"]) == response
+    assert ANTHROPIC_FAKE in ref["value"]
+    assert "sha256" not in ref
+    assert payload["payload"]["tool_response_ref"] == ref
+
+
+# Every content field the harness sends, per hook, rides the event verbatim.
+_RAW_FIELDS = (
+    ("PreToolUse", "tool_input", {"command": "cat .env " + ANTHROPIC_FAKE}),
+    ("UserPromptSubmit", "prompt", "prompt with " + ANTHROPIC_FAKE),
+    ("Stop", "last_assistant_message", "reply with " + ANTHROPIC_FAKE),
+    ("PostCompact", "compact_summary", "summary with " + ANTHROPIC_FAKE),
+    ("SubagentStop", "agent_transcript_path", "transcripts/agent-t.jsonl"),
+    ("PostToolUseFailure", "error", "failed: " + ANTHROPIC_FAKE),
+)
+
+
+@pytest.mark.parametrize(("hook", "key", "value"), _RAW_FIELDS)
+def test_every_content_field_rides_raw(
+    hook: str, key: str, value: object, jdir: Path
+) -> None:
+    stdin = _stdin(hook)
+    stdin[key] = value
+
+    assert capture_mod.capture(stdin, journal_dir=jdir) == 1
+
+    (payload,) = _events(jdir)
+    event = ModelClaudeHookEvent.model_validate(payload)
+    expected = (
+        value
+        if isinstance(value, str)
+        else json.dumps(
+            value, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+        )
+    )
+    refs = {ref.field: ref for ref in event.content_refs}
+    field = "agent_transcript_path" if key == "agent_transcript_path" else key
+    assert refs[field].value == expected
+    assert refs[field].length == len(expected)
+    assert "sha256" not in json.dumps(payload)
+
+
+def test_the_capture_needs_no_redaction_resolver(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(capture_mod.content_capture, "load_resolver", lambda: None)
+    assert capture_mod.capture(_stdin("Stop"), journal_dir=jdir) == 1
+    assert not hasattr(capture_mod, "make_scrubber")
+
+
+def test_payload_encryption_is_one_contract_setting_off_by_default() -> None:
+    raw = yaml.safe_load(_CONTRACT.read_text(encoding="utf-8"))
+    setting = raw["payload_encryption"]
+    assert setting["enabled"] is False
+    assert "key_secret_ref" in setting
+    assert capture_mod.payload_encryption_enabled() is False
 
 
 # ---------------------------------------------------------------------------
@@ -250,10 +289,10 @@ def test_goal_id_only_on_prefixed_command_and_is_uuid(
     post["tool_name"] = "Bash"
     post["tool_input"] = {"command": f"ONEX_GOAL={_GOAL} echo hi"}
     assert stamped(post, "p") == {}
-    # the command text still rides only as its scrubbed reference
+    # the command text rides raw in its reference (OMN-19513)
     capture_mod.capture(_bash_pre(f"ONEX_GOAL={_GOAL} echo hi"), journal_dir=jdir)
     (payload,) = _events(jdir)
-    assert "echo hi" not in json.dumps(payload)
+    assert "echo hi" in payload["content_refs"][0]["value"]
     assert [ref["field"] for ref in payload["content_refs"]] == ["tool_input"]
 
 
@@ -623,30 +662,22 @@ def test_session_end_returns_at_once_too(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# the fan-out redaction: the lineage crosses member by member, not as a digest
+# the fan-out: the publish transform is omnimarket's, projected here
 # ---------------------------------------------------------------------------
 
 
-def test_the_redaction_mirror_passes_the_lineage_and_hashes_the_undeclared(
-    jdir: Path,
-) -> None:
-    from omniclaude.hooks.capture_redaction import redact_capture
-    from omniclaude.hooks.topics import TopicBase
+def test_the_registry_projects_omnimarkets_publish_transform() -> None:
+    """The producer journals raw; the transform mirrors omnimarket's registry.
 
-    capture_mod.capture(
-        {**_stdin("PostToolUse"), "agent_id": "a1", "agent_type": "Explore"},
-        journal_dir=jdir,
-    )
-    (payload,) = _events(jdir)
-    payload["payload"] = {**payload["payload"], "surprise": "undeclared"}
+    omnimarket's emit registry owns the publish transform for both topics and
+    still declares ``redact_capture``; the Registry Consistency check refuses
+    any other projection here.
+    """
+    from omniclaude.hooks.event_registry import EVENT_REGISTRY, redact_capture
 
-    out = redact_capture(payload, topic=TopicBase.HOOK_EVENT.value)
-
-    assert out["lineage"] == payload["lineage"]
-    assert out["lineage"]["agent_id"] == "a1"
-    assert out["payload"]["tool_name"] == payload["payload"]["tool_name"]
-    assert str(out["payload"]["surprise"]).startswith("sha256:")
-    assert out["redaction_state"] == "redacted"
+    for event_type in ("hook.event", "content.captured"):
+        rules = EVENT_REGISTRY[event_type].fan_out
+        assert [rule.transform for rule in rules] == [redact_capture]
 
 
 # ---------------------------------------------------------------------------

@@ -6,10 +6,7 @@
     "field": "compact_summary",
     "hook_event_name": "PostCompact",
     "length": 23,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "d9a5b651e3a6436253f52f0f8ccdf0f0adbf439324674a1da0d770af94770a49",
     "value": "private compact summary"
   }
 ]

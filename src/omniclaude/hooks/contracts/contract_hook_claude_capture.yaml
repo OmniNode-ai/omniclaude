@@ -63,7 +63,6 @@ identity:
     tool_use_id in PermissionRequest stdin, so that event's causation_id is null
     until the upstream schema supplies one; the mapper does not invent an ID.
   content_record_id: "uuid5(NAMESPACE, str(event_id) + '|' + field_name)"
-  content_hash: "sha256 over the emitted string or canonical JSON string"
 
 lineage:
   fields:
@@ -80,7 +79,7 @@ lineage:
     correlation_id: {type: uuid, required: true}
     causation_id: {type: uuid, nullable: true}
     agent_model: {type: string, nullable: true, source: "sidecar.model", added_by: OMN-20010}
-    agent_description: {type: string, nullable: true, max_length: 200, source: "sidecar.description", added_by: OMN-20010, rule: "the spawning call's short task label; scrubbed with the content scrub and cut to 200 characters, never a prompt"}
+    agent_description: {type: string, nullable: true, max_length: 200, source: "sidecar.description", added_by: OMN-20010, rule: "the spawning call's short task label, cut to 200 characters; never scrubbed (OMN-19513)"}
     workflow_phase: {type: string, nullable: true, source: "sidecar.workflowPhase", added_by: OMN-20010}
   parent_agent_id: >
     Deliberately absent from the event. The ordered projection fold derives it
@@ -92,29 +91,34 @@ lineage:
     workflow_run_id is supplied by the caller from the workflow sidecar path.
 
 content_reference:
-  fields: [field, sha256, length, content_record_id]
+  fields: [field, value, length, content_record_id]
   event_rule: >
     The envelope content_refs tuple lists each content reference used by the
-    typed payload exactly once. The metadata topic contains references only.
+    typed payload exactly once. Each reference carries the field's raw value.
   record_model: ModelHookContentRecord
   content_value_rule: >
     String values remain strings; non-string arbitrary JSON is serialized as
-    canonical JSON. Content records are destined only for the restricted family.
-  scrub_rule: >
-    map_hook_stdin takes a REQUIRED content_scrubber with no default. The
-    producer MUST pass the production span scrub of the restricted content
-    family (the capture_redaction.yaml secret_patterns set). Each serialized
-    value is scrubbed FIRST; sha256 and length are computed over the scrubbed
-    value, so no hash on the metadata topic is ever derived from a secret.
-    redaction_state (clean | secret_detected) and matched_pattern_names travel
-    on the content record. The generator's mock_content_scrubber is a fixture
-    stand-in with one pattern, not a production control.
+    canonical JSON. The value is exactly what the harness sent.
+  raw_rule: >
+    OMN-19513, operator RULING 2026-10-15T04:24:42Z: no content field is
+    scrubbed or hashed. map_hook_stdin takes no scrubber, the reference and the
+    content record carry the raw value, and neither carries a digest or a
+    redaction state.
 
-# In the coverage table, content_fields name the class each field takes on the
-# RESTRICTED content family. capture_verbatim there means verbatim WITH the
-# secret-pattern scrub on top (capture_redaction.yaml: verbatim is not exempt
-# from scrubbing); it never means unscrubbed. Nothing in content_fields ever
-# reaches the metadata topic, which carries only the content reference.
+# OMN-19513: payload encryption, one setting, off by default. When on, both
+# capture producers read the key from the secret store by key_secret_ref and
+# journal each payload sealed (AES-256-GCM, plugins/onex/hooks/lib/
+# hook_payload_encryption.py); a key that cannot be read journals nothing, so
+# content never crosses in the clear while the setting asks for encryption.
+# The key is 32 random bytes as base64 text. The lab runs it off.
+payload_encryption:
+  enabled: false
+  # The secret-store reference of the key. Unset until a key is provisioned;
+  # no key exists today and none is created by this contract.
+  key_secret_ref: null
+
+# In the coverage table, content_fields name the class each field takes.
+# capture_verbatim means the raw value, unscrubbed (OMN-19513).
 coverage:
   - hook: PreToolUse
     registered_today: true

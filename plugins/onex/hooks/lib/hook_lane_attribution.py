@@ -115,6 +115,7 @@ __all__ = [
     "SIDECAR_NAME_KEYS",
     "WORKSPACE_ENV",
     "attribution_fields",
+    "read_agent_first_message",
     "read_sidecar",
     "record_key",
     "registry_base",
@@ -364,6 +365,83 @@ def read_sidecar(
         if isinstance(payload, dict):
             return payload
     return None
+
+
+#: The longest first transcript line :func:`read_agent_first_message` reads. A
+#: forked skill's first message is its whole SKILL.md (about 25 KB today); a
+#: line past this is left unread rather than half-parsed.
+_AGENT_FIRST_LINE_CHARS = 1_048_576
+
+#: Entries of the agent's transcript scanned for its first user message. The
+#: harness writes a handful of attachment entries ahead of it.
+_AGENT_SCAN_LINES = 24
+
+
+def _first_user_text(entry: object) -> str | None:
+    """The text of a transcript entry when it is a user message, else ``None``."""
+    if not isinstance(entry, dict):
+        return None
+    message = entry.get("message")
+    role = message.get("role") if isinstance(message, dict) else None
+    if entry.get("type") != "user" and role != "user":
+        return None
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(
+            part["text"]
+            for part in content
+            if isinstance(part, dict) and isinstance(part.get("text"), str)
+        )
+    return ""
+
+
+def read_agent_first_message(
+    transcript_path: str | Path | None,
+    session_id: str | None,
+    agent_id: str | None,
+    *,
+    agent_transcript_path: str | Path | None = None,
+) -> str:
+    """The first user message of the agent's own transcript, or ``""``.
+
+    A forked skill's sidecar carries only the generic agent type, so nothing
+    in it names the skill; the executor's first message does (OMN-17427). The
+    transcript is ``agent-<id>.jsonl`` beside the sidecar, found by the same
+    candidates as :func:`read_sidecar`, or ``agent_transcript_path`` when the
+    hook payload names it. ``""`` -- never a guess -- when there is no agent
+    id, no transcript or no user message in its first entries. Never raises.
+    """
+    candidates: list[Path] = []
+    if agent_transcript_path:
+        candidates.append(Path(agent_transcript_path))
+    if agent_id and not (
+        "/" in agent_id or "\\" in agent_id or agent_id in (".", "..")
+    ):
+        suffix = ".meta.json"
+        for sidecar in _sidecar_candidates(
+            transcript_path, session_id, agent_id, include_workflows=True
+        ):
+            candidates.append(
+                sidecar.with_name(sidecar.name[: -len(suffix)] + ".jsonl")
+            )
+    for candidate in candidates:
+        try:
+            with candidate.open(encoding="utf-8") as stream:
+                for _ in range(_AGENT_SCAN_LINES):
+                    line = stream.readline(_AGENT_FIRST_LINE_CHARS)
+                    if not line:
+                        break
+                    try:
+                        text = _first_user_text(json.loads(line))
+                    except ValueError:
+                        break
+                    if text is not None:
+                        return text
+        except OSError:
+            continue
+    return ""
 
 
 def resolve_lane(

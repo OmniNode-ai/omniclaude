@@ -6,10 +6,7 @@
     "field": "delta",
     "hook_event_name": "MessageDisplay",
     "length": 22,
-    "matched_pattern_names": [],
-    "redaction_state": "clean",
     "session_id": "session-fixture-1",
-    "sha256": "050ae6d1261fcecb86f75b298b162597d095bb204dd415dd41eca0a197742c7a",
     "value": "private streamed delta"
   }
 ]
