@@ -42,10 +42,17 @@
 
 name: Sibling lock refresh
 
+# OMN-19998 (operator ruling 2026-10-16T07:34:18Z): omniclaude consumes
+# omnimarket by git pin and never waits for an omnimarket release. The pin
+# follows omnimarket dev, so this runs when omnimarket dev moves:
+# omnimarket's ci.yml dispatches `omnimarket-dev-moved` here on every push to
+# its dev. The hourly schedule is the fallback for a dispatch that never
+# arrived; a run with nothing to advance opens nothing.
 on:
+  repository_dispatch:
+    types: [omnimarket-dev-moved]
   schedule:
-    # Daily at 06:17 UTC — after the overnight release window, before the day's work.
-    - cron: "17 6 * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       packages:
@@ -207,7 +214,12 @@ jobs:
           # so every PR it opened failed that check and needed a hand-pushed
           # commit before it could merge -- an automation that cannot land
           # its own output. First observed on #2262, its first real PR.
-          BRANCH="bot/omn-13902-sibling-lock-refresh-$(date -u +%Y%m%d%H%M%S)"
+          # OMN-19998: one rolling branch, not one per run. The refresh now runs
+          # on every omnimarket dev push, so a per-run branch would open a new
+          # PR each time and leave the older ones to conflict on uv.lock. The
+          # branch is rebuilt from this run's base and force-pushed, which
+          # moves an open refresh PR to the newest pin instead of adding one.
+          BRANCH="bot/omn-13902-sibling-lock-refresh"
           # OMN-18273: commit as the App this job already authenticates as. The
           # previous identity resolved to no GitHub account, so the commit rendered
           # unlinked and named neither a bot nor a run; the credential and the
@@ -220,7 +232,15 @@ jobs:
           git commit -m "chore(deps, OMN-13902): refresh omninode sibling locks [bot]" \
             --trailer "Onex-Workflow: ${GITHUB_WORKFLOW}" \
             --trailer "Onex-Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          git push origin "$BRANCH"
+          git push --force origin "$BRANCH"
+          if ! OPEN="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')"; then
+            echo "::error::could not list open PRs; the branch is pushed, but whether its PR exists is unread."
+            exit 1
+          fi
+          if [[ -n "$OPEN" ]]; then
+            echo "The open refresh PR on $BRANCH now carries this run's pins."
+            exit 0
+          fi
           # Build the PR body in a file to avoid heredoc-in-YAML indentation pitfalls.
           {
             printf '%s\n' "Automated sibling version-alignment (OMN-13902)."

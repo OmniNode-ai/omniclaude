@@ -22,10 +22,22 @@ requirements:
       - id: "AC2"
         statement: |-
           AC2: The per-attempt budget is the job ceiling less setup and the pause, split across the review step's attempts, and the ceiling the step reads equals timeout-minutes -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -k "job_ceiling or share_of_the_ceiling" with HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS changed alone
+  - id: req-omn19998-omnimarket-pin-follows-dev
+    statement: "omniclaude consumes omnimarket by a git pin that follows omnimarket dev, with no wait for an omnimarket release."
+    acceptance:
+      - id: "AC3"
+        statement: |-
+          AC3: sibling-lock-refresh.yml runs on the omnimarket-dev-moved repository_dispatch with an hourly schedule as fallback, and every run moves one rolling bot PR rather than opening another -- falsifier: uv run pytest tests/workflows/test_sibling_refresh_follows_omnimarket_dev_omn19998.py -q against the workflow at origin/dev
+      - id: "AC4"
+        statement: |-
+          AC4: the omnimarket pin in pyproject.toml and uv.lock is a full commit sha on omnimarket dev that no release tag contains, advanced by scripts/relock_git_sources.py, with the capture-contract mirror re-derived at it -- falsifier: uv run pytest tests/test_sibling_pin_alignment_omn13902.py tests/workflows/test_sibling_lock_refresh_syncs_capture_mirror.py -q with the rev skewed on one surface
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
     command: "uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py tests/hooks/test_hostile_reviewer_workflow.py -q"
+  - kind: tests
+    description: "The refresh workflow's dispatch trigger, hourly fallback and rolling bot branch, beside the git-source pin tests"
+    command: "uv run pytest tests/workflows/test_sibling_refresh_follows_omnimarket_dev_omn19998.py tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -47,3 +59,19 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -q -k \"job_ceiling or share_of_the_ceiling\""
     binds_ac:
       - AC2
+  - id: dod-omn19998-refresh-follows-dev
+    description: "The omnimarket pin refresh runs on the omnimarket-dev-moved dispatch, hourly as fallback, and moves one rolling bot PR."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/workflows/test_sibling_refresh_follows_omnimarket_dev_omn19998.py -q"
+    binds_ac:
+      - AC3
+  - id: dod-omn19998-pin-on-every-surface
+    description: "The omnimarket rev is one full sha on every surface and the capture-contract mirror matches it."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/test_sibling_pin_alignment_omn13902.py tests/workflows/test_sibling_lock_refresh_syncs_capture_mirror.py -q"
+    binds_ac:
+      - AC4

@@ -421,6 +421,10 @@ topics:
       claude_code_version: capture_verbatim
       # OMN-17427: the emitting machine's hostname, a name and never a path.
       host: capture_verbatim
+      # OMN-18531 (TA.21): the lineage stream's producer sequence number and
+      # the stream's name.
+      producer_seq: capture_verbatim
+      stream: capture_verbatim
       lineage.session_id: capture_verbatim
       lineage.agent_id: capture_verbatim
       lineage.agent_type: capture_verbatim
@@ -707,6 +711,22 @@ topics:
       said_at: capture_verbatim
       tool_name: capture_verbatim
       tool_use_id: capture_verbatim
+      # OMN-18531 (TA.21): the shared item identity and the producer's
+      # per-session, per-stream sequence. content_record_id is a uuid5 over the
+      # lineage event id and the field name, the same value the lineage
+      # event's reference carries, so a reader joins the two streams on it.
+      # Identifiers and counters, no content.
+      content_record_id: capture_verbatim
+      producer_seq: capture_verbatim
+      stream: capture_verbatim
+      # The barrier record (content_kind barrier, OMN-18531): the id of the barrier,
+      # the stream it speaks for, the sequence high-water the producer had
+      # issued on it, and whether content capture was enabled. Ids, a count
+      # and a flag.
+      record_type: capture_verbatim
+      barrier_id: capture_verbatim
+      high_water: capture_verbatim
+      content_capture: capture_verbatim
       # The size policy's bookkeeping: which chunk this is, of how many, the
       # sha256 of the chunks concatenated (so a reader can verify a
       # reassembly), the full length before the cap, and whether the cap cut
