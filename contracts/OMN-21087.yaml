@@ -56,6 +56,11 @@ requirements:
     acceptance:
       - id: AC7
         statement: 'AC7: a resumed run names the completed phases and the phase it picks up at (or that every phase passed and is only checked) and reuses the last run''s Docker answer, and --restart ignores the last run''s answers; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "picks_up or only_checks" fails against the part-1 script.'
+  - id: req-omn21087-guide-pin
+    statement: The onboarding guide downloads the script that carries the returning-machine fixes.
+    acceptance:
+      - id: AC8
+        statement: 'AC8: ONBOARDING.md pins lab-onboarding.sh at a commit that contains omniclaude#2789 (467e0c2c), with the sha256 of the script at that commit, and the pinned script takes the OpenRouter model from the overlay rather than naming one; falsifier: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -k "returning_machine or from_the_overlay" fails against the c522d72a pin.'
 evidence_requirements:
   - kind: tests
     description: "Onboarding script tests pass"
@@ -130,3 +135,10 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv run pytest tests/skills/test_onboarding_bootstrap_handler_omn21087.py -q --no-cov
+  - id: dod-omn21087-guide-pin
+    description: "The guide pins the script with the returning-machine fixes, and its digest"
+    source: manual
+    binds_ac: [AC8]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q --no-cov -k 'returning_machine or from_the_overlay'"
