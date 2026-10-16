@@ -1,0 +1,57 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21088
+title: "onex-delegate skill runs onex delegate --result-only (Lane C)"
+summary: >
+  The onex-delegate plugin's prompt.md and SKILL.md run one plain
+  `onex delegate "<prompt>" --result-only` command, show stdout as the answer,
+  report the one error line on failure, and read receipt.json only on demand.
+  A clean-install test asserts `onex delegate --help` lists --result-only. The
+  plugin-compat.yaml floors are unchanged here; a follow-up raises them to the
+  omnibase-infra and omnimarket releases of Lanes A and B.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21088-skill-result-only
+    statement: The onex-delegate skill runs one plain onex delegate --result-only command and presents its plain result.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: prompt.md carries exactly one fenced onex delegate command with --result-only, no --json or --human, no shell operators, and no JSON-result parsing; falsifier: uv run pytest plugins/onex-delegate/tests/test_delegate_result_only_surface.py -k "plain_result_only_command or allow_rule or json_parsing" fails against the --json prompt.'
+      - id: AC2
+        statement: 'AC2: prompt.md shows stdout as the answer, reports the one stderr error line on failure, reads receipt.json only on demand, and SKILL.md names --result-only; falsifier: uv run pytest plugins/onex-delegate/tests/test_delegate_result_only_surface.py -k "stdout_as_the_answer or error_line or receipt_only_on_demand or skill_description" fails against the --json skill.'
+evidence_requirements:
+  - kind: tests
+    description: "Skill surface tests for the --result-only command pass"
+    command: "uv run pytest plugins/onex-delegate/tests -q -m 'not integration'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-skill-runs-result-only
+    description: "prompt.md carries exactly one plain onex delegate --result-only command, with no --json, redirect, pipe or &&"
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_result_only_surface.py -q --no-cov -k 'plain_result_only_command or allow_rule or json_parsing'"
+  - id: dod-skill-presents-plain-result
+    description: "prompt.md shows stdout as the answer, reports the one error line, reads receipt.json only on demand, and SKILL.md names --result-only"
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_result_only_surface.py -q --no-cov -k 'stdout_as_the_answer or error_line or receipt_only_on_demand or skill_description'"
+  - id: dod-skill-no-json-presentation
+    description: "The skill no longer tells the agent to parse the typed JSON result"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "! grep -q 'Parse the single JSON object' plugins/onex-delegate/skills/delegate/prompt.md"
+  - id: dod-install-test-asserts-flag
+    description: "The clean-install test asserts onex delegate --help lists --result-only"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q '_RESULT_ONLY_FLAG in run.stdout' plugins/onex-delegate/tests/test_install_works.py"
