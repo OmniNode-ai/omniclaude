@@ -670,14 +670,14 @@ def test_the_registry_projects_omnimarkets_publish_transform() -> None:
     """The producer journals raw; the transform mirrors omnimarket's registry.
 
     omnimarket's emit registry owns the publish transform for both topics and
-    still declares ``redact_capture``; the Registry Consistency check refuses
+    declares ``passthrough`` at the refreshed pin; Registry Consistency refuses
     any other projection here.
     """
-    from omniclaude.hooks.event_registry import EVENT_REGISTRY, redact_capture
+    from omniclaude.hooks.event_registry import EVENT_REGISTRY
 
     for event_type in ("hook.event", "content.captured"):
         rules = EVENT_REGISTRY[event_type].fan_out
-        assert [rule.transform for rule in rules] == [redact_capture]
+        assert [rule.transform for rule in rules] == [None]
 
 
 # ---------------------------------------------------------------------------

@@ -26,10 +26,15 @@ requirements:
       - id: AC3
         statement: 'AC3: The lane write guard honours a github_mode_by_owner row of the write_config contract that the sibling-refreshed omnimarket carries, and a github_mode_by_repository row wins over its owner row. -- falsifier: uv lock --check && uv run pytest tests/scripts/test_gh_lane_write_guard.py -q --no-cov'
   - id: req-refreshed-capture-metadata
-    statement: The refreshed capture-contract mirror preserves GuardRefusal and AssistantUsage metadata through the hook-event fan-out without exposing undeclared content.
+    statement: The refreshed capture-contract mirror preserves GuardRefusal and AssistantUsage metadata when its redaction policy is explicitly applied.
     acceptance:
       - id: AC4
-        statement: 'AC4: GuardRefusal identifiers and AssistantUsage counts, source hook and partial-window flag survive redaction, including zero counts and false flags; undeclared content is hashed and the input is unchanged. -- falsifier: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov'
+        statement: 'AC4: GuardRefusal identifiers and AssistantUsage counts, source hook and partial-window flag survive explicit redaction, including zero counts and false flags; undeclared content is hashed and the input is unchanged. -- falsifier: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov'
+  - id: req-refreshed-raw-capture-fan-out
+    statement: The capture fan-out follows the passthrough policy declared by the pinned omnimarket registry, including raw content, lineage, sequence counters and barrier flags.
+    acceptance:
+      - id: AC5
+        statement: 'AC5: hook.event and content.captured preserve their complete payloads without a redaction stamp, retain their session partition key and target topics, and return a new top-level mapping without mutating the input. -- falsifier: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -k refreshed_capture_fan_out fails against the merge-base registry'
 evidence_requirements:
   - kind: tests
     command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
@@ -42,7 +47,7 @@ evidence_requirements:
     description: Verifies the lane write guard follows the owner-level write_config rows that the refreshed omnimarket contract carries.
   - kind: tests
     command: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov
-    description: Exercises the refreshed capture metadata through the runtime fan-out while checking undeclared-content hashing and input immutability.
+    description: Exercises explicit redaction of metadata and raw runtime fan-out, including input immutability.
 dod_evidence:
   - id: dod-omniclaude-sibling-refresh-behavior
     source: manual
@@ -72,7 +77,23 @@ dod_evidence:
     source: manual
     binds_ac:
       - AC4
-    description: The hook-event fan-out preserves the refreshed metadata and hashes undeclared content; the same tests fail with the merge-base capture mirror.
+    description: Explicit redaction preserves the refreshed metadata and hashes undeclared content; raw fan-out is verified separately against the pinned registry policy.
     checks:
       - check_type: command
         check_value: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov
+  - id: dod-omniclaude-refreshed-raw-capture-fan-out
+    source: manual
+    binds_ac:
+      - AC5
+    description: Raw hook, full-content and empty-barrier records survive the fan-out unchanged. These behavioral assertions fail against the merge-base registry's redaction transforms.
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -k refreshed_capture_fan_out
+  - id: dod-omniclaude-capture-container-smoke
+    source: manual
+    binds_ac:
+      - AC5
+    description: A fresh Python container loads the checked-out runtime and exercises raw capture delivery, explicit redaction and immutability. This smoke check uses no broker, host service or production credential and can run on a hosted runner.
+    checks:
+      - check_type: command
+        check_value: 'docker run --rm --volume "$PWD:/workspace:ro" --workdir /workspace --env CI=true --env UV_PROJECT_ENVIRONMENT=/tmp/capture-venv --env UV_CACHE_DIR=/tmp/uv-cache ghcr.io/astral-sh/uv:python3.12-bookworm uv run --frozen --group dev pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -p no:cacheprovider'
