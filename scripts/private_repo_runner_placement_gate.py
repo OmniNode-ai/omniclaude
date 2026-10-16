@@ -183,6 +183,7 @@ same hook entry runs unchanged in a pre-commit step inside Actions.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -1299,8 +1300,14 @@ class HostedRuling:
     ts: str
     lane: str
     ticket: str
-    repos: frozenset[str]
+    # sha256 of each lowercased `owner/name` the ruling covers. Hashes, not
+    # names: this file ships in a PUBLIC repository, whose hygiene gate
+    # refuses a private repository's name in the tree.
+    repo_hashes: frozenset[str]
     label_families: tuple[str, ...]
+
+    def covers(self, slug: str) -> bool:
+        return repo_hash(slug) in self.repo_hashes
 
     def admits(self, labels: list[str]) -> bool:
         """Is every hosted label of this arm in one of the ruling's image families?"""
@@ -1309,6 +1316,11 @@ class HostedRuling:
         return bool(hosted) and all(
             label.split("-", 1)[0].lower() in families for label in hosted
         )
+
+
+def repo_hash(slug: str) -> str:
+    """The registry's spelling of a repository: sha256 of `owner/name`, lowercased."""
+    return hashlib.sha256(slug.strip().lower().encode("utf-8")).hexdigest()
 
 
 def _yaml_mapping(path: Path, what: str) -> dict[str, Any]:
@@ -1340,13 +1352,14 @@ def load_hosted_rulings(path: Path) -> dict[str, HostedRuling]:
         ts, lane, ticket = (
             str(fields.get(key, "")) for key in ("ts", "lane", "ticket")
         )
-        repos, families = fields.get("repos"), fields.get("label_families")
+        repos, families = fields.get("repos_sha256"), fields.get("label_families")
         if (
             not RULING_TS.match(ts)
             or not lane
             or not re.fullmatch(r"OMN-\d+", ticket)
             or not isinstance(repos, list)
             or not repos
+            or not all(re.fullmatch(r"[0-9a-f]{64}", str(repo)) for repo in repos)
             or not isinstance(families, list)
             or not families
             or ts in rulings
@@ -1354,14 +1367,15 @@ def load_hosted_rulings(path: Path) -> dict[str, HostedRuling]:
             raise GateError(
                 f"the hosted-rulings registry {path} carries a malformed or "
                 f"duplicate entry {entry!r}: each needs ts, lane, ticket, a "
-                "non-empty repos list and a non-empty label_families list. "
+                "non-empty repos_sha256 list of 64-hex digests and a non-empty "
+                "label_families list. "
                 "THE GATE DID NOT RUN."
             )
         rulings[ts] = HostedRuling(
             ts=ts,
             lane=lane,
             ticket=ticket,
-            repos=frozenset(str(repo) for repo in repos),
+            repo_hashes=frozenset(str(repo) for repo in repos),
             label_families=tuple(str(family) for family in families),
         )
     return rulings
@@ -1437,11 +1451,10 @@ def load_eligible(
                 "A job runs hosted in a private repository only under a ruling "
                 "this gate can name. THE GATE DID NOT RUN."
             )
-        if slug not in ruling.repos:
+        if not ruling.covers(slug):
             raise GateError(
-                f"{where} cites ruling {ts}, whose scope is "
-                f"{', '.join(sorted(ruling.repos))}, not {slug}. "
-                "THE GATE DID NOT RUN."
+                f"{where} cites ruling {ts}, whose scope does not include "
+                f"{slug} (sha256 {repo_hash(slug)}). THE GATE DID NOT RUN."
             )
         if ledger_files is not None and not _ruling_on_ledger(ruling, ledger_files):
             raise GateError(

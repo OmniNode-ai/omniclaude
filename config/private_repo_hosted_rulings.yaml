@@ -8,15 +8,20 @@
 #
 # Add an entry only for a RULING row that exists on the rolling work ledger,
 # copying its timestamp, lane and ticket exactly.
+#
+# repos_sha256 holds the sha256 of each lowercased `owner/name` the ruling
+# names, never the name: this repository is public and its hygiene gate
+# refuses a private repository's name in the tree. Compute one with
+#   printf '%s' 'owner/name' | tr '[:upper:]' '[:lower:]' | sha256sum
 schema: 1
 rulings:
   - ts: "2026-10-16T17:44:31Z"
     lane: orchestrator-bb1a
     ticket: OMN-19998
     amends: "2026-09-14T11:38:53Z"
-    repos:
-      - OmniNode-ai/omnibase_internal
-      - OmniNode-ai/omniclaude-internal
+    repos_sha256:
+      - 7146a97ae5b7765b1ea173a000a08aa8880ec91eefa6fe494e9dd01211774ea1
+      - bbf7655663525515c8e8e6b5a3ebc2f9fbf3992b44ff5e6680e949b836a0cdf2
     label_families:
       - ubuntu
     scope: >-
