@@ -72,3 +72,12 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -k \"unknown_ruling or does_not_scope or on_the_ledger or does_not_exist\""
     binds_ac:
       - AC4
+  - id: dod-omn19998-hosted-rulings-sha256
+    description: "The shipped registry holds repository digests; listed jobs still pass and a ruling scoped to another repository is refused."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -k \"shipped_registry or listed_hosted_job_passes or does_not_scope\""
+    binds_ac:
+      - AC3
+      - AC4
