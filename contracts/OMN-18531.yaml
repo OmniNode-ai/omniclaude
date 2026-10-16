@@ -29,6 +29,11 @@ requirements:
     - id: AC8
       statement: 'AC8: the hook-inventory gate fails when the installed binding registers an event absent from `client_bindings`, and runs in the existing
         required `hook-inventory-gate` check -- falsifier: the gate exits 0 on that fixture, or the workflow does not call it.'
+  - id: req-omn18531-mod-file-growth-pin
+    statement: A baselined script on a mod surface cannot gain code lines in this repository (operator ruling 2026-10-15T08:14:15Z, canonical shapes for all mod work).
+    acceptance:
+    - id: AC9
+      statement: 'AC9: the canonical-file-shape pre-commit hook and the required canonical-file-shape CI job run omnibase_core at a commit carrying the mod-file-growth rule, so a code line added to a baselined script under plugins/, .claude/ or a hooks/ directory is refused -- falsifier: with the pin at 70f7ceda44af968ccf26264ecd429cfd27503971 the planted growth is accepted and tests/ci/test_mod_file_growth_pin_omn18531.py fails.'
 evidence_requirements:
   - kind: tests
     description: "The checkpoint capture kind tests pass beside the existing content capture tests"
@@ -36,6 +41,9 @@ evidence_requirements:
   - kind: tests
     description: Inventory gate over client_bindings
     command: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov
+  - kind: tests
+    description: Pinned ratchet refuses code growth and accepts comment growth in a baselined mod script
+    command: uv run pytest tests/ci/test_mod_file_growth_pin_omn18531.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ""
@@ -84,3 +92,12 @@ dod_evidence:
       cwd: ${OMNI_HOME}/omniclaude
     binds_ac:
     - AC8
+  - id: dod-omn-18531-ac9
+    description: The pinned canonical-file-shape ratchet refuses a code line added to a baselined mod script, accepts a comment line, and the hook and CI job pin one commit.
+    source: manual
+    checks:
+    - check_type: test_passes
+      check_value: uv run pytest tests/ci/test_mod_file_growth_pin_omn18531.py -q --no-cov
+      cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+    - AC9

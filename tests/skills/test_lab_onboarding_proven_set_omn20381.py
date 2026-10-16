@@ -118,12 +118,15 @@ class Harness:
             "LOG": str(self.run_dir / "log"),
             "STATUS": str(self.run_dir / "status"),
             "SHELL": "/bin/zsh",
+            "STAMP": "20261014-174000",
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
         }
         self.commits: dict[str, tuple[str, str]] = {}
 
-    def make_remotes(self, *, pins_present: bool = True) -> None:
+    def make_remotes(
+        self, *, pins_present: bool = True, pins_in_older: bool = True
+    ) -> None:
         # Infra is created last so its tree names the siblings' older commits.
         for name in (*REPOS[1:], REPOS[0]):
             repo = self.remotes / f"{name}.git"
@@ -135,8 +138,12 @@ class Harness:
                     f"  {sibling}: {self.commits[sibling][0]}\n"
                     for sibling in ("omnimarket", "omnibase_core")
                 )
+            older_pins = pins if pins_in_older else None
             older = _git(
-                repo, "commit-tree", _tree(repo, "older\n", pins), stdin="older\n"
+                repo,
+                "commit-tree",
+                _tree(repo, "older\n", older_pins),
+                stdin="older\n",
             )
             newer = _git(
                 repo,
@@ -242,10 +249,12 @@ def test_dirty_clone_fails_without_moving_head_or_floor(harness: Harness) -> Non
     floor.write_bytes(before)
     result = harness.run("phase2")
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "omnimarket: clone has uncommitted changes" in result.stdout
-    assert "FAIL check out the proven commit of omnimarket" in result.stdout
-    assert "move your changes out" in result.stdout
-    assert "another --workspace" in result.stdout
+    assert (
+        "✗ omnimarket: 1 tracked file(s) changed or deleted "
+        "(on branch dev, 0 commit(s) behind origin/dev)"
+    ) in result.stdout
+    assert "FAIL bring the clones up to date with origin" in result.stdout
+    assert "commit or stash that work, or move each clone aside" in result.stdout
     assert _git(clone, "rev-parse", "HEAD") == harness.commits["omnimarket"][1]
     assert floor.read_bytes() == before
 
@@ -257,6 +266,7 @@ def test_missing_pins_fails_instead_of_accepting_dev_head(harness: Harness) -> N
     assert "FAIL read the proven set (omnibase_infra/.github/sibling-pins.yaml)" in (
         result.stdout
     )
+    assert "origin's omnibase_infra lacks its proven set" in result.stdout
     assert "PASS" not in result.stdout
     assert harness.run("phase2_verified").returncode == 1
     assert not (harness.workspace / ".onex-workspace-floor.json").exists()
@@ -370,3 +380,113 @@ def test_verify_phase_asks_the_wrapper_and_never_reconciles() -> None:
     assert "reconcile" not in floor
     phase6 = text.split("phase6() {", 1)[1].split("\n}", 1)[0]
     assert "workspace_floor" in phase6
+
+
+# ---------------------------------------------------------------------------
+# OMN-21087: a machine that ran onboarding before. Phase 2 brings every clean
+# clone to origin (an old checkout can predate the pins file), and stops once,
+# naming every clone that holds work, before any clone moves.
+# ---------------------------------------------------------------------------
+
+
+def _heads(harness: Harness) -> dict[str, str]:
+    return {r: _git(harness.workspace / r, "rev-parse", "HEAD") for r in REPOS}
+
+
+def test_an_old_clean_checkout_from_before_the_pins_file_is_brought_current(
+    harness: Harness,
+) -> None:
+    """The reported case: omnibase_infra far behind and older than its pins file."""
+    harness.make_remotes(pins_in_older=False)
+    _passed(harness.run("phase2"))
+    infra = harness.workspace / "omnibase_infra"
+    older, newer = harness.commits["omnibase_infra"]
+    _git(infra, "checkout", "--quiet", "-B", "dev", older)
+    assert not (infra / ".github" / "sibling-pins.yaml").exists()
+    result = harness.run("phase2")
+    _passed(result)
+    assert "restore the pins file" not in result.stdout
+    assert _git(infra, "rev-parse", "HEAD") == newer
+    assert _git(infra, "rev-parse", "--abbrev-ref", "HEAD") == "dev"
+
+
+def test_a_clean_detached_unpinned_clone_returns_to_its_branch(
+    harness: Harness,
+) -> None:
+    harness.make_remotes()
+    _passed(harness.run("phase2"))
+    spi = harness.workspace / "omnibase_spi"
+    older, newer = harness.commits["omnibase_spi"]
+    _git(spi, "checkout", "--quiet", "--detach", older)
+    _passed(harness.run("phase2"))
+    assert _git(spi, "rev-parse", "HEAD") == newer
+    assert _git(spi, "rev-parse", "--abbrev-ref", "HEAD") == "dev"
+
+
+def test_one_stop_names_every_clone_holding_work_and_moves_none(
+    harness: Harness,
+) -> None:
+    harness.make_remotes()
+    _passed(harness.run("phase2"))
+    infra = harness.workspace / "omnibase_infra"
+    _git(
+        infra, "checkout", "--quiet", "-B", "dev", harness.commits["omnibase_infra"][0]
+    )
+    (infra / "README").unlink()  # a tracked file deleted locally
+    spi = harness.workspace / "omnibase_spi"
+    (spi / "local.txt").write_text("mine\n")
+    _git(spi, "add", "local.txt")
+    _git(spi, "commit", "--quiet", "-m", "local work")
+    before = _heads(harness)
+    result = harness.run("phase2")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert (
+        "✗ omnibase_infra: 1 tracked file(s) changed or deleted "
+        "(on branch dev, 1 commit(s) behind origin/dev)"
+    ) in result.stdout
+    assert "✗ omnibase_spi: 1 commit(s) that origin does not have" in result.stdout
+    assert (
+        f'to move it aside: mkdir -p "{harness.workspace}/.set-aside" && '
+        f'mv "{infra}" "{harness.workspace}/.set-aside/omnibase_infra.20261014-174000"'
+    ) in result.stdout
+    assert _heads(harness) == before
+    assert not (infra / "README").exists()
+
+
+def test_untracked_files_never_block_a_clone(harness: Harness) -> None:
+    harness.make_remotes()
+    _passed(harness.run("phase2"))
+    (harness.workspace / "omnimarket" / "worktrees").mkdir()
+    (harness.workspace / "omnimarket" / "worktrees" / "note").write_text("x\n")
+    _passed(harness.run("phase2"))
+
+
+def test_a_directory_that_is_not_a_clone_is_moved_aside_never_deleted(
+    harness: Harness,
+) -> None:
+    harness.make_remotes()
+    (harness.workspace / ".omninode-dev-setup").write_text("ours\n")
+    stray = harness.workspace / "omnibase_spi"
+    stray.mkdir()
+    (stray / "notes.txt").write_text("keep me\n")
+    _passed(harness.run("phase2"))
+    kept = harness.workspace / ".set-aside" / "omnibase_spi.20261014-174000"
+    assert (kept / "notes.txt").read_text() == "keep me\n"
+    assert (harness.workspace / "omnibase_spi" / ".git").is_dir()
+
+
+def test_the_workspace_config_is_a_repository_the_materialiser_can_read(
+    harness: Harness,
+) -> None:
+    """onex reads origin/main of the config root; a plain directory warns on every run."""
+    harness.make_remotes()
+    _passed(harness.run("phase2"))
+    root = harness.workspace / ".onex" / "workspace-config"
+    rel = "config/onex/runtime/runtime_config.yaml"
+    assert _git(root, "rev-parse", "--show-toplevel") == str(root.resolve())
+    committed = _git(root, "show", f"origin/main:{rel}")
+    assert committed == (root / rel).read_text().strip()
+    count = _git(root, "rev-list", "--count", "HEAD")
+    _passed(harness.run('is_done() { [ "$1" = 2 ]; }; phase2'))
+    _passed(harness.run("phase2_verified"))
+    assert _git(root, "rev-list", "--count", "HEAD") == count

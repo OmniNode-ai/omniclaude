@@ -26,6 +26,8 @@ CALLER = ROOT / ".github/workflows/imperative-contract-guard.yml"
 ALLOWLIST_PATH = ".github/imperative-contract-allowlist.yaml"
 ALLOWLIST = ROOT / ALLOWLIST_PATH
 CORE_SHA = "70f7ceda44af968ccf26264ecd429cfd27503971"
+# OMN-18531: the canonical-file-shape hook and CI job run core at the commit carrying mod-file-growth.
+SHAPE_CORE_SHA = "d7ed23f1e89b8b6ce6079d303f8599c661c7f191"
 CORE_USES = "OmniNode-ai/omnibase_core/.github/workflows/imperative-contract-guard.yml"
 RECORDED_HANDLER_PATHS = [
     "omniclaude/nodes/node_delegation_orchestrator/handlers/handler_cross_cli_invoker.py",
@@ -132,7 +134,7 @@ def test_canonical_shape_pin_and_caller_test_have_hook_and_ci_twins() -> None:
         if any(hook["id"] == "canonical-file-shape" for hook in repo["hooks"])
     ]
     assert shape_repo["repo"] == "https://github.com/OmniNode-ai/omnibase_core"
-    assert shape_repo["rev"] == CORE_SHA
+    assert shape_repo["rev"] == SHAPE_CORE_SHA
     command = "pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q"
     (hook,) = [
         hook
@@ -144,7 +146,7 @@ def test_canonical_shape_pin_and_caller_test_have_hook_and_ci_twins() -> None:
     assert hook["pass_filenames"] is False
     jobs = _mapping(ROOT / ".github/workflows/ci.yml")["jobs"]
     assert jobs["canonical-file-shape"]["env"]["CANONICAL_FILE_SHAPE_CORE"].endswith(
-        f"@{CORE_SHA}"
+        f"@{SHAPE_CORE_SHA}"
     )
     assert any(
         step.get("run") == f"uv run {command}"

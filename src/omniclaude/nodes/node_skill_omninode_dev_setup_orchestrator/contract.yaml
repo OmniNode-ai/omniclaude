@@ -123,6 +123,25 @@ metadata:
   license: MIT
   generated_by: generate_skill_node.py
   maturity: stub
+  bootstrap_handler:
+    language: bash
+    source: handler_onboarding_preflight.sh
+    sha256_fingerprint: "ce2b:2452:f52c:a37f:1824:a319:563b:113d:8fa3:55a2:38fd:561a:204c:7854:2c6c:90f7"
+    loading: source_after_sha256_verification
+    entrypoints:
+      - resume_banner
+      - save_choices
+      - survey_leftovers
+      - report_leftovers
+      - settle_leftovers
+      - set_aside_leftovers
+      - settle_models
+      - shell_runs_workspace_onex
+    description: >-
+      Preflight on stock macOS Bash, before Python or ONEX is installed.
+      The lab-onboarding entrypoint supplies platform probes, prompts,
+      clone operations and run state. The handler surveys earlier installs,
+      collects consent, preserves displaced files and resumes saved choices.
   tags:
     - orchestrator
     - skill
