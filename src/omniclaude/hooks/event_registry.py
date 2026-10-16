@@ -774,9 +774,12 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # the bus). The refreshed omnimarket emit registry declares passthrough
     # for this topic, and the Registry Consistency CI job (OMN-13092) refuses
     # any projection here that differs from the omnimarket rev uv.lock pins.
-    # Confidentiality is held by the topic's ACL (a command topic, see
-    # CLAUDE.md) and, in production, by the ``payload_encryption`` setting of
-    # contract_hook_claude_capture.yaml, which encrypts the journalled payload.
+    # Raw content on the bus is the ruled behaviour, not an omission: the
+    # topic's broker ACL (a command topic, see CLAUDE.md) is what limits who
+    # reads it. The ``payload_encryption`` block of
+    # contract_hook_claude_capture.yaml seals the journalled payload only when
+    # enabled with a provisioned key; it ships disabled with no key, so this
+    # projection does not rely on it.
     "content.captured": EventRegistration(
         event_type="content.captured",
         fan_out=[
@@ -795,8 +798,8 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # producer; the publish transform is projected from omnimarket's emit
     # registry's passthrough policy, which implements the same raw-capture
     # RULING 2026-10-15T04:24:42Z and is held by the same Registry
-    # Consistency check and ``payload_encryption`` option as content.captured
-    # above. Partitioned by session so a session's hooks stay ordered.
+    # Consistency check and topic ACL as content.captured above. Partitioned
+    # by session so a session's hooks stay ordered.
     "hook.event": EventRegistration(
         event_type="hook.event",
         fan_out=[
