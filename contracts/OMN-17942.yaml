@@ -14,6 +14,9 @@ evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
     command: "uv run pytest tests/hooks/test_ticket_creation_guard.py -q"
+  - kind: tests
+    description: "Lane-intake rules (label, first-line stamp, lane identity, daily budget) hold, each refusal beside an admitted control"
+    command: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -28,3 +31,14 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/hooks/test_ticket_creation_guard.py -q"
+  - id: dod-lane-intake-rules
+    description: >
+      A Linear create from a lane or node context is refused without the
+      label, the first-line stamp naming its lane, a declared lane identity,
+      or when the day's intake budget from the policy config is spent; the
+      same create, fixed, is admitted and counted.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q"

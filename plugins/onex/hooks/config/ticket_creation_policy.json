@@ -251,7 +251,38 @@
     "  exists on the named parent. A create citing a parent AC that was never",
     "  written is admitted. Closing that needs a parent-body lookup on the",
     "  create path, which this guard does not have today -- it is a separate",
-    "  change, not a hole this rule opened."
+    "  change, not a hole this rule opened.",
+    "",
+    "OMN-17942 (lane intake). Rules 11-14 -- an item opened from a lane or node",
+    "context is identifiable as lane-created and is bounded per day.",
+    "",
+    "Why: scorecard S3 measured 135 of 148 new items 2026-10-12..2026-10-16",
+    "  carrying the operator's identity, because every lane writes through the",
+    "  one existing Linear key. The operator ruled (2026-10-16, ~17:47Z) that",
+    "  the existing key stays -- no new bot credential -- so the author field",
+    "  cannot tell a lane-created item from a person's. The label and the",
+    "  first-line stamp carry that fact instead, and the weekly intake and",
+    "  created:completed metric excludes the label.",
+    "",
+    "lane_intake.label -- the Linear label every lane- or node-created item",
+    "  carries. lane_intake.stamp_prefix -- the first line of such an item's",
+    "  description is exactly '<stamp_prefix> <lane>'. Both are data here so a",
+    "  rename is one edit; the guard spells neither.",
+    "",
+    "lane_intake.daily_budget -- the most lane/node-created items admitted per",
+    "  UTC day, across all lanes. Set to 30: the 148 new items over the five",
+    "  days of the S3 window is about 30 a day, against about 35 a day",
+    "  completed in the 2026-08-22..2026-09-04 measurement, so the budget holds",
+    "  intake at roughly the close rate. An operator raises or lowers it on",
+    "  evidence; the guard refuses PAST it with a message naming the count.",
+    "  Admissions are counted when this guard admits a create, so a create the",
+    "  tracker later fails to file still spends one -- the conservative",
+    "  direction for a budget.",
+    "",
+    "lane_intake.state_subdir -- where the per-day admission ledger lives,",
+    "  relative to ONEX_STATE_DIR (one JSON line per admitted create, one file",
+    "  per UTC day). A lane context with no resolvable state dir is refused,",
+    "  not waved through: an unmeasurable budget is not a budget."
   ],
   "prd_source": {
     "repo": "OmniNode-ai/knowledge-base-internal",
@@ -401,5 +432,11 @@
     "noted"
   ],
   "min_labelled_criteria": 1,
-  "labelled_criterion_exempt_binding_forms": ["parent_criterion"]
+  "labelled_criterion_exempt_binding_forms": ["parent_criterion"],
+  "lane_intake": {
+    "label": "lane-created",
+    "stamp_prefix": "created-by-lane:",
+    "daily_budget": 30,
+    "state_subdir": "hooks/ticket_intake"
+  }
 }
