@@ -98,7 +98,6 @@ def build_body(
         "source_tool": contract["source_tool"],
         "payload": {
             "event_type": request.event_type,
-            "event_id": event_id,
             "correlation_id": correlation_id,
             "payload": payload,
         },
@@ -186,8 +185,11 @@ def handle(
     *,
     environ: Mapping[str, str] | None = None,
     contract: Mapping[str, Any] | None = None,
+    event_id: str | None = None,
+    fired_at: str | None = None,
 ) -> ModelHookBusPublishResult:
-    event_id = str(uuid.uuid4())
+    """Publish one event. A replay passes the journal record's id and fire time."""
+    event_id = event_id or str(uuid.uuid4())
     outcome = EnumHookBusPublishOutcome
     try:
         contract = load_contract() if contract is None else contract
@@ -195,7 +197,7 @@ def handle(
         base = env.get(contract["url_env"], "").strip().rstrip("/")
         if not base:
             return ModelHookBusPublishResult(outcome.NO_LOCAL_BUS, event_id)
-        fired_at = datetime.now(UTC).isoformat()
+        fired_at = fired_at or datetime.now(UTC).isoformat()
         body = build_body(request, contract, event_id=event_id, fired_at=fired_at)
         if len(body) > contract["max_record_bytes"]:
             where = _quarantine(
@@ -221,3 +223,72 @@ def landed(request: ModelHookBusPublishRequest) -> bool:
         EnumHookBusPublishOutcome.PUBLISHED,
         EnumHookBusPublishOutcome.QUARANTINED,
     )
+
+
+def replay_journal(
+    journal_dir: Path,
+    *,
+    environ: Mapping[str, str] | None = None,
+    contract: Mapping[str, Any] | None = None,
+    limit: int | None = None,
+    pause_s: float = 0.0,
+) -> dict[str, int]:
+    """Publish a host's existing journal through the local bus, oldest first.
+
+    The retirement step for the hook-emit drainer (OMN-19513). Each record keeps
+    the instant its hook fired (its event id names its quarantine file only). A record leaves the journal
+    only once it is on the bus or quarantined as too large; the first record the
+    bus does not take stops the replay with that record and every one behind it
+    still journalled, so a broker outage loses nothing and reorders nothing.
+    ``pause_s`` paces the replay so it does not raise the host's load.
+    """
+    contract = load_contract() if contract is None else contract
+    contract = {**contract, "timeout_ms": contract["replay_timeout_ms"]}
+    counts = {"published": 0, "quarantined": 0, "unreadable": 0, "left": 0}
+    pending = sorted(journal_dir.glob("[0-9]*.json"))
+    for index, path in enumerate(pending):
+        if limit is not None and index >= limit:
+            counts["left"] += len(pending) - index
+            break
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+            request = ModelHookBusPublishRequest(
+                event_type=record["event_type"],
+                payload=dict(record["payload"]),
+                correlation_id=record.get("correlation_id"),
+                journal_dir=journal_dir,
+            )
+        except (OSError, ValueError, KeyError, TypeError):
+            counts["unreadable"] += 1
+            continue
+        result = handle(
+            request,
+            environ=environ,
+            contract=contract,
+            event_id=record.get("event_id"),
+            fired_at=record.get("queued_at"),
+        )
+        if result.outcome not in (
+            EnumHookBusPublishOutcome.PUBLISHED,
+            EnumHookBusPublishOutcome.QUARANTINED,
+        ):
+            counts["left"] += len(pending) - index
+            break
+        path.unlink(missing_ok=True)
+        counts[str(result.outcome)] += 1
+        if pause_s:
+            time.sleep(pause_s)
+    return counts
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(description=replay_journal.__doc__)
+    parser.add_argument("--replay-journal", type=Path, required=True)
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--pause-s", type=float, default=0.05)
+    args = parser.parse_args()
+    counts = replay_journal(args.replay_journal, limit=args.limit, pause_s=args.pause_s)
+    sys.stdout.write(json.dumps(counts) + "\n")

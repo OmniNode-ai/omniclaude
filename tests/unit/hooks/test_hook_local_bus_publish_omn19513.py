@@ -132,7 +132,9 @@ def test_publishes_an_emit_request_envelope_to_the_contract_topic(
     emit = envelope["payload"]
     assert emit["event_type"] == "tool.executed"
     assert emit["correlation_id"] == "c-1"
-    assert emit["event_id"] == result.event_id
+    # No event_id: the runtime assigns it, and refuses a supplied one on a
+    # work.ledger.* event (event_id_reason in the contract).
+    assert "event_id" not in emit
     assert emit["payload"]["tool_name"] == "Bash"
     # The fire time the drainer stamped travels with the event.
     assert emit["payload"][contract["fire_time_key"]].startswith("20")
@@ -266,3 +268,60 @@ def test_append_journals_on_a_host_with_no_local_bus(
 ) -> None:
     jdir = _append(tmp_path, monkeypatch, None)
     assert len(_journalled(jdir)) == 1
+
+
+def _journal(tmp_path: Path, *payloads: dict[str, object]) -> Path:
+    sys.path.insert(0, str(_LIB_DIR))
+    try:
+        journal = _load(_LIB_DIR / "hook_emit_journal.py", "hook_emit_journal_replay")
+        jdir = tmp_path / "journal"
+        for payload in payloads:
+            journal.append(
+                jdir, event_type="tool.executed", payload=payload, correlation_id="c-r"
+            )
+    finally:
+        sys.path.remove(str(_LIB_DIR))
+    return jdir
+
+
+def test_replay_publishes_the_journal_oldest_first_keeping_fire_time(
+    handler: Any, tmp_path: Path, proxy: tuple[_Proxy, str]
+) -> None:
+    state, url = proxy
+    contract = _contract()
+    jdir = _journal(tmp_path, {"session_id": "s", "n": 1}, {"session_id": "s", "n": 2})
+    originals = [json.loads(p.read_text()) for p in sorted(jdir.glob("*.json"))]
+    counts = handler.replay_journal(jdir, environ={contract["url_env"]: url})
+    assert counts == {"published": 2, "quarantined": 0, "unreadable": 0, "left": 0}
+    assert sorted(jdir.glob("*.json")) == []
+    sent = [
+        json.loads(body)["records"][0]["value"]["payload"]
+        for _, _, body in state.requests
+    ]
+    assert [s["payload"]["n"] for s in sent] == [1, 2]
+    fired = [s["payload"][contract["fire_time_key"]] for s in sent]
+    assert fired == [o["queued_at"] for o in originals]
+
+
+def test_replay_stops_and_keeps_the_journal_while_the_bus_is_unreachable(
+    handler: Any, tmp_path: Path
+) -> None:
+    contract = _contract()
+    jdir = _journal(tmp_path, {"session_id": "s", "n": 1}, {"session_id": "s", "n": 2})
+    url = f"http://127.0.0.1:{_free_port()}"
+    counts = handler.replay_journal(jdir, environ={contract["url_env"]: url})
+    assert counts == {"published": 0, "quarantined": 0, "unreadable": 0, "left": 2}
+    assert len(sorted(jdir.glob("*.json"))) == 2
+
+
+def test_replay_quarantines_an_oversized_record_and_continues(
+    handler: Any, tmp_path: Path, proxy: tuple[_Proxy, str]
+) -> None:
+    state, url = proxy
+    contract = _contract()
+    big = {"session_id": "s", "blob": "x" * (contract["max_record_bytes"] + 1)}
+    jdir = _journal(tmp_path, big, {"session_id": "s", "n": 2})
+    counts = handler.replay_journal(jdir, environ={contract["url_env"]: url})
+    assert counts == {"published": 1, "quarantined": 1, "unreadable": 0, "left": 0}
+    assert len(state.requests) == 1
+    assert len(list((jdir / contract["quarantine_dirname"]).glob("*.json"))) == 1

@@ -7,9 +7,12 @@
   "command_topic": "onex.cmd.omnimarket.event-emit.v1",
   "content_type": "application/vnd.kafka.json.v2+json",
   "timeout_ms": 500,
+  "replay_timeout_ms": 5000,
+  "replay_timeout_reason": "A replay is not on a hook's path, so it waits longer than a hook may: a first cold request on h202 at load average 20 took over 500 ms (2026-10-16).",
   "max_record_bytes": 900000,
   "max_record_bytes_reason": "The broker's default message limit is 1048576 bytes, and the proxy does not refuse an oversized record: it holds the request until the client gives up (measured on h202 2026-10-16, a 1.2 MB record timed out). The hook therefore measures the request itself and quarantines anything above this limit, leaving headroom for the envelope the runtime adds.",
   "quarantine_dirname": "quarantine",
   "fire_time_key": "hook_fired_at",
+  "event_id_reason": "The emit request carries no event_id, as the drainer's never did: the runtime assigns one, and for a work.ledger.* event it derives the canonical producer identity and refuses any other (node_event_emit_effect._work_ledger_request, measured on h202 2026-10-16).",
   "source_tool": "omniclaude.hook_edge"
 }
