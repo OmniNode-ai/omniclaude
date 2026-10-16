@@ -22,6 +22,7 @@ verbatim as the positive and negative control of the whole change.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -1649,7 +1650,10 @@ def _rulings_file(
                         "lane": "orchestrator-bb1a",
                         "ticket": "OMN-19998",
                         "amends": "2026-09-14T11:38:53Z",
-                        "repos": list(repos),
+                        "repos_sha256": [
+                            hashlib.sha256(repo.lower().encode()).hexdigest()
+                            for repo in repos
+                        ],
                         "label_families": ["ubuntu"],
                         "scope": "fixture scope",
                     }
@@ -1859,9 +1863,10 @@ def test_the_shipped_registry_carries_the_2026_10_16_ruling_for_two_repos() -> N
     ruling = registry[RULING_TS]
     assert ruling.ticket == "OMN-19998"
     assert ruling.lane == "orchestrator-bb1a"
-    assert ruling.repos == frozenset(
-        {"OmniNode-ai/omnibase_internal", "OmniNode-ai/omniclaude-internal"}
-    )
+    # Two repositories, held as digests: this tree is public and may not name
+    # them. The lab run against the real tree is what matches each digest.
+    assert len(ruling.repo_hashes) == 2
+    assert not ruling.covers("OmniNode-ai/fixture")
     assert ruling.label_families == ("ubuntu",)
 
 
