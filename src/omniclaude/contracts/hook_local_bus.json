@@ -1,0 +1,15 @@
+{
+  "name": "hook_local_bus",
+  "ticket_id": "OMN-19513",
+  "summary": "Where the hook edge lands each raw event: the host's local bus, through its Redpanda HTTP proxy, as an emit request on the command topic node_event_emit_effect consumes in the runtime-effects profile. That node does the enrichment and topic fan-out the hook-emit drainer did; node_bus_forwarder_effect relays the fanned-out capture classes onward. The hook journals only while the bus is unreachable, and a host that declares no local bus keeps the journal.",
+  "url_env": "ONEX_HOOK_LOCAL_BUS_HTTP_URL",
+  "url_source": "Written per host by the host installer from that host's compose overlay: the external advertised pandaproxy address of omnibase_infra docker/docker-compose.dev-<host>.yml. Never a default here: a host without the variable has no local bus.",
+  "command_topic": "onex.cmd.omnimarket.event-emit.v1",
+  "content_type": "application/vnd.kafka.json.v2+json",
+  "timeout_ms": 500,
+  "max_record_bytes": 900000,
+  "max_record_bytes_reason": "The broker's default message limit is 1048576 bytes, and the proxy does not refuse an oversized record: it holds the request until the client gives up (measured on h202 2026-10-16, a 1.2 MB record timed out). The hook therefore measures the request itself and quarantines anything above this limit, leaving headroom for the envelope the runtime adds.",
+  "quarantine_dirname": "quarantine",
+  "fire_time_key": "hook_fired_at",
+  "source_tool": "omniclaude.hook_edge"
+}

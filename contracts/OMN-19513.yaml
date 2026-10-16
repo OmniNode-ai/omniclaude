@@ -35,6 +35,11 @@ requirements:
     acceptance:
       - id: AC7
         statement: 'AC7: the raw-capture guard passes on the producer and fails on each of a digest or redaction field on the content models, a scrub parameter on map_hook_stdin, a retired scrub name in either producer, a digest in the contract content reference and a missing payload_encryption block -- falsifier: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov -k raw_today fails against the producer sources before omniclaude#2767'
+  - id: req-hook-local-bus-first
+    statement: The hook lands each raw event on the host's local bus through its HTTP proxy, journals only while that bus is unreachable or undeclared, and quarantines an over-limit event with its reason instead of sending or retrying it.
+    acceptance:
+      - id: AC8
+        statement: 'AC8: an event with a declared local bus reaches the proxy as an emit request on the contract topic and is not journalled; a refused, hung or undeclared bus journals it; an over-limit event is quarantined with reason payload_too_large and never sent -- falsifier: uv run pytest tests/unit/hooks/test_hook_local_bus_publish_omn19513.py -q --no-cov fails against the pre-change hook_emit_append'
 evidence_requirements:
   - kind: tests
     description: Selected configuration survives launchd rendering and missing overlays preserve the previous agent.
@@ -51,6 +56,9 @@ evidence_requirements:
   - kind: tests
     description: The raw-capture guard accepts the raw producer and refuses each reintroduced scrub, digest or redaction field.
     command: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
+  - kind: tests
+    description: The local-bus publish handler and hook_emit_append land events on a stand-in HTTP proxy, fall back to the journal, and quarantine over-limit events.
+    command: uv run pytest tests/unit/hooks/test_hook_local_bus_publish_omn19513.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ''
@@ -137,3 +145,11 @@ dod_evidence:
           assert not guards[0].get("continue-on-error", False) and "if" not in guards[0]'
     binds_ac:
       - AC7
+  - id: dod-omn19513-local-bus-first
+    description: The local-bus tests run the real urllib request against a loopback stand-in proxy, the journal fallback for a refused, hung and undeclared bus, the quarantine of an over-limit event, and the stdlib-only import check.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_local_bus_publish_omn19513.py -q --no-cov
+    binds_ac:
+      - AC8

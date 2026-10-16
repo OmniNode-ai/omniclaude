@@ -10,9 +10,9 @@ to Kafka inline; profiling put 31.08s of a 31.65s ``handle()`` in a lazily-
 imported ``omnibase_infra`` chain that builds ~2,497 Pydantic classes. With
 one such process forked per tool call, 14 ran concurrently at ~270% CPU.
 
-Here the hook does one thing: serialize the event to the local journal.
-Publishing is the drainer's job (``hook_emit_drainer.py``), which pays that
-import once for the life of the machine instead of once per tool call.
+Here the hook lands the event on the host's local bus with one stdlib HTTP
+POST (OMN-19513, ``handler_hook_local_bus_publish``) and journals it only
+while that bus is unreachable or the host declares none.
 
 Deliberately stdlib-only and free of any ``omnibase_infra`` / ``omnimarket``
 import -- see ``hook_emit_journal`` for why that constraint is load-bearing
@@ -28,6 +28,7 @@ may not fail silently.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -39,6 +40,23 @@ import hook_actor  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
 import hook_lane_attribution as lane_attribution  # noqa: E402
 import hook_turn_id  # noqa: E402
+
+# OMN-19513: the stdlib handler that lands an event on the host's local bus. A
+# missing file (a plugin tree without src/) or a load failure means the journal.
+_BUS_HANDLER = (
+    Path(__file__).resolve().parents[4]
+    / "src/omniclaude/handlers/handler_hook_local_bus_publish.py"
+)
+
+
+def _landed_on_local_bus(target: Path, event: dict[str, Any]) -> bool:
+    """True when the event is on the local bus, or quarantined there as too large."""
+    spec = importlib.util.spec_from_file_location("hook_local_bus", _BUS_HANDLER)
+    if spec is None or spec.loader is None or not _BUS_HANDLER.is_file():
+        return False
+    bus = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bus)
+    return bool(bus.landed(bus.ModelHookBusPublishRequest(journal_dir=target, **event)))
 
 
 def _parse_payload(raw: str) -> dict[str, Any]:
@@ -126,17 +144,15 @@ def append_event(
         host_turn_id=host_turn_id,
     )
     payload["turn_id"] = turn_id
-    write = (
-        journal.defer
-        if _deferred_by_status(event_type, drainer_status)
-        else journal.append
-    )
-    write(
-        target,
-        event_type=event_type,
-        payload=payload,
-        correlation_id=correlation_id,
-    )
+    event = {
+        "event_type": event_type,
+        "payload": payload,
+        "correlation_id": correlation_id,
+    }
+    if _deferred_by_status(event_type, drainer_status):
+        journal.defer(target, **event)
+    elif not _landed_on_local_bus(target, event):
+        journal.append(target, **event)
     return turn_id
 
 
@@ -145,25 +161,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--event-type", required=True)
     parser.add_argument("--payload", default="{}")
     parser.add_argument("--correlation-id", default=None)
+    # The working directory the hook fired in, taken from the harness hook payload
+    # rather than this process's own cwd. Used to resolve the lane identity merged
+    # onto the event (OMN-18609).
+    parser.add_argument("--cwd", default=None, help="the hook's cwd (OMN-18609)")
+    # The agent host that produced this event, as declared by the hook registration
+    # that invoked the caller (OMN-18704). Absent means the Claude Code host. Never
+    # inferred from the environment: a Codex hook inherits its parent's environment,
+    # so a Codex session launched from a Claude Code session carries CLAUDECODE=1.
     parser.add_argument(
-        "--cwd",
-        default=None,
-        help=(
-            "The working directory the hook fired in, taken from the harness "
-            "hook payload rather than this process's own cwd. Used to resolve "
-            "the lane identity merged onto the event (OMN-18609)."
-        ),
-    )
-    parser.add_argument(
-        "--actor",
-        default=None,
-        help=(
-            "The agent host that produced this event, as declared by the hook "
-            "registration that invoked the caller (OMN-18704). Absent means "
-            "the Claude Code host. Never inferred from the environment: a "
-            "Codex hook inherits its parent's environment, so a Codex session "
-            "launched from a Claude Code session carries CLAUDECODE=1."
-        ),
+        "--actor", default=None, help="the declared agent host (OMN-18704)"
     )
     parser.add_argument(
         "--turn-id",

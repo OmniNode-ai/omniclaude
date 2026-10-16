@@ -1102,6 +1102,9 @@ _LEDGER_BUS_ENV = (
     "ONEX_LEDGER_EMIT_DRAINER_STATUS",
     "ONEX_HOOK_EMIT_JOURNAL_DIR",
     "OMNICLAUDE_EMIT_SOCKET",
+    # The host's local-bus HTTP proxy (hook_local_bus.json): a test that runs a
+    # hook emit must never land its event on the lab host's real bus.
+    "ONEX_HOOK_LOCAL_BUS_HTTP_URL",
 )
 _BROKER_ENV_PREFIXES = ("KAFKA_", "ONEX_KAFKA_", "REDPANDA_", "ONEX_BUS_")
 
