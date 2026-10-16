@@ -27,6 +27,12 @@
 # for the same reason the routing-decision job in omnibase_infra is pinned --
 # it must not share fate with the variable it reads.
 #
+# RULED EXCEPTIONS ARE DECLARED, NOT ANNOTATED (OMN-19998). A job an operator
+# ruling lets run on GitHub-hosted runners is listed in the caller's
+# `.github/hosted-eligible-jobs.yaml`, citing a ruling that the registry
+# `config/private_repo_hosted_rulings.yaml` carries for that repository. The
+# registry is read from the validator checkout below, at the same pin.
+#
 # Usage in caller repos:
 #   jobs:
 #     private-repo-runner-placement:

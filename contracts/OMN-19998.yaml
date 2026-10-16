@@ -22,6 +22,15 @@ requirements:
       - id: "AC2"
         statement: |-
           AC2: The per-attempt budget is the job ceiling less setup and the pause, split across the review step's attempts, and the ceiling the step reads equals timeout-minutes -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -k "job_ceiling or share_of_the_ceiling" with HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS changed alone
+  - id: req-omn19998-hosted-eligible-jobs
+    statement: "A private repository's job runs on GitHub-hosted runners only when a checked-in declaration lists it under a ruling the placement gate names for that repository."
+    acceptance:
+      - id: "AC3"
+        statement: |-
+          AC3: The placement gate accepts a hosted job listed in .github/hosted-eligible-jobs.yaml under a ruling in config/private_repo_hosted_rulings.yaml, and still fails the unlisted twin beside it -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -k "listed_hosted_job_passes or unlisted_hosted_job_fails" with load_eligible returning {}
+      - id: "AC4"
+        statement: |-
+          AC4: An entry citing a ruling the registry does not carry, a ruling scoped to another repository, a ruling absent from a readable ledger, or a job no workflow defines is refused -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -k "unknown_ruling or does_not_scope or on_the_ledger or does_not_exist" with those checks removed
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -47,3 +56,19 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -q -k \"job_ceiling or share_of_the_ceiling\""
     binds_ac:
       - AC2
+  - id: dod-omn19998-hosted-eligible-listed
+    description: "A listed hosted job passes the placement gate and its unlisted twin fails."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -k \"listed_hosted_job_passes or unlisted_hosted_job_fails\""
+    binds_ac:
+      - AC3
+  - id: dod-omn19998-hosted-eligible-refusals
+    description: "Unknown, out-of-scope and off-ledger rulings and stale entries are refused."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -k \"unknown_ruling or does_not_scope or on_the_ledger or does_not_exist\""
+    binds_ac:
+      - AC4
