@@ -1602,3 +1602,343 @@ def test_no_fetched_branches_fails_closed(tmp_path: Path) -> None:
     )
     _git(root, "init", "-q")
     assert _run_every_branch(module, root, tmp_path, "dev", ["dev"]) == 2
+
+
+# --- OMN-19998: hosted-eligible jobs declared in a checked-in file ----------
+#
+# RULING 2026-10-16T17:44:31Z (amends 2026-09-14T11:38:53Z) lets two private
+# repositories run self-contained jobs on GitHub-hosted Linux runners. The
+# per-job comment marker cannot carry that: the canonical-file-shape ratchet
+# counts every `#...-ok` comment as a new suppression. So the jobs are declared
+# in `.github/hosted-eligible-jobs.yaml`, and each entry cites a ruling the
+# gate's own registry names for that repository (and, where a ledger is
+# readable, that the ledger carries). Every assertion below has its twin: the
+# listed job passes, the identical unlisted job beside it fails.
+
+LIGHT_RUNS_ON = (
+    "${{ fromJSON(vars.PRIVATE_CI_LIGHT_RUNS_ON || '[\"ubuntu-latest\"]') }}"
+)
+RULING_TS = "2026-10-16T17:44:31Z"
+RULING_ROW = (
+    f"{RULING_TS} | RULING | lane=orchestrator-bb1a | ticket=OMN-19998 | "
+    "question=May private repositories run self-contained CI jobs on "
+    'GitHub-hosted runners now? | kind=process | "fixture words"\n'
+)
+
+
+def _light_workflow(*jobs: str, runs_on: str = LIGHT_RUNS_ON) -> str:
+    return "name: CI\non:\n  pull_request: {}\n  push: {}\njobs:\n" + "".join(
+        f"  {job}:\n    runs-on: {runs_on}\n    steps:\n      - run: true\n"
+        for job in jobs
+    )
+
+
+def _rulings_file(
+    tmp_path: Path,
+    repos: tuple[str, ...] = ("OmniNode-ai/fixture",),
+    ts: str = RULING_TS,
+) -> Path:
+    path = tmp_path / "rulings.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "schema": 1,
+                "rulings": [
+                    {
+                        "ts": ts,
+                        "lane": "orchestrator-bb1a",
+                        "ticket": "OMN-19998",
+                        "amends": "2026-09-14T11:38:53Z",
+                        "repos": list(repos),
+                        "label_families": ["ubuntu"],
+                        "scope": "fixture scope",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _declare(root: Path, *entries: tuple[str, str, str], repo: str = "") -> None:
+    (root / ".github").mkdir(parents=True, exist_ok=True)
+    (root / ".github" / "hosted-eligible-jobs.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema": 1,
+                "jobs": [
+                    {
+                        "repo": repo or "OmniNode-ai/fixture",
+                        "workflow": workflow,
+                        "job": job,
+                        "ruling": ruling,
+                    }
+                    for workflow, job, ruling in entries
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _run_eligible(
+    module,
+    root: Path,
+    tmp_path: Path,
+    rulings: Path,
+    variables: dict[str, str] | None = None,
+    ledger: Path | None = None,
+) -> int:
+    vars_file = tmp_path / "vars.json"
+    vars_file.write_text(json.dumps(variables or {}), encoding="utf-8")
+    argv = [
+        "--repo-root",
+        str(root),
+        "--repo",
+        "OmniNode-ai/fixture",
+        "--assume-visibility",
+        "private",
+        "--variables-json",
+        str(vars_file),
+        "--branches-json",
+        "[]",
+        "--hosted-rulings",
+        str(rulings),
+        # An empty value disables the ledger read, so a lane's own
+        # ONEX_LEDGER_PATH never decides a fixture's verdict.
+        "--ledger",
+        str(ledger) if ledger else "",
+    ]
+    return _fixture_call(lambda: module.main(argv))
+
+
+def test_a_listed_hosted_job_passes_and_its_unlisted_twin_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint", "unit"))
+    rulings = _rulings_file(tmp_path)
+
+    _declare(root, ("ci.yml", "lint", RULING_TS), ("ci.yml", "unit", RULING_TS))
+    assert _run_eligible(module, root, tmp_path, rulings) == 0
+    assert f"eligible: ci.yml::lint runs GitHub-hosted under RULING {RULING_TS}" in (
+        capsys.readouterr().out
+    )
+
+    _declare(root, ("ci.yml", "lint", RULING_TS))
+    assert _run_eligible(module, root, tmp_path, rulings) == 1
+    err = capsys.readouterr().err
+    assert "ci.yml::unit" in err
+    assert "ci.yml::lint" not in err
+
+
+def test_an_unlisted_hosted_job_fails_with_no_declaration_file(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint"))
+    assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 1
+
+
+def test_an_entry_citing_an_unknown_ruling_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint"))
+    _declare(root, ("ci.yml", "lint", "2026-10-16T17:44:32Z"))
+    assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 2
+    assert "2026-10-16T17:44:32Z" in capsys.readouterr().err
+
+
+def test_a_ruling_that_does_not_scope_this_repository_is_refused(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint"))
+    _declare(root, ("ci.yml", "lint", RULING_TS))
+    rulings = _rulings_file(tmp_path, repos=("OmniNode-ai/somewhere-else",))
+    assert _run_eligible(module, root, tmp_path, rulings) == 2
+
+
+def test_an_entry_naming_another_repository_is_refused(tmp_path: Path) -> None:
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint"))
+    _declare(root, ("ci.yml", "lint", RULING_TS), repo="OmniNode-ai/other")
+    assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 2
+
+
+def test_the_ruling_must_be_on_the_ledger_when_a_ledger_is_readable(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint"))
+    _declare(root, ("ci.yml", "lint", RULING_TS))
+    rulings = _rulings_file(tmp_path)
+
+    ledger = tmp_path / "ledger" / "ROLLING_WORK_LEDGER.md"
+    ledger.parent.mkdir()
+    ledger.write_text("2026-10-16T17:44:31Z | STATUS | lane=x | not a ruling\n")
+    assert _run_eligible(module, root, tmp_path, rulings, ledger=ledger) == 2
+
+    # A rolled ledger keeps the row in archive/, which is read too.
+    (ledger.parent / "archive").mkdir()
+    (ledger.parent / "archive" / "ROLLING_WORK_LEDGER_roll.md").write_text(RULING_ROW)
+    assert _run_eligible(module, root, tmp_path, rulings, ledger=ledger) == 0
+
+
+def test_a_listed_job_on_a_non_linux_hosted_image_still_fails(
+    tmp_path: Path,
+) -> None:
+    """The ruling covers Linux runners only; a listing cannot widen it."""
+    module = _module()
+    root = _tree(
+        tmp_path / "repo", "ci.yml", _light_workflow("lint", runs_on="macos-15")
+    )
+    _declare(root, ("ci.yml", "lint", RULING_TS))
+    assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 1
+
+
+def test_a_listed_job_that_selects_no_runner_still_fails(tmp_path: Path) -> None:
+    """A listing excuses a hosted placement, never a placement onto nothing."""
+    module = _module()
+    expression = (
+        "${{ github.event_name == 'pull_request' && "
+        "fromJSON(vars.PRIVATE_CI_LIGHT_RUNS_ON || '[\"ubuntu-latest\"]') }}"
+    )
+    root = _tree(
+        tmp_path / "repo", "ci.yml", _light_workflow("lint", runs_on=expression)
+    )
+    _declare(root, ("ci.yml", "lint", RULING_TS))
+    assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 1
+
+
+def test_an_entry_for_a_job_that_does_not_exist_is_refused(tmp_path: Path) -> None:
+    """A stale entry would silently excuse the next job given that name."""
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint"))
+    _declare(root, ("ci.yml", "lint", RULING_TS), ("ci.yml", "gone", RULING_TS))
+    assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 2
+
+
+def test_listed_jobs_pass_after_the_variable_flips_them_back_to_the_lab(
+    tmp_path: Path,
+) -> None:
+    """One variable returns every listed job to the fleet; the file stays."""
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint"))
+    _declare(root, ("ci.yml", "lint", RULING_TS))
+    assert (
+        _run_eligible(
+            module,
+            root,
+            tmp_path,
+            _rulings_file(tmp_path),
+            variables={"PRIVATE_CI_LIGHT_RUNS_ON": FLEET},
+        )
+        == 0
+    )
+
+
+def test_the_declaration_needs_no_comment_marker(tmp_path: Path) -> None:
+    """The ratchet counts `#...-ok` comments; neither file may carry one."""
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint"))
+    _declare(root, ("ci.yml", "lint", RULING_TS))
+    marker = __import__("re").compile(r"#\s*[A-Za-z][\w-]*-ok\b")
+    for path in (root / ".github").rglob("*.y*ml"):
+        assert not marker.search(path.read_text(encoding="utf-8")), path
+    assert not marker.search(module.DEFAULT_HOSTED_RULINGS.read_text(encoding="utf-8"))
+    assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 0
+
+
+def test_the_shipped_registry_carries_the_2026_10_16_ruling_for_two_repos() -> None:
+    module = _module()
+    registry = module.load_hosted_rulings(module.DEFAULT_HOSTED_RULINGS)
+    assert set(registry) == {RULING_TS}
+    ruling = registry[RULING_TS]
+    assert ruling.ticket == "OMN-19998"
+    assert ruling.lane == "orchestrator-bb1a"
+    assert ruling.repos == frozenset(
+        {"OmniNode-ai/omnibase_internal", "OmniNode-ai/omniclaude-internal"}
+    )
+    assert ruling.label_families == ("ubuntu",)
+
+
+def test_the_rulings_override_is_refused_inside_github_actions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint"))
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    argv = [
+        "--repo-root",
+        str(root),
+        "--repo",
+        "OmniNode-ai/fixture",
+        "--hosted-rulings",
+        str(_rulings_file(tmp_path)),
+    ]
+    assert module.main(argv) == 2
+
+
+def test_another_branch_is_judged_by_its_own_declaration(tmp_path: Path) -> None:
+    """The checkout's listing never excuses a different branch's tree."""
+    module = _module()
+    light = _light_workflow("lint")
+    declaration = yaml.safe_dump(
+        {
+            "schema": 1,
+            "jobs": [
+                {
+                    "repo": "OmniNode-ai/fixture",
+                    "workflow": "ci.yml",
+                    "job": "lint",
+                    "ruling": RULING_TS,
+                }
+            ],
+        }
+    )
+    rulings = _rulings_file(tmp_path)
+    assert _every_branch_eligible(module, tmp_path / "a", rulings, light, None) == 1
+    # The same tree passes once main declares the job itself. The helper's
+    # file map is rooted at .github/workflows, hence the `..`.
+    assert (
+        _every_branch_eligible(module, tmp_path / "b", rulings, light, declaration) == 0
+    )
+
+
+def _every_branch_eligible(
+    module, tmp_path: Path, rulings: Path, light: str, main_declaration: str | None
+) -> int:
+    tmp_path.mkdir()
+    main_files = {"ci.yml": light}
+    if main_declaration is not None:
+        main_files["../hosted-eligible-jobs.yaml"] = main_declaration
+    origin = _origin_with_branches(
+        tmp_path, "dev", {"dev": {"ci.yml": light}, "main": main_files}
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    _declare(work, ("ci.yml", "lint", RULING_TS))
+    vars_file = tmp_path / "vars.json"
+    vars_file.write_text("{}", encoding="utf-8")
+    argv = [
+        "--repo-root",
+        str(work),
+        "--repo",
+        "OmniNode-ai/fixture",
+        "--assume-visibility",
+        "private",
+        "--variables-json",
+        str(vars_file),
+        "--branches-json",
+        json.dumps(["dev", "main"]),
+        "--every-workflow-branch",
+        "--event-branch",
+        "dev",
+        "--hosted-rulings",
+        str(rulings),
+        "--ledger",
+        "",
+    ]
+    return _fixture_call(lambda: module.main(argv))

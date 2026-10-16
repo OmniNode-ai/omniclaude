@@ -1,0 +1,25 @@
+# Operator rulings that let a private repository run CI jobs on GitHub-hosted
+# runners (OMN-19998). Read by scripts/private_repo_runner_placement_gate.py at
+# the gate's own pinned SHA. A private repository lists its eligible jobs in
+# .github/hosted-eligible-jobs.yaml, each citing one ruling below by its ledger
+# timestamp; the gate accepts a listed job only when the cited ruling is here,
+# names that repository, covers every hosted label's image family, and (where
+# the gate can read a ledger) is a RULING row on the ledger.
+#
+# Add an entry only for a RULING row that exists on the rolling work ledger,
+# copying its timestamp, lane and ticket exactly.
+schema: 1
+rulings:
+  - ts: "2026-10-16T17:44:31Z"
+    lane: orchestrator-bb1a
+    ticket: OMN-19998
+    amends: "2026-09-14T11:38:53Z"
+    repos:
+      - OmniNode-ai/omnibase_internal
+      - OmniNode-ai/omniclaude-internal
+    label_families:
+      - ubuntu
+    scope: >-
+      Self-contained jobs only (lint, unit tests, type checks, validators);
+      Linux runners only; jobs that need the lab network, bus or database stay
+      on lab runners. One routing variable flips the jobs back to the lab.

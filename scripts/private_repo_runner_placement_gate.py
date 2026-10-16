@@ -136,6 +136,36 @@ placed on the line immediately before, or anywhere inside, the job's mapping.
 A bare pin with no annotation is the failure. There is no global allowlist
 file and no `--force`: an allowlist is where exemptions go to stop being read.
 
+A JOB AN OPERATOR RULING PUTS ON HOSTED RUNNERS IS DECLARED, NOT ANNOTATED
+(OMN-19998). RULING 2026-10-16T17:44:31Z amends the 2026-09-14 rule: named
+private repositories may run self-contained jobs on GitHub-hosted LINUX
+runners. Those jobs can run on the fleet, so the annotation above (whose
+meaning is "the fleet cannot carry this") is the wrong record for them, and
+the canonical-file-shape ratchet counts every `#...-ok` comment as a new
+suppression, so the two gates could not both pass. Instead the repository
+declares them in `.github/hosted-eligible-jobs.yaml`:
+
+    schema: 1
+    jobs:
+      - repo: OmniNode-ai/<name>
+        workflow: ci.yml
+        job: lint
+        ruling: "2026-10-16T17:44:31Z"
+
+and a listed job's hosted placement is accepted only when ALL of these hold:
+the ruling is in this gate's own registry
+(`config/private_repo_hosted_rulings.yaml`, read at the gate's pinned SHA, so
+adding a ruling is a reviewed change here and never a caller's edit); that
+ruling names this repository; every hosted label of the arm is in the
+ruling's label families (Linux only today); and, where a ledger is readable
+(`--ledger`, default `$ONEX_LEDGER_PATH` outside Actions), the ledger itself
+carries the RULING row with that timestamp, lane and ticket. A listing never
+excuses a placement onto nothing, an entry naming another repository or a job
+that does not exist is refused, and each branch is judged by its OWN
+declaration file, so a pull request's listing cannot excuse another branch.
+The jobs stay listed when the routing variable flips them back to the fleet:
+a listed job that resolves to the fleet is simply not hosted.
+
 A HOST THAT CANNOT READ GETS A DATED SNAPSHOT, NEVER A PASS (OMN-17427). A lab-host
 lane cannot read Actions variables (HTTP 403 at both scopes) and its GitHub reads
 are refused by the lane read guard, so visibility and the variable scopes cannot be
@@ -209,6 +239,16 @@ SHA_REF = re.compile(r"^[0-9a-f]{40}$")
 # a run would not execute, so a tree claiming to go deeper is malformed rather
 # than merely large, and is refused.
 MAX_NESTING = 4
+
+# OMN-19998. Where a private repository declares the jobs a ruling lets run on
+# GitHub-hosted runners, and where this gate keeps the rulings that may be
+# cited. The registry sits beside this script so the reusable workflow reads
+# it at the same pinned SHA as the validator: one pin, not two.
+ELIGIBLE_FILE = Path(".github") / "hosted-eligible-jobs.yaml"
+DEFAULT_HOSTED_RULINGS = (
+    Path(__file__).resolve().parents[1] / "config" / "private_repo_hosted_rulings.yaml"
+)
+RULING_TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 class GateError(RuntimeError):
@@ -1252,6 +1292,169 @@ def _called_jobs(uses: str, text: str) -> dict[str, Any]:
     return jobs
 
 
+@dataclass(frozen=True)
+class HostedRuling:
+    """One operator ruling that lets named private repositories run hosted."""
+
+    ts: str
+    lane: str
+    ticket: str
+    repos: frozenset[str]
+    label_families: tuple[str, ...]
+
+    def admits(self, labels: list[str]) -> bool:
+        """Is every hosted label of this arm in one of the ruling's image families?"""
+        families = {family.lower() for family in self.label_families}
+        hosted = [label for label in labels if HOSTED_LABEL.match(label)]
+        return bool(hosted) and all(
+            label.split("-", 1)[0].lower() in families for label in hosted
+        )
+
+
+def _yaml_mapping(path: Path, what: str) -> dict[str, Any]:
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise GateError(
+            f"{what} {path} could not be read ({error}). THE GATE DID NOT RUN."
+        ) from error
+    if not isinstance(document, dict) or document.get("schema") != 1:
+        raise GateError(
+            f"{what} {path} is not a schema-1 mapping. THE GATE DID NOT RUN."
+        )
+    return document
+
+
+def load_hosted_rulings(path: Path) -> dict[str, HostedRuling]:
+    """The rulings a hosted-eligible entry may cite, keyed by timestamp."""
+    document = _yaml_mapping(path, "the hosted-rulings registry")
+    entries = document.get("rulings")
+    if not isinstance(entries, list):
+        raise GateError(
+            f"the hosted-rulings registry {path} has no `rulings` list. "
+            "THE GATE DID NOT RUN."
+        )
+    rulings: dict[str, HostedRuling] = {}
+    for entry in entries:
+        fields = entry if isinstance(entry, dict) else {}
+        ts, lane, ticket = (
+            str(fields.get(key, "")) for key in ("ts", "lane", "ticket")
+        )
+        repos, families = fields.get("repos"), fields.get("label_families")
+        if (
+            not RULING_TS.match(ts)
+            or not lane
+            or not re.fullmatch(r"OMN-\d+", ticket)
+            or not isinstance(repos, list)
+            or not repos
+            or not isinstance(families, list)
+            or not families
+            or ts in rulings
+        ):
+            raise GateError(
+                f"the hosted-rulings registry {path} carries a malformed or "
+                f"duplicate entry {entry!r}: each needs ts, lane, ticket, a "
+                "non-empty repos list and a non-empty label_families list. "
+                "THE GATE DID NOT RUN."
+            )
+        rulings[ts] = HostedRuling(
+            ts=ts,
+            lane=lane,
+            ticket=ticket,
+            repos=frozenset(str(repo) for repo in repos),
+            label_families=tuple(str(family) for family in families),
+        )
+    return rulings
+
+
+def _ledger_files(ledger: Path) -> list[Path]:
+    """The live ledger plus the rolls it spilled into, beside it in archive/."""
+    if not ledger.is_file():
+        raise GateError(
+            f"the ledger {ledger} does not exist, so the ruling a hosted-eligible "
+            "job cites cannot be confirmed on it. Pass --ledger '' to judge "
+            "against the registry alone. THE GATE DID NOT RUN."
+        )
+    return [ledger, *sorted((ledger.parent / "archive").glob("*.md"))]
+
+
+def _ruling_on_ledger(ruling: HostedRuling, files: list[Path]) -> bool:
+    prefix = f"{ruling.ts} | RULING |"
+    cells = (f"lane={ruling.lane}", f"ticket={ruling.ticket}")
+    for path in files:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if line.startswith(prefix):
+                    row = {cell.strip() for cell in line.split("|")}
+                    if all(cell in row for cell in cells):
+                        return True
+    return False
+
+
+def load_eligible(
+    repo_root: Path,
+    slug: str,
+    rulings: dict[str, HostedRuling],
+    ledger: Path | None,
+) -> dict[tuple[str, str], HostedRuling]:
+    """{(workflow file, job id): ruling} declared by this tree, every entry checked.
+
+    An absent file declares nothing. Every way an entry can be wrong is a
+    REFUSAL naming it, never a silently ignored line: an entry that does not
+    excuse what its author meant it to is a different verdict for a reason
+    nobody can see.
+    """
+    path = repo_root / ELIGIBLE_FILE
+    if not path.is_file():
+        return {}
+    document = _yaml_mapping(path, "the hosted-eligible declaration")
+    entries = document.get("jobs")
+    if not isinstance(entries, list):
+        raise GateError(f"{ELIGIBLE_FILE} has no `jobs` list. THE GATE DID NOT RUN.")
+    ledger_files = _ledger_files(ledger) if ledger is not None else None
+    eligible: dict[tuple[str, str], HostedRuling] = {}
+    for entry in entries:
+        fields = entry if isinstance(entry, dict) else {}
+        repo, workflow, job, ts = (
+            str(fields.get(key, "")) for key in ("repo", "workflow", "job", "ruling")
+        )
+        where = f"{ELIGIBLE_FILE} entry {workflow}::{job}"
+        if not (repo and workflow and job and ts):
+            raise GateError(
+                f"{ELIGIBLE_FILE} carries an entry {entry!r} without repo, "
+                "workflow, job and ruling. THE GATE DID NOT RUN."
+            )
+        if repo != slug:
+            raise GateError(
+                f"{where} names repository {repo}, not {slug}. A declaration "
+                "excuses jobs of its own repository only. THE GATE DID NOT RUN."
+            )
+        ruling = rulings.get(ts)
+        if ruling is None:
+            raise GateError(
+                f"{where} cites ruling {ts}, which the hosted-rulings registry "
+                f"does not carry (known: {', '.join(sorted(rulings)) or 'none'}). "
+                "A job runs hosted in a private repository only under a ruling "
+                "this gate can name. THE GATE DID NOT RUN."
+            )
+        if slug not in ruling.repos:
+            raise GateError(
+                f"{where} cites ruling {ts}, whose scope is "
+                f"{', '.join(sorted(ruling.repos))}, not {slug}. "
+                "THE GATE DID NOT RUN."
+            )
+        if ledger_files is not None and not _ruling_on_ledger(ruling, ledger_files):
+            raise GateError(
+                f"{where} cites ruling {ts} (lane={ruling.lane}, "
+                f"ticket={ruling.ticket}), and the ledger {ledger} carries no "
+                "such RULING row. THE GATE DID NOT RUN."
+            )
+        if (workflow, job) in eligible:
+            raise GateError(f"{where} is listed twice. THE GATE DID NOT RUN.")
+        eligible[(workflow, job)] = ruling
+    return eligible
+
+
 def _labels(value: Any) -> list[str]:
     if value is None:
         return []
@@ -1693,6 +1896,9 @@ def scan(
     latent: list[str] | None = None,
     matrix: list[str] | None = None,
     refs: RefNames | None = None,
+    rulings_path: Path = DEFAULT_HOSTED_RULINGS,
+    ledger: Path | None = None,
+    accepted: list[str] | None = None,
 ) -> list[Finding]:
     called = CalledWorkflows(repo_root) if called is None else called
     refs = RefNames(slug) if refs is None else refs
@@ -1713,6 +1919,16 @@ def scan(
             "nothing to prove. THE GATE DID NOT RUN."
         )
 
+    accepted = [] if accepted is None else accepted
+    # The registry is read only when this tree declares something, so a
+    # repository with no declaration never depends on it.
+    eligible = (
+        load_eligible(repo_root, slug, load_hosted_rulings(rulings_path), ledger)
+        if (repo_root / ELIGIBLE_FILE).is_file()
+        else {}
+    )
+    present: set[tuple[str, str]] = set()
+
     findings: list[Finding] = []
     for path in paths:
         text = path.read_text(encoding="utf-8")
@@ -1731,6 +1947,7 @@ def scan(
             if not isinstance(definition, dict):
                 continue
             where = f"{path.name}::{job_id}"
+            present.add((path.name, str(job_id)))
             if isinstance(definition.get("uses"), str):
                 notes.append(
                     f"note: {path.name}::{job_id} delegates to {definition['uses']}"
@@ -1748,6 +1965,22 @@ def scan(
             offenders = _job_offenders(
                 definition, variables, called, notes, contexts, slug, where, refs
             )
+            ruling = eligible.get((path.name, str(job_id)))
+            if ruling is not None and offenders:
+                # A declaration excuses a HOSTED arm whose labels the ruling
+                # covers, and nothing else: a placement onto nothing, or an
+                # image family outside the ruling, stays a finding.
+                offenders = [
+                    offender
+                    for offender in offenders
+                    if offender[1].branch is None
+                    or not ruling.admits(offender[1].branch.labels)
+                ]
+                if not offenders:
+                    accepted.append(
+                        f"eligible: {where} runs GitHub-hosted under RULING "
+                        f"{ruling.ts} ({ruling.ticket}), declared in {ELIGIBLE_FILE}"
+                    )
             if not offenders:
                 continue
             # The annotation lives beside the CALLER's job, because that is the
@@ -1778,6 +2011,15 @@ def scan(
                         events=", ".join(placement.events),
                     )
                 )
+    stale = sorted(set(eligible) - present)
+    if stale:
+        raise GateError(
+            f"{ELIGIBLE_FILE} lists "
+            + ", ".join(f"{workflow}::{job}" for workflow, job in stale)
+            + ", which no workflow in this tree defines. A stale entry would "
+            "excuse the next job given that name without anyone deciding it "
+            "should. Remove it. THE GATE DID NOT RUN."
+        )
     return findings
 
 
@@ -1946,6 +2188,21 @@ def _workflow_texts(repo_root: Path, branch: str) -> dict[str, str] | None:
     return texts
 
 
+def _branch_file(repo_root: Path, branch: str, path: Path) -> str | None:
+    """One file of a fetched branch's tree, or None when the branch has none."""
+    spec = f"refs/remotes/origin/{branch}:{path.as_posix()}"
+    if _run_git(repo_root, "cat-file", "-e", spec).returncode != 0:
+        return None
+    result = _run_git(repo_root, "show", spec)
+    if result.returncode != 0:
+        raise GateError(
+            f"could not read {spec} "
+            f"({result.stderr.decode('utf-8', 'replace').strip()[:200]}). "
+            "THE GATE DID NOT RUN."
+        )
+    return result.stdout.decode("utf-8")
+
+
 def workflow_branches(repo_root: Path, event_branch: str) -> list[str]:
     """Every branch that runs workflows, except the one checked out.
 
@@ -1993,6 +2250,9 @@ def scan_every_workflow_branch(
     matrix: list[str],
     refs: RefNames,
     judged: list[str],
+    rulings_path: Path = DEFAULT_HOSTED_RULINGS,
+    ledger: Path | None = None,
+    accepted: list[str] | None = None,
 ) -> list[Finding]:
     """Judge the workflow tree of every OTHER branch that runs workflows.
 
@@ -2017,6 +2277,12 @@ def scan_every_workflow_branch(
             workflows.mkdir(parents=True)
             for name, text in texts.items():
                 (workflows / name).write_text(text, encoding="utf-8")
+            # The branch's OWN declaration, never the checkout's: a pull
+            # request's listing must not excuse another branch's tree.
+            declaration = _branch_file(repo_root, branch, ELIGIBLE_FILE)
+            if declaration is not None:
+                (root / ELIGIBLE_FILE).write_text(declaration, encoding="utf-8")
+            branch_accepted: list[str] = []
             branch_findings = scan(
                 root,
                 slug,
@@ -2026,7 +2292,15 @@ def scan_every_workflow_branch(
                 latent,
                 matrix,
                 refs,
+                rulings_path,
+                ledger,
+                branch_accepted,
             )
+            if accepted is not None:
+                accepted.extend(
+                    line.replace("eligible: ", f"eligible: {branch}:", 1)
+                    for line in branch_accepted
+                )
         judged.append(
             f"branch {branch} ({sha}): {len(texts)} workflow(s), "
             f"{len(branch_findings)} hosted placement(s)"
@@ -2173,6 +2447,26 @@ def main(argv: list[str] | None = None) -> int:
             "variable scopes"
         ),
     )
+    parser.add_argument(
+        "--hosted-rulings",
+        type=Path,
+        help=(
+            "the registry of rulings a hosted-eligible declaration may cite. "
+            "Defaults to config/private_repo_hosted_rulings.yaml beside this "
+            "script, read at the gate's own pin. For tests only; refused "
+            "inside GitHub Actions (OMN-19998)."
+        ),
+    )
+    parser.add_argument(
+        "--ledger",
+        default=None,
+        help=(
+            "the rolling work ledger on which each cited ruling must ALSO be "
+            "found as a RULING row (its archive/ rolls are read too). Defaults "
+            "to $ONEX_LEDGER_PATH outside GitHub Actions; an empty value "
+            "judges against the registry alone."
+        ),
+    )
     args = parser.parse_args(argv)
 
     # The two fixture flags substitute a FILE for a live read -- the variable
@@ -2193,6 +2487,7 @@ def main(argv: list[str] | None = None) -> int:
             ("--called-workflows-json", args.called_workflows_json),
             ("--assume-visibility", args.assume_visibility),
             ("--branches-json", args.branches_json),
+            ("--hosted-rulings", args.hosted_rulings),
         )
         if value
     ]
@@ -2223,6 +2518,13 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(f"wrote {args.write_variables_snapshot} for {args.repo}")
         return 0
+
+    rulings_path = args.hosted_rulings or DEFAULT_HOSTED_RULINGS
+    ledger_arg = args.ledger
+    if ledger_arg is None and os.environ.get("GITHUB_ACTIONS") != "true":
+        ledger_arg = os.environ.get("ONEX_LEDGER_PATH", "")
+    ledger = Path(ledger_arg) if ledger_arg else None
+    accepted: list[str] = []
 
     snapshot = (
         VariablesSnapshot(
@@ -2273,6 +2575,9 @@ def main(argv: list[str] | None = None) -> int:
             latent,
             matrix,
             refs,
+            rulings_path,
+            ledger,
+            accepted,
         )
         judged: list[str] = []
         if args.every_workflow_branch:
@@ -2294,6 +2599,9 @@ def main(argv: list[str] | None = None) -> int:
                     matrix,
                     refs,
                     judged,
+                    rulings_path,
+                    ledger,
+                    accepted,
                 )
             )
     except GateError as error:
@@ -2313,6 +2621,11 @@ def main(argv: list[str] | None = None) -> int:
     for line in judged:
         print(f"judged: {line}")
 
+    # Every hosted placement a ruling accepted, on every run: the count of
+    # private jobs on hosted runners is re-derivable from these lines.
+    for line in accepted:
+        print(line)
+
     # Printed on EVERY run, pass or fail. A latent cell is the state the
     # OMN-18616 defect sat in for months before a trigger was added -- visible
     # only in one workflow's own comment, seen by nobody.
@@ -2320,9 +2633,15 @@ def main(argv: list[str] | None = None) -> int:
         print(line)
 
     if not findings:
+        ruled = (
+            f", except {len(accepted)} hosted job(s) declared under a ruling "
+            "(the eligible: lines above)"
+            if accepted
+            else ""
+        )
         print(
             f"OK: every job in {args.repo} ({visibility}) resolves to a "
-            "non-hosted runner under every trigger event it declares."
+            f"non-hosted runner under every trigger event it declares{ruled}."
         )
         return 0
 
@@ -2352,8 +2671,10 @@ def main(argv: list[str] | None = None) -> int:
         '  contains(fromJSON(\'["pull_request","pull_request_review"]\'), '
         "github.event_name) &&\n"
         "  github.event.pull_request.head.repo.full_name != github.repository\n"
-        "\nOtherwise move the job to the fleet, or -- if the fleet genuinely "
-        "cannot carry it -- record WHY beside the job:\n"
+        "\nOtherwise move the job to the fleet; if an operator ruling in "
+        "config/private_repo_hosted_rulings.yaml lets this repository run it "
+        f"hosted, list it in {ELIGIBLE_FILE} citing that ruling; or -- if the "
+        "fleet genuinely cannot carry it -- record WHY beside the job:\n"
         "  # private-repo-hosted-ok: <reason> (OMN-nnnnn)\n"
         "A pin with no reason is the failure this gate exists to refuse.\n"
         "A finding carrying a `via:` line is a job that DELEGATES: the label is "
