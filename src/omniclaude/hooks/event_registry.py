@@ -771,13 +771,13 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # assistant reply -- one item or one chunk per record. OMN-19513: the
     # producer journals it raw (operator RULING 2026-10-15T04:24:42Z: no
     # redaction); the publish transform is projected from omnimarket's emit
-    # registry, which still declares redact_capture for this topic.
+    # registry, which declares passthrough for this topic.
     "content.captured": EventRegistration(
         event_type="content.captured",
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.CONTENT_CAPTURED,
-                transform=redact_capture,
+                transform=None,  # Passthrough, as omnimarket's emit registry declares
                 description="Full session content (OMN-19550, OMN-19513)",
             ),
         ],
@@ -794,7 +794,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.HOOK_EVENT,
-                transform=redact_capture,
+                transform=None,  # Passthrough, as omnimarket's emit registry declares
                 description=(
                     "Lineage-carrying Claude Code hook event, all hook types "
                     "(OMN-19513)"
