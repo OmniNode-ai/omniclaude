@@ -78,6 +78,44 @@ def test_redaction_policy_preserves_metadata_when_explicitly_applied(
 
 
 @pytest.mark.parametrize(
+    ("topic", "declared"),
+    [
+        (
+            "onex.evt.omniclaude.hook-event.v1",
+            {"producer_seq": 0, "stream": "lineage"},
+        ),
+        (
+            "onex.cmd.omniintelligence.content-captured.v1",
+            {
+                "content_record_id": "record-1",
+                "producer_seq": 0,
+                "stream": "content",
+                "record_type": "barrier",
+                "barrier_id": "barrier-1",
+                "high_water": 0,
+                "content_capture": False,
+            },
+        ),
+    ],
+    ids=["hook-lineage-sequence", "content-sequence-and-barrier"],
+)
+def test_redaction_policy_keeps_sequence_and_barrier_fields_verbatim(
+    topic: str, declared: dict[str, object]
+) -> None:
+    """The OMN-18531 fields this refresh declares are not hashed by the policy."""
+    record: dict[str, object] = {**declared, "undeclared_content": "private text"}
+    original = deepcopy(record)
+
+    result = redact_capture(record, topic=topic)
+
+    for field, value in declared.items():
+        assert result[field] == value, field
+    assert result["undeclared_content"] == hash_value("private text")
+    assert result["redaction_state"] == "redacted"
+    assert record == original
+
+
+@pytest.mark.parametrize(
     ("event_type", "topic", "payload"),
     [
         (

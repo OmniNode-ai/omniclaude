@@ -29,12 +29,17 @@ requirements:
     statement: The refreshed capture-contract mirror preserves GuardRefusal and AssistantUsage metadata when its redaction policy is explicitly applied.
     acceptance:
       - id: AC4
-        statement: 'AC4: GuardRefusal identifiers and AssistantUsage counts, source hook and partial-window flag survive explicit redaction, including zero counts and false flags; undeclared content is hashed and the input is unchanged. -- falsifier: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov'
+        statement: 'AC4: GuardRefusal identifiers and AssistantUsage counts, source hook and partial-window flag survive explicit redaction, including zero counts and false flags, and so do the OMN-18531 sequence and barrier fields this refresh declares on hook.event and content.captured; undeclared content is hashed and the input is unchanged. -- falsifier: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov'
   - id: req-refreshed-raw-capture-fan-out
     statement: The capture fan-out follows the passthrough policy declared by the pinned omnimarket registry, including raw content, lineage, sequence counters and barrier flags.
     acceptance:
       - id: AC5
-        statement: 'AC5: hook.event and content.captured preserve their complete payloads without a redaction stamp, retain their session partition key and target topics, and return a new top-level mapping without mutating the input. -- falsifier: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -k refreshed_capture_fan_out fails against the merge-base registry'
+        statement: 'AC5: hook.event and content.captured preserve their complete payloads without a redaction stamp, retain their session partition key and target topics, and return a new top-level mapping without mutating the input. -- falsifier: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -k refreshed_capture_fan_out'
+  - id: req-raw-capture-ruled-guard
+    statement: Raw capture publish stays under the guard that enforces RULING 2026-10-15T04:24:42Z, which keeps the producer payload_encryption option in the capture contract.
+    acceptance:
+      - id: AC6
+        statement: 'AC6: The capture contract keeps its payload_encryption block with enabled and key_secret_ref, and no scrub, content hash or redaction field returns to the hook and content capture producer. -- falsifier: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov'
 evidence_requirements:
   - kind: tests
     command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
@@ -48,6 +53,9 @@ evidence_requirements:
   - kind: tests
     command: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov
     description: Exercises explicit redaction of metadata and raw runtime fan-out, including input immutability.
+  - kind: tests
+    command: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
+    description: Verifies the raw-capture guard keeps the payload_encryption option and refuses redaction returning to the capture producer.
 dod_evidence:
   - id: dod-omniclaude-sibling-refresh-behavior
     source: manual
@@ -89,3 +97,11 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -k refreshed_capture_fan_out
+  - id: dod-omniclaude-raw-capture-ruled-guard
+    source: manual
+    binds_ac:
+      - AC6
+    description: The raw-capture guard refuses a capture contract without the payload_encryption block and refuses redaction returning to the producer.
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
