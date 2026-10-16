@@ -140,7 +140,7 @@ dod_evidence:
         superseded_by: dod-omn21087-ac1-fast-forward
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; this item proved the old AC1 text.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
   - id: dod-omn21087-ac2-stop-named
     description: 'A dirty clone, a dirty detached clone and a clean clone whose branch cannot fast-forward each stop phase 2 naming the clone, its state, its distance behind origin and the move-aside command, and nothing moves; a clean detached clone returns to its branch. Fails at the merge base, which never named a clone that cannot fast-forward.'
     source: manual
@@ -156,7 +156,7 @@ dod_evidence:
         superseded_by: dod-omn21087-ac2-stop-named
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; this item proved the old AC2 text.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
   - id: dod-omn21087-ac3-behind-not-missing
     description: 'An old omnibase_infra clone that predates .github/sibling-pins.yaml is reported as ''clone is 2 commits behind origin/dev'', clean (then fast-forwarded) or dirty (then stopped), and never as ''restore the pins file''. Fails at the merge base, which reported no distance.'
     source: manual
@@ -172,7 +172,7 @@ dod_evidence:
         superseded_by: dod-omn21087-ac3-behind-not-missing
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; this item proved the old AC3 text.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
   - id: dod-omn21087-ac4-resume
     description: 'A run whose phase 3 failed, resumed from a second downloaded copy of the script, reports phases 1 and 2 passed without running their steps and runs phase 3; a passed phase whose check no longer holds says why it runs again. Fails at the merge base, which reran such a phase silently.'
     source: manual
@@ -188,64 +188,64 @@ dod_evidence:
         superseded_by: dod-omn21087-ac4-resume
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; this item proved the old AC4 text.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
       - item: dod-omn21087-preflight-survey
         label: AC5
         reason_kind: no_longer_applicable
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 is no longer a criterion of the ticket.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
       - item: dod-omn21087-set-aside
         label: AC6
         reason_kind: no_longer_applicable
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC6 is no longer a criterion of the ticket.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
       - item: dod-omn21087-resume
         label: AC7
         reason_kind: no_longer_applicable
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC7 is no longer a criterion of the ticket.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
       - item: dod-omn21087-deploy-bootstrap
         label: AC5
         reason_kind: no_longer_applicable
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
       - item: dod-omn21087-deploy-bootstrap
         label: AC6
         reason_kind: no_longer_applicable
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
       - item: dod-omn21087-deploy-bootstrap
         label: AC7
         reason_kind: no_longer_applicable
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
       - item: dod-omn21087-bootstrap-loading
         label: AC5
         reason_kind: no_longer_applicable
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
       - item: dod-omn21087-bootstrap-loading
         label: AC6
         reason_kind: no_longer_applicable
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
       - item: dod-omn21087-bootstrap-loading
         label: AC7
         reason_kind: no_longer_applicable
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
       - item: dod-omn21087-guide-pin
         label: AC8
         reason_kind: no_longer_applicable
         reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC8 is no longer a criterion of the ticket.'
         retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
-        retired_at: "2026-10-16T23:00:00Z"
+        retired_at: "2026-10-16T22:40:00Z"
