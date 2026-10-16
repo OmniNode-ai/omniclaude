@@ -530,7 +530,7 @@ def capture(
         sealer = content_capture.payload_sealer(key_reader=key_reader)
     except content_capture.PayloadSealRefusedError as exc:
         _log(
-            f"skipped {hook_name}: payload_encryption is on and {exc}; "
+            f"skipped {hook_name}: payload encryption refused: {exc}; "
             "nothing crosses in the clear"
         )
         return 0

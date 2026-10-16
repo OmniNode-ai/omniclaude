@@ -110,6 +110,8 @@ content_reference:
 # journal each payload sealed (AES-256-GCM, plugins/onex/hooks/lib/
 # hook_payload_encryption.py); a key that cannot be read journals nothing, so
 # content never crosses in the clear while the setting asks for encryption.
+# Only an explicit enabled:false permits plaintext. Unreadable, incomplete or
+# malformed encryption settings refuse capture in both producers.
 # The key is 32 random bytes as base64 text. The lab runs it off.
 payload_encryption:
   enabled: false

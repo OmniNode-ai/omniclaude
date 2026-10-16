@@ -770,31 +770,41 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # session content -- the complete prompt, tool input, tool result and
     # assistant reply -- one item or one chunk per record. OMN-19513: the
     # producer journals it raw (operator RULING 2026-10-15T04:24:42Z: no
-    # redaction); the publish transform is projected from omnimarket's emit
-    # registry, which still declares redact_capture for this topic.
+    # redaction); the pinned omnimarket emit registry declares passthrough on
+    # the publish side, and Registry Consistency refuses any other projection.
+    # Raw publish is the ruled policy, not a dropped control: production's
+    # option is payload encryption at the producer (``payload_encryption`` in
+    # contract_hook_claude_capture.yaml, handler_hook_payload_encryption.py).
+    # Both producers call hook_content_capture.payload_sealer before journalling:
+    # only explicit enabled:false permits plaintext, invalid settings refuse
+    # capture, and enabled:true requires a usable secret-store key. Passthrough
+    # preserves the sealed envelope; redaction would corrupt its ciphertext.
     "content.captured": EventRegistration(
         event_type="content.captured",
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.CONTENT_CAPTURED,
-                transform=redact_capture,
-                description="Full session content (OMN-19550, OMN-19513)",
+                transform=None,
+                description="Raw full session content (OMN-19550, OMN-19513)",
             ),
         ],
         partition_key_field="session_id",
         required_fields=["session_id", "content_kind"],
     ),
-    # OMN-19513 (topic and redaction policy owned by omnimarket's emit
+    # OMN-19513 (topic and capture policy owned by omnimarket's emit
     # registry): the all-hooks capture. One lineage-carrying event per Claude
     # Code hook call, every hook type on one topic, content fields raw from the
     # producer; the publish transform is projected from omnimarket's emit
-    # registry. Partitioned by session so a session's hooks stay ordered.
+    # registry, which declares passthrough at the pinned rev (operator RULING
+    # 2026-10-15T04:24:42Z: capture raw; encryption is the production option,
+    # as for content.captured above). Partitioned by session so a session's
+    # hooks stay ordered.
     "hook.event": EventRegistration(
         event_type="hook.event",
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.HOOK_EVENT,
-                transform=redact_capture,
+                transform=None,
                 description=(
                     "Lineage-carrying Claude Code hook event, all hook types "
                     "(OMN-19513)"
