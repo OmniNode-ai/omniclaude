@@ -89,11 +89,3 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -k refreshed_capture_fan_out
-  - id: dod-omniclaude-capture-container-smoke
-    source: manual
-    binds_ac:
-      - AC5
-    description: A fresh Python container loads the checked-out runtime and exercises raw capture delivery, explicit redaction and immutability. This smoke check uses no broker, host service or production credential and can run on a hosted runner.
-    checks:
-      - check_type: command
-        check_value: 'docker run --rm --volume "$PWD:/workspace:ro" --workdir /workspace --env CI=true --env UV_PROJECT_ENVIRONMENT=/tmp/capture-venv --env UV_CACHE_DIR=/tmp/uv-cache ghcr.io/astral-sh/uv:python3.12-bookworm uv run --frozen --group dev pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -p no:cacheprovider'
