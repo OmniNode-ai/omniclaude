@@ -1,0 +1,71 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-18473"
+title: "omniclaude Hostile Review gate passes two models like the rest of the fleet"
+summary: >-
+  The two-model pairing landed in omniclaude#2202 (a447152e7) and the voter roster
+  then moved into the review voters overlay (OMN-20910, 13c667ff7). The remaining
+  criterion, AC3, asked for the verdict artifact to carry both voters and findings
+  attributed to each. Its flat-sum wording was superseded by the cross-model
+  quorum rule (OMN-18479); this change pins the artifact attribution half with a
+  test that executes the workflow's artifact writer.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "The review step's artifact writer is executed and attributes findings to each voter."
+    command: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn18473-ac1-voters-from-overlay"
+    description: "AC1 as delivered by a447152e7 (two --model flags) and re-homed by OMN-20910: the review step takes its voters from the overlay and the workflow names no voter."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "test \"$(grep -c -e '--voters-overlay' .github/workflows/hostile-reviewer.yml)\" -ge 1 && ! grep -v '^[[:space:]]*#' .github/workflows/hostile-reviewer.yml | grep -q -e '--model '"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn18473-ac2-degraded-run-fails-closed"
+    description: "AC2: a run where fewer voters returned than agreement requires cannot pass; the gate reads it as degraded_quorum and fails closed."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k test_degraded_quorum_exit_code_fails_the_gate_closed"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
+  - id: "dod-omn18473-ac3-verdict-artifact-attribution"
+    description: "AC3: the verdict artifact carries models_succeeded for both voters and a model value on each finding, with blocking_count taken from the quorum."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k test_verdict_artifact_preserves_voter_attribution"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
+  - id: "dod-omn18473-ac4-no-single-model-expected"
+    description: "AC4: neither the workflow nor its test describes a single-model DEGRADED run as the expected outcome."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "! grep -q -e 'only ever passes a single --model' -e 'single-model workflow' .github/workflows/hostile-reviewer.yml tests/hooks/test_hostile_reviewer_workflow.py"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC4"]
+  - id: "dod-omn18473-ac5-voter-pin-test"
+    description: "AC5: the workflow test pins that the review step reads its voters from the overlay and names none."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k 'test_review_step_invokes_cli_review_with_the_voters_overlay or test_workflow_names_no_voter_endpoint_or_model'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC5"]
+  - id: "dod-omn18473-ac6-workflow-tests-green"
+    description: "AC6: the workflow test file passes at this head."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC6"]
