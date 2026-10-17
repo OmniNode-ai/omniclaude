@@ -21,6 +21,12 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "plugins/onex/skills/_bin/lab-onboarding.sh"
 NODE = REPO / "src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator"
 HANDLER = NODE / "handler_onboarding_preflight.sh"
+# The entrypoint's load of the bootstrap handler: commit, digest and, when it
+# differs, the download digest.
+PREFLIGHT_LOAD = re.compile(
+    r'^load_onboarding_handler preflight ([0-9a-f]{40}) "([0-9a-f:]+)"(?: "([0-9a-f:]+)")?',
+    re.M,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -33,10 +39,12 @@ def test_node_declares_the_bootstrap_handler_and_its_verified_bytes() -> None:
     digest = hashlib.sha256(HANDLER.read_bytes()).hexdigest()
     fingerprint = bootstrap["sha256_fingerprint"]
     assert fingerprint.replace(":", "") == digest
-    assert f'local digest="{fingerprint}"' in SCRIPT.read_text()
-    assert re.search(
-        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/[0-9a-f]{40}/\$rel",
-        SCRIPT.read_text(),
+    load = PREFLIGHT_LOAD.search(SCRIPT.read_text())
+    assert load
+    assert load.group(2) == fingerprint
+    assert (
+        '"https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$2/$rel"'
+        in SCRIPT.read_text()
     )
     for entrypoint in bootstrap["entrypoints"]:
         assert re.search(rf"^{entrypoint}\(\) \{{", HANDLER.read_text(), re.M)
@@ -107,6 +115,8 @@ def test_downloaded_entrypoint_verifies_handler_before_sourcing(
         assert "Preflight only: nothing was changed." in result.stdout
     downloaded = tmp_path / "omninode-onboarding/handler_onboarding_preflight.sh"
     assert downloaded.read_bytes() == served.read_bytes()
+    # No overlay roots: the finish step's handler is never fetched.
+    assert not (tmp_path / "omninode-onboarding/handler_onboarding_finish.sh").exists()
 
 
 def _git(*args: str) -> subprocess.CompletedProcess[bytes]:
@@ -119,10 +129,7 @@ def _git(*args: str) -> subprocess.CompletedProcess[bytes]:
 
 
 def _download_commit() -> str:
-    match = re.search(
-        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
-        SCRIPT.read_text(),
-    )
+    match = PREFLIGHT_LOAD.search(SCRIPT.read_text())
     assert match
     commit = match.group(1)
     if _git("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
@@ -144,11 +151,7 @@ def test_the_downloaded_handler_comes_from_a_commit_on_this_history() -> None:
     at preflight. The URL must name a commit on this history whose handler is
     the bytes the script checks.
     """
-    text = SCRIPT.read_text()
-    match = re.search(
-        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
-        text,
-    )
+    match = PREFLIGHT_LOAD.search(SCRIPT.read_text())
     assert match
     commit = match.group(1)
     if _git("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
@@ -165,8 +168,5 @@ def test_the_downloaded_handler_comes_from_a_commit_on_this_history() -> None:
     # OMN-21163: the download checks its own digest. A pull request that changes
     # the handler cannot name a dev commit holding the new bytes, so for that one
     # change the download keeps the handler already on dev.
-    digest = re.search(r'\bdownload_digest="([0-9a-f:]+)"', text)
-    assert digest
-    assert hashlib.sha256(_handler_at(commit)).hexdigest() == digest.group(1).replace(
-        ":", ""
-    )
+    digest = match.group(3) or match.group(2)
+    assert hashlib.sha256(_handler_at(commit)).hexdigest() == digest.replace(":", "")

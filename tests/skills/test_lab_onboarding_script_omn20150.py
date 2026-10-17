@@ -2151,10 +2151,8 @@ def test_local_url_choice_reaches_a_downloaded_script() -> None:
     from the commit its URL names, and that handler offers the Local URL choice.
     While the handler change waited for its own commit on dev, a download fetched
     the handler before it, which has no local choice."""
-    text = SCRIPT.read_text()
     match = re.search(
-        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
-        text,
+        r"^load_onboarding_handler preflight ([0-9a-f]{40}) ", SCRIPT.read_text(), re.M
     )
     assert match
     commit = match.group(1)

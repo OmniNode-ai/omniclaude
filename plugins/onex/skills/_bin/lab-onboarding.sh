@@ -112,6 +112,8 @@ fi
 # workspace or internal clone, a lab tenant, a state directory, an event bus, a
 # routing overlay. This run and everything it starts inherit none of it, on
 # every run including a resumed one; the names are kept for preflight's report.
+# The overlay roots are read first, for the finish step alone, and never exported.
+FINISH_OVERLAY_ROOTS="${ONEX_SKILL_OVERLAY_ROOTS:-}"
 INHERITED_ENV=""
 for _v in $(compgen -e); do
   case "$_v" in
@@ -704,21 +706,19 @@ backends:
 YAML
 }
 
-# The node's bootstrap handler runs on stock macOS Bash before Python exists.
+# The node's Bash handlers run on stock macOS Bash before Python exists.
 # Prefer the checkout beside this entrypoint; downloaded copies fetch the same
 # checksum-pinned handler into the run directory. Never source unchecked bytes.
 #
-# A downloaded copy fetches the handler from a commit on dev, and checks it
-# against download_digest. A pull request that changes the handler cannot name
-# a dev commit that holds its new bytes (the merge queue squashes, so no branch
-# commit reaches dev), so for that one change the two digests differ and a
-# downloaded copy keeps the handler already on dev; the next pull request names
-# the merge commit and sets download_digest back to digest.
-load_onboarding_preflight() {
-  local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="d176:b199:ae21:0c4d:0182:a465:8b61:8c4f:dc63:03ce:6de1:960a:2000:a346:e18b:3a64" root candidate \
-    download_digest="d176:b199:ae21:0c4d:0182:a465:8b61:8c4f:dc63:03ce:6de1:960a:2000:a346:e18b:3a64"
-  digest="${digest//:/}"; download_digest="${download_digest//:/}"
+# A downloaded copy fetches each handler from the commit its load names, and
+# checks it against the download digest. A pull request that changes a handler
+# cannot name a dev commit that holds its new bytes (the merge queue squashes, so
+# no branch commit reaches dev), so for that one change the two digests differ
+# and a downloaded copy keeps the handler already on dev; the next pull request
+# names the merge commit and sets the download digest back to the digest.
+load_onboarding_handler() { # name commit digest [download-digest, when it differs]
+  local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_$1.sh"
+  local digest="${3//:/}" download_digest="${4:-$3}" root candidate
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
   for candidate in "$root/$rel" "$PWD/$rel" "$WORKSPACE/omniclaude/$rel"; do
     [ -f "$candidate" ] || continue
@@ -727,15 +727,16 @@ load_onboarding_preflight() {
       return 0
     fi
   done
-  candidate="$RUN_DIR/handler_onboarding_preflight.sh"
-  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/3943474a4de281bb724dbb1332b6d200f51f6adc/$rel" ||
-     ! printf '%s  %s\n' "$download_digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
-    printf 'omninode-dev-setup: cannot load the checksum-pinned onboarding preflight handler\n' >&2
-    return 1
-  fi
-  . "$candidate"
+  candidate="$RUN_DIR/handler_onboarding_$1.sh"
+  curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$2/$rel" &&
+    printf '%s  %s\n' "${download_digest//:/}" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1 && . "$candidate"
 }
-load_onboarding_preflight || exit 1
+load_onboarding_handler preflight 3943474a4de281bb724dbb1332b6d200f51f6adc "d176:b199:ae21:0c4d:0182:a465:8b61:8c4f:dc63:03ce:6de1:960a:2000:a346:e18b:3a64" ||
+  { printf 'omninode-dev-setup: cannot load the checksum-pinned onboarding preflight handler\n' >&2; exit 1; }
+# The finish step loads only when overlay roots were given; a copy that cannot be
+# loaded leaves it off. TODO: its commit names the branch commit that added the
+# handler; at landing it must move to the merge commit on dev.
+if [ -z "$FINISH_OVERLAY_ROOTS" ] || ! load_onboarding_handler finish 75b8ec1719dc804826bb9cf626f4f29eeef6073e "1af3:d461:fca3:8736:6af0:210a:fa28:6e90:0dac:81d8:8ec0:dd63:5060:d1b1:55e2:e8a3"; then finish_step() { :; }; fi
 
 phase0() {
   phase_start 0 "Preflight (reads this Mac; changes nothing you have not agreed to)" "under a minute"
@@ -862,6 +863,7 @@ phase0() {
       phase_fail "run this again and enter your Mac password when asked. Nothing was installed"; }
   fi
   [ "$PREFLIGHT_ONLY" -eq 1 ] || set_aside_leftovers
+  [ "$PREFLIGHT_ONLY" -eq 1 ] || finish_step prepare
   say ""
   say "  Will set up: $SELECTED"
   [ "$PREFLIGHT_ONLY" -eq 1 ] || say "  Models: $(labels "$MODELS")"
@@ -2031,6 +2033,7 @@ main() {
   [ "$PREFLIGHT_ONLY" -eq 1 ] && { say "Preflight only: nothing was changed."; exit 0; }
   save_choices
   phase1
+  finish_step start
   phase2
   phase3
   phase4
@@ -2048,6 +2051,7 @@ main() {
   say "     time it asks. The onex skills are already installed; /onex:delegate is one of them."
   notify "Onboarding complete" "Every phase passed"
   printf 'result=COMPLETE\n' >>"$STATUS"
+  finish_step play
 }
 
 main
