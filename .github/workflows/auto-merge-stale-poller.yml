@@ -185,9 +185,56 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             scripts/publish_occ_autobind_command.py
-            config/ci_bus_lanes.yaml
             src/omnimarket/events/topics.py
           sparse-checkout-cone-mode: false
+      # OMN-20935: the dev lane's broker and transport are private deployment
+      # config, so they are read from the CI overlay repository (the org Actions
+      # variable OMNI_CI_OVERLAY_REPO, a bare repository name under this owner)
+      # with a read-only App token, not from omnimarket. An unset variable, an
+      # unreadable repository or a missing file fails the job: there is no
+      # in-repo lane table to fall back to. The file is data, read unpinned from
+      # the overlay's default branch and validated by the policy loader below.
+      - name: Resolve the CI overlay
+        id: ci-overlay
+        env:
+          CI_OVERLAY_REPO: ${{ vars.OMNI_CI_OVERLAY_REPO }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CI_OVERLAY_REPO}" ]; then
+            echo "::error::no CI bus lane table configured: OMNI_CI_OVERLAY_REPO is unset, so no CI overlay supplies config/lab/ci_bus_lanes.yaml. Put your lane table in a repository of your own and set OMNI_CI_OVERLAY_REPO to its name."
+            exit 1
+          fi
+          if [[ ! "${CI_OVERLAY_REPO}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::OMNI_CI_OVERLAY_REPO must be a bare repository name, got '${CI_OVERLAY_REPO}'"
+            exit 1
+          fi
+          echo "name=${CI_OVERLAY_REPO}" >> "$GITHUB_OUTPUT"
+      - name: Mint a read-only CI overlay token
+        id: ci-overlay-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ONEXBOT_APP_ID }}
+          private-key: ${{ secrets.ONEXBOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.ci-overlay.outputs.name }}
+          permission-contents: read
+      - name: Fetch the CI bus lane table from the CI overlay
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.ci-overlay.outputs.name }}
+          token: ${{ steps.ci-overlay-token.outputs.token }}
+          path: .monitor-bus-overlay
+          persist-credentials: false
+          sparse-checkout: |
+            config/lab/ci_bus_lanes.yaml
+          sparse-checkout-cone-mode: false
+      - name: Assert the CI overlay carries the lane table
+        run: |
+          set -euo pipefail
+          if [ ! -s .monitor-bus-overlay/config/lab/ci_bus_lanes.yaml ]; then
+            echo "::error::the CI overlay carries no config/lab/ci_bus_lanes.yaml; the dev CI bus cannot be resolved"
+            exit 1
+          fi
       - name: Resolve watched repositories from data
         id: watchlist
         run: |
@@ -246,7 +293,7 @@ jobs:
           policy = importlib.util.module_from_spec(spec)
           sys.modules[spec.name] = policy
           spec.loader.exec_module(policy)
-          overlay = policy._load_lane_overlay(Path(".monitor-bus/config/ci_bus_lanes.yaml"))
+          overlay = policy._load_lane_overlay(Path(".monitor-bus-overlay/config/lab/ci_bus_lanes.yaml"))
           mode, broker = policy._resolve_lane_broker(overlay, "dev")
           if mode != "concrete" or not broker:
               raise SystemExit("dev CI bus is not declared as a concrete broker")
