@@ -121,9 +121,9 @@ dod_evidence:
       - check_type: test_passes
         check_value: uv run pytest tests/skills/test_onboarding_bootstrap_handler_omn21087.py -q --no-cov
   - id: dod-omn21087-handler-url-on-dev
-    description: "A downloaded script fetches its handler from a commit on dev whose handler hashes to the digest it checks, not from a commit only a merged branch carried"
+    description: "A freshly downloaded script fetches its handler from a commit on dev whose handler hashes to the digest it checks, not from a commit only a merged branch carried, so a fresh download can run (and resume) at all"
     source: manual
-    binds_ac: []
+    binds_ac: [AC4]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_bootstrap_handler_omn21087.py -q --no-cov -k this_history"
