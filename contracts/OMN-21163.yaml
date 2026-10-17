@@ -42,12 +42,20 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn21163-ac1-menu
-    description: 'The menu''s fifth choice, Local URL, asks for the server''s URL and model and shows what the server lists; beside Gemini only Gemini''s key is asked; --provider local with --local-url and --local-model runs unattended; without a URL and no terminal it stops before installing. No key prompt for it anywhere. Fails at the merge base, which has four choices and refuses --provider local.'
+    description: 'The menu''s fifth choice, Local URL, asks for the server''s URL and model and shows what the server lists; beside Gemini only Gemini''s key is asked; no key prompt for it. Fails at the merge base, whose menu has four choices and refuses 5.'
     source: manual
     binds_ac: [AC1]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'local_url_menu or local_url_beside or local_url_by_provider or local_url_unattended_without'"
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'local_url_menu or local_url_beside'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21163-ac1-provider
+    description: '--provider local with --local-url and --local-model runs unattended and asks for no key; with no URL and no terminal it stops before installing. Fails at the merge base, which refuses --provider local.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'local_url_by_provider or local_url_unattended_without'"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn21163-ac2-add-local
     description: 'The URL and model reach `onex models add local --url <url> --model <name> --json` with nothing on stdin, and its pinned test delegation''s answer is the model''s line; a failed test is reported, not stopped; a refusal (the server does not answer) stops phase 3 naming the URL; nothing answering at the URL in preflight stops before installing, naming it; an omnimarket older than 0.4.316 is replaced by the proven one, or the run stops. Fails at the merge base, which has no local-url step.'

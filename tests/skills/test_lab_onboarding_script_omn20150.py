@@ -1779,7 +1779,7 @@ def test_phase_2_writes_the_marker_before_the_first_clone() -> None:
 
 # The merge-base control runs these against a script with no local choice:
 # fail inside the verifier's 30 s per-check ceiling, not after 120 s.
-_LOCAL_TIMEOUT = 15.0
+_LOCAL_TIMEOUT = 10.0
 _LOCAL_MODEL = "fixture-local-model"
 
 
