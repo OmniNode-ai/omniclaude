@@ -4,14 +4,15 @@
 
 ``queue-status --occ-refs-only`` counts a reference as live when it is a workflow
 file or step, a dependency or pin, or a non-docstring Python string or name that
-locates the repository. This file pins two of the three sources that still carried
-one after the OMN-20074 passes (the third, the ``onex-change-control`` dependency in
-``pyproject.toml`` and ``uv.lock``, is dropped by its own change):
+locates the repository. This file pins the three sources that still carried one
+after the OMN-20074 passes:
 
 * the two minting reusables ``call-occ-autobind-reusable.yml`` and
   ``call-occ-companion-effect-reusable.yml`` (a workflow file named for an OCC job);
 * the Done-flip guard's clone path and the PR-body stamp guard's repository slug,
-  both of which read the change-control repository.
+  both of which read the change-control repository;
+* the ``onex-change-control`` dependency, override and git source in ``pyproject.toml``
+  and its package entry in ``uv.lock``.
 
 Comments and docstrings that narrate the retirement are mentions, not uses.
 """
@@ -87,3 +88,23 @@ def test_guard_module_does_not_read_the_change_control_repository(
 ) -> None:
     source = (REPO_ROOT / relative).read_text(encoding="utf-8")
     assert _live_python_lines(source) == []
+
+
+def _live_manifest_lines(text: str) -> list[int]:
+    """Lines of a manifest or lock that are not comments and name the repository."""
+    return [
+        number
+        for number, line in enumerate(text.splitlines(), start=1)
+        if OCC_RE.search(line) and not line.lstrip().startswith("#")
+    ]
+
+
+def test_positive_control_the_manifest_matcher_skips_comments_only() -> None:
+    assert _live_manifest_lines('x = ["onex-change-control>=0.1.0"]\n') == [1]
+    assert _live_manifest_lines("# onex-change-control was dropped\n") == []
+
+
+@pytest.mark.parametrize("relative", ["pyproject.toml", "uv.lock"])
+def test_manifest_does_not_depend_on_onex_change_control(relative: str) -> None:
+    text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+    assert _live_manifest_lines(text) == []
