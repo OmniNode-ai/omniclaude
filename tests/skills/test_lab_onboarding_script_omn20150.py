@@ -1793,14 +1793,14 @@ _LOCAL_MODEL = "fixture-local-model"
 
 @pytest.fixture
 def local_model_server() -> Iterator[str]:
-    """An OpenAI-compatible model list on 127.0.0.1, the way LM Studio serves one."""
+    """A server answering HTTP on 127.0.0.1, where a model server such as LM Studio listens."""
 
     class _Models(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             body = json.dumps(
                 {"object": "list", "data": [{"id": _LOCAL_MODEL, "object": "model"}]}
             ).encode()
-            self.send_response(200 if self.path == "/v1/models" else 404)
+            self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -1858,7 +1858,6 @@ def test_local_url_menu_asks_its_url_and_model_and_never_a_key(
     menu = out.split(_MENU)[0]
     assert "5) Local URL   a model server you already run" in menu
     assert "You chose: Local URL" in out
-    assert f"lists: {_LOCAL_MODEL}" in out
     assert _HIDDEN not in out and " key (" not in out
     summary = out.split("Ready to set up:")[1]
     assert (

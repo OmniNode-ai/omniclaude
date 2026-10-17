@@ -624,13 +624,10 @@ local_url_valid() { # an http(s) URL with a host
   case "$1" in http://?*|https://?*) ;; *) return 1 ;; esac
   case "$1" in *[[:space:]]*) return 1 ;; esac
 }
-# Anything that answers HTTP at the model list counts: a server that lists no
-# models may still chat, and onex's own add decides that with its test delegation.
-local_url_answers() { curl -sS -m 5 -o /dev/null "$(local_url_base "$1")/v1/models" 2>/dev/null; }
-local_url_models() { # url -> the model ids the server lists, comma-separated (first 10)
-  curl -sS -m 5 "$(local_url_base "$1")/v1/models" 2>/dev/null | tr ',{}' '\n\n\n' |
-    sed -n 's/^[[:space:]]*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 10 | paste -sd, - | sed 's/,/, /g'
-}
+# Anything that answers HTTP at the server's address counts. Preflight never calls
+# the model API itself (model calls go through delegation): whether it serves a
+# model is decided by `onex models add local`, with its one pinned test delegation.
+local_url_answers() { curl -sS -m 5 -o /dev/null "$(local_url_base "$1")/" 2>/dev/null; }
 
 local_url_unreachable() { # url: stop before anything installs, naming the URL
   FAILED_STEP="reach the local model server"
@@ -639,7 +636,7 @@ local_url_unreachable() { # url: stop before anything installs, naming the URL
 }
 
 settle_local_url() { # preflight: the server's URL and model, never a key
-  local a listed
+  local a
   [ -n "$LOCAL_URL" ] || LOCAL_URL="$(saved_choice local_url)"
   [ -n "$LOCAL_MODEL" ] || LOCAL_MODEL="$(saved_choice local_model)"
   while :; do
@@ -682,8 +679,6 @@ settle_local_url() { # preflight: the server's URL and model, never a key
       LAST_ERR="the local model server at $LOCAL_URL needs a model name, and there is no terminal to ask on"
       phase_fail "pass --local-model NAME, or run this in Terminal. Nothing was installed"
     fi
-    listed="$(local_url_models "$LOCAL_URL")"
-    [ -n "$listed" ] && say "  The server at $LOCAL_URL lists: $listed"
     printf '  The model it runs, as the server names it: '
     IFS= read -r a || quit_setup
     LOCAL_MODEL="$(printf '%s' "$a" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
