@@ -24,7 +24,7 @@
   tick-bundle-install.sh.
 
   Install only this agent:
-    bash omniclaude/scripts/tick-bundle-install.sh --only ai.omninode.canonical-clone-sync
+    bash omniclaude/scripts/tick-bundle-install.sh, flag "only", value ai.omninode.canonical-clone-sync
 
   Uninstall:
     launchctl bootout gui/$(id -u)/ai.omninode.canonical-clone-sync
