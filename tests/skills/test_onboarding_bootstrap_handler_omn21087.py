@@ -165,7 +165,7 @@ def test_the_downloaded_handler_comes_from_a_commit_on_this_history() -> None:
     # OMN-21163: the download checks its own digest. A pull request that changes
     # the handler cannot name a dev commit holding the new bytes, so for that one
     # change the download keeps the handler already on dev.
-    digest = re.search(r'local download_digest="([0-9a-f:]+)"', text)
+    digest = re.search(r'\bdownload_digest="([0-9a-f:]+)"', text)
     assert digest
     assert hashlib.sha256(_handler_at(commit)).hexdigest() == digest.group(1).replace(
         ":", ""

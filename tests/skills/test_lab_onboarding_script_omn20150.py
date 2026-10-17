@@ -38,6 +38,14 @@ SCRIPT = (
     / "lab-onboarding.sh"
 )
 SKILL = SCRIPT.parents[1] / "omninode_dev_setup" / "SKILL.md"
+HANDLER = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "omniclaude"
+    / "nodes"
+    / "node_skill_omninode_dev_setup_orchestrator"
+    / "handler_onboarding_preflight.sh"
+)
 UNBRACED_MULTIBYTE_EXPANSION = re.compile(rb"\$[A-Za-z_][A-Za-z0-9_]*[\x80-\xff]")
 
 pytestmark = pytest.mark.unit
@@ -685,10 +693,10 @@ def _stored_keys(tmp_path: Path, *providers: str) -> None:
     onex.chmod(0o755)
 
 
-def _functions(*names: str) -> str:
-    """The named top-level functions of the script, as bash source."""
+def _functions(*names: str, source: Path = SCRIPT) -> str:
+    """The named top-level functions of the script (or ``source``), as bash source."""
     out, keep = [], False
-    for line in SCRIPT.read_text().splitlines():
+    for line in source.read_text().splitlines():
         if any(line.startswith(f"{n}() {{") for n in names):
             keep = True
         if keep:
@@ -1977,13 +1985,13 @@ def _local_url_phase3(
             "result_line",
             "cause_of",
             "setup_model",
-            "stop_unless_local_url_answered",
         )
+        + "\n"
+        + _functions("local_url_add_args", "stop_local_url_unanswered", source=HANDLER)
         + f'\nmodels_cmd() {{ "{fake}" "$@"; }}\n'
-        + 'KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""; LOCAL_URL_REFUSED=0\n'
+        + 'KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""\n'
         + f'LOCAL_URL="http://127.0.0.1:1234"; LOCAL_MODEL="{_LOCAL_MODEL}"\n'
         + 'setup_model local; say "$(result_line local)"\n'
-        + "stop_unless_local_url_answered\n"
         + 'say "passed: $(passed_models)"\n'
     )
     result = subprocess.run(
@@ -2004,7 +2012,7 @@ def test_local_url_and_model_reach_onex_models_add_local(tmp_path: Path) -> None
         f'{{"provider": "local", "status": "passed", "backend_id": "local-url", "model": "{_LOCAL_MODEL}"}}\n',
     )
     assert calls == [
-        f"add local --url http://127.0.0.1:1234 --model {_LOCAL_MODEL} --json stdin=0"
+        f"add local --json --url http://127.0.0.1:1234 --model {_LOCAL_MODEL} stdin=0"
     ]
     assert f"Local URL   ✓ answered ({_LOCAL_MODEL})" in result.stdout, result.stderr
     assert "passed: local" in result.stdout
@@ -2070,9 +2078,9 @@ def _local_url_onex(
             "log",
             "last_log_lines",
             "retry",
-            "local_url_supported",
-            "ensure_local_url_onex",
         )
+        + "\n"
+        + _functions("local_url_supported", "ensure_local_url_onex", source=HANDLER)
         + "\nmodels_cmd() {\n"
         + f'  [ "$1 $2" = "add --help" ] && {{ echo "  --model TEXT"; [ -f "{upgraded}" ] && echo "  --url TEXT"; }}\n'
         + "  return 0\n}\n"
@@ -2123,7 +2131,11 @@ def test_local_url_on_this_mac_is_reached_from_docker_by_its_host_name(
     url: str, reached: str
 ) -> None:
     result = subprocess.run(
-        ["/bin/bash", "-c", _functions("docker_url") + f'\ndocker_url "{url}"\n'],
+        [
+            "/bin/bash",
+            "-c",
+            _functions("docker_url", source=HANDLER) + f'\ndocker_url "{url}"\n',
+        ],
         capture_output=True,
         text=True,
         timeout=30,
