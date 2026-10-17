@@ -58,6 +58,11 @@ requirements:
         statement: "the two OCC minting reusables are deleted, the Done-flip guard decides on repo evidence alone and reads no change-control clone, and the PR-body stamp guard has no merged-companion read -- falsifier: uv run pytest tests/ci/test_occ_live_refs_zero_omn17427.py -q --no-cov fails at the merge base"
       - id: AC13
         statement: "pyproject.toml and uv.lock carry no onex-change-control dependency, override, git source or package entry -- falsifier: uv run pytest tests/ci/test_occ_live_refs_zero_omn17427.py -q --no-cov fails over the merge base"
+  - id: req-launchd-plist-templates-parse-as-xml
+    statement: Every launchd template renders to a plist that plistlib parses, and the installer refuses a rendered plist that does not parse.
+    acceptance:
+      - id: AC14
+        statement: "the four templates that carried a double hyphen inside an XML comment parse after rendering, the installer's verify_well_formed refuses a double-hyphen comment and passes a well-formed plist -- falsifier: uv run pytest tests/scripts/test_launchd_plist_templates_well_formed.py -q --no-cov fails at the merge base, where the test file is absent and plistlib reports the four templates not well-formed"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -268,3 +273,15 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_occ_live_refs_zero_omn17427.py -q --no-cov"
     binds_ac:
       - AC13
+  - id: dod-launchd-plist-templates-parse-as-xml
+    description: >
+      Every template under scripts/launchd renders and parses with plistlib, and
+      tick-bundle-install.sh refuses a rendered plist that does not parse; the
+      passing control proves the refusal is not unconditional.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_launchd_plist_templates_well_formed.py -q --no-cov"
+    binds_ac:
+      - AC14
