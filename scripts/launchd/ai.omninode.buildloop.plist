@@ -3,7 +3,7 @@
 <!--
   ai.omninode.buildloop.plist — launchd agent for periodic dispatch/build-loop tick [OMN-9056]
 
-  Invokes cron-closeout.sh --build-only (phases F1-F3), which is the canonical
+  Invokes cron-closeout.sh with its build-only flag (phases F1-F3), which is the canonical
   build-loop entrypoint per OMN-6935. The standalone cron-buildloop.sh was
   deprecated when its logic was folded into cron-closeout.sh.
 

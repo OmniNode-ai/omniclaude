@@ -156,6 +156,19 @@ verify_program_args() {
   return 0
 }
 
+verify_well_formed() {
+  # Refuse a rendered plist that a strict XML reader cannot parse. plutil accepts a
+  # double hyphen inside an XML comment, which XML 1.0 forbids; the canonical-clone-sync
+  # and transcript-s3-archive templates carried one and were installed ill-formed
+  # (plistlib: "not well-formed (invalid token)"). OMN-17427.
+  local label="$1" rendered="$2" err
+  command -v python3 >/dev/null 2>&1 || return 0
+  if ! err="$(printf '%s' "${rendered}" | python3 -I -c 'import plistlib, sys; plistlib.loads(sys.stdin.buffer.read())' 2>&1)"; then
+    echo "  [${label}] REFUSED: rendered plist is not well-formed: ${err##*$'\n'}" >&2
+    return 1
+  fi
+}
+
 install_one() {
   local label="$1"
   local src="${LAUNCHD_SRC}/${label}.plist"
@@ -175,6 +188,7 @@ install_one() {
     return
   fi
 
+  verify_well_formed "${label}" "${rendered}" || return 1
   verify_program_args "${label}" "${rendered}" || return 1
 
   if [[ -f "${dst}" ]]; then

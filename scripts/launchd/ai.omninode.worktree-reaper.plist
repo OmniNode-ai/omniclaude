@@ -7,7 +7,7 @@
   This is a CONTINUOUSLY-RUNNING daemon (KeepAlive=true), NOT a periodic launchd
   job. launchd periodic jobs do not fire reliably on this Mac
   (memory feedback_local_durability); a resident KeepAlive process sidesteps that
-  failure mode. The reaper's own --loop runs BOTH GC layers (OMN-13230, T6):
+  failure mode. The reaper's own loop mode runs BOTH GC layers (OMN-13230, T6):
     - Layer 1 (event-first): polls the pr-merged projection every
       ONEX_REAPER_INTERVAL seconds and drives prune-worktrees.sh on each
       newly-merged PR.
@@ -25,7 +25,7 @@
     bash omniclaude/scripts/install-worktree-reaper-daemon.sh
 
   Uninstall:
-    bash omniclaude/scripts/install-worktree-reaper-daemon.sh --uninstall
+    bash omniclaude/scripts/install-worktree-reaper-daemon.sh, flag "uninstall"
 -->
 <plist version="1.0">
 <dict>

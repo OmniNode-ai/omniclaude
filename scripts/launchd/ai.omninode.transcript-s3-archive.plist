@@ -6,7 +6,7 @@
   (OMN-18189, OMN-19513).
 
   Runs transcript-s3-archive-sync.sh once daily. That script invokes the
-  canonical archive_claude_sessions.sh already in omninode_infra (--yes,
+  canonical archive_claude_sessions.sh already in omninode_infra (yes flag,
   non-interactive) against the discovered archive bucket and its KMS key, and
   reads back the object count/size afterward. It authenticates as whatever
   AWS_PROFILE is set below (default: the "default" SSO profile); if that
