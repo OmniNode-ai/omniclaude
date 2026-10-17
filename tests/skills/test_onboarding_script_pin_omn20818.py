@@ -153,3 +153,23 @@ def test_guide_names_the_local_model_server_choice() -> None:
     assert "`--local-url URL`" in text
     assert "`--local-model NAME`" in text
     assert "`gemini`, `openrouter`, `openai`, `ollama` or `local`" in text
+
+
+# OMN-21163 AC3: the merge commit of omniclaude#2834, the first commit whose
+# script offers a local model server by URL on the download path too (#2830 added
+# the choice; #2834 points the download at the handler that carries it).
+LOCAL_URL_SCRIPT_COMMIT = "2265616f6ca81e76e117671acca57fd5161b39b5"
+
+
+def test_pin_carries_the_local_model_server_choice() -> None:
+    pinned = _pinned_commit()
+    _require_commit(pinned)
+    _require_commit(LOCAL_URL_SCRIPT_COMMIT)
+    assert _is_ancestor(LOCAL_URL_SCRIPT_COMMIT, pinned), (
+        f"ONBOARDING.md pins {pinned}, which does not contain "
+        f"{LOCAL_URL_SCRIPT_COMMIT} (omniclaude#2834, OMN-21163)"
+    )
+    shown = _git("show", f"{pinned}:{SCRIPT_PATH}")
+    assert shown.returncode == 0, shown.stderr.decode(errors="replace")
+    assert b"--local-url" in shown.stdout
+    assert b"local_url_add_args" in shown.stdout
