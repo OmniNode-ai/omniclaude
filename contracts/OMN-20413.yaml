@@ -1,0 +1,36 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-20413
+title: "dev's container evidence checks run as written, so no PR has to edit an inherited item"
+summary: >
+  onex scm pr-create refuses a command check whose first token is docker on a host without
+  docker, and the OMN-19513 container smoke lacked pydantic-settings in its uv --with list.
+  Pull requests citing OMN-17427 or OMN-19513 had to edit those inherited items, and
+  repo-evidence / dod-verify then failed them as always-pass at the merge base. dev now
+  carries the repaired items, so a pull request inherits them unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20413-container-checks-carried
+    statement: dev's docker run evidence checks start with a resolvable token and the OMN-19513 container smoke installs what omniclaude.hooks imports.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: no command check in contracts/*.yaml starts with a bare docker run, the OMN-17427, OMN-19513 and OMN-20883 container checks lead with env or bash -c, and the OMN-19513 smoke lists pydantic-settings, omnibase-infra, tiktoken and requests -- falsifier: uv run pytest tests/ci/test_inherited_container_checks_omn20413.py -q --no-cov fails at the merge base'
+evidence_requirements:
+  - kind: tests
+    description: The inherited container checks carry the forms onex scm pr-create accepts and the OMN-19513 smoke's full dependency list.
+    command: uv run pytest tests/ci/test_inherited_container_checks_omn20413.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20413-container-checks-carried
+    description: The structural test reads every contract's command checks and refuses a bare docker run lead or a missing OMN-19513 smoke dependency.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_inherited_container_checks_omn20413.py -q --no-cov
+    binds_ac:
+      - AC1
