@@ -44,7 +44,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import NamedTuple
 from urllib.parse import urlsplit
 
 CONTRACT_PATH = (
@@ -63,7 +63,7 @@ class ModelHookBusPublishRequest(NamedTuple):
     """One hook event, already stamped with lane, actor and turn."""
 
     event_type: str
-    payload: dict[str, Any]
+    payload: dict[str, object]
     correlation_id: str | None
     journal_dir: Path
 
@@ -74,22 +74,40 @@ class ModelHookBusPublishResult(NamedTuple):
     detail: str = ""
 
 
-def load_contract(path: Path = CONTRACT_PATH) -> dict[str, Any]:
+def load_contract(path: Path = CONTRACT_PATH) -> dict[str, object]:
     loaded = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(loaded, dict):
         raise ValueError(f"{path}: contract must be a JSON object")
     return loaded
 
 
+def _text(contract: Mapping[str, object], key: str) -> str:
+    """A string field of the contract; TypeError when it is not one."""
+    value = contract[key]
+    if not isinstance(value, str):
+        raise TypeError(f"contract {key} must be a string, got {type(value).__name__}")
+    return value
+
+
+def _count(contract: Mapping[str, object], key: str) -> int:
+    """An integer field of the contract; TypeError when it is not one."""
+    value = contract[key]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"contract {key} must be an integer, got {type(value).__name__}"
+        )
+    return value
+
+
 def build_body(
     request: ModelHookBusPublishRequest,
-    contract: Mapping[str, Any],
+    contract: Mapping[str, object],
     *,
     event_id: str,
     fired_at: str,
 ) -> bytes:
     """The proxy request body: one record whose value is the runtime envelope."""
-    payload = {**request.payload, contract["fire_time_key"]: fired_at}
+    payload = {**request.payload, _text(contract, "fire_time_key"): fired_at}
     correlation_id = request.correlation_id or event_id
     envelope = {
         "envelope_id": str(uuid.uuid4()),
@@ -110,13 +128,13 @@ def build_body(
 
 def _quarantine(
     request: ModelHookBusPublishRequest,
-    contract: Mapping[str, Any],
+    contract: Mapping[str, object],
     *,
     event_id: str,
     fired_at: str,
     size: int,
 ) -> str:
-    held = request.journal_dir / contract["quarantine_dirname"]
+    held = request.journal_dir / _text(contract, "quarantine_dirname")
     held.mkdir(parents=True, exist_ok=True)
     target = held / f"{event_id}.json"
     tmp = held / f".{event_id}.json.tmp"
@@ -151,7 +169,7 @@ def _record_error(answer: bytes) -> str | None:
     return None if code in (None, 0) else f"proxy record error_code={code}"
 
 
-def _post(base: str, contract: Mapping[str, Any], body: bytes) -> str | None:
+def _post(base: str, contract: Mapping[str, object], body: bytes) -> str | None:
     """POST one record to the proxy; the record error, or None when acked."""
     url = urlsplit(base)
     if url.scheme not in ("http", "https") or not url.hostname:
@@ -162,14 +180,14 @@ def _post(base: str, contract: Mapping[str, Any], body: bytes) -> str | None:
         else http.client.HTTPConnection
     )
     connection = connection_cls(
-        url.hostname, url.port, timeout=contract["timeout_ms"] / 1000
+        url.hostname, url.port, timeout=_count(contract, "timeout_ms") / 1000
     )
     try:
         connection.request(
             "POST",
             f"{url.path.rstrip('/')}/topics/{contract['command_topic']}",
             body=body,
-            headers={"Content-Type": contract["content_type"]},
+            headers={"Content-Type": _text(contract, "content_type")},
         )
         answer = connection.getresponse()
         data = answer.read()
@@ -184,7 +202,7 @@ def handle(
     request: ModelHookBusPublishRequest,
     *,
     environ: Mapping[str, str] | None = None,
-    contract: Mapping[str, Any] | None = None,
+    contract: Mapping[str, object] | None = None,
     event_id: str | None = None,
     fired_at: str | None = None,
 ) -> ModelHookBusPublishResult:
@@ -194,12 +212,12 @@ def handle(
     try:
         contract = load_contract() if contract is None else contract
         env = os.environ if environ is None else environ
-        base = env.get(contract["url_env"], "").strip().rstrip("/")
+        base = env.get(_text(contract, "url_env"), "").strip().rstrip("/")
         if not base:
             return ModelHookBusPublishResult(outcome.NO_LOCAL_BUS, event_id)
         fired_at = fired_at or datetime.now(UTC).isoformat()
         body = build_body(request, contract, event_id=event_id, fired_at=fired_at)
-        if len(body) > contract["max_record_bytes"]:
+        if len(body) > _count(contract, "max_record_bytes"):
             where = _quarantine(
                 request, contract, event_id=event_id, fired_at=fired_at, size=len(body)
             )
@@ -229,7 +247,7 @@ def replay_journal(
     journal_dir: Path,
     *,
     environ: Mapping[str, str] | None = None,
-    contract: Mapping[str, Any] | None = None,
+    contract: Mapping[str, object] | None = None,
     limit: int | None = None,
     pause_s: float = 0.0,
 ) -> dict[str, int]:
