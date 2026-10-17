@@ -68,15 +68,15 @@ Capture journals nothing, and says so in the hook log, when:
    resolve fails at the journal head every cycle and holds every record behind
    it until it is dead-lettered (the OMN-19074 outage shape), so an absent
    list, or a list without this event type, means NOT capturing.
-3. The contract resolver (topic and size bound) cannot be loaded.
+3. The contract resolver (topic and size bound), or the item-identity handler
+   of ``node_capture_item_identity_effect`` (OMN-18531, TA.21), cannot be loaded.
 
-Why the resolver is loaded by file path
----------------------------------------
+Why both are loaded by file path
+--------------------------------
 ``import omniclaude.hooks.capture_redaction`` runs the package ``__init__``,
 which imports ``omnibase_infra``, ``pydantic`` and ``aiokafka``: 22 s cold,
-measured 2026-09-25, on every tool call. That is the OMN-17224 cost. The
-resolver itself needs only the standard library and PyYAML, so it is loaded
-straight from its file.
+measured 2026-09-25, on every tool call (the OMN-17224 cost). The resolver needs
+the standard library and PyYAML, the item-identity handler the standard library.
 
 Fail-open like every hook on this path: always exits 0, never writes stdout.
 """
@@ -130,7 +130,11 @@ OPERATOR_LOOKBACK_SECONDS = 3600
 #: Transcript entry ids kept in a session's operator marker.
 OPERATOR_MARKER_KEEP = 512
 
+#: ``src/omniclaude`` of the checkout this hook runs from, when it runs from one.
+SOURCE_ROOT = Path(__file__).resolve().parents[4] / "src" / "omniclaude"
+
 _RESOLVER_MODULE_NAME = "omniclaude_capture_redaction_by_path"
+_ITEM_IDENTITY_MODULE_NAME = "omnimarket_capture_item_identity_by_path"
 
 _REPLY_MARKER_SUFFIX = ".reply"
 _OPERATOR_MARKER_SUFFIX = ".operator"
@@ -164,44 +168,55 @@ def status_path_for(journal_dir: Path) -> Path:
     return journal_dir.parent / health.STATUS_FILENAME
 
 
-def _resolver_candidates() -> list[Path]:
-    candidates = [
-        Path(__file__).resolve().parents[4]
-        / "src"
-        / "omniclaude"
-        / "hooks"
-        / "capture_redaction.py"
-    ]
+def package_files(package: str, *parts: str) -> list[Path]:
     # find_spec on a TOP-LEVEL name locates the package without executing it.
-    spec = importlib.util.find_spec("omniclaude")
-    if spec is not None and spec.submodule_search_locations:
-        for location in spec.submodule_search_locations:
-            candidates.append(Path(location) / "hooks" / "capture_redaction.py")
-    return candidates
+    spec = importlib.util.find_spec(package)
+    locations = spec.submodule_search_locations if spec is not None else None
+    return [Path(location).joinpath(*parts) for location in locations or ()]
 
 
-def load_resolver() -> ModuleType | None:
-    """Load the capture-redaction resolver by file path, or return ``None``."""
-    loaded = sys.modules.get(_RESOLVER_MODULE_NAME)
+def _resolver_candidates() -> list[Path]:
+    parts = ("hooks", "capture_redaction.py")
+    return [SOURCE_ROOT.joinpath(*parts), *package_files("omniclaude", *parts)]
+
+
+def load_by_path(name: str, candidates: list[Path]) -> ModuleType | None:
+    """Load the first candidate file that loads as module ``name``, or ``None``."""
+    loaded = sys.modules.get(name)
     if loaded is not None:
         return loaded
-    for candidate in _resolver_candidates():
-        if not candidate.is_file():
-            continue
-        spec = importlib.util.spec_from_file_location(_RESOLVER_MODULE_NAME, candidate)
-        if spec is None or spec.loader is None:
+    for candidate in candidates:
+        spec = importlib.util.spec_from_file_location(name, candidate)
+        if not candidate.is_file() or spec is None or spec.loader is None:
             continue
         module = importlib.util.module_from_spec(spec)
-        # Registered before exec: dataclasses resolve their module by name.
-        sys.modules[_RESOLVER_MODULE_NAME] = module
+        # Registered before exec: dataclasses and pydantic resolve their module
+        # (and postponed annotations) through its entry in sys.modules.
+        sys.modules[name] = module
         try:
             spec.loader.exec_module(module)
         except Exception as exc:  # noqa: BLE001 -- try the next candidate
-            sys.modules.pop(_RESOLVER_MODULE_NAME, None)
-            _log(f"resolver at {candidate.name} did not load: {exc}")
+            sys.modules.pop(name, None)
+            _log(f"{name} at {candidate} did not load: {type(exc).__name__}")
             continue
         return module
     return None
+
+
+def load_resolver() -> ModuleType | None:
+    return load_by_path(_RESOLVER_MODULE_NAME, _resolver_candidates())
+
+
+def load_item_identity() -> ModuleType | None:
+    """The stdlib-only handler of node_capture_item_identity_effect (TA.21)."""
+    handler = (
+        "node_capture_item_identity_effect",
+        "handlers",
+        "handler_item_identity.py",
+    )
+    return load_by_path(
+        _ITEM_IDENTITY_MODULE_NAME, package_files("omnimarket", "nodes", *handler)
+    )
 
 
 def content_topic(resolver: ModuleType) -> str:
@@ -527,13 +542,8 @@ def record_operator_marker(turn_dir: Path, session_id: str, ids: list[str]) -> N
 # ---------------------------------------------------------------------------
 
 #: The capture contract; its ``payload_encryption`` block is the setting.
-CAPTURE_CONTRACT_YAML = (
-    Path(__file__).resolve().parents[4]
-    / "src"
-    / "omniclaude"
-    / "hooks"
-    / "contracts"
-    / "contract_hook_claude_capture.yaml"
+CAPTURE_CONTRACT_YAML = SOURCE_ROOT.joinpath(
+    "hooks", "contracts", "contract_hook_claude_capture.yaml"
 )
 _ENCRYPTION_HANDLER = "omniclaude.handlers.handler_hook_payload_encryption"
 
@@ -553,24 +563,14 @@ def payload_encryption_setting(
     Load the stdlib-only setting model by file so disabled capture encryption
     does not import the package's model initializers or cryptography.
     """
-    for resolver_path in _resolver_candidates():
-        model_path = (
-            resolver_path.parents[1]
-            / "models"
-            / "model_hook_payload_encryption_setting.py"
-        )
-        if model_path.is_file():
-            break
-    else:
+    setting_file = ("models", "model_hook_payload_encryption_setting.py")
+    model = load_by_path(
+        "capture_encryption_setting",
+        [path.parents[1].joinpath(*setting_file) for path in _resolver_candidates()],
+    )
+    if model is None:
         raise PayloadSealRefusedError("the encryption setting model is unavailable")
     try:
-        spec = importlib.util.spec_from_file_location(
-            "capture_encryption_setting", model_path
-        )
-        if spec is None or spec.loader is None:
-            raise ValueError("the encryption setting model could not be loaded")
-        model = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(model)
         setting = model.ModelHookPayloadEncryptionSetting.from_contract(
             (contract_path or CAPTURE_CONTRACT_YAML).read_text(encoding="utf-8")
         )
@@ -710,9 +710,10 @@ def capture(
             "publishable (update its omnimarket and restart it)"
         )
         return 0
-    resolver = load_resolver()
-    if resolver is None:
-        _log("skipped: the capture-redaction resolver could not be loaded")
+    resolver, item_identity = load_resolver(), load_item_identity()
+    if resolver is None or item_identity is None:
+        missing = "capture-redaction resolver" if resolver is None else "item identity"
+        _log(f"skipped: the {missing} could not be loaded")
         return 0
     topic = content_topic(resolver)
 
@@ -748,33 +749,43 @@ def capture(
             )
             items = [*items, *operator_items]
 
-    written = 0
+    chunks: list[dict[str, Any]] = []
     for item in items:
         record = {"session_id": session, "hook_source": _HOOK_SOURCE[kind], **item}
-        for chunk in raw_chunks(resolver, record, topic=topic):
-            if sealer is not None:
-                chunk = sealer("content.captured", chunk)
-            appender.append_event(
-                # A literal, not CONTENT_EVENT_TYPE, on purpose (OMN-19913):
-                # validate_hook_edge_lane.py resolves only literal classes at
-                # an emit call, so the constant hid this class from the lane
-                # contract and nothing derived from the contract knew it needed
-                # a broker grant. tests pin the literal to the constant.
-                event_type="content.captured",
-                payload=chunk,
-                correlation_id=correlation_id or session,
-                cwd=cwd,
-                actor=actor,
-                host_turn_id=host_turn_id,
-                agent_id=agent_id,
-                transcript_path=transcript_path,
-                session_id=session,
-                journal_dir=str(journal_dir),
-            )
-            written += 1
+        chunks.extend(raw_chunks(resolver, record, topic=topic))
+    # OMN-18531 (TA.21): one call stamps the content_record_id each record shares
+    # with its lineage reference, and the content stream's sequence block.
+    raw_agent = agent_id or hook_input.get("agent_id")
+    stamped = item_identity.stamp_content_records(
+        journal_dir,
+        session_id=session,
+        agent_id=raw_agent if isinstance(raw_agent, str) else None,
+        hook_input=hook_input,
+        records=chunks,
+    )
+    for chunk in stamped:
+        if sealer is not None:
+            chunk = sealer("content.captured", chunk)
+        appender.append_event(
+            # A literal, not CONTENT_EVENT_TYPE, on purpose (OMN-19913):
+            # validate_hook_edge_lane.py resolves only literal classes at
+            # an emit call, so the constant hid this class from the lane
+            # contract and nothing derived from the contract knew it needed
+            # a broker grant. tests pin the literal to the constant.
+            event_type="content.captured",
+            payload=chunk,
+            correlation_id=correlation_id or session,
+            cwd=cwd,
+            actor=actor,
+            host_turn_id=host_turn_id,
+            agent_id=agent_id,
+            transcript_path=transcript_path,
+            session_id=session,
+            journal_dir=str(journal_dir),
+        )
     if operator_ids:
         record_operator_marker(turn_dir, session, operator_ids)
-    return written
+    return len(stamped)
 
 
 def _loads_or_none(raw: str) -> Any:

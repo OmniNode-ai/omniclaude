@@ -201,44 +201,16 @@ def lane_grant_pending(contract_path: Path | None = None) -> bool:
 
 
 def _contract_candidates() -> list[Path]:
-    candidates = [
-        Path(__file__).resolve().parents[4]
-        / "src"
-        / "omniclaude"
-        / "hooks"
-        / "model_claude_hook_event.py"
+    parts = ("hooks", "model_claude_hook_event.py")
+    return [
+        content_capture.SOURCE_ROOT.joinpath(*parts),
+        *content_capture.package_files("omniclaude", *parts),
     ]
-    # find_spec on a TOP-LEVEL name locates the package without executing it.
-    spec = importlib.util.find_spec("omniclaude")
-    if spec is not None and spec.submodule_search_locations:
-        for location in spec.submodule_search_locations:
-            candidates.append(Path(location) / "hooks" / "model_claude_hook_event.py")
-    return candidates
 
 
 def load_contract() -> ModuleType | None:
     """Load the capture contract module by file path, or return ``None``."""
-    loaded = sys.modules.get(_CONTRACT_MODULE_NAME)
-    if loaded is not None:
-        return loaded
-    for candidate in _contract_candidates():
-        if not candidate.is_file():
-            continue
-        spec = importlib.util.spec_from_file_location(_CONTRACT_MODULE_NAME, candidate)
-        if spec is None or spec.loader is None:
-            continue
-        module = importlib.util.module_from_spec(spec)
-        # Registered before exec: pydantic resolves postponed annotations
-        # through the module's entry in sys.modules.
-        sys.modules[_CONTRACT_MODULE_NAME] = module
-        try:
-            spec.loader.exec_module(module)
-        except Exception as exc:  # noqa: BLE001 -- try the next candidate
-            sys.modules.pop(_CONTRACT_MODULE_NAME, None)
-            _log(f"contract at {candidate} did not load: {type(exc).__name__}")
-            continue
-        return module
-    return None
+    return content_capture.load_by_path(_CONTRACT_MODULE_NAME, _contract_candidates())
 
 
 def payload_encryption_enabled(contract_path: Path | None = None) -> bool:
@@ -522,9 +494,10 @@ def capture(
             f"{HOOK_EVENT_TYPE} as publishable (update its omnimarket and restart it)"
         )
         return 0
-    contract = load_contract()
-    if contract is None:
-        _log("skipped: the capture contract could not be loaded")
+    contract, item_identity = load_contract(), content_capture.load_item_identity()
+    if contract is None or item_identity is None:
+        missing = "capture contract" if contract is None else "item identity"
+        _log(f"skipped: the {missing} could not be loaded")
         return 0
     try:
         sealer = content_capture.payload_sealer(key_reader=key_reader)
@@ -551,6 +524,9 @@ def capture(
         # The error names a field, never its value: hook stdin is content.
         _log(f"skipped {hook_name}: the contract refused the input: {exc}")
         return 0
+    # OMN-18531 (TA.21): settle the event id this call shares with the content
+    # hook (rebinding the derived content references), and stamp the sequence.
+    payload = item_identity.stamp_lineage_event(target, payload, hook_input)
     lineage = payload["lineage"]
     if sealer is not None:
         payload = sealer(HOOK_EVENT_TYPE, payload)
