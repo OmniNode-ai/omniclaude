@@ -65,7 +65,7 @@ echo "[worktree-reaper-daemon] starting loop interpreter=$PYTHON_BIN interval=${
 # exec so launchd KeepAlive supervises the reaper process directly. The reaper's
 # --loop handles BOTH layers: the fast event poll every --interval seconds and the
 # catch-up backstop every --catch-up-interval seconds (plus once on start). Default
-# roots cover all Mac worktree roots.
+# roots are the two under $OMNI_HOME; no home-directory root is added.
 exec "$PYTHON_BIN" "$REAPER" --execute --loop \
   --interval "$INTERVAL" \
   --catch-up-interval "$CATCH_UP_INTERVAL"

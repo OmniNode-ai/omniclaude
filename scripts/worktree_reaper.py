@@ -71,9 +71,9 @@ OWNER/REPO --source local`` output — a branch whose name matches a MERGED PR's
 head branch, or whose HEAD matches a MERGED PR's head oid — never from a gh
 read, so this reaper's merged decision rides the same local answer. The reaper
 passes the prune script the worktrees root for the matched row across ALL roots
-($OMNI_HOME/omni_worktrees + the legacy /Users/<user>/Code/omni_worktrees +
-.onex_state worktrees); it never weakens the prune script's checks. Salvage of dirty
-worktrees is out of scope (OMN-13044 owns that).
+($OMNI_HOME/omni_worktrees + the .onex_state worktrees); it never weakens the
+prune script's checks. Salvage of dirty worktrees is out of scope (OMN-13044
+owns that).
 
 Default-SKIP on ambiguity: any error fetching/parsing the projection, any prune
 subprocess failure, or any malformed row leaves the cursor un-advanced so the next
@@ -665,21 +665,20 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def _resolve_roots(arg_roots: list[str]) -> list[Path]:
     """Resolve worktrees roots to GC.
 
-    Explicit ``--root`` flags win. Otherwise default to all known Mac roots:
-    $OMNI_HOME/omni_worktrees, the legacy ~/Code/omni_worktrees, and the
-    .onex_state worktrees dir. Absent roots are simply skipped by reap_row.
+    Explicit ``--root`` flags win. Otherwise default to the roots under
+    $OMNI_HOME: its omni_worktrees and the .onex_state worktrees dir. There is no
+    home-directory fallback (OMN-19396): with OMNI_HOME unset no root resolves and
+    ``main`` stops. Absent roots are simply skipped by reap_row.
     """
     if arg_roots:
         return [Path(r) for r in arg_roots]
-    roots: list[Path] = []
-    omni_home = os.environ.get("OMNI_HOME", "").strip()
-    if omni_home:
-        roots.append(Path(omni_home) / "omni_worktrees")
-        roots.append(Path(omni_home) / ".onex_state" / "worktrees")
-    legacy = Path.home() / "Code" / "omni_worktrees"
-    if legacy not in roots:
-        roots.append(legacy)
-    return roots
+    registry_root = os.environ.get("OMNI_HOME", "").strip()
+    if not registry_root:
+        return []
+    return [
+        Path(registry_root) / "omni_worktrees",
+        Path(registry_root) / ".onex_state" / "worktrees",
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:
