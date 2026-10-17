@@ -21,124 +21,240 @@ is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
-  - id: req-omn21087-clones
-    statement: Phase 2 brings every clean clone to origin and stops, naming each clone that holds work, before any clone moves.
+  - id: req-omn21087-fast-forward
+    statement: Phase 2 fast-forwards a clean clone on its branch to origin instead of only fetching it.
     acceptance:
       - id: AC1
-        statement: 'AC1: a clean clone that is behind or detached is brought to origin (omnibase_infra first, so a checkout older than the pins file is updated rather than reported as missing it); a clone with tracked changes or commits origin lacks is named with its state, its distance behind origin and the command that moves it aside, and no clone moves; a non-clone directory at a repo path is moved aside, never deleted; falsifier: uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -k "dirty_clone or detached_unpinned or one_stop or not_a_clone or missing_pins" fails against the dev script.'
-  - id: req-omn21087-run-environment
-    statement: No leftover variable reaches the run, and every run, resumed or not, is bound to the onboarding workspace.
+        statement: 'AC1: For an existing clone on its tracked branch with no local changes: fast-forward it to origin, not just fetch.'
+  - id: req-omn21087-stop-named
+    statement: A clone phase 2 cannot bring current stops the run, named with its state, its distance behind origin and the command that fixes it.
     acceptance:
       - id: AC2
-        statement: 'AC2: the run and its children inherit none of OMNI_HOME, OMNIBASE_INTERNAL_PATH, ONEX_EVENT_BUS_TYPE, ONEX_LAB_TENANT_STATE_DIR, ONEX_STATE_DIR, ONEX_DISPATCH_VENV, ONEX_CONTRACTS_DIR or KAFKA_BOOTSTRAP_SERVERS, and a resumed run that skips phase 2 runs phase 3 with OMNIBASE_PATH and ONEX_WORKSPACE_CONFIG_ROOT naming the onboarding workspace; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "leftover_variable or binds_the_workspace" fails against the dev script.'
-  - id: req-omn21087-phase3
-    statement: Phase 3 does not rebuild a current dispatch venv, and a failed model test prints its cause.
+        statement: 'AC2: For a clone that is dirty or cannot fast-forward (a clean detached clone is returned to its branch instead; a dirty detached clone stops): stop with a message that names that clone, its state and how far behind it is, and the exact command to fix it.'
+  - id: req-omn21087-behind-not-missing
+    statement: An old clone lacking a file origin has is reported as behind origin, never as a file to restore.
     acceptance:
       - id: AC3
-        statement: 'AC3: phase 3 checks the dispatch venv with the reconciler''s --check before rebuilding it, and a failed model test whose summary is an exit status prints the Error line that caused it; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "failed_model_test or checks_the_venv" fails against the dev script.'
-  - id: req-omn21087-runtime-config-repo
-    statement: The workspace runtime config is readable by onex's materialiser without a warning.
+        statement: 'AC3: A missing file in an old clone should be reported as "clone is N commits behind", not "restore the pins file".'
+  - id: req-omn21087-resume-at-failure
+    statement: A resumed run, from any copy of the script, picks up at the failed phase or says why a passed phase runs again.
     acceptance:
       - id: AC4
-        statement: 'AC4: phase 2 makes the workspace config root a git repository whose origin/main carries config/onex/runtime/runtime_config.yaml, idempotently, and phase2_verified requires it; falsifier: uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -k materialiser fails against the dev script.'
-  - id: req-omn21087-preflight-survey
-    statement: Preflight reports what an earlier setup left, as the developer's shell runs it, before anything installs.
-    acceptance:
-      - id: AC5
-        statement: 'AC5: preflight runs onex in a new interactive shell of the developer''s kind and reports an alias or function, its --version output, onex installs on PATH, profile lines setting old variables or an onex alias or function, and a local-model routes file this setup did not write, in one table, changing nothing; phase 6 checks a new terminal runs the workspace onex; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "preflight_reports or developers_shell or new_terminal" fails against the part-1 script.'
-  - id: req-omn21087-set-aside
-    statement: The developer is asked once to set the leftovers aside or stop, and setting aside never deletes.
-    acceptance:
-      - id: AC6
-        statement: 'AC6: when something interferes the run asks once before installing; q stops with nothing changed; with no terminal it stops unless --set-aside is passed; setting aside comments out profile lines behind a no-op marker (a multi-line onex function whole, by brace depth, after copying the file), parses every edited profile with its shell before any file changes and changes nothing when one would not parse, stops before asking when an onex alias or function is defined in a file it does not read, moves files and clones beside where they were, and lists each item with how to restore it; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "no_terminal or q_at or setting_aside or clone_holding or parseable or would_break or does_not_read" fails against the part-1 script.'
-  - id: req-omn21087-resume
-    statement: A resumed run says where it picks up and reuses its answers.
-    acceptance:
-      - id: AC7
-        statement: 'AC7: a resumed run names the completed phases and the phase it picks up at (or that every phase passed and is only checked) and reuses the last run''s Docker answer, and --restart ignores the last run''s answers; falsifier: uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -k "picks_up or only_checks" fails against the part-1 script.'
-  - id: req-omn21087-guide-pin
-    statement: The onboarding guide downloads the script that carries the returning-machine fixes.
-    acceptance:
-      - id: AC8
-        statement: 'AC8: ONBOARDING.md pins lab-onboarding.sh at a commit that contains omniclaude#2789 (467e0c2c), with the sha256 of the script at that commit, and the pinned script takes the OpenRouter model from the overlay rather than naming one; falsifier: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -k "returning_machine or from_the_overlay" fails against the c522d72a pin.'
+        statement: 'AC4: Resume after a phase failure should pick up at the failed phase, including after a fresh download of the script, or say clearly why it starts over.'
 evidence_requirements:
   - kind: tests
     description: "Onboarding script tests pass"
     command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_lab_onboarding_proven_set_omn20381.py tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov"
+  - kind: tests
+    description: "Clone currency and resume tests for the amended criteria pass"
+    command: "uv run pytest tests/skills/test_onboarding_clone_currency_omn21087.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  # Earlier evidence remains executable; its AC labels predate the four
+  # amended criteria above. The four ac1/ac2/ac3/ac4 items bind the live criteria.
   - id: dod-omn21087-clones
     description: "Phase 2 brings clean clones to origin and names every clone holding work before any moves"
     source: manual
-    binds_ac: [AC1]
+    binds_ac: []
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -q --no-cov -k 'dirty_clone or detached_unpinned or one_stop or not_a_clone or missing_pins'"
   - id: dod-omn21087-run-environment
     description: "No leftover variable reaches the run; a resumed run is bound to the onboarding workspace"
     source: manual
-    binds_ac: [AC2]
+    binds_ac: []
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'leftover_variable or binds_the_workspace'"
   - id: dod-omn21087-phase3
     description: "Phase 3 checks the venv before rebuilding it; a failed model test prints its cause"
     source: manual
-    binds_ac: [AC3]
+    binds_ac: []
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'failed_model_test or checks_the_venv'"
   - id: dod-omn21087-runtime-config-repo
     description: "The workspace config root is a repository the materialiser reads"
     source: manual
-    binds_ac: [AC4]
+    binds_ac: []
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -q --no-cov -k materialiser"
   - id: dod-omn21087-preflight-survey
     description: "Preflight reports what an earlier setup left, as the developer's shell runs it"
     source: manual
-    binds_ac: [AC5]
+    binds_ac: []
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'preflight_reports or developers_shell or new_terminal'"
   - id: dod-omn21087-set-aside
     description: "Asked once; set aside never deletes; no terminal stops without --set-aside"
     source: manual
-    binds_ac: [AC6]
+    binds_ac: []
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'no_terminal or q_at or setting_aside or clone_holding or parseable or would_break or does_not_read'"
   - id: dod-omn21087-resume
     description: "A resumed run says where it picks up and reuses its answers"
     source: manual
-    binds_ac: [AC7]
+    binds_ac: []
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_returning_machine_omn21087.py -q --no-cov -k 'picks_up or only_checks'"
   - id: dod-omn21087-deploy-bootstrap
     description: The published bootstrap handler at the checked-out commit matches the checksum required by the entrypoint; the hosted runner needs only HTTPS and git.
     source: manual
-    binds_ac: [AC5, AC6, AC7]
+    binds_ac: []
     checks:
       - check_type: command
         check_value: >-
           curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-          | sha256sum | grep -q '^ce2b2452f52ca37f1824a319563b113d8fa355a238fd561a204c78542c6c90f7  -$'
+          | sha256sum | grep -q '^1aaa45ad1327ddd605f0d45e1c0993f6763eef1957471cc0a161614f25130a31  -$'
   - id: dod-omn21087-bootstrap-loading
     description: The entrypoint uses the node's declared handler, works without Python, and refuses a downloaded handler whose checksum differs before sourcing it.
     source: manual
-    binds_ac: [AC5, AC6, AC7]
+    binds_ac: []
     checks:
       - check_type: test_passes
         check_value: uv run pytest tests/skills/test_onboarding_bootstrap_handler_omn21087.py -q --no-cov
+  - id: dod-omn21087-handler-url-on-dev
+    description: "A freshly downloaded script fetches its handler from a commit on dev whose handler hashes to the digest it checks, not from a commit only a merged branch carried, so a fresh download can run (and resume) at all"
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_bootstrap_handler_omn21087.py -q --no-cov -k this_history"
   - id: dod-omn21087-guide-pin
     description: "The guide pins the script with the returning-machine fixes, and its digest"
     source: manual
-    binds_ac: [AC8]
+    binds_ac: []
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q --no-cov -k 'returning_machine or from_the_overlay'"
+  - id: dod-omn21087-ac1-fast-forward
+    description: 'Every clean clone on its branch has its branch fast-forwarded to origin/dev (a pinned one then sits at its proven commit), and the run says how far behind it was. Fails at the merge base, where a pinned clone''s branch was only fetched.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_clone_currency_omn21087.py -q --no-cov -k 'ac1_'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    # supersedes_ac_binding:
+    # - item: dod-omn21087-clones
+    # label: AC1
+    # reason_kind: superseded_by
+    # superseded_by: dod-omn21087-ac1-fast-forward
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; this item proved the old AC1 text.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+  - id: dod-omn21087-ac2-stop-named
+    description: 'A dirty clone, a dirty detached clone and a clean clone whose branch cannot fast-forward each stop phase 2 naming the clone, its state, its distance behind origin and the move-aside command, and nothing moves; a clean detached clone returns to its branch. Fails at the merge base, which never named a clone that cannot fast-forward.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_clone_currency_omn21087.py -q --no-cov -k 'ac2_'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    # supersedes_ac_binding:
+    # - item: dod-omn21087-run-environment
+    # label: AC2
+    # reason_kind: superseded_by
+    # superseded_by: dod-omn21087-ac2-stop-named
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; this item proved the old AC2 text.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+  - id: dod-omn21087-ac3-behind-not-missing
+    description: 'An old omnibase_infra clone that predates .github/sibling-pins.yaml is reported as ''clone is 2 commits behind origin/dev'', clean (then fast-forwarded) or dirty (then stopped), and never as ''restore the pins file''. Fails at the merge base, which reported no distance.'
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_clone_currency_omn21087.py -q --no-cov -k 'ac3_'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    # supersedes_ac_binding:
+    # - item: dod-omn21087-phase3
+    # label: AC3
+    # reason_kind: superseded_by
+    # superseded_by: dod-omn21087-ac3-behind-not-missing
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; this item proved the old AC3 text.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+  - id: dod-omn21087-ac4-resume
+    description: 'A run whose phase 3 failed, resumed from a second downloaded copy of the script, reports phases 1 and 2 passed without running their steps and runs phase 3; a passed phase whose check no longer holds says why it runs again. Fails at the merge base, which reran such a phase silently.'
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_clone_currency_omn21087.py -q --no-cov -k 'ac4_'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    # supersedes_ac_binding:
+    # - item: dod-omn21087-runtime-config-repo
+    # label: AC4
+    # reason_kind: superseded_by
+    # superseded_by: dod-omn21087-ac4-resume
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; this item proved the old AC4 text.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+    # - item: dod-omn21087-preflight-survey
+    # label: AC5
+    # reason_kind: no_longer_applicable
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 is no longer a criterion of the ticket.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+    # - item: dod-omn21087-set-aside
+    # label: AC6
+    # reason_kind: no_longer_applicable
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC6 is no longer a criterion of the ticket.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+    # - item: dod-omn21087-resume
+    # label: AC7
+    # reason_kind: no_longer_applicable
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC7 is no longer a criterion of the ticket.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+    # - item: dod-omn21087-deploy-bootstrap
+    # label: AC5
+    # reason_kind: no_longer_applicable
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+    # - item: dod-omn21087-deploy-bootstrap
+    # label: AC6
+    # reason_kind: no_longer_applicable
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+    # - item: dod-omn21087-deploy-bootstrap
+    # label: AC7
+    # reason_kind: no_longer_applicable
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+    # - item: dod-omn21087-bootstrap-loading
+    # label: AC5
+    # reason_kind: no_longer_applicable
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+    # - item: dod-omn21087-bootstrap-loading
+    # label: AC6
+    # reason_kind: no_longer_applicable
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+    # - item: dod-omn21087-bootstrap-loading
+    # label: AC7
+    # reason_kind: no_longer_applicable
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC5 to AC7 are no longer criteria of the ticket.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"
+    # - item: dod-omn21087-guide-pin
+    # label: AC8
+    # reason_kind: no_longer_applicable
+    # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC8 is no longer a criterion of the ticket.'
+    # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
+    # retired_at: "2026-10-16T22:40:00Z"

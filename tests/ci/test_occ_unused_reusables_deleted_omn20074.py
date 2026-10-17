@@ -9,8 +9,11 @@ repository runs either one at its default branch, and the only instruction that
 named the scaffold tool was the dispatch-worker receipt-pairing rule, which now
 points at the repo's own contract instead.
 
-The reusables other repositories still call stay hosted here until their last
-caller is gone, including the minting pair and the deploy gate.
+The minting pair (``call-occ-autobind-reusable.yml`` and
+``call-occ-companion-effect-reusable.yml``) is gone too (OMN-17427): the only
+repository that still names them at its default branch pins a commit sha, which
+stays resolvable after the files leave dev. The deploy gate reusable stays
+hosted for the callers that still use it.
 
 ``scripts/ci/check_occ_companion_merged.py`` lost its last omniclaude caller
 when the S6 cutover deleted ci.yml's occ-companion-merged job; omninode_infra
@@ -38,11 +41,12 @@ _DELETED = (
     "tests/ci/test_check_occ_companion_merged.py",
 )
 
-_STILL_CALLED = (
+_MINTING_REUSABLES = (
     ".github/workflows/call-occ-autobind-reusable.yml",
     ".github/workflows/call-occ-companion-effect-reusable.yml",
-    ".github/workflows/deploy-gate-reusable.yml",
 )
+
+_STILL_CALLED = (".github/workflows/deploy-gate-reusable.yml",)
 
 
 def test_unused_occ_scripts_are_deleted() -> None:
@@ -71,3 +75,8 @@ def test_canonical_file_shape_baseline_drops_the_deleted_scripts() -> None:
 def test_reusables_with_live_callers_stay_hosted() -> None:
     missing = [rel for rel in _STILL_CALLED if not (REPO_ROOT / rel).is_file()]
     assert not missing, missing
+
+
+def test_occ_minting_reusables_are_deleted() -> None:
+    present = [rel for rel in _MINTING_REUSABLES if (REPO_ROOT / rel).exists()]
+    assert not present, present

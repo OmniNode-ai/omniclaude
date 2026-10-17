@@ -13,8 +13,8 @@ dependency pass removed:
 * nothing in the tree imports the ``onex_change_control`` package, which is the
   precondition for dropping it from pyproject.toml and uv.lock.
 
-The two OCC companion reusables other repositories still call are not covered
-here: they stay hosted until their last caller is gone.
+The two OCC companion reusables were deleted under OMN-17427; the file-level
+pin is tests/ci/test_occ_unused_reusables_deleted_omn20074.py.
 """
 
 from __future__ import annotations

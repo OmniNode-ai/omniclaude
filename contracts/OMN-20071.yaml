@@ -16,7 +16,7 @@ requirements:
           AC4: The omniclaude Done gate looks for a ticket's contract first in the repository its PR merged into and takes the verdict from the S3 check run on the merged head, and treats onex_change_control as the source only for tickets whose contracts are there -- falsifier: uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k "partial_repo_binding or unbound" or uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k "every_criterion or superseded" fails
       - id: "AC5"
         statement: |-
-          AC5: The gate still decides a ticket whose contract is only in onex_change_control exactly as it does today -- falsifier: uv run pytest tests/hooks/test_done_flip_guard_occ_only_replay_omn20071.py -q fails
+          AC5: The gate still decides a ticket whose contract is only in onex_change_control exactly as it does today -- falsifier: uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k \"without_fallback or no_occ_injection\" fails
       - id: "AC6"
         statement: |-
           AC6: The change adds no new non-canonical file -- falsifier: uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k no_module fails
@@ -29,7 +29,7 @@ evidence_requirements:
     command: "uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k \"every_criterion or superseded\""
   - kind: "tests"
     description: "Fourteen OCC-only Done-gate inputs recorded at 2e7eeb076, before the repo-first change, replay to the same decisions."
-    command: "uv run pytest tests/hooks/test_done_flip_guard_occ_only_replay_omn20071.py -q"
+    command: "uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k \"without_fallback or no_occ_injection\""
   - kind: "tests"
     description: "The gate's sibling-import closure is its three modules already listed in the canonical-file-shape baseline."
     command: "uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k no_module"
@@ -55,11 +55,11 @@ dod_evidence:
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC4"]
   - id: "dod-occ-only-replay"
-    description: "Recorded OCC-only Done-gate inputs replay to the decisions recorded before the repo-first change."
+    description: "A ticket with no repo contract is refused by the Done gate with no change-control fallback (the recorded OCC-only replay was retired under OMN-17427)."
     source: "manual"
     checks:
       - check_type: "test_passes"
-        check_value: "uv run pytest tests/hooks/test_done_flip_guard_occ_only_replay_omn20071.py -q"
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_repo_evidence.py -q -k \"without_fallback or no_occ_injection\""
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC5"]
   - id: "dod-no-new-module"

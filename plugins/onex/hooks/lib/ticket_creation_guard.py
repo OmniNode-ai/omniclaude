@@ -321,6 +321,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -330,6 +331,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
@@ -1349,6 +1351,24 @@ def criterion_lines(description: str) -> dict[str, str]:
     return resolved
 
 
+def _handler(name: str) -> Any:
+    """Load a stdlib-only handler from ``src/omniclaude/handlers`` by path.
+
+    The canonical-file-shape ratchet lets this baselined script only shrink, so
+    new behaviour (OMN-17942 lane intake) and the description-patch logic live
+    in handlers; the hook's bare interpreter has no ``omniclaude`` package.
+    """
+    path = (
+        Path(__file__).resolve().parents[4] / "src/omniclaude/handlers" / f"{name}.py"
+    )
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"handler not loadable: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class PatchUnapplicable(ValueError):
     """A description patch this guard cannot resolve to one definite result."""
 
@@ -1356,88 +1376,12 @@ class PatchUnapplicable(ValueError):
 def apply_description_patch(previous: str, operations: Any) -> str:
     """The description ``operations`` produce when applied to ``previous``.
 
-    ``save_issue`` can edit a description through ``patch`` instead of sending
-    the whole field, and ticking a checkbox is exactly the shape somebody
-    reaches for ``patch`` to do. A rule 9 that read only ``description`` would
-    therefore miss the most likely route to the defect while looking like it
-    covered it, so the ops are applied here and the RESULT is compared.
-
-    Anchor semantics are the tool's own: every anchor must match exactly once,
-    and the ops apply in order, atomically. Anything this cannot resolve to one
-    definite result raises :class:`PatchUnapplicable` and the caller refuses --
-    "I could not work out what this writes" must not resolve to "so it passes".
+    The patch logic lives in ``src/omniclaude/handlers`` (see :func:`_handler`);
+    an unresolvable patch raises :class:`PatchUnapplicable`.
     """
-    if not isinstance(operations, list) or not operations:
-        raise PatchUnapplicable("patch is not a non-empty list of operations")
-    body = previous
-    for index, raw in enumerate(operations):
-        if not isinstance(raw, dict):
-            raise PatchUnapplicable(f"operation {index} is not an object")
-        op = raw.get("op")
-        if op == "prepend":
-            text = raw.get("text")
-            if not isinstance(text, str):
-                raise PatchUnapplicable(f"operation {index} carries no text")
-            body = text + body
-        elif op == "append":
-            text = raw.get("text")
-            if not isinstance(text, str):
-                raise PatchUnapplicable(f"operation {index} carries no text")
-            body = body + text
-        elif op in {"insert_before", "insert_after"}:
-            anchor, text = raw.get("anchor"), raw.get("text")
-            if not isinstance(anchor, str) or not isinstance(text, str):
-                raise PatchUnapplicable(
-                    f"operation {index} needs a string anchor and text"
-                )
-            if body.count(anchor) != 1:
-                raise PatchUnapplicable(
-                    f"operation {index} anchor matches {body.count(anchor)} times"
-                )
-            at = body.index(anchor)
-            at = at if op == "insert_before" else at + len(anchor)
-            body = body[:at] + text + body[at:]
-        elif op == "replace":
-            old, new = raw.get("old_string"), raw.get("new_string")
-            if not isinstance(old, str) or not old or not isinstance(new, str):
-                raise PatchUnapplicable(
-                    f"operation {index} needs a non-empty old_string and a new_string"
-                )
-            if raw.get("replace_all") is True:
-                if old not in body:
-                    raise PatchUnapplicable(f"operation {index} matches nothing")
-                body = body.replace(old, new)
-            else:
-                if body.count(old) != 1:
-                    raise PatchUnapplicable(
-                        f"operation {index} old_string matches {body.count(old)} times"
-                    )
-                body = body.replace(old, new, 1)
-        elif op == "replace_range":
-            start, end = raw.get("from"), raw.get("to")
-            new = raw.get("new_string")
-            if (
-                not isinstance(start, str)
-                or not start
-                or not isinstance(end, str)
-                or not end
-                or not isinstance(new, str)
-            ):
-                raise PatchUnapplicable(f"operation {index} needs from, to, new_string")
-            if body.count(start) != 1:
-                raise PatchUnapplicable(
-                    f"operation {index} 'from' matches {body.count(start)} times"
-                )
-            head = body.index(start)
-            tail = body.find(end, head + len(start))
-            if tail == -1 or body.count(end, head + len(start)) != 1:
-                raise PatchUnapplicable(
-                    f"operation {index} 'to' does not follow 'from' exactly once"
-                )
-            body = body[:head] + new + body[tail:]
-        else:
-            raise PatchUnapplicable(f"operation {index} has unknown op {op!r}")
-    return body
+    return _handler("handler_ticket_description_patch").apply_description_patch(
+        previous, operations, PatchUnapplicable
+    )
 
 
 #: The approved-edit citation (OMN-19401). Whole-line anchored for the same reason
@@ -2247,6 +2191,21 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="override the shipped admission policy (tests only)",
     )
+    parser.add_argument(
+        "--lane-intake",
+        action="store_true",
+        help="judge only the lane-intake rules (11-14) for a create a node files",
+    )
+    parser.add_argument(
+        "--node",
+        action="store_true",
+        help="the caller is a node: a lane context whatever its environment says",
+    )
+    parser.add_argument(
+        "--no-record",
+        action="store_true",
+        help="do not spend the day's intake budget (a dry run)",
+    )
     args = parser.parse_args(argv)
 
     raw = sys.stdin.read()
@@ -2260,7 +2219,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     tool_name = payload.get("tool_name")
-    if not isinstance(tool_name, str) or "save_issue" not in tool_name:
+    if not args.lane_intake and (
+        not isinstance(tool_name, str) or "save_issue" not in tool_name
+    ):
         return 0
 
     try:
@@ -2275,12 +2236,31 @@ def main(argv: list[str] | None = None) -> int:
     tool_input = payload.get("tool_input")
     is_update = isinstance(tool_input, dict) and _is_present(tool_input.get("id"))
 
-    findings = check_save_issue(
-        tool_input,
-        policy,
-        body_lookup=body_lookup,
-        ruling_lookup=_ledger_ruling_lookup(),
+    findings = (
+        []
+        if args.lane_intake
+        else check_save_issue(
+            tool_input,
+            policy,
+            body_lookup=body_lookup,
+            ruling_lookup=_ledger_ruling_lookup(),
+        )
     )
+    admission = None
+    if isinstance(tool_input, dict) and not _is_present(tool_input.get("id")):
+        intake = _handler("handler_lane_intake")
+        admission = intake.begin(
+            payload,
+            os.environ,
+            args.policy or DEFAULT_POLICY_PATH,
+            datetime.now(UTC),
+            force=args.node or args.lane_intake,
+        )
+        if admission is not None:
+            findings += [Finding(**f) for f in intake.findings(tool_input, admission)]
+    if args.lane_intake and admission is None:
+        sys.stderr.write("--lane-intake needs a create: a tool_input with no id\n")
+        return 1
     if findings:
         # Nothing is written to stderr on this path. The shell wrapper captures
         # stdout and stderr TOGETHER and then reads `.reason` out of the result
@@ -2297,6 +2277,12 @@ def main(argv: list[str] | None = None) -> int:
         return _block(
             render_block_reason(findings, policy, update=is_update), reason_code
         )
+    if admission is not None and not args.no_record:
+        try:
+            intake.record(admission, str(tool_input.get("title", "")))
+        except OSError as exc:
+            sys.stderr.write(f"could not record the intake admission: {exc}\n")
+            return 1
     if body_lookup is None:
         sys.stderr.write(
             "[ticket_creation_guard] no LINEAR_API_KEY in the environment or "
