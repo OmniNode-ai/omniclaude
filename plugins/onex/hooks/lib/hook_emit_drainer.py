@@ -1290,7 +1290,7 @@ def main(argv: list[str] | None = None) -> int:
             preserve_backlog=args.preserve_backlog,
         )
     except Exception as exc:  # noqa: BLE001 -- a daemon must not die on a stray error
-        logger.error("drainer exiting on unexpected error: %s", exc)
+        logger.exception("drainer exiting on unexpected error: %s", exc)
         return 1
 
 
