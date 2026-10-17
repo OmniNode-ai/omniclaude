@@ -146,6 +146,19 @@ metadata:
       The lab-onboarding entrypoint supplies platform probes, prompts,
       clone operations and run state. The handler surveys earlier installs,
       collects consent, preserves displaced files and resumes saved choices.
+  finish_handler:
+    language: bash
+    source: handler_onboarding_finish.sh
+    sha256_fingerprint: "1af3:d461:fca3:8736:6af0:210a:fa28:6e90:0dac:81d8:8ec0:dd63:5060:d1b1:55e2:e8a3"
+    loading: source_after_sha256_verification
+    enabled_by: node_onboarding overlay field finish_greeting_enabled
+    entrypoints:
+      - finish_step
+    description: >-
+      The finish step on stock macOS Bash, off unless the onboarding node's
+      deployment overlay sets finish_greeting_enabled to "true". Loaded only
+      when ONEX_SKILL_OVERLAY_ROOTS is set; a copy that cannot be loaded or
+      verified leaves the step off and never fails onboarding.
   tags:
     - orchestrator
     - skill
