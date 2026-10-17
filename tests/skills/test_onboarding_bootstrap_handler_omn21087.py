@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import shutil
 import subprocess
@@ -12,6 +13,9 @@ from pathlib import Path
 
 import pytest
 import yaml
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "plugins/onex/skills/_bin/lab-onboarding.sh"
@@ -101,3 +105,46 @@ def test_downloaded_entrypoint_verifies_handler_before_sourcing(
         assert "Preflight only: nothing was changed." in result.stdout
     downloaded = tmp_path / "omninode-onboarding/handler_onboarding_preflight.sh"
     assert downloaded.read_bytes() == served.read_bytes()
+
+
+def _git(*args: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        ["git", "-C", str(REPO), *args],
+        capture_output=True,
+        check=False,
+        env=scrub_git_location_env(os.environ),
+    )
+
+
+def test_the_downloaded_handler_comes_from_a_commit_on_this_history() -> None:
+    """A downloaded script fetches its handler from the commit its URL names.
+
+    A commit that only a merged branch carried is unreachable once the branch
+    goes, and GitHub may stop serving it; every downloaded copy would then fail
+    at preflight. The URL must name a commit on this history whose handler is
+    the bytes the script checks.
+    """
+    text = SCRIPT.read_text()
+    match = re.search(
+        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
+        text,
+    )
+    assert match
+    commit = match.group(1)
+    if _git("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
+        _git("fetch", "--no-tags", "--depth=1", "origin", commit)
+    assert _git("cat-file", "-e", f"{commit}^{{commit}}").returncode == 0, (
+        f"the handler URL names {commit}, which origin no longer serves"
+    )
+    if _git("merge-base", "--is-ancestor", commit, "HEAD").returncode != 0:
+        if _git("rev-parse", "--is-shallow-repository").stdout.strip() == b"true":
+            _git("fetch", "--no-tags", "--unshallow", "origin")
+    assert _git("merge-base", "--is-ancestor", commit, "HEAD").returncode == 0, (
+        f"the handler URL names {commit}, which is not on this branch's history"
+    )
+    rel = HANDLER.relative_to(REPO).as_posix()
+    served = _git("show", f"{commit}:{rel}")
+    assert served.returncode == 0, served.stderr.decode(errors="replace")
+    digest = re.search(r'local digest="([0-9a-f:]+)"', text)
+    assert digest
+    assert hashlib.sha256(served.stdout).hexdigest() == digest.group(1).replace(":", "")
