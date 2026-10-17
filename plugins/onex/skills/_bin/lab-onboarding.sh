@@ -266,6 +266,12 @@ phase_fail() { # next-step
 
 mark_done() { mkdir -p "$STATE_DIR" && { grep -qx "$1" "$DONE_FILE" 2>/dev/null || echo "$1" >>"$DONE_FILE"; }; }
 is_done() { [ "$RESTART" -eq 0 ] && grep -qx "$1" "$DONE_FILE" 2>/dev/null; }
+# A resumed run picks up at the phase that failed. A phase an earlier run passed is
+# checked, not redone; when it does run again, the run says why instead of
+# silently starting it over.
+rerun_note() { # phase why
+  say "  Phase $1 passed in an earlier run, but $2, so it runs again."
+}
 
 last_log_lines() { tail -n 3 "$LOG" 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-300; }
 
@@ -567,131 +573,6 @@ stored_key_providers() { # every provider an earlier run already stored a key fo
   return "$found"
 }
 
-# "1,3,4", "1 3 4", "134" and "4,1,3" all choose the same models; repeats are
-# ignored. Sets MODELS in menu order; 1 when the answer chooses nothing valid.
-parse_model_choice() {
-  local a p i=0 picked=""
-  a="$(printf '%s' "$1" | tr -d ', ')"
-  [ -n "$a" ] || return 1
-  case "$a" in *[!1-4]*) return 1 ;; esac
-  for p in $ALL_MODELS; do
-    i=$((i + 1))
-    case "$a" in *"$i"*) picked="$picked $p" ;; esac
-  done
-  MODELS="${picked# }"
-}
-
-ask_models() { # -> MODELS
-  local a p i=0 note
-  say ""
-  say "  Your models"
-  say ""
-  say "  Choose one or more. Delegation picks among them for each task."
-  say ""
-  for p in $ALL_MODELS; do
-    i=$((i + 1)); note=""
-    is_stored "$p" && note="  (key stored)"
-    [ "$p" = "ollama" ] && ollama_overrides_ours && note="  (set up)"
-    case "$p" in
-      gemini)     say "    $i) Gemini      your key, from aistudio.google.com/apikey$note" ;;
-      openrouter) say "    $i) OpenRouter  your key, from openrouter.ai/keys (its free models need no credit)$note" ;;
-      openai)     say "    $i) OpenAI      your key, from platform.openai.com/api-keys (needs credits)$note" ;;
-      ollama)     say "    $i) Ollama      on this Mac, no key. Slower, especially on Intel; it downloads"
-                  say "                   a model sized to this Mac$note" ;;
-    esac
-  done
-  say ""
-  say "    q) quit setup (nothing has been installed yet)"
-  while :; do
-    say ""
-    printf '  Choose one or more, e.g. 1,3,4: '
-    IFS= read -r a || quit_setup
-    case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
-    parse_model_choice "$a" && break
-    say "  Choose at least one, 1 to 4 (for example 1,3), or q to quit."
-  done
-  say ""
-  say "  You chose: $(labels "$MODELS")"
-}
-
-# One hidden prompt per chosen model that takes a key, in menu order, each
-# naming its provider and "n of m". A key already entered in this run is kept,
-# so changing the choice at the summary never asks for it again.
-ask_keys() {
-  local keyed p n=0 total label value looks a
-  keyed="$(keyed_models)"
-  total="$(count_words "$keyed")"
-  [ "$total" -gt 0 ] || return 0
-  say ""
-  say "  Your keys stay on this Mac, in onex's key store. They are never shown or logged,"
-  say "  and each is only ever sent to its own provider."
-  for p in $keyed; do
-    n=$((n + 1)); label="$(provider_label "$p")"
-    if [ -n "$(pending_key "$p")" ]; then
-      say "  $label key ($n of $total): already entered."
-      continue
-    fi
-    while :; do
-      say ""
-      if is_stored "$p" && [ "$RESUMING" -eq 1 ]; then
-        say "  $label key ($n of $total): stored by your last run; kept."
-        break
-      elif is_stored "$p"; then
-        read_secret "  $label key ($n of $total) — stored; press Enter to keep it, or paste a new one (input is hidden):"
-        if [ -z "$SECRET" ]; then say "  Keeping your stored $label key."; break; fi
-      else
-        read_secret "  $label key ($n of $total) — paste it from $(key_page "$p") (input is hidden):"
-      fi
-      value="$SECRET"; SECRET=""
-      if [ -z "$value" ]; then
-        printf '  No key entered. Skip %s for now? [Y = skip, n = try again] ' "$label"
-        IFS= read -r a || quit_setup
-        case "$a" in n|N|no|NO) continue ;; esac
-        drop_model "$p"; SKIPPED="${SKIPPED:+$SKIPPED }$p"
-        say "  Skipped $label. Add it any time: onex models add $p"
-        break
-      fi
-      looks="$(key_looks_like "$value")"
-      if [ -n "$looks" ] && [ "$looks" != "$p" ]; then
-        value=""
-        say "  ✗ That looks like $(a_an "$(provider_label "$looks")") $(provider_label "$looks") key, not $(a_an "$label") $label key."
-        continue
-      fi
-      set_pending_key "$p" "$value"; value=""
-      say "  $label key received."
-      [ "$p" = "openrouter" ] && say "  OpenRouter model: the default the onex overlay declares (change it any time: onex models add openrouter --model <model id>)"
-      break
-    done
-  done
-}
-
-confirm_models() { # 0 continue, 1 change the choice; q quits
-  local p a
-  say ""
-  say "  Ready to set up:"
-  for p in $MODELS; do
-    if [ "$p" = "ollama" ]; then
-      if ollama_overrides_ours; then say "    Ollama      already set up on this Mac"
-      else say "    Ollama      no key; downloads a model sized to this Mac's $(ram_gb) GB of memory"; fi
-    elif [ "$p" = "openrouter" ] && [ -n "$(pending_key "$p")" ]; then
-      say "    $(printf '%-11s' "$(provider_label "$p")") key received, default model from the overlay"
-    elif [ -n "$(pending_key "$p")" ]; then
-      say "    $(printf '%-11s' "$(provider_label "$p")") key received"
-    else
-      say "    $(printf '%-11s' "$(provider_label "$p")") your stored key"
-    fi
-  done
-  for p in $SKIPPED; do say "    $(result_line "$p")"; done
-  say ""
-  printf '  Continue? [Y = yes, c = change, q = quit] '
-  IFS= read -r a || quit_setup
-  case "$a" in
-    c|C|change|CHANGE) return 1 ;;
-    q|Q|quit|QUIT) quit_setup ;;
-  esac
-  return 0
-}
-
 # With no terminal there is nobody to ask: --provider names the models, else
 # every stored key (and Ollama, when an earlier run set it up) is used. A model
 # that needs a key and has none stops the run before anything installs.
@@ -830,7 +711,7 @@ YAML
 # checksum-pinned handler into the run directory. Never source unchecked bytes.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="ce2b:2452:f52c:a37f:1824:a319:563b:113d:8fa3:55a2:38fd:561a:204c:7854:2c6c:90f7" root candidate
+  local digest="1aaa:45ad:1327:ddd6:05f0:d45e:1c09:93f6:763e:ef19:5747:1cc0:a161:614f:2513:0a31" root candidate
   digest="${digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
   for candidate in "$root/$rel" "$PWD/$rel" "$WORKSPACE/omniclaude/$rel"; do
@@ -841,7 +722,7 @@ load_onboarding_preflight() {
     fi
   done
   candidate="$RUN_DIR/handler_onboarding_preflight.sh"
-  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/b2ceaacf4bae07142ab25abf4e3d0abd308810a4/$rel" ||
+  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/cbd7eb27136b43059214fb8d31659bbf5cb3100b/$rel" ||
      ! printf '%s  %s\n' "$digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
     printf 'omninode-dev-setup: cannot load the checksum-pinned onboarding preflight handler\n' >&2
     return 1
@@ -1026,6 +907,7 @@ phase1_verified() {
 phase1() {
   phase_start 1 "Base tools (Xcode tools, Homebrew, gh, jq, python@3.13, uv)" "5-20 minutes on a clean Mac"
   if is_done 1 && phase1_verified; then phase_pass "already installed"; return; fi
+  is_done 1 && rerun_note 1 "the base tools it installed (Xcode tools, Homebrew, uv, gh, jq, python@3.13) are no longer all present"
 
   if ! xcode-select -p >/dev/null 2>&1; then
     say "  Installing the Xcode command-line tools…"
@@ -1179,14 +1061,54 @@ clone_problem() { # repo state
   IFS='|' read -r where changed behind unique def <<EOF
 $2
 EOF
-  local why=""
+  local why="" diverged=0
   [ "${changed:-0}" -gt 0 ] && why="$changed tracked file(s) changed or deleted"
   [ "${unique:-0}" -gt 0 ] && why="${why}${why:+; }$unique commit(s) that origin does not have"
+  # Off its branch, the clone returns to it before fast-forwarding; a branch with
+  # commits origin lacks cannot fast-forward, so it is named here, before any move.
+  if [ -n "$def" ] && [ "$where" != "$def" ] &&
+     git -C "$WORKSPACE/$1" rev-parse --verify --quiet "refs/heads/$def" >/dev/null; then
+    diverged="$(git -C "$WORKSPACE/$1" rev-list --count "origin/$def..refs/heads/$def" 2>/dev/null || echo 0)"
+  fi
+  [ "${diverged:-0}" -gt 0 ] &&
+    why="${why}${why:+; }its $def branch has $diverged commit(s) that origin does not have, so it cannot fast-forward"
   [ -n "$why" ] || return 0
   printf '%s (%s, %s commit(s) behind origin/%s)' "$why" "$(clone_where "$where")" "${behind:-0}" "${def:-?}"
 }
 
 clone_where() { case "$1" in detached) echo "detached HEAD" ;; *) echo "on branch $1" ;; esac; }
+
+commits_behind() { # n -> "1 commit" or "n commits"
+  if [ "$1" = 1 ]; then echo "1 commit"; else echo "$1 commits"; fi
+}
+
+# What an old clone lacks is named for what it is: a clone behind origin, never a
+# file to restore. Empty when the clone is current.
+clone_behind_note() { # repo state
+  local where changed behind unique def note
+  IFS='|' read -r where changed behind unique def <<EOF
+$2
+EOF
+  [ "${behind:-0}" -gt 0 ] || return 0
+  note="clone is $(commits_behind "$behind") behind origin/${def:-?}"
+  [ "$1" = omnibase_infra ] && [ ! -f "$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml" ] &&
+    note="$note and predates .github/sibling-pins.yaml, which origin has"
+  printf '%s' "$note"
+}
+
+# A clean clone that still would not fast-forward: named with its state, how far
+# behind it is and the command that moves it aside, like a clone holding work.
+clone_cannot_fast_forward() { # repo
+  local where changed behind unique def
+  IFS='|' read -r where changed behind unique def <<EOF
+$(clone_state "$1")
+EOF
+  say "  ✗ $1: cannot fast-forward ($(clone_where "$where"), $(commits_behind "${behind:-0}") behind origin/${def:-?})"
+  say "      to move it aside: $(clone_fix "$1")"
+  FAILED_STEP="bring $1 up to date with origin"
+  LAST_ERR="$1 cannot fast-forward to origin/${def:-?}"
+  phase_fail "run 'git -C $WORKSPACE/$1 status' to see why, or move it aside with the command above (the next run clones it fresh), then run this again"
+}
 
 # The command that clears clone_problem without losing anything: the clone moves
 # aside whole, and the next run clones it fresh.
@@ -1219,7 +1141,7 @@ pin_clone_to_proven() { # repo
   pin="$(proven_pin "$1")" || return 1
   [ -n "$pin" ] || return 0
   [ "$(git -C "$d" rev-parse HEAD)" = "$pin" ] && return 0
-  changes="$(git -C "$d" status --porcelain)" || return 1
+  changes="$(git -C "$d" status --porcelain --untracked-files=no)" || return 1
   if [ -n "$changes" ]; then
     say "  $1: clone has uncommitted changes; cannot check out the proven commit"
     return 1
@@ -1339,11 +1261,12 @@ profile_block_names_legacy_home() { # file
 phase2() {
   phase_start 2 "Workspace ($WORKSPACE)" "2-5 minutes"
   if is_done 2 && phase2_verified; then phase_pass "already in place"; return; fi
+  is_done 2 && rerun_note 2 "the workspace no longer checks out (every clone at its proven commit, the pins file, the runtime config and the profile block)"
   refuse_foreign_workspace
   mkdir -p "$WORKSPACE" || { FAILED_STEP="create $WORKSPACE"; phase_fail "choose another directory with --workspace"; }
   [ -f "$WORKSPACE_MARKER" ] || printf 'This workspace was created by omninode-dev-setup.\n' >"$WORKSPACE_MARKER" ||
     { FAILED_STEP="mark the workspace"; phase_fail "could not write $WORKSPACE_MARKER; check the directory is writable"; }
-  local r pin default_repos="" problem problems=""
+  local r pin default_repos="" problem problems="" state note seen=""
   for r in $REPOS; do
     if [ -e "$WORKSPACE/$r/.git" ]; then say "  $r: present, fetching"; else say "  $r: cloning"; fi
     retry "clone or fetch $r" sync_clone "$r" || phase_fail "check that github.com is reachable, then run this again"
@@ -1352,9 +1275,12 @@ phase2() {
   # names every clone that holds work, with how far behind it is and the command
   # that moves it aside. Nothing is changed in any clone when one is named.
   for r in $REPOS; do
-    problem="$(clone_problem "$r" "$(clone_state "$r")")"
+    state="$(clone_state "$r")"
+    problem="$(clone_problem "$r" "$state")"
     [ -n "$problem" ] || continue
     say "  ✗ $r: $problem"
+    note="$(clone_behind_note "$r" "$state")"
+    [ -n "$note" ] && say "      $r: $note"
     say "      to move it aside: $(clone_fix "$r")"
     problems="${problems}${problems:+ }$r"
   done
@@ -1363,10 +1289,21 @@ phase2() {
     LAST_ERR="these clones hold work setup will not move: $problems"
     phase_fail "commit or stash that work, or move each clone aside with the command under it (the next run clones it fresh), then run this again"
   fi
-  # The proven set lives in omnibase_infra, so it is brought current first: an old
-  # checkout that predates the pins file is updated, never reported as missing one.
-  step "bring omnibase_infra up to date with origin" bring_clone_current omnibase_infra ||
-    phase_fail "run 'git -C $WORKSPACE/omnibase_infra status' to see why it cannot fast-forward"
+  # Every clean clone is fast-forwarded to origin, not just fetched; a pinned one
+  # is then checked out at its proven commit below. The proven set lives in
+  # omnibase_infra, so it goes first: an old checkout that predates the pins file
+  # is named as behind and updated, never reported as missing the file.
+  for r in omnibase_infra $REPOS; do
+    case " $seen " in *" $r "*) continue ;; esac
+    seen="${seen}${seen:+ }$r"
+    pin="$(proven_pin "$r")"
+    # Detached at its proven commit, the layout an earlier run left: nothing to move.
+    [ -n "$pin" ] && [ "$(git -C "$WORKSPACE/$r" rev-parse HEAD 2>/dev/null)" = "$pin" ] &&
+      ! git -C "$WORKSPACE/$r" symbolic-ref --quiet HEAD >/dev/null 2>&1 && continue
+    note="$(clone_behind_note "$r" "$(clone_state "$r")")"
+    [ -n "$note" ] && say "  $r: $note; fast-forwarding it"
+    step "bring $r up to date with origin" bring_clone_current "$r" || clone_cannot_fast_forward "$r"
+  done
   [ -f "$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml" ] ||
     { FAILED_STEP="read the proven set (omnibase_infra/.github/sibling-pins.yaml)"
       LAST_ERR="omnibase_infra is current with origin/$(clone_default_branch omnibase_infra), and origin has no .github/sibling-pins.yaml"
@@ -1379,9 +1316,6 @@ phase2() {
           phase_fail "check that origin has commit $pin in $r ('git -C $WORKSPACE/$r fetch origin'), then run this again"; }
       say "  $r: proven ${pin:0:12}"
     else
-      [ "$r" = omnibase_infra ] ||
-        step "bring $r up to date with origin" bring_clone_current "$r" ||
-        phase_fail "run 'git -C $WORKSPACE/$r status' to see why it cannot fast-forward"
       default_repos="${default_repos}${default_repos:+ }$r"
     fi
   done
@@ -1582,6 +1516,7 @@ setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason
 phase3() {
   phase_start 3 "onex, local identity and your models" "3-10 minutes, more when Ollama downloads a model"
   local p passed
+  is_done 3 && rerun_note 3 "its model tests are not kept between runs and the later phases need them; it rebuilds nothing that is current"
 
   if dispatch_venv_current >>"$LOG" 2>&1; then
     say "  The workspace dispatch environment (onex) already holds the proven set; not rebuilt."
@@ -1858,6 +1793,7 @@ phase4() {
   phase_start 4 "Docker (optional: the local stack, on your key)" "10-20 minutes the first time"
   if [ "$MODE2_OK" -ne 1 ]; then phase_skip "${MODE2_WHY# }"; return; fi
   if is_done 4 && docker_ready && stack_healthy; then phase_pass "already running"; return; fi
+  is_done 4 && rerun_note 4 "Docker is not running with a healthy local stack"
 
   local host_ram mem_gb mem
   host_ram="$(ram_gb)"
@@ -1978,6 +1914,7 @@ internal_plugins_reachable() {
 
 phase5() {
   phase_start 5 "Claude Code plugins (the full onex tree; omni where you have access)" "1-2 minutes"
+  is_done 5 && rerun_note 5 "the plugins are checked on every run; only what is missing is installed"
   if ! command -v claude >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/claude" ]; then
     say "  Installing Claude Code…"
     retry "install Claude Code" install_claude_code || phase_fail "install Claude Code from claude.com/claude-code, then run this again"
