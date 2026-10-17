@@ -34,6 +34,13 @@ requirements:
     acceptance:
     - id: AC9
       statement: 'AC9: the canonical-file-shape pre-commit hook and the required canonical-file-shape CI job run omnibase_core at a commit carrying the mod-file-growth rule, so a code line added to a baselined script under plugins/, .claude/ or a hooks/ directory is refused -- falsifier: with the pin at 70f7ceda44af968ccf26264ecd429cfd27503971 the planted growth is accepted and tests/ci/test_mod_file_growth_pin_omn18531.py fails.'
+  - id: req-omn18531-ta21-capture-callers
+    statement: The two capture hooks stamp the shared item identity and each stream's producer sequence through one call each into node_capture_item_identity_effect (plan task TA.21, producer half).
+    acceptance:
+    - id: AC10
+      statement: 'AC10: a content record carries the content_record_id of the lineage reference it fulfils, in either hook order, and two byte-identical prompts get two ids -- falsifier: tests/unit/hooks/test_hook_item_identity_callers_omn18531.py fails on an id that differs, is shared, or depends on hook order.'
+    - id: AC11
+      statement: 'AC11: each stream''s producer_seq counts 1, 2, 3 with no gap, and a hook that cannot load the node handler journals nothing -- falsifier: a gap, a repeat, or an unstamped record journalled in that test file.'
 evidence_requirements:
   - kind: tests
     description: "The checkpoint capture kind tests pass beside the existing content capture tests"
@@ -44,6 +51,9 @@ evidence_requirements:
   - kind: tests
     description: Pinned ratchet refuses code growth and accepts comment growth in a baselined mod script
     command: uv run pytest tests/ci/test_mod_file_growth_pin_omn18531.py -q --no-cov
+  - kind: tests
+    description: The capture hooks call node_capture_item_identity_effect (TA.21)
+    command: uv run pytest tests/unit/hooks/test_hook_item_identity_callers_omn18531.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ""
@@ -101,3 +111,21 @@ dod_evidence:
       cwd: ${OMNI_HOME}/omniclaude
     binds_ac:
     - AC9
+  - id: dod-omn-18531-ac10
+    description: Each content record carries the content_record_id of its lineage reference in either hook order, and identical prompts get distinct ids.
+    source: manual
+    checks:
+    - check_type: test_passes
+      check_value: uv run pytest tests/unit/hooks/test_hook_item_identity_callers_omn18531.py -k 'lineage_reference_id or two_identical' -q --no-cov
+      cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+    - AC10
+  - id: dod-omn-18531-ac11
+    description: Each stream's producer_seq has no gap, and a hook that cannot load the handler journals nothing.
+    source: manual
+    checks:
+    - check_type: test_passes
+      check_value: uv run pytest tests/unit/hooks/test_hook_item_identity_callers_omn18531.py -k 'sequence or cannot_load' -q --no-cov
+      cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+    - AC11
