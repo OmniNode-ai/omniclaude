@@ -141,6 +141,23 @@ dependencies:
 # Handler routing
 handler_routing:
   routing_strategy: backend_match
+  handlers:
+    - operation: ticket_tick_acceptance
+      event_model:
+        module: omniclaude.nodes.node_linear_effect.models
+        name: ModelLinearRequest
+      handler:
+        module: omniclaude.nodes.node_linear_effect.handlers.handler_linear_ticketing
+        name: HandlerLinearApi
+      output_events: [ModelLinearResult]
+    - operation: ticket_tick_acceptance_evidence
+      event_model:
+        module: omniclaude.nodes.node_linear_effect.models
+        name: ModelLinearRequest
+      handler:
+        module: omniclaude.nodes.node_linear_effect.handlers.handler_lane_repo_evidence
+        name: LaneRepoEvidence
+      output_events: [ModelLinearResult]
   default_backend: linear_api
   backends:
     - backend: linear_api
