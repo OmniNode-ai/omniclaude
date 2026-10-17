@@ -1,0 +1,31 @@
+schema_version: 1.0.0
+ticket_id: OMN-20935
+title: omniclaude's dev-head monitor reads the CI bus lane table from the CI overlay, not omnimarket
+summary: The dev-head monitor job in auto-merge-stale-poller.yml no longer sparse-checks-out config/ci_bus_lanes.yaml from omnimarket. It reads config/lab/ci_bus_lanes.yaml from the CI overlay repository named by the org Actions variable OMNI_CI_OVERLAY_REPO, through a read-only App token, and fails when the variable is unset, the repository is unreadable or the file is missing. The scripts/publish_occ_autobind_command.py and topics.py checkouts from omnimarket at the locked sha are unchanged. This is the omniclaude half of moving the readers off omnimarket before omnimarket's copy is removed.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn20935-omniclaude-reader-takes-the-lane-table-from-the-overlay
+  statement: The dev-head monitor job resolves the dev CI bus lane table from the CI overlay repository and never from omnimarket's config/ci_bus_lanes.yaml.
+  acceptance:
+  - id: AC2
+    statement: 'AC2: the dev-head monitor job reads the lane table from the CI overlay and not from omnimarket -- falsifier: pytest tests/ci/test_dev_head_monitor_omn18836.py::test_dev_lane_table_is_read_from_the_ci_overlay_not_omnimarket fails on the workflow before this change and passes after it'
+evidence_requirements:
+- kind: tests
+  description: 'AC2: the monitor job''s omnimarket sparse checkout lists no config/ci_bus_lanes.yaml, the job resolves OMNI_CI_OVERLAY_REPO, mints a read-only contents token, sparse-checks-out config/lab/ci_bus_lanes.yaml and loads the lane table from that path.'
+  command: uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q -p no:randomly --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn20935-ac2-monitor-reads-the-overlay
+  description: 'AC2: the dev-head monitor workflow reads the lane table from the CI overlay and not from omnimarket.'
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q -p no:randomly --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC2
