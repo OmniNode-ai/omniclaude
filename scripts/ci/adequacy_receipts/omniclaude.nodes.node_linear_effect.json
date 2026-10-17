@@ -1,0 +1,21 @@
+{
+  "base_node_files": [
+    "src/omniclaude/nodes/node_linear_effect/__init__.py",
+    "src/omniclaude/nodes/node_linear_effect/contract.yaml",
+    "src/omniclaude/nodes/node_linear_effect/models/__init__.py",
+    "src/omniclaude/nodes/node_linear_effect/models/model_linear_request.py",
+    "src/omniclaude/nodes/node_linear_effect/models/model_linear_result.py",
+    "src/omniclaude/nodes/node_linear_effect/node.py",
+    "src/omniclaude/nodes/node_linear_effect/protocols/__init__.py",
+    "src/omniclaude/nodes/node_linear_effect/protocols/protocol_linear_ticketing.py"
+  ],
+  "base_ref": "9d0879d",
+  "contract_tests": [
+    "tests/unit/nodes/node_linear_effect/test_handler_linear_api.py"
+  ],
+  "handler_module": "omniclaude.nodes.node_linear_effect.handlers.handler_linear_ticketing",
+  "handler_module_sha256": "sha256:bfaf3382016be70100dcdf9f0e3cfa3a7cb129acd743ab3b8b63083056dc3ae8",
+  "legacy_handler": "none",
+  "node_id": "omniclaude.nodes.node_linear_effect",
+  "receipt_schema": "adequacy_receipt.no_legacy.v1"
+}

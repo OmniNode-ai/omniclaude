@@ -28,6 +28,7 @@ class ProtocolLinearTicketing(Protocol):
         - ticket_update_status operation -> ticket_update_status()
         - ticket_add_comment operation -> ticket_add_comment()
         - ticket_create operation -> ticket_create()
+        - ticket_tick_acceptance operation -> ticket_tick_acceptance()
     """
 
     @property
@@ -80,6 +81,22 @@ class ProtocolLinearTicketing(Protocol):
 
         Returns:
             ModelLinearResult with ticket_id and ticket_url populated on success.
+        """
+        ...
+
+    async def ticket_tick_acceptance(
+        self, request: ModelLinearRequest
+    ) -> ModelLinearResult:
+        """Tick the acceptance boxes a contract-bound check covers (OMN-17427).
+
+        Writes only what the Done-flip guard's repo-evidence bar admits; with
+        ``request.set_done`` it also sets Done once no box stays open.
+
+        Args:
+            request: Linear request with ticket_id, apply and set_done populated.
+
+        Returns:
+            ModelLinearResult naming the labels ticked and the labels no check covers.
         """
         ...
 

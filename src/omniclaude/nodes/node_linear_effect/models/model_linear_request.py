@@ -20,6 +20,7 @@ class LinearOperation(StrEnum):
     TICKET_UPDATE_STATUS = "ticket_update_status"
     TICKET_ADD_COMMENT = "ticket_add_comment"
     TICKET_CREATE = "ticket_create"
+    TICKET_TICK_ACCEPTANCE = "ticket_tick_acceptance"
 
 
 class ModelLinearRequest(BaseModel):
@@ -33,6 +34,9 @@ class ModelLinearRequest(BaseModel):
         title: Ticket title for ticket_create.
         description: Ticket description for ticket_create (Markdown).
         team_id: Linear team ID for ticket_create.
+        apply: ticket_tick_acceptance writes only when true; false is a dry run.
+        set_done: ticket_tick_acceptance also sets Done once no box remains open.
+        leave_open: ticket_tick_acceptance leaves these criterion labels unticked.
         correlation_id: Correlation ID for tracing.
     """
 
@@ -65,6 +69,18 @@ class ModelLinearRequest(BaseModel):
     team_id: str | None = Field(
         default=None,
         description="Linear team ID for ticket_create",
+    )
+    apply: bool = Field(
+        default=False,
+        description="ticket_tick_acceptance: write the edit (false is a dry run)",
+    )
+    set_done: bool = Field(
+        default=False,
+        description="ticket_tick_acceptance: set Done in the same edit when no box stays open",
+    )
+    leave_open: tuple[str, ...] = Field(
+        default=(),
+        description="ticket_tick_acceptance: criterion labels (AC5) to leave unticked, e.g. a half the operator cut",
     )
     correlation_id: UUID | None = Field(
         default=None,
