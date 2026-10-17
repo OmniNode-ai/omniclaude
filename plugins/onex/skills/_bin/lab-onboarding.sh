@@ -722,7 +722,7 @@ load_onboarding_preflight() {
     fi
   done
   candidate="$RUN_DIR/handler_onboarding_preflight.sh"
-  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/cbd7eb27136b43059214fb8d31659bbf5cb3100b/$rel" ||
+  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/d5e7ff7e24c5591ad1962982abc0e7156767c246/$rel" ||
      ! printf '%s  %s\n' "$digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
     printf 'omninode-dev-setup: cannot load the checksum-pinned onboarding preflight handler\n' >&2
     return 1
