@@ -59,6 +59,18 @@ class ModelLinearResult(BaseModel):
         default=None,
         description="Error detail when status is FAILED",
     )
+    ticket_state: str | None = Field(
+        default=None,
+        description="The ticket's workflow state after the operation",
+    )
+    ticked_labels: tuple[str, ...] = Field(
+        default=(),
+        description="ticket_tick_acceptance: criterion labels ticked (or that would be, on a dry run)",
+    )
+    uncovered_labels: tuple[str, ...] = Field(
+        default=(),
+        description="ticket_tick_acceptance: criterion labels no contract-bound check covers",
+    )
     correlation_id: UUID | None = Field(
         default=None,
         description="Correlation ID carried through from the request",

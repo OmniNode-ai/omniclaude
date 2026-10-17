@@ -303,3 +303,16 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_launchd_plists_well_formed.py -q --no-cov"
     binds_ac:
       - AC15
+  - id: dod-omn17427-lane-tick-acceptance
+    description: >
+      The Linear backend ticks acceptance boxes and sets Done from a lab lane through the
+      Done-flip guard's own repo-evidence decision, with lane-safe readers (onex scm and the
+      canonical clone) in place of the gh reads a lane cannot make. A ticket with a criterion no
+      contract binds ticks nothing; a red check run, a partial binding and a contract changed
+      after the check started are refused; a dry run writes nothing; Done is a second edit.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/nodes/node_linear_effect/test_handler_linear_ticketing.py -q --no-cov"
+    binds_ac: []
