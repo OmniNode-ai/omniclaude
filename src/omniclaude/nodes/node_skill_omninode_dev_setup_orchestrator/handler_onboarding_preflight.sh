@@ -12,7 +12,11 @@ CHOICES_FILE="$STATE_DIR/choices"
 RESUMING=0
 saved_choice() { [ "$RESTART" -eq 0 ] && sed -n "s/^$1=//p" "$CHOICES_FILE" 2>/dev/null | tail -n 1; }
 save_choices() {
-  mkdir -p "$STATE_DIR" && printf 'models=%s\ncontainers=%s\n' "$MODELS" "$MODE2_OK" >"$CHOICES_FILE"
+  mkdir -p "$STATE_DIR" && {
+    printf 'models=%s\ncontainers=%s\n' "$MODELS" "$MODE2_OK"
+    # A local model server's URL and model, so a resumed run asks neither again.
+    has_model local && printf 'local_url=%s\nlocal_model=%s\n' "$LOCAL_URL" "$LOCAL_MODEL"
+  } >"$CHOICES_FILE"
 }
 resume_banner() {
   local n done_list="" next=""
@@ -461,6 +465,7 @@ settle_models() {
         say "  Every model was skipped. Choose at least one."
         continue
       fi
+      if has_model local; then settle_local_url; fi
       confirm_models && break
     done
     # Keys for models dropped at the summary are forgotten here.
@@ -468,6 +473,7 @@ settle_models() {
     for p in gemini openrouter openai; do has_model "$p" || set_pending_key "$p" ""; done
   fi
   if has_model ollama; then settle_ollama; fi
+  if [ "$PROMPT_TTY" -eq 0 ] && has_model local; then settle_local_url; fi
 }
 
 # Model selection belongs to the bootstrap handler, alongside settle_models.
@@ -477,7 +483,7 @@ parse_model_choice() {
   local a p i=0 picked=""
   a="$(printf '%s' "$1" | tr -d ', ')"
   [ -n "$a" ] || return 1
-  case "$a" in *[!1-4]*) return 1 ;; esac
+  case "$a" in *[!1-5]*) return 1 ;; esac
   for p in $ALL_MODELS; do
     i=$((i + 1))
     case "$a" in *"$i"*) picked="$picked $p" ;; esac
@@ -502,6 +508,8 @@ ask_models() { # -> MODELS
       openai)     say "    $i) OpenAI      your key, from platform.openai.com/api-keys (needs credits)$note" ;;
       ollama)     say "    $i) Ollama      on this Mac, no key. Slower, especially on Intel; it downloads"
                   say "                   a model sized to this Mac$note" ;;
+      local)      say "    $i) Local URL   a model server you already run (LM Studio, llama.cpp, vLLM, MLX)"
+                  say "                   that speaks the OpenAI API: its URL and model name, no key" ;;
     esac
   done
   say ""
@@ -512,7 +520,7 @@ ask_models() { # -> MODELS
     IFS= read -r a || quit_setup
     case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
     parse_model_choice "$a" && break
-    say "  Choose at least one, 1 to 4 (for example 1,3), or q to quit."
+    say "  Choose at least one, 1 to 5 (for example 1,3), or q to quit."
   done
   say ""
   say "  You chose: $(labels "$MODELS")"
@@ -577,6 +585,8 @@ confirm_models() { # 0 continue, 1 change the choice; q quits
     if [ "$p" = "ollama" ]; then
       if ollama_overrides_ours; then say "    Ollama      already set up on this Mac"
       else say "    Ollama      no key; downloads a model sized to this Mac's $(ram_gb) GB of memory"; fi
+    elif [ "$p" = "local" ]; then
+      say "    Local URL   no key; $LOCAL_MODEL on the server at $LOCAL_URL"
     elif [ "$p" = "openrouter" ] && [ -n "$(pending_key "$p")" ]; then
       say "    $(printf '%-11s' "$(provider_label "$p")") key received, default model from the overlay"
     elif [ -n "$(pending_key "$p")" ]; then

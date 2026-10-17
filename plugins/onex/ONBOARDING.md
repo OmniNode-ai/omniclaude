@@ -23,12 +23,16 @@ points no model at a lab server.
 The run checks all of this before it changes anything. Below the minimum it stops and
 installs nothing.
 
-You also need **a model key of your own**, unless you pick Ollama. One of:
+You also need **a model key of your own**, unless you pick Ollama or a local model server.
+One of:
 
 - Google AI Studio (Gemini)
 - OpenRouter
 - OpenAI — the account needs credits
 - Ollama — runs a model on this Mac instead, no key. Slower, especially on Intel.
+- A local model server by URL — one you already run (LM Studio, llama.cpp, vLLM, MLX) that
+  speaks the OpenAI API, on this Mac or your network. You give its URL and the model name
+  it runs; no key. Setup stops, naming the URL, if nothing answers there.
 
 Your key is read with the input hidden, stored in onex's key store on this Mac, and is
 never printed, logged, or passed as a command-line argument.
@@ -87,7 +91,8 @@ Every question comes before anything is installed:
 0. **Only on a Mac that ran an earlier setup: set its leftovers aside?** See
    [A Mac that ran an earlier setup](#a-mac-that-ran-an-earlier-setup). Asked only when
    preflight found something that would interfere.
-1. **Which model.** Gemini, OpenRouter, OpenAI or Ollama. Then your key, with the input
+1. **Which model.** Gemini, OpenRouter, OpenAI, Ollama or a local model server by URL. For
+   a local server you are asked its URL and model name, never a key. Then your key, with the input
    hidden. If this Mac already has a key stored you are offered it rather than asked again.
    OpenRouter runs the default model onex's overlay declares, so you are not asked for a
    model; change it any time with `onex models add openrouter --model <model id>`. The key
@@ -247,8 +252,10 @@ bash lab-onboarding.sh --restart
 |---|---|
 | `--preflight-only` | Run phase 0, print the verdict, exit |
 | `--containers` / `--no-containers` | Answer the Docker question in advance |
-| `--provider NAME` | `gemini`, `openrouter`, `openai` or `ollama` |
+| `--provider NAME` | `gemini`, `openrouter`, `openai`, `ollama` or `local`, or several, comma-separated |
 | `--ollama-model NAME` | The model Ollama downloads; the default is sized to this Mac |
+| `--local-url URL` | With `local`: the model server's base URL, such as `http://127.0.0.1:1234` |
+| `--local-model NAME` | With `local`: the model that server runs, as it names it |
 | `--workspace DIR` | Where the clones go; defaults to `$OMNIBASE_PATH`, else `~/Code/omnibase`. `OMNI_HOME` is never read |
 | `--set-aside` | Answer yes in advance to setting aside what an earlier setup left |
 | `--restart` | Forget completed phases and your earlier answers, and run every phase again |

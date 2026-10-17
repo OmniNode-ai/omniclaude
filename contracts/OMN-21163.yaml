@@ -1,0 +1,77 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21163
+title: "Onboarding offers a local model server by URL as an LLM choice, with no key"
+summary: >
+  lab-onboarding.sh offers a fifth model choice, a local model server by URL (LM
+  Studio, llama.cpp, vLLM, MLX: any OpenAI-compatible server that needs no key).
+  The menu and --provider local ask for the server's URL and model name (or take
+  --local-url and --local-model) and never for a key. Preflight stops before
+  installing, naming the URL, when nothing answers there. Phase 3 makes sure the
+  dispatch venv's omnimarket has `onex models add local --url` (0.4.316,
+  OMN-21162), passes the URL and model to it, reports its one pinned test
+  delegation like any other model, and stops naming the URL when onex refuses a
+  server that does not answer. ONBOARDING.md names the new choice and its flags;
+  a follow-up PR repins the guide to the merged script.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21163-menu
+    statement: The LLM menu and --provider offer a local model server by URL that asks for its URL and model name and never for a key.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: the LLM menu and `--provider` offer a local model server choice that asks for its URL and model name and never for a key'
+  - id: req-omn21163-add-local
+    statement: The script passes the URL and model to onex models add local --url and its test delegation, and stops naming the URL when the server does not answer.
+    acceptance:
+      - id: AC2
+        statement: 'AC2: the script passes the URL and model to `onex models add local --url` and its test delegation, and stops naming the URL when the server does not answer'
+  - id: req-omn21163-guide
+    statement: ONBOARDING.md names the new choice and pins the script carrying AC1 and AC2 by commit and sha256.
+    acceptance:
+      - id: AC3
+        statement: 'AC3: ONBOARDING.md names the new choice and pins the script that carries AC1 and AC2 by commit and sha256'
+evidence_requirements:
+  - kind: tests
+    description: "Onboarding script tests pass"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_onboarding_bootstrap_handler_omn21087.py tests/skills/test_onboarding_script_pin_omn20818.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21163-ac1-menu
+    description: 'The menu''s fifth choice, Local URL, asks for the server''s URL and model and shows what the server lists; beside Gemini only Gemini''s key is asked; --provider local with --local-url and --local-model runs unattended; without a URL and no terminal it stops before installing. No key prompt for it anywhere. Fails at the merge base, which has four choices and refuses --provider local.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'local_url_menu or local_url_beside or local_url_by_provider or local_url_unattended_without'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21163-ac2-add-local
+    description: 'The URL and model reach `onex models add local --url <url> --model <name> --json` with nothing on stdin, and its pinned test delegation''s answer is the model''s line; a failed test is reported, not stopped; a refusal (the server does not answer) stops phase 3 naming the URL; nothing answering at the URL in preflight stops before installing, naming it; an omnimarket older than 0.4.316 is replaced by the proven one, or the run stops. Fails at the merge base, which has no local-url step.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'local_url_and_model_reach or local_url_failed_test or local_url_refused or local_url_that_nothing or local_url_installs or local_url_with_no'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21163-ac3-guide-names
+    description: 'ONBOARDING.md names the local model server choice, --local-url, --local-model and local among --provider''s values. Fails at the merge base, whose guide names four choices.'
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q --no-cov -k local_model_server"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21163-deploy-bootstrap
+    description: The published bootstrap handler at the checked-out commit matches the checksum the entrypoint now requires (the handler carries the fifth menu choice); the hosted runner needs only HTTPS and git.
+    source: manual
+    binds_ac: []
+    checks:
+      - check_type: command
+        check_value: >-
+          curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
+          | sha256sum | grep -q '^fe4f9ca432c2eca4c1b39a3575ca826df83711b2c82f2118a7a41a75c4caa988  -$'
+        cwd: "${OMNI_HOME}/omniclaude"

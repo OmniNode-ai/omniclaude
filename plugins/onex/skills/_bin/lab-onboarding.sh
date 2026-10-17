@@ -38,11 +38,16 @@
 #   --containers         answer the Docker question yes in advance
 #   --no-containers      answer it no in advance
 #                        (neither: the one question is asked after preflight)
-#   --provider LIST      one or more of gemini, openrouter, openai, ollama, comma-separated
-#                        (default: asked up front). Gemini, OpenRouter and OpenAI take your
-#                        own key, asked for one at a time; Ollama runs a model on this Mac,
-#                        no key. Delegation chooses among the ones set up
+#   --provider LIST      one or more of gemini, openrouter, openai, ollama, local,
+#                        comma-separated (default: asked up front). Gemini, OpenRouter and
+#                        OpenAI take your own key, asked for one at a time; Ollama runs a
+#                        model on this Mac, no key; local is a model server you already run
+#                        (LM Studio, llama.cpp, vLLM, MLX) that speaks the OpenAI API, by its
+#                        URL and model name, no key. Delegation chooses among the ones set up
 #   --ollama-model NAME  the model Ollama downloads (default: chosen from this Mac's memory)
+#   --local-url URL      the local model server's base URL, such as http://127.0.0.1:1234
+#                        (default: asked when local is chosen)
+#   --local-model NAME   the model that server runs, as it names it (default: asked)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else ~/Code/omnibase). A directory
 #                        that already holds clones this setup did not create is refused
 #   --set-aside          answer yes in advance to setting aside what an earlier setup left
@@ -118,6 +123,8 @@ unset OMNI_HOME
 RESTART=0
 SET_ASIDE_FLAG=0
 OLLAMA_MODEL=""
+LOCAL_URL=""
+LOCAL_MODEL=""
 
 usage() { sed -n '2,/^set -uo pipefail$/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; }
 
@@ -130,6 +137,10 @@ while [ $# -gt 0 ]; do
     --provider=*) PROVIDER="${1#*=}" ;;
     --ollama-model) shift; OLLAMA_MODEL="${1:-}" ;;
     --ollama-model=*) OLLAMA_MODEL="${1#*=}" ;;
+    --local-url) shift; LOCAL_URL="${1:-}" ;;
+    --local-url=*) LOCAL_URL="${1#*=}" ;;
+    --local-model) shift; LOCAL_MODEL="${1:-}" ;;
+    --local-model=*) LOCAL_MODEL="${1#*=}" ;;
     --workspace) shift; WORKSPACE="${1:-}"; WORKSPACE_FROM="from --workspace" ;;
     --workspace=*) WORKSPACE="${1#*=}"; WORKSPACE_FROM="from --workspace" ;;
     --restart) RESTART=1 ;;
@@ -140,8 +151,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 for _p in $(printf '%s' "$PROVIDER" | tr ',' ' '); do
-  case "$_p" in openrouter|gemini|openai|ollama) ;; *)
-    printf 'omninode-dev-setup: --provider must be gemini, openrouter, openai or ollama (or a comma-separated list of them)\n' >&2; exit 2 ;;
+  case "$_p" in openrouter|gemini|openai|ollama|local) ;; *)
+    printf 'omninode-dev-setup: --provider must be gemini, openrouter, openai, ollama or local (or a comma-separated list of them)\n' >&2; exit 2 ;;
   esac
 done
 [ -n "$WORKSPACE" ] || { printf 'omninode-dev-setup: --workspace needs a directory\n' >&2; exit 2; }
@@ -504,14 +515,14 @@ ask_docker() { # note -> 0 yes, 1 no, 2 quit. Asked in the terminal; never a fla
 }
 
 # ---------------------------------------------------------------------------
-# Your models: any combination of Gemini, OpenRouter, OpenAI and Ollama, at
-# least one. Delegation chooses among them for each task; the developer never
+# Your models: any combination of Gemini, OpenRouter, OpenAI, Ollama and a
+# local model server by URL, at least one. Delegation chooses among them for each task; the developer never
 # picks one per run. Settled in preflight, before anything installs, so the run
 # never stops mid-way to ask. Each key is held only in this process (never
 # exported, logged or written) until phase 3 hands it to `onex models add` on
 # stdin.
 # ---------------------------------------------------------------------------
-ALL_MODELS="gemini openrouter openai ollama"
+ALL_MODELS="gemini openrouter openai ollama local"
 MODELS=""     # the chosen models, in menu order, space-separated
 SKIPPED=""    # chosen, then skipped at the key prompt
 STORED=""     # providers an earlier run already stored a key for
@@ -536,6 +547,7 @@ provider_label() {
     openrouter) echo "OpenRouter" ;;
     openai) echo "OpenAI" ;;
     ollama) echo "Ollama" ;;
+    local) echo "Local URL" ;;
     anthropic) echo "Anthropic (Claude)" ;;
     *) echo "$1" ;;
   esac
@@ -591,6 +603,82 @@ settle_models_unattended() {
     phase_fail "run this in Terminal, or pass --provider with models whose keys are stored, or ollama. Nothing was installed"
   fi
   say "  No terminal to ask on, so these models are used: $(labels "$MODELS")."
+}
+
+# ---------------------------------------------------------------------------
+# A local model server by URL: a server the developer already runs (LM Studio,
+# llama.cpp, vLLM, MLX), on this Mac or the network, that speaks the
+# OpenAI-compatible API and needs no key. Its URL and model are asked here, in
+# preflight; phase 3 hands both to `onex models add local --url --model`
+# (omnimarket 0.4.316, OMN-21162), which declares it as onex's local-url
+# backend and runs one delegation pinned to it. No key is ever asked for.
+# ---------------------------------------------------------------------------
+LOCAL_URL_MARK="# Written by omninode-dev-setup: a local model server by URL."
+LOCAL_URL_OMNIMARKET="0.4.316"   # the first omnimarket release with `onex models add local --url`
+
+local_url_base() { # url -> the base URL, without a trailing / or /v1, as onex stores it
+  local b="${1%/}"; b="${b%/v1}"; printf '%s' "${b%/}"
+}
+local_url_valid() { # an http(s) URL with a host
+  case "$1" in http://?*|https://?*) ;; *) return 1 ;; esac
+  case "$1" in *[[:space:]]*) return 1 ;; esac
+}
+# Anything that answers HTTP at the model list counts: a server that lists no
+# models may still chat, and onex's own add decides that with its test delegation.
+local_url_answers() { curl -sS -m 5 -o /dev/null "$(local_url_base "$1")/v1/models" 2>/dev/null; }
+local_url_models() { # url -> the model ids the server lists, comma-separated (first 10)
+  curl -sS -m 5 "$(local_url_base "$1")/v1/models" 2>/dev/null | tr ',{}' '\n\n\n' |
+    sed -n 's/^[[:space:]]*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 10 | paste -sd, - | sed 's/,/, /g'
+}
+
+local_url_unreachable() { # url: stop before anything installs, naming the URL
+  FAILED_STEP="reach the local model server"
+  LAST_ERR="nothing answers at $1"
+  phase_fail "start the model server at $1 (or name another with --local-url), then run this again. Nothing was installed"
+}
+
+settle_local_url() { # preflight: the server's URL and model, never a key
+  local a listed
+  [ -n "$LOCAL_URL" ] || LOCAL_URL="$(saved_choice local_url)"
+  [ -n "$LOCAL_MODEL" ] || LOCAL_MODEL="$(saved_choice local_model)"
+  while :; do
+    if [ -z "$LOCAL_URL" ]; then
+      if [ "$PROMPT_TTY" -eq 0 ]; then
+        FAILED_STEP="choose your models"
+        LAST_ERR="a local model server needs its URL, and there is no terminal to ask on"
+        phase_fail "pass --local-url URL and --local-model NAME, or run this in Terminal. Nothing was installed"
+      fi
+      say ""
+      say "  Local model server: one you already run (LM Studio, llama.cpp, vLLM, MLX) that"
+      say "  speaks the OpenAI API. No key is asked for."
+      printf '  Its URL, such as http://127.0.0.1:1234 (q to quit): '
+      IFS= read -r a || quit_setup
+      case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
+      LOCAL_URL="$(printf '%s' "$a" | tr -d '[:space:]')"
+    fi
+    if ! local_url_valid "$LOCAL_URL"; then
+      say "  ✗ '$LOCAL_URL' is not an http(s) URL with a host, such as http://127.0.0.1:1234."
+      [ "$PROMPT_TTY" -eq 1 ] || local_url_unreachable "$LOCAL_URL"
+      LOCAL_URL=""; continue
+    fi
+    local_url_answers "$LOCAL_URL" && break
+    say "  ✗ Nothing answers at $LOCAL_URL. Start the server there, or check its URL."
+    [ "$PROMPT_TTY" -eq 1 ] || local_url_unreachable "$LOCAL_URL"
+    LOCAL_URL=""
+  done
+  while [ -z "$LOCAL_MODEL" ]; do
+    if [ "$PROMPT_TTY" -eq 0 ]; then
+      FAILED_STEP="choose your models"
+      LAST_ERR="the local model server at $LOCAL_URL needs a model name, and there is no terminal to ask on"
+      phase_fail "pass --local-model NAME, or run this in Terminal. Nothing was installed"
+    fi
+    listed="$(local_url_models "$LOCAL_URL")"
+    [ -n "$listed" ] && say "  The server at $LOCAL_URL lists: $listed"
+    printf '  The model it runs, as the server names it: '
+    IFS= read -r a || quit_setup
+    LOCAL_MODEL="$(printf '%s' "$a" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  done
+  say "  Model: the local model server at $LOCAL_URL, no key. Model: $LOCAL_MODEL."
 }
 
 
@@ -711,7 +799,7 @@ YAML
 # checksum-pinned handler into the run directory. Never source unchecked bytes.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="1aaa:45ad:1327:ddd6:05f0:d45e:1c09:93f6:763e:ef19:5747:1cc0:a161:614f:2513:0a31" root candidate
+  local digest="fe4f:9ca4:32c2:eca4:c1b3:9a35:75ca:826d:f837:11b2:c82f:2118:a7a4:1a75:c4ca:a988" root candidate
   digest="${digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
   for candidate in "$root/$rel" "$PWD/$rel" "$WORKSPACE/omniclaude/$rel"; do
@@ -1418,9 +1506,9 @@ dispatch_venv_current() {
 # stamped, after this phase.
 models_cmd() { (cd "$HOME" && env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/onex" models "$@"); }
 
-RES_GEMINI=""; RES_OPENROUTER=""; RES_OPENAI=""; RES_OLLAMA=""
-set_result() { case "$1" in gemini) RES_GEMINI="$2" ;; openrouter) RES_OPENROUTER="$2" ;; openai) RES_OPENAI="$2" ;; ollama) RES_OLLAMA="$2" ;; esac; }
-result_of() { case "$1" in gemini) echo "$RES_GEMINI" ;; openrouter) echo "$RES_OPENROUTER" ;; openai) echo "$RES_OPENAI" ;; ollama) echo "$RES_OLLAMA" ;; esac; }
+RES_GEMINI=""; RES_OPENROUTER=""; RES_OPENAI=""; RES_OLLAMA=""; RES_LOCAL=""
+set_result() { case "$1" in gemini) RES_GEMINI="$2" ;; openrouter) RES_OPENROUTER="$2" ;; openai) RES_OPENAI="$2" ;; ollama) RES_OLLAMA="$2" ;; local) RES_LOCAL="$2" ;; esac; }
+result_of() { case "$1" in gemini) echo "$RES_GEMINI" ;; openrouter) echo "$RES_OPENROUTER" ;; openai) echo "$RES_OPENAI" ;; ollama) echo "$RES_OLLAMA" ;; local) echo "$RES_LOCAL" ;; esac; }
 passed_models() { local p out=""; for p in $MODELS; do case "$(result_of "$p")" in pass*) out="$out $p" ;; esac; done; echo "${out# }"; }
 
 # result_line provider -> "Gemini  ✓ answered (model)" and the like
@@ -1476,6 +1564,16 @@ cause_of() {
     cut -c1-300
 }
 
+# The local server takes no key: its URL and model go to `onex models add local`,
+# which declares it in the local routes and runs its one pinned test delegation.
+# A refusal (no JSON result) means the server did not answer, and phase 3 stops on it.
+LOCAL_URL_REFUSED=0
+stop_unless_local_url_answered() { # phase 3, after every model's line: a refused local add stops the run
+  has_model local && [ "$LOCAL_URL_REFUSED" -eq 1 ] || return 0
+  FAILED_STEP="set up the local model server at $LOCAL_URL"
+  LAST_ERR="$(result_of local | sed 's/^fail://')"
+  phase_fail "nothing answered as a model server at $LOCAL_URL; start it there (or name another with --local-url), then run this again"
+}
 setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason>
   local p="$1" key out err line status model="" reason cause
   err="$RUN_DIR/models.err"
@@ -1487,7 +1585,9 @@ setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason
       return 0
     fi
   fi
-  if [ -n "$key" ]; then
+  if [ "$p" = "local" ]; then
+    out="$(models_cmd add local --url "$LOCAL_URL" --model "$LOCAL_MODEL" --json 2>"$err" </dev/null)"
+  elif [ -n "$key" ]; then
     out="$(printf '%s' "$key" | models_cmd add "$p" --json ${model:+--model "$model"} 2>"$err")"
   else
     out="$(models_cmd test "$p" --json 2>"$err")"
@@ -1507,7 +1607,8 @@ setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason
       esac
       set_result "$p" "fail:$reason" ;;
     not_set_up) set_result "$p" "fail:no key is stored for it" ;;
-    *) set_result "$p" "fail:$cause" ;;
+    *) set_result "$p" "fail:$cause"
+       [ "$p" = "local" ] && LOCAL_URL_REFUSED=1 ;;
   esac
   [ "$(result_of "$p")" = "fail:" ] && set_result "$p" "fail:onex models gave no result; see the log"
   rm -f "$err"
@@ -1532,6 +1633,7 @@ phase3() {
   say "  $(onex_run --version 2>/dev/null | tail -n 1)"
   step "onex models is available" models_cmd --help ||
     phase_fail "this onex has no 'onex models' command yet; update the omnimarket clone, then run this again"
+  if has_model local; then ensure_local_url_onex; fi
 
   if onex_run local identity >/dev/null 2>&1; then
     say "  Local identity: present"
@@ -1550,6 +1652,10 @@ phase3() {
   else
     retire_lab_model_overrides
   fi
+  if has_model local; then
+    step "mark the local routes file as this setup's" mark_local_url_overrides ||
+      phase_fail "could not write $HOME/$OVERRIDES_FILE_REL; check that ~/.omninode is writable"
+  fi
 
   say ""
   for p in $MODELS; do
@@ -1561,6 +1667,8 @@ phase3() {
   done
   for p in $SKIPPED; do say "  $(result_line "$p")"; done
   for p in $MODELS $SKIPPED; do record_model_status "$p"; done
+
+  stop_unless_local_url_answered
 
   passed="$(passed_models)"
   if [ -z "$passed" ]; then
@@ -1612,6 +1720,68 @@ setup_ollama() {
   fi
   step "point onex's local routes at Ollama" write_ollama_overrides "$OLLAMA_MODEL" || {
     LAST_ERR="$HOME/$OVERRIDES_FILE_REL was not written"; return 1; }
+}
+
+# `onex models add local --url` arrived in omnimarket 0.4.316. A returning Mac's
+# floor may name an older omnimarket, which --proven reinstalls first; then the
+# floor is set aside (never deleted) and the dispatch venv rebuilt from the
+# proven set's pin, which carries it. Phase 3 stamps a new floor when it passes.
+local_url_supported() { models_cmd add --help 2>/dev/null | grep -q -- '--url'; }
+
+ensure_local_url_onex() {
+  local floor="$WORKSPACE/.onex-workspace-floor.json"
+  local_url_supported && return 0
+  say "  This onex's omnimarket predates 'onex models add local --url' (omnimarket $LOCAL_URL_OMNIMARKET); installing the proven omnimarket…"
+  if [ -f "$floor" ]; then
+    mv "$floor" "$floor.pre-local-url.$STAMP" ||
+      { FAILED_STEP="set aside the workspace floor"; phase_fail "move $floor aside by hand, then run this again"; }
+    say "  Set aside the workspace floor as $(basename "$floor").pre-local-url.$STAMP; this phase stamps a new one."
+  fi
+  retry "rebuild the dispatch venv with the proven omnimarket" nice -n 10 bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --proven ||
+    phase_fail "see the log; the script names the exact command to run by hand"
+  local_url_supported && return 0
+  FAILED_STEP="onex models add local --url is available"
+  LAST_ERR="the dispatch venv's omnimarket is older than $LOCAL_URL_OMNIMARKET"
+  phase_fail "update the omnimarket clone in $WORKSPACE to $LOCAL_URL_OMNIMARKET or newer, then run this again"
+}
+
+# The local routes file carries this setup's mark on its first line, so preflight
+# reads it as an earlier run's file, not the developer's. Ollama's file already
+# carries one; a file with no mark (the developer's) is left as it is.
+mark_local_url_overrides() {
+  local f="$HOME/$OVERRIDES_FILE_REL"
+  [ -f "$f" ] && return 0
+  mkdir -p "$(dirname "$f")" && printf '%s\n' "$LOCAL_URL_MARK" >"$f"
+}
+
+# The chat endpoint `onex models add local` declared for the server, read back
+# from the local routes, so this script never spells the server's API path.
+local_url_endpoint() {
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$HOME/$OVERRIDES_FILE_REL" <<'PYEP'
+import sys
+import yaml
+data = yaml.safe_load(open(sys.argv[1])) or {}
+for backend in data.get("backends") or []:
+    if isinstance(backend, dict) and backend.get("backend_id") == "local-url":
+        print(backend["endpoint_url"])
+        sys.exit(0)
+sys.exit("no local-url backend in " + sys.argv[1])
+PYEP
+}
+
+# docker_url url -> the same URL as a container reaches it: this Mac's
+# loopback is host.docker.internal from inside Docker.
+docker_url() {
+  local scheme rest host
+  scheme="${1%%://*}://"; rest="${1#*://}"; host="${rest%%[:/]*}"
+  case "$host" in 127.0.0.1|localhost|0.0.0.0) rest="host.docker.internal${rest#"$host"}" ;; esac
+  printf '%s%s' "$scheme" "$rest"
+}
+
+point_bundle_at_local_url() { # the stack's local-model slot names the developer's server
+  local endpoint
+  endpoint="$(local_url_endpoint)" || return 1
+  point_bundle_model "$(docker_url "$endpoint")" "$LOCAL_MODEL"
 }
 
 # accepted_backend JSON -> the backend id of the attempt whose answer was accepted
@@ -1844,6 +2014,9 @@ phase4() {
     if in_list ollama "$(passed_models)"; then
       step "point the stack's local model at Ollama" point_bundle_model "http://host.docker.internal:$OLLAMA_PORT$OLLAMA_CHAT_PATH" "$OLLAMA_MODEL" ||
         phase_fail "set model_endpoint and served_model_id in ~/.omnibase/local.bifrost.yaml by hand, then run this again"
+    elif in_list local "$(passed_models)"; then
+      step "point the stack's local model at your model server" point_bundle_at_local_url ||
+        phase_fail "set model_endpoint and served_model_id in ~/.omnibase/local.bifrost.yaml by hand, then run this again"
     fi
   fi
   # The key path: the stack serves a tenant of its own and holds your keys for
@@ -1885,10 +2058,10 @@ phase4() {
     fi
   else
     case "$served" in
-      local-*) say "  Answered by Ollama on this Mac ($served)." ;;
+      local-*) say "  Answered by your local model ($served)." ;;
       *) FAILED_STEP="check the stack's delegation went to Ollama"
          LAST_ERR="the answer came from ${served:-no backend}, not a local route"
-         phase_fail "check that Ollama is running and ~/.omnibase/local.bifrost.yaml names it" ;;
+         phase_fail "check that your local model (Ollama, or the server at your URL) is running and ~/.omnibase/local.bifrost.yaml names it" ;;
     esac
   fi
   phase_pass "stack healthy, one delegation answered (stop it with 'make down-local' from the checkout that started it)"
@@ -2001,6 +2174,9 @@ phase6() {
     check "Ollama answers on this Mac" ollama_up
     check "Ollama has $OLLAMA_MODEL" ollama_has_model "$OLLAMA_MODEL"
   fi
+  if in_list local "$(passed_models)"; then
+    check "the local model server answers at $LOCAL_URL" local_url_answers "$LOCAL_URL"
+  fi
   check "the full onex plugin installed in Claude Code" plugin_installed onex@omninode-tools-dev
   if [ "$MODE2_OK" -eq 1 ]; then check "local stack healthy" stack_healthy; fi
   if [ "$CHECKS_FAILED" -gt 0 ]; then
@@ -2030,7 +2206,8 @@ main() {
   say "Your models:"
   for p in $MODELS $SKIPPED; do say "  $(result_line "$p")"; done
   say "$(count_words "$(passed_models)") of $(count_words "$MODELS $SKIPPED") models ready. Delegation chooses among them for each task."
-  say "Add or fix one any time: onex models add <gemini|openrouter|openai>; see them all: onex models list"
+  say "Add or fix one any time: onex models add <gemini|openrouter|openai>, or a local server with"
+  say "  onex models add local --url <url> --model <name>; see them all: onex models list"
   say "Next:"
   say "  1. Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect."
   say "  2. Open Claude Code (run 'claude') and sign in with your Anthropic account the first"
