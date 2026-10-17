@@ -65,6 +65,9 @@ capabilities:
   - name: linear.ticketing.ticket_create
     description: Create a new Linear ticket
 
+  - name: linear.ticketing.ticket_tick_acceptance
+    description: Tick the acceptance boxes a contract-bound check covers, and optionally set Done, through the Done-flip guard's repo-evidence bar (OMN-17427)
+
 # IO operations
 io_operations:
   - operation: ticket_get
@@ -111,6 +114,22 @@ io_operations:
       - result: ModelLinearResult
     idempotent: false
 
+  - operation: ticket_tick_acceptance
+    description: >
+      Tick every labelled unchecked acceptance box and, with set_done, set Done in
+      the same edit. The Done-flip guard judges the description and state the edit
+      would leave behind with lane-safe evidence readers; a refusal writes nothing.
+      apply=false is a dry run.
+    protocol_method: ticket_tick_acceptance
+    input_fields:
+      - ticket_id: str
+      - apply: bool
+      - set_done: bool
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelLinearResult
+    idempotent: true
+
 # Dependencies
 dependencies:
   - name: protocol_linear_ticketing
@@ -126,6 +145,9 @@ handler_routing:
   backends:
     - backend: linear_api
       handler_key: linear_api
+      handler:
+        name: HandlerLinearApi
+        module: omniclaude.nodes.node_linear_effect.handlers.handler_linear_ticketing
 
 # Invariants
 invariants:
