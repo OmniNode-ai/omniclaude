@@ -11,8 +11,11 @@ summary: >
   dispatch venv's omnimarket has `onex models add local --url` (0.4.316,
   OMN-21162), passes the URL and model to it, reports its one pinned test
   delegation like any other model, and stops naming the URL when onex refuses a
-  server that does not answer. ONBOARDING.md names the new choice and its flags;
-  a follow-up PR repins the guide to the merged script.
+  server that does not answer. ONBOARDING.md names the new choice and its flags.
+  The menu lives in the checksum-pinned bootstrap handler; a downloaded copy
+  checks the handler it fetches from dev against its own download digest, which
+  a follow-up PR moves to this change's merge commit before the guide is
+  repinned to the script that carries AC1 and AC2.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []

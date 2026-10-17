@@ -54,9 +54,11 @@ def test_downloaded_entrypoint_verifies_handler_before_sourcing(
     bindir = home / ".local/bin"
     bindir.mkdir(parents=True)
     served = tmp_path / "served.sh"
-    served.write_text(
-        'touch "$HOME/unverified-handler-ran"\n' if tampered else HANDLER.read_text()
-    )
+    if tampered:
+        served.write_text('touch "$HOME/unverified-handler-ran"\n')
+    else:
+        # What GitHub serves: the handler at the commit the download URL names.
+        served.write_bytes(_handler_at(_download_commit()))
     curl = bindir / "curl"
     curl.write_text(
         "#!/bin/sh\n"
@@ -116,6 +118,24 @@ def _git(*args: str) -> subprocess.CompletedProcess[bytes]:
     )
 
 
+def _download_commit() -> str:
+    match = re.search(
+        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
+        SCRIPT.read_text(),
+    )
+    assert match
+    commit = match.group(1)
+    if _git("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
+        _git("fetch", "--no-tags", "--depth=1", "origin", commit)
+    return commit
+
+
+def _handler_at(commit: str) -> bytes:
+    served = _git("show", f"{commit}:{HANDLER.relative_to(REPO).as_posix()}")
+    assert served.returncode == 0, served.stderr.decode(errors="replace")
+    return served.stdout
+
+
 def test_the_downloaded_handler_comes_from_a_commit_on_this_history() -> None:
     """A downloaded script fetches its handler from the commit its URL names.
 
@@ -142,9 +162,11 @@ def test_the_downloaded_handler_comes_from_a_commit_on_this_history() -> None:
     assert _git("merge-base", "--is-ancestor", commit, "HEAD").returncode == 0, (
         f"the handler URL names {commit}, which is not on this branch's history"
     )
-    rel = HANDLER.relative_to(REPO).as_posix()
-    served = _git("show", f"{commit}:{rel}")
-    assert served.returncode == 0, served.stderr.decode(errors="replace")
-    digest = re.search(r'local digest="([0-9a-f:]+)"', text)
+    # OMN-21163: the download checks its own digest. A pull request that changes
+    # the handler cannot name a dev commit holding the new bytes, so for that one
+    # change the download keeps the handler already on dev.
+    digest = re.search(r'local download_digest="([0-9a-f:]+)"', text)
     assert digest
-    assert hashlib.sha256(served.stdout).hexdigest() == digest.group(1).replace(":", "")
+    assert hashlib.sha256(_handler_at(commit)).hexdigest() == digest.group(1).replace(
+        ":", ""
+    )

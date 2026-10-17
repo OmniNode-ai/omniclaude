@@ -797,10 +797,18 @@ YAML
 # The node's bootstrap handler runs on stock macOS Bash before Python exists.
 # Prefer the checkout beside this entrypoint; downloaded copies fetch the same
 # checksum-pinned handler into the run directory. Never source unchecked bytes.
+#
+# A downloaded copy fetches the handler from a commit on dev, and checks it
+# against download_digest. A pull request that changes the handler cannot name
+# a dev commit that holds its new bytes (the merge queue squashes, so no branch
+# commit reaches dev), so for that one change the two digests differ and a
+# downloaded copy keeps the handler already on dev; the next pull request names
+# the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
   local digest="fe4f:9ca4:32c2:eca4:c1b3:9a35:75ca:826d:f837:11b2:c82f:2118:a7a4:1a75:c4ca:a988" root candidate
-  digest="${digest//:/}"
+  local download_digest="1aaa:45ad:1327:ddd6:05f0:d45e:1c09:93f6:763e:ef19:5747:1cc0:a161:614f:2513:0a31"
+  digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
   for candidate in "$root/$rel" "$PWD/$rel" "$WORKSPACE/omniclaude/$rel"; do
     [ -f "$candidate" ] || continue
@@ -810,8 +818,8 @@ load_onboarding_preflight() {
     fi
   done
   candidate="$RUN_DIR/handler_onboarding_preflight.sh"
-  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/14ba412114428505184f7a8429a6496bb5e7548c/$rel" ||
-     ! printf '%s  %s\n' "$digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
+  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/d5e7ff7e24c5591ad1962982abc0e7156767c246/$rel" ||
+     ! printf '%s  %s\n' "$download_digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
     printf 'omninode-dev-setup: cannot load the checksum-pinned onboarding preflight handler\n' >&2
     return 1
   fi
