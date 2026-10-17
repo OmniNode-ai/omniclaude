@@ -20,6 +20,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -113,6 +114,16 @@ UNCOVERED_WRITES = [
     ["api", "-X", "PATCH", f"repos/{ENFORCED}/pulls/9", "-f", "title=t"],
     ["api", "-X", "POST", f"repos/{ENFORCED}/actions/runs/123/rerun"],
     ["api", "graphql", "-f", "query=mutation{x}"],
+    [
+        "api",
+        "-X",
+        "POST",
+        f"repos/{ENFORCED}/check-runs",
+        "-f",
+        "name=n",
+        "-f",
+        "head_sha=abc",
+    ],
     ["issue", "create", "--repo", ENFORCED, "--title", "t"],
 ]
 
@@ -465,8 +476,17 @@ def test_onex_without_run_node_is_not_the_effect_runner(
 
 @pytest.mark.unit
 def test_pinned_contract_operations_are_the_covered_verbs() -> None:
-    """The table the shim reads, at the omnimarket pin: a new operation fails here first."""
-    operations = yaml.safe_load(_pinned_contract())["operations"]
+    """The table the shim reads, at the omnimarket pin: a new operation fails here first.
+
+    The shim covers an operation only when its description says "replaces gh <group> <sub>."
+    (the awk filter in scripts/user-bin/gh); an operation that replaces a `gh api` call, such
+    as check_run_create, is not a covered verb and the call stays allowed.
+    """
+    operations = [
+        op
+        for op in yaml.safe_load(_pinned_contract())["operations"]
+        if re.search(r"replaces gh [a-z]+ [a-z]+\.", op["description"])
+    ]
     assert sorted(op["name"] for op in operations) == sorted(
         op for _, _, op in COVERED.values()
     )

@@ -1,37 +1,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""False-positive fixes for the Done-flip durable-evidence guard [OMN-13856].
+"""Regression tests for repo evidence and product PR resolution.
 
-The 2026-09-25 Linear triage found three tickets whose work was verified done
-live, and which the guard still refused. Each refusal had a distinct cause, and
-each fix below is paired with a negative control proving the guard still fails
-closed on the real gap it exists to catch:
-
-(a) OMN-13907 — a housekeeping ticket with no PR at all, whose DoD evidence is
-    a live-state readback (8 worktrees verified absent). The first cut accepted
-    a ``live-state-proven:`` description line on shape and age; anyone wanting
-    the close could write it, and it was withdrawn (HOLD, 2026-09-25). The bar
-    for a ticket with no PR is now the evidence closer's: its OCC contract binds
-    every labelled acceptance criterion via ``binds_ac``, and each criterion has
-    a PASS receipt naming the subject, the environment and a fresh read time,
-    attested by a verifier other than its runner. The description line no
-    longer closes anything; the old weaker path (any PASS receipt) is gone too.
-(b) OMN-14642 — ``omninode_infra#614`` was closed as superseded by the merged
-    ``#618`` (said so in its closing comment), and was read as abandoned. Fix:
-    a closed PR whose own closing note names a MERGED successor carrying the
-    same ticket id is superseded, not abandoned.
-(c) OMN-14642 — "PR #257" in the ticket's incident narrative (the commit that
-    CAUSED the bug, not a fix) resolves to no repository and was read as an
-    unverifiable DoD citation, although its own line names the commit it
-    merged as. Fix: such a reference is resolved by matching that SHA against
-    the merge commit of PR #N in each repository the ticket's other citations
-    name; exactly one merged match resolves it, anything else still refuses.
-(d) OMN-14652 — PR state was read through ``gh pr view`` (GraphQL); with the
-    GraphQL quota empty and REST quota healthy, both merged PRs came back as
-    errors. Fix: read PR state by REST.
-
-Hermetic: every GitHub read goes through an injected fetcher, or through a
-monkeypatched ``subprocess.run`` for the REST fetch itself.
+No-PR tickets and description readbacks cannot substitute for product contracts
+and verified checks. PR supersession, commit anchoring and REST reads retain
+their existing product PR semantics. All readers are injected.
 """
 
 from __future__ import annotations
@@ -40,7 +13,6 @@ import importlib.util
 import json
 import subprocess
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -67,8 +39,6 @@ guard = _load_guard()
 import linear_done_verify as ldv  # noqa: E402  (sibling import needs sys.path)
 import no_pr_bound_evidence as nbe  # noqa: E402  (sibling import needs sys.path)
 
-_NOW = datetime(2026, 9, 25, 15, 0, tzinfo=UTC)
-
 
 @pytest.fixture(autouse=True)
 def _hermetic_linear(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,17 +53,16 @@ def _call(ticket_id: str, description: str) -> dict[str, Any]:
     }
 
 
-def _no_receipt_probe(_ticket_id: str, _description: str) -> Any:
-    return nbe.BoundEvidenceVerdict(False, "no OCC contract on origin/dev")
+def _no_repo_probe(*_args: Any) -> Any:
+    return nbe.RepoEvidenceVerdict(
+        nbe.RepoEvidenceOutcome.NOT_ENGAGED, "no product contract"
+    )
 
 
-def _pass_probe(_ticket_id: str, _description: str) -> Any:
-    """Every criterion bound (OMN-20368): these tests are about PR resolution."""
-    return nbe.BoundEvidenceVerdict(True, "bound: AC1<-dod-001")
-
-
-def _no_receipts(_ticket_id: str) -> list[dict[str, str]]:
-    return []
+def _pass_probe(*_args: Any) -> Any:
+    return nbe.RepoEvidenceVerdict(
+        nbe.RepoEvidenceOutcome.PASSED, "repo-bound: AC1<-dod-001"
+    )
 
 
 def _never_called_fetcher(ref: Any) -> Any:
@@ -163,46 +132,45 @@ _CONTRACT: dict[str, Any] = {
 }
 
 
-def _entry_sha(item: str) -> str | None:
-    from omnibase_core.validation.validator_receipt_gate import (
-        ContractEntryNotFoundError,
-        compute_contract_entry_sha256,
+def _contract_probe(contract: dict[str, Any] | None) -> Any:
+    import yaml
+
+    def probe(tid: str, descriptions: list[str], prs: list[Any]) -> Any:
+        return nbe.evaluate_repo_evidence(
+            tid,
+            descriptions,
+            prs,
+            read_contract=lambda *_args: nbe.ContractRead(
+                nbe.ContractReadStatus.FOUND
+                if contract is not None
+                else nbe.ContractReadStatus.ABSENT,
+                text=yaml.safe_dump(contract),
+            ),
+            read_check_runs=lambda *_args: [
+                {
+                    "id": 1,
+                    "name": nbe.REPO_EVIDENCE_CHECK_NAME,
+                    "app": {"slug": "github-actions"},
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+            ],
+        )
+
+    return probe
+
+
+_PRODUCT_PR = "https://github.com/OmniNode-ai/omniclaude/pull/77"
+
+
+def _evidence_fetcher(ref: Any) -> Any:
+    return ldv.PRStatus(
+        ref=ref,
+        state="MERGED",
+        merge_state="CLEAN",
+        head_sha="h" * 40,
+        merge_commit_sha="m" * 40,
     )
-
-    try:
-        return str(compute_contract_entry_sha256(_CONTRACT, item))
-    except ContractEntryNotFoundError:
-        return None
-
-
-def _receipt(item: str, **overrides: Any) -> dict[str, Any]:
-    receipt: dict[str, Any] = {
-        "schema_version": "1.0.0",
-        "ticket_id": "OMN-13907",
-        "evidence_item_id": item,
-        "check_type": "command",
-        "status": "PASS",
-        "run_timestamp": "2026-09-25T14:30:00Z",
-        "runner": "guard-fp-fix",
-        "verifier": "worktree-readback-verifier",
-        "target_identity": "host:operator-mac/worktrees",
-        "probe_stdout": "8 of 8 flagged worktrees absent\n",
-        "commit_sha": "abc1234",
-        # OMN-20368: the receipt names the contract entry it was taken against.
-        "contract_entry_sha256": _entry_sha(item),
-    }
-    receipt.update(overrides)
-    return {k: v for k, v in receipt.items() if v is not None}
-
-
-def _bound_probe(
-    contract: dict[str, Any] | None, receipts: list[dict[str, Any]]
-) -> Any:
-    evidence = nbe.OccTicketEvidence(contract, receipts)
-    return lambda tid, desc: nbe.evaluate_bound_evidence(tid, desc, evidence, _NOW)
-
-
-_GOOD_RECEIPTS = [_receipt("dod-dispositions"), _receipt("dod-worktrees-clean")]
 
 
 def test_a_bare_live_state_line_no_longer_closes() -> None:
@@ -213,135 +181,34 @@ def test_a_bare_live_state_line_no_longer_closes() -> None:
     )
     d = guard.decide(
         _call("OMN-13907", _OMN_13907_BODY + "\n" + marker),
-        occ_probe=_bound_probe(None, []),
+        repo_evidence_probe=_contract_probe(None),
         pr_fetcher=_never_called_fetcher,
-        now=_NOW,
     )
     assert not d.allowed
     assert "no_bound_dod_receipt" in d.reason
     assert not hasattr(ldv, "parse_live_state_marker")
 
 
-def test_a_no_pr_ticket_with_every_criterion_bound_to_a_fresh_receipt_is_allowed() -> (
-    None
-):
+def test_a_no_pr_ticket_is_refused_even_when_a_contract_is_available() -> None:
     d = guard.decide(
         _call("OMN-13907", _NO_PR_BODY),
-        occ_probe=_bound_probe(_CONTRACT, _GOOD_RECEIPTS),
+        repo_evidence_probe=_contract_probe(_CONTRACT),
         pr_fetcher=_never_called_fetcher,
-        now=_NOW,
     )
-    assert d.allowed, d.reason
-    assert d.reason == "durable_evidence:occ_bound_receipts"
+    assert not d.allowed
+    assert d.reason.startswith("no_bound_dod_receipt for OMN-13907")
+    assert "no merged product PR" in d.reason
 
 
-def test_a_verdict_names_which_item_discharged_each_criterion() -> None:
-    v = nbe.evaluate_bound_evidence(
+def test_a_repo_verdict_names_which_item_binds_each_criterion() -> None:
+    v = _contract_probe(_CONTRACT)(
         "OMN-13907",
-        _NO_PR_BODY,
-        nbe.OccTicketEvidence(_CONTRACT, _GOOD_RECEIPTS),
-        _NOW,
+        [_NO_PR_BODY],
+        [_evidence_fetcher(ldv.PRRef(77, "OmniNode-ai/omniclaude"))],
     )
-    assert v.passed, v.detail
+    assert v.outcome is nbe.RepoEvidenceOutcome.PASSED, v.detail
     assert "DOD1<-dod-dispositions" in v.detail
     assert "DOD2<-dod-worktrees-clean" in v.detail
-
-
-@pytest.mark.parametrize(
-    ("receipts", "expect", "why"),
-    [
-        (
-            [
-                _receipt("dod-dispositions"),
-                _receipt("dod-worktrees-clean", run_timestamp="2026-09-10T14:30:00Z"),
-            ],
-            "freshness window",
-            "stale read time",
-        ),
-        (
-            [
-                _receipt("dod-dispositions"),
-                _receipt("dod-worktrees-clean", run_timestamp="2026-09-26T14:30:00Z"),
-            ],
-            "in the future",
-            "future read time",
-        ),
-        (
-            [
-                _receipt("dod-dispositions"),
-                _receipt("dod-worktrees-clean", run_timestamp=None),
-            ],
-            "no timezone-aware run_timestamp",
-            "no read time",
-        ),
-        (
-            [
-                _receipt("dod-dispositions"),
-                _receipt("dod-worktrees-clean", ticket_id="OMN-8781"),
-            ],
-            "names subject OMN-8781",
-            "wrong subject ticket",
-        ),
-        (
-            [
-                _receipt("dod-dispositions"),
-                _receipt("dod-worktrees-clean", check_type="file_exists"),
-            ],
-            "not declared by item",
-            "check type the contract never declared",
-        ),
-        (
-            [
-                _receipt("dod-dispositions"),
-                _receipt("dod-worktrees-clean", target_identity=None),
-            ],
-            "names no environment",
-            "no environment",
-        ),
-        (
-            [
-                _receipt("dod-dispositions"),
-                _receipt("dod-worktrees-clean", verifier="guard-fp-fix"),
-            ],
-            "self-attested",
-            "runner attests itself",
-        ),
-        (
-            [
-                _receipt("dod-dispositions"),
-                _receipt("dod-worktrees-clean", probe_stdout=""),
-            ],
-            "no probe_stdout",
-            "no observation",
-        ),
-        (
-            [
-                _receipt("dod-dispositions"),
-                _receipt("dod-worktrees-clean", status="FAIL"),
-            ],
-            "not a PASS",
-            "failing receipt",
-        ),
-        (
-            [_receipt("dod-dispositions")],
-            "dod-worktrees-clean has no receipt",
-            "a bound criterion with no receipt",
-        ),
-    ],
-)
-def test_a_control_defective_receipt_is_refused(
-    receipts: list[dict[str, Any]], expect: str, why: str
-) -> None:
-    d = guard.decide(
-        _call("OMN-13907", _NO_PR_BODY),
-        occ_probe=_bound_probe(_CONTRACT, receipts),
-        pr_fetcher=_never_called_fetcher,
-        now=_NOW,
-    )
-    assert not d.allowed, why
-    assert "no_bound_dod_receipt" in d.reason
-    assert expect in d.reason, (why, d.reason)
-    assert "DOD2" in d.reason
 
 
 def test_a_control_unbound_criterion_is_refused() -> None:
@@ -351,10 +218,9 @@ def test_a_control_unbound_criterion_is_refused() -> None:
         "dod_evidence": [_CONTRACT["dod_evidence"][0]],
     }
     d = guard.decide(
-        _call("OMN-13907", _NO_PR_BODY),
-        occ_probe=_bound_probe(contract, _GOOD_RECEIPTS),
-        pr_fetcher=_never_called_fetcher,
-        now=_NOW,
+        _call("OMN-13907", _NO_PR_BODY + "\n" + _PRODUCT_PR),
+        repo_evidence_probe=_contract_probe(contract),
+        pr_fetcher=_evidence_fetcher,
     )
     assert not d.allowed
     assert "DOD2: no dod_evidence item" in d.reason
@@ -380,10 +246,9 @@ def test_a_control_retired_binding_does_not_count() -> None:
         ],
     }
     d = guard.decide(
-        _call("OMN-13907", _NO_PR_BODY),
-        occ_probe=_bound_probe(contract, _GOOD_RECEIPTS),
-        pr_fetcher=_never_called_fetcher,
-        now=_NOW,
+        _call("OMN-13907", _NO_PR_BODY + "\n" + _PRODUCT_PR),
+        repo_evidence_probe=_contract_probe(contract),
+        pr_fetcher=_evidence_fetcher,
     )
     assert not d.allowed
     assert "DOD2: no dod_evidence item" in d.reason
@@ -392,10 +257,9 @@ def test_a_control_retired_binding_does_not_count() -> None:
 def test_a_control_unlabelled_criteria_are_unbindable() -> None:
     """OMN-13907 as written today: DoD bullets with no labels. Refused."""
     d = guard.decide(
-        _call("OMN-13907", _OMN_13907_BODY),
-        occ_probe=_bound_probe(_CONTRACT, _GOOD_RECEIPTS),
-        pr_fetcher=_never_called_fetcher,
-        now=_NOW,
+        _call("OMN-13907", _OMN_13907_BODY + "\n" + _PRODUCT_PR),
+        repo_evidence_probe=_contract_probe(_CONTRACT),
+        pr_fetcher=_evidence_fetcher,
     )
     assert not d.allowed
     assert "carry no label" in d.reason
@@ -403,16 +267,15 @@ def test_a_control_unlabelled_criteria_are_unbindable() -> None:
 
 def test_a_control_no_contract_fails_closed() -> None:
     d = guard.decide(
-        _call("OMN-13907", _NO_PR_BODY),
-        occ_probe=_bound_probe(None, _GOOD_RECEIPTS),
-        pr_fetcher=_never_called_fetcher,
-        now=_NOW,
+        _call("OMN-13907", _NO_PR_BODY + "\n" + _PRODUCT_PR),
+        repo_evidence_probe=_contract_probe(None),
+        pr_fetcher=_evidence_fetcher,
     )
     assert not d.allowed
-    assert "no OCC contract contracts/OMN-13907.yaml" in d.reason
+    assert "no merged product PR carries contracts/OMN-13907.yaml" in d.reason
 
 
-def test_a_control_bound_receipts_do_not_waive_an_open_cited_pr() -> None:
+def test_a_control_repo_evidence_does_not_waive_an_open_cited_pr() -> None:
     desc = (
         _NO_PR_BODY
         + "\nFollow-up recovery in https://github.com/OmniNode-ai/omniclaude/pull/77\n"
@@ -422,10 +285,8 @@ def test_a_control_bound_receipts_do_not_waive_an_open_cited_pr() -> None:
     )
     d = guard.decide(
         _call("OMN-13907", desc),
-        occ_probe=_bound_probe(_CONTRACT, _GOOD_RECEIPTS),
+        repo_evidence_probe=_contract_probe(_CONTRACT),
         pr_fetcher=fetcher,
-        receipt_lister=_no_receipts,
-        now=_NOW,
     )
     assert not d.allowed
     assert "pr_not_merged" in d.reason
@@ -474,12 +335,11 @@ def _omn_14642_table(
 def test_b_closed_pr_superseded_by_named_merged_successor_is_allowed() -> None:
     d = guard.decide(
         _call("OMN-14642", _OMN_14642_ATTACHED),
-        occ_probe=_pass_probe,
+        repo_evidence_probe=_pass_probe,
         pr_fetcher=_table_fetcher(_omn_14642_table()),
-        receipt_lister=_no_receipts,
     )
     assert d.allowed, d.reason
-    assert d.reason == "durable_evidence:occ_bound_receipts:all_prs_merged"
+    assert d.reason == "durable_evidence:repo_bound_checks:all_prs_merged"
 
 
 def test_b_verify_records_the_proven_successor() -> None:
@@ -497,9 +357,8 @@ def test_b_verify_records_the_proven_successor() -> None:
 def test_b_control_closed_pr_with_no_note_is_still_abandoned() -> None:
     d = guard.decide(
         _call("OMN-14642", _OMN_14642_ATTACHED),
-        occ_probe=_no_receipt_probe,
+        repo_evidence_probe=_no_repo_probe,
         pr_fetcher=_table_fetcher(_omn_14642_table(note=None)),
-        receipt_lister=_no_receipts,
     )
     assert not d.allowed
     assert "omninode_infra#614" in d.reason
@@ -513,9 +372,8 @@ def test_b_control_named_successor_not_merged_still_blocks() -> None:
     )
     d = guard.decide(
         _call("OMN-14642", desc),
-        occ_probe=_no_receipt_probe,
+        repo_evidence_probe=_no_repo_probe,
         pr_fetcher=_table_fetcher(table),
-        receipt_lister=_no_receipts,
     )
     assert not d.allowed
     assert "omninode_infra#614" in d.reason
@@ -529,9 +387,8 @@ def test_b_control_successor_for_another_ticket_does_not_count() -> None:
     )
     d = guard.decide(
         _call("OMN-14642", desc),
-        occ_probe=_no_receipt_probe,
+        repo_evidence_probe=_no_repo_probe,
         pr_fetcher=_table_fetcher(table),
-        receipt_lister=_no_receipts,
     )
     assert not d.allowed
     assert "omninode_infra#614" in d.reason
@@ -542,9 +399,8 @@ def test_b_control_note_naming_no_successor_does_not_count() -> None:
     desc = "https://github.com/OmniNode-ai/omninode_infra/pull/614\n"
     d = guard.decide(
         _call("OMN-14642", desc),
-        occ_probe=_no_receipt_probe,
+        repo_evidence_probe=_no_repo_probe,
         pr_fetcher=_table_fetcher(table),
-        receipt_lister=_no_receipts,
     )
     assert not d.allowed
 
@@ -600,9 +456,8 @@ def _c_table(
 def test_c_commit_anchored_narrative_ref_resolves_to_its_merged_pr() -> None:
     d = guard.decide(
         _call("OMN-14642", _NARRATIVE + _CITED),
-        occ_probe=_pass_probe,
+        repo_evidence_probe=_pass_probe,
         pr_fetcher=_table_fetcher(_c_table()),
-        receipt_lister=_no_receipts,
     )
     assert d.allowed, d.reason
     result = ldv.verify(_NARRATIVE + _CITED, [], fetcher=_table_fetcher(_c_table()))
@@ -630,9 +485,8 @@ def test_c_control_sha_matching_no_candidate_still_blocks() -> None:
     )
     d = guard.decide(
         _call("OMN-14642", _NARRATIVE + _CITED),
-        occ_probe=_no_receipt_probe,
+        repo_evidence_probe=_no_repo_probe,
         pr_fetcher=_table_fetcher(table),
-        receipt_lister=_no_receipts,
     )
     assert not d.allowed
     assert "no associated repo" in d.reason
@@ -649,9 +503,8 @@ def test_c_control_unmerged_candidate_does_not_resolve() -> None:
     )
     d = guard.decide(
         _call("OMN-14642", _NARRATIVE + _CITED),
-        occ_probe=_no_receipt_probe,
+        repo_evidence_probe=_no_repo_probe,
         pr_fetcher=_table_fetcher(table),
-        receipt_lister=_no_receipts,
     )
     assert not d.allowed
 
@@ -660,9 +513,8 @@ def test_c_control_only_an_unanchored_ref_still_blocks() -> None:
     """No other citation, so no candidate repository: still refused."""
     d = guard.decide(
         _call("OMN-14642", _NARRATIVE),
-        occ_probe=_no_receipt_probe,
+        repo_evidence_probe=_no_repo_probe,
         pr_fetcher=ldv.fetch_pr_status,
-        receipt_lister=_no_receipts,
     )
     assert not d.allowed
     assert "no associated repo" in d.reason
@@ -671,9 +523,8 @@ def test_c_control_only_an_unanchored_ref_still_blocks() -> None:
 def test_c_control_unanchored_ref_without_sha_still_blocks() -> None:
     d = guard.decide(
         _call("OMN-14642", "Implementing work landed in a PR #257.\n" + _CITED),
-        occ_probe=_no_receipt_probe,
+        repo_evidence_probe=_no_repo_probe,
         pr_fetcher=_table_fetcher(_c_table()),
-        receipt_lister=_no_receipts,
     )
     assert not d.allowed
     assert "no associated repo" in d.reason
@@ -688,14 +539,13 @@ def test_c_control_ambiguously_anchored_ref_still_blocks() -> None:
     merged = {"state": "MERGED", "merge_state": "UNKNOWN"}
     d = guard.decide(
         _call("OMN-18086", desc),
-        occ_probe=_no_receipt_probe,
+        repo_evidence_probe=_no_repo_probe,
         pr_fetcher=_table_fetcher(
             {
                 ("OmniNode-ai/omnimarket", 2504): merged,
                 ("OmniNode-ai/omnibase_infra", 2504): merged,
             }
         ),
-        receipt_lister=_no_receipts,
     )
     assert not d.allowed
     assert "more than one repo" in d.reason

@@ -51,6 +51,13 @@ requirements:
     acceptance:
       - id: AC11
         statement: "sibling-lock-refresh.yml runs generate_event_registry.py --sync-capture-contract against the omnimarket clone checked out at the rev read back from uv.lock with ci.yml's om_pin grep, after uv lock and before the delta check, and the mirror is in the delta check and the bot commit -- falsifier: uv run pytest tests/workflows/test_sibling_lock_refresh_syncs_capture_mirror.py -q fails over the merge base"
+  - id: req-omniclaude-off-onex-change-control
+    statement: omniclaude's workflows and hook guards have no live onex_change_control reference.
+    acceptance:
+      - id: AC12
+        statement: "the two OCC minting reusables are deleted, the Done-flip guard decides on repo evidence alone and reads no change-control clone, and the PR-body stamp guard has no merged-companion read -- falsifier: uv run pytest tests/ci/test_occ_live_refs_zero_omn17427.py -q --no-cov fails at the merge base"
+      - id: AC13
+        statement: "pyproject.toml and uv.lock carry no onex-change-control dependency, override, git source or package entry -- falsifier: uv run pytest tests/ci/test_occ_live_refs_zero_omn17427.py -q --no-cov fails over the merge base"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -237,3 +244,27 @@ dod_evidence:
         check_value: "uv run pytest tests/workflows/test_sibling_lock_refresh_syncs_capture_mirror.py -q"
     binds_ac:
       - AC11
+  - id: dod-omniclaude-off-onex-change-control
+    description: >
+      The structural test proves no workflow file is named for an OCC job and no guard module
+      locates the repository; the guard
+      tests prove the Done-flip decision rests on repo evidence and a stamp drop is always
+      refused.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_occ_live_refs_zero_omn17427.py tests/ci/test_occ_unused_reusables_deleted_omn20074.py tests/hooks/test_done_flip_guard.py tests/hooks/test_done_flip_guard_repo_evidence.py tests/hooks/test_pr_body_stamp_guard_rebind_omn_18853.py -q --no-cov"
+    binds_ac:
+      - AC12
+  - id: dod-omniclaude-drops-occ-dependency
+    description: >
+      The structural test reads pyproject.toml and uv.lock and finds no live line naming
+      onex-change-control; it fails when either file is restored from before the dependency drop.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_occ_live_refs_zero_omn17427.py -q --no-cov"
+    binds_ac:
+      - AC13

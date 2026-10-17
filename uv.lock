@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine != 's390x'",
@@ -13,8 +13,7 @@ overrides = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=dae3f3e6e330d47eb4c3b993175eb354c7c8b224" },
-    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=dc1f42e841e4c5a6556f899a37e9b144da8d69aa" },
 ]
 
 [[package]]
@@ -1746,8 +1745,8 @@ wheels = [
 
 [[package]]
 name = "omnimarket"
-version = "0.4.315"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=dae3f3e6e330d47eb4c3b993175eb354c7c8b224#dae3f3e6e330d47eb4c3b993175eb354c7c8b224" }
+version = "0.4.316"
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=dc1f42e841e4c5a6556f899a37e9b144da8d69aa#dc1f42e841e4c5a6556f899a37e9b144da8d69aa" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1844,7 +1843,6 @@ dev = [
     { name = "coverage" },
     { name = "kafka-python" },
     { name = "mypy" },
-    { name = "onex-change-control" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
@@ -1877,7 +1875,7 @@ requires-dist = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=dae3f3e6e330d47eb4c3b993175eb354c7c8b224" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=dc1f42e841e4c5a6556f899a37e9b144da8d69aa" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=3fcbf795087a79081c0ceeb676216bf64c5d49ae" },
     { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=3fcbf795087a79081c0ceeb676216bf64c5d49ae" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
@@ -1906,7 +1904,6 @@ dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.4.0" },
     { name = "kafka-python", specifier = ">=2.3.0" },
     { name = "mypy", specifier = ">=1.17.0" },
-    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb" },
     { name = "opentelemetry-api", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.23.0,<2.0.0" },
@@ -1976,18 +1973,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d8/31/5d076f3f92e2ed68b7df4811784c5df2c45caa81ecb914555a6db88bdf7e/omninode_memory-0.18.0.tar.gz", hash = "sha256:c9484bd9f8dc8070ca791d6127015f0ecf8a2b6ecfb6fa8baada95effb4e8c6f", size = 1247372, upload-time = "2026-08-30T14:06:26.834Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/08/d7/c13f6a1afb7667a4022b3dc571471cd8cfe01e537a23680ab7c32794d99b/omninode_memory-0.18.0-py3-none-any.whl", hash = "sha256:f6d49ab241dfa5d3f3754f981e0b4d48e95ce76ced43569f249cdaf2fe1c4541", size = 659967, upload-time = "2026-08-30T14:06:25.241Z" },
-]
-
-[[package]]
-name = "onex-change-control"
-version = "0.5.1"
-source = { git = "https://github.com/OmniNode-ai/onex_change_control.git?rev=47342e562a516b0278e22a974f35cbf2a64b33eb#47342e562a516b0278e22a974f35cbf2a64b33eb" }
-dependencies = [
-    { name = "colorama" },
-    { name = "omnibase-core" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "tomli-w" },
 ]
 
 [[package]]
@@ -3378,15 +3363,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/22/1f/ae535223a8c4ef4c0c1192e3f9b82da660be9eb66b9279e95c99288e9dab/tiktoken-0.12.0-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:04f0e6a985d95913cabc96a741c5ffec525a2c72e9df086ff17ebe35985c800e", size = 1194451, upload-time = "2025-10-06T20:22:15.545Z" },
     { url = "https://files.pythonhosted.org/packages/78/a7/f8ead382fce0243cb625c4f266e66c27f65ae65ee9e77f59ea1653b6d730/tiktoken-0.12.0-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:0ee8f9ae00c41770b5f9b0bb1235474768884ae157de3beb5439ca0fd70f3e25", size = 1253794, upload-time = "2025-10-06T20:22:16.624Z" },
     { url = "https://files.pythonhosted.org/packages/93/e0/6cc82a562bc6365785a3ff0af27a2a092d57c47d7a81d9e2295d8c36f011/tiktoken-0.12.0-cp313-cp313t-win_amd64.whl", hash = "sha256:dc2dd125a62cb2b3d858484d6c614d136b5b848976794edfb63688d539b8b93f", size = 878777, upload-time = "2025-10-06T20:22:18.036Z" },
-]
-
-[[package]]
-name = "tomli-w"
-version = "1.2.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/19/75/241269d1da26b624c0d5e110e8149093c759b7a286138f4efd61a60e75fe/tomli_w-1.2.0.tar.gz", hash = "sha256:2dd14fac5a47c27be9cd4c976af5a12d87fb1f0b4512f81d69cce3b35ae25021", size = 7184, upload-time = "2025-01-15T12:07:24.262Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c7/18/c86eb8e0202e32dd3df50d43d7ff9854f8e0603945ff398974c1d91ac1ef/tomli_w-1.2.0-py3-none-any.whl", hash = "sha256:188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90", size = 6675, upload-time = "2025-01-15T12:07:22.074Z" },
 ]
 
 [[package]]

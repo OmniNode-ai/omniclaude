@@ -9,8 +9,7 @@ the repo-evidence caller neither shadows nor compares with OCC, and neither
 CI Summary nor the required-checks manifest expects an OCC context.
 
 omniclaude also HOSTS reusables other repositories still call
-(call-occ-autobind-reusable.yml, call-occ-companion-effect-reusable.yml,
-deploy-gate-reusable.yml, reject-deploy-gate-skip.yml). A workflow whose only
+(deploy-gate-reusable.yml, reject-deploy-gate-skip.yml). A workflow whose only
 trigger is ``workflow_call`` is such a hosted definition, not a caller here, so
 it is out of scope for these assertions. The assertions read the parsed
 workflow files, so a comment naming a retired workflow cannot trip them.

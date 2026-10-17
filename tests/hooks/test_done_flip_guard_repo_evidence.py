@@ -1,12 +1,13 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Repo evidence decides before OCC, with all readers injected [OMN-20071]."""
+"""Repo evidence is the only Done bar, with all readers injected [OMN-20071]."""
 
 from __future__ import annotations
 
 import base64
 import importlib.util
+import inspect
 import sys
 from functools import partial
 from pathlib import Path
@@ -35,7 +36,6 @@ def _load_guard() -> Any:
 
 guard = _load_guard()
 ldv: Any = importlib.import_module("linear_done_verify")
-nbe: Any = importlib.import_module("no_pr_bound_evidence")
 repo_evidence: Any = importlib.import_module("no_pr_bound_evidence")
 
 _TICKET = "OMN-90001"
@@ -54,7 +54,7 @@ _DESCRIPTION = f"""Implemented in {_PR_URL}
 
 
 def _never(*_args: Any, **_kwargs: Any) -> Any:
-    raise AssertionError("this reader or OCC probe must not be consulted")
+    raise AssertionError("this reader must not be consulted")
 
 
 def _merged(ref: Any) -> Any:
@@ -131,17 +131,12 @@ def _done(probe: Any, *, description: str = _DESCRIPTION, **kwargs: Any) -> Any:
         },
         linear_fetcher=lambda _tid: {"description": description, "labels": []},
         pr_fetcher=kwargs.pop("pr_fetcher", _merged),
-        occ_probe=kwargs.pop("occ_probe", _never),
         repo_evidence_probe=probe,
         **kwargs,
     )
 
 
-def _occ(passed: bool) -> Any:
-    return lambda _tid, _desc: nbe.BoundEvidenceVerdict(passed, "OCC probe detail")
-
-
-def test_partial_repo_binding_refuses_without_consulting_occ() -> None:
+def test_partial_repo_binding_refuses() -> None:
     decision = _done(_probe(_contract("AC1")))
     assert not decision.allowed
     assert "no_bound_dod_receipt" in decision.reason
@@ -150,35 +145,26 @@ def test_partial_repo_binding_refuses_without_consulting_occ() -> None:
     assert _SOURCE in decision.reason and _HEAD in decision.reason
 
 
-def test_every_criterion_bound_and_success_allows_without_occ() -> None:
+def test_every_criterion_bound_and_success_allows() -> None:
     decision = _done(_probe())
     assert decision.allowed, decision.reason
     assert decision.reason == "durable_evidence:repo_bound_checks:all_prs_merged"
 
 
-@pytest.mark.parametrize("passed", [True, False])
-def test_absent_repo_contract_leaves_occ_decision_unchanged(passed: bool) -> None:
+def test_absent_repo_contract_refuses_without_fallback() -> None:
     probe = _probe(
         read_contract=lambda *_args: repo_evidence.ContractRead(
             repo_evidence.ContractReadStatus.ABSENT
         ),
         read_check_runs=_never,
     )
-    decision = _done(probe, occ_probe=_occ(passed))
-    assert decision.allowed is passed
-    if passed:
-        assert decision.reason == "durable_evidence:occ_bound_receipts:all_prs_merged"
-    else:
-        expected = guard._bound_receipt_refusal(
-            _TICKET,
-            "OCC probe detail",
-            why="a Done transition needs a passing definition-of-done check for "
-            "every acceptance criterion",
-        )
-        assert decision.reason == expected.reason
+    decision = _done(probe)
+    assert not decision.allowed
+    assert decision.reason.startswith(f"no_bound_dod_receipt for {_TICKET}")
+    assert f"no merged product PR carries contracts/{_TICKET}.yaml" in decision.reason
 
 
-def test_red_repo_check_refuses_without_occ() -> None:
+def test_red_repo_check_refuses() -> None:
     decision = _done(_probe(runs=[_run(conclusion="failure")]))
     assert not decision.allowed
     assert "7100" in decision.reason
@@ -186,32 +172,30 @@ def test_red_repo_check_refuses_without_occ() -> None:
     assert "conclusion=failure" in decision.reason
 
 
-@pytest.mark.parametrize("passed", [True, False])
-def test_contract_without_check_run_falls_back_to_occ(passed: bool) -> None:
+def test_contract_without_check_run_refuses_without_fallback() -> None:
     probe = _probe(runs=[])
     verdict = probe(_TICKET, [_DESCRIPTION], [_merged(ldv.PRRef(_NUMBER, _REPO))])
     assert verdict.outcome is repo_evidence.RepoEvidenceOutcome.NOT_ENGAGED
     assert not verdict.engaged
-    decision = _done(probe, occ_probe=_occ(passed))
-    assert decision.allowed is passed
-    if not passed:
-        assert "OCC probe detail" in decision.reason
-        assert f"{_SOURCE} carries contracts/{_TICKET}.yaml but no " in decision.reason
-        assert f"run on head {_HEAD[:12]}" in decision.reason
+    decision = _done(probe)
+    assert not decision.allowed
+    assert decision.reason.startswith(f"no_bound_dod_receipt for {_TICKET}")
+    assert f"{_SOURCE} carries contracts/{_TICKET}.yaml but no " in decision.reason
+    assert f"run on head {_HEAD[:12]}" in decision.reason
 
 
 def test_check_from_other_app_does_not_engage() -> None:
     probe = _probe(runs=[_run(app={"slug": "some-other-app"})])
-    decision = _done(probe, occ_probe=_occ(True))
-    assert decision.allowed
-    assert decision.reason == "durable_evidence:occ_bound_receipts:all_prs_merged"
+    decision = _done(probe)
+    assert not decision.allowed
+    assert decision.reason.startswith("no_bound_dod_receipt")
 
 
 def test_commit_status_shape_does_not_engage() -> None:
     probe = _probe(runs=[{"context": "repo-evidence / dod-verify", "state": "success"}])
-    decision = _done(probe, occ_probe=_occ(True))
-    assert decision.allowed
-    assert "occ_bound_receipts" in decision.reason
+    decision = _done(probe)
+    assert not decision.allowed
+    assert "no_bound_dod_receipt" in decision.reason
 
 
 def test_head_contract_differing_from_merged_contract_refuses() -> None:
@@ -229,7 +213,7 @@ def test_head_contract_differing_from_merged_contract_refuses() -> None:
     assert _HEAD in decision.reason and _MERGE in decision.reason
 
 
-def test_contract_read_error_refuses_without_occ() -> None:
+def test_contract_read_error_refuses() -> None:
     decision = _done(
         _probe(
             read_contract=lambda *_args: repo_evidence.ContractRead(
@@ -243,14 +227,14 @@ def test_contract_read_error_refuses_without_occ() -> None:
     assert _SOURCE in decision.reason and _MERGE in decision.reason
 
 
-def test_unreadable_check_runs_refuse_without_occ() -> None:
+def test_unreadable_check_runs_refuse() -> None:
     decision = _done(_probe(read_check_runs=lambda *_args: None))
     assert not decision.allowed
     assert "check runs unreadable" in decision.reason
     assert _SOURCE in decision.reason and _HEAD in decision.reason
 
 
-def test_unlabelled_criterion_refuses_without_occ() -> None:
+def test_unlabelled_criterion_refuses() -> None:
     description = _DESCRIPTION.replace("AC2 -- ", "")
     decision = _done(_probe(), description=description)
     assert not decision.allowed
@@ -272,7 +256,6 @@ def test_tick_is_admitted_when_repo_binds_every_criterion() -> None:
         },
         pr_fetcher=_merged,
         repo_evidence_probe=_probe(),
-        occ_probe=_never,
     )
     assert decision.allowed, decision.reason
     assert decision.reason == "not_done_state"
@@ -291,7 +274,6 @@ def test_tick_is_refused_when_repo_leaves_a_criterion_unbound() -> None:
         linear_fetcher=lambda _tid: {"description": before},
         pr_fetcher=_merged,
         repo_evidence_probe=_probe(_contract("AC1")),
-        occ_probe=_never,
     )
     assert not decision.allowed
     assert decision.reason.startswith("ac_tick_without_receipt")
@@ -308,9 +290,9 @@ def test_empty_head_skips_default_probe_readers(
     )
     assert verdict.outcome is repo_evidence.RepoEvidenceOutcome.NOT_ENGAGED
     monkeypatch.setattr(repo_evidence, "_gh_api_json", _never)
-    decision = _done(None, pr_fetcher=lambda _ref: status, occ_probe=_occ(True))
-    assert decision.allowed
-    assert "occ_bound_receipts" in decision.reason
+    decision = _done(None, pr_fetcher=lambda _ref: status)
+    assert not decision.allowed
+    assert "no_bound_dod_receipt" in decision.reason
 
 
 def test_gh_read_contract_maps_404_to_absent(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -365,13 +347,11 @@ def test_gh_read_check_runs_returns_none_on_error(
     assert repo_evidence.gh_read_check_runs(_REPO, _HEAD) is None
 
 
-def test_repo_success_never_loads_default_occ_evidence(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(guard, "load_ticket_occ_evidence", _never)
-    monkeypatch.setattr(guard, "resolve_omni_home", _never)
-    decision = _done(_probe(), occ_probe=None)
-    assert decision.allowed, decision.reason
+def test_decide_has_no_occ_injection_parameters() -> None:
+    parameters = inspect.signature(guard.decide).parameters
+    assert "occ_probe" not in parameters
+    assert "receipt_lister" not in parameters
+    assert "now" not in parameters
 
 
 def test_done_fetches_pr_status_only_once() -> None:
@@ -528,11 +508,12 @@ def test_newest_contract_leaving_a_criterion_unbound_refuses() -> None:
     assert "AC2" in decision.reason
 
 
-def test_newest_pr_without_a_run_falls_back_to_occ_not_to_an_older_success() -> None:
+def test_newest_pr_without_a_run_refuses_despite_an_older_success() -> None:
     probe = _two_pr_probe(old_runs=[_run(id=7000)], new_runs=[])
-    decision = _two_pr_done(probe, occ_probe=_occ(False))
+    decision = _two_pr_done(probe)
     assert not decision.allowed
-    assert "OCC probe detail" in decision.reason
+    assert "no_bound_dod_receipt" in decision.reason
+    assert "but no repo-evidence / dod-verify run" in decision.reason
 
 
 def test_merged_pr_without_a_merge_time_is_never_treated_as_superseded() -> None:
@@ -594,3 +575,74 @@ def test_done_gate_adds_no_module_outside_its_baselined_files() -> None:
     assert closure == {"done_flip_guard", "linear_done_verify", "no_pr_bound_evidence"}
     for name in closure:
         assert f"plugins/onex/hooks/lib/{name}.py" in baseline
+
+
+@pytest.mark.parametrize(
+    "outcome", [repo_evidence.RepoEvidenceOutcome.NOT_ENGAGED, None]
+)
+def test_unavailable_repo_evidence_refuses_done(outcome: Any) -> None:
+    verdict = (
+        repo_evidence.RepoEvidenceVerdict(outcome, "no merged PR carries the contract")
+        if outcome is not None
+        else None
+    )
+    decision = _done(lambda *_args: verdict)
+    assert not decision.allowed
+    assert decision.reason.startswith(f"no_bound_dod_receipt for {_TICKET}")
+    assert (
+        verdict.detail if verdict is not None else "verdict unavailable"
+    ) in decision.reason
+
+
+def test_passed_repo_verdict_uses_repo_bound_allow_reason() -> None:
+    verdict = repo_evidence.RepoEvidenceVerdict(
+        repo_evidence.RepoEvidenceOutcome.PASSED, "verified"
+    )
+    decision = _done(lambda *_args: verdict)
+    assert decision.allowed
+    assert decision.reason.startswith("durable_evidence:repo_bound_checks")
+
+
+def test_done_cannot_drop_an_unbound_live_criterion() -> None:
+    proposed = _DESCRIPTION.replace("- AC2 -- the second check passes\n", "")
+    decision = guard.decide(
+        {
+            "tool_name": "mcp__linear-server__update_issue",
+            "tool_input": {"id": _TICKET, "state": "Done", "description": proposed},
+        },
+        linear_fetcher=lambda _tid: {"description": _DESCRIPTION},
+        pr_fetcher=_merged,
+        repo_evidence_probe=_probe(_contract("AC1")),
+    )
+    assert not decision.allowed
+    assert "AC2: no dod_evidence item" in decision.reason
+
+
+def test_deploy_readback_uses_merged_implementing_pr_repo_evidence() -> None:
+    description = (
+        "deploy-readback-proven: deployed and verified; probe exit 0\n\n"
+        f"## Implementing PR\n{_PR_URL}\n\n"
+        "## Acceptance criteria\n- AC1 -- first check passes\n- AC2 -- second check passes\n"
+    )
+    decision = _done(_probe(), description=description)
+    assert decision.allowed, decision.reason
+    assert decision.reason.startswith("durable_evidence:repo_bound_checks")
+
+
+def test_not_engaged_repo_evidence_refuses_tick_with_verdict_detail() -> None:
+    before = _DESCRIPTION.replace("- AC", "- [ ] AC")
+    decision = guard.decide(
+        {
+            "tool_name": "mcp__linear-server__update_issue",
+            "tool_input": {
+                "id": _TICKET,
+                "description": before.replace("- [ ] AC1", "- [x] AC1"),
+            },
+        },
+        linear_fetcher=lambda _tid: {"description": before},
+        pr_fetcher=_merged,
+        repo_evidence_probe=_probe(runs=[]),
+    )
+    assert not decision.allowed
+    assert decision.reason.startswith(f"ac_tick_without_receipt for {_TICKET}")
+    assert f"{_SOURCE} carries contracts/{_TICKET}.yaml but no " in decision.reason
