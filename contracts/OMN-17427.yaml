@@ -198,7 +198,7 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: |
-          env docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --mount "type=bind,src=$(pwd),dst=/workspace,readonly" --workdir /workspace python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 python -c '
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --mount "type=bind,src=$(pwd),dst=/workspace,readonly" --workdir /workspace python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 python -c '
           import json
           import runpy
           import tempfile
@@ -257,7 +257,7 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_occ_live_refs_zero_omn17427.py tests/ci/test_occ_unused_reusables_deleted_omn20074.py tests/hooks/test_done_flip_guard.py tests/hooks/test_done_flip_guard_repo_evidence.py tests/hooks/test_pr_body_stamp_guard_rebind_omn_18853.py -q --no-cov"
     binds_ac:
       - AC12
-  - id: dod-omniclaude-drops-onex-change-control-dependency
+  - id: dod-omniclaude-drops-occ-dependency
     description: >
       The structural test reads pyproject.toml and uv.lock and finds no live line naming
       onex-change-control; it fails when either file is restored from before the dependency drop.
