@@ -170,6 +170,16 @@ repos:
         args: [--allowlist, .onex_ratchets/noncanonical_class_allowlist.yaml, src/omniclaude]
         files: ^src/omniclaude/.*\.py$
 
+  # OMN-19998: public-repository runner placement (RULING 2026-10-16T07:07:09Z,
+  # "Ci runners should be for private repos only"). CI twin job
+  # public-runner-placement in .github/workflows/ci.yml; keep this rev equal to
+  # that job's release.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: v0.47.46
+    hooks:
+      - id: check-public-runner-placement
+        args: [--repo, omniclaude, --visibility, public]
+
   # Shared ONEX governance hooks (omnibase_core; moved from onex_change_control
   # under the same hook ids, OMN-20074 OCC retirement S8)
   - repo: https://github.com/OmniNode-ai/omnibase_core

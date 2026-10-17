@@ -57,7 +57,7 @@ on:
 jobs:
   ban-hardcoded-runner-ip:
     name: ban-hardcoded-runner-ip
-    # OMNI_RUNNER_SELECTOR_V1 - trusted events default to self-hosted omnibase-ci; pull_request defaults to ubuntu-latest
+    # OMNI_RUNNER_SELECTOR_V1 - trusted events default to ubuntu-latest for a public caller, self-hosted omnibase-ci for a private one; pull_request defaults to ubuntu-latest
     # OMN-18205: the untrusted test is the FORK test, and only the fork test.
     # This selector sent EVERY pull request to the public class, same-repo ones
     # included, so every repository consuming this reusable had the check
@@ -71,7 +71,7 @@ jobs:
         (github.event_name == 'pull_request' &&
          github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || (github.event.repository.private && '["self-hosted","omnibase-ci"]' || '["ubuntu-latest"]'))
       }}
 
     steps:

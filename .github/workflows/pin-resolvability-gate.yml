@@ -50,7 +50,7 @@ jobs:
   # advisory-ok: OMN-19655 blocks today through the CI Summary layer-5 default-deny sweep (a red check-run in neither registry fails CI Summary); the L4 entry needs the branch-protection row first, an operator change
   pin-resolvability:
     name: pypi-pin-resolvability
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci;
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to ubuntu-latest;
     # public forks default to ubuntu-latest. The untrusted test is the FORK
     # test and only the fork test (OMN-18205). Read live from the routing
     # seam; this workflow never writes a routing variable.
@@ -59,7 +59,7 @@ jobs:
         (github.event_name == 'pull_request' &&
          github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["ubuntu-latest"]')
       }}
     timeout-minutes: 30
     steps:

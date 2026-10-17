@@ -127,6 +127,10 @@ GATE_JOBS: tuple[str, ...] = (
     # context was not added to branch protection: CI Summary is already required,
     # so this registration is enforcement-equivalent.
     "Plugin Validate (OMN-17427)",  # plugin-validate
+    # OMN-19998: public-repository runner placement (RULING
+    # 2026-10-16T07:07:09Z). Unconditional in ci.yml (no needs, no if), so a
+    # skip is anomalous; it is ALSO a STRICT_SUCCESS_JOBS member below.
+    "Public Runner Placement (OMN-19998)",  # public-runner-placement
     "Cross-Repo Boundary Parity",  # boundary-parity (OMN-16000) — DIRECTLY REQUIRED live; was previously mis-marked SOFT_ALLOWLIST "warn-only" while a `contains()` substring bug in its `if:` silently skipped it on any PR whose changed-file count contained the digit '0' (10/20/100/...). Fixed 2026-08-13: `if:` no longer branches on changed_files, and the job is now a completeness-anchor member so CI Summary WAITS for it and only accepts success/skipped (declared skip policy), never a false green from the old bug.
 )
 
@@ -164,6 +168,8 @@ STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
         "Canonical File Shape (OMN-20304)",
         # OMN-17427: see the GATE_JOBS entry above.
         "Plugin Validate (OMN-17427)",
+        # OMN-19998: see the GATE_JOBS entry above.
+        "Public Runner Placement (OMN-19998)",
     }
 )
 

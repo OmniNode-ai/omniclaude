@@ -26,7 +26,7 @@ permissions:
 jobs:
   anti-growth-baseline:
     name: anti-growth-baseline
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public FORK PRs default to ubuntu-latest
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to ubuntu-latest; public FORK PRs default to ubuntu-latest
     # OMN-18205: the untrusted test is the FORK test, and only a public
     # repository's genuine fork pull request may use the public runner selector.
     # Private or unknown-visibility callers take the trusted self-hosted selector.
@@ -36,7 +36,7 @@ jobs:
          github.event.pull_request.head.repo.full_name != github.repository &&
          github.event.repository.visibility == 'public')
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || (github.event.repository.private && '["self-hosted","omnibase-ci"]' || '["ubuntu-latest"]'))
       }}
     timeout-minutes: 10
     steps:
