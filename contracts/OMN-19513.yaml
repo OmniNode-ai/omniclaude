@@ -40,6 +40,11 @@ requirements:
     acceptance:
       - id: AC8
         statement: 'AC8: an event with a declared local bus reaches the proxy as an emit request on the contract topic and is not journalled; a refused, hung or undeclared bus journals it; an over-limit event is quarantined with reason payload_too_large and never sent -- falsifier: uv run pytest tests/unit/hooks/test_hook_local_bus_publish_omn19513.py -q --no-cov fails against the pre-change hook_emit_append'
+  - id: req-hook-emit-bus-payload-too-large
+    statement: A payload over the producer max_request_size is refused without discarding or restarting the drainer's reused emit bus, so one oversized record cannot slow every publish behind it.
+    acceptance:
+      - id: AC9
+        statement: 'AC9: an oversized payload on a reused or fresh emit bus raises without a retry, the bus count stays at one and the next record publishes on the same bus -- falsifier: uv run pytest tests/unit/hooks/test_hook_emit_drainer_persistent_bus.py -q --no-cov -k oversized_payload fails against the pre-fix hook_emit_bus'
 evidence_requirements:
   - kind: tests
     description: Selected configuration survives launchd rendering and missing overlays preserve the previous agent.
@@ -59,6 +64,9 @@ evidence_requirements:
   - kind: tests
     description: The local-bus publish handler and hook_emit_append land events on a stand-in HTTP proxy, fall back to the journal, and quarantine over-limit events.
     command: uv run pytest tests/unit/hooks/test_hook_local_bus_publish_omn19513.py -q --no-cov
+  - kind: tests
+    description: An oversized payload keeps the reused emit bus and is not retried on a fresh one.
+    command: uv run pytest tests/unit/hooks/test_hook_emit_drainer_persistent_bus.py -q --no-cov -k oversized_payload
 emergency_bypass:
   enabled: false
   justification: ''
@@ -154,3 +162,11 @@ dod_evidence:
         check_value: uv run pytest tests/unit/hooks/test_hook_local_bus_publish_omn19513.py -q --no-cov
     binds_ac:
       - AC8
+  - id: dod-omn19513-emit-bus-payload-too-large
+    description: The persistent emit bus tests raise an oversized payload on a reused and on a fresh bus and check that the bus is started once and reused for the next record.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_emit_drainer_persistent_bus.py -q --no-cov -k oversized_payload
+    binds_ac:
+      - AC9

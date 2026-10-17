@@ -4,37 +4,26 @@
 """One Kafka bus for the life of the hook-emit drainer (OMN-19518).
 
 WHY THIS EXISTS. ``KafkaEventPublisher._publish_once`` (omnimarket
-``node_event_emit_effect``) builds a bus, starts it, publishes ONE record and
-closes it. That is the right default for an opportunistic, one-shot caller, and
-the wrong one for the resident drainer: the drainer log for 2026-09-25 00:00Z to
-01:00Z shows 1,274 events, 1,292 bus starts and 2,584 SCRAM authentications, so
-every hook event paid a producer bootstrap and two logins, and the intermittent
-SASL handshake timeouts in that log came from the churn.
+``node_event_emit_effect``) builds, starts and closes a bus per record: on
+2026-09-25 00:00Z to 01:00Z that was 1,274 events, 1,292 bus starts and 2,584
+SCRAM authentications, and the SASL handshake timeouts came from the churn.
 
-HOW. The publisher already takes a ``bus_factory``. The drainer hands it a
-factory that always returns this proxy, and the proxy owns one real bus:
-
-* ``start()`` builds and starts the real bus only when there is none;
-* ``publish()`` forwards to it;
-* ``close()`` -- which the publisher calls after every record -- does nothing,
-  so the bus outlives the record;
-* ``shutdown()`` closes the real bus when the drainer exits.
+HOW. The publisher takes a ``bus_factory``; the drainer hands it one that
+always returns this proxy, which owns one real bus. ``start()`` builds it only
+when there is none, ``publish()`` forwards to it, ``close()`` (called after
+every record) does nothing, and ``shutdown()`` closes it when the drainer exits.
 
 ERROR HANDLING. A bus that has failed is never trusted again. Any exception,
-or a cancellation (the handler's per-publish timeout cancels the coroutine),
-discards the real bus: it is detached at once and closed in the background, so
-a close that hangs cannot stall the drain. When the failure happened on a bus
-that was REUSED from an earlier record, the most likely cause is a connection
-the broker closed while idle, so the publish is retried once on a fresh bus
-inside the same call, still bounded by the handler's own timeout. A failure on
-a bus started for this very call is not retried: it is reported, the journal
-keeps the record, and the drainer's ordinary backoff applies. Delivery stays
-at-least-once, which the drainer already documents; the retry can duplicate a
-record whose first send was acked but whose ack was lost, and the content
-event id carried as the idempotency key is there for exactly that case.
-
-Stdlib only: the real bus comes from the injected factory, so this module
-imports nothing from omnibase_infra or omnimarket.
+or a cancellation (the handler's per-publish timeout), discards the real bus,
+closed in the background so a hanging close cannot stall the drain. A failure
+on a bus REUSED from an earlier record (most likely an idle connection the
+broker closed) is retried once on a fresh bus inside the same call; a failure
+on a bus started for this call is reported and the drainer's backoff applies.
+The exception is a payload over ``max_request_size`` (OMN-19513): the client
+refuses it before sending, so the bus is kept and nothing is retried. On
+2026-10-16 one 1.58 MB spooled hook event, retried behind every record, cost
+each record two bus starts and cut publishing from about 6 to 1 per second.
+At-least-once; the content event id is the idempotency key. Stdlib only.
 """
 
 from __future__ import annotations
@@ -45,6 +34,15 @@ from collections.abc import Callable
 from typing import Any
 
 logger = logging.getLogger("hook_emit_drainer")
+
+
+def _is_payload_too_large(exc: BaseException | None) -> bool:
+    """aiokafka's size refusal, raised directly or as the transport's cause."""
+    for _ in range(8):  # bounded: a cause chain can cycle
+        if exc is None or type(exc).__name__ == "MessageSizeTooLargeError":
+            return exc is not None
+        exc = exc.__cause__
+    return False
 
 
 class PersistentBus:
@@ -99,6 +97,8 @@ class PersistentBus:
             self._discard(bus)
             raise
         except Exception as exc:
+            if _is_payload_too_large(exc):
+                raise
             self._discard(bus)
             if fresh:
                 raise

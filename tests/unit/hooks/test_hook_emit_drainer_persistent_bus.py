@@ -177,6 +177,67 @@ def test_spool_only_opt_out_still_publishes_nothing(
         emitter.close()
 
 
+def _too_large() -> BaseException:
+    """The transport's shape: its own wrapper raised from aiokafka's error."""
+    from aiokafka.errors import MessageSizeTooLargeError
+
+    try:
+        raise MessageSizeTooLargeError("the message is 1580199 bytes")
+    except MessageSizeTooLargeError as cause:
+        wrapper = RuntimeError("payload exceeds the configured max_request_size")
+        wrapper.__cause__ = cause
+        return wrapper
+
+
+def test_an_oversized_payload_keeps_the_bus_and_is_not_retried(
+    fake_bus: type[FakeBus],
+) -> None:
+    """OMN-19513: a size refusal says nothing about the connection.
+
+    On 2026-10-16 one 1.58 MB hook event sat in the emit handler's spool and was
+    retried behind every record the drainer published. Each retry discarded the
+    reused bus and retried on a fresh one, so every published record paid two
+    producer starts and four SCRAM logins, publishing slowed from about 6 to
+    about 1 event per second and the journal grew past 64,000 records.
+    """
+    emitter = drainer._Emitter()
+    try:
+        assert emitter.publish(_record(0)) is True
+        fake_bus.plan = [_too_large()]
+        assert emitter.publish(_record(1)) is False, "the record is still unsent"
+        assert fake_bus.starts == 1, (
+            f"{fake_bus.starts} bus starts: a deterministic size refusal must "
+            "not discard the bus or be retried on a fresh one"
+        )
+        assert emitter.publish(_record(2)) is True
+        assert fake_bus.starts == 1, "the healthy bus must be reused afterwards"
+        assert fake_bus.closes == 0
+    finally:
+        emitter.close()
+
+
+def test_an_oversized_payload_on_a_fresh_bus_keeps_the_bus() -> None:
+    import hook_emit_bus
+    from aiokafka.errors import MessageSizeTooLargeError
+
+    FakeBus.reset()
+
+    async def scenario() -> None:
+        proxy = hook_emit_bus.PersistentBus(FakeBus)
+        await proxy.start()
+        FakeBus.plan = [MessageSizeTooLargeError("too large")]
+        with pytest.raises(MessageSizeTooLargeError):
+            await proxy.publish(topic="t", key=None)
+        await proxy.start()
+        await proxy.publish(topic="t", key=None)
+        await proxy.shutdown()
+
+    asyncio.run(scenario())
+    assert FakeBus.starts == 1
+    assert FakeBus.closes == 1, "only the shutdown closes the bus"
+    assert FakeBus.publishes == ["t"]
+
+
 def test_a_cancelled_publish_discards_the_bus() -> None:
     """The handler's timeout cancels the publish; the bus it was on is suspect."""
     import hook_emit_bus
