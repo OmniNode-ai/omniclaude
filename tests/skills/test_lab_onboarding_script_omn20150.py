@@ -28,6 +28,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 SCRIPT = (
     Path(__file__).resolve().parents[2]
@@ -2141,3 +2144,34 @@ def test_local_url_on_this_mac_is_reached_from_docker_by_its_host_name(
         check=False,
     )
     assert result.stdout == reached, result.stderr
+
+
+def test_local_url_choice_reaches_a_downloaded_script() -> None:
+    """AC1 for the guide's download path: a downloaded script fetches the handler
+    from the commit its URL names, and that handler offers the Local URL choice.
+    While the handler change waited for its own commit on dev, a download fetched
+    the handler before it, which has no local choice."""
+    text = SCRIPT.read_text()
+    match = re.search(
+        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
+        text,
+    )
+    assert match
+    commit = match.group(1)
+    rel = HANDLER.relative_to(SCRIPT.parents[4]).as_posix()
+    git = ["git", "-C", str(SCRIPT.parents[4])]
+    env = scrub_git_location_env(os.environ)
+    if subprocess.run(
+        [*git, "cat-file", "-e", f"{commit}^{{commit}}"], env=env, check=False
+    ).returncode:
+        subprocess.run(
+            [*git, "fetch", "--no-tags", "--depth=1", "origin", commit],
+            env=env,
+            check=False,
+        )
+    served = subprocess.run(
+        [*git, "show", f"{commit}:{rel}"], env=env, capture_output=True, check=False
+    )
+    assert served.returncode == 0, served.stderr.decode(errors="replace")
+    assert b"$i) Local URL" in served.stdout
+    assert b"settle_local_url" in served.stdout

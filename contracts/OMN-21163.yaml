@@ -86,3 +86,11 @@ dod_evidence:
           curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
           | sha256sum | grep -q '^d176b199ae210c4d0182a4658b618c4fdc6303ce6de1960a2000a346e18b3a64  -$'
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21163-ac1-download
+    description: 'A downloaded script (the guide''s path) fetches the handler from the commit its URL names, and that handler offers the Local URL choice and asks its URL and model. Fails at the merge base, where the download URL still named the handler before the local choice.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k local_url_choice_reaches_a_downloaded"
+        cwd: "${OMNI_HOME}/omniclaude"
