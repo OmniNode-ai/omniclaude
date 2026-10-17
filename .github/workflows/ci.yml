@@ -620,6 +620,8 @@ jobs:
     # OMN-14127: pure static Python checks. Keep them on GitHub-hosted runners
     # so required CI does not queue behind self-hosted fleet saturation.
     runs-on: ubuntu-latest
+    env:
+      VALIDATOR_COMMIT_ID: 9ec8cd90765fe9d5af66c84532f389397e9b14f2
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -629,22 +631,22 @@ jobs:
           # neither resolves in a depth-1 checkout (omnimarket's ratchet job: same).
           fetch-depth: 0
 
-      - name: Resolve the pinned omnibase-core version
+      - name: Resolve the pinned validator commit
         id: core_pin
-        run: |
-          set -euo pipefail
-          # A sibling is read at the version this repo's uv.lock pins, never its
-          # live branch (ruling 2026-10-01), so a merge there cannot turn this red.
-          version="$(awk -v n=omnibase-core '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
-          [[ -n "$version" ]] || { echo "::error::omnibase-core not found in uv.lock"; exit 1; }
-          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+        run: echo "rev=$VALIDATOR_COMMIT_ID" >> "$GITHUB_OUTPUT"
 
       - name: Checkout omnibase_core validator source
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
-          ref: ${{ steps.core_pin.outputs.tag }}
+          # OMN-20935: core#2032 retains unchanged, previously landed no-legacy
+          # proofs. The locked release predates that fix; pin its merged commit
+          # until a released validator contains it (never read a live branch).
+          ref: ${{ steps.core_pin.outputs.rev }}
           path: .ci/omnibase_core
+
+      - name: Verify the validator checkout matches its pinned commit
+        run: test "$(git -C .ci/omnibase_core rev-parse HEAD)" = "$VALIDATOR_COMMIT_ID"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
