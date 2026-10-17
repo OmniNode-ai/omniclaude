@@ -1034,6 +1034,18 @@ repos:
         stages: [pre-commit]
         files: ^(scripts/advisory_job_gate\.py|tests/scripts/test_advisory_job_gate\.py)$
 
+      # OMN-17427. XML 1.0 forbids a double hyphen inside a comment, so a plist
+      # header that quotes a command-line flag installs a LaunchAgent launchd
+      # refuses to load. The test renders every scripts/launchd template the way
+      # tick-bundle-install.sh does and parses it with plistlib. Check-only.
+      - id: launchd-plists-well-formed
+        name: launchd plist templates render to well-formed XML (OMN-17427)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/scripts/test_launchd_plists_well_formed.py -q --no-cov
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(scripts/launchd/.*\.plist|scripts/tick-bundle-install\.sh|tests/scripts/test_launchd_plists_well_formed\.py)$
+
       # --------------------------------------------------------------------------
       # Migration Freeze Check - Block new migrations during DB-per-repo refactor
       # Scope: Only triggers when migration files or .migration_freeze change

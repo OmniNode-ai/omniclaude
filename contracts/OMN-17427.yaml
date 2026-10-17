@@ -63,6 +63,11 @@ requirements:
     acceptance:
       - id: AC14
         statement: "the four templates that carried a double hyphen inside an XML comment parse after rendering, the installer's verify_well_formed refuses a double-hyphen comment and passes a well-formed plist -- falsifier: uv run pytest tests/scripts/test_launchd_plist_templates_well_formed.py -q --no-cov fails at the merge base, where the test file is absent and plistlib reports the four templates not well-formed"
+  - id: req-omn17427-mac-launchd-plists-well-formed
+    statement: Every launchd plist template renders to XML that plistlib parses, so the installed LaunchAgents load on the Mac.
+    acceptance:
+      - id: AC15
+        statement: "no comment in scripts/launchd/*.plist holds a double hyphen, and tick-bundle-install.sh escapes & < > in the paths it substitutes, so every template parses after rendering with a path holding an ampersand, a bracket, a pipe and a backslash -- falsifier: uv run pytest tests/scripts/test_launchd_plists_well_formed.py -q --no-cov"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -285,3 +290,16 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_launchd_plist_templates_well_formed.py -q --no-cov"
     binds_ac:
       - AC14
+  - id: dod-omn17427-mac-launchd-plists-well-formed
+    description: >
+      The four committed plists whose header comments quoted a double-hyphen flag
+      (buildloop, canonical-clone-sync, transcript-s3-archive, worktree-reaper)
+      parse again, the renderer escapes the substituted paths, and a check-only
+      pre-commit hook runs the focused test when a plist or the installer changes.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_launchd_plists_well_formed.py -q --no-cov"
+    binds_ac:
+      - AC15
