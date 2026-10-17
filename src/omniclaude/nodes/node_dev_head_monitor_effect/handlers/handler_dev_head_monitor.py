@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict
 from omniclaude.nodes.node_dev_head_monitor_effect.handlers.handler_gh_cli import (
     GhCli,
 )
-from omniclaude.nodes.node_dev_head_monitor_effect.handlers.handler_linear_ticketing import (
+from omniclaude.nodes.node_dev_head_monitor_effect.handlers.handler_linear_api import (
     LinearApi,
 )
 from omniclaude.nodes.node_dev_head_monitor_effect.models.model_dev_head_types import (

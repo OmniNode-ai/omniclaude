@@ -117,8 +117,8 @@ io_operations:
   - operation: ticket_tick_acceptance
     description: >
       Tick every labelled unchecked acceptance box and, with set_done, set Done in
-      the same edit. The Done-flip guard judges the description and state the edit
-      would leave behind with lane-safe evidence readers; a refusal writes nothing.
+      a second edit. The Done-flip guard judges each proposed edit with lane-safe
+      evidence readers; a refused tick writes nothing and a refused Done keeps the tick.
       apply=false is a dry run.
     protocol_method: ticket_tick_acceptance
     input_fields:
