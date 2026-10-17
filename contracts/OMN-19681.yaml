@@ -1,0 +1,53 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-19681
+title: "Shard omniclaude Hooks System Tests so each shard's pytest step is 6 minutes or less"
+summary: >
+  The hooks-tests job in .github/workflows/ci.yml runs as a matrix whose shard
+  plan comes from config/hooks_test_file_durations.json (seconds per test file).
+  The matrix went from 2 shards to 3 in omniclaude#2634. On dev push runs
+  39046995778 to 39058030745 the "Run hooks tests" step of shard 2 took 362,
+  366 and 362 seconds in three of six runs, past the 360 second bar of AC2,
+  because the record dated 2026-10-09 (192 files, 683 s) no longer matched the
+  suite (206 files, 718 s mean over 4 runs). This change refreshes the record
+  and its provenance from the hooks-test-results artifacts of runs 39048497381,
+  39050118906, 39054183277 and 39058030745.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn19681-shape
+    statement: The Hooks System Tests job is a sharded matrix and the skip-count ratchet reads every shard's junit output.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: a workflow-shape test asserts the Hooks System Tests job is a 2-way matrix and that the skip-count ratchet step reads both shards'' junit output -- falsifier: uv run pytest tests/ci -k hooks -q, red before the change (proved by checking out the pre-image of the workflow-shape test file from origin/dev, running it, then restoring)'
+  - id: req-omn19681-walltime
+    statement: Each hooks shard's pytest step runs 6 minutes or less and the skip-count ratchet still counts every hooks case.
+    acceptance:
+      - id: AC2
+        statement: 'AC2: each hooks shard''s pytest step is 6 minutes or less on three PR runs (it was 10.2 min unsharded in run 36187640881), and the skip-count ratchet still counts every hooks case -- falsifier: gh api repos/OmniNode-ai/omniclaude/actions/runs/<id>/jobs job-steps read for three PR runs, plus uv run pytest tests/ci -k hooks'
+evidence_requirements:
+  - kind: tests
+    description: "Hooks shard plan and skip-count ratchet tests pass"
+    command: "uv run pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn19681-ac1-shape
+    description: 'The workflow-shape tests assert the hooks-tests job is a sharded matrix whose plan step and ratchet step cover every shard (the matrix is 3-way since omniclaude#2634, which amended the 2-way of AC1).'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn19681-ac2-plan
+    description: 'The committed duration record plans every tests/hooks file into exactly one shard and balances the shards within the bar; the record covers all 206 test files of tests/hooks.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov -k 'balances_the_committed_record or assigns_every_file'"
+        cwd: "${OMNI_HOME}/omniclaude"
