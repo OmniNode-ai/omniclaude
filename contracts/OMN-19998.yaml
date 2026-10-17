@@ -31,10 +31,19 @@ requirements:
       - id: "AC4"
         statement: |-
           AC4: An entry citing a ruling the registry does not carry, a ruling scoped to another repository, a ruling absent from a readable ledger, or a job no workflow defines is refused -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -k "unknown_ruling or does_not_scope or on_the_ledger or does_not_exist" with those checks removed
+  - id: req-omn19998-public-runner-placement
+    statement: "Operator RULING 2026-10-16T07:07:09Z: CI runners are for private repositories only. omniclaude is public, so no workflow routing fallback names the self-hosted fleet for a public caller, except the lab carve-outs (OMNI_HOSTILE_REVIEW_RUNS_ON_JSON, OMNI_LAB_BUS_RUNS_ON_JSON), and omnibase_core's check-public-runner-placement runs as a CI Summary strict job and as a pre-commit hook at one core release."
+    acceptance:
+      - id: "AC5"
+        statement: |-
+          AC5: no workflow line outside the carve-outs falls back to the self-hosted fleet for a public caller (a reusable workflow keeps it only for a private caller), the Public Runner Placement job is unconditional, hosted, carries a positive control and the same core release as the hook, and CI Summary requires its success -- falsifier: uv run pytest tests/ci/test_public_runner_placement_omn19998.py -q fails at the merge base, where 96 fallback lines name the fleet and neither the job nor the hook exists
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
     command: "uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py tests/hooks/test_hostile_reviewer_workflow.py -q"
+  - kind: tests
+    description: "The placement tests read every workflow file for the fleet fallback, the ci.yml job, .pre-commit-config.yaml and the CI Summary gate lists."
+    command: "uv run pytest tests/ci/test_public_runner_placement_omn19998.py -q"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -81,3 +90,11 @@ dod_evidence:
     binds_ac:
       - AC3
       - AC4
+  - id: dod-omn19998-ac5-public-runner-placement
+    description: "AC5 tests read the workflows, the CI job, the pre-commit hook and the CI Summary gate lists."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_public_runner_placement_omn19998.py -q"
+    binds_ac:
+      - AC5

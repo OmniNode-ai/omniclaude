@@ -36,7 +36,7 @@ concurrency:
 jobs:
   plugin-version-bump:
     name: plugin-version-bump
-    runs-on: ${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]') }}
+    runs-on: ${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["ubuntu-latest"]') }}
     timeout-minutes: 15
     env:
       BUMP_BRANCH: automation/omn-20710-plugin-version-bump

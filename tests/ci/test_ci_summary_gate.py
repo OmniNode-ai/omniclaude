@@ -2383,6 +2383,8 @@ class TestAnEarlierRunOfThisWorkflowIsNotExternalOmn20768:
 
 
 DEV_6D5B0CD9F_JOBS = FIXTURES_DIR / "omn17427_dev_6d5b0cd9f_run_jobs.json"
+# OMN-19998: CI Summary gate jobs added to ci.yml after run 38472613080.
+JOBS_REGISTERED_AFTER_6D5B0CD9F = ("Public Runner Placement (OMN-19998)",)
 
 
 @pytest.mark.unit
@@ -2411,6 +2413,9 @@ class TestConcludedJobWithLaggingStatusOmn17427:
         assert len(jobs) == 96
         lagging = [j["name"] for j in jobs if j["status"] != "completed"]
         assert lagging == ["Aislop Sweep"]
+        # Gate jobs registered after the measurement have no row in it; each is
+        # given a concluded success row so the replay still judges the lag.
+        jobs += [_job(name, "success") for name in JOBS_REGISTERED_AFTER_6D5B0CD9F]
         code, report = evaluate(jobs, run_attempt=1)
         assert code == EXIT_SUCCESS, report
         assert "default-deny sweep rows still running" not in report
