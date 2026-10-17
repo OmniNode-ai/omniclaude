@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine != 's390x'",
@@ -13,7 +13,7 @@ overrides = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=dc1f42e841e4c5a6556f899a37e9b144da8d69aa" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=185ccc876955d7f09566301449abffa70502918f" },
 ]
 
 [[package]]
@@ -1746,7 +1746,7 @@ wheels = [
 [[package]]
 name = "omnimarket"
 version = "0.4.316"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=dc1f42e841e4c5a6556f899a37e9b144da8d69aa#dc1f42e841e4c5a6556f899a37e9b144da8d69aa" }
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=185ccc876955d7f09566301449abffa70502918f#185ccc876955d7f09566301449abffa70502918f" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1875,7 +1875,7 @@ requires-dist = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=dc1f42e841e4c5a6556f899a37e9b144da8d69aa" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=185ccc876955d7f09566301449abffa70502918f" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=3fcbf795087a79081c0ceeb676216bf64c5d49ae" },
     { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=3fcbf795087a79081c0ceeb676216bf64c5d49ae" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
