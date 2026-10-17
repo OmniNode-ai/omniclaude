@@ -110,8 +110,6 @@ dev = [
     "opentelemetry-api>=1.23.0,<2.0.0",
     "opentelemetry-sdk>=1.23.0,<2.0.0",
     "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
-    # Centralized governance hooks (OMN-5135)
-    "onex-change-control>=0.1.0",
 ]
 
 [project.scripts]
@@ -255,7 +253,6 @@ override-dependencies = [
     # omnibase_infra dev at e1ecbac6f (tag v0.38.29). It declares
     # `omnibase-core==0.47.16`, which the core floor above admits.
     "omnibase-infra>=0.38.29,<0.39.0",
-    "onex-change-control @ git+https://github.com/OmniNode-ai/onex_change_control.git@47342e562a516b0278e22a974f35cbf2a64b33eb",
     # OMN-15968: omninode-intelligence's own pin (v0.4.0) otherwise conflicts
     # with our direct omnimarket rev below -- force our rev to win transitively.
     # OMN-16979: approved dispatch baseline carrying canonical projection
@@ -268,7 +265,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dae3f3e6e330d47eb4c3b993175eb354c7c8b224",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dc1f42e841e4c5a6556f899a37e9b144da8d69aa",
 ]
 
 [tool.uv.sources]
@@ -288,7 +285,6 @@ override-dependencies = [
 # The >=0.38.14 floor above is what now carries that fix; do not re-add an override.
 # scripts/check_dep_provenance.py enforces this -- omnibase-infra is a forbidden
 # git-source override as of OMN-17176.
-onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", rev = "47342e562a516b0278e22a974f35cbf2a64b33eb" }  # pragma: allowlist secret  # OMN-14458: pinned to merged onex_change_control#4106 commit; never pin a branch head.
 # OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
 # drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "3fcbf795087a79081c0ceeb676216bf64c5d49ae" }  # pragma: allowlist secret
@@ -314,7 +310,7 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 #
 # So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
 # on workflow_dispatch and review the bot PR.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "dae3f3e6e330d47eb4c3b993175eb354c7c8b224" }  # pragma: allowlist secret
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "dc1f42e841e4c5a6556f899a37e9b144da8d69aa" }  # pragma: allowlist secret
 
 # OMN-18752: which surface decides the commit a git-sourced sibling must carry.
 # `clone` is claimed only where something enforces it. omnimarket's in-process
