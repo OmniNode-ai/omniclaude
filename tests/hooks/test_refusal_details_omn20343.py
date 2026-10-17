@@ -80,11 +80,11 @@ def test_secret_leak_refusal_detail_names_pattern(guard_box):
 def test_done_flip_refusal_detail_names_rule(guard_box):
     box, plugin, _ = guard_box
     # The decision core emits the same shape as production, with a long preface
-    # before the unresolved receipt. The wrapper must not lose that citation.
+    # before the missing repo binding. The wrapper must not lose that citation.
     reason = (
         "no_bound_dod_receipt for OMN-20343: "
         + "guidance " * 60
-        + "What is missing: AC1 receipt drift/dod_receipts/OMN-20343/probe.yaml is missing. "
+        + "What is missing: AC1: contracts/OMN-20343.yaml has no binds_ac entry. "
         + "Ticked boxes do not substitute for it"
     )
     (plugin / "hooks/lib/done_flip_guard.py").write_text(
@@ -97,7 +97,7 @@ def test_done_flip_refusal_detail_names_rule(guard_box):
     assert "rule=no_bound_dod_receipt" in row
     assert "citation=contracts/OMN-20343.yaml" in row
     assert "AC1" in row
-    assert "drift/dod_receipts/OMN-20343/probe.yaml" in row
+    assert "contracts/OMN-20343.yaml has no binds_ac entry" in row
 
 
 def _has_variable_component(argument):
