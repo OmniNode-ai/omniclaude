@@ -12,14 +12,19 @@ stock macOS /bin/bash 3.2 (the D4 failure class).
 from __future__ import annotations
 
 import errno
+import json
 import os
 import pty
 import re
 import select
 import signal
+import socket
 import subprocess
 import sys
+import threading
 import time
+from collections.abc import Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -33,6 +38,14 @@ SCRIPT = (
     / "lab-onboarding.sh"
 )
 SKILL = SCRIPT.parents[1] / "omninode_dev_setup" / "SKILL.md"
+HANDLER = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "omniclaude"
+    / "nodes"
+    / "node_skill_omninode_dev_setup_orchestrator"
+    / "handler_onboarding_preflight.sh"
+)
 UNBRACED_MULTIBYTE_EXPANSION = re.compile(rb"\$[A-Za-z_][A-Za-z0-9_]*[\x80-\xff]")
 
 pytestmark = pytest.mark.unit
@@ -649,10 +662,11 @@ def _phase0_only(tmp_path: Path) -> Path:
 
 @pytest.mark.parametrize("provider", ["none", "glm"])
 def test_only_the_beta_providers_are_accepted(tmp_path: Path, provider: str) -> None:
-    """No lab-model fallback, and GLM is out of the beta: gemini, openrouter, openai or ollama."""
+    """No lab-model fallback, and GLM is out of the beta: gemini, openrouter, openai,
+    ollama or a local model server by URL (OMN-21163)."""
     result = _run(tmp_path, "--provider", provider)
     assert result.returncode == 2
-    assert "must be gemini, openrouter, openai or ollama" in result.stderr
+    assert "must be gemini, openrouter, openai, ollama or local" in result.stderr
 
 
 def test_no_key_and_nobody_to_ask_stops_before_installing(tmp_path: Path) -> None:
@@ -679,10 +693,10 @@ def _stored_keys(tmp_path: Path, *providers: str) -> None:
     onex.chmod(0o755)
 
 
-def _functions(*names: str) -> str:
-    """The named top-level functions of the script, as bash source."""
+def _functions(*names: str, source: Path = SCRIPT) -> str:
+    """The named top-level functions of the script (or ``source``), as bash source."""
     out, keep = [], False
-    for line in SCRIPT.read_text().splitlines():
+    for line in source.read_text().splitlines():
         if any(line.startswith(f"{n}() {{") for n in names):
             keep = True
         if keep:
@@ -1077,12 +1091,12 @@ def test_several_models_are_chosen_by_number(tmp_path: Path, answer: str) -> Non
     assert "You chose: Gemini, OpenAI, Ollama" in out
 
 
-@pytest.mark.parametrize("answer", ["", "5", "0", "x"])
+@pytest.mark.parametrize("answer", ["", "6", "0", "x"])
 def test_an_empty_or_out_of_range_choice_asks_again(
     tmp_path: Path, answer: str
 ) -> None:
     out, _ = _preflight(
-        tmp_path, [(_MENU, answer), ("Choose at least one, 1 to 4", "q")]
+        tmp_path, [(_MENU, answer), ("Choose at least one, 1 to 5", "q")]
     )
     assert out.count(_MENU) == 2
 
@@ -1762,3 +1776,368 @@ def test_phase_2_writes_the_marker_before_the_first_clone() -> None:
     body = _function_body("phase2")
     assert body.index("WORKSPACE_MARKER") < body.index("sync_clone")
     assert "refuse_foreign_workspace" in body
+
+
+# ---------------------------------------------------------------------------
+# OMN-21163: a local model server by URL (LM Studio, llama.cpp, vLLM, MLX) is a
+# fifth choice. Onboarding asks for its URL and model name and never for a key,
+# hands both to `onex models add local --url --model` (omnimarket 0.4.316,
+# OMN-21162), and stops, naming the URL, when nothing answers there.
+# ---------------------------------------------------------------------------
+
+# The merge-base control runs these against a script with no local choice:
+# fail inside the verifier's 30 s per-check ceiling, not after 120 s.
+_LOCAL_TIMEOUT = 10.0
+_LOCAL_MODEL = "fixture-local-model"
+
+
+@pytest.fixture
+def local_model_server() -> Iterator[str]:
+    """A server answering HTTP on 127.0.0.1, where a model server such as LM Studio listens."""
+
+    class _Models(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            body = json.dumps(
+                {"object": "list", "data": [{"id": _LOCAL_MODEL, "object": "model"}]}
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Models)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _closed_url() -> str:
+    """A URL on 127.0.0.1 where nothing listens."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    return f"http://127.0.0.1:{port}"
+
+
+def _unattended_preflight(
+    tmp_path: Path, *args: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["/bin/bash", str(_phase0_only(tmp_path)), "--no-containers", *args],
+        env=_phase0_env(tmp_path),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=_LOCAL_TIMEOUT * 2,
+        check=False,
+    )
+
+
+def test_local_url_menu_asks_its_url_and_model_and_never_a_key(
+    tmp_path: Path, local_model_server: str
+) -> None:
+    """AC1: the menu's fifth choice asks for the server's URL and model, no key."""
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "5"),
+            ("Its URL, such as http://127.0.0.1:1234", local_model_server),
+            ("The model it runs", _LOCAL_MODEL),
+            ("Continue?", "q"),
+        ],
+        timeout=_LOCAL_TIMEOUT,
+    )
+    menu = out.split(_MENU)[0]
+    assert "5) Local URL   a model server you already run" in menu
+    assert "You chose: Local URL" in out
+    assert _HIDDEN not in out and " key (" not in out
+    summary = out.split("Ready to set up:")[1]
+    assert (
+        f"Local URL   no key; {_LOCAL_MODEL} on the server at {local_model_server}"
+        in summary
+    )
+
+
+def test_local_url_beside_a_keyed_model_asks_only_that_models_key(
+    tmp_path: Path, local_model_server: str
+) -> None:
+    """AC1: with Gemini and the local server, one key prompt: Gemini's (1 of 1)."""
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "5,1"),
+            ("Gemini key (1 of 1)", "AIza-g"),
+            ("Its URL, such as http://127.0.0.1:1234", local_model_server),
+            ("The model it runs", _LOCAL_MODEL),
+            ("Continue?", "q"),
+        ],
+        timeout=_LOCAL_TIMEOUT,
+    )
+    assert "You chose: Gemini, Local URL" in out
+    assert out.count(_HIDDEN) == 1
+    assert "Local URL key" not in out
+
+
+def test_local_url_by_provider_flag_runs_unattended(
+    tmp_path: Path, local_model_server: str
+) -> None:
+    """AC1: --provider local with --local-url and --local-model asks nothing."""
+    result = _unattended_preflight(
+        tmp_path,
+        "--provider",
+        "local",
+        "--local-url",
+        local_model_server,
+        "--local-model",
+        _LOCAL_MODEL,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    out = result.stdout
+    assert "No terminal to ask on, so these models are used: Local URL." in out
+    assert (
+        f"Model: the local model server at {local_model_server}, no key. Model: {_LOCAL_MODEL}."
+        in out
+    )
+    assert (
+        "key"
+        not in out.split("Model: the local model server")[0].split("Local URL.")[1]
+    )
+
+
+def test_local_url_unattended_without_a_url_stops_before_installing(
+    tmp_path: Path,
+) -> None:
+    result = _unattended_preflight(tmp_path, "--provider", "local")
+    assert result.returncode == 1, result.stdout
+    assert "pass --local-url URL and --local-model NAME" in result.stdout
+    assert "Nothing was installed" in result.stdout
+    assert sorted((tmp_path / "home").rglob("*")) == []
+
+
+def test_local_url_that_nothing_answers_stops_naming_it(tmp_path: Path) -> None:
+    """AC2: nothing answers at the URL: the run stops before installing, naming it."""
+    url = _closed_url()
+    result = _unattended_preflight(
+        tmp_path, "--provider", "local", "--local-url", url, "--local-model", "m"
+    )
+    assert result.returncode == 1, result.stdout
+    assert f"Nothing answers at {url}" in result.stdout
+    assert f"start the model server at {url}" in result.stdout
+    assert "Nothing was installed" in result.stdout
+    assert sorted((tmp_path / "home").rglob("*")) == []
+
+
+def test_local_url_that_nothing_answers_is_asked_again_in_a_terminal(
+    tmp_path: Path,
+) -> None:
+    url = _closed_url()
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "5"),
+            ("Its URL, such as http://127.0.0.1:1234", url),
+            (f"Nothing answers at {url}", ""),
+            ("Its URL, such as http://127.0.0.1:1234", "q"),
+        ],
+        timeout=_LOCAL_TIMEOUT,
+    )
+    assert "Nothing was installed" in out
+
+
+def _local_url_phase3(
+    tmp_path: Path, stdout: str, stderr: str = "", rc: int = 0
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """Phase 3's local model step with `onex models` faked; returns the run and its calls."""
+    fake = tmp_path / "onex-models"
+    calls = tmp_path / "calls"
+    (tmp_path / "out").write_text(stdout)
+    (tmp_path / "err").write_text(stderr)
+    fake.write_text(
+        "#!/bin/bash\n"
+        f'stdin="$(cat)"; echo "$* stdin=${{#stdin}}" >>"{calls}"\n'
+        f'cat "{tmp_path / "out"}"; cat "{tmp_path / "err"}" >&2; exit {rc}\n'
+    )
+    fake.chmod(0o755)
+    snippet = (
+        f"LOG=/dev/null; STATUS={tmp_path}/status; RUN_DIR={tmp_path}; MODELS=local; SKIPPED=\n"
+        "say() { printf '%s\\n' \"$*\"; }\n"
+        'phase_fail() { say "STOPPED step=$FAILED_STEP err=$LAST_ERR next=$1"; exit 1; }\n'
+        + _functions(
+            "pending_key",
+            "set_pending_key",
+            "uses_key",
+            "in_list",
+            "has_model",
+            "provider_label",
+            "receipt_field",
+            "set_result",
+            "result_of",
+            "passed_models",
+            "result_line",
+            "cause_of",
+            "setup_model",
+        )
+        + "\n"
+        + _functions("local_url_add_args", "stop_local_url_unanswered", source=HANDLER)
+        + f'\nmodels_cmd() {{ "{fake}" "$@"; }}\n'
+        + 'KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""\n'
+        + f'LOCAL_URL="http://127.0.0.1:1234"; LOCAL_MODEL="{_LOCAL_MODEL}"\n'
+        + 'setup_model local; say "$(result_line local)"\n'
+        + 'say "passed: $(passed_models)"\n'
+    )
+    result = subprocess.run(
+        ["/bin/bash", "-c", snippet],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    return result, (calls.read_text().splitlines() if calls.exists() else [])
+
+
+def test_local_url_and_model_reach_onex_models_add_local(tmp_path: Path) -> None:
+    """AC2: the URL and model go to `onex models add local --url --model`, no key on
+    stdin; its one pinned test delegation's answer is the model's line."""
+    result, calls = _local_url_phase3(
+        tmp_path,
+        f'{{"provider": "local", "status": "passed", "backend_id": "local-url", "model": "{_LOCAL_MODEL}"}}\n',
+    )
+    assert calls == [
+        f"add local --json --url http://127.0.0.1:1234 --model {_LOCAL_MODEL} stdin=0"
+    ]
+    assert f"Local URL   ✓ answered ({_LOCAL_MODEL})" in result.stdout, result.stderr
+    assert "passed: local" in result.stdout
+    assert "STOPPED" not in result.stdout
+
+
+def test_local_url_failed_test_delegation_is_reported_not_stopped(
+    tmp_path: Path,
+) -> None:
+    result, _ = _local_url_phase3(
+        tmp_path,
+        '{"provider": "local", "status": "failed", "reason": "answered by another model"}\n',
+        rc=1,
+    )
+    assert "Local URL   ✗ answered by another model" in result.stdout
+    assert "STOPPED" not in result.stdout
+
+
+def test_local_url_refused_by_onex_stops_phase_3_naming_the_url(
+    tmp_path: Path,
+) -> None:
+    """AC2: `onex models add local` refuses a server that does not answer; phase 3
+    stops there and names the URL."""
+    result, _ = _local_url_phase3(
+        tmp_path,
+        "",
+        stderr=(
+            "Error: http://127.0.0.1:1234 does not answer an OpenAI-compatible "
+            "models or chat request (GET /v1/models: ConnectError). Nothing was changed\n"
+        ),
+        rc=1,
+    )
+    assert result.returncode == 1
+    stopped = [
+        line for line in result.stdout.splitlines() if line.startswith("STOPPED")
+    ]
+    assert stopped, result.stdout + result.stderr
+    assert "step=set up the local model server at http://127.0.0.1:1234" in stopped[0]
+    assert "does not answer an OpenAI-compatible" in stopped[0]
+    assert "at http://127.0.0.1:1234; start it there" in stopped[0]
+
+
+def _local_url_onex(
+    tmp_path: Path, reconcile_fixes: bool
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    """ensure_local_url_onex with a dispatch venv whose omnimarket predates --url."""
+    ws = tmp_path / "ws"
+    scripts = ws / "omnibase_infra" / "scripts"
+    scripts.mkdir(parents=True)
+    (ws / ".onex-workspace-floor.json").write_text('{"omnimarket_commit": "old"}\n')
+    upgraded = tmp_path / "upgraded"
+    (scripts / "reconcile-workspace-venvs.sh").write_text(
+        f'echo "$*" >>"{tmp_path / "reconcile-calls"}"\n'
+        + (f'touch "{upgraded}"\n' if reconcile_fixes else "")
+    )
+    snippet = (
+        f'LOG=/dev/null; RETRIES=3; STAMP=20261017-000000; WORKSPACE="{ws}"\n'
+        'LOCAL_URL_OMNIMARKET="0.4.316"\n'
+        "say() { printf '%s\\n' \"$*\"; }\n"
+        "sleep() { :; }\n"
+        'phase_fail() { say "STOPPED step=$FAILED_STEP err=$LAST_ERR next=$1"; exit 1; }\n'
+        + _functions(
+            "log",
+            "last_log_lines",
+            "retry",
+        )
+        + "\n"
+        + _functions("local_url_supported", "ensure_local_url_onex", source=HANDLER)
+        + "\nmodels_cmd() {\n"
+        + f'  [ "$1 $2" = "add --help" ] && {{ echo "  --model TEXT"; [ -f "{upgraded}" ] && echo "  --url TEXT"; }}\n'
+        + "  return 0\n}\n"
+        + 'ensure_local_url_onex; say "supported"\n'
+    )
+    result = subprocess.run(
+        ["/bin/bash", "-c", snippet],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    return result, ws
+
+
+def test_local_url_installs_an_omnimarket_new_enough_for_it(tmp_path: Path) -> None:
+    """AC2: an omnimarket older than 0.4.316 has no `add local --url`; the floor is
+    set aside and the proven omnimarket installed, then the add is there."""
+    result, ws = _local_url_onex(tmp_path, reconcile_fixes=True)
+    assert "supported" in result.stdout, result.stdout + result.stderr
+    assert (
+        "predates 'onex models add local --url' (omnimarket 0.4.316)" in result.stdout
+    )
+    assert not (ws / ".onex-workspace-floor.json").exists()
+    assert (ws / ".onex-workspace-floor.json.pre-local-url.20261017-000000").exists()
+    assert "--proven" in (tmp_path / "reconcile-calls").read_text()
+
+
+def test_local_url_with_no_omnimarket_new_enough_stops(tmp_path: Path) -> None:
+    result, _ = _local_url_onex(tmp_path, reconcile_fixes=False)
+    assert "STOPPED" in result.stdout
+    assert "older than 0.4.316" in result.stdout
+    assert "supported" not in result.stdout.replace("local_url_supported", "")
+
+
+@pytest.mark.parametrize(
+    ("url", "reached"),
+    [
+        (
+            "http://127.0.0.1:1234/v1/chat/completions",
+            "http://host.docker.internal:1234/v1/chat/completions",
+        ),
+        ("http://localhost:8080/x", "http://host.docker.internal:8080/x"),
+        ("https://gpu.lan:9000/x", "https://gpu.lan:9000/x"),
+    ],
+)
+def test_local_url_on_this_mac_is_reached_from_docker_by_its_host_name(
+    url: str, reached: str
+) -> None:
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            _functions("docker_url", source=HANDLER) + f'\ndocker_url "{url}"\n',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.stdout == reached, result.stderr

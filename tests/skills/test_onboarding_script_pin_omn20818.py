@@ -143,3 +143,13 @@ def test_pin_carries_the_returning_machine_fixes() -> None:
         f"ONBOARDING.md pins {pinned}, which does not contain "
         f"{RETURNING_MACHINE_SCRIPT_COMMIT} (omniclaude#2789, OMN-21087)"
     )
+
+
+# OMN-21163 AC3: the guide names the local model server choice, its flags, and
+# that it asks for no key.
+def test_guide_names_the_local_model_server_choice() -> None:
+    text = GUIDE.read_text(encoding="utf-8")
+    assert "A local model server by URL" in text
+    assert "`--local-url URL`" in text
+    assert "`--local-model NAME`" in text
+    assert "`gemini`, `openrouter`, `openai`, `ollama` or `local`" in text
