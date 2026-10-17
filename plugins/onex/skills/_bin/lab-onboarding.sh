@@ -573,131 +573,6 @@ stored_key_providers() { # every provider an earlier run already stored a key fo
   return "$found"
 }
 
-# "1,3,4", "1 3 4", "134" and "4,1,3" all choose the same models; repeats are
-# ignored. Sets MODELS in menu order; 1 when the answer chooses nothing valid.
-parse_model_choice() {
-  local a p i=0 picked=""
-  a="$(printf '%s' "$1" | tr -d ', ')"
-  [ -n "$a" ] || return 1
-  case "$a" in *[!1-4]*) return 1 ;; esac
-  for p in $ALL_MODELS; do
-    i=$((i + 1))
-    case "$a" in *"$i"*) picked="$picked $p" ;; esac
-  done
-  MODELS="${picked# }"
-}
-
-ask_models() { # -> MODELS
-  local a p i=0 note
-  say ""
-  say "  Your models"
-  say ""
-  say "  Choose one or more. Delegation picks among them for each task."
-  say ""
-  for p in $ALL_MODELS; do
-    i=$((i + 1)); note=""
-    is_stored "$p" && note="  (key stored)"
-    [ "$p" = "ollama" ] && ollama_overrides_ours && note="  (set up)"
-    case "$p" in
-      gemini)     say "    $i) Gemini      your key, from aistudio.google.com/apikey$note" ;;
-      openrouter) say "    $i) OpenRouter  your key, from openrouter.ai/keys (its free models need no credit)$note" ;;
-      openai)     say "    $i) OpenAI      your key, from platform.openai.com/api-keys (needs credits)$note" ;;
-      ollama)     say "    $i) Ollama      on this Mac, no key. Slower, especially on Intel; it downloads"
-                  say "                   a model sized to this Mac$note" ;;
-    esac
-  done
-  say ""
-  say "    q) quit setup (nothing has been installed yet)"
-  while :; do
-    say ""
-    printf '  Choose one or more, e.g. 1,3,4: '
-    IFS= read -r a || quit_setup
-    case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
-    parse_model_choice "$a" && break
-    say "  Choose at least one, 1 to 4 (for example 1,3), or q to quit."
-  done
-  say ""
-  say "  You chose: $(labels "$MODELS")"
-}
-
-# One hidden prompt per chosen model that takes a key, in menu order, each
-# naming its provider and "n of m". A key already entered in this run is kept,
-# so changing the choice at the summary never asks for it again.
-ask_keys() {
-  local keyed p n=0 total label value looks a
-  keyed="$(keyed_models)"
-  total="$(count_words "$keyed")"
-  [ "$total" -gt 0 ] || return 0
-  say ""
-  say "  Your keys stay on this Mac, in onex's key store. They are never shown or logged,"
-  say "  and each is only ever sent to its own provider."
-  for p in $keyed; do
-    n=$((n + 1)); label="$(provider_label "$p")"
-    if [ -n "$(pending_key "$p")" ]; then
-      say "  $label key ($n of $total): already entered."
-      continue
-    fi
-    while :; do
-      say ""
-      if is_stored "$p" && [ "$RESUMING" -eq 1 ]; then
-        say "  $label key ($n of $total): stored by your last run; kept."
-        break
-      elif is_stored "$p"; then
-        read_secret "  $label key ($n of $total) — stored; press Enter to keep it, or paste a new one (input is hidden):"
-        if [ -z "$SECRET" ]; then say "  Keeping your stored $label key."; break; fi
-      else
-        read_secret "  $label key ($n of $total) — paste it from $(key_page "$p") (input is hidden):"
-      fi
-      value="$SECRET"; SECRET=""
-      if [ -z "$value" ]; then
-        printf '  No key entered. Skip %s for now? [Y = skip, n = try again] ' "$label"
-        IFS= read -r a || quit_setup
-        case "$a" in n|N|no|NO) continue ;; esac
-        drop_model "$p"; SKIPPED="${SKIPPED:+$SKIPPED }$p"
-        say "  Skipped $label. Add it any time: onex models add $p"
-        break
-      fi
-      looks="$(key_looks_like "$value")"
-      if [ -n "$looks" ] && [ "$looks" != "$p" ]; then
-        value=""
-        say "  ✗ That looks like $(a_an "$(provider_label "$looks")") $(provider_label "$looks") key, not $(a_an "$label") $label key."
-        continue
-      fi
-      set_pending_key "$p" "$value"; value=""
-      say "  $label key received."
-      [ "$p" = "openrouter" ] && say "  OpenRouter model: the default the onex overlay declares (change it any time: onex models add openrouter --model <model id>)"
-      break
-    done
-  done
-}
-
-confirm_models() { # 0 continue, 1 change the choice; q quits
-  local p a
-  say ""
-  say "  Ready to set up:"
-  for p in $MODELS; do
-    if [ "$p" = "ollama" ]; then
-      if ollama_overrides_ours; then say "    Ollama      already set up on this Mac"
-      else say "    Ollama      no key; downloads a model sized to this Mac's $(ram_gb) GB of memory"; fi
-    elif [ "$p" = "openrouter" ] && [ -n "$(pending_key "$p")" ]; then
-      say "    $(printf '%-11s' "$(provider_label "$p")") key received, default model from the overlay"
-    elif [ -n "$(pending_key "$p")" ]; then
-      say "    $(printf '%-11s' "$(provider_label "$p")") key received"
-    else
-      say "    $(printf '%-11s' "$(provider_label "$p")") your stored key"
-    fi
-  done
-  for p in $SKIPPED; do say "    $(result_line "$p")"; done
-  say ""
-  printf '  Continue? [Y = yes, c = change, q = quit] '
-  IFS= read -r a || quit_setup
-  case "$a" in
-    c|C|change|CHANGE) return 1 ;;
-    q|Q|quit|QUIT) quit_setup ;;
-  esac
-  return 0
-}
-
 # With no terminal there is nobody to ask: --provider names the models, else
 # every stored key (and Ollama, when an earlier run set it up) is used. A model
 # that needs a key and has none stops the run before anything installs.
@@ -836,7 +711,7 @@ YAML
 # checksum-pinned handler into the run directory. Never source unchecked bytes.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="ce2b:2452:f52c:a37f:1824:a319:563b:113d:8fa3:55a2:38fd:561a:204c:7854:2c6c:90f7" root candidate
+  local digest="1aaa:45ad:1327:ddd6:05f0:d45e:1c09:93f6:763e:ef19:5747:1cc0:a161:614f:2513:0a31" root candidate
   digest="${digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
   for candidate in "$root/$rel" "$PWD/$rel" "$WORKSPACE/omniclaude/$rel"; do
