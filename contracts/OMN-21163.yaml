@@ -94,3 +94,11 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k local_url_choice_reaches_a_downloaded"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21163-ac3-guide-pin
+    description: 'ONBOARDING.md pins the script at 2265616f (omniclaude#2834) by commit and sha256: the script carries --local-url and the local add, and its download fetches the handler with the Local URL choice. Fails at the merge base, whose guide pins 467e0c2c.'
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
