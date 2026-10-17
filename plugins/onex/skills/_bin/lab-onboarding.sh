@@ -716,7 +716,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="bc3a:84fc:ad8f:cb7d:e2c5:a3c3:2185:a19b:b093:c92e:02a2:8292:f20c:70f6:3eac:8cc0" root candidate \
+  local digest="4cca:951b:6da4:37a2:d97a:b315:fe84:5d31:77fc:9cdf:d2da:01e2:4ce8:1941:d4ef:37f8" root candidate \
     download_digest="1aaa:45ad:1327:ddd6:05f0:d45e:1c09:93f6:763e:ef19:5747:1cc0:a161:614f:2513:0a31"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -1494,7 +1494,7 @@ setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason
     fi
   fi
   if [ -n "$key" ] || [ "$p" = "local" ]; then
-    # shellcheck disable=SC2046  # a local server's --url and --model hold no spaces
+    # Unquoted on purpose: preflight admits a local server's URL and model only without spaces.
     out="$(printf '%s' "$key" | models_cmd add "$p" --json ${model:+--model "$model"} $(local_url_add_args "$p") 2>"$err")"
   else
     out="$(models_cmd test "$p" --json 2>"$err")"

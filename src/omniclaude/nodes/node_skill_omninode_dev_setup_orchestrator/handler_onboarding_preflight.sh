@@ -670,6 +670,12 @@ settle_local_url() { # preflight: the server's URL and model, never a key
     [ "$PROMPT_TTY" -eq 1 ] || local_url_unreachable "$LOCAL_URL"
     LOCAL_URL=""
   done
+  case "$LOCAL_MODEL" in *[[:space:]]*)
+    say "  ✗ '$LOCAL_MODEL' is not a model name: a model name has no spaces."
+    [ "$PROMPT_TTY" -eq 1 ] || { FAILED_STEP="choose your models"; LAST_ERR="'$LOCAL_MODEL' has a space"
+      phase_fail "pass --local-model with the name the server lists. Nothing was installed"; }
+    LOCAL_MODEL="" ;;
+  esac
   while [ -z "$LOCAL_MODEL" ]; do
     if [ "$PROMPT_TTY" -eq 0 ]; then
       FAILED_STEP="choose your models"
@@ -681,6 +687,7 @@ settle_local_url() { # preflight: the server's URL and model, never a key
     printf '  The model it runs, as the server names it: '
     IFS= read -r a || quit_setup
     LOCAL_MODEL="$(printf '%s' "$a" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    case "$LOCAL_MODEL" in *[[:space:]]*) say "  ✗ A model name has no spaces; use the name the server lists."; LOCAL_MODEL="" ;; esac
   done
   say "  Model: the local model server at $LOCAL_URL, no key. Model: $LOCAL_MODEL."
 }

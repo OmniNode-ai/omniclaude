@@ -84,5 +84,5 @@ dod_evidence:
       - check_type: command
         check_value: >-
           curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-          | sha256sum | grep -q '^bc3a84fcad8fcb7de2c5a3c32185a19bb093c92e02a28292f20c70f63eac8cc0  -$'
+          | sha256sum | grep -q '^4cca951b6da437a2d97ab315fe845d3177fc9cdfd2da01e24ce81941d4ef37f8  -$'
         cwd: "${OMNI_HOME}/omniclaude"
