@@ -108,7 +108,7 @@ permissions:
 jobs:
   public-repo-hygiene:
     name: public-repo-hygiene
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public FORK PRs default to ubuntu-latest
+    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to ubuntu-latest; public FORK PRs default to ubuntu-latest
     # OMN-18205: the untrusted test is the FORK test, and only the fork test.
     # It used to also send every same-repo pull request whose base is `dev`
     # to the public class. That is not a trust boundary -- a same-repo pull
@@ -125,7 +125,7 @@ jobs:
         (github.event_name == 'pull_request' &&
          github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || (github.event.repository.private && '["self-hosted","omnibase-ci"]' || '["ubuntu-latest"]'))
       }}
     timeout-minutes: 15
     steps:
@@ -452,7 +452,7 @@ jobs:
         (github.event_name == 'pull_request' &&
          github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || (github.event.repository.private && '["self-hosted","omnibase-ci"]' || '["ubuntu-latest"]'))
       }}
     timeout-minutes: 10
     steps:

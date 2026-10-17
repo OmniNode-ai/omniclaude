@@ -63,6 +63,7 @@ Shape-Gate Independence (OMN-20298)
 Pre-commit Suite (OMN-19612)
 Runtime Profiles
 Canonical File Shape (OMN-20304)
+Public Runner Placement (OMN-19998)
 Path Changes (OMN-20074)
 Branch Claim Gate
 check-deterministic-skills
