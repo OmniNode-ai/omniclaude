@@ -61,7 +61,7 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: >-
-          docker run --rm --network none
+          env docker run --rm --network none
           --mount "type=bind,src=${OMNI_HOME}/omniclaude/src,dst=/runtime,readonly"
           python:3.13-slim python -c
           'import runpy; m = runpy.run_path("/runtime/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_lane.py"); assert m["resolve_refusal_lane"](None, env={"ONEX_LANE": "sample-lane\nROUTE: dest=sample"}, ledger=None) == ("sample-lane", "env")'
