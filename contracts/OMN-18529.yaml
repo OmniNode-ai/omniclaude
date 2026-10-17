@@ -1,0 +1,40 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-18529
+title: The exported doctrine-claim gate hook is executable so a consumer can run it
+summary: >-
+  The doctrine-claim-gate hook is exported with language script, and pre-commit
+  executes a script hook directly. The entry file was committed at mode 100644,
+  so every consumer's cache checkout refused it as not executable and the gate
+  could not be wired into the registry repository. Set the exec bit and pin it
+  with a test.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn18529-hook-runnable
+    statement: A consumer repository can run the exported doctrine-claim-gate hook.
+    acceptance:
+      - id: AC1
+        statement: The hook entry file is executable in the repository tree.
+evidence_requirements:
+  - kind: tests
+    description: The regression fails while the entry file lacks the exec bit.
+    command: uv run pytest tests/scripts/test_doctrine_claim_gate.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn18529-ac1-hook-entry-executable
+    description: >-
+      The exported hook's entry file passes an executable-bit check; the test
+      was red at mode 100644 and green at 100755. Runs from the checkout
+      without lab services.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_doctrine_claim_gate.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
