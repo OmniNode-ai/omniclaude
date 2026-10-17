@@ -31,7 +31,7 @@ import os
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 #: The launcher's declarations of a lane's identity, most specific first -- the
 #: ``ONEX_LANE`` operand ``hook_lane_attribution`` resolves from; the
@@ -110,7 +110,7 @@ def read_intake_count(ledger: Path | None) -> int | None:
 
 
 def begin(
-    payload: Mapping[str, Any],
+    payload: Mapping[str, object],
     environ: Mapping[str, str],
     policy_path: Path,
     now: datetime,
@@ -154,7 +154,7 @@ def stamp_line(policy: LaneIntakePolicy, lane: str) -> str:
     return f"{policy.stamp_prefix} {lane}"
 
 
-def _label_names(tool_input: Mapping[str, Any]) -> set[str]:
+def _label_names(tool_input: Mapping[str, object]) -> set[str]:
     """The label names a create carries, lowercased. Ids cannot be read here."""
     raw = tool_input.get("labels", tool_input.get("label"))
     if isinstance(raw, str):
@@ -165,7 +165,7 @@ def _label_names(tool_input: Mapping[str, Any]) -> set[str]:
 
 
 def findings(
-    tool_input: Mapping[str, Any], admission: LaneAdmission
+    tool_input: Mapping[str, object], admission: LaneAdmission
 ) -> list[dict[str, str]]:
     """Rules 11-14 for one create, as ``{code, field, reason, fix}`` dicts."""
     policy, lane = admission.policy, admission.lane

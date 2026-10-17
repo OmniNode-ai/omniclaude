@@ -11,11 +11,9 @@ guard runs under a bare interpreter with no ``omniclaude`` package.
 
 from __future__ import annotations
 
-from typing import Any
-
 
 def apply_description_patch(
-    previous: str, operations: Any, error: type[ValueError]
+    previous: str, operations: object, error: type[ValueError]
 ) -> str:
     """The description ``operations`` produce when applied to ``previous``.
 
