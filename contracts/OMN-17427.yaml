@@ -196,7 +196,7 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: |
-          docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --mount "type=bind,src=$(pwd),dst=/workspace,readonly" --workdir /workspace python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 python -c '
+          env docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --mount "type=bind,src=$(pwd),dst=/workspace,readonly" --workdir /workspace python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 python -c '
           import json
           import runpy
           import tempfile
