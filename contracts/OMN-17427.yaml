@@ -75,6 +75,11 @@ requirements:
         statement: Labeled ticks preserve criterion text, dry runs and refused ticks write nothing, and Done is judged as a second edit.
       - id: AC17
         statement: Lane evidence admits a complete green contract binding and refuses a partial binding, red check or contract changed after the check started.
+  - id: req-reaper-default-roots-under-omni-home
+    statement: The worktree reaper's default roots are the two under OMNI_HOME and never a home-directory root.
+    acceptance:
+      - id: AC18
+        statement: "worktree_reaper._resolve_roots with no --root returns exactly OMNI_HOME/omni_worktrees and OMNI_HOME/.onex_state/worktrees, adds nothing under the home directory, and returns no root when OMNI_HOME is unset -- falsifier: uv run pytest tests/scripts/test_worktree_reaper.py -q --no-cov -k default_roots fails over the merge base, which appends the legacy home-directory root"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -335,3 +340,12 @@ dod_evidence:
     binds_ac:
       - AC16
       - AC17
+  - id: dod-reaper-default-roots-under-omni-home
+    description: The reaper's default roots are the registry's two roots, with no home-directory fallback and none when OMNI_HOME is unset.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_worktree_reaper.py -q --no-cov -k default_roots"
+    binds_ac:
+      - AC18
