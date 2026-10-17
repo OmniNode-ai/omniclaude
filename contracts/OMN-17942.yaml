@@ -10,6 +10,12 @@ summary: >
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
+requirements:
+  - id: req-omn17942-lane-intake
+    statement: A Linear create from a lane or node context carries the intake label, a first-line lane stamp and a declared lane identity, and is counted against a daily intake budget.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: a lane create is refused without the label, the first-line stamp naming its lane, a declared lane identity, or when the day''s intake budget from the policy config is spent, and the same create, fixed, is admitted and counted; falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py fails at the merge base, whose policy config has no lane_intake section.'
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -42,3 +48,14 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q"
+    binds_ac:
+      - AC1
+  - id: dod-deploy-lane-intake-handler
+    description: >
+      Deploy probe: the lane-intake handler read from GitHub at the
+      checked-out commit defines LaneIntakePolicy. A head without this change
+      has no such file and the probe finds no match.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/handlers/handler_lane_intake.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -c '^class LaneIntakePolicy(NamedTuple):'"
