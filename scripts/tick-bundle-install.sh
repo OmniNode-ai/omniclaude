@@ -108,11 +108,17 @@ UNCHANGED=0
 render_plist() {
   # Expand __OMNI_HOME__ and __HOME__ placeholders in a template plist and print
   # the rendered content to stdout. Uses sed with pipe delimiter so path slashes
-  # do not collide.
-  local src="$1"
+  # do not collide. [OMN-17427] Each value is escaped twice: for XML (& < >), so a
+  # path holding one still yields a well-formed plist, and for sed's replacement
+  # (backslash, & and the | delimiter), so it is inserted literally.
+  local src="$1" registry home
+  registry="$(printf '%s' "${OMNI_HOME_RESOLVED}" \
+    | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/[\\&|]/\\&/g')"
+  home="$(printf '%s' "${HOME}" \
+    | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/[\\&|]/\\&/g')"
   sed \
-    -e "s|__OMNI_HOME__|${OMNI_HOME_RESOLVED}|g" \
-    -e "s|__HOME__|${HOME}|g" \
+    -e "s|__OMNI_HOME__|${registry}|g" \
+    -e "s|__HOME__|${home}|g" \
     "${src}"
 }
 
@@ -145,6 +151,8 @@ verify_program_args() {
     echo "${rendered}" \
       | awk '/<key>ProgramArguments<\/key>/{flag=1; next} flag && /<string>/{gsub(/.*<string>|<\/string>.*/, ""); print; exit}'
   )"
+  # [OMN-17427] The rendered text is XML; undo the escaping render_plist applied.
+  prog="$(printf '%s' "${prog}" | sed -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&amp;/\&/g')"
   if [[ -z "${prog}" ]]; then
     echo "  [${label}] ERROR — ProgramArguments[0] not found in rendered plist" >&2
     return 1
