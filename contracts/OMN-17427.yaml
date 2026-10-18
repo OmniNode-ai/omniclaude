@@ -111,6 +111,11 @@ requirements:
         statement: A work tree outside the canonical clone is denied through global options or GIT_WORK_TREE; naming the clone itself and operations outside canonical clones remain allowed.
       - id: AC26
         statement: git init with a linked-worktree git dir and a work tree set is denied for exported, inline and inherited environment variables, while a read under those exports remains allowed.
+  - id: req-hostile-reviewer-json-via-file
+    statement: The Hostile Reviewer step hands cli_review's JSON to its parsers through a file, so a review with dozens of findings cannot fail the step with exit 126.
+    acceptance:
+      - id: AC27
+        statement: "With a python3 that refuses any environment string over 128 KiB, a 400 KiB two-voter review result still reaches a passed verdict and a written artifact, and no review JSON rides in an environment variable -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k 'oversized_review_result or review_step_invokes_cli_review'"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -589,3 +594,12 @@ dod_evidence:
         check_value: "uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov -k onboarding_script_defaults"
     binds_ac:
       - AC22
+  - id: dod-hostile-reviewer-json-via-file
+    description: The review step's parsers read cli_review's JSON from a file, and an oversized result passes through a python3 that enforces the Linux per-string environment limit.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k 'oversized_review_result or review_step_invokes_cli_review'"
+    binds_ac:
+      - AC27

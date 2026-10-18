@@ -38,10 +38,12 @@ words and loses the behaviour fails here.
 from __future__ import annotations
 
 import base64
+import errno
 import json
 import os
 import re
 import subprocess
+import sys
 import urllib.parse
 from pathlib import Path
 from typing import Any, cast
@@ -237,7 +239,11 @@ def _review_script() -> str:
 
 
 def _run_review_script(
-    tmp_path: Path, *, stub: str, extra_env: dict[str, str] | None = None
+    tmp_path: Path,
+    *,
+    stub: str,
+    extra_env: dict[str, str] | None = None,
+    python3_shim: str | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path, dict[str, str]]:
     """Execute the workflow's own review script with `uv` stubbed out."""
     bin_dir = tmp_path / "bin"
@@ -245,6 +251,10 @@ def _run_review_script(
     uv = bin_dir / "uv"
     uv.write_text(stub, encoding="utf-8")
     uv.chmod(0o755)
+    if python3_shim is not None:
+        python3 = bin_dir / "python3"
+        python3.write_text(python3_shim, encoding="utf-8")
+        python3.chmod(0o755)
 
     runner_temp = tmp_path / "runner-temp"
     runner_temp.mkdir()
@@ -375,6 +385,93 @@ cat <<'JSON'
 JSON
 exit 2
 """
+
+
+# omniclaude#2864 (OMN-17427): a review with dozens of findings produced a
+# passing quorum verdict, and the step then died with exit code 126 at the first
+# python3 it handed the review JSON through the environment. A Linux execve
+# refuses a single environment string over 128 KiB (MAX_ARG_STRLEN, E2BIG),
+# which bash reports as 126. This shim applies that same limit on any host, so
+# the regression is reproducible where the limit is not enforced.
+EXECVE_LIMIT_PYTHON3_SHIM = f"""#!/usr/bin/env bash
+for name in $(compgen -e); do
+  value="${{!name}}"
+  if [ $(( ${{#name}} + ${{#value}} + 1 )) -gt 131072 ]; then
+    echo "python3: ${{name}}: Argument list too long" >&2
+    exit 126
+  fi
+done
+exec "{sys.executable}" "$@"
+"""
+
+# About 400 KiB of findings, over the 128 KiB environment-string limit.
+OVERSIZED_REVIEW_STUB = """#!/usr/bin/env bash
+echo "Model 'example-voter-a' succeeded in 6.2s (60 finding(s))." >&2
+echo "Model 'example-voter-b' succeeded in 8.1s (60 finding(s))." >&2
+python3 - <<'PY'
+import errno
+import json
+finding = {
+    "severity": "warning",
+    "rule_id": "example-rule",
+    "normalized_message": "x" * 3000,
+    "raw_message": "x" * 3000,
+    "file_path": "a/b.py",
+    "line_start": 1,
+}
+results = [
+    {"success": True, "model": model, "findings": [dict(finding) for _ in range(60)]}
+    for model in ("example-voter-a", "example-voter-b")
+]
+print(json.dumps({
+    "models_succeeded": ["example-voter-a", "example-voter-b"],
+    "total_findings": 120,
+    "results": results,
+    "quorum": {"verdict": "passed", "quorum_threshold": 2, "blocking_count": 0,
+               "warning_count": 120, "blocking_findings": [], "warning_findings": []},
+}))
+PY
+exit 0
+"""
+
+
+def test_an_oversized_review_result_never_rides_in_an_environment_string(
+    tmp_path: Path,
+) -> None:
+    """Positive control: the shim refuses a big environment string, and the step passes.
+
+    The shim must refuse when handed an oversized variable, or a pass below
+    would prove nothing about the step.
+    """
+    shim = tmp_path / "python3"
+    shim.write_text(EXECVE_LIMIT_PYTHON3_SHIM, encoding="utf-8")
+    shim.chmod(0o755)
+    # On Linux the kernel refuses the oversized string at execve, before the
+    # shim runs; elsewhere the shim applies the same limit and exits 126.
+    try:
+        refused = subprocess.run(
+            [str(shim), "-c", "print(1)"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PATH": os.environ["PATH"], "BIG": "a" * 200_000},
+        )
+    except OSError as exc:
+        assert exc.errno == errno.E2BIG, exc
+    else:
+        assert refused.returncode == 126, refused.stderr
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    result, artifact, outputs = _run_review_script(
+        run_dir,
+        stub=OVERSIZED_REVIEW_STUB.replace("python3 -", f"{sys.executable} -"),
+        python3_shim=EXECVE_LIMIT_PYTHON3_SHIM,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert outputs["verdict"] == "passed"
+    assert json.loads(artifact.read_text(encoding="utf-8"))["verdict"] == "passed"
 
 
 def test_a_blocking_verdict_names_the_finding_that_blocked_it(

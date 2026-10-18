@@ -492,7 +492,7 @@ jobs:
           # command's real exit code. That bug zeroed out REVIEW_EXIT on
           # every cli_review failure, so the infra_error fail-closed check
           # below never fired and the script fell through to json.loads() an
-          # empty $REVIEW_JSON (omniclaude#2180, run 35017674790).
+          # empty review JSON (omniclaude#2180, run 35017674790).
           # set +e/-e brackets the substitution so `set -euo pipefail` above
           # does not abort the script on a genuine cli_review failure.
           #
@@ -521,17 +521,26 @@ jobs:
           # hand on a laptop to be named. Each was one line of this stderr.
           STDERR_LOG="${RUNNER_TEMP}/hostile-review-stderr.log"
           ATTEMPT_ERR="${RUNNER_TEMP}/hostile-review-stderr-attempt.log"
+          # cli_review's JSON goes to a file, never to an environment variable.
+          # A Linux execve refuses any single environment string over 128 KiB
+          # (E2BIG, which bash reports as exit 126), and a review with dozens of
+          # findings is larger than that: omniclaude#2864 produced a passing
+          # quorum verdict and then died with exit 126 at the first python3 that
+          # was handed the JSON through its environment, so the gate went red
+          # with no verdict and no named cause. The parsers below read the file.
+          REVIEW_JSON_FILE="${RUNNER_TEMP}/hostile-review-result.json"
           : > "$STDERR_LOG"
 
           REVIEW_EXIT=1
           for attempt in 1 2; do
             : > "$ATTEMPT_ERR"
+            : > "$REVIEW_JSON_FILE"
             set +e
-            REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
+            uv run python -m omniintelligence.review_pairing.cli_review \
               --pr "$PR_NUMBER" \
               --repo "$REPO" \
               --voters-overlay "$REVIEW_VOTERS_OVERLAY" \
-              2>"$ATTEMPT_ERR")
+              >"$REVIEW_JSON_FILE" 2>"$ATTEMPT_ERR"
             REVIEW_EXIT=$?
             set -e
 
@@ -705,13 +714,15 @@ jobs:
             exit 1
           fi
 
-          # Parse verdict from JSON using Python inline. Pass the JSON through
-          # the environment because the heredoc occupies Python's stdin.
-          VERDICT_DATA=$(REVIEW_JSON="$REVIEW_JSON" python3 - <<'PYEOF'
+          # Parse verdict from JSON using Python inline. Pass the JSON's path
+          # through the environment because the heredoc occupies Python's
+          # stdin; the JSON itself is too large for an environment string.
+          VERDICT_DATA=$(REVIEW_JSON_FILE="$REVIEW_JSON_FILE" python3 - <<'PYEOF'
           import os
           import json
 
-          data = json.loads(os.environ["REVIEW_JSON"])
+          with open(os.environ["REVIEW_JSON_FILE"], encoding="utf-8") as handle:
+              data = json.load(handle)
           models_succeeded = data.get("models_succeeded", [])
           total_findings = data.get("total_findings", 0)
           skipped_reason = data.get("skipped_reason")
@@ -775,7 +786,7 @@ jobs:
           # this gate spent an unknown number of PRs reviewing nothing.
           VERDICT_DATA="$VERDICT_DATA" NAMED_CAUSE="$NAMED_CAUSE" \
           STDERR_LOG="$STDERR_LOG" REVIEW_EXIT="$REVIEW_EXIT" \
-          REVIEW_JSON="$REVIEW_JSON" python3 - <<'PY'
+          REVIEW_JSON_FILE="$REVIEW_JSON_FILE" python3 - <<'PY'
           import json
           import os
 
@@ -805,7 +816,9 @@ jobs:
           # alternatives, and `raw` keeps the finding verbatim: a renamed field
           # upstream then costs a worse-looking row, never a lost finding.
           findings = []
-          for result in json.loads(os.environ["REVIEW_JSON"]).get("results", []):
+          with open(os.environ["REVIEW_JSON_FILE"], encoding="utf-8") as handle:
+              review = json.load(handle)
+          for result in review.get("results", []):
               if not result.get("success"):
                   continue
               for finding in result.get("findings", []):
@@ -830,7 +843,7 @@ jobs:
               "verdict": fields.get("verdict", "unknown"),
               "blocking_count": int(fields.get("blocking_count", "0") or 0),
               "below_quorum_count": int(fields.get("below_quorum_count", "0") or 0),
-              "quorum": json.loads(os.environ["REVIEW_JSON"]).get("quorum"),
+              "quorum": review.get("quorum"),
               "total_findings": int(fields.get("total_findings", "0") or 0),
               "models_succeeded": [m for m in models.split(",") if m],
               "review_exit": int(os.environ["REVIEW_EXIT"]),
