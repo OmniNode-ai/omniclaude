@@ -333,22 +333,31 @@ jobs:
           # OMN-20910: the review tooling is read at omniintelligence's newest
           # dev-<UTC>-<sha12> tag, resolved here at run time (every dev merge there
           # is tagged), never at a branch tip and never at the rev uv.lock records.
-          # The UTC stamp is fixed-width, so the lexical maximum is the newest tag.
+          # Only names of exactly that shape are considered (14-digit UTC stamp,
+          # 12 hex), so the lexical maximum is the newest tag. The tag is
+          # commit-anchored: the fetched commit must start with the sha12 the tag
+          # name records, or the clone is refused, so a tag cannot be moved to
+          # other content without the run failing.
           repo_url="https://github.com/OmniNode-ai/omniintelligence.git"
           for attempt in {1..4}; do
             rm -rf ../omniintelligence
-            if tag="$(git ls-remote --tags --refs "$repo_url" 'refs/tags/dev-*' | sed 's#.*refs/tags/##' | sort | tail -n 1)" \
+            if tag="$(git ls-remote --tags --refs "$repo_url" 'refs/tags/dev-*' | sed 's#.*refs/tags/##' | grep -E '^dev-[0-9]{14}-[0-9a-f]{12}$' | sort | tail -n 1)" \
               && [[ -n "$tag" ]] \
               && git init -q ../omniintelligence \
               && git -C ../omniintelligence fetch --depth=1 --filter=blob:none \
                 "$repo_url" "refs/tags/${tag}" \
               && git -C ../omniintelligence checkout -q FETCH_HEAD; then
-              echo "omniintelligence read at tag ${tag} ($(git -C ../omniintelligence rev-parse HEAD))"
+              head_sha="$(git -C ../omniintelligence rev-parse HEAD)"
+              if [[ "$head_sha" != "${tag##*-}"* ]]; then
+                echo "::error::omniintelligence tag ${tag} resolves to ${head_sha}, not the commit its name records"
+                exit 1
+              fi
+              echo "omniintelligence read at tag ${tag} (${head_sha})"
               exit 0
             fi
             sleep $((attempt * 10))
           done
-          echo "::error::no omniintelligence dev-* tag could be resolved and fetched"
+          echo "::error::no omniintelligence dev-<UTC>-<sha12> tag could be resolved and fetched"
           exit 1
 
       - name: Clone omnibase_core

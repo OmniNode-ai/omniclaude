@@ -611,6 +611,12 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
     assert "'refs/tags/dev-*'" in combined, (
         "omniintelligence must be read at a dev-* tag"
     )
+    assert "grep -E '^dev-[0-9]{14}-[0-9a-f]{12}$'" in combined, (
+        "only dev-<UTC>-<sha12> tag names may be resolved"
+    )
+    assert '[[ "$head_sha" != "${tag##*-}"* ]]' in combined, (
+        "the fetched commit must match the sha12 its tag name records"
+    )
     assert "refs/heads" not in combined, "no dependency clone may fetch a branch tip"
     assert "omniintelligence\\.git\\?rev=" not in combined, (
         "omniintelligence is no longer read at the rev uv.lock records"
