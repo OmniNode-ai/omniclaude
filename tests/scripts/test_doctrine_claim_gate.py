@@ -554,3 +554,28 @@ def test_pre_correction_measurement_and_corrected_twin(tmp_path: Path) -> None:
     assert len(corrected_scan.claims) == 1
     assert len(corrected_scan.markers) == 1
     assert gate.evaluate(corrected_scan, states) == []
+
+
+def test_exported_hook_entry_is_executable() -> None:
+    """A `language: script` hook is exec'd by pre-commit, so its file needs the exec bit.
+
+    The hook shipped at mode 100644 and failed with "is not executable" in every
+    consumer's cache checkout, which made wiring the gate into the registry
+    impossible. This asserts the exported entry is runnable the way pre-commit
+    runs it, not merely that the entry names the right file.
+    """
+    import os
+
+    import yaml
+
+    root = Path(__file__).resolve().parents[2]
+    hooks = yaml.safe_load(
+        (root / ".pre-commit-hooks.yaml").read_text(encoding="utf-8")
+    )
+    hook = next(h for h in hooks if h["id"] == "doctrine-claim-gate")
+    assert hook["language"] == "script"
+    entry = root / hook["entry"]
+    assert entry.is_file()
+    assert os.access(entry, os.X_OK), (
+        f"{hook['entry']} must be executable for language: script"
+    )
