@@ -48,11 +48,13 @@ def test_the_lock_records_only_the_claude_api_voter_revision() -> None:
     assert lock_revs(text) == {CLAUDE_API_VOTER_PIN}
 
 
-def test_the_workflow_clones_the_rev_the_lock_records() -> None:
+def test_the_workflow_clones_omniintelligence_at_its_newest_dev_tag() -> None:
+    """OMN-20910: the review tooling is read at a dev-* tag, not the lock's rev."""
     text = (ROOT / ".github" / "workflows" / "hostile-reviewer.yml").read_text(
         encoding="utf-8"
     )
-    assert "omniintelligence\\.git\\?rev=[0-9a-f]{40}" in text
+    assert "'refs/tags/dev-*'" in text
+    assert "omniintelligence\\.git\\?rev=[0-9a-f]{40}" not in text
 
 
 def test_the_pin_before_claude_api_voters_is_caught() -> None:

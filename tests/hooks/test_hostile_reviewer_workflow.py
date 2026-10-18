@@ -595,12 +595,20 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
     for repo in ("omniintelligence", "omnibase_core", "omnibase_compat"):
         repo_url = f"https://github.com/OmniNode-ai/{repo}.git"
         assert repo_url in combined, f"{repo} clone must be present"
-    # A sibling is read at the pin this repo's uv.lock records, never a live branch
-    # (ruling 2026-10-01): omniintelligence by rev, core and compat by release tag.
+    # core and compat are read at the pin this repo's uv.lock records, never a live
+    # branch (ruling 2026-10-01). omniintelligence is read at its newest dev-* tag
+    # (OMN-20910), resolved at run time; a branch tip stays refused.
     assert "--branch dev" not in combined, "dependency clones must not track dev"
     assert "--branch main" not in combined, "dependency clones must not track main"
-    assert "omniintelligence\\.git\\?rev=" in combined, (
-        "omniintelligence must be fetched at the rev uv.lock pins"
+    assert "git ls-remote --tags --refs" in combined, (
+        "omniintelligence must be resolved to its newest tag at run time"
+    )
+    assert "'refs/tags/dev-*'" in combined, (
+        "omniintelligence must be read at a dev-* tag"
+    )
+    assert "refs/heads" not in combined, "no dependency clone may fetch a branch tip"
+    assert "omniintelligence\\.git\\?rev=" not in combined, (
+        "omniintelligence is no longer read at the rev uv.lock records"
     )
     for pinned in ("omnibase-core", "omnibase-compat"):
         assert f"n={pinned}" in combined, f"{pinned} version must be read from uv.lock"
@@ -891,21 +899,31 @@ def test_gate_job_depends_on_review_and_fails_on_failure(
 
 
 def test_no_anthropic_api_key_required(workflow: dict[object, object]) -> None:
-    """ANTHROPIC_API_KEY must NOT appear in any env block (OMN-7467 guard).
+    """The Claude API key names are exported to exactly one step, from one named secret.
 
-    Claude Code authenticates via OAuth; requiring ANTHROPIC_API_KEY in CI
-    has regressed 6+ times across the org and is an explicit anti-pattern in
-    ``~/.claude/CLAUDE.md``.
+    The OMN-7467 guard keeps Claude Code on OAuth: no job-level or workflow-level
+    env, and no step other than the review step, may carry either name. The one
+    sanctioned carrier (OMN-20910) is the review step, whose Claude API voters
+    read it, and its value is the HOSTILE_REVIEW_ANTHROPIC_API_KEY Actions secret.
     """
-    raw = WORKFLOW_PATH.read_text(encoding="utf-8")
-    # Match the env-var name as a required key, not as a sanitizer regex or
-    # commented documentation. The simplest robust check is "no occurrence
-    # at all" in this file — there is no legitimate reason to mention the
-    # variable in this workflow.
-    assert "ANTHROPIC_API_KEY" not in raw, (
-        "ANTHROPIC_API_KEY must not be referenced in the hostile-reviewer "
-        "workflow — Claude Code uses OAuth (OMN-7467)"
-    )
+    names = ("ANTHROPIC_API_KEY", "REVIEW_ANTHROPIC_API_KEY")
+    carriers: list[tuple[str, str, object]] = []
+    envs: list[tuple[str, object]] = [("<workflow>", workflow.get("env"))]
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    for job_name, job in jobs.items():
+        assert isinstance(job, dict)
+        envs.append((f"{job_name}:<job>", job.get("env")))
+        for step in job.get("steps") or []:
+            if isinstance(step, dict):
+                envs.append((f"{job_name}:{step.get('name')}", step.get("env")))
+    for where, env in envs:
+        if isinstance(env, dict):
+            carriers.extend((where, n, env[n]) for n in names if n in env)
+    secret = "${{ secrets.HOSTILE_REVIEW_ANTHROPIC_API_KEY }}"
+    assert carriers == [
+        ("hostile-review:Run adversarial review", n, secret) for n in names
+    ]
 
 
 def test_workflow_has_pr_write_permission(workflow: dict[object, object]) -> None:
@@ -1195,3 +1213,24 @@ def test_voter_model_from_overlay_ratchet_is_wired_as_ci_step_and_hook() -> None
         for hook in repo["hooks"]
     ]
     assert any(_THIS_TEST in str(hook.get("entry", "")) for hook in hooks)
+
+
+def test_review_step_exports_the_claude_api_key_under_the_voter_env_names(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-20910: omniintelligence's Anthropic voter reads ANTHROPIC_API_KEY by default."""
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    review_job = jobs["hostile-review"]
+    assert isinstance(review_job, dict)
+    step = _named_step(workflow, "Run adversarial review")
+    env = step["env"]
+    assert isinstance(env, dict)
+    secret = "${{ secrets.HOSTILE_REVIEW_ANTHROPIC_API_KEY }}"
+    assert env["ANTHROPIC_API_KEY"] == secret
+    assert env["REVIEW_ANTHROPIC_API_KEY"] == secret
+    job_env = review_job["env"]
+    assert isinstance(job_env, dict)
+    assert (
+        "ANTHROPIC_API_KEY" not in job_env and "REVIEW_ANTHROPIC_API_KEY" not in job_env
+    ), "the key belongs to the review step only, not every step of the job"

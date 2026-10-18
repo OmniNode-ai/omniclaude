@@ -330,20 +330,25 @@ jobs:
       - name: Clone omniintelligence
         working-directory: ${{ github.workspace }}
         run: |
-          # Pinned to the omniintelligence rev this repo's uv.lock records
-          # (ruling 2026-10-01: a sibling is read at the pin, never its live dev).
-          pin_rev="$(grep -oE 'omniintelligence\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
-          [[ -n "$pin_rev" ]] || { echo "::error::omniintelligence rev not found in uv.lock"; exit 1; }
+          # OMN-20910: the review tooling is read at omniintelligence's newest
+          # dev-<UTC>-<sha12> tag, resolved here at run time (every dev merge there
+          # is tagged), never at a branch tip and never at the rev uv.lock records.
+          # The UTC stamp is fixed-width, so the lexical maximum is the newest tag.
+          repo_url="https://github.com/OmniNode-ai/omniintelligence.git"
           for attempt in {1..4}; do
             rm -rf ../omniintelligence
-            if git init -q ../omniintelligence \
+            if tag="$(git ls-remote --tags --refs "$repo_url" 'refs/tags/dev-*' | sed 's#.*refs/tags/##' | sort | tail -n 1)" \
+              && [[ -n "$tag" ]] \
+              && git init -q ../omniintelligence \
               && git -C ../omniintelligence fetch --depth=1 --filter=blob:none \
-                https://github.com/OmniNode-ai/omniintelligence.git "$pin_rev" \
+                "$repo_url" "refs/tags/${tag}" \
               && git -C ../omniintelligence checkout -q FETCH_HEAD; then
+              echo "omniintelligence read at tag ${tag} ($(git -C ../omniintelligence rev-parse HEAD))"
               exit 0
             fi
             sleep $((attempt * 10))
           done
+          echo "::error::no omniintelligence dev-* tag could be resolved and fetched"
           exit 1
 
       - name: Clone omnibase_core
@@ -469,6 +474,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          # OMN-20910: the Claude API voters' key. omniintelligence's
+          # adapter_ai_reviewer reads the variable the overlay voter names in
+          # api_key_env, and only when none is named `ANTHROPIC_API_KEY`
+          # (src/omniintelligence/review_pairing/adapters/adapter_ai_reviewer.py at the
+          # newest dev tag); its tests declare `REVIEW_ANTHROPIC_API_KEY` for the
+          # overlay voters. The overlay is private, so the secret is exported under
+          # both names. An unset secret is an empty string and changes nothing
+          # until a voter names it.
+          ANTHROPIC_API_KEY: ${{ secrets.HOSTILE_REVIEW_ANTHROPIC_API_KEY }}
+          REVIEW_ANTHROPIC_API_KEY: ${{ secrets.HOSTILE_REVIEW_ANTHROPIC_API_KEY }}
           # OMN-20910: no voter endpoint is set here. Every voter, its endpoint,
           # model, sampling and focus come from REVIEW_VOTERS_OVERLAY (job env).
         working-directory: ../omniintelligence
@@ -592,7 +607,12 @@ jobs:
           path = sys.argv[1]
           with open(path, encoding="utf-8", errors="replace") as handle:
               text = handle.read()
-          for name in ("LOCAL_LLM_SHARED_SECRET", "LLM_ENDPOINT_CIDR_ALLOWLIST"):
+          for name in (
+              "LOCAL_LLM_SHARED_SECRET",
+              "LLM_ENDPOINT_CIDR_ALLOWLIST",
+              "ANTHROPIC_API_KEY",
+              "REVIEW_ANTHROPIC_API_KEY",
+          ):
               value = os.environ.get(name)
               if value and len(value) >= 8:
                   text = redact_value(text, name, value)
