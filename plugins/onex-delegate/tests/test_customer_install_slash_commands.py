@@ -13,19 +13,22 @@ test stayed green.
 
 This module runs the customer install with the real `claude` binary into a
 scratch Claude config (`CLAUDE_CONFIG_DIR`), with this checkout standing in for
-the GitHub repository the quickstart names, and reads the command list from the
-`init` record of `claude -p --output-format stream-json`. That record is emitted
-before any authentication, so the scratch config needs no login and no network.
-The built-ins are measured the same way on an empty scratch config, so the test
-holds whatever built-in set the pinned Claude Code version ships.
+the GitHub repository the quickstart names, and reads back what Claude Code's
+own loader installed: `claude plugin list --json` for the installed plugins and
+`claude plugin details` for each plugin's component inventory. A plugin's
+slash commands are its skills, named `<plugin>:<skill>`; everything else on the
+list is Claude Code's own. Neither read starts a session or calls a model, so
+the scratch config needs no login. On the full developer tree the same read
+reports 114 skills and 30 hooks.
 
 What it proves, and what it does not
 ------------------------------------
 * The commands the customer path runs are the public quickstart's, and the
   onboarding script's customer default is the same plugin from the same
   marketplace; the full developer tree needs its explicit --developer flag.
-* After the install, the command list is the built-ins plus exactly
-  `onex:delegate`, served by one plugin read from `plugins/onex-delegate`.
+* After the install, one plugin is installed, read from `plugins/onex-delegate`,
+  and its inventory is one skill, `delegate`, and nothing else, so the command
+  list is Claude Code's built-ins plus exactly `onex:delegate`.
 * `/onex:delegate` resolves to this plugin's delegate skill, whose one command
   is `onex delegate ... --result-only`.
 
@@ -96,36 +99,36 @@ def _run(
     )
 
 
-def _init_record(config_dir: Path, cwd: Path) -> dict:
-    """The session `init` record: slash commands, skills and plugins."""
-    result = _run(
-        [
-            _claude(),
-            "-p",
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--max-turns",
-            "1",
-            "--strict-mcp-config",
-            "--setting-sources",
-            "user",
-            "Reply with: ok",
-        ],
-        config_dir,
-        cwd,
+def _installed(config_dir: Path, cwd: Path) -> list[dict]:
+    done = _run([_claude(), "plugin", "list", "--json"], config_dir, cwd)
+    assert done.returncode == 0, (
+        f"claude plugin list failed: {done.stdout}{done.stderr}"
     )
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        record = json.loads(line)
-        if record.get("type") == "system" and record.get("subtype") == "init":
-            return record
-    raise AssertionError(
-        f"claude -p printed no init record (exit {result.returncode}); "
-        f"stderr: {result.stderr[-2000:]}"
+    return json.loads(done.stdout)
+
+
+_INVENTORY_ROW = re.compile(
+    r"^\s+(?P<kind>[A-Za-z][A-Za-z ]*?) \((?P<count>\d+)\)(?:\s+(?P<items>.*))?$"
+)
+
+
+def _inventory(
+    plugin_id: str, config_dir: Path, cwd: Path
+) -> dict[str, tuple[int, str]]:
+    """`claude plugin details` component inventory: kind -> (count, listed names)."""
+    done = _run([_claude(), "plugin", "details", plugin_id], config_dir, cwd)
+    assert done.returncode == 0, (
+        f"claude plugin details failed: {done.stdout}{done.stderr}"
     )
+    block = (
+        done.stdout.split("Component inventory", 1)[1].strip("\n").split("\n\n", 1)[0]
+    )
+    inventory: dict[str, tuple[int, str]] = {}
+    for line in block.splitlines():
+        row = _INVENTORY_ROW.match(line)
+        assert row is not None, f"unreadable inventory row {line!r} in:\n{done.stdout}"
+        inventory[row["kind"]] = (int(row["count"]), (row["items"] or "").strip())
+    return inventory
 
 
 def _quickstart_commands() -> list[list[str]]:
@@ -169,35 +172,31 @@ def test_customer_install_adds_only_the_delegate_command(tmp_path: Path) -> None
     claude = _claude()
     cwd = tmp_path / "cwd"
     cwd.mkdir()
+    config = tmp_path / "claude-customer"
+    config.mkdir()
+    assert _installed(config, cwd) == [], "a scratch config must start with no plugins"
 
-    empty = tmp_path / "claude-empty"
-    empty.mkdir()
-    builtins = set(_init_record(empty, cwd)["slash_commands"])
-    assert builtins, "an empty scratch config listed no built-in commands"
-    assert DELEGATE_COMMAND not in builtins
-
-    customer = tmp_path / "claude-customer"
-    customer.mkdir()
     for argv in _quickstart_commands():
         # This checkout stands in for the GitHub repository the quickstart names.
         argv = [claude, *argv[1:]]
         if argv[2:4] == ["marketplace", "add"]:
             argv[4] = str(REPO_ROOT)
-        done = _run(argv, customer, cwd)
+        done = _run(argv, config, cwd)
         assert done.returncode == 0, (
             f"{shlex.join(argv)} failed: {done.stdout}{done.stderr}"
         )
 
-    record = _init_record(customer, cwd)
-    commands = set(record["slash_commands"])
-    assert builtins <= commands
-    assert commands - builtins == {DELEGATE_COMMAND}
+    installed = _installed(config, cwd)
+    assert [(p["id"], p["enabled"]) for p in installed] == [(CUSTOMER_PLUGIN, True)]
+    assert (
+        Path(installed[0]["readFromFolder"]).resolve() == DELEGATE_PLUGIN_DIR.resolve()
+    )
 
-    installed = [p for p in record["plugins"] if p.get("path") != "builtin"]
-    assert [p["source"] for p in installed] == [CUSTOMER_PLUGIN]
-    assert Path(installed[0]["path"]).resolve() == DELEGATE_PLUGIN_DIR.resolve()
+    inventory = _inventory(CUSTOMER_PLUGIN, config, cwd)
+    assert inventory.pop("Skills") == (1, "delegate")
+    assert inventory and all(count == 0 for count, _ in inventory.values()), inventory
+    plugin_name = CUSTOMER_PLUGIN.split("@", 1)[0]
+    assert f"{plugin_name}:delegate" == DELEGATE_COMMAND
 
-    skills = [s for s in record.get("skills", []) if ":" in s]
-    assert skills == [DELEGATE_COMMAND]
-    skill_md = Path(installed[0]["path"]) / "skills" / "delegate" / "SKILL.md"
+    skill_md = Path(installed[0]["installPath"]) / "skills" / "delegate" / "SKILL.md"
     assert 'onex delegate "<prompt>" --result-only' in skill_md.read_text()
