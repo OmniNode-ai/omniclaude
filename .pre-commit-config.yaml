@@ -29,6 +29,14 @@
 repos:
   - repo: local
     hooks:
+      - id: linear-lane-repo-evidence
+        name: Linear lane repository evidence readers (OMN-17427)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/unit/nodes/node_linear_effect/test_handler_linear_api.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/nodes/node_linear_effect/|plugins/onex/hooks/lib/canonical_clone_sync\.py|tests/unit/nodes/node_linear_effect/|contracts/OMN-17427\.yaml|\.pre-commit-config\.yaml)'
+        stages: [pre-commit]
+
       - id: imperative-contract-guard-caller
         name: Imperative contract guard caller and parity (OMN-21006)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
