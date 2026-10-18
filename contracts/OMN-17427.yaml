@@ -102,6 +102,17 @@ requirements:
     acceptance:
       - id: AC23
         statement: "A matching declared gh pr view with headRefName,headRefOid,isCrossRepository,state reaches gh and returns its JSON unchanged; adding body is refused before gh runs -- falsifier: pytest tests/scripts/test_gh_pr_state_read_guard.py -q --no-cov -k remote_runner_exact_head_fields"
+  - id: req-documentation-recurrence-gate
+    statement: The existing documentation gate rejects new prose outside the knowledge base and requires the root README to link there.
+    acceptance:
+      - id: AC24
+        statement: Diff mode rejects Markdown, MDX, reStructuredText and AsciiDoc outside the allowed paths and a changed root README without a knowledge-base link, reading content from the staged index or requested head ref.
+      - id: AC25
+        statement: Machine configuration, allowed test evidence and README links to the knowledge base pass the same diff gate.
+      - id: AC26
+        statement: The exported and local pre-commit hooks inspect the index without a Markdown filter, and the reusable required CI gate retains canonical validation reports and run/fire events from the existing core report writer.
+      - id: AC27
+        statement: Hook Python imports do not leave root bytecode that the pre-push clean-root gate rejects, and direct pytest hook entries disable bytecode generation.
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -114,6 +125,38 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  - id: dod-kb-documentation-recurrence-rejection
+    description: Focused CLI regressions reject misplaced prose and README content in staged and ref-diff mode.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_kb_doc_gate.py -q --no-cov -k 'recurrence_diff_blocks or recurrence_readme'"
+    binds_ac: [AC24]
+  - id: dod-kb-documentation-recurrence-positive-controls
+    description: Machine configuration, allowed fixture evidence and knowledge-base links are positive controls.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_kb_doc_gate.py -q --no-cov -k 'recurrence_diff_allows or recurrence_readme_with'"
+    binds_ac: [AC25]
+  - id: dod-kb-documentation-recurrence-wiring
+    description: The focused file checks both hook installations, the shared CI invocation and canonical PASS, FAIL and ERROR reports with run/fire events.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_kb_doc_gate.py -q --no-cov -k 'recurrence_exported or recurrence_own_repo or recurrence_canonical or recurrence_ci'"
+    binds_ac: [AC26]
+  - id: dod-hook-runner-bytecode
+    description: The hook runner imports a root module without creating a cache, and direct pytest hooks disable bytecode generation.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_uv_run_worktree_safe.py -q --no-cov"
+    binds_ac: [AC27]
   - id: dod-gh-shim-runner-exact-head
     description: The runner's exact field list passes while an appended unlisted field is refused without reaching gh.
     source: manual

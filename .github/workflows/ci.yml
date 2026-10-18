@@ -116,6 +116,10 @@ jobs:
           uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov
       - name: Verify registered guard refusal surface
         run: uv run pytest tests/hooks/test_refusal_surface_omn18983.py -q --no-cov
+      - name: Verify documentation recurrence gate (OMN-17427)
+        run: uv run pytest tests/scripts/test_kb_doc_gate.py -q --no-cov
+      - name: Verify hook runners leave no root bytecode (OMN-17427)
+        run: uv run pytest tests/scripts/test_uv_run_worktree_safe.py -q --no-cov
       - name: Verify ledger ruling re-read before publishing (OMN-18645)
         run: uv run pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov
       - name: Verify hooks shard coverage and report admission (OMN-19681)
