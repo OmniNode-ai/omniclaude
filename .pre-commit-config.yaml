@@ -37,6 +37,22 @@ repos:
         files: '^(src/omniclaude/nodes/node_linear_effect/|plugins/onex/hooks/lib/canonical_clone_sync\.py|tests/unit/nodes/node_linear_effect/|contracts/OMN-17427\.yaml|\.pre-commit-config\.yaml)'
         stages: [pre-commit]
 
+      - id: kb-doc-gate
+        name: Documentation belongs in the knowledge base (OMN-17427)
+        entry: python3 scripts/kb_doc_gate.py --staged
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit, pre-merge-commit]
+
+      - id: worktree-hook-bytecode
+        name: Hook runners leave no root bytecode (OMN-17427)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/scripts/test_uv_run_worktree_safe.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(scripts/uv-run-worktree-safe\.sh|tests/scripts/test_uv_run_worktree_safe\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: imperative-contract-guard-caller
         name: Imperative contract guard caller and parity (OMN-21006)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
@@ -440,7 +456,7 @@ repos:
       - id: ticket-refusal-reason
         name: Ticket refusal lane, guard and reason contract (OMN-19381)
         entry: >-
-          uv run --frozen pytest tests/hooks/test_refusal_row_lane_omn19381.py
+          env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest tests/hooks/test_refusal_row_lane_omn19381.py
           -q -p no:cacheprovider
         language: system
         pass_filenames: false
@@ -449,7 +465,7 @@ repos:
       - id: git-command-segment-regression
         name: Git command segment admission and diagnostics (OMN-18936)
         entry: >-
-          uv run --frozen pytest tests/hooks/test_shared_tree_git_guard.py
+          env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest tests/hooks/test_shared_tree_git_guard.py
           -q --no-cov -p no:cacheprovider
         language: system
         pass_filenames: false
@@ -1821,7 +1837,7 @@ repos:
         verbose: true
         stages: [pre-push]
 
-default_install_hook_types: [pre-commit, pre-push, commit-msg]
+default_install_hook_types: [pre-commit, pre-merge-commit, pre-push, commit-msg]
 default_stages: [pre-commit]
 fail_fast: false
 

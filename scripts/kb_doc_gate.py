@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""KB doc gate — keep product-repo markdown inside the allowed set.
+"""KB doc gate — keep product-repo documentation inside the allowed set.
 
 OMN-16589 built the pilot; OMN-17172 rolls it to the fleet and flips it to a
 required status check. This module is the canonical validator for both.
@@ -34,15 +34,20 @@ that let a shrunken doc stay forever. The ruling above removes it.)
 ## Modes
 
 ``diff`` (default)
-    Fails when a changed ``.md`` file's **post-image** path is outside the
+    Fails when a changed prose file's **post-image** path is outside the
     allowed set — additions and in-place modifications alike. Deletions are
     always fine (that is the migration doing its job). A rename or copy is
     judged on its DESTINATION path: moving a stray doc to another stray path
     keeps it in the repo, and treating that as exempt would be a one-command
     bypass of the whole gate; moving it *into* the allowed set passes.
+    Prose formats are Markdown (.md, .markdown), MDX, reStructuredText and
+    AsciiDoc (.adoc, .asciidoc), case-insensitively. Machine configuration
+    formats are not prose. A changed root README.md must contain a link to
+    an OmniNode knowledge-base repository. Content is read from the index
+    under --staged and from --head-ref in CI, never the working copy.
 
 ``strict``
-    Fails when **any** tracked markdown file on the branch is outside the
+    Fails when **any** tracked prose file on the branch is outside the
     allowed set, whether or not this change touched it. This is the end-state
     mode for a repo whose Wave-4 migration (epic OMN-16602) has landed; it is
     what keeps a scrubbed repo scrubbed. Turning it on before that repo's
@@ -65,7 +70,10 @@ only the fallback for a repo that ships no config file.
 
 Only that restricted YAML subset is supported (see :func:`load_config`); this
 script is stdlib-only on purpose, so it can run from a bare checkout with no
-dependency install step.
+dependency install step. The optional ``--report-json`` integration requires
+omnibase-core 0.47.47 or later and delegates report persistence and run/fire
+events to its existing validation-report write EFFECT node. CI enables it;
+the bare-checkout pre-commit gate has no third-party dependency.
 
 ## Merges
 
@@ -123,6 +131,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 MODES = ("diff", "strict")
+PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".adoc", ".asciidoc")
+_KB_LINK = re.compile(
+    r"https://github\.com/omninode-ai/knowledge[-_]base(?:[-_]internal)?"
+    r"(?=[/#?\s)>\]\"']|$)",
+    re.IGNORECASE,
+)
 
 # The operator ruling's allowed set, as path globs. Root-anchored patterns are
 # deliberate: only the TOP-LEVEL README.md and SECURITY.md are presumed
@@ -214,6 +228,10 @@ def is_allowed(path: str, patterns: tuple[str, ...]) -> bool:
 
 def is_markdown(path: str) -> bool:
     return path.lower().endswith(".md")
+
+
+def is_prose(path: str) -> bool:
+    return path.lower().endswith(PROSE_SUFFIXES)
 
 
 # ---------------------------------------------------------------------------
@@ -386,7 +404,7 @@ def merge_introduced(
 
 
 def tracked_markdown(repo_root: Path) -> list[str]:
-    """Every tracked markdown path on the branch, POSIX-style, repo-relative.
+    """Every tracked prose path on the branch, POSIX-style, repo-relative.
 
     ``git ls-files`` reads the INDEX, which is the right answer at both call
     sites: under pre-commit the index is what is about to become the commit,
@@ -396,7 +414,7 @@ def tracked_markdown(repo_root: Path) -> list[str]:
     would miss a ``.MD`` file on Linux while catching it on macOS.
     """
     out = _git(repo_root, "ls-files", "-z")
-    return sorted(p for p in out.split("\0") if p and is_markdown(p))
+    return sorted(p for p in out.split("\0") if p and is_prose(p))
 
 
 # ---------------------------------------------------------------------------
@@ -415,20 +433,21 @@ def evaluate_diff(
     """
     violations: list[Violation] = []
     for cf in changed:
-        if not is_markdown(cf.path):
+        if not is_prose(cf.path):
             continue
         if cf.status == "D":
             continue
         if is_allowed(cf.path, allowed):
             continue
+        kind = "markdown" if is_markdown(cf.path) else "prose"
         if cf.status == "A":
-            reason = "new markdown file outside the allowed set"
+            reason = f"new {kind} file outside the allowed set"
         elif cf.status in ("R", "C"):
             reason = (
-                f"markdown moved to a path outside the allowed set (from {cf.old_path})"
+                f"{kind} moved to a path outside the allowed set (from {cf.old_path})"
             )
         else:
-            reason = "existing markdown outside the allowed set was modified"
+            reason = f"existing {kind} outside the allowed set was modified"
         violations.append(Violation(cf.path, reason))
     return violations
 
@@ -436,10 +455,82 @@ def evaluate_diff(
 def evaluate_tree(paths: list[str], *, allowed: tuple[str, ...]) -> list[Violation]:
     """``strict`` mode: any tracked markdown on the branch outside the set."""
     return [
-        Violation(path, "markdown outside the allowed set exists on this branch")
+        Violation(path, "prose outside the allowed set exists on this branch")
         for path in paths
         if not is_allowed(path, allowed)
     ]
+
+
+def evaluate_readme(
+    repo_root: Path, paths: list[str], *, staged: bool, head_ref: str
+) -> list[Violation]:
+    """Validate the README post-image that the commit or PR will publish."""
+    if "README.md" not in paths:
+        return []
+    revision = ":README.md" if staged else f"{head_ref}:README.md"
+    content = _git(repo_root, "show", revision)
+    if _KB_LINK.search(content):
+        return []
+    return [Violation("README.md", "root README must contain a knowledge-base link")]
+
+
+def _finish(
+    report_path: Path | None,
+    code: int,
+    violations: list[Violation] | None = None,
+    *,
+    error: str | None = None,
+) -> int:
+    """Adapt the verdict to core's report writer; keep event derivation there."""
+    if report_path is None:
+        return code
+    try:
+        from omnibase_core.models.nodes.validation_report_write.model_validation_report_write_input import (
+            ModelValidationReportWriteInput,
+        )
+        from omnibase_core.models.validation.model_validation_report import (
+            ModelValidationFindingEmbed,
+            ModelValidationReport,
+            ModelValidationRequestRef,
+        )
+        from omnibase_core.nodes.node_validation_report_write_effect.handler import (
+            NodeValidationReportWriteEffect,
+        )
+
+        findings = [
+            ModelValidationFindingEmbed(
+                validator_id="kb-doc-gate",
+                severity="FAIL",
+                rule_id="readme-kb-link" if v.path == "README.md" else "doc-placement",
+                location=v.path,
+                message=v.reason,
+            )
+            for v in violations or []
+        ]
+        if error:
+            findings.append(
+                ModelValidationFindingEmbed(
+                    validator_id="kb-doc-gate",
+                    severity="ERROR",
+                    rule_id="gate-execution",
+                    message=error,
+                )
+            )
+        report = ModelValidationReport.from_findings(
+            findings=tuple(findings),
+            request=ModelValidationRequestRef(profile="default"),
+            validators_run=("kb-doc-gate",),
+        )
+        NodeValidationReportWriteEffect().handle(
+            ModelValidationReportWriteInput(report_path=str(report_path), report=report)
+        )
+    except (ImportError, OSError, ValueError) as exc:
+        print(
+            f"kb-doc-gate: cannot write canonical validation report: {exc}",
+            file=sys.stderr,
+        )
+        return 2
+    return code
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +572,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--head-ref", default="HEAD", help="diff mode: diff head ref (default: HEAD)"
     )
     parser.add_argument(
+        "--report-json",
+        type=Path,
+        help="write a core ValidationReport and adjacent run/fire events (requires omnibase-core>=0.47.47)",
+    )
+    parser.add_argument(
         "files", nargs="*", help="staged files to evaluate (only used with --staged)"
     )
     return parser.parse_args(argv)
@@ -495,7 +591,7 @@ def main(argv: list[str] | None = None) -> int:
         file_mode, extra_allowed = load_config(config_path)
     except ValueError as exc:
         print(f"kb-doc-gate: config error: {exc}", file=sys.stderr)
-        return 2
+        return _finish(args.report_json, 2, error=str(exc))
 
     mode = file_mode or args.mode or "diff"
     allowed = DEFAULT_ALLOWED + tuple(extra_allowed)
@@ -503,7 +599,7 @@ def main(argv: list[str] | None = None) -> int:
     if mode == "strict":
         paths = tracked_markdown(repo_root)
         violations = evaluate_tree(paths, allowed=allowed)
-        inspected = f"{len(paths)} tracked markdown file(s)"
+        inspected = f"{len(paths)} tracked prose file(s)"
     else:
         if args.staged:
             changed = staged_changed_files(repo_root, args.files)
@@ -524,13 +620,26 @@ def main(argv: list[str] | None = None) -> int:
                 "kb-doc-gate: diff mode needs one of --staged or --base-ref",
                 file=sys.stderr,
             )
-            return 2
+            return _finish(
+                args.report_json, 2, error="diff mode needs --staged or --base-ref"
+            )
         violations = evaluate_diff(changed, allowed=allowed)
+        paths = [cf.path for cf in changed if cf.status != "D"]
         inspected = f"{len(changed)} changed file(s)"
+
+    try:
+        violations.extend(
+            evaluate_readme(
+                repo_root, paths, staged=args.staged, head_ref=args.head_ref
+            )
+        )
+    except (OSError, UnicodeError, subprocess.CalledProcessError) as exc:
+        print(f"kb-doc-gate: cannot read README post-image: {exc}", file=sys.stderr)
+        return _finish(args.report_json, 2, violations, error=str(exc))
 
     if not violations:
         print(f"kb-doc-gate: OK ({mode} mode, {inspected} inspected)")
-        return 0
+        return _finish(args.report_json, 0)
 
     print(
         f"kb-doc-gate: FAILED ({mode} mode) — {len(violations)} violation(s):",
@@ -547,7 +656,7 @@ def main(argv: list[str] | None = None) -> int:
         "this repo's .kb-doc-gate.yaml (OMN-16589, OMN-17172).",
         file=sys.stderr,
     )
-    return 1
+    return _finish(args.report_json, 1, violations)
 
 
 if __name__ == "__main__":

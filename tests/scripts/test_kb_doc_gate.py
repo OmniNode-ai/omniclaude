@@ -18,6 +18,7 @@ existence of anything outside it.
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -278,7 +279,9 @@ def git_repo(tmp_path):
     _git(repo, "init", "-q", "-b", "main")
     _git(repo, "config", "user.email", "test@example.com")
     _git(repo, "config", "user.name", "Test")
-    (repo / "README.md").write_text("# Repo\n\nDocs live in the knowledge-base.\n")
+    (repo / "README.md").write_text(
+        "# Repo\n\n[Docs](https://github.com/OmniNode-ai/knowledge_base)\n"
+    )
     (repo / "docs").mkdir()
     (repo / "docs" / "legacy.md").write_text("a doc that should have moved\n")
     _git(repo, "add", "-A")
@@ -288,7 +291,7 @@ def git_repo(tmp_path):
 
 def _run_cli(argv: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["python3", str(_SCRIPT), *argv],
+        [sys.executable, str(_SCRIPT), *argv],
         capture_output=True,
         text=True,
         check=False,
@@ -645,3 +648,195 @@ def test_hook_manifest_declares_both_the_commit_and_merge_stages():
     hooks = {h["id"]: h for h in yaml.safe_load(manifest.read_text(encoding="utf-8"))}
 
     assert set(hooks["kb-doc-gate"]["stages"]) == {"pre-commit", "pre-merge-commit"}
+
+
+@pytest.mark.parametrize("suffix", ["md", "mdx", "rst", "markdown", "adoc", "asciidoc"])
+@pytest.mark.parametrize("source", ["staged", "refs"])
+def test_recurrence_diff_blocks_prose_formats(git_repo, suffix, source):
+    path = f"docs/new-guide.{suffix}"
+    (git_repo / path).write_text("A new product guide.\n")
+    _git(git_repo, "add", path)
+    if source == "staged":
+        args = ["--staged", path]
+    else:
+        _git(git_repo, "commit", "-q", "-m", "add guide")
+        args = ["--base-ref", "HEAD~1", "--head-ref", "HEAD"]
+
+    result = _run_cli(["--mode", "diff", "--repo-root", str(git_repo), *args])
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert path in result.stderr
+
+
+@pytest.mark.parametrize("source", ["staged", "refs"])
+def test_recurrence_readme_requires_kb_link(git_repo, source):
+    (git_repo / "README.md").write_text("# Product\n\nSee docs/ for the guide.\n")
+    _git(git_repo, "add", "README.md")
+    if source == "staged":
+        args = ["--staged", "README.md"]
+    else:
+        _git(git_repo, "commit", "-q", "-m", "change readme")
+        args = ["--base-ref", "HEAD~1"]
+
+    result = _run_cli(["--repo-root", str(git_repo), *args])
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "README.md" in result.stderr
+    assert "knowledge-base link" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/OmniNode-ai/knowledge_base",
+        "https://github.com/OmniNode-ai/knowledge-base/blob/main/README.md",
+        "https://github.com/OmniNode-ai/knowledge_base/tree/main/guides",
+        "https://github.com/OMNINODE-AI/knowledge-base",
+    ],
+)
+def test_recurrence_readme_with_kb_link_passes(git_repo, url):
+    (git_repo / "README.md").write_text(f"# Product\n\n[Documentation]({url})\n")
+    _git(git_repo, "add", "README.md")
+    result = _run_cli(["--staged", "--repo-root", str(git_repo)])
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/OmniNode-ai/knowledge_base_backup",
+        "https://example.com/OmniNode-ai/knowledge_base",
+        "https://github.com/another-owner/knowledge_base",
+    ],
+)
+def test_recurrence_readme_rejects_unrelated_urls(git_repo, url):
+    (git_repo / "README.md").write_text(f"# Product\n\n[Documentation]({url})\n")
+    _git(git_repo, "add", "README.md")
+    result = _run_cli(["--staged", "--repo-root", str(git_repo)])
+    assert result.returncode == 1, result.stdout + result.stderr
+
+
+def test_recurrence_readme_checks_index_not_worktree(git_repo):
+    (git_repo / "README.md").write_text("# Missing documentation link\n")
+    _git(git_repo, "add", "README.md")
+    (git_repo / "README.md").write_text(
+        "[Docs](https://github.com/OmniNode-ai/knowledge_base)\n"
+    )
+    result = _run_cli(["--staged", "--repo-root", str(git_repo)])
+    assert result.returncode == 1, result.stdout + result.stderr
+
+
+def test_recurrence_readme_checks_head_ref_not_worktree(git_repo):
+    (git_repo / "README.md").write_text("# Missing documentation link\n")
+    _git(git_repo, "add", "README.md")
+    _git(git_repo, "commit", "-q", "-m", "change readme")
+    (git_repo / "README.md").write_text(
+        "[Docs](https://github.com/OmniNode-ai/knowledge_base)\n"
+    )
+    result = _run_cli(["--base-ref", "HEAD~1", "--repo-root", str(git_repo)])
+    assert result.returncode == 1, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "contracts/check.yaml",
+        "docs/config.json",
+        "requirements.txt",
+        "tests/fixtures/guide.mdx",
+        "tests/data/guide.rst",
+        "tests/golden/guide.markdown",
+    ],
+)
+def test_recurrence_diff_allows_machine_config_and_fixture_evidence(git_repo, path):
+    target = git_repo / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("machine or fixture data\n")
+    _git(git_repo, "add", path)
+    result = _run_cli(["--staged", "--repo-root", str(git_repo)])
+    assert result.returncode == 0, result.stderr
+
+
+def test_recurrence_exported_hook_does_not_filter_prose_formats():
+    import yaml
+
+    manifest = _SCRIPT.parents[1] / ".pre-commit-hooks.yaml"
+    hook = next(
+        h for h in yaml.safe_load(manifest.read_text()) if h["id"] == "kb-doc-gate"
+    )
+    assert hook.get("types", ["file"]) == ["file"]
+    assert hook["always_run"] is True
+    assert hook["pass_filenames"] is False
+
+
+def test_recurrence_own_repo_installs_the_same_gate():
+    import yaml
+
+    config = yaml.safe_load(
+        (_SCRIPT.parents[1] / ".pre-commit-config.yaml").read_text()
+    )
+    hook = next(
+        h
+        for repo in config["repos"]
+        if repo["repo"] == "local"
+        for h in repo["hooks"]
+        if h["id"] == "kb-doc-gate"
+    )
+    assert hook["entry"] == "python3 scripts/kb_doc_gate.py --staged"
+    assert hook["always_run"] is True
+    assert hook["pass_filenames"] is False
+    assert "pre-merge-commit" in config["default_install_hook_types"]
+
+
+@pytest.mark.parametrize("offender", [None, "docs/guide.mdx", "README.md"])
+def test_recurrence_canonical_report_emits_run_and_fire(git_repo, tmp_path, offender):
+    if offender:
+        (git_repo / offender).write_text("A guide without a KB link.\n")
+        _git(git_repo, "add", offender)
+    report = tmp_path / "report.json"
+    result = _run_cli(
+        ["--staged", "--repo-root", str(git_repo), "--report-json", str(report)]
+    )
+    assert result.returncode == (1 if offender else 0), result.stderr
+    document = json.loads(report.read_text())
+    assert document["overall_status"] == ("FAIL" if offender else "PASS")
+    events = [
+        json.loads(line)
+        for line in Path(f"{report}.events.jsonl").read_text().splitlines()
+    ]
+    assert [event["kind"] for event in events] == (
+        ["run", "fire"] if offender else ["run"]
+    )
+    assert events[0]["validator_name"] == "kb-doc-gate"
+    assert events[0]["fired_count"] == (1 if offender else 0)
+    if offender:
+        assert events[1]["location"] == offender
+
+
+def test_recurrence_canonical_report_records_config_error(git_repo, tmp_path):
+    (git_repo / ".kb-doc-gate.yaml").write_text("mode: not-a-mode\n")
+    report = tmp_path / "report.json"
+    result = _run_cli(
+        ["--staged", "--repo-root", str(git_repo), "--report-json", str(report)]
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert json.loads(report.read_text())["overall_status"] == "ERROR"
+
+
+def test_recurrence_ci_runs_the_canonical_gate_and_retains_events():
+    import yaml
+
+    workflow = yaml.safe_load(
+        (_SCRIPT.parents[1] / ".github/workflows/kb-doc-gate-reusable.yml").read_text()
+    )
+    steps = workflow["jobs"]["kb-doc-gate"]["steps"]
+    gate = next(step for step in steps if step.get("name") == "Run kb-doc-gate")
+    assert '--base-ref "origin/${BASE_REF}"' in gate["run"]
+    assert "--report-json" in gate["run"]
+    upload = next(
+        step
+        for step in steps
+        if step.get("name") == "Upload validator report and events"
+    )
+    assert upload["if"] == "always()"
+    assert "kb-doc-gate-report.json.events.jsonl" in upload["with"]["path"]
