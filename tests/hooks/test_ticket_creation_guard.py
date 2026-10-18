@@ -156,6 +156,9 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
                 "behaviour_runner_words": ["pytest"],
                 "min_labelled_criteria": 2,
                 "labelled_criterion_exempt_binding_forms": ["invariant"],
+                "defect_diagnosis": json.loads(
+                    _POLICY_JSON.read_text(encoding="utf-8")
+                )["defect_diagnosis"],
             }
         ),
         encoding="utf-8",
@@ -2567,12 +2570,21 @@ def test_the_refusal_names_the_approved_edit_path() -> None:
     assert "Criterion-edit ruling:" in findings[0].fix
 
 
+def _ledger_rows(ledger: Path, stamp: str) -> list[str]:
+    """The reader the guard binds, now lifted into a handler the guard loads by path."""
+    return list(
+        _GUARD._handler("handler_ticket_ledger_lookup").rows_for_stamp(
+            ledger, stamp, _GUARD._LEDGER_CELL_SEPARATOR
+        )
+    )
+
+
 def test_the_ledger_reader_finds_a_ruling_in_the_live_file(tmp_path: Path) -> None:
     ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
     ledger.write_text(f"unrelated\n{_RULING_ROW}\n", encoding="utf-8")
-    assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == [_RULING_ROW]
-    assert _GUARD.ledger_rows_for_stamp(ledger, "2026-01-01T00:00:00Z") == []
-    assert _GUARD.ledger_rows_for_stamp(tmp_path / "absent.md", _RULING_STAMP) == []
+    assert _ledger_rows(ledger, _RULING_STAMP) == [_RULING_ROW]
+    assert _ledger_rows(ledger, "2026-01-01T00:00:00Z") == []
+    assert _ledger_rows(tmp_path / "absent.md", _RULING_STAMP) == []
 
 
 def test_the_ledger_reader_finds_a_ruling_in_a_rolled_archive(tmp_path: Path) -> None:
@@ -2583,7 +2595,7 @@ def test_the_ledger_reader_finds_a_ruling_in_a_rolled_archive(tmp_path: Path) ->
     (archive / "ROLLING_WORK_LEDGER_2026-10-08-split.md").write_text(
         f"{_RULING_ROW}\n", encoding="utf-8"
     )
-    assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == [_RULING_ROW]
+    assert _ledger_rows(ledger, _RULING_STAMP) == [_RULING_ROW]
 
 
 def test_the_ledger_reader_does_not_follow_a_symlinked_archive_directory(
@@ -2600,7 +2612,7 @@ def test_the_ledger_reader_does_not_follow_a_symlinked_archive_directory(
     ledger = home / "ROLLING_WORK_LEDGER.md"
     ledger.write_text("live row only\n", encoding="utf-8")
     (home / "archive").symlink_to(elsewhere, target_is_directory=True)
-    assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == []
+    assert _ledger_rows(ledger, _RULING_STAMP) == []
 
 
 def test_the_ledger_reader_does_not_follow_a_symlinked_ledger(tmp_path: Path) -> None:
@@ -2608,7 +2620,7 @@ def test_the_ledger_reader_does_not_follow_a_symlinked_ledger(tmp_path: Path) ->
     real.write_text(f"{_RULING_ROW}\n", encoding="utf-8")
     ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
     ledger.symlink_to(real)
-    assert _GUARD.ledger_rows_for_stamp(ledger, _RULING_STAMP) == []
+    assert _ledger_rows(ledger, _RULING_STAMP) == []
 
 
 def test_main_admits_an_approved_rewrite_end_to_end(
