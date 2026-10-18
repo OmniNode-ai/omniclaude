@@ -405,6 +405,7 @@ def test_missing_canonical_sibling_does_not_read_a_nested_clone(
     clone, merge = _clone(registry, _contract("AC1"))
     clone.rename(registry / "omnibase_internal")
     monkeypatch.setenv("OMNI_HOME", str(registry))
+    monkeypatch.delenv("ONEX_REGISTRY_ROOTS", raising=False)
     monkeypatch.delenv("OMNIBASE_INTERNAL_HOME", raising=False)
 
     read = LaneRepoEvidence().read_contract(
