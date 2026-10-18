@@ -332,28 +332,42 @@ jobs:
         run: |
           # OMN-20910: the review tooling is read at omniintelligence's newest
           # dev-<UTC>-<sha12> tag, resolved here at run time (every dev merge there
-          # is tagged), never at a branch tip and never at the rev uv.lock records.
-          # Only names of exactly that shape are considered (14-digit UTC stamp,
-          # 12 hex), so the lexical maximum is the newest tag. The tag is
-          # commit-anchored: the fetched commit must start with the sha12 the tag
-          # name records, or the clone is refused, so a tag cannot be moved to
-          # other content without the run failing.
+          # is tagged), never checked out at a branch tip and never at the rev
+          # uv.lock records. Only names of exactly that shape are considered
+          # (14-digit UTC stamp, 12 hex), newest first. A tag name is not a trust
+          # root: anyone who can push a tag could name one after a commit they
+          # control. A candidate is therefore taken only when its commit starts with
+          # the sha12 its name records AND is an ancestor of omniintelligence's dev
+          # branch, whose protection is the same root a uv.lock rev would trust. A
+          # tag failing either test is skipped with a warning, so a forged
+          # newer-looking tag can neither be read nor hold the reviewer back. dev is
+          # fetched only to test ancestry (commits and trees, no blobs); the tree
+          # read is the tag's.
           repo_url="https://github.com/OmniNode-ai/omniintelligence.git"
           for attempt in {1..4}; do
             rm -rf ../omniintelligence
-            if tag="$(git ls-remote --tags --refs "$repo_url" 'refs/tags/dev-*' | sed 's#.*refs/tags/##' | grep -E '^dev-[0-9]{14}-[0-9a-f]{12}$' | sort | tail -n 1)" \
-              && [[ -n "$tag" ]] \
-              && git init -q ../omniintelligence \
-              && git -C ../omniintelligence fetch --depth=1 --filter=blob:none \
-                "$repo_url" "refs/tags/${tag}" \
-              && git -C ../omniintelligence checkout -q FETCH_HEAD; then
-              head_sha="$(git -C ../omniintelligence rev-parse HEAD)"
-              if [[ "$head_sha" != "${tag##*-}"* ]]; then
-                echo "::error::omniintelligence tag ${tag} resolves to ${head_sha}, not the commit its name records"
-                exit 1
-              fi
-              echo "omniintelligence read at tag ${tag} (${head_sha})"
-              exit 0
+            if git init -q ../omniintelligence \
+              && git -C ../omniintelligence remote add origin "$repo_url" \
+              && tags="$(git -C ../omniintelligence ls-remote --tags --refs origin 'refs/tags/dev-*' | sed 's#.*refs/tags/##' | grep -E '^dev-[0-9]{14}-[0-9a-f]{12}$' | sort -r)" \
+              && [[ -n "$tags" ]] \
+              && git -C ../omniintelligence fetch -q --no-tags --filter=blob:none origin \
+                '+refs/heads/dev:refs/remotes/origin/dev' '+refs/tags/dev-*:refs/tags/dev-*'; then
+              for tag in $tags; do
+                head_sha="$(git -C ../omniintelligence rev-parse "refs/tags/${tag}^{commit}")"
+                if [[ "$head_sha" != "${tag##*-}"* ]]; then
+                  echo "::warning::omniintelligence tag ${tag} resolves to ${head_sha}, not the commit its name records; skipped"
+                  continue
+                fi
+                if ! git -C ../omniintelligence merge-base --is-ancestor "$head_sha" refs/remotes/origin/dev; then
+                  echo "::warning::omniintelligence tag ${tag} (${head_sha}) is not an ancestor of its dev branch; skipped"
+                  continue
+                fi
+                git -C ../omniintelligence checkout -q --detach "$head_sha"
+                echo "omniintelligence read at tag ${tag} (${head_sha})"
+                exit 0
+              done
+              echo "::error::no omniintelligence dev-<UTC>-<sha12> tag is anchored to its commit and reachable from dev"
+              exit 1
             fi
             sleep $((attempt * 10))
           done

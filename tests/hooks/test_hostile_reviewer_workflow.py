@@ -605,7 +605,7 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
     # (OMN-20910), resolved at run time; a branch tip stays refused.
     assert "--branch dev" not in combined, "dependency clones must not track dev"
     assert "--branch main" not in combined, "dependency clones must not track main"
-    assert "git ls-remote --tags --refs" in combined, (
+    assert "ls-remote --tags --refs origin" in combined, (
         "omniintelligence must be resolved to its newest tag at run time"
     )
     assert "'refs/tags/dev-*'" in combined, (
@@ -617,7 +617,17 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
     assert '[[ "$head_sha" != "${tag##*-}"* ]]' in combined, (
         "the fetched commit must match the sha12 its tag name records"
     )
-    assert "refs/heads" not in combined, "no dependency clone may fetch a branch tip"
+    # A tag name is not a trust root: the commit must also be reachable from the
+    # sibling's dev branch, which is fetched to test ancestry and never checked out.
+    assert 'merge-base --is-ancestor "$head_sha" refs/remotes/origin/dev' in combined, (
+        "the tagged commit must be an ancestor of omniintelligence dev"
+    )
+    assert 'checkout -q --detach "$head_sha"' in combined, (
+        "the tree read must be the verified tag commit, never a branch tip"
+    )
+    assert "checkout -q FETCH_HEAD" not in combined, (
+        "no dependency clone may check out what it fetched without verification"
+    )
     assert "omniintelligence\\.git\\?rev=" not in combined, (
         "omniintelligence is no longer read at the rev uv.lock records"
     )
