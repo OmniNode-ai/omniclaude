@@ -97,6 +97,11 @@ requirements:
         statement: "lab-onboarding.sh installs onex@omninode-tools from OmniNode-ai/omniclaude by default, and the full onex tree and omni only with --developer -- falsifier: uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov -k onboarding_script_defaults"
       - id: AC22
         statement: "The onboarding script's customer default is the public quickstart install, and that install, run into a scratch Claude config, adds exactly onex:delegate to the built-in slash commands, served from plugins/onex-delegate -- falsifier: uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov -k 'only_the_delegate_command or onboarding_script_defaults'"
+  - id: req-gh-shim-runner-exact-head
+    statement: The declared exact-head check admits the remote runner's fork-status field on the same PR.
+    acceptance:
+      - id: AC23
+        statement: "A matching declared gh pr view with headRefName,headRefOid,isCrossRepository,state reaches gh and returns its JSON unchanged; adding body is refused before gh runs -- falsifier: pytest tests/scripts/test_gh_pr_state_read_guard.py -q --no-cov -k remote_runner_exact_head_fields"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -109,6 +114,24 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  - id: dod-gh-shim-runner-exact-head
+    description: The runner's exact field list passes while an appended unlisted field is refused without reaching gh.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_gh_pr_state_read_guard.py -q --no-cov -k remote_runner_exact_head_fields"
+    binds_ac:
+      - AC23
+  - id: dod-deploy-gh-shim-runner-exact-head
+    description: Hosted runners exercise this checkout's shim with a fake gh, isolated home and temporary logs; the exact runner call passes and an appended body field is refused without credentials or network reads.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_gh_pr_state_read_guard.py -q --no-cov -k remote_runner_exact_head_fields"
+    binds_ac:
+      - AC23
   - id: dod-project-set-is-refused
     description: >
       A create that sets project or projectId is refused with code
