@@ -617,6 +617,9 @@ class Policy:
     #: nothing can produce is an exemption that never fires, and a gate whose
     #: exemption never fires reads as working.
     labelled_criterion_exempt_binding_forms: frozenset[str]
+    #: Rule 15 (OMN-17427). The defect vocabulary and the ``Diagnosis:`` citation
+    #: forms, read by ``handler_defect_diagnosis`` and validated at load time.
+    defect_diagnosis: Any
     #: The declared binding grammar (OMN-18414). Carried on the policy so the
     #: decision core stays a pure function of what it is handed, and so a
     #: malformed declaration refuses at load time -- with everything else --
@@ -945,6 +948,9 @@ def load_policy(path: Path | None = None, grammar_path: Path | None = None) -> P
             raw.get("min_labelled_criteria"), "min_labelled_criteria", source
         ),
         labelled_criterion_exempt_binding_forms=frozenset(exempt_forms),
+        defect_diagnosis=_handler("handler_defect_diagnosis").load_policy(
+            raw.get("defect_diagnosis"), source, PolicyError
+        ),
     )
 
 
@@ -1753,6 +1759,7 @@ def check_save_issue(
     policy: Policy,
     body_lookup: BodyLookup | None = None,
     ruling_lookup: RulingLookup | None = None,
+    ledger_lines: Any = None,
 ) -> list[Finding]:
     """Return every failing admission rule for one ``save_issue`` call.
 
@@ -1975,6 +1982,17 @@ def check_save_issue(
     if description_readable:
         findings.extend(_labelled_criterion_findings(description, binding, policy))
 
+    # Rule 15 -- a defect-shaped create cites its diagnosis before its criteria
+    # are admitted. ``ledger_lines`` is the ledger seam; absent, a ledger
+    # citation resolves nothing.
+    if description_readable:
+        findings.extend(
+            Finding(**f)
+            for f in _handler("handler_defect_diagnosis").findings(
+                tool_input, title, description, policy.defect_diagnosis, ledger_lines
+            )
+        )
+
     return findings
 
 
@@ -2119,56 +2137,6 @@ def _body_network_lookup(api_key: str) -> BodyLookup:
     return lookup
 
 
-def _ledger_path() -> Path | None:
-    """The rolling ledger to resolve rulings against, or ``None``.
-
-    ``ONEX_LEDGER_PATH`` first, which is where a dispatched lane's copy lives;
-    ``$OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md`` second.
-    """
-    explicit = os.environ.get("ONEX_LEDGER_PATH", "").strip()
-    if explicit:
-        return Path(explicit)
-    home = os.environ.get("OMNI_HOME", "").strip()
-    if home:
-        return Path(home) / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
-    return None
-
-
-def ledger_rows_for_stamp(ledger: Path, stamp: str) -> list[str]:
-    """Every row of ``ledger`` (and its rolled archive) whose first cell is ``stamp``.
-
-    An unreadable file contributes no rows, so an unreadable ledger approves
-    nothing: the rewrite stays refused. A symlinked ledger, a symlinked
-    ``archive`` directory and a symlinked archive file are never followed, so a
-    ruling cannot be read from outside the ledger's own directory.
-    """
-    files = [ledger]
-    archive = ledger.parent / "archive"
-    if archive.is_dir() and not archive.is_symlink():
-        files.extend(sorted(archive.glob(f"{ledger.stem}_*-split.md")))
-    prefix = f"{stamp}{_LEDGER_CELL_SEPARATOR}"
-    rows: list[str] = []
-    for path in files:
-        if path.is_symlink() or not path.is_file():
-            continue
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        rows.extend(line for line in lines if line.startswith(prefix))
-    return rows
-
-
-def _ledger_ruling_lookup() -> RulingLookup:
-    """Bind rule 9's ledger seam to the rolling ledger on this machine."""
-    ledger = _ledger_path()
-
-    def lookup(stamp: str) -> list[str]:
-        return ledger_rows_for_stamp(ledger, stamp) if ledger is not None else []
-
-    return lookup
-
-
 def _block(reason: str, reason_code: str) -> int:
     json.dump(
         {"decision": "block", "reason": reason, "reason_code": reason_code}, sys.stdout
@@ -2236,6 +2204,7 @@ def main(argv: list[str] | None = None) -> int:
     tool_input = payload.get("tool_input")
     is_update = isinstance(tool_input, dict) and _is_present(tool_input.get("id"))
 
+    ledger = _handler("handler_ticket_ledger_lookup")
     findings = (
         []
         if args.lane_intake
@@ -2243,7 +2212,10 @@ def main(argv: list[str] | None = None) -> int:
             tool_input,
             policy,
             body_lookup=body_lookup,
-            ruling_lookup=_ledger_ruling_lookup(),
+            ruling_lookup=ledger.ruling_lookup(_LEDGER_CELL_SEPARATOR),
+            ledger_lines=_handler("handler_defect_diagnosis").ledger_line_lookup(
+                ledger.ledger_path()
+            ),
         )
     )
     admission = None
