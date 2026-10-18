@@ -462,3 +462,15 @@ dod_evidence:
           '
     binds_ac:
       - AC21
+  - id: dod-customer-install-commands-self-contained
+    description: The customer install test holds the two claude plugin commands itself and reads no README, so rewriting or removing the README cannot break it.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: >-
+          ! grep -q 'README' plugins/onex-delegate/tests/test_customer_install_slash_commands.py && grep -q 'CUSTOMER_MARKETPLACE\]' plugins/onex-delegate/tests/test_customer_install_slash_commands.py
+      - check_type: test_passes
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov -k onboarding_script_defaults"
+    binds_ac:
+      - AC22

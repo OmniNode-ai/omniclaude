@@ -13,7 +13,7 @@ test stayed green.
 
 This module runs the customer install with the real `claude` binary into a
 scratch Claude config (`CLAUDE_CONFIG_DIR`), with this checkout standing in for
-the GitHub repository the quickstart names, and reads back what Claude Code's
+the GitHub repository the customer install names, and reads back what Claude Code's
 own loader installed: `claude plugin list --json` for the installed plugins and
 `claude plugin details` for each plugin's component inventory. A plugin's
 slash commands are its skills, named `<plugin>:<skill>`; everything else on the
@@ -23,7 +23,7 @@ reports 114 skills and 30 hooks.
 
 What it proves, and what it does not
 ------------------------------------
-* The commands the customer path runs are the public quickstart's, and the
+* The commands the customer path runs are the two below, and the
   onboarding script's customer default is the same plugin from the same
   marketplace; the full developer tree needs its explicit --developer flag.
 * After the install, one plugin is installed, read from `plugins/onex-delegate`,
@@ -53,7 +53,6 @@ pytestmark = pytest.mark.integration
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DELEGATE_PLUGIN_DIR = REPO_ROOT / "plugins" / "onex-delegate"
-README = REPO_ROOT / "README.md"
 ONBOARDING_SCRIPT = (
     REPO_ROOT / "plugins" / "onex" / "skills" / "_bin" / "lab-onboarding.sh"
 )
@@ -132,20 +131,8 @@ def _inventory(
 
 
 def _quickstart_commands() -> list[list[str]]:
-    """The `claude plugin ...` lines of the README's first-time install block."""
-    text = README.read_text()
-    block = (
-        text.split("### Plugin Install", 1)[1].split("```bash", 1)[1].split("```", 1)[0]
-    )
+    """The `claude plugin ...` lines of the customer's first-time install."""
     return [
-        shlex.split(line)
-        for line in block.splitlines()
-        if line.strip().startswith("claude plugin ")
-    ]
-
-
-def test_quickstart_is_the_customer_install() -> None:
-    assert _quickstart_commands() == [
         ["claude", "plugin", "marketplace", "add", CUSTOMER_MARKETPLACE],
         ["claude", "plugin", "install", CUSTOMER_PLUGIN],
     ]
@@ -177,7 +164,7 @@ def test_customer_install_adds_only_the_delegate_command(tmp_path: Path) -> None
     assert _installed(config, cwd) == [], "a scratch config must start with no plugins"
 
     for argv in _quickstart_commands():
-        # This checkout stands in for the GitHub repository the quickstart names.
+        # This checkout stands in for the GitHub repository the customer install names.
         argv = [claude, *argv[1:]]
         if argv[2:4] == ["marketplace", "add"]:
             argv[4] = str(REPO_ROOT)
