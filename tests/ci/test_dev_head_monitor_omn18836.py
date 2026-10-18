@@ -374,11 +374,8 @@ def test_contract_and_schedule_wire_the_native_bus_worker() -> None:
     assert contract["event_bus"]["publish_topics"] == [
         "onex.evt.omniclaude.dev-head-monitor-completed.v1"
     ]
-    mint = next(
-        step
-        for step in job["steps"]
-        if "create-github-app-token" in step.get("uses", "")
-    )
+    mint = next(step for step in job["steps"] if step.get("id") == "app-token")
+    assert "create-github-app-token" in mint["uses"]
     assert mint["with"]["permission-actions"] == "read"
     assert mint["with"]["permission-pull-requests"] == "write"
 
@@ -424,6 +421,33 @@ def test_monitor_dry_run_is_its_own_dispatch_input() -> None:
     steps = workflow["jobs"]["dev-head-red-alert"]["steps"]
     env = next(step["env"] for step in steps if "DRY_RUN" in step.get("env", {}))
     assert "inputs.dev-head-monitor-dry-run == true" in env["DRY_RUN"]
+
+
+def test_dev_lane_table_is_read_from_the_ci_overlay_not_omnimarket() -> None:
+    """OMN-20935: the lane table is private config read from the CI overlay."""
+    steps = _host_workflow()["jobs"]["dev-head-red-alert"]["steps"]
+    omnimarket = next(
+        step for step in steps if step.get("with", {}).get("path") == ".monitor-bus"
+    )
+    sparse = omnimarket["with"]["sparse-checkout"].split()
+    assert "config/ci_bus_lanes.yaml" not in sparse
+    resolve = next(step for step in steps if step.get("id") == "ci-overlay")
+    assert resolve["env"]["CI_OVERLAY_REPO"] == "${{ vars.OMNI_CI_OVERLAY_REPO }}"
+    token = next(step for step in steps if step.get("id") == "ci-overlay-token")
+    assert token["with"]["permission-contents"] == "read"
+    assert token["with"]["repositories"] == "${{ steps.ci-overlay.outputs.name }}"
+    overlay = next(
+        step
+        for step in steps
+        if step.get("with", {}).get("path") == ".monitor-bus-overlay"
+    )
+    assert overlay["with"]["sparse-checkout"].split() == [
+        "config/lab/ci_bus_lanes.yaml"
+    ]
+    assert overlay["with"]["token"] == "${{ steps.ci-overlay-token.outputs.token }}"
+    runs = "\n".join(step.get("run", "") for step in steps)
+    assert ".monitor-bus-overlay/config/lab/ci_bus_lanes.yaml" in runs
+    assert ".monitor-bus/config/ci_bus_lanes.yaml" not in runs
 
 
 @pytest.mark.parametrize("sha", ["b" * 40, "dev"])
