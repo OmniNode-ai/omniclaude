@@ -640,6 +640,11 @@ def _iter_bash_checks(
         tokens = _segment_tokens(segment)
         while tokens and shell.assign(tokens[0]):
             tokens.pop(0)
+        if tokens and tokens[0] == "env":
+            # `env NAME=value git ...` is the inline assignment spelled through env
+            tokens.pop(0)
+            while tokens and shell.assign(tokens[0]):
+                tokens.pop(0)
         if not tokens:
             continue
         if tokens[0] == "export":
@@ -676,20 +681,149 @@ def _gh_checks(tokens: list[str], shell: _Shell) -> Iterator[tuple[str, str | No
         yield f"gh {pair[0]} {pair[1]}", shell.cwd
 
 
+# --- core.worktree: a canonical clone's work tree is itself, always ----------
+#
+# 2026-10-18: a lane run set core.worktree in a canonical repository
+# clone's .git/config to its own run directory. Every git command on the clone
+# then read the wrong tree: `git status` printed clean over a stale partial
+# checkout, a convergence reset the lane's run directory instead of the clone,
+# and a plugin tick that put the clone's src on sys.path crashed for every
+# session. Nothing here denied it: `git config` is a read verb above, and a
+# `--work-tree` global option was skipped as just another flag.
+#
+# Denied in a canonical clone: `git config core.worktree <value>` (any scope
+# file inside the clone, via `--file`), and any git command whose `--work-tree`
+# / GIT_WORK_TREE is a directory other than the clone while its git dir is the
+# clone's. `git init` on a linked worktree's git dir with a work tree set is
+# denied too: it writes core.worktree into the SHARED config (the live
+# mechanism: a lane exports GIT_DIR=<clone>/.git/worktrees/<n> and
+# GIT_WORK_TREE=<n's tree>, then runs `git init` anywhere). A work tree equal to
+# the clone is harmless and passes, `git config --unset core.worktree` is the
+# repair and passes.
+
+# `git config` forms that only READ (or restore the default) — never a bypass.
+_CONFIG_READ_FLAGS = {
+    "--get",
+    "--get-all",
+    "--get-regexp",
+    "--get-urlmatch",
+    "--list",
+    "-l",
+    "--unset",
+    "--unset-all",
+}
+
+_CORE_WORKTREE_KEY = "core.worktree"
+_CORE_WORKTREE_LABELS = {"git config core.worktree"}
+_CORE_WORKTREE_PREFIXES = ("git --work-tree=", "git init (GIT_WORK_TREE=")
+_CORE_WORKTREE_HINT = (
+    "A canonical clone's work tree is the clone itself: core.worktree set to any "
+    "other directory (or a --work-tree / GIT_WORK_TREE naming one) makes every git "
+    "command on the clone read the wrong tree (2026-10-18). To repair a clone that "
+    "already carries one:  git -C <clone> config --unset core.worktree\n\n"
+)
+_CONFIG_FILE_FLAGS = {"--file", "-f"}
+
+
+def _checkout_root(path: str) -> str | None:
+    """The nearest ancestor of *path* (itself included) holding a ``.git`` entry."""
+    current = os.path.normpath(path)
+    while True:
+        if os.path.exists(os.path.join(current, ".git")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
+def _work_tree_checks(
+    subcommand: str,
+    work_tree: str,
+    git_dir: str | None,
+    effective: str,
+    shell: _Shell,
+) -> Iterator[tuple[str, str | None]]:
+    """Yield a check for a ``--work-tree`` other than the clone the git dir is."""
+    label = f"git --work-tree={work_tree}"
+    resolved = _resolve_shell_path(work_tree, effective, shell.env)
+    if resolved is None:
+        _log(f"UNRESOLVED {label}; treating location as unknown")
+        return
+    if git_dir is not None:
+        gd = _resolve_shell_path(git_dir, effective, shell.env)
+        if gd is None:
+            _log(f"UNRESOLVED git dir {git_dir!r}; treating location as unknown")
+            return
+        if os.path.basename(gd) != ".git":
+            # A linked worktree's git dir: its work tree is legitimately elsewhere,
+            # but `git init` writes core.worktree into the shared config.
+            if subcommand == "init":
+                yield f"git init (GIT_WORK_TREE={work_tree})", gd
+            return
+        where, root = gd, os.path.dirname(gd)
+    else:
+        where, root = effective, _checkout_root(effective)
+    if root is None or os.path.realpath(resolved) != os.path.realpath(root):
+        yield label, where
+
+
+def _config_core_worktree_write(
+    args: list[str], effective: str | None, shell: _Shell
+) -> str | None:
+    """The path a ``git config core.worktree <value>`` writes to, else None."""
+    if any(tok.split("=", 1)[0] in _CONFIG_READ_FLAGS for tok in args):
+        return None
+    operands: list[str] = []
+    config_file: str | None = None
+    skip = False
+    for idx, tok in enumerate(args):
+        if skip:
+            skip = False
+            continue
+        if tok in _CONFIG_FILE_FLAGS and idx + 1 < len(args):
+            config_file = args[idx + 1]
+            skip = True
+        elif tok.startswith("--file="):
+            config_file = tok.split("=", 1)[1]
+        elif _is_operand(tok):
+            operands.append(tok)
+    if len(operands) < 2 or operands[0].strip().lower() != _CORE_WORKTREE_KEY:
+        return None
+    if config_file is not None:
+        return _resolve_shell_path(config_file, effective, shell.env)
+    return effective
+
+
 def _git_checks(tokens: list[str], shell: _Shell) -> Iterator[tuple[str, str | None]]:
     i = tokens.index("git") + 1
     effective = shell.cwd
+    work_tree = shell.env.get("GIT_WORK_TREE") or None
+    git_dir = shell.env.get("GIT_DIR") or None
     while i < len(tokens):
         tok = tokens[i]
         if tok in _GIT_OPTS_WITH_VALUE:
-            if tok == "-C" and i + 1 < len(tokens):
-                effective = _resolve_shell_path(tokens[i + 1], shell.cwd, shell.env)
+            value = tokens[i + 1] if i + 1 < len(tokens) else None
+            if tok == "-C" and value is not None:
+                effective = _resolve_shell_path(value, shell.cwd, shell.env)
                 if effective is None:
                     _log(
-                        f"UNRESOLVED git -C target {tokens[i + 1]!r}; treating location as unknown"
+                        f"UNRESOLVED git -C target {value!r}; treating location as unknown"
                     )
+            elif tok == "--work-tree" and value is not None:
+                work_tree = value
+            elif tok == "--git-dir" and value is not None:
+                git_dir = value
+            elif tok == "-c" and value is not None:
+                key, _, override = value.partition("=")
+                if key.strip().lower() == _CORE_WORKTREE_KEY and override:
+                    work_tree = override
             i += 2
             continue
+        if tok.startswith("--work-tree="):
+            work_tree = tok.split("=", 1)[1]
+        elif tok.startswith("--git-dir="):
+            git_dir = tok.split("=", 1)[1]
         if tok.startswith("-"):
             i += 1
             continue
@@ -698,6 +832,12 @@ def _git_checks(tokens: list[str], shell: _Shell) -> Iterator[tuple[str, str | N
         return
     subcommand = tokens[i]
     args = _git_args(tokens, i + 1)
+    if work_tree is not None and effective is not None:
+        yield from _work_tree_checks(subcommand, work_tree, git_dir, effective, shell)
+    if subcommand == "config":
+        where = _config_core_worktree_write(args, effective, shell)
+        if where is not None:
+            yield "git config core.worktree", where
     if subcommand == "worktree":
         op, paths = _worktree_operation(args)
         for raw in paths:
@@ -777,18 +917,6 @@ _TEXT_EMITTING = {
     "column",
     "fold",
     "pbcopy",
-}
-
-# `git config` forms that only READ (or restore the default) — never a bypass.
-_CONFIG_READ_FLAGS = {
-    "--get",
-    "--get-all",
-    "--get-regexp",
-    "--get-urlmatch",
-    "--list",
-    "-l",
-    "--unset",
-    "--unset-all",
 }
 
 # Short options of `git commit` that consume a value, so the remainder of a
@@ -1383,14 +1511,21 @@ def main() -> None:
                 if found:
                     _root, repo = found
                     _log(f"DENY Bash '{label}' in {path} (canonical clone: {repo})")
+                    core_hint = (
+                        _CORE_WORKTREE_HINT
+                        if label in _CORE_WORKTREE_LABELS
+                        or label.startswith(_CORE_WORKTREE_PREFIXES)
+                        else ""
+                    )
                     _deny(
                         f"BLOCKED: '{label}' targets the canonical clone "
                         f"'{repo}' ({path}). Canonical clones stay on main — "
                         f"no branches, staging, commits, or ref/index/worktree "
                         f"plumbing there.\n\n"
-                        f"Allowed in a canonical clone: reads, tests, dev servers, "
-                        f"git pull/fetch (sync), git worktree add, git worktree "
-                        f"remove of a worktree under omni_worktrees/.\n\n"
+                        + core_hint
+                        + "Allowed in a canonical clone: reads, tests, dev servers, "
+                        "git pull/fetch (sync), git worktree add, git worktree "
+                        "remove of a worktree under omni_worktrees/.\n\n"
                         + converge_hint
                         + "\n\n"
                         + worktree_hint
