@@ -369,11 +369,11 @@ def test_default_reader_finds_the_internal_sibling_clone(
     registry = tmp_path / "registry"
     registry.mkdir()
     clone, merge = _clone(tmp_path, _contract("AC1"))
-    clone = clone.rename(tmp_path / "omnibase_internal")
-    repo = "OmniNode-ai/omnibase_internal"
+    clone = clone.rename(tmp_path / "sibling-clone")
+    repo = "OmniNode-ai/sibling-clone"
     _git(clone, "config", "onex.repo", repo)
     monkeypatch.setenv("OMNI_HOME", str(registry))
-    monkeypatch.delenv("OMNIBASE_INTERNAL_HOME", raising=False)
+    monkeypatch.setenv("OMNIBASE_INTERNAL_HOME", str(clone))
     monkeypatch.delenv("ONEX_REGISTRY_ROOTS", raising=False)
     read = LaneRepoEvidence().read_contract(repo, merge, _TICKET)
     assert read.status.value == "found", read.error
@@ -435,12 +435,12 @@ def test_real_guard_uses_sibling_clone_without_weakening_bindings(
     clone, merge = _clone(
         tmp_path, _contract(*(("AC1", "AC2") if complete else ("AC1",)))
     )
-    clone = clone.rename(tmp_path / "omnibase_internal")
-    repo = "OmniNode-ai/omnibase_internal"
+    clone = clone.rename(tmp_path / "sibling-clone")
+    repo = "OmniNode-ai/sibling-clone"
     _git(clone, "config", "onex.repo", repo)
     monkeypatch.setenv("OMNI_HOME", str(registry))
     monkeypatch.delenv("ONEX_REGISTRY_ROOTS", raising=False)
-    monkeypatch.delenv("OMNIBASE_INTERNAL_HOME", raising=False)
+    monkeypatch.setenv("OMNIBASE_INTERNAL_HOME", str(clone))
     description = _DESCRIPTION.replace(_REPO, repo)
     linear = FakeLinear(description)
     handler = _Handler(
