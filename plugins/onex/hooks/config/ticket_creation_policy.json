@@ -282,7 +282,33 @@
     "lane_intake.state_subdir -- where the per-day admission ledger lives,",
     "  relative to ONEX_STATE_DIR (one JSON line per admitted create, one file",
     "  per UTC day). A lane context with no resolvable state dir is refused,",
-    "  not waved through: an unmeasurable budget is not a budget."
+    "  not waved through: an unmeasurable budget is not a budget.",
+    "",
+    "OMN-17427 (closure-throughput plan, task 3). Rule 15 -- a defect-shaped",
+    "create binds to a diagnosis before its criteria are admitted.",
+    "",
+    "Why: 81 of 1,122 terminal rows in 7 days (7.2 %) reported a falsified",
+    "  premise. Criteria written before the defect is understood describe a",
+    "  defect that may not exist, and the work that fixes the real defect then",
+    "  matches no criterion, so the ticket cannot close on its own evidence.",
+    "",
+    "defect_diagnosis.defect_title_terms and defect_label_names -- a create is",
+    "  defect-shaped when its title carries one of the terms on word boundaries",
+    "  or its labels carry one of the names. Such a create must carry a line of",
+    "  its own, unbulleted, reading 'Diagnosis: <citation>'. A non-defect create",
+    "  is untouched.",
+    "",
+    "defect_diagnosis.citation_forms -- the durable artifacts a citation may be,",
+    "  tried in order. A ledger citation is RESOLVED: the cited line must exist",
+    "  and be non-blank in the rolling ledger or its archive, else the create is",
+    "  refused and the refusal names the citation it could not resolve. A pull",
+    "  request and a file:line are checked for SHAPE only, because this hook",
+    "  runs without GitHub or repository access; that is the stated limit of the",
+    "  rule, not a hole it opened.",
+    "",
+    "  Declared here rather than in gate_binding_grammar.json: that file is a",
+    "  byte-pinned copy of omnibase_infra's contract, so a new key there is a",
+    "  two-repository change. The closer does not read this line today."
   ],
   "prd_source": {
     "repo": "OmniNode-ai/knowledge-base-internal",
@@ -433,6 +459,42 @@
   ],
   "min_labelled_criteria": 1,
   "labelled_criterion_exempt_binding_forms": ["parent_criterion"],
+  "defect_diagnosis": {
+    "defect_title_terms": [
+      "bug",
+      "defect",
+      "regression",
+      "broken",
+      "crash",
+      "crashes",
+      "fails",
+      "failing",
+      "failure",
+      "fix"
+    ],
+    "defect_label_names": ["bug", "defect", "regression"],
+    "line_pattern": "^[ \\t]*Diagnosis:[ \\t]*(?P<citation>.*?)[ \\t]*$",
+    "citation_forms": [
+      {
+        "id": "ledger_line",
+        "pattern": "^(?P<path>[A-Za-z0-9_./-]*ROLLING_WORK_LEDGER[A-Za-z0-9_.-]*\\.md):(?P<line>[1-9][0-9]*)$",
+        "example": "docs/tracking/ROLLING_WORK_LEDGER.md:4120",
+        "resolution": "ledger"
+      },
+      {
+        "id": "pull_request",
+        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*$",
+        "example": "OmniNode-ai/omniclaude#2836",
+        "resolution": "shape"
+      },
+      {
+        "id": "file_line",
+        "pattern": "^[A-Za-z0-9_./-]+\\.[A-Za-z0-9]+:[1-9][0-9]*$",
+        "example": "plugins/onex/hooks/lib/ticket_creation_guard.py:1078",
+        "resolution": "shape"
+      }
+    ]
+  },
   "lane_intake": {
     "label": "lane-created",
     "stamp_prefix": "created-by-lane:",

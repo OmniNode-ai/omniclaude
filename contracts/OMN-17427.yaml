@@ -85,6 +85,11 @@ requirements:
     acceptance:
       - id: AC19
         statement: "When run raises KeyError('Version'), main returns 1 and logs the exception with its traceback; the rendered log names the raising frame -- falsifier: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k test_main_logs_the_traceback_of_an_unexpected_error"
+  - id: req-defect-create-binds-to-diagnosis
+    statement: A defect-shaped Linear create cites a resolving Diagnosis line before its criteria are admitted.
+    acceptance:
+      - id: AC20
+        statement: "a create whose title or labels read as a defect and carries no Diagnosis line is refused, one citing a ledger line that is absent or blank is refused naming that citation, a ledger, pull request or file:line citation is admitted, and a feature-shaped create is unaffected -- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_defect_diagnosis.py -q fails over the merge base, which has no defect_diagnosis policy"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -393,3 +398,24 @@ dod_evidence:
           '
     binds_ac:
       - AC19
+  - id: dod-defect-create-binds-to-diagnosis
+    description: >
+      A defect-shaped create with no Diagnosis line, or whose ledger citation
+      does not resolve, is refused by the registered guard; a resolving
+      citation admits it and a feature-shaped create is unaffected.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_defect_diagnosis.py tests/hooks/test_ticket_creation_guard.py -q"
+    binds_ac:
+      - AC20
+  - id: dod-deploy-defect-create-binds-to-diagnosis
+    description: Hosted runners exercise this checkout's guard command with temporary ledgers and isolated homes, checking defect refusals and admitted controls without credentials or external services.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/hooks/test_ticket_creation_guard_defect_diagnosis.py -q --no-cov"
+    binds_ac:
+      - AC20
