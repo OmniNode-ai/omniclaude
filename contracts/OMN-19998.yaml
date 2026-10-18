@@ -37,6 +37,11 @@ requirements:
       - id: "AC5"
         statement: |-
           AC5: no workflow line outside the carve-outs falls back to the self-hosted fleet for a public caller (a reusable workflow keeps it only for a private caller), the Public Runner Placement job is unconditional, hosted, carries a positive control and the same core release as the hook, and CI Summary requires its success -- falsifier: uv run pytest tests/ci/test_public_runner_placement_omn19998.py -q fails at the merge base, where 96 fallback lines name the fleet and neither the job nor the hook exists
+  - id: "req-omn19998-dev-tag-sibling-pins"
+    statement: "Operator RULINGs 2026-10-16T07:34:18Z and 2026-10-16T09:35:49Z: a consumer reads a sibling by tag instead of waiting for a PyPI release. The dep-provenance gate accepts a first-party sibling pinned through [tool.uv.sources] to its own OmniNode-ai repository by a dev merge tag dev-<UTC YYYYMMDDHHMMSS>-<sha12> alone, and keeps refusing a rev, a branch, a release tag, a malformed dev tag and another repository."
+    acceptance:
+      - id: "AC6"
+        statement: "AC6: scripts/check_dep_provenance.py exits 0 for omnibase-core, omnibase-infra, omnibase-spi and omnibase-compat pinned by git = their OmniNode-ai repository and tag = a dev merge tag, and exits 1 for a release tag, a malformed dev tag, another repository, a dev tag beside a rev or branch, and a branch pin to dev -- falsifier: uv run pytest tests/scripts/test_check_dep_provenance_dev_tag_omn19998.py -q fails at the merge base, where the two allow tests fail"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -98,3 +103,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_public_runner_placement_omn19998.py -q"
     binds_ac:
       - AC5
+  - id: "dod-omn19998-dev-tag-sibling-pins"
+    description: "The dev-tag provenance tests and the existing dep-provenance tests pass at the head; at the merge base the two allow tests fail."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_check_dep_provenance_dev_tag_omn19998.py tests/scripts/test_check_dep_provenance.py tests/scripts/test_check_dep_provenance_infra_omn17176.py -q"
+    binds_ac:
+      - "AC6"
