@@ -116,6 +116,13 @@ requirements:
     acceptance:
       - id: AC27
         statement: "With a python3 that refuses any environment string over 128 KiB, a 400 KiB two-voter review result still reaches a passed verdict and a written artifact, and no review JSON rides in an environment variable -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k 'oversized_review_result or review_step_invokes_cli_review'"
+  - id: req-advisory-gate-declared-manifest-fallback
+    statement: On a host with no landing controller cache and no GitHub read, the advisory-job gate takes its required contexts from the clone's declared required-checks manifest, and never inside GitHub Actions.
+    acceptance:
+      - id: AC28
+        statement: "A manifest at schema_version 3 whose repo field names the repository answers with its REQUIRED rows only after the controller cache, the live read and the git cache fail, and the live read wins when it answers -- falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k TestDeclaredManifestFallback fails over the merge base, where the class is absent"
+      - id: AC29
+        statement: "A missing, unparseable, other-repository, wrong-schema or malformed manifest still refuses, and GITHUB_ACTIONS=true never uses the manifest -- falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k 'required_rows or unusable_manifest or unparseable_manifest or never_falls_back' fails over the merge base, where the answering control and those tests are absent"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -128,6 +135,34 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  - id: dod-advisory-gate-manifest-answers
+    description: Tests give the gate a clone with a declared manifest and no other source, and check the answer, the precedence of the live read and the refusal without a manifest.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k 'positive_control or required_rows or the_hook_passes or live_read_wins'"
+    binds_ac:
+      - AC28
+  - id: dod-advisory-gate-manifest-refusals
+    description: Tests give the gate unusable manifests and a GitHub Actions environment and check that each still refuses, beside the case that answers from a usable manifest, so a gate that refuses everything cannot pass the control.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k 'required_rows or unusable_manifest or unparseable_manifest or never_falls_back'"
+    binds_ac:
+      - AC29
+  - id: dod-deploy-advisory-gate-manifest-fallback
+    description: Hosted runners run the manifest fallback tests against this checkout with no controller cache and no GitHub credentials.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k TestDeclaredManifestFallback"
+    binds_ac:
+      - AC28
+      - AC29
   - id: dod-canonical-core-worktree-config
     description: Subprocess tests exercise config writes and their harmless controls against this checkout's guard.
     source: manual
