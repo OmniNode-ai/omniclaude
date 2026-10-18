@@ -108,3 +108,15 @@ def test_positive_control_the_manifest_matcher_skips_comments_only() -> None:
 def test_manifest_does_not_depend_on_onex_change_control(relative: str) -> None:
     text = (REPO_ROOT / relative).read_text(encoding="utf-8")
     assert _live_manifest_lines(text) == []
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "plugins/onex/skills/_lib/begin_day/begin_day.py",
+        "plugins/onex/skills/epic_team/repo_manifest.yaml",
+    ],
+)
+def test_repo_lists_do_not_name_onex_change_control(relative: str) -> None:
+    text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+    assert _live_manifest_lines(text) == []
