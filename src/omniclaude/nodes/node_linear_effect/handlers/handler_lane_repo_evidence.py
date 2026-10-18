@@ -89,6 +89,7 @@ def run_scm(verb: str, args: list[str]) -> dict[str, object] | None:
             text=True,
             timeout=SCM_TIMEOUT_S,
             check=False,
+            env=scrub_git_location_env(os.environ),
         )
     except (subprocess.TimeoutExpired, OSError):
         return None
@@ -125,7 +126,11 @@ class LaneRepoEvidence:
         clone_root: Path | None = None,
     ) -> None:
         self._scm = scm
+        # An explicit root is authoritative (including in isolated tests).
+        # Otherwise use the same registry discovery as canonical-clone-sync:
+        # not every canonical clone is a child named after the repository.
         self._clone_root = clone_root
+        self._clones: dict[str, list[Path]] = {}
         self._ldv = hook_module("linear_done_verify")
         self._evidence = hook_module("no_pr_bound_evidence")
         #: (repo, head sha) -> merge commit, from the PR reads.
@@ -222,23 +227,44 @@ class LaneRepoEvidence:
     def read_contract(self, repo: str, ref: str, ticket_id: str) -> object:
         """``contracts/<ticket>.yaml`` at a commit, from the canonical clone."""
         ev = self._evidence
+        path = f"{ev.CONTRACT_DIR}/{ticket_id}.yaml"
+        clones = self._canonical_clones(repo)
         name = repo.rsplit("/", maxsplit=1)[-1]
-        root = self._clone_root or Path(os.environ.get("OMNI_HOME", ""))
-        clone = root / name
         if self._clone_root is None and name == "omnibase_internal":
             # Reuse the sync's canonical sibling discovery, including its env
             # override and refusal to treat a linked worktree as the clone.
             siblings = hook_module("canonical_clone_sync").sibling_clones(os.environ)
-            if not siblings:
+            # The sibling is canonical by its location, so it counts even when
+            # no remote or onex.repo names the repository.
+            clones = clones + [s for s in siblings if s not in clones]
+            if not clones:
                 return ev.ContractRead(
                     ev.ContractReadStatus.ERROR,
                     error=f"no canonical sibling clone found for {repo}",
                 )
-            clone = siblings[0]
-        path = f"{ev.CONTRACT_DIR}/{ticket_id}.yaml"
-        if not self._has_commit(clone, ref):
-            return self._contract_at_unheld_head(clone, repo, ref, path)
-        return self._show(clone, ref, path)
+        if not clones:
+            return ev.ContractRead(
+                ev.ContractReadStatus.ERROR,
+                error=f"no canonical clone of {repo} under the registered roots",
+            )
+        for clone in clones:
+            if self._has_commit(clone, ref):
+                return self._show(clone, ref, path)
+        # A second registered clone may hold the merge even when the first
+        # has not synced it yet. The unchanged head proof needs that merge.
+        merge = self._merge_of_head.get((repo, ref))
+        for clone in clones:
+            if merge and self._has_commit(clone, merge):
+                return self._contract_at_unheld_head(clone, repo, ref, path)
+        return self._contract_at_unheld_head(clones[0], repo, ref, path)
+
+    def _canonical_clones(self, repo: str) -> list[Path]:
+        if self._clone_root is not None:
+            return [self._clone_root / repo.rsplit("/", maxsplit=1)[-1]]
+        if repo not in self._clones:
+            sync = hook_module("canonical_clone_sync")
+            self._clones[repo] = sync._clones_for(os.environ, repo)
+        return self._clones[repo]
 
     def _has_commit(self, clone: Path, ref: str) -> bool:
         return self._git(clone, ["cat-file", "-e", f"{ref}^{{commit}}"]).returncode == 0

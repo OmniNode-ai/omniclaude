@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from omnibase_core.validators.no_unguarded_git_subprocess import (
 from omniclaude.nodes.node_linear_effect.handlers.handler_lane_repo_evidence import (
     LaneRepoEvidence,
     hook_module,
+    run_scm,
 )
 from omniclaude.nodes.node_linear_effect.handlers.handler_linear_ticketing import (
     HandlerLinearApi,
@@ -411,3 +413,136 @@ def test_missing_canonical_sibling_does_not_read_a_nested_clone(
 
     assert read.status.value == "error"
     assert "no canonical sibling clone" in read.error
+
+
+def test_default_reader_uses_registered_root_and_repository_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = tmp_path / "registry"
+    registry.mkdir()
+    extra = tmp_path / "registered"
+    extra.mkdir()
+    clone, merge = _clone(extra, _contract("AC1"))
+    clone = clone.rename(extra / "renamed-canonical-clone")
+    _git(clone, "config", "onex.repo", _REPO)
+    roots = registry / "scripts/git-hooks/registry-roots"
+    roots.parent.mkdir(parents=True)
+    roots.write_text(f"root={extra}\n")
+    monkeypatch.setenv("OMNI_HOME", str(registry))
+    monkeypatch.delenv("ONEX_REGISTRY_ROOTS", raising=False)
+    monkeypatch.delenv("OMNIBASE_INTERNAL_HOME", raising=False)
+    read = LaneRepoEvidence().read_contract(_REPO, merge, _TICKET)
+    assert read.status.value == "found", read.error
+
+
+def test_explicit_clone_root_does_not_read_another_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = tmp_path / "registry"
+    registry.mkdir()
+    clone, merge = _clone(registry, _contract("AC1"))
+    _git(clone, "config", "onex.repo", _REPO)
+    monkeypatch.setenv("OMNI_HOME", str(registry))
+    explicit = tmp_path / "explicit"
+    explicit.mkdir()
+    read = LaneRepoEvidence(clone_root=explicit).read_contract(_REPO, merge, _TICKET)
+    assert read.status.value == "error"
+
+
+def test_default_reader_refuses_a_same_named_clone_of_another_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clone, merge = _clone(tmp_path, _contract("AC1"))
+    _git(clone, "config", "onex.repo", "other-owner/omnimarket")
+    monkeypatch.setenv("OMNI_HOME", str(tmp_path))
+    monkeypatch.delenv("ONEX_REGISTRY_ROOTS", raising=False)
+    monkeypatch.delenv("OMNIBASE_INTERNAL_HOME", raising=False)
+    read = LaneRepoEvidence().read_contract(_REPO, merge, _TICKET)
+    assert read.status.value == "error"
+
+
+@pytest.mark.parametrize("complete", [True, False])
+def test_real_guard_uses_sibling_clone_without_weakening_bindings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, complete: bool
+) -> None:
+    registry = tmp_path / "registry"
+    registry.mkdir()
+    clone, merge = _clone(
+        tmp_path, _contract(*(("AC1", "AC2") if complete else ("AC1",)))
+    )
+    clone = clone.rename(tmp_path / "example-sibling")
+    repo = "OmniNode-ai/example-sibling"
+    _git(clone, "config", "onex.repo", repo)
+    monkeypatch.setenv("OMNI_HOME", str(registry))
+    monkeypatch.delenv("ONEX_REGISTRY_ROOTS", raising=False)
+    monkeypatch.setenv("OMNIBASE_INTERNAL_HOME", str(clone))
+    description = _DESCRIPTION.replace(_REPO, repo)
+    linear = FakeLinear(description)
+    handler = _Handler(
+        transport=linear,
+        evidence=LaneRepoEvidence(scm=_scm(merge, started_at="2999-01-01T00:00:00Z")),
+    )
+    handler.stored = description
+    result = _run(handler, _request(apply=True))
+    if complete:
+        assert result.status is LinearResultStatus.SUCCESS, result.error
+        assert linear.issue["description"].count("[x]") == 2
+    else:
+        assert result.status is LinearResultStatus.FAILED
+        assert result.uncovered_labels == ("AC2",)
+        assert linear.mutations == []
+
+
+def test_unheld_head_proof_uses_the_registered_clone_holding_the_merge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = tmp_path / "registry"
+    registry.mkdir()
+    stale_root = tmp_path / "stale"
+    fresh_root = tmp_path / "fresh"
+    stale_root.mkdir()
+    fresh_root.mkdir()
+    stale, _ = _clone(stale_root, _contract("AC1"))
+    fresh, merge = _clone(fresh_root, _contract("AC1", "AC2"))
+    stale = stale.rename(registry / "a-stale")
+    fresh = fresh.rename(registry / "b-fresh")
+    for clone in (stale, fresh):
+        _git(clone, "config", "onex.repo", _REPO)
+    monkeypatch.setenv("OMNI_HOME", str(registry))
+    monkeypatch.delenv("ONEX_REGISTRY_ROOTS", raising=False)
+    monkeypatch.delenv("OMNIBASE_INTERNAL_HOME", raising=False)
+    evidence = LaneRepoEvidence(scm=_scm(merge, started_at="2999-01-01T00:00:00Z"))
+    ref = hook_module("linear_done_verify").PRRef(number=3300, repo=_REPO)
+    evidence.fetch_pr_status(ref)
+    evidence.read_check_runs(_REPO, _HEAD)
+    read = evidence.read_contract(_REPO, _HEAD, _TICKET)
+    assert read.status.value == "found", read.error
+    assert len(yaml.safe_load(read.text)["dod_evidence"]) == 2
+
+
+def test_scm_subprocess_reads_its_target_instead_of_the_inherited_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target_root = tmp_path / "target"
+    foreign_root = tmp_path / "foreign"
+    target_root.mkdir()
+    foreign_root.mkdir()
+    target, expected = _clone(target_root, _contract("AC1", "AC2"))
+    foreign, wrong = _clone(foreign_root, _contract("AC1"))
+    assert expected != wrong
+    command = tmp_path / "onex"
+    command.write_text(
+        f"#!{sys.executable}\n"
+        "import json, subprocess\n"
+        f"sha = subprocess.check_output(['git', '-C', {str(target)!r}, "
+        "'rev-parse', 'HEAD'], text=True).strip()\n"
+        "print(json.dumps({'outcome': 'completed', 'result': {'sha': sha}}))\n"
+    )
+    command.chmod(0o755)
+    monkeypatch.setenv("ONEX_BIN", str(command))
+    monkeypatch.setenv("GIT_DIR", str(foreign / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(foreign))
+    result = run_scm("pr-merge-commit", [f"{_REPO}#3300"])
+    assert result == {"sha": expected}
+    assert os.environ["GIT_DIR"] == str(foreign / ".git")
+    assert os.environ["GIT_WORK_TREE"] == str(foreign)
