@@ -354,7 +354,8 @@ dod_evidence:
       The structural test proves no workflow file is named for an OCC job and no guard module
       locates the repository; the guard
       tests prove the Done-flip decision rests on repo evidence and a stamp drop is always
-      refused.
+      refused. The begin_day probe list and the epic_team routing manifest no longer name the
+      repository.
     source: manual
     status: verified
     checks:
