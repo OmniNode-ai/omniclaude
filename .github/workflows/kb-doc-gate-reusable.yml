@@ -3,12 +3,15 @@
 #
 # KB Doc Gate (reusable). OMN-16589 (pilot), OMN-17172 (fleet rollout).
 #
-# Keeps product-repo markdown inside the allowed set defined by the operator
+# Keeps product-repo prose inside the allowed set defined by the operator
 # ruling of 2026-09-01 -- root README, CLAUDE.md/.claude, CHANGELOG*, LICENSE*,
 # root SECURITY.md, .github/**, skills|commands|agents/**, and the tests/**
 # fixture subtrees. Everything else is documentation whose home is the
 # knowledge-base repo. Full statement of the rule, and the per-repo
 # .kb-doc-gate.yaml schema, in scripts/kb_doc_gate.py.
+# OMN-17427: Markdown, MDX, reStructuredText and AsciiDoc share that policy;
+# root README content must link to the knowledge base. This reusable remains
+# the fleet's single validator source; consumers adopt it by immutable pin.
 #
 # Two modes:
 #   diff   (default) -- fails a PR that ADDS or MODIFIES markdown outside the
@@ -211,6 +214,14 @@ jobs:
           fi
           echo "kb-doc-gate checked out at $checked_out_sha"
 
+      - name: Set up Python for canonical validator events
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install canonical validation report writer
+        run: python3 -m pip install 'omnibase-core==0.47.47'
+
       - name: Run kb-doc-gate
         env:
           MODE: ${{ inputs.mode }}
@@ -237,4 +248,15 @@ jobs:
             --base-ref "origin/${BASE_REF}" \
             --head-ref HEAD \
             --mode "${MODE}" \
-            --repo-root .
+            --repo-root . \
+            --report-json "${RUNNER_TEMP}/kb-doc-gate-report.json"
+
+      - name: Upload validator report and events
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kb-doc-gate-report
+          path: |
+            ${{ runner.temp }}/kb-doc-gate-report.json
+            ${{ runner.temp }}/kb-doc-gate-report.json.events.jsonl
+          if-no-files-found: error

@@ -20,6 +20,10 @@
 
 set -euo pipefail
 
+# OMN-17427: hook imports (including pytest's root conftest) must not create
+# __pycache__ that the later clean-root pre-push gate correctly rejects.
+export PYTHONDONTWRITEBYTECODE=1
+
 unset GIT_DIR 2>/dev/null || true
 unset GIT_WORK_TREE 2>/dev/null || true
 
