@@ -98,6 +98,11 @@ def test_config_core_worktree_write_denied_in_canonical(registry: Path) -> None:
         "git config --local core.worktree /somewhere/else",
         "git config CORE.WORKTREE /somewhere/else",
         "git config --add core.worktree /somewhere/else",
+        "git config --global core.worktree /somewhere/else",
+        "git config --system core.worktree /somewhere/else",
+        "git config --worktree core.worktree /somewhere/else",
+        "git config --replace-all core.worktree /somewhere/else",
+        "git config -- core.worktree /somewhere/else",
         "git -C {clone} config core.worktree /somewhere/else",
         "cd {clone} && git config core.worktree /somewhere/else",
         "git config --file {clone}/.git/config core.worktree /somewhere/else",
@@ -137,6 +142,8 @@ def test_control_config_write_in_a_worktree_and_reads_and_unset_in_canonical_all
         "git --git-dir={clone}/.git --work-tree={lane} log",
         "git --git-dir {clone}/.git --work-tree {lane} log",
         "GIT_WORK_TREE={lane} git -C {clone} status",
+        "env GIT_WORK_TREE={lane} git -C {clone} status",
+        "git -c core.worktree={lane} -C {clone} status",
     ],
 )
 def test_work_tree_elsewhere_denied_in_canonical(
@@ -169,6 +176,9 @@ def test_control_work_tree_naming_the_clone_or_a_worktree_allowed(
         registry, f"git --git-dir={worktree}/.git --work-tree={lane} status", tmp_path
     )
     _allowed(registry, f"git -C {clone} status", tmp_path)
+    # a command that is not git at all is not this guard's business
+    _allowed(registry, f"ls {clone}", clone)
+    _allowed(registry, f"make -C {clone} build", clone)
 
 
 @pytest.mark.unit
@@ -201,3 +211,16 @@ def test_the_live_mechanism_git_init_under_a_linked_gitdir_with_a_work_tree_deni
     _allowed(
         registry, f"export GIT_DIR={linked}; git init", tmp_path
     )  # no work tree set: nothing is written
+
+
+@pytest.mark.unit
+def test_env_wrapper_spelling_of_the_live_mechanism_denied(
+    registry: Path, tmp_path: Path
+) -> None:
+    clone = registry / "some_repo"
+    linked = clone / ".git" / "worktrees" / "lane"
+    lane = tmp_path / "lane_run"
+    reason = _denied(
+        registry, f"env GIT_DIR={linked} GIT_WORK_TREE={lane} git init", tmp_path
+    )
+    assert "git init" in reason

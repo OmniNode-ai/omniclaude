@@ -640,6 +640,11 @@ def _iter_bash_checks(
         tokens = _segment_tokens(segment)
         while tokens and shell.assign(tokens[0]):
             tokens.pop(0)
+        if tokens and tokens[0] == "env":
+            # `env NAME=value git ...` is the inline assignment spelled through env
+            tokens.pop(0)
+            while tokens and shell.assign(tokens[0]):
+                tokens.pop(0)
         if not tokens:
             continue
         if tokens[0] == "export":
@@ -695,6 +700,18 @@ def _gh_checks(tokens: list[str], shell: _Shell) -> Iterator[tuple[str, str | No
 # GIT_WORK_TREE=<n's tree>, then runs `git init` anywhere). A work tree equal to
 # the clone is harmless and passes, `git config --unset core.worktree` is the
 # repair and passes.
+
+# `git config` forms that only READ (or restore the default) — never a bypass.
+_CONFIG_READ_FLAGS = {
+    "--get",
+    "--get-all",
+    "--get-regexp",
+    "--get-urlmatch",
+    "--list",
+    "-l",
+    "--unset",
+    "--unset-all",
+}
 
 _CORE_WORKTREE_KEY = "core.worktree"
 _CORE_WORKTREE_LABELS = {"git config core.worktree"}
@@ -797,6 +814,10 @@ def _git_checks(tokens: list[str], shell: _Shell) -> Iterator[tuple[str, str | N
                 work_tree = value
             elif tok == "--git-dir" and value is not None:
                 git_dir = value
+            elif tok == "-c" and value is not None:
+                key, _, override = value.partition("=")
+                if key.strip().lower() == _CORE_WORKTREE_KEY and override:
+                    work_tree = override
             i += 2
             continue
         if tok.startswith("--work-tree="):
@@ -896,18 +917,6 @@ _TEXT_EMITTING = {
     "column",
     "fold",
     "pbcopy",
-}
-
-# `git config` forms that only READ (or restore the default) — never a bypass.
-_CONFIG_READ_FLAGS = {
-    "--get",
-    "--get-all",
-    "--get-regexp",
-    "--get-urlmatch",
-    "--list",
-    "-l",
-    "--unset",
-    "--unset-all",
 }
 
 # Short options of `git commit` that consume a value, so the remainder of a
