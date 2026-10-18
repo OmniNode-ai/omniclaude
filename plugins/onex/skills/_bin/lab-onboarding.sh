@@ -23,8 +23,9 @@
 #                        with `onex models add` and tested with one delegation pinned to it
 #   4 Docker             optional: only if you said yes; Docker Desktop installed, or started
 #                        if stopped, then the local stack on your keys
-#   5 Claude Code        the full onex plugin from your omniclaude clone, and omni and
-#                        onex-overlays when this GitHub login can read omniclaude-internal
+#   5 Claude Code        the customer plugin, onex@omninode-tools: one skill, /onex:delegate.
+#                        With --developer: the full onex plugin from your omniclaude clone,
+#                        and omni and onex-overlays when this login can read the private plugin repository
 #   6 Verify             the checks for the selected modes, one line each
 #
 # Compatible with macOS's stock /bin/bash 3.2: no associative arrays, no
@@ -54,6 +55,8 @@
 #                        (an onex alias, old variables in your profile, a published onex,
 #                        a local-model routes file, clones holding work); each is moved or
 #                        commented out, never deleted
+#   --developer          install the full developer plugin set in phase 5 instead of
+#                        the customer plugin (every /onex: skill and guard hook, and omni)
 #   --restart            forget completed phases and run every phase again
 #   -h, --help           this text
 #
@@ -120,7 +123,7 @@ for _v in $(compgen -e); do
   esac
 done
 unset OMNI_HOME
-RESTART=0
+RESTART=0; DEVELOPER=0
 SET_ASIDE_FLAG=0
 OLLAMA_MODEL=""; LOCAL_URL=""; LOCAL_MODEL=""
 
@@ -139,7 +142,7 @@ while [ $# -gt 0 ]; do
     --local-model) shift; LOCAL_MODEL="${1:-}" ;;
     --workspace) shift; WORKSPACE="${1:-}"; WORKSPACE_FROM="from --workspace" ;;
     --workspace=*) WORKSPACE="${1#*=}"; WORKSPACE_FROM="from --workspace" ;;
-    --restart) RESTART=1 ;;
+    --restart) RESTART=1 ;; --developer) DEVELOPER=1 ;;
     --set-aside) SET_ASIDE_FLAG=1 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'omninode-dev-setup: unknown option: %s (see --help)\n' "$1" >&2; exit 2 ;;
@@ -1922,45 +1925,45 @@ internal_plugins_reachable() {
     grep -q 'successfully authenticated'
 }
 
+# The customer plugin set is the public quickstart's: one plugin, one skill
+# (/onex:delegate), from the customer marketplace entry. --developer installs the
+# full onex tree (every /onex: skill and guard hook) and, with access, omni.
+CUSTOMER_MARKETPLACE="OmniNode-ai/omniclaude"; WANT_PLUGIN=onex@omninode-tools; OTHER_PLUGIN=onex@omninode-tools-dev
+[ "$DEVELOPER" -eq 1 ] && { WANT_PLUGIN=onex@omninode-tools-dev; OTHER_PLUGIN=onex@omninode-tools; }
 phase5() {
-  phase_start 5 "Claude Code plugins (the full onex tree; omni where you have access)" "1-2 minutes"
+  local claude p note="start a new Claude Code session to load them" want="$WANT_PLUGIN"
+  phase_start 5 "Claude Code plugin ($want)" "1-2 minutes"
   is_done 5 && rerun_note 5 "the plugins are checked on every run; only what is missing is installed"
   if ! command -v claude >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/claude" ]; then
     say "  Installing Claude Code…"
     retry "install Claude Code" install_claude_code || phase_fail "install Claude Code from claude.com/claude-code, then run this again"
   fi
-  local claude; claude="$(claude_bin)"
-
-  # The full onex tree (every /onex: skill and guard hook) is a directory
-  # marketplace in the omniclaude clone, so it moves with that clone.
-  if plugin_installed onex@omninode-tools-dev; then
-    say "  onex@omninode-tools-dev: installed"
-  else
+  claude="$(claude_bin)"
+  if plugin_installed "$want"; then say "  $want: installed"
+  elif [ "$DEVELOPER" -eq 1 ]; then
+    # The full onex tree is a directory marketplace in the omniclaude clone, so it moves with that clone.
     "$claude" plugin marketplace list 2>/dev/null | grep -q 'omninode-tools-dev' ||
       step "add the onex dev marketplace from your omniclaude clone" \
         "$claude" plugin marketplace add "$WORKSPACE/omniclaude/plugins/"*-dev-marketplace ||
       phase_fail "could not add the onex dev marketplace from your omniclaude clone; check the log for the error"
-    step "install onex@omninode-tools-dev" "$claude" plugin install onex@omninode-tools-dev ||
-      phase_fail "run 'claude plugin install onex@omninode-tools-dev' to see the error"
+    step "install $want" "$claude" plugin install "$want" || phase_fail "run 'claude plugin install $want' to see the error"
+  else
+    "$claude" plugin marketplace list 2>/dev/null | grep -Eq 'omninode-tools($|[^-])' ||
+      retry "add the $CUSTOMER_MARKETPLACE marketplace" "$claude" plugin marketplace add "$CUSTOMER_MARKETPLACE" ||
+      phase_fail "run 'claude plugin marketplace add $CUSTOMER_MARKETPLACE' to see the error"
+    retry "install $want" "$claude" plugin install "$want" || phase_fail "run 'claude plugin install $want' to see the error"
   fi
-  if plugin_installed onex@omninode-tools; then
-    say "  ⚠ The public onex@omninode-tools (two skills) is also installed; the full tree includes them."
-    say "    Remove it with 'claude plugin uninstall onex@omninode-tools' so each /onex: skill appears once."
-  fi
-
-  local note="start a new Claude Code session to load them"
-  if internal_plugins_reachable; then
+  plugin_installed "$OTHER_PLUGIN" && say "  ⚠ $OTHER_PLUGIN is also installed; remove it with 'claude plugin uninstall $OTHER_PLUGIN' so each /onex: skill appears once."
+  if [ "$DEVELOPER" -eq 0 ]; then
+    note="$note; the developer plugins (the full onex tree, omni) are installed only with --developer"
+  elif internal_plugins_reachable; then
     "$claude" plugin marketplace list 2>/dev/null | grep -q 'omninode-internal' ||
       retry "add the omniclaude-internal marketplace" "$claude" plugin marketplace add OmniNode-ai/omniclaude-internal ||
       phase_fail "run 'claude plugin marketplace add OmniNode-ai/omniclaude-internal' to see the error"
-    local p
     for p in omni onex-overlays; do
-      if plugin_installed "$p@omninode-internal"; then
-        say "  $p@omninode-internal: installed"
-      else
-        retry "install $p@omninode-internal" "$claude" plugin install "$p@omninode-internal" ||
-          phase_fail "run 'claude plugin install $p@omninode-internal' to see the error"
-      fi
+      plugin_installed "$p@omninode-internal" && { say "  $p@omninode-internal: installed"; continue; }
+      retry "install $p@omninode-internal" "$claude" plugin install "$p@omninode-internal" ||
+        phase_fail "run 'claude plugin install $p@omninode-internal' to see the error"
     done
   else
     say "  omni and onex-overlays: not installed. They come from the private omniclaude-internal"
@@ -2012,7 +2015,7 @@ phase6() {
     check "Ollama has $OLLAMA_MODEL" ollama_has_model "$OLLAMA_MODEL"
   fi
   in_list local "$(passed_models)" && check "the local model server answers at $LOCAL_URL" local_url_answers "$LOCAL_URL"
-  check "the full onex plugin installed in Claude Code" plugin_installed onex@omninode-tools-dev
+  check "the Claude Code plugin $WANT_PLUGIN installed" plugin_installed "$WANT_PLUGIN"
   if [ "$MODE2_OK" -eq 1 ]; then check "local stack healthy" stack_healthy; fi
   if [ "$CHECKS_FAILED" -gt 0 ]; then
     FAILED_STEP="$CHECKS_FAILED check(s) failed"
@@ -2045,7 +2048,7 @@ main() {
   say "Next:"
   say "  1. Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect."
   say "  2. Open Claude Code (run 'claude') and sign in with your Anthropic account the first"
-  say "     time it asks. The onex skills are already installed; /onex:delegate is one of them."
+  say "     time it asks. /onex:delegate is installed$([ "$DEVELOPER" -eq 1 ] && echo ', with every other onex skill')."
   notify "Onboarding complete" "Every phase passed"
   printf 'result=COMPLETE\n' >>"$STATUS"
 }
