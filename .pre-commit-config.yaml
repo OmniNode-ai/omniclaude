@@ -910,10 +910,10 @@ repos:
       # and fallback (OMN-20911)".
       - id: gh-shim-lane-guards
         name: gh shim lane read-strict switch and fallback (OMN-20911)
-        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/scripts/test_gh_lane_fallback.py tests/scripts/test_gh_lane_read_fallback.py tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py -q --no-cov
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/scripts/test_gh_lane_fallback.py tests/scripts/test_gh_lane_read_fallback.py tests/scripts/test_gh_lane_read_guard.py tests/scripts/test_gh_lane_write_guard.py tests/scripts/test_gh_shim_refusal_row_omn21020.py tests/scripts/test_gh_pr_state_read_guard.py -q --no-cov
         language: system
         pass_filenames: false
-        files: '^(scripts/user-bin/gh|tests/scripts/test_gh_(lane_fallback|lane_read_fallback|lane_read_guard|lane_write_guard|shim_refusal_row_omn21020)\.py|\.pre-commit-config\.yaml)$'
+        files: '^(scripts/user-bin/gh|tests/scripts/test_gh_(lane_fallback|lane_read_fallback|lane_read_guard|lane_write_guard|shim_refusal_row_omn21020|pr_state_read_guard)\.py|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
       - id: ledger-ruling-reread-regression

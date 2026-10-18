@@ -155,6 +155,7 @@ def test_guarded_shape_is_refused_with_alternatives(
         "ONEX_GH_EXACT_HEAD=<owner>/<repo>#<n> gh pr view <n> --repo <owner>/<repo>"
         in result.stderr
     )
+    assert "--json headRefOid,state,mergeStateStatus,isCrossRepository" in result.stderr
 
 
 @pytest.mark.unit
@@ -241,7 +242,8 @@ def test_refusal_fills_repo_and_number_when_argv_resolves_them(
     assert "git -C $OMNI_HOME/omnimarket " in result.stderr
     assert (
         "ONEX_GH_EXACT_HEAD=OmniNode-ai/omnimarket#9002 gh pr view 9002 "
-        "--repo OmniNode-ai/omnimarket --json headRefOid" in result.stderr
+        "--repo OmniNode-ai/omnimarket --json "
+        "headRefOid,state,mergeStateStatus,isCrossRepository" in result.stderr
     )
 
 
@@ -659,11 +661,45 @@ def test_matching_declaration_is_allowed(env: dict[str, str]) -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("unlisted_field", [None, "body"])
+def test_remote_runner_exact_head_fields(
+    env: dict[str, str], unlisted_field: str | None
+) -> None:
+    """The runner reads fork status on the declared PR, alongside its head and state."""
+    fields = "headRefName,headRefOid,isCrossRepository,state"
+    if unlisted_field:
+        fields += f",{unlisted_field}"
+    argv = ["pr", "view", "9002", "--repo", "OmniNode-ai/omnimarket", "--json", fields]
+    payload = {
+        "headRefName": "landing-branch",
+        "headRefOid": "a" * 40,
+        "isCrossRepository": False,
+        "state": "OPEN",
+    }
+
+    result = _run(
+        env,
+        *argv,
+        extra={"ONEX_GH_EXACT_HEAD": DECL, "FAKE_GH_STDOUT": json.dumps(payload)},
+    )
+
+    if unlisted_field:
+        _assert_refused(env, result)
+        assert f"field '{unlisted_field}' is not allowed" in result.stderr
+        assert "isCrossRepository" in result.stderr.split("(allowed:", 1)[1]
+    else:
+        assert result.returncode == 0, result.stderr
+        assert _calls(env) == [argv]
+        assert json.loads(result.stdout) == payload
+        assert _call_log_rows(env)[-1][7] == "allowed"
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "fields",
     [
         "headRefOid",
-        "headRefOid,headRefName,baseRefName,state,isDraft,mergedAt,mergeStateStatus,number",
+        "headRefOid,headRefName,baseRefName,state,isDraft,mergedAt,mergeStateStatus,number,isCrossRepository",
     ],
 )
 def test_every_listed_field_is_allowed(env: dict[str, str], fields: str) -> None:

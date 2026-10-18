@@ -647,7 +647,8 @@ unset _search_call
 # ONEX_GH_EXACT_HEAD=<owner>/<repo>#<n> and is exactly
 #   gh pr view <n> --repo|-R <owner>/<repo> --json <fields>
 # with <n> and the repository matching the declaration, every field in {headRefOid,
-# headRefName, baseRefName, state, isDraft, mergedAt, mergeStateStatus, number}, and
+# headRefName, baseRefName, state, isDraft, mergedAt, mergeStateStatus, number,
+# isCrossRepository}, and
 # no --jq, --template, --web or --comments. A declaration of any other shape is
 # refused with a message naming the part that failed.
 
@@ -753,14 +754,14 @@ _prs_exact_head() {
   IFS=,
   for f in $fields; do
     case "$f" in
-      headRefOid|headRefName|baseRefName|state|isDraft|mergedAt|mergeStateStatus|number) ;;
+      headRefOid|headRefName|baseRefName|state|isDraft|mergedAt|mergeStateStatus|number|isCrossRepository) ;;
       *) bad="$f"; break ;;
     esac
   done
   IFS="$old_ifs"
   set +f
   if [ -n "$bad" ]; then
-    _prs_why="ONEX_GH_EXACT_HEAD: field '$bad' is not allowed (allowed: headRefOid, headRefName, baseRefName, state, isDraft, mergedAt, mergeStateStatus, number)"
+    _prs_why="ONEX_GH_EXACT_HEAD: field '$bad' is not allowed (allowed: headRefOid, headRefName, baseRefName, state, isDraft, mergedAt, mergeStateStatus, number, isCrossRepository)"
     return 1
   fi
   return 0
@@ -983,10 +984,10 @@ if [ "$_prs_guarded" -eq 1 ] && ! _prs_caller_allowed && ! _prs_exact_head "$@";
     "  python3 <omni plugin>/skills/merge-drain/scripts/pr_state_local.py --pr $_prs_o/$_prs_r#$_prs_n   (--json for the whole record, --status for the state file's age)" \
     "  git -C \$OMNI_HOME/$_prs_r log|diff origin/dev...   (files, diffs and history from the canonical clone)" \
     'The one GitHub read allowed is the exact-head check right before a mutation:' \
-    '  ONEX_GH_EXACT_HEAD=<owner>/<repo>#<n> gh pr view <n> --repo <owner>/<repo> --json headRefOid,state,mergeStateStatus' >&2
+    '  ONEX_GH_EXACT_HEAD=<owner>/<repo>#<n> gh pr view <n> --repo <owner>/<repo> --json headRefOid,state,mergeStateStatus,isCrossRepository' >&2
   if [ -n "$_rs_repo" ] && [ -n "$_rs_n" ]; then
     printf '%s\n' \
-      "  e.g. ONEX_GH_EXACT_HEAD=$_prs_o/$_prs_r#$_prs_n gh pr view $_prs_n --repo $_prs_o/$_prs_r --json headRefOid,state,mergeStateStatus" >&2
+      "  e.g. ONEX_GH_EXACT_HEAD=$_prs_o/$_prs_r#$_prs_n gh pr view $_prs_n --repo $_prs_o/$_prs_r --json headRefOid,state,mergeStateStatus,isCrossRepository" >&2
   fi
   _call_log 1 refused
   exit 1
