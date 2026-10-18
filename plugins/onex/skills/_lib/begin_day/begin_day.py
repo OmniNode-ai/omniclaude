@@ -51,7 +51,6 @@ OMNI_REPOS: list[str] = [
     "omnimemory",
     "omninode_infra",
     "omniweb",
-    "onex_change_control",
 ]
 
 # Severity weights for focus area scoring
