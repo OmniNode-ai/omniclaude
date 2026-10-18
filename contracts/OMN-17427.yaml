@@ -382,6 +382,22 @@ dod_evidence:
     binds_ac:
       - AC16
       - AC17
+  - id: dod-lane-evidence-canonical-clone-resolution
+    description: >
+      Lane evidence uses canonical-clone-sync's registered roots and internal
+      sibling discovery, matches repository identity, and reads the clone holding
+      the verified merge. An explicit clone root stays authoritative. SCM child
+      processes do not inherit Git location overrides from the caller's worktree.
+      The real Done guard still refuses partial bindings and red checks.
+      The existing Tests gate collects this focused file and the matching
+      pre-commit hook runs it when its reader or discovery inputs change.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/nodes/node_linear_effect/test_handler_linear_api.py -q --no-cov"
+    binds_ac:
+      - AC17
   - id: dod-reaper-default-roots-under-omni-home
     description: The reaper's default roots are the registry's two roots, with no home-directory fallback and none when OMNI_HOME is unset.
     source: manual
@@ -487,3 +503,15 @@ dod_evidence:
           '
     binds_ac:
       - AC21
+  - id: dod-customer-install-commands-self-contained
+    description: The customer install test holds the two claude plugin commands itself and reads no README, so rewriting or removing the README cannot break it.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: >-
+          ! grep -q 'README' plugins/onex-delegate/tests/test_customer_install_slash_commands.py && grep -q 'CUSTOMER_MARKETPLACE\]' plugins/onex-delegate/tests/test_customer_install_slash_commands.py
+      - check_type: test_passes
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov -k onboarding_script_defaults"
+    binds_ac:
+      - AC22
