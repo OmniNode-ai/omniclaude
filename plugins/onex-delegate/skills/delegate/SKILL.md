@@ -1,6 +1,6 @@
 ---
 version: 3.2.0
-description: "Single-command delegation to a model you choose: one you run, or your own provider key. Runs `onex delegate \"<prompt>\" --result-only` which builds the payload, dispatches node_delegate_skill_orchestrator, and prints only the final answer on stdout (on failure, one error line on stderr). Handled inline — no subagent, no payload file, no cat of workflow_result.json."
+description: "Single-command delegation to a model you choose: one you run, or your own provider key. Runs `onex delegate \"<prompt>\" --json` which builds the payload, dispatches node_delegate_skill_orchestrator, and prints the typed result on stdout; the skill shows the answer, then one `Run: <correlation_id>` line. Handled inline — no subagent, no payload file, no cat of workflow_result.json."
 skill_kind: dispatch
 mode: full
 level: basic
@@ -40,15 +40,20 @@ A dispatch skill IS one CLI call. The procedure lives in the `onex delegate`
 entrypoint — payload construction, node dispatch, and result extraction are all
 internal. See `prompt.md` for the one command and how to present its output.
 
-Your context receives only the final answer (success) or one error line (failure):
-no model reasoning, no receipt JSON, no metrics, no diagnostics. The command is
-`onex delegate "<prompt>" --result-only [--task-type <type>] [--max-tokens <n>]`, run
+Your context receives the typed result object; the skill replies with the answer and one
+closing line naming the run. The command is
+`onex delegate "<prompt>" --json [--task-type <type>] [--max-tokens <n>]`, run
 plain, with no redirect, pipe or `&&`.
 
-| Outcome | stdout | stderr | Exit |
-|---|---|---|---|
-| success | the final answer, exactly | empty | 0 |
-| failure, including a refusal before dispatch | empty | `Error: <terminal cause>: <error_message> (receipt: <path>)` | non-zero |
+| Outcome | Reply | Exit |
+|---|---|---|
+| success | `result.response` exactly, a blank line, then `Run: <correlation_id>` | 0 |
+| failure, including a refusal before dispatch | the one error line, then `Run: <correlation_id>` when the object has one | non-zero |
+
+`Run: <correlation_id>` is the run id: the same UUID is in the run's `receipt.json` and in
+the delegation record, so a reader can find the run from the reply alone. `--result-only`
+is not used: it prints the answer alone, and a caller that reads the command's output for
+the run id (the M4 board's C30 probe does) then finds none.
 
 The run's `receipt.json` (model, provider, cost, latency, attempts) and its
 `diagnostics.log` stay on disk. Read the receipt only when you ask for the cost, the
@@ -77,7 +82,7 @@ and the command is the same. Three packages, one environment (the pins are decla
 | Package | Provides |
 |---|---|
 | `omnibase-core >= 0.46.8` | the `onex` console script and the `onex.cli` entry-point loader |
-| `omnibase-infra >= 0.38.67` | the `delegate` subcommand, registered into the `onex.cli` group, and its `--result-only` flag |
+| `omnibase-infra >= 0.38.67` | the `delegate` subcommand, registered into the `onex.cli` group, and its `--json` flag |
 | `omnimarket >= 0.4.205` | `node_delegate_skill_orchestrator`, the node the subcommand dispatches |
 
 Install (this is the command to run):
@@ -119,8 +124,8 @@ Use `llm.glm.api_key` for GLM. To use a model server you run instead, declare it
 With neither, the first delegation refuses with `No local model is declared on this
 machine` before it reaches any model.
 
-The skill runs `onex delegate ... --result-only`. If `onex delegate --help` does not list
-`--result-only`, the installed `omnibase-infra` is older than the release that added it: run
+The skill runs `onex delegate ... --json`. If `onex delegate --help` does not list
+`--json`, the installed `omnibase-infra` is older than the release that added it: run
 `uv tool upgrade omnibase-core` to take the newest releases.
 
 Verify: `onex --version` prints `onex version 0.47.x` or newer, from any directory.
