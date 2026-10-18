@@ -25,7 +25,7 @@
 #                        if stopped, then the local stack on your keys
 #   5 Claude Code        the customer plugin, onex@omninode-tools: one skill, /onex:delegate.
 #                        With --developer: the full onex plugin from your omniclaude clone,
-#                        and omni and onex-overlays when this login can read omniclaude-internal
+#                        and omni and onex-overlays when this login can read the private plugin repository
 #   6 Verify             the checks for the selected modes, one line each
 #
 # Compatible with macOS's stock /bin/bash 3.2: no associative arrays, no

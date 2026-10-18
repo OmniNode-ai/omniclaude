@@ -4803,7 +4803,6 @@ jobs:
                 - 'plugins/onex-*-marketplace/**'
                 - '.claude-plugin/marketplace.json'
                 - 'plugins/.claude-plugin/marketplace.json'
-                - 'README.md'
                 - '.github/workflows/ci.yml'
               push: ['main', 'develop', 'hotfix/**']
               workflow_dispatch: true
