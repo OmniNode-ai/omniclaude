@@ -4803,6 +4803,7 @@ jobs:
                 - 'plugins/onex-*-marketplace/**'
                 - '.claude-plugin/marketplace.json'
                 - 'plugins/.claude-plugin/marketplace.json'
+                - 'README.md'
                 - '.github/workflows/ci.yml'
               push: ['main', 'develop', 'hotfix/**']
               workflow_dispatch: true
@@ -5696,6 +5697,25 @@ jobs:
           uv run pytest plugins/onex/tests/test_plugin_compat_yaml.py -v \
             --tb=short \
             -p no:warnings
+
+      # OMN-17427: test_customer_install_slash_commands.py runs the customer
+      # install with the real claude binary into a scratch config and reads the
+      # slash-command list it produces, so this job carries the pinned CLI.
+      - name: Set up Node for the Claude Code CLI
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install the pinned Claude Code CLI (OMN-17427)
+        run: |
+          set -euo pipefail
+          npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          installed="$(claude --version)"
+          echo "installed: ${installed}"
+          case "${installed}" in
+            "${CLAUDE_CODE_VERSION} "*) ;;
+            *) echo "::error::expected Claude Code ${CLAUDE_CODE_VERSION}, got ${installed}"; exit 1 ;;
+          esac
 
       - name: Run delegate-only consumer surface + marketplace pin tests
         working-directory: ${{ github.workspace }}

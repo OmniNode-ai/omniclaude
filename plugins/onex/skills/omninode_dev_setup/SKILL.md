@@ -62,7 +62,7 @@ each task; the developer never picks one per run. Nothing connects to the lab.
 | 2 | Workspace: the canonical clones, and OMNIBASE_PATH and PATH in the shell profile | yes |
 | 3 | onex, the local identity, then each chosen model set up with `onex models add` (Ollama installed with one model downloaded) and tested with one delegation pinned to it; one result line per model; fails only if none passed | yes |
 | 4 | Docker (optional): only if the developer says yes to the one question; Docker Desktop installed, or started if stopped, then the local stack on the same keys | yes |
-| 5 | Claude Code plugins: the full onex tree (`onex@omninode-tools-dev`, from the omniclaude clone), and `omni` and `onex-overlays` when this GitHub login can read omniclaude-internal and an SSH key is loaded | yes |
+| 5 | Claude Code plugin: the customer plugin `onex@omninode-tools` (one skill, `/onex:delegate`), from the public marketplace. With `--developer`: the full onex tree (`onex@omninode-tools-dev`, from the omniclaude clone), and `omni` and `onex-overlays` when this GitHub login can read omniclaude-internal and an SSH key is loaded | yes |
 | 6 | Verify | no |
 
 Minimum requirements are printed by phase 0. A Mac below them gets nothing

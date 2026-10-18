@@ -709,9 +709,12 @@ def _functions(*names: str, source: Path = SCRIPT) -> str:
     return "\n".join(out)
 
 
-def test_phase5_installs_the_full_onex_tree_and_omni_where_reachable() -> None:
+def test_phase5_installs_the_full_onex_tree_and_omni_only_with_developer() -> None:
+    """The customer default is the delegate-only plugin (OMN-17427)."""
     text = SCRIPT.read_text()
-    assert "plugin install onex@omninode-tools-dev" in text
+    assert '[ "$DEVELOPER" -eq 1 ] && { WANT_PLUGIN=onex@omninode-tools-dev;' in text
+    assert 'plugin install "$want"' in text
+    assert 'if [ "$DEVELOPER" -eq 0 ]; then' in text
     assert (
         'plugin marketplace add "$WORKSPACE/omniclaude/plugins/"*-dev-marketplace'
         in text
