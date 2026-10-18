@@ -80,6 +80,11 @@ requirements:
     acceptance:
       - id: AC18
         statement: "worktree_reaper._resolve_roots with no --root returns exactly OMNI_HOME/omni_worktrees and OMNI_HOME/.onex_state/worktrees, adds nothing under the home directory, and returns no root when OMNI_HOME is unset -- falsifier: uv run pytest tests/scripts/test_worktree_reaper.py -q --no-cov -k default_roots fails over the merge base, which appends the legacy home-directory root"
+  - id: req-drainer-unexpected-exit-traceback
+    statement: An unexpected drainer exit logs the traceback needed to locate the raising frame.
+    acceptance:
+      - id: AC19
+        statement: "When run raises KeyError('Version'), main returns 1 and logs the exception with its traceback; the rendered log names the raising frame -- falsifier: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k test_main_logs_the_traceback_of_an_unexpected_error"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -349,3 +354,42 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_worktree_reaper.py -q --no-cov -k default_roots"
     binds_ac:
       - AC18
+  - id: dod-drainer-unexpected-exit-traceback
+    description: The drainer main entry point returns 1 and attaches KeyError exception information to its unexpected-exit log record.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov -k test_main_logs_the_traceback_of_an_unexpected_error"
+    binds_ac:
+      - AC19
+  - id: dod-deploy-drainer-unexpected-exit-traceback
+    description: A hosted Docker runner loads this checkout in an isolated Python container, injects an unexpected failure, and checks the rendered log for its traceback and raising frame without a broker or credentials.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: |
+          env docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --env PYTHONDONTWRITEBYTECODE=1 --mount "type=bind,src=$(pwd),dst=/workspace,readonly" --workdir /workspace python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 python -c '
+          import sys
+          import tempfile
+          from pathlib import Path
+          sys.path.insert(0, str(Path("plugins/onex/hooks/lib").resolve()))
+          import hook_emit_drainer as drainer
+          def raise_key_error(*args, **kwargs):
+              raise KeyError("Version")
+          drainer.run = raise_key_error
+          with tempfile.TemporaryDirectory() as directory:
+              root = Path(directory)
+              log = root / "drainer.log"
+              rc = drainer.main(["--journal-dir", str(root / "journal"), "--log-file", str(log)])
+              assert rc == 1, rc
+              output = log.read_text()
+              assert "drainer exiting on unexpected error" in output, output
+              assert "Traceback (most recent call last):" in output, output
+              assert "raise_key_error" in output, output
+              assert "KeyError:" in output and "Version" in output, output
+          print("PASS: drainer unexpected exit returns 1 and logs the raising frame")
+          '
+    binds_ac:
+      - AC19

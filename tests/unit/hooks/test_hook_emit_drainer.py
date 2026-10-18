@@ -1204,3 +1204,24 @@ def test_drainer_reload_fingerprint_is_stat_only_and_names_the_changed_file(
     a.write_text("x: 22\n", encoding="utf-8")
     after = drainer.fingerprint(sources)
     assert drainer.changed_names(before, after) == ["contract"]
+
+
+def test_main_logs_the_traceback_of_an_unexpected_error(
+    jdir: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A bare ``KeyError('Version')`` stopped the drainer 2,142 times in 8 days
+    with no frame in the log; the exit must name where the error was raised."""
+
+    def raise_key_error(*_args: object, **_kwargs: object) -> int:
+        raise KeyError("Version")
+
+    monkeypatch.setattr(drainer, "run", raise_key_error)
+    # main() installs its own handlers on the root logger; keep caplog's.
+    monkeypatch.setattr(drainer, "configure_logging", lambda *_a, **_k: None)
+    with caplog.at_level("ERROR"):
+        rc = drainer.main(["--journal-dir", str(jdir)])
+    assert rc == 1
+    exiting = [r for r in caplog.records if "exiting on unexpected error" in r.message]
+    assert len(exiting) == 1
+    assert exiting[0].exc_info is not None
+    assert exiting[0].exc_info[0] is KeyError
