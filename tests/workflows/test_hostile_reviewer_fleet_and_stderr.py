@@ -38,6 +38,7 @@ words and loses the behaviour fails here.
 from __future__ import annotations
 
 import base64
+import errno
 import json
 import os
 import re
@@ -408,6 +409,7 @@ OVERSIZED_REVIEW_STUB = """#!/usr/bin/env bash
 echo "Model 'example-voter-a' succeeded in 6.2s (60 finding(s))." >&2
 echo "Model 'example-voter-b' succeeded in 8.1s (60 finding(s))." >&2
 python3 - <<'PY'
+import errno
 import json
 finding = {
     "severity": "warning",
@@ -444,14 +446,20 @@ def test_an_oversized_review_result_never_rides_in_an_environment_string(
     shim = tmp_path / "python3"
     shim.write_text(EXECVE_LIMIT_PYTHON3_SHIM, encoding="utf-8")
     shim.chmod(0o755)
-    refused = subprocess.run(
-        [str(shim), "-c", "print(1)"],
-        capture_output=True,
-        text=True,
-        check=False,
-        env={"PATH": os.environ["PATH"], "BIG": "a" * 200_000},
-    )
-    assert refused.returncode == 126, refused.stderr
+    # On Linux the kernel refuses the oversized string at execve, before the
+    # shim runs; elsewhere the shim applies the same limit and exits 126.
+    try:
+        refused = subprocess.run(
+            [str(shim), "-c", "print(1)"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PATH": os.environ["PATH"], "BIG": "a" * 200_000},
+        )
+    except OSError as exc:
+        assert exc.errno == errno.E2BIG, exc
+    else:
+        assert refused.returncode == 126, refused.stderr
 
     run_dir = tmp_path / "run"
     run_dir.mkdir()
