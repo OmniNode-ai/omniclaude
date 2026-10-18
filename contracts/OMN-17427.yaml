@@ -139,7 +139,7 @@ dod_evidence:
     status: verified
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/test_kb_doc_gate.py -q --no-cov -k 'recurrence_diff_allows or recurrence_readme_with'"
+        check_value: "uv run pytest tests/scripts/test_kb_doc_gate.py -q --no-cov -k 'recurrence_diff_allows or recurrence_readme_with or recurrence_readme_rejects_unrelated'"
     binds_ac: [AC25]
   - id: dod-kb-documentation-recurrence-wiring
     description: The focused file checks both hook installations, the shared CI invocation and canonical PASS, FAIL and ERROR reports with run/fire events.
