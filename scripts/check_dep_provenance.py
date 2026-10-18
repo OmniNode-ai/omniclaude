@@ -17,7 +17,10 @@ Forbidden first-party deps (both hyphen and underscore spellings):
     omnibase-core   omnibase-spi   omnibase-compat   omnibase-infra
 
 A ``[tool.uv.sources]`` entry for any of the above with a ``git`` / ``rev`` /
-``branch`` / ``tag`` key is a forbidden override and fails the gate.
+``branch`` / ``tag`` key is a forbidden override and fails the gate, with one
+exception (OMN-19998): the sibling's own OmniNode-ai repository pinned by ``tag``
+alone to a dev merge tag ``dev-<UTC YYYYMMDDHHMMSS>-<sha12>``, which is how a
+consumer reads a sibling without waiting for a release.
 
 ``onex-change-control`` is deliberately NOT checked — it publishes no PyPI
 distribution and follows an immutable-main pin release model, so its git pin is
@@ -91,6 +94,34 @@ _GIT_SOURCE_KEYS: frozenset[str] = frozenset({"git", "rev", "branch", "tag"})
 # (Named without the substring "token" so omniclaude's validate-secrets hook does
 # not flag this regex as a hardcoded credential — omniclaude adaptation, OMN-13877.)
 _RAW_OVERRIDE_OK_RE = re.compile(r"#\s*raw-override-ok:\s*(\S+)")
+
+# OMN-19998 (operator RULINGs 2026-10-16T07:34:18Z and 2026-10-16T09:35:49Z): a
+# consumer reads a sibling by tag instead of waiting for a PyPI release. Every
+# dev merge of a sibling gets a lightweight dev-<UTC YYYYMMDDHHMMSS>-<sha12> tag
+# from its own dev-merge-tag.yml, and uv.lock records the full commit that tag
+# names, so the pin is content-addressed. Exactly that shape is not an override:
+# the sibling's own OmniNode-ai repository, a `tag` key and no rev or branch, and
+# a name that is a dev merge tag. A rev, a branch, a release tag or a fork stays
+# forbidden.
+_DEV_MERGE_TAG_RE = re.compile(r"^dev-[0-9]{14}-[0-9a-f]{12}$")
+
+
+def _sibling_repo_url(pkg: str) -> str:
+    """The one git URL a sibling's dev merge tag is read from."""
+    return f"https://github.com/OmniNode-ai/{pkg.replace('-', '_')}.git"
+
+
+def _is_dev_merge_tag_pin(pkg: str, attrs: dict[str, object]) -> bool:
+    """True when the source pins the sibling's own repository at a dev merge tag."""
+    if set(attrs) & _GIT_SOURCE_KEYS != {"git", "tag"}:
+        return False
+    tag = attrs.get("tag")
+    return (
+        attrs.get("git") == _sibling_repo_url(pkg)
+        and isinstance(tag, str)
+        and _DEV_MERGE_TAG_RE.fullmatch(tag) is not None
+    )
+
 
 # ---------------------------------------------------------------------------
 # [tool.uv.sources] parsing. TOML is authoritative for source classification so
@@ -184,6 +215,8 @@ def find_violations(text: str) -> list[str]:
         if not git_keys:
             # A non-git source (unusual, but not a provenance violation).
             continue
+        if _is_dev_merge_tag_pin(pkg, attrs):
+            continue
 
         raw_line = _line_for_package(block, pkg)
         if raw_line is not None:
@@ -238,11 +271,14 @@ def main(argv: list[str] | None = None) -> int:
         for msg in violations:
             print(f"  - {msg}", file=sys.stderr)
         print(
-            "\nomnibase-core / omnibase-spi / omnibase-compat are PyPI-published "
-            "first-party deps and must NOT be pinned to git commits/branches/tags "
-            "on dev/main. Resolve them from PyPI (release the dep first if the "
-            "needed version is unpublished). If a temporary override is genuinely "
-            "unavoidable, annotate the exact line with "
+            "\nomnibase-core / omnibase-spi / omnibase-compat / omnibase-infra "
+            "must NOT be pinned to a git commit, a branch, a release tag or a "
+            "fork on dev/main. Resolve them from PyPI, or, when the needed change "
+            "is not released, pin the sibling's newest dev merge tag instead of "
+            "waiting for a release: { git = "
+            '"https://github.com/OmniNode-ai/<repo>.git", tag = '
+            '"dev-<UTC YYYYMMDDHHMMSS>-<sha12>" } (OMN-19998). If another '
+            "override is genuinely unavoidable, annotate the exact line with "
             "'# raw-override-ok: <ticket>' (non-empty token).",
             file=sys.stderr,
         )
