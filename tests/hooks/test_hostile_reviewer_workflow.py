@@ -1011,6 +1011,85 @@ def test_verdict_parser_behaviour_on_quorum_payloads(
     assert absent["quorum_verdict"] == "absent"
 
 
+def test_verdict_artifact_preserves_voter_attribution(
+    workflow: dict[object, object], tmp_path: pathlib.Path
+) -> None:
+    """OMN-18473 AC3: pin the artifact attribution half.
+
+    OMN-18479's quorum rule superseded the original AC3 wording (flat sum,
+    no dedup): two attributed findings can represent one blocking finding.
+    """
+    import json
+    import sys
+
+    run_text = _review_step_run_text(workflow)
+    start = run_text.index("import json\nimport os\n\nfields = {}")
+    snippet = run_text[start : run_text.index("\nPY\n", start)]
+    stderr_log = tmp_path / "stderr.log"
+    stderr_log.write_text("", encoding="utf-8")
+    artifact_path = tmp_path / "hostile-review-verdict.json"
+    two_models = ["example-voter-a", "example-voter-b"]
+    finding = {
+        "severity": "error",
+        "rule_id": "example-rule",
+        "normalized_message": "Shared finding",
+        "file_path": "example.py",
+        "line_start": 12,
+    }
+
+    for second_succeeded in (True, False):
+        models_succeeded = two_models if second_succeeded else two_models[:1]
+        verdict = "blocked" if second_succeeded else "degraded_quorum"
+        blocking_count = 1 if second_succeeded else 0
+        payload = {
+            "results": [
+                {"model": two_models[0], "success": True, "findings": [finding]},
+                {
+                    "model": two_models[1],
+                    "success": second_succeeded,
+                    "findings": [finding],
+                },
+            ],
+            "quorum": {
+                "verdict": verdict,
+                "blocking_count": blocking_count,
+                "warning_count": 0 if second_succeeded else 1,
+            },
+        }
+        subprocess.run(
+            [sys.executable, "-c", snippet],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+            env={
+                "PATH": "/usr/bin:/bin",
+                "VERDICT_DATA": (
+                    f"verdict={verdict}\n"
+                    f"blocking_count={blocking_count}\n"
+                    f"below_quorum_count={0 if second_succeeded else 1}\n"
+                    f"total_findings={len(models_succeeded)}\n"
+                    f"models_succeeded={','.join(models_succeeded)}\n"
+                ),
+                "STDERR_LOG": str(stderr_log),
+                "REVIEW_EXIT": "0",
+                "REVIEW_JSON": json.dumps(payload),
+                "VERDICT_ARTIFACT": str(artifact_path),
+                "NAMED_CAUSE": "",
+            },
+        )
+        artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+        assert artifact["models_succeeded"] == models_succeeded
+        assert artifact["review_exit"] == 0
+        if second_succeeded:
+            assert {f["model"] for f in artifact["findings"]} == set(two_models)
+            assert len(artifact["findings"]) == 2
+            assert artifact["blocking_count"] == 1
+        else:
+            # Positive control: a failed voter's finding must be excluded.
+            assert [f["model"] for f in artifact["findings"]] == [two_models[0]]
+
+
 # --- OMN-20910 widening: the voter's MODEL is a field of the overlay ----------
 # These cases drive the same ``voter_endpoint_findings`` entry point as the
 # ratchet above, so a pattern missing from it fails them.
