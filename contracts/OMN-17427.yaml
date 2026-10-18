@@ -68,6 +68,18 @@ requirements:
     acceptance:
       - id: AC15
         statement: "no comment in scripts/launchd/*.plist holds a double hyphen, and tick-bundle-install.sh escapes & < > in the paths it substitutes, so every template parses after rendering with a path holding an ampersand, a bracket, a pipe and a backslash -- falsifier: uv run pytest tests/scripts/test_launchd_plists_well_formed.py -q --no-cov"
+  - id: req-lane-tick-acceptance
+    statement: Lab lanes tick acceptance boxes and request Done through the existing Done-flip guard.
+    acceptance:
+      - id: AC16
+        statement: Labeled ticks preserve criterion text, dry runs and refused ticks write nothing, and Done is judged as a second edit.
+      - id: AC17
+        statement: Lane evidence admits a complete green contract binding and refuses a partial binding, red check or contract changed after the check started.
+  - id: req-reaper-default-roots-under-omni-home
+    statement: The worktree reaper's default roots are the two under OMNI_HOME and never a home-directory root.
+    acceptance:
+      - id: AC18
+        statement: "worktree_reaper._resolve_roots with no --root returns exactly OMNI_HOME/omni_worktrees and OMNI_HOME/.onex_state/worktrees, adds nothing under the home directory, and returns no root when OMNI_HOME is unset -- falsifier: uv run pytest tests/scripts/test_worktree_reaper.py -q --no-cov -k default_roots fails over the merge base, which appends the legacy home-directory root"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -303,3 +315,37 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_launchd_plists_well_formed.py -q --no-cov"
     binds_ac:
       - AC15
+  - id: dod-omn17427-lane-tick-acceptance
+    description: >
+      The Linear backend ticks acceptance boxes and sets Done from a lab lane through the
+      Done-flip guard's own repo-evidence decision, with lane-safe readers (onex scm and the
+      canonical clone) in place of the gh reads a lane cannot make. A ticket with a criterion no
+      contract binds ticks nothing; a red check run, a partial binding and a contract changed
+      after the check started are refused; a dry run writes nothing; Done is a second edit.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/nodes/node_linear_effect/test_handler_linear_api.py -q --no-cov"
+    binds_ac:
+      - AC16
+      - AC17
+  - id: dod-deploy-linear-api-guarded-ticks
+    description: Hosted runners exercise the Linear backend with a fake transport and real guard over a temporary git repository, without credentials or fleet services.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/nodes/node_linear_effect/test_handler_linear_api.py -q --no-cov"
+    binds_ac:
+      - AC16
+      - AC17
+  - id: dod-reaper-default-roots-under-omni-home
+    description: The reaper's default roots are the registry's two roots, with no home-directory fallback and none when OMNI_HOME is unset.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_worktree_reaper.py -q --no-cov -k default_roots"
+    binds_ac:
+      - AC18

@@ -368,14 +368,34 @@ def test_resolve_projection_base_url_strips_trailing_slash() -> None:
     assert url == "http://host:3002"
 
 
-def test_default_roots_include_legacy_and_onex_state(
+def test_default_roots_are_the_registry_root_and_onex_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setenv("OMNI_HOME", str(tmp_path / "omni_home"))
+    monkeypatch.setenv("OMNI_HOME", str(tmp_path / "registry"))
     roots = worktree_reaper._resolve_roots([])
-    root_strs = [str(r) for r in roots]
-    assert any(r.endswith("omni_worktrees") for r in root_strs)
-    assert any(".onex_state/worktrees" in r for r in root_strs)
+    assert roots == [
+        tmp_path / "registry" / "omni_worktrees",
+        tmp_path / "registry" / ".onex_state" / "worktrees",
+    ]
+
+
+def test_default_roots_never_include_a_home_directory_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OMN-19396: the legacy home-directory worktrees root is not a default."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("OMNI_HOME", str(tmp_path / "registry"))
+    roots = worktree_reaper._resolve_roots([])
+    assert not any(r == home or home in r.parents for r in roots)
+
+
+def test_default_roots_empty_without_the_registry_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("OMNI_HOME", raising=False)
+    assert worktree_reaper._resolve_roots([]) == []
 
 
 # ---------------------------------------------------------------------------
