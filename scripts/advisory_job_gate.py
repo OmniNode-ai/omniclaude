@@ -544,6 +544,39 @@ def landing_controller_contexts(
         return None
 
 
+def declared_manifest_contexts(
+    slug: str, repo_root: Path
+) -> tuple[list[str], str] | None:
+    """REQUIRED rows of the clone's own `.github/required-checks.yaml` (schema v3).
+
+    OMN-17427: every lab host has the clone, and the manifest reconcile job holds
+    its REQUIRED rows equal to live branch protection, so it answers where the
+    controller cache is absent and a GitHub read is refused. Anything but a
+    well-formed v3 manifest for this repository answers None, never a guess.
+    """
+    try:
+        data = yaml.safe_load(
+            (repo_root / ".github" / "required-checks.yaml").read_text(encoding="utf-8")
+        )
+        if not isinstance(data, dict) or data.get("schema_version") != 3:
+            return None
+        if data.get("repo") != slug.split("/", 1)[-1]:
+            return None
+        gates = data["gates"]
+        if not isinstance(gates, list) or any(
+            not isinstance(row, dict) for row in gates
+        ):
+            return None
+        names = [row.get("name") for row in gates if row.get("mode") == "REQUIRED"]
+        if not names or any(
+            not isinstance(name, str) or not name.strip() for name in names
+        ):
+            return None
+        return names, f"{len(names)} REQUIRED rows of .github/required-checks.yaml"
+    except (yaml.YAMLError, KeyError, OSError, UnicodeDecodeError):
+        return None
+
+
 def resolve_required_contexts(slug: str, repo_root: Path) -> tuple[list[str], str]:
     """Live `required_status_checks` for the repository's default branch.
 
@@ -551,7 +584,9 @@ def resolve_required_contexts(slug: str, repo_root: Path) -> tuple[list[str], st
     public-repo hygiene gate takes on visibility. A 24h cache under `.git/`
     keeps a local pre-commit run cheap; a cache older than that is not used,
     and when neither the live read nor a fresh cache answers, the gate refuses.
-    A fresh, branch-matched controller cache also serves linked worktrees.
+    A fresh, branch-matched controller cache also serves linked worktrees, and
+    the clone's declared `.github/required-checks.yaml` is the last resort
+    outside GitHub Actions (OMN-17427).
     """
     # In a WORKTREE `.git` is a file, not a directory (CLAUDE.md rule 17), so
     # there is nowhere to cache. Best-effort by design: a missing cache costs a
@@ -593,6 +628,15 @@ def resolve_required_contexts(slug: str, repo_root: Path) -> tuple[list[str], st
                     )
             except (ValueError, KeyError, OSError):
                 pass
+        # Never in GitHub Actions: CI is the authoritative verdict and must read
+        # the live surface, so a refused read there stays a refusal.
+        declared = (
+            None
+            if os.environ.get("GITHUB_ACTIONS") == "true"
+            else declared_manifest_contexts(slug, repo_root)
+        )
+        if declared is not None:
+            return declared[0], f"{declared[1]} (live read failed: {error})"
         raise _fail(
             f"could not resolve required_status_checks for {slug} and no fresh "
             f"cache exists: {error}"

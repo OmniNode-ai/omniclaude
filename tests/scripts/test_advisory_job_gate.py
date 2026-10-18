@@ -828,6 +828,141 @@ class TestLandingControllerContextCache:
             gate.resolve_required_contexts("AnotherOrg/fixture", root)
 
 
+class TestDeclaredManifestFallback:
+    """OMN-17427: a host with no controller cache and no GitHub read still gets a verdict.
+
+    Lane hosts other than the landing controller's have no `required-contexts.json`
+    and a GitHub read budget of 0, so the hook refused every commit there. The clone
+    carries `.github/required-checks.yaml`, whose REQUIRED rows the manifest reconcile
+    job holds equal to live branch protection, and that is the last source tried.
+    """
+
+    MANIFEST = {
+        "schema_version": 3,
+        "repo": "fixture",
+        "gates": [
+            {"name": "unit-tests", "mode": "REQUIRED"},
+            {"name": "lint", "mode": "REQUIRED"},
+            {"name": "advisory-only", "mode": "ADVISORY"},
+            {"name": "gone", "mode": "RETIRED"},
+        ],
+    }
+
+    @pytest.fixture
+    def offline_host(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        """No controller cache under HOME, and every GitHub read refused."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(gate.Path, "home", lambda: home)
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+
+        def refused(_args: list[str]) -> str:
+            raise gate.GateError("raw GitHub read budget=0")
+
+        monkeypatch.setattr(gate, "_gh", refused)
+        return _repo(tmp_path, {"ci.yml": CLEAN})
+
+    @staticmethod
+    def _declare(root: Path, manifest: Any) -> None:
+        (root / ".github" / "required-checks.yaml").write_text(
+            yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8"
+        )
+
+    def test_positive_control_without_a_manifest_the_host_is_still_refused(
+        self, offline_host: Path
+    ) -> None:
+        with pytest.raises(gate.GateError, match="no fresh cache"):
+            gate.resolve_required_contexts("OmniNode-ai/fixture", offline_host)
+
+    def test_required_rows_of_the_declared_manifest_answer(
+        self, offline_host: Path
+    ) -> None:
+        self._declare(offline_host, self.MANIFEST)
+        contexts, source = gate.resolve_required_contexts(
+            "OmniNode-ai/fixture", offline_host
+        )
+        assert contexts == ["unit-tests", "lint"]
+        assert "required-checks.yaml" in source
+
+    def test_the_hook_passes_and_still_refuses_an_unenforced_job(
+        self, offline_host: Path, tmp_path: Path
+    ) -> None:
+        self._declare(offline_host, self.MANIFEST)
+        baseline = _baseline(tmp_path, EMPTY_BASELINE)
+        assert _run(offline_host, repo="OmniNode-ai/fixture", baseline=baseline) == 0
+        (offline_host / ".github/workflows/extra.yml").write_text(
+            CLEAN.replace("unit-tests:", "unenforced-tests:")
+        )
+        assert _run(offline_host, repo="OmniNode-ai/fixture", baseline=baseline) == 1
+
+    def test_live_read_wins_over_the_manifest(
+        self, offline_host: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._declare(offline_host, self.MANIFEST)
+        answers = iter(['{"b":"dev"}', '["live-only"]'])
+        monkeypatch.setattr(gate, "_gh", lambda _args: next(answers))
+        contexts, source = gate.resolve_required_contexts(
+            "OmniNode-ai/fixture", offline_host
+        )
+        assert contexts == ["live-only"]
+        assert "live" in source
+
+    @pytest.mark.parametrize(
+        "manifest",
+        [
+            {**MANIFEST, "schema_version": 2},
+            {**MANIFEST, "repo": "another-repo"},
+            {"schema_version": 3, "repo": "fixture", "gates": []},
+            {
+                "schema_version": 3,
+                "repo": "fixture",
+                "gates": [{"name": "x", "mode": "ADVISORY"}],
+            },
+            {"schema_version": 3, "repo": "fixture", "gates": [{"mode": "REQUIRED"}]},
+            {"schema_version": 3, "repo": "fixture", "gates": "unit-tests"},
+            ["not", "a", "mapping"],
+        ],
+        ids=[
+            "old-schema",
+            "other-repo",
+            "no-gates",
+            "no-required-row",
+            "nameless-row",
+            "gates-not-a-list",
+            "not-a-mapping",
+        ],
+    )
+    def test_an_unusable_manifest_remains_a_refusal(
+        self, offline_host: Path, manifest: Any
+    ) -> None:
+        self._declare(offline_host, manifest)
+        with pytest.raises(gate.GateError, match="no fresh cache"):
+            gate.resolve_required_contexts("OmniNode-ai/fixture", offline_host)
+
+    def test_an_unparseable_manifest_remains_a_refusal(
+        self, offline_host: Path
+    ) -> None:
+        (offline_host / ".github" / "required-checks.yaml").write_text(
+            "gates: [this: is: not: a: map\n", encoding="utf-8"
+        )
+        with pytest.raises(gate.GateError, match="no fresh cache"):
+            gate.resolve_required_contexts("OmniNode-ai/fixture", offline_host)
+
+    def test_github_actions_never_falls_back_to_the_manifest(
+        self, offline_host: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._declare(offline_host, self.MANIFEST)
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        with pytest.raises(gate.GateError, match="no fresh cache"):
+            gate.resolve_required_contexts("OmniNode-ai/fixture", offline_host)
+
+    def test_this_repositorys_own_manifest_is_usable(self) -> None:
+        """Control on the real file: the fallback must read what this repo ships."""
+        declared = gate.declared_manifest_contexts("OmniNode-ai/omniclaude", REPO_ROOT)
+        assert declared is not None
+        assert "advisory-job-gate / advisory-job-gate" in declared[0]
+
+
 class TestAdvisoryJobGateRoutingOn:
     """OMN-20043 AC3: with the gh read router on, the gate's branch-protection read yields
     one JSON document. The App token is refused with a 403 body on stdout; the gate still

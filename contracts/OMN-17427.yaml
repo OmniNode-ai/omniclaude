@@ -111,16 +111,28 @@ requirements:
         statement: A work tree outside the canonical clone is denied through global options or GIT_WORK_TREE; naming the clone itself and operations outside canonical clones remain allowed.
       - id: AC26
         statement: git init with a linked-worktree git dir and a work tree set is denied for exported, inline and inherited environment variables, while a read under those exports remains allowed.
+  - id: req-hostile-reviewer-json-via-file
+    statement: The Hostile Reviewer step hands cli_review's JSON to its parsers through a file, so a review with dozens of findings cannot fail the step with exit 126.
+    acceptance:
+      - id: AC27
+        statement: "With a python3 that refuses any environment string over 128 KiB, a 400 KiB two-voter review result still reaches a passed verdict and a written artifact, and no review JSON rides in an environment variable -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k 'oversized_review_result or review_step_invokes_cli_review'"
+  - id: req-advisory-gate-declared-manifest-fallback
+    statement: On a host with no landing controller cache and no GitHub read, the advisory-job gate takes its required contexts from the clone's declared required-checks manifest, and never inside GitHub Actions.
+    acceptance:
+      - id: AC28
+        statement: "A manifest at schema_version 3 whose repo field names the repository answers with its REQUIRED rows only after the controller cache, the live read and the git cache fail, and the live read wins when it answers -- falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k TestDeclaredManifestFallback fails over the merge base, where the class is absent"
+      - id: AC29
+        statement: "A missing, unparseable, other-repository, wrong-schema or malformed manifest still refuses, and GITHUB_ACTIONS=true never uses the manifest -- falsifier: uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k 'required_rows or unusable_manifest or unparseable_manifest or never_falls_back' fails over the merge base, where the answering control and those tests are absent"
   - id: req-documentation-recurrence-gate
     statement: The existing documentation gate rejects new prose outside the knowledge base and requires the root README to link there.
     acceptance:
-      - id: AC27
-        statement: Diff mode rejects Markdown, MDX, reStructuredText and AsciiDoc outside the allowed paths and a changed root README without a knowledge-base link, reading content from the staged index or requested head ref.
-      - id: AC28
-        statement: Machine configuration, allowed test evidence and README links to the knowledge base pass the same diff gate.
-      - id: AC29
-        statement: The exported and local pre-commit hooks inspect the index without a Markdown filter, and the reusable required CI gate retains canonical validation reports and run/fire events from the existing core report writer.
       - id: AC30
+        statement: Diff mode rejects Markdown, MDX, reStructuredText and AsciiDoc outside the allowed paths and a changed root README without a knowledge-base link, reading content from the staged index or requested head ref.
+      - id: AC31
+        statement: Machine configuration, allowed test evidence and README links to the knowledge base pass the same diff gate.
+      - id: AC32
+        statement: The exported and local pre-commit hooks inspect the index without a Markdown filter, and the reusable required CI gate retains canonical validation reports and run/fire events from the existing core report writer.
+      - id: AC33
         statement: Hook Python imports do not leave root bytecode that the pre-push clean-root gate rejects, and direct pytest hook entries disable bytecode generation.
 evidence_requirements:
   - kind: tests
@@ -134,6 +146,34 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  - id: dod-advisory-gate-manifest-answers
+    description: Tests give the gate a clone with a declared manifest and no other source, and check the answer, the precedence of the live read and the refusal without a manifest.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k 'positive_control or required_rows or the_hook_passes or live_read_wins'"
+    binds_ac:
+      - AC28
+  - id: dod-advisory-gate-manifest-refusals
+    description: Tests give the gate unusable manifests and a GitHub Actions environment and check that each still refuses, beside the case that answers from a usable manifest, so a gate that refuses everything cannot pass the control.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k 'required_rows or unusable_manifest or unparseable_manifest or never_falls_back'"
+    binds_ac:
+      - AC29
+  - id: dod-deploy-advisory-gate-manifest-fallback
+    description: Hosted runners run the manifest fallback tests against this checkout with no controller cache and no GitHub credentials.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k TestDeclaredManifestFallback"
+    binds_ac:
+      - AC28
+      - AC29
   - id: dod-canonical-core-worktree-config
     description: Subprocess tests exercise config writes and their harmless controls against this checkout's guard.
     source: manual
@@ -205,7 +245,7 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/scripts/test_kb_doc_gate.py -q --no-cov -k 'recurrence_diff_blocks or recurrence_readme'"
-    binds_ac: [AC27]
+    binds_ac: [AC30]
   - id: dod-kb-documentation-recurrence-positive-controls
     description: Machine configuration, allowed fixture evidence and knowledge-base links are positive controls.
     source: manual
@@ -213,7 +253,7 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/scripts/test_kb_doc_gate.py -q --no-cov -k 'recurrence_diff_allows or recurrence_readme_with or recurrence_readme_rejects_unrelated'"
-    binds_ac: [AC28]
+    binds_ac: [AC31]
   - id: dod-kb-documentation-recurrence-wiring
     description: The focused file checks both hook installations, the shared CI invocation and canonical PASS, FAIL and ERROR reports with run/fire events.
     source: manual
@@ -221,7 +261,7 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/scripts/test_kb_doc_gate.py -q --no-cov -k 'recurrence_exported or recurrence_own_repo or recurrence_canonical or recurrence_ci'"
-    binds_ac: [AC29]
+    binds_ac: [AC32]
   - id: dod-hook-runner-bytecode
     description: The hook runner imports a root module without creating a cache, and direct pytest hooks disable bytecode generation.
     source: manual
@@ -229,7 +269,7 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/scripts/test_uv_run_worktree_safe.py -q --no-cov"
-    binds_ac: [AC30]
+    binds_ac: [AC33]
   - id: dod-gh-shim-runner-exact-head
     description: The runner's exact field list passes while an appended unlisted field is refused without reaching gh.
     source: manual
@@ -632,3 +672,12 @@ dod_evidence:
         check_value: "uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov -k onboarding_script_defaults"
     binds_ac:
       - AC22
+  - id: dod-hostile-reviewer-json-via-file
+    description: The review step's parsers read cli_review's JSON from a file, and an oversized result passes through a python3 that enforces the Linux per-string environment limit.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k 'oversized_review_result or review_step_invokes_cli_review'"
+    binds_ac:
+      - AC27
