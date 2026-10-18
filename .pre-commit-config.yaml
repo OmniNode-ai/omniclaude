@@ -53,6 +53,14 @@ repos:
         files: '^(scripts/uv-run-worktree-safe\.sh|tests/scripts/test_uv_run_worktree_safe\.py|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
+      - id: call-repo-evidence-gate-verifier-floor
+        name: call-repo-evidence-gate caller stays on the verifier floor (OMN-17427)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/call-repo-evidence-gate\.yml|tests/ci/test_repo_evidence_caller_verifier_floor_omn17427\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: imperative-contract-guard-caller
         name: Imperative contract guard caller and parity (OMN-21006)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_imperative_contract_guard_caller_omn21006.py -q
