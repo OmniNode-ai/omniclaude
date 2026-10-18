@@ -362,6 +362,8 @@ dod_evidence:
       canonical clone) in place of the gh reads a lane cannot make. A ticket with a criterion no
       contract binds ticks nothing; a red check run, a partial binding and a contract changed
       after the check started are refused; a dry run writes nothing; Done is a second edit.
+      Canonical evidence reads discover the internal sibling through the sync resolver,
+      honour its configured override and preserve an explicitly supplied clone root.
     source: manual
     status: verified
     checks:

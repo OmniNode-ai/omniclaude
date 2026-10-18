@@ -359,3 +359,55 @@ def test_contract_absent_in_a_held_commit_reads_absent(tmp_path: Path) -> None:
     evidence = LaneRepoEvidence(scm=_scm(merge, started_at="x"), clone_root=tmp_path)
     read = evidence.read_contract(_REPO, merge, "OMN-12345")
     assert read.status.value == "absent"
+
+
+@pytest.mark.parametrize("override", [False, True])
+def test_default_evidence_reads_internal_sibling_clone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, override: bool
+) -> None:
+    registry = tmp_path / "registry"
+    registry.mkdir()
+    clone, merge = _clone(tmp_path, _contract("AC1"))
+    sibling = tmp_path / ("custom-internal" if override else "omnibase_internal")
+    clone.rename(sibling)
+    monkeypatch.setenv("OMNI_HOME", str(registry))
+    monkeypatch.delenv("OMNIBASE_INTERNAL_HOME", raising=False)
+    if override:
+        monkeypatch.setenv("OMNIBASE_INTERNAL_HOME", str(sibling))
+    evidence = LaneRepoEvidence()
+
+    read = evidence.read_contract("OmniNode-ai/omnibase_internal", merge, _TICKET)
+
+    assert read.status.value == "found", read.error
+    assert read.text == _contract("AC1")
+
+
+def test_explicit_clone_root_is_not_replaced_by_internal_sibling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clone, merge = _clone(tmp_path, _contract("AC1"))
+    clone.rename(tmp_path / "omnibase_internal")
+    monkeypatch.setenv("OMNIBASE_INTERNAL_HOME", str(tmp_path / "missing"))
+    evidence = LaneRepoEvidence(clone_root=tmp_path)
+
+    read = evidence.read_contract("OmniNode-ai/omnibase_internal", merge, _TICKET)
+
+    assert read.status.value == "found", read.error
+
+
+def test_missing_canonical_sibling_does_not_read_a_nested_clone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = tmp_path / "registry"
+    registry.mkdir()
+    clone, merge = _clone(registry, _contract("AC1"))
+    clone.rename(registry / "omnibase_internal")
+    monkeypatch.setenv("OMNI_HOME", str(registry))
+    monkeypatch.delenv("OMNIBASE_INTERNAL_HOME", raising=False)
+
+    read = LaneRepoEvidence().read_contract(
+        "OmniNode-ai/omnibase_internal", merge, _TICKET
+    )
+
+    assert read.status.value == "error"
+    assert "no canonical sibling clone" in read.error

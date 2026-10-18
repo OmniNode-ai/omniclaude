@@ -125,8 +125,7 @@ class LaneRepoEvidence:
         clone_root: Path | None = None,
     ) -> None:
         self._scm = scm
-        root = clone_root or Path(os.environ.get("OMNI_HOME", ""))
-        self._clone_root = root
+        self._clone_root = clone_root
         self._ldv = hook_module("linear_done_verify")
         self._evidence = hook_module("no_pr_bound_evidence")
         #: (repo, head sha) -> merge commit, from the PR reads.
@@ -223,7 +222,19 @@ class LaneRepoEvidence:
     def read_contract(self, repo: str, ref: str, ticket_id: str) -> object:
         """``contracts/<ticket>.yaml`` at a commit, from the canonical clone."""
         ev = self._evidence
-        clone = self._clone_root / repo.rsplit("/", maxsplit=1)[-1]
+        name = repo.rsplit("/", maxsplit=1)[-1]
+        root = self._clone_root or Path(os.environ.get("OMNI_HOME", ""))
+        clone = root / name
+        if self._clone_root is None and name == "omnibase_internal":
+            # Reuse the sync's canonical sibling discovery, including its env
+            # override and refusal to treat a linked worktree as the clone.
+            siblings = hook_module("canonical_clone_sync").sibling_clones(os.environ)
+            if not siblings:
+                return ev.ContractRead(
+                    ev.ContractReadStatus.ERROR,
+                    error=f"no canonical sibling clone found for {repo}",
+                )
+            clone = siblings[0]
         path = f"{ev.CONTRACT_DIR}/{ticket_id}.yaml"
         if not self._has_commit(clone, ref):
             return self._contract_at_unheld_head(clone, repo, ref, path)
