@@ -20,7 +20,7 @@ requirements:
     statement: The Hooks System Tests job is a sharded matrix and the skip-count ratchet reads every shard's junit output.
     acceptance:
       - id: AC1
-        statement: 'AC1: a workflow-shape test asserts the Hooks System Tests job is a 2-way matrix and that the skip-count ratchet step reads both shards'' junit output -- falsifier: uv run pytest tests/ci -k hooks -q, red before the change (proved by checking out the pre-image of the workflow-shape test file from origin/dev, running it, then restoring)'
+        statement: 'AC1: a workflow-shape test asserts the Hooks System Tests job is a 3-way matrix (2-way in the ticket, amended to 3 by omniclaude#2634) and that the skip-count ratchet step reads every shard''s junit output -- falsifier: uv run pytest tests/ci -k hooks -q, red before the change (proved by checking out the pre-image of the workflow-shape test file from origin/dev, running it, then restoring)'
   - id: req-omn19681-walltime
     statement: Each hooks shard's pytest step runs 6 minutes or less and the skip-count ratchet still counts every hooks case.
     acceptance:
@@ -36,7 +36,7 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn19681-ac1-shape
-    description: 'The workflow-shape tests assert the hooks-tests job is a sharded matrix whose plan step and ratchet step cover every shard (the matrix is 3-way since omniclaude#2634, which amended the 2-way of AC1).'
+    description: 'The workflow-shape tests assert the hooks-tests job is a sharded matrix whose plan step and ratchet step cover every shard (3-way since omniclaude#2634).'
     source: manual
     binds_ac: [AC1]
     checks:
@@ -44,10 +44,10 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn19681-ac2-plan
-    description: 'The committed duration record plans every tests/hooks file into exactly one shard and balances the shards within the bar; the record covers all 206 test files of tests/hooks.'
+    description: 'The committed duration record plans every tests/hooks file into exactly one shard and balances the shards within the bar; the record names exactly the 206 test files of tests/hooks the plan step finds.'
     source: manual
     binds_ac: [AC2]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov -k 'balances_the_committed_record or assigns_every_file'"
+        check_value: "uv run pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov -k 'balances_the_committed_record or assigns_every_file or committed_record_names_exactly'"
         cwd: "${OMNI_HOME}/omniclaude"
