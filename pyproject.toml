@@ -265,7 +265,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@1eebc319cd79b914c326e04d09bf77c4966b6d84",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@3e84ce6c29f75d3bfbddb0986382d644de83201d",
 ]
 
 [tool.uv.sources]
@@ -285,9 +285,9 @@ override-dependencies = [
 # The >=0.38.14 floor above is what now carries that fix; do not re-add an override.
 # scripts/check_dep_provenance.py enforces this -- omnibase-infra is a forbidden
 # git-source override as of OMN-17176.
-# OMN-14178: pin to the OMN-14176 torch-free split (#768 merge) until a tag carries it —
-# drops the transitive torch/nvidia/adaptive-classifier pull from the default install.
-omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "3fcbf795087a79081c0ceeb676216bf64c5d49ae" }  # pragma: allowlist secret
+# OMN-20910: pin the Claude API voter merge; it retains the lab roster reader,
+# the larger retry budget and the torch-free default install.
+omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "7f686d4bbca251dd3db49c1222ff8d6f738abd6c" }  # pragma: allowlist secret
 # OMN-16979: pin an approved dispatch commit; never substitute a PyPI source,
 # because the dispatch-drift guard verifies direct VCS provenance.
 # OMN-18622 recorded that `sibling-lock-refresh.yml` could never move this
@@ -310,7 +310,7 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 #
 # So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
 # on workflow_dispatch and review the bot PR.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "1eebc319cd79b914c326e04d09bf77c4966b6d84" }  # pragma: allowlist secret
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "3e84ce6c29f75d3bfbddb0986382d644de83201d" }  # pragma: allowlist secret
 
 # OMN-18752: which surface decides the commit a git-sourced sibling must carry.
 # `clone` is claimed only where something enforces it. omnimarket's in-process
