@@ -5,9 +5,7 @@ model key. Everything runs on your Mac. **Nothing here connects to the OmniNode 
 the run installs no tailnet client, requests no lab identity, reads no lab address and
 points no model at a lab server.
 
-> This is not [GETTING_STARTED.md](GETTING_STARTED.md). That guide is for adding the
-> ONEX plugin to an existing developer machine and assumes Claude Code, Python, uv, git
-> and gh are already installed. This page assumes none of them are.
+> This page assumes none of Claude Code, Python, uv, git and gh are already installed.
 
 ---
 

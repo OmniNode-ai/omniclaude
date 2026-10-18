@@ -44,10 +44,6 @@ entries:
   # regex already excludes 10.0.0.x (only 192.168.x.x and 100.(109|99).x.x
   # are flagged) -- these entries are belt-and-suspenders documentation of
   # that fact, not a workaround for a real hit.
-  - path_glob: "plugins/onex/skills/_shared/QDRANT_SECURITY.md"
-    class: real-lan-ip
-    reason: >-
-      generic RFC-1918/example.com SSRF test payloads, not operator hosts.
   - path_glob: "plugins/onex/skills/_shared/test_qdrant_ssrf_protection.py"
     class: real-lan-ip
     reason: >-
