@@ -436,12 +436,13 @@ dod_evidence:
     binds_ac:
       - AC21
   - id: dod-customer-install-slash-commands
-    description: A customer install into a scratch Claude config adds exactly the onex:delegate command to Claude Code's built-ins.
+    description: A customer install into a scratch Claude config adds exactly the onex:delegate command to Claude Code's built-ins. The hosted runner carries no claude binary, so the check installs the CI-pinned CLAUDE_CODE_VERSION into a scratch npm prefix first.
     source: manual
     status: verified
     checks:
-      - check_type: test_passes
-        check_value: "uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov -k only_the_delegate_command"
+      - check_type: command
+        check_value: >-
+          cli="$(mktemp -d)" && npm install --silent --no-audit --no-fund --prefix "$cli" "@anthropic-ai/claude-code@2.1.295" && PATH="$cli/node_modules/.bin:$PATH" uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov -k only_the_delegate_command
     binds_ac:
       - AC22
   - id: dod-deploy-customer-onboarding-default-plugin
