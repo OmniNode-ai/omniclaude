@@ -405,6 +405,23 @@ def test_hooks_plan_balances_the_committed_record_within_the_bar() -> None:
     assert max(totals) <= 300, totals
 
 
+def test_hooks_committed_record_names_exactly_the_files_the_plan_step_finds() -> None:
+    """Falsifier: the record is stale, so a file the plan step finds has no
+    measured time (it is planned at the default weight and can stack a shard
+    past the bar) or the record times a file that no longer exists."""
+    record: dict[str, float] = json.loads(DURATIONS.read_text(encoding="utf-8"))
+    planned: set[str] = set()
+    for group in range(1, SHARDS + 1):
+        result = _plan(REPO_ROOT, group)
+        assert result.returncode == 0, result.stderr
+        planned.update(result.stdout.split())
+    assert len(planned) > 150
+    assert sorted(planned - set(record)) == [], "unrecorded test files"
+    assert sorted(set(record) - planned) == [], (
+        "recorded files the plan step does not find"
+    )
+
+
 @pytest.mark.parametrize("report_count", [0, 1, 2, 3, 4])
 def test_ratchet_refuses_incomplete_hooks_shard_reports(
     tmp_path: Path,
