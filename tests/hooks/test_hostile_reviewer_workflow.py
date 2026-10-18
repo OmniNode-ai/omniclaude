@@ -280,9 +280,14 @@ def test_review_step_invokes_cli_review_with_the_voters_overlay(
     assert "--pr" in run and "--repo" in run, (
         "review job must pass --pr and --repo to cli_review"
     )
-    assert "REVIEW_JSON=\"$REVIEW_JSON\" python3 - <<'PYEOF'" in run, (
-        "review JSON must be passed through the environment because the "
-        "heredoc occupies Python stdin"
+    assert "REVIEW_JSON_FILE=\"$REVIEW_JSON_FILE\" python3 - <<'PYEOF'" in run, (
+        "the review JSON's path must be passed through the environment because "
+        "the heredoc occupies Python stdin"
+    )
+    assert "REVIEW_JSON=" not in run and 'os.environ["REVIEW_JSON"]' not in run, (
+        "the review JSON itself must never ride in an environment variable: a "
+        "Linux execve refuses an environment string over 128 KiB (E2BIG, bash "
+        "exit 126), which a review with dozens of findings exceeds"
     )
     assert "echo \"$REVIEW_JSON\" | python3 - <<'PYEOF'" not in run, (
         "do not pipe review JSON into python3 - with a heredoc; Python reads "
@@ -941,7 +946,9 @@ def test_workflow_has_pr_write_permission(workflow: dict[object, object]) -> Non
 def _extract_verdict_snippet(workflow: dict[object, object]) -> str:
     """Return the review step's inline verdict parser, ready to execute."""
     run_text = _review_step_run_text(workflow)
-    start = run_text.index('VERDICT_DATA=$(REVIEW_JSON="$REVIEW_JSON" python3 - ')
+    start = run_text.index(
+        'VERDICT_DATA=$(REVIEW_JSON_FILE="$REVIEW_JSON_FILE" python3 - '
+    )
     return run_text[run_text.index("\n", start) + 1 : run_text.index("PYEOF\n", start)]
 
 
@@ -951,15 +958,19 @@ def _run_verdict_snippet(
     import json
     import subprocess
     import sys
+    import tempfile
 
-    completed = subprocess.run(
-        [sys.executable, "-c", _extract_verdict_snippet(workflow)],
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=60,
-        env={"REVIEW_JSON": json.dumps(payload), "PATH": "/usr/bin:/bin"},
-    )
+    with tempfile.TemporaryDirectory() as scratch:
+        review_json = pathlib.Path(scratch) / "hostile-review-result.json"
+        review_json.write_text(json.dumps(payload), encoding="utf-8")
+        completed = subprocess.run(
+            [sys.executable, "-c", _extract_verdict_snippet(workflow)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+            env={"REVIEW_JSON_FILE": str(review_json), "PATH": "/usr/bin:/bin"},
+        )
     return dict(
         line.split("=", 1) for line in completed.stdout.splitlines() if "=" in line
     )
@@ -1046,6 +1057,7 @@ def test_verdict_artifact_preserves_voter_attribution(
     stderr_log = tmp_path / "stderr.log"
     stderr_log.write_text("", encoding="utf-8")
     artifact_path = tmp_path / "hostile-review-verdict.json"
+    review_json = tmp_path / "hostile-review-result.json"
     two_models = ["example-voter-a", "example-voter-b"]
     finding = {
         "severity": "error",
@@ -1074,6 +1086,7 @@ def test_verdict_artifact_preserves_voter_attribution(
                 "warning_count": 0 if second_succeeded else 1,
             },
         }
+        review_json.write_text(json.dumps(payload), encoding="utf-8")
         subprocess.run(
             [sys.executable, "-c", snippet],
             capture_output=True,
@@ -1091,7 +1104,7 @@ def test_verdict_artifact_preserves_voter_attribution(
                 ),
                 "STDERR_LOG": str(stderr_log),
                 "REVIEW_EXIT": "0",
-                "REVIEW_JSON": json.dumps(payload),
+                "REVIEW_JSON_FILE": str(review_json),
                 "VERDICT_ARTIFACT": str(artifact_path),
                 "NAMED_CAUSE": "",
             },
