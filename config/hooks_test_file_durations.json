@@ -196,6 +196,7 @@
   "tests/hooks/test_team_observability.py": 0.6,
   "tests/hooks/test_tick_activity_classifier.py": 0.04,
   "tests/hooks/test_ticket_creation_guard.py": 5.5,
+  "tests/hooks/test_ticket_creation_guard_defect_diagnosis.py": 1.38,
   "tests/hooks/test_ticket_creation_guard_lane_intake.py": 2.39,
   "tests/hooks/test_topic_registry.py": 0.42,
   "tests/hooks/test_topics.py": 0.13,
