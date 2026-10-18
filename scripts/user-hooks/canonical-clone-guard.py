@@ -678,7 +678,7 @@ def _gh_checks(tokens: list[str], shell: _Shell) -> Iterator[tuple[str, str | No
 
 # --- core.worktree: a canonical clone's work tree is itself, always ----------
 #
-# 2026-10-18: a lane run set core.worktree in the canonical omniclaude-internal
+# 2026-10-18: a lane run set core.worktree in a canonical repository
 # clone's .git/config to its own run directory. Every git command on the clone
 # then read the wrong tree: `git status` printed clean over a stale partial
 # checkout, a convergence reset the lane's run directory instead of the clone,
