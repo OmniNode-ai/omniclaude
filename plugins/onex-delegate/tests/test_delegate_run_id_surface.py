@@ -32,8 +32,8 @@ JSON_STDOUT = TESTS_DIR / "fixtures" / "delegate_json_stdout.json"
 
 _SHELL_OPERATORS = ("|", ">", "<<", "&&", "||", ";", "$(", "`")
 
-# The board probe's parse of a delegation tool result (omninode_infra
-# scripts/ci/c30_claude_code_plugin_delegate_probe.py, parse_delegation_run).
+# The board probe's parse of a delegation tool result (the M4 board C30
+# delegate probe, parse_delegation_run).
 _PROBE_MARKER = re.compile(
     r'\{\s*"skill_name"\s*:\s*"node_delegate_skill_orchestrator"'
 )
