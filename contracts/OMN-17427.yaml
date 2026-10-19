@@ -172,6 +172,13 @@ requirements:
         statement: "find_half_removed_worktrees finds a planted tree whose .git pointer names a missing admin dir and returns nothing for a clean worktree; the pruner reports such trees in their own section, keeps them out of classification, and does so on --no-debris runs -- falsifier: uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py -q -p no:randomly --no-cov -k 'half_removed_scan_and_clean_control or main_reports_half_removed_without_classifying or report_empty_half_removed_section' fails over the merge base"
       - id: AC43
         statement: "a failed removal leaves a snapshot whose MANIFEST names the path and HEAD, and the pruner's attempt carries head_oid, saved before the removal -- falsifier: uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py tests/scripts/test_every_worktree_removal_saves_first.py -q -p no:randomly --no-cov -k 'pruner_records_partial_removal or session_end_partial_removal_left_a_snapshot or missing_snapshot_helper or every_removal_site_saves' fails over the merge base"
+  - id: req-required-check-manifest-matches-live-dev
+    statement: The required-check manifest's dev REQUIRED rows name exactly the contexts dev branch protection requires, so the Required-Check Manifest Reconcile job on dev passes; Comment Render Delegation (OMN-18512) stays enforced through CI Summary.
+    acceptance:
+      - id: AC44
+        statement: "the manifest has no REQUIRED row for Comment Render Delegation (OMN-18512), a context dev branch protection does not require (63 contexts, read 2026-10-19T15:19:07Z), and CI Summary still lists it in GATE_JOBS and STRICT_SUCCESS_JOBS -- falsifier: uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov -k gated_by_ci_summary_not_branch_protection fails over the merge base, whose manifest line 40 declares the row REQUIRED"
+      - id: AC45
+        statement: "a manifest change that names no context outside the dev contexts snapshot and drops no context it records needs no snapshot refresh; an added context outside the snapshot or a dropped context the snapshot records still needs the fixture in the same change -- falsifier: uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov -k 'manifest_change or manifest_required_pair or refresh_trigger_controls or required_checks_change_needs' fails over the merge base, which has none of the manifest_change tests"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -858,3 +865,31 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py tests/scripts/test_every_worktree_removal_saves_first.py -q -p no:randomly --no-cov -k 'pruner_records_partial_removal or session_end_partial_removal_left_a_snapshot or missing_snapshot_helper or every_removal_site_saves'"
     binds_ac:
       - AC43
+  - id: dod-required-check-manifest-no-comment-render-row
+    description: The manifest declares no REQUIRED row for Comment Render Delegation (OMN-18512), and CI Summary still gates and strictly requires that job.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov -k 'gated_by_ci_summary_not_branch_protection or wired_to_ci_and_precommit'"
+    binds_ac:
+      - AC44
+  - id: dod-manifest-snapshot-refresh-trigger
+    description: Tests drive the snapshot-refresh trigger with manifest changes that drop an unrecorded row, drop a recorded row, and add a row outside the snapshot, and read the base manifest through git show.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov -k 'manifest_change or manifest_required_pair or refresh_trigger_controls or required_checks_change_needs'"
+    binds_ac:
+      - AC45
+  - id: dod-deploy-manifest-snapshot-refresh-trigger
+    description: Hosted runners run the snapshot-refresh trigger tests and the manifest row test against this checkout with no branch-protection token.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_ci_summary_gate.py tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov -k 'TestExternalContextCompleteness or gated_by_ci_summary_not_branch_protection'"
+    binds_ac:
+      - AC44
+      - AC45
