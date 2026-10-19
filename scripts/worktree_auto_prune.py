@@ -121,6 +121,9 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from worktree_removal_snapshot import (  # noqa: E402
     SnapshotError,
+    classify_failed_removal,
+    find_half_removed_worktrees,
+    read_gitdir_pointer,
     snapshot_before_removal,
 )
 
@@ -1554,6 +1557,17 @@ class ModelRemovalAttempt(BaseModel):
             "host, reported with the load average that explains it."
         ),
     )
+    partially_removed: bool = Field(
+        default=False,
+        description=(
+            "The removal destroyed the tree on its way out; never a safety hold "
+            "[OMN-18826 AC1]"
+        ),
+    )
+    head_oid: str = Field(
+        default="",
+        description="HEAD saved before removal to reconstruct a half-removed tree [OMN-18826 AC4]",
+    )
     load_average: float | None = Field(
         default=None, description="1-minute host load average read at the timeout"
     )
@@ -1724,6 +1738,8 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
             decision.pr_state is EnumBranchPrState.MERGED,
         )
 
+    # The pointer may itself be unlinked during removal [OMN-18826 AC1].
+    admin_dir = read_gitdir_pointer(worktree)
     result = _git_run_with_load_retry(canonical, "worktree", "remove", str(worktree))
 
     if result.timed_out:
@@ -1747,6 +1763,7 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
             load_average=result.load_average,
             branch_outcome=branch_outcome,
             snapshot=snapshot.directory,
+            head_oid=snapshot.head,
             detail=(
                 f"git worktree remove timed out at {GIT_TIMEOUT_SECONDS}s, retried "
                 f"once after waiting for the load to fall and timed out again; "
@@ -1755,6 +1772,25 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
         )
 
     if result.exit_code != 0:
+        readback = classify_failed_removal(worktree, admin_dir)
+        if readback.classification == "partially_removed":
+            # There is no admin dir through which to restore the branch.
+            return ModelRemovalAttempt(
+                path=decision.path,
+                ok=False,
+                command=" ".join(argv),
+                exit_code=result.exit_code,
+                stderr=result.stderr,
+                partially_removed=True,
+                branch_outcome=branch_outcome,
+                snapshot=snapshot.directory,
+                head_oid=snapshot.head,
+                detail=(
+                    f"{readback.detail}; git worktree remove exit {result.exit_code}: "
+                    f"{result.stderr}; reconstruct from head {snapshot.head}; "
+                    f"snapshot {snapshot.directory}"
+                ),
+            )
         stderr_text = (
             result.stderr or result.stdout or "(git produced no stdout or stderr)"
         )
@@ -1771,6 +1807,7 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
             stderr=stderr_text,
             branch_outcome=branch_outcome,
             snapshot=snapshot.directory,
+            head_oid=snapshot.head,
             detail=f"git worktree remove refused (exit {result.exit_code}): {stderr_text}{restored}",
         )
 
@@ -1782,6 +1819,7 @@ def prune_worktree(decision: ModelWorktreePruneDecision) -> ModelRemovalAttempt:
         stderr="",
         branch_outcome=branch_outcome,
         snapshot=snapshot.directory,
+        head_oid=snapshot.head,
         detail=f"worktree removed; {branch_outcome}; {snapshot.summary()}",
     )
 
@@ -2231,6 +2269,7 @@ def render_report(
     stale_dirty_age_bar_days: float | None = None,
     reclaim_bytes: int | None = None,
     reclaim_measured_paths: int = 0,
+    half_removed: Sequence[str] = (),
     worktrees_before: int | None = None,
     worktrees_after_observed: int | None = None,
 ) -> str:
@@ -2266,7 +2305,8 @@ def render_report(
         f"- **Generated:** {generated_at}",
         f"- **Root:** `{root}`",
         f"- **Mode:** {mode}",
-        f"- **Scanned:** {len(decisions)}",
+        f"- **Scanned:** {len(decisions) + len(half_removed)}",
+        f"- **Half-removed (reported, never removed):** {len(half_removed)}",
         f"- **Prune-eligible and safe:** {len(prunable)}",
         f"- **Triage (never deleted):** {len(triage)}",
         f"- **Timed out (host load, not a safety finding):** {len(timed_out)}",
@@ -2553,6 +2593,15 @@ def render_report(
     if not stale_dirty:
         lines.append("| _(none)_ | | | | | | |")
 
+    lines += ["", f"## Half-removed worktrees ({len(half_removed)})", ""]
+    for path in half_removed:
+        lines.append(
+            f"- `{path}` — partially_removed: .git points at a missing admin dir "
+            f"({read_gitdir_pointer(Path(path))})"
+        )
+    if not half_removed:
+        lines.append("None.")
+
     if removals:
         succeeded = sum(1 for r in removals if r.ok)
         lines += [
@@ -2567,8 +2616,11 @@ def render_report(
                 (attempt.stderr or "—").replace("|", "\\|").replace("\n", "<br>")
             )
             command_cell = attempt.command.replace("|", "\\|")
+            detail_cell = attempt.detail.replace("|", "\\|").replace("\n", "<br>")
             if attempt.ok:
                 verdict = "OK"
+            elif attempt.partially_removed:
+                verdict = "partially_removed"
             elif attempt.timed_out:
                 verdict = "TIMED OUT"
             else:
@@ -2576,7 +2628,7 @@ def render_report(
             lines.append(
                 f"| `{attempt.path}` | {verdict} "
                 f"| `{command_cell}` | {attempt.exit_code} | {stderr_cell} "
-                f"| {attempt.branch_outcome or '—'} | {attempt.detail} |"
+                f"| {attempt.branch_outcome or '—'} | {detail_cell} |"
             )
 
     # --- the rescue-only class [OMN-18442 AC6] ----------------------------
@@ -3086,6 +3138,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 flush=True,
             )
 
+    # Always scan stale pointers, including unattended --no-debris runs.
+    # These have no git admin dir and cannot enter classification [OMN-18826 AC3].
+    worktrees_before = len(worktrees)
+    half_removed = find_half_removed_worktrees(worktrees)
+    half_removed_set = set(half_removed)
+    worktrees = [w for w in worktrees if w not in half_removed_set]
+    print(
+        f"Half-removed worktrees: {len(half_removed)} "
+        "(.git points at a missing admin dir; reported, never removed)",
+        flush=True,
+    )
     print(f"Scanning {len(worktrees)} worktree(s) under {root}", flush=True)
 
     ledger = parse_ledger_claims(ledger_path)
@@ -3446,7 +3509,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         stale_dirty_age_bar_days=args.stale_dirty_age_days,
         reclaim_bytes=reclaim_bytes,
         reclaim_measured_paths=len(reclaim_measured),
-        worktrees_before=len(decisions),
+        half_removed=[str(w) for w in half_removed],
+        worktrees_before=worktrees_before,
         worktrees_after_observed=worktrees_after_observed,
     )
 
@@ -3464,7 +3528,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "generated_at": generated_at,
                     "root": str(root),
                     "executed": args.execute,
-                    "scanned": len(decisions),
+                    "scanned": worktrees_before,
+                    "half_removed_count": len(half_removed),
+                    "half_removed": [
+                        {"path": str(w), "gitdir": str(read_gitdir_pointer(w))}
+                        for w in half_removed
+                    ],
                     "prune_count": len(prunable),
                     "triage_count": len(triage),
                     "timed_out_count": len(timed_out),
@@ -3509,9 +3578,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "rows": [r.model_dump(mode="json") for r in stale_dirty],
                     },
                     "accounting": {
-                        "worktrees_before": len(decisions),
+                        "worktrees_before": worktrees_before,
                         "removed": sum(1 for r in removals if r.ok),
-                        "worktrees_after_expected": len(decisions)
+                        "worktrees_after_expected": worktrees_before
                         - sum(1 for r in removals if r.ok),
                         "worktrees_after_observed": worktrees_after_observed,
                         # `reclaim_bytes` is what was removed on an --execute
@@ -3564,7 +3633,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else ""
     )
     print(
-        f"\nscanned={len(decisions)} safe={len(prunable)} triage={len(triage)} "
+        f"\nscanned={worktrees_before} half_removed={len(half_removed)} safe={len(prunable)} triage={len(triage)} "
         f"timed_out={len(timed_out)} debris={len(debris_decisions)} "
         f"revalidation_refused={len(revalidation_refusals)} "
         f"removed={sum(1 for r in removals if r.ok)}{rescue_summary}"
@@ -3575,7 +3644,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"orphan_empty_removed={len(removed_orphan_dirs)} "
         f"orphan_non_empty_reported={len(orphan_dirs.non_empty)} "
         f"stale_dirty_reported={len(stale_dirty)} "
-        f"before={len(decisions)} "
+        f"before={worktrees_before} "
         f"after={'—' if worktrees_after_observed is None else worktrees_after_observed} "
         f"reclaimed={'not measured' if reclaim_bytes is None else _gib(reclaim_bytes)}"
     )

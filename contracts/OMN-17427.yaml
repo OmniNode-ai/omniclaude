@@ -161,6 +161,17 @@ requirements:
     acceptance:
       - id: AC39
         statement: "the root README.md links the knowledge base and retains the customer install commands read by the plugin tests, no requirements*.txt is tracked, and the KB doc gate passes in strict mode with no docs/ prose entries in its allowed set -- falsifier: python3 scripts/kb_doc_gate.py --mode strict --repo-root . and uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov pass, and git ls-files 'requirements*.txt' '**/requirements*.txt' prints nothing, where the merge base tracks consumers/requirements.txt"
+  - id: req-worktree-remove-partial-removal
+    statement: Every omniclaude caller of git worktree remove (the SessionEnd hook and scripts/worktree_auto_prune.py) reports a tree that a failed removal half-deleted as partially_removed with git's own error line, and leaves a record to rebuild it from.
+    acceptance:
+      - id: AC40
+        statement: "after a non-zero git worktree remove, a path that still exists with its admin directory gone is reported partially_removed, never as untracked files -- falsifier: uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py -q -p no:randomly --no-cov fails over the merge base, where a fixture worktree with a chmod 500 subdirectory is not reported partially_removed"
+      - id: AC41
+        statement: "neither caller discards git worktree remove stderr; the failure row quotes git's failed to delete line and its exit code -- falsifier: uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py -q -p no:randomly --no-cov -k 'pruner_records_partial_removal or session_end_partial_removal or session_end_calls_extracted_removal' fails over the merge base, where session-end.sh logs a bare see-log row"
+      - id: AC42
+        statement: "find_half_removed_worktrees finds a planted tree whose .git pointer names a missing admin dir and returns nothing for a clean worktree; the pruner reports such trees in their own section, keeps them out of classification, and does so on --no-debris runs -- falsifier: uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py -q -p no:randomly --no-cov -k 'half_removed_scan_and_clean_control or main_reports_half_removed_without_classifying or report_empty_half_removed_section' fails over the merge base"
+      - id: AC43
+        statement: "a failed removal leaves a snapshot whose MANIFEST names the path and HEAD, and the pruner's attempt carries head_oid, saved before the removal -- falsifier: uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py tests/scripts/test_every_worktree_removal_saves_first.py -q -p no:randomly --no-cov -k 'pruner_records_partial_removal or session_end_partial_removal_left_a_snapshot or missing_snapshot_helper or every_removal_site_saves' fails over the merge base"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -811,3 +822,39 @@ dod_evidence:
     binds_ac:
       - AC22
       - AC39
+  - id: dod-worktree-remove-partial-removal-ac40
+    description: The pruner and the SessionEnd function each drive a real partial removal and report partially_removed; deletable and refused controls do not.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py -q -p no:randomly --no-cov -k 'real_partial_removal or deletable_control or pruner_records_partial_removal or pruner_refusal_and_success_controls or session_end_partial_removal'"
+    binds_ac:
+      - AC40
+  - id: dod-worktree-remove-partial-removal-ac41
+    description: The failure row of both callers quotes git's failed to delete line and the non-zero exit code.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py -q -p no:randomly --no-cov -k 'pruner_records_partial_removal or session_end_partial_removal or session_end_calls_extracted_removal'"
+    binds_ac:
+      - AC41
+  - id: dod-worktree-remove-partial-removal-ac42
+    description: The half-removed scan finds a planted stale-pointer tree, skips a clean one, and the pruner reports it in its own section.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py -q -p no:randomly --no-cov -k 'half_removed_scan_and_clean_control or main_reports_half_removed_without_classifying or report_empty_half_removed_section'"
+    binds_ac:
+      - AC42
+  - id: dod-worktree-remove-partial-removal-ac43
+    description: A failed removal leaves a snapshot naming the path and HEAD, and every removal site saves first.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py tests/scripts/test_every_worktree_removal_saves_first.py -q -p no:randomly --no-cov -k 'pruner_records_partial_removal or session_end_partial_removal_left_a_snapshot or missing_snapshot_helper or every_removal_site_saves'"
+    binds_ac:
+      - AC43

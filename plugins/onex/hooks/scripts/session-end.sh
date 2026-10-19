@@ -602,6 +602,35 @@ echo "$INPUT"
 # Runs in a backgrounded subshell so find/jq/git subprocess invocations
 # do not block Claude Code (performance budget: <50ms sync path).
 
+# SessionEnd's G6b save and G7 removal, with a readback of a failed removal
+# [OMN-18826]. `git worktree remove` is not atomic: git deletes the admin dir
+# first, then walks the tree and carries on past every failed unlink, so a
+# failed removal can leave a half-deleted tree that nothing can query. The
+# failure row quotes git's own stderr and exit code, and a tree whose admin dir
+# is gone is logged PARTIALLY_REMOVED, never as untracked files.
+# Reads _wt_snapshot_helper (scripts/worktree_removal_snapshot.py), log,
+# LOG_FILE and PYTHON_CMD. Returns 0 on removal, 1 when git did not remove the
+# tree, 2 when nothing was attempted because the save could not run.
+_wt_remove_with_readback() {
+    local _wt_parent_repo=$1 _wt_dir=$2 _wt_admin_dir _wt_rm_err _wt_rm_rc=0
+    # G6b: save before removing (OMN-19539, operator ruling 2026-09-25). The
+    # guards see no tracked or untracked change, but `git worktree remove`
+    # still deletes IGNORED files (.env, local settings) without a word.
+    # worktree_removal_snapshot.py saves them, with the diff and HEAD, under
+    # $OMNI_HOME/.onex_state; a missing helper or a failed save keeps the tree.
+    [[ -f "$_wt_snapshot_helper" ]] || { log "STALE: ${_wt_dir} - snapshot helper missing, nothing is removed unsaved"; return 2; }
+    "$PYTHON_CMD" "$_wt_snapshot_helper" "$_wt_dir" --reason session-end >>"$LOG_FILE" 2>&1 || { log "STALE: ${_wt_dir} - pre-removal snapshot failed, worktree kept (see log)"; return 2; }
+    # The admin dir is read first: the removal may unlink the .git pointer [AC1].
+    _wt_admin_dir=$(git -C "$_wt_dir" rev-parse --absolute-git-dir 2>/dev/null) || _wt_admin_dir=""
+    # G7: no --force, so git re-checks state after the guards (TOCTOU safety).
+    # stderr is captured and quoted in the row, not discarded [OMN-18826 AC2].
+    _wt_rm_err=$(git -C "$_wt_parent_repo" worktree remove "$_wt_dir" 2>&1 >/dev/null) || _wt_rm_rc=$?
+    [[ $_wt_rm_rc -eq 0 ]] && return 0
+    log "STALE: ${_wt_dir} - git worktree remove failed (exit ${_wt_rm_rc}): ${_wt_rm_err//$'\n'/ | }"
+    [[ -e "$_wt_dir" && -n "$_wt_admin_dir" && ! -e "$_wt_admin_dir" ]] && log "PARTIALLY_REMOVED: ${_wt_dir} - partially_removed: admin dir ${_wt_admin_dir} deleted, $(find "$_wt_dir" -type f 2>/dev/null | wc -l | tr -d ' ') files remain; destroyed, unrecoverable in place (snapshot saved before removal)"
+    return 1
+}
+
 WORKTREE_BASE="${ONEX_WORKTREES_DIR}"
 
 if [[ -d "$WORKTREE_BASE" ]]; then
@@ -747,32 +776,16 @@ if [[ -d "$WORKTREE_BASE" ]]; then
             continue
         fi
 
-        # G6b: Save before removing (OMN-19539, operator ruling 2026-09-25).
-        # G3-G5 see no tracked or untracked change, but `git worktree remove`
-        # still deletes IGNORED files (.env, local settings) without a word.
-        # The repo's worktree_removal_snapshot.py saves them, with the diff,
-        # under $OMNI_HOME/.onex_state; a missing helper or a failed save
-        # keeps the worktree.
+        # G6b + G7: save, then remove with plain `git worktree remove` (no
+        # --force, so git refuses if state changed after the guards), reading
+        # back a failed removal [OMN-19539, OMN-18826]. See
+        # _wt_remove_with_readback above for the return codes.
         _wt_snapshot_helper="${PLUGIN_ROOT}/../../scripts/worktree_removal_snapshot.py"
-        if [[ ! -f "$_wt_snapshot_helper" ]]; then
-            log "STALE: ${_wt_dir} - snapshot helper missing, nothing is removed unsaved"
-            _wt_skipped=$((_wt_skipped + 1))
-            continue
-        fi
-        if ! "$PYTHON_CMD" "$_wt_snapshot_helper" "$_wt_dir" --reason session-end >>"$LOG_FILE" 2>&1; then
-            log "STALE: ${_wt_dir} - pre-removal snapshot failed, worktree kept (see log)"
-            _wt_skipped=$((_wt_skipped + 1))
-            continue
-        fi
-
-        # G7: Safe removal via git worktree remove from parent repo.
-        # No --force: let git refuse if state changed between guards and removal (TOCTOU safety).
-        if git -C "$_wt_parent_repo" worktree remove "$_wt_dir" 2>>"$LOG_FILE"; then
+        if _wt_remove_with_readback "$_wt_parent_repo" "$_wt_dir"; then
             git -C "$_wt_parent_repo" worktree prune 2>>"$LOG_FILE" || true
             log "REMOVED: ${_wt_dir}"
             _wt_removed=$((_wt_removed + 1))
         else
-            log "STALE: ${_wt_dir} - git worktree remove failed (see log)"
             _wt_skipped=$((_wt_skipped + 1))
         fi
 
