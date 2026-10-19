@@ -73,3 +73,11 @@ dod_evidence:
         check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k fails_loud"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC5"]
+  - id: "dod-omn21122-ac1-installed-reader"
+    description: "Deploy smoke for the locked omnimarket package: the real capture CLI journals the newest compaction, preserving its bytes and reassembling a multi-chunk package. The old pin journals nothing."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_installed_compact_reader_omn21122.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
