@@ -258,3 +258,24 @@ dod_evidence:
     # reason: 'the ticket''s criteria were amended on 2026-10-16 to the four Expected bullets; AC8 is no longer a criterion of the ticket.'
     # retired_by: 'OMN-21087 ac-proof lane (jake-b-omni)'
     # retired_at: "2026-10-16T22:40:00Z"
+  - id: dod-omn21087-deploy-bootstrap-follows-entrypoint
+    description: 'The published bootstrap handler at the checked-out commit hashes to the digest the entrypoint at that commit declares. Replaces dod-omn21087-deploy-bootstrap, whose literal digest went stale when OMN-21163 changed the handler; the earlier item stays as merged. The hosted runner needs only HTTPS and git.'
+    source: manual
+    evidence_artifact: "supersedes_dod_evidence:dod-omn21087-deploy-bootstrap"
+    binds_ac: []
+    checks:
+      - check_type: command
+        check_value: >-
+          d=$(sed -n 's/^  local digest="\([0-9a-f:]*\)".*/\1/p' plugins/onex/skills/_bin/lab-onboarding.sh | tr -d :)
+          && [ ${#d} -eq 64 ]
+          && curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
+          | sha256sum | grep -q "^$d  -$"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21087-deploy-probe-test
+    description: 'The replacement deploy probe carries no digest literal and its digest read returns the checked-out handler''s sha256. Fails at the merge base, where no item supersedes the stale probe.'
+    source: manual
+    binds_ac: []
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_deploy_probe_omn21087.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
