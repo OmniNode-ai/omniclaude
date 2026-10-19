@@ -271,11 +271,20 @@ dod_evidence:
           && curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
           | sha256sum | grep -q "^$d  -$"
         cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-omn21087-deploy-probe-test
-    description: 'The replacement deploy probe carries no digest literal and its digest read returns the checked-out handler''s sha256. Fails at the merge base, where no item supersedes the stale probe.'
+  - id: dod-omn21087-ac4-fresh-download-handler
+    description: 'A freshly downloaded script can load its handler: the handler GitHub serves at the commit the script''s download URL names hashes to the script''s download_digest, read from the script itself. The test checks both probes take their digests and commit from the script, never a literal. Fails at the merge base, where the test file does not exist.'
     source: manual
-    binds_ac: []
+    binds_ac: [AC4]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_deploy_probe_omn21087.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: >-
+          s=plugins/onex/skills/_bin/lab-onboarding.sh
+          && d=$(sed -n 's/^ *download_digest="\([0-9a-f:]*\)".*/\1/p' "$s" | tr -d :)
+          && c=$(sed -n 's|.*raw\.githubusercontent\.com/OmniNode-ai/omniclaude/\([0-9a-f]\{40\}\)/\$rel.*|\1|p' "$s")
+          && [ ${#d} -eq 64 ] && [ ${#c} -eq 40 ]
+          && curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$c/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
+          | sha256sum | grep -q "^$d  -$"
         cwd: "${OMNI_HOME}/omniclaude"
