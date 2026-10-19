@@ -21,6 +21,7 @@ the workflow cannot silently regress the gate semantics.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import subprocess
@@ -600,12 +601,36 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
     for repo in ("omniintelligence", "omnibase_core", "omnibase_compat"):
         repo_url = f"https://github.com/OmniNode-ai/{repo}.git"
         assert repo_url in combined, f"{repo} clone must be present"
-    # A sibling is read at the pin this repo's uv.lock records, never a live branch
-    # (ruling 2026-10-01): omniintelligence by rev, core and compat by release tag.
+    # core and compat are read at the pin this repo's uv.lock records, never a live
+    # branch (ruling 2026-10-01). omniintelligence is read at its newest dev-* tag
+    # (OMN-20910), resolved at run time; a branch tip stays refused.
     assert "--branch dev" not in combined, "dependency clones must not track dev"
     assert "--branch main" not in combined, "dependency clones must not track main"
-    assert "omniintelligence\\.git\\?rev=" in combined, (
-        "omniintelligence must be fetched at the rev uv.lock pins"
+    assert "ls-remote --tags --refs origin" in combined, (
+        "omniintelligence must be resolved to its newest tag at run time"
+    )
+    assert "'refs/tags/dev-*'" in combined, (
+        "omniintelligence must be read at a dev-* tag"
+    )
+    assert "grep -E '^dev-[0-9]{14}-[0-9a-f]{12}$'" in combined, (
+        "only dev-<UTC>-<sha12> tag names may be resolved"
+    )
+    assert '[[ "$head_sha" != "${tag##*-}"* ]]' in combined, (
+        "the fetched commit must match the sha12 its tag name records"
+    )
+    # A tag name is not a trust root: the commit must also be reachable from the
+    # sibling's dev branch, which is fetched to test ancestry and never checked out.
+    assert 'merge-base --is-ancestor "$head_sha" refs/remotes/origin/dev' in combined, (
+        "the tagged commit must be an ancestor of omniintelligence dev"
+    )
+    assert 'checkout -q --detach "$head_sha"' in combined, (
+        "the tree read must be the verified tag commit, never a branch tip"
+    )
+    assert "checkout -q FETCH_HEAD" not in combined, (
+        "no dependency clone may check out what it fetched without verification"
+    )
+    assert "omniintelligence\\.git\\?rev=" not in combined, (
+        "omniintelligence is no longer read at the rev uv.lock records"
     )
     for pinned in ("omnibase-core", "omnibase-compat"):
         assert f"n={pinned}" in combined, f"{pinned} version must be read from uv.lock"
@@ -896,21 +921,31 @@ def test_gate_job_depends_on_review_and_fails_on_failure(
 
 
 def test_no_anthropic_api_key_required(workflow: dict[object, object]) -> None:
-    """ANTHROPIC_API_KEY must NOT appear in any env block (OMN-7467 guard).
+    """The Claude API key names are exported to exactly one step, from one named secret.
 
-    Claude Code authenticates via OAuth; requiring ANTHROPIC_API_KEY in CI
-    has regressed 6+ times across the org and is an explicit anti-pattern in
-    ``~/.claude/CLAUDE.md``.
+    The OMN-7467 guard keeps Claude Code on OAuth: no job-level or workflow-level
+    env, and no step other than the review step, may carry either name. The one
+    sanctioned carrier (OMN-20910) is the review step, whose Claude API voters
+    read it, and its value is the HOSTILE_REVIEW_ANTHROPIC_API_KEY Actions secret.
     """
-    raw = WORKFLOW_PATH.read_text(encoding="utf-8")
-    # Match the env-var name as a required key, not as a sanitizer regex or
-    # commented documentation. The simplest robust check is "no occurrence
-    # at all" in this file — there is no legitimate reason to mention the
-    # variable in this workflow.
-    assert "ANTHROPIC_API_KEY" not in raw, (
-        "ANTHROPIC_API_KEY must not be referenced in the hostile-reviewer "
-        "workflow — Claude Code uses OAuth (OMN-7467)"
-    )
+    names = ("ANTHROPIC_API_KEY", "REVIEW_ANTHROPIC_API_KEY")
+    carriers: list[tuple[str, str, object]] = []
+    envs: list[tuple[str, object]] = [("<workflow>", workflow.get("env"))]
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    for job_name, job in jobs.items():
+        assert isinstance(job, dict)
+        envs.append((f"{job_name}:<job>", job.get("env")))
+        for step in job.get("steps") or []:
+            if isinstance(step, dict):
+                envs.append((f"{job_name}:{step.get('name')}", step.get("env")))
+    for where, env in envs:
+        if isinstance(env, dict):
+            carriers.extend((where, n, env[n]) for n in names if n in env)
+    secret = "${{ secrets.HOSTILE_REVIEW_ANTHROPIC_API_KEY }}"
+    assert carriers == [
+        ("hostile-review:Run adversarial review", n, secret) for n in names
+    ]
 
 
 def test_workflow_has_pr_write_permission(workflow: dict[object, object]) -> None:
@@ -1208,3 +1243,159 @@ def test_voter_model_from_overlay_ratchet_is_wired_as_ci_step_and_hook() -> None
         for hook in repo["hooks"]
     ]
     assert any(_THIS_TEST in str(hook.get("entry", "")) for hook in hooks)
+
+
+def test_review_step_exports_the_claude_api_key_under_the_voter_env_names(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-20910: omniintelligence's Anthropic voter reads ANTHROPIC_API_KEY by default."""
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    review_job = jobs["hostile-review"]
+    assert isinstance(review_job, dict)
+    step = _named_step(workflow, "Run adversarial review")
+    env = step["env"]
+    assert isinstance(env, dict)
+    secret = "${{ secrets.HOSTILE_REVIEW_ANTHROPIC_API_KEY }}"
+    assert env["ANTHROPIC_API_KEY"] == secret
+    assert env["REVIEW_ANTHROPIC_API_KEY"] == secret
+    job_env = review_job["env"]
+    assert isinstance(job_env, dict)
+    assert (
+        "ANTHROPIC_API_KEY" not in job_env and "REVIEW_ANTHROPIC_API_KEY" not in job_env
+    ), "the key belongs to the review step only, not every step of the job"
+
+
+_GIT_STUB = """#!/usr/bin/env bash
+args=("$@")
+if [[ "${args[0]}" == "-C" ]]; then args=("${args[@]:2}"); fi
+echo "${args[*]}" >> "$GIT_STUB_LOG"
+case "${args[0]}" in
+  init) mkdir -p "${args[-1]}" ;;
+  ls-remote) printf '%s' "$STUB_LS_REMOTE" ;;
+  rev-parse) echo "$STUB_REV_PARSE" ;;
+  merge-base) exit "${STUB_ANCESTOR_RC:-0}" ;;
+esac
+exit 0
+"""
+
+_TAG_SHA12 = "abcdef012345"
+_TAG_NAME = f"dev-20261018120000-{_TAG_SHA12}"
+_TAG_REF = f"{_TAG_SHA12}{'0' * 28}\trefs/tags/{_TAG_NAME}\n"
+
+
+def _run_omniintelligence_clone_step(
+    workflow: dict[object, object],
+    tmp_path: pathlib.Path,
+    *,
+    ls_remote: str,
+    rev_parse: str,
+    ancestor_rc: int,
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """Run the Clone omniintelligence step against a stub git and stub sleep."""
+    run = _named_step(workflow, "Clone omniintelligence")["run"]
+    assert isinstance(run, str)
+    bin_dir = tmp_path / "bin"
+    work_dir = tmp_path / "workspace"
+    bin_dir.mkdir()
+    work_dir.mkdir()
+    for name, body in (("git", _GIT_STUB), ("sleep", "#!/usr/bin/env bash\nexit 0\n")):
+        stub = bin_dir / name
+        stub.write_text(body, encoding="utf-8")
+        stub.chmod(0o755)
+    log = tmp_path / "git.log"
+    log.touch()
+    script = tmp_path / "step.sh"
+    script.write_text(run, encoding="utf-8")
+    env = {
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "GIT_STUB_LOG": str(log),
+        "STUB_LS_REMOTE": ls_remote,
+        "STUB_REV_PARSE": rev_parse,
+        "STUB_ANCESTOR_RC": str(ancestor_rc),
+    }
+    result = subprocess.run(
+        ["bash", "-e", str(script)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    return result, log.read_text(encoding="utf-8").splitlines()
+
+
+@pytest.mark.parametrize(
+    ("ls_remote", "rev_parse", "ancestor_rc", "message"),
+    [
+        pytest.param(
+            "",
+            "",
+            0,
+            "tag could be resolved and fetched",
+            id="no-tag-on-the-remote",
+        ),
+        pytest.param(
+            f"{'1' * 40}\trefs/tags/dev-latest\n",
+            "",
+            0,
+            "tag could be resolved and fetched",
+            id="no-tag-matches-the-dev-utc-sha12-shape",
+        ),
+        pytest.param(
+            _TAG_REF,
+            f"{'f' * 40}",
+            0,
+            "tag is anchored to its commit and reachable from dev",
+            id="tag-commit-differs-from-the-sha12-its-name-records",
+        ),
+        pytest.param(
+            _TAG_REF,
+            f"{_TAG_SHA12}{'0' * 28}",
+            1,
+            "tag is anchored to its commit and reachable from dev",
+            id="tag-commit-is-not-an-ancestor-of-dev",
+        ),
+    ],
+)
+def test_clone_omniintelligence_fails_fast_when_no_dev_tag_resolves(
+    workflow: dict[object, object],
+    tmp_path: pathlib.Path,
+    ls_remote: str,
+    rev_parse: str,
+    ancestor_rc: int,
+    message: str,
+) -> None:
+    """OMN-20910: zero usable dev-* tags fails the step with a named error and checks nothing out."""
+    result, git_calls = _run_omniintelligence_clone_step(
+        workflow,
+        tmp_path,
+        ls_remote=ls_remote,
+        rev_parse=rev_parse,
+        ancestor_rc=ancestor_rc,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode != 0, output
+    assert f"::error::no omniintelligence dev-<UTC>-<sha12> {message}" in output, output
+    assert not any(call.startswith("checkout") for call in git_calls), git_calls
+
+
+def test_clone_omniintelligence_reads_the_newest_anchored_dev_tag(
+    workflow: dict[object, object],
+    tmp_path: pathlib.Path,
+) -> None:
+    """Positive control for the fail-fast cases: a resolvable, anchored tag is checked out."""
+    result, git_calls = _run_omniintelligence_clone_step(
+        workflow,
+        tmp_path,
+        ls_remote=_TAG_REF,
+        rev_parse=f"{_TAG_SHA12}{'0' * 28}",
+        ancestor_rc=0,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert f"omniintelligence read at tag {_TAG_NAME}" in output, output
+    assert [call for call in git_calls if call.startswith("checkout")] == [
+        f"checkout -q --detach {_TAG_SHA12}{'0' * 28}"
+    ]

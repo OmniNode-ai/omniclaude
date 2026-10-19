@@ -24,6 +24,11 @@ requirements:
         statement: "AC4: the ratchet refuses a vars.<anything>MODEL reference, a model id literal and a MODEL env key bound to a literal, finds all five lines of a known-bad model fixture, and the new cases fail on the merge base -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k voter_model_from_overlay"
       - id: "AC5"
         statement: "AC5: the ratchet's test file runs as a step of the refusal-surface job that the required CI Summary context covers and as a check-only pre-commit hook -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k voter_model_from_overlay_ratchet_is_wired"
+  - id: "req-omniintelligence-by-dev-tag-and-claude-key"
+    statement: "The hostile-review job reads omniintelligence at its newest dev-* tag, resolved at run time, and exports the Claude API voters' key, as ANTHROPIC_API_KEY and REVIEW_ANTHROPIC_API_KEY, to the review step only."
+    acceptance:
+      - id: "AC6"
+        statement: "AC6: the clone step resolves refs/tags/dev-* with git ls-remote and fetches no branch tip, and the review step alone carries ANTHROPIC_API_KEY and REVIEW_ANTHROPIC_API_KEY from the HOSTILE_REVIEW_ANTHROPIC_API_KEY secret -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py tests/ci/test_hostile_reviewer_retry_budget_pin_omn17427.py -q --no-cov -k 'dependency_clones or no_anthropic_api_key or voter_env_name or newest_dev_tag'"
 evidence_requirements:
   - kind: "tests"
     description: "The workflow reads the overlay and names no voter."
@@ -73,3 +78,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_hostile_reviewer_retry_budget_pin_omn17427.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC1"]
+  - id: "dod-omn20910-ac6-dev-tag-and-claude-key"
+    description: "omniintelligence is read at its newest dev-* tag, never a branch tip, and the review step alone carries the Claude API key."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py tests/ci/test_hostile_reviewer_retry_budget_pin_omn17427.py -q --no-cov -k 'dependency_clones or no_anthropic_api_key or voter_env_name or newest_dev_tag'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC6"]
