@@ -13,9 +13,9 @@
 # evaluates each job's `runs-on` once per cell of a fixed event matrix --
 # pull_request from a fork and from the base repository, pull_request_review in
 # both shapes, push, workflow_dispatch, repository_dispatch, schedule,
-# merge_group, workflow_run, release -- and fails when any cell except a fork
-# pull request selects a GitHub-hosted label. That is a property of the CHECKED
-# TREE, not of the event this run happens to be firing under, so a pull-request
+# merge_group, workflow_run, release -- and fails when any cell, including a
+# fork event, selects a GitHub-hosted label (OMN-17427). That is a property of
+# the CHECKED TREE, not of the event this run happens to be firing under, so a pull-request
 # run already judges every event. The `push` trigger in each caller exists for
 # a different reason: it is what makes the default branch itself judged after a
 # merge, which is the surface where OMN-18616 went unseen for nine days.
@@ -27,12 +27,9 @@
 # for the same reason the routing-decision job in omnibase_infra is pinned --
 # it must not share fate with the variable it reads.
 #
-# RULED EXCEPTIONS ARE DECLARED, NOT ANNOTATED (OMN-19998). A job an operator
-# ruling lets run on GitHub-hosted runners is listed in the caller's
-# `.github/hosted-eligible-jobs.yaml`, citing a ruling that the registry
-# `config/private_repo_hosted_rulings.yaml` carries for that repository. The
-# registry is read from the validator checkout below, at the same pin.
-# The registry is EMPTY since 2026-10-19 (OMN-17427): the operator withdrew
+# NO HOSTED EXEMPTIONS (OMN-17427). The registry is read from the validator
+# checkout below, at the same pin, and is EMPTY since 2026-10-19: the operator
+# withdrew
 # hosted eligibility ("make it impossible to run private repos actions on
 # github"), so every declaration is refused, no annotation excuses a hosted
 # placement, and a hosted literal fallback is a finding even while its
@@ -58,9 +55,9 @@ on:
     inputs:
       report_reusable_calls:
         description: >-
-          Also list `uses:` jobs, whose placement is decided in the repository
-          that DEFINES the called workflow and is judged there by this same
-          gate. Reported rather than omitted so a cross-repo hop is visible.
+          Also list `uses:` jobs. Each called workflow is read at its pinned ref
+          and resolved against the private caller's variable scopes, because
+          the caller pays for the run. Cross-repository hops remain visible.
         required: false
         default: true
         type: boolean

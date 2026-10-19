@@ -27,27 +27,11 @@ under test; if it cannot be resolved, the gate FAILS CLOSED and says so,
 because a gate that cannot tell whether the rule applies has not passed -- it
 has not run.
 
-FORK ISOLATION OUTRANKS THIS RULE, AND THE ORDER IS NOT A JUDGEMENT CALL.
-The canonical selector sends a pull request opened from a fork to the public
-runner class and everything else to the trusted seam. Both halves are required
-in a private repository: this ruling says its CI does not run on hosted
-runners, and fork isolation says untrusted code never reaches a fleet runner
-that bind-mounts the lab credential directory. The routing node's contract
-settles which yields -- only a CAPACITY reason may be reversed for a repository
-that may not run hosted, never a trust reason such as fork isolation -- so a
-hosted branch GUARDED BY A FORK TEST is the required placement, not a
-violation, and it is exempt here.
-
-The exemption is scoped to ONE CELL of the event matrix and cannot spread: it
-applies to the arm selected when the event is a pull request (or a pull-request
-review) whose head repository is a fork, and to nothing else. The arm an
-ordinary same-repo pull request selects is judged on the ordinary terms, and so
-is the arm a push, a dispatch or a schedule selects -- including when the guard
-that reaches it is spelled as a fork test, which is precisely the case that
-went unseen for nine days. A fork guard with nothing to fall back to is not
-excused either: under every non-fork event its guard is false, no arm is
-selected, `runs-on` evaluates to a falsy value, and the job cannot start, which
-is reported as its own finding rather than passed over.
+FORK EVENTS DO NOT EXCUSE HOSTED PLACEMENT (OMN-17427, 2026-10-19).
+The prohibition applies to every job billed to a private repository, including
+a fork pull request and a fork review. This gate refuses their hosted arms;
+it does not reroute untrusted code to a credential-bearing fleet runner.
+Callers must keep their trust isolation when removing hosted placements.
 
 A `uses:` JOB IS JUDGED WHERE THE RUN IS BILLED, NOT WHERE THE WORKFLOW LIVES.
 A job that calls a reusable workflow has no `runs-on` of its own, and the
@@ -98,10 +82,10 @@ on a textual fork-test match and never asked when the guard was true.
 So each job's arms are now EVALUATED, once per event, against a fixed matrix of
 event contexts -- and the guard is evaluated, not matched. The two spellings of
 "is a fork" are no longer a regex carve-out: under a fork pull request the fork
-guard is simply TRUE and the hosted arm it selects is exempt, and under a push
-the same guard is TRUE for the wrong reason and the hosted arm it selects is a
-FINDING. One mechanism, both readings, no list of blessed spellings to keep in
-step with the estate.
+guard is TRUE and the hosted arm it selects is a FINDING. Under a push
+the same guard can be TRUE for the wrong reason and is a FINDING there too.
+One mechanism, both readings, no list of blessed spellings to keep in step
+with the estate.
 
 THE EVALUATOR FAILS CLOSED ON ANY SHAPE IT CANNOT READ. It understands the
 subset this estate writes: `&&`, `||`, `!`, `==`, `!=`, `contains()`,
@@ -136,35 +120,10 @@ only because its variable is set -- `fromJSON(vars.X || '["ubuntu-latest"]')`
 -- is a finding: the day X is unset at every scope it runs hosted, which is how
 two private repositories spent Enterprise minutes until 2026-10-19.
 
-A JOB AN OPERATOR RULING PUTS ON HOSTED RUNNERS IS DECLARED, NOT ANNOTATED
-(OMN-19998). RULING 2026-10-16T17:44:31Z amends the 2026-09-14 rule: named
-private repositories may run self-contained jobs on GitHub-hosted LINUX
-runners. Those jobs can run on the fleet, so the annotation above (whose
-meaning is "the fleet cannot carry this") is the wrong record for them, and
-the canonical-file-shape ratchet counts every `#...-ok` comment as a new
-suppression, so the two gates could not both pass. Instead the repository
-declares them in `.github/hosted-eligible-jobs.yaml`:
-
-    schema: 1
-    jobs:
-      - repo: OmniNode-ai/<name>
-        workflow: ci.yml
-        job: lint
-        ruling: "2026-10-16T17:44:31Z"
-
-and a listed job's hosted placement is accepted only when ALL of these hold:
-the ruling is in this gate's own registry
-(`config/private_repo_hosted_rulings.yaml`, read at the gate's pinned SHA, so
-adding a ruling is a reviewed change here and never a caller's edit); that
-ruling names this repository; every hosted label of the arm is in the
-ruling's label families (Linux only today); and, where a ledger is readable
-(`--ledger`, default `$ONEX_LEDGER_PATH` outside Actions), the ledger itself
-carries the RULING row with that timestamp, lane and ticket. A listing never
-excuses a placement onto nothing, an entry naming another repository or a job
-that does not exist is refused, and each branch is judged by its OWN
-declaration file, so a pull request's listing cannot excuse another branch.
-The jobs stay listed when the routing variable flips them back to the fleet:
-a listed job that resolves to the fleet is simply not hosted.
+THE HOSTED-ELIGIBLE REGISTRY IS EMPTY. The earlier ruling that permitted
+selected private jobs on hosted runners was withdrawn on 2026-10-19. A
+`.github/hosted-eligible-jobs.yaml` declaration citing it is refused against
+`config/private_repo_hosted_rulings.yaml`, read at the gate's pinned SHA.
 
 A HOST THAT CANNOT READ GETS A DATED SNAPSHOT, NEVER A PASS (OMN-17427). A lab-host
 lane cannot read Actions variables (HTTP 403 at both scopes) and its GitHub reads
@@ -214,7 +173,6 @@ HOSTED_LABEL = re.compile(r"^(ubuntu|macos|windows)-", re.IGNORECASE)
 ANNOTATION_MARKER = re.compile(r"#\s*private-repo-hosted-ok:", re.IGNORECASE)
 
 VAR_REF = re.compile(r"vars\.([A-Z0-9_]+)")
-FALLBACK_FOR = "vars.{name}\\s*\\|\\|\\s*'(\\[[^']*\\])'"
 
 # The two spellings a JOB-level `uses:` may take. A job-level `uses:` names a
 # reusable WORKFLOW, never an action, so both forms carry a `.github/workflows`
@@ -281,7 +239,7 @@ class Branch:
     guard: str
     labels: list[str]
     how: str
-    # Hosted labels named by the literal fallback of a variable that is SET
+    # Hosted labels named by a fallback of a variable that is SET
     # today (OMN-17427, 2026-10-19). The arm resolves to `labels` now and to
     # these the day the variable is unset at every scope.
     fallback: tuple[str, ...] = ()
@@ -350,7 +308,6 @@ class EventContext:
     key: str
     event_name: str
     head: str  # "fork" | "self" | "absent"
-    fork_exempt: bool
     why: str
     # How a REF-VALUED field that this gate cannot know resolves in this cell.
     # `github.base_ref` on a pull request is a real branch name, but which one
@@ -381,60 +338,49 @@ EVENT_MATRIX: tuple[EventContext, ...] = (
         "pull_request:fork",
         "pull_request",
         "fork",
-        True,
-        "a pull request opened from a fork -- the ONE cell where a hosted "
-        "placement is required rather than forbidden, because fork isolation "
-        "is a trust constraint and outranks the cost ruling",
+        "a pull request opened from a fork; hosted placement is forbidden here too",
     ),
     EventContext(
         "pull_request:base",
         "pull_request",
         "self",
-        False,
         "an ordinary pull request whose head is a branch of this repository",
     ),
     EventContext(
         "pull_request_review:fork",
         "pull_request_review",
         "fork",
-        True,
         "a review submitted on a pull request opened from a fork",
     ),
     EventContext(
         "pull_request_review:base",
         "pull_request_review",
         "self",
-        False,
         "a review submitted on a same-repository pull request",
     ),
-    EventContext("push", "push", "absent", False, "a push to a branch or tag"),
+    EventContext("push", "push", "absent", "a push to a branch or tag"),
     EventContext(
         "workflow_dispatch",
         "workflow_dispatch",
         "absent",
-        False,
         "a manual run from the Actions tab or the API",
     ),
     EventContext(
         "repository_dispatch",
         "repository_dispatch",
         "absent",
-        False,
         "a cross-repository trigger -- the event behind the omniweb "
         "pin-drift job that acquired no runner at all",
     ),
-    EventContext("schedule", "schedule", "absent", False, "a cron run"),
-    EventContext(
-        "merge_group", "merge_group", "absent", False, "a merge-queue evaluation"
-    ),
+    EventContext("schedule", "schedule", "absent", "a cron run"),
+    EventContext("merge_group", "merge_group", "absent", "a merge-queue evaluation"),
     EventContext(
         "workflow_run",
         "workflow_run",
         "absent",
-        False,
         "a run chained off another workflow completing",
     ),
-    EventContext("release", "release", "absent", False, "a release being published"),
+    EventContext("release", "release", "absent", "a release being published"),
 )
 
 
@@ -1466,15 +1412,29 @@ def load_eligible(
 
 
 def _labels(value: Any) -> list[str]:
-    if value is None:
-        return []
+    # OMN-17427: an expression hidden in an array or object is not a literal
+    # label. Refuse shapes we cannot resolve instead of passing their text.
     if isinstance(value, str):
-        return [value]
-    if isinstance(value, list):
-        return [str(entry) for entry in value]
-    if isinstance(value, dict):  # runs-on: {group: ..., labels: [...]}
-        return [str(entry) for entry in value.get("labels") or []]
-    return [str(value)]
+        labels = [value]
+    elif isinstance(value, list):
+        labels = value
+    elif isinstance(value, dict):  # runs-on: {group: ..., labels: [...]}
+        if any("${{" in str(entry) for entry in value.values()):
+            raise GateError(
+                f"unresolved runs-on object expression {value!r}. THE GATE DID NOT RUN."
+            )
+        return _labels(value.get("labels"))
+    else:
+        labels = []
+    if not labels or any(
+        not isinstance(label, str) or not label.strip() or "${{" in label
+        for label in labels
+    ):
+        raise GateError(
+            f"runs-on labels {value!r} are empty, invalid or contain an unresolved "
+            "expression. THE GATE DID NOT RUN."
+        )
+    return labels
 
 
 def _split_top_level(expression: str, operator: str) -> list[str]:
@@ -1517,51 +1477,58 @@ def _labels_of(
 ) -> tuple[list[str], str, tuple[str, ...]]:
     """Resolve one arm's value to labels, live, or refuse to guess.
 
-    Also returns the hosted labels a SET variable's literal fallback names:
+    Also returns the hosted labels a SET variable's fallback chain names:
     an expression that could fall back to a hosted runner is a finding
     whatever the variable holds today (OMN-17427, 2026-10-19).
     """
-    names = VAR_REF.findall(fragment)
-    if not names:
-        raise GateError(
-            "a runs-on expression that names no vars.* cannot be resolved "
-            f"statically: {runs_on!r}. THE GATE DID NOT RUN."
-        )
-    labels: list[str] = []
+    fragment = _strip_parens(fragment)
+    args = _call_args(fragment, "fromjson")
+    decode_json = args is not None
+    if args is not None:
+        if len(args) != 1:
+            raise GateError(f"unreadable runs-on {runs_on!r}. THE GATE DID NOT RUN.")
+        fragment = _strip_parens(args[0])
+
+    labels: list[str] | None = None
     how: list[str] = []
     fallback: list[str] = []
-    for name in dict.fromkeys(names):
-        value = variables.get(name)
-        match = re.search(FALLBACK_FOR.format(name=name), fragment)
-        if value is not None and match is not None:
-            try:
-                fallback.extend(
-                    str(entry)
-                    for entry in json.loads(match.group(1))
-                    if HOSTED_LABEL.match(str(entry))
-                )
-            except json.JSONDecodeError as error:
-                raise GateError(
-                    f"the literal fallback of {name} is not valid JSON "
-                    f"({match.group(1)!r}): {error}. THE GATE DID NOT RUN."
-                ) from error
-        if value is None:
-            if match is None:
-                raise GateError(
-                    f"{name} is unset at every scope and carries no literal "
-                    f"fallback in {runs_on!r}; placement is undecidable. "
-                    "THE GATE DID NOT RUN."
-                )
-            value = match.group(1)
-            how.append(f"{name} unset -> {value}")
+    variable_seen = False
+    for operand in _split_top_level(fragment, "||"):
+        operand = _strip_parens(operand)
+        variable = VAR_REF.fullmatch(operand)
+        literal = re.fullmatch(r"'((?:[^']|'')*)'", operand)
+        if variable:
+            variable_seen = True
+            name = variable.group(0).split(".", 1)[1]
+            value = variables.get(name)
+            how.append(f"{name}={value}" if value else f"{name} unset")
+        elif literal:
+            value = literal.group(1).replace("''", "'")
+            how.append(f"literal {value}")
         else:
-            how.append(f"{name}={value}")
+            raise GateError(
+                f"unreadable runs-on value {operand!r} in {runs_on!r}; "
+                "only vars.*, string literals and fromJSON of their fallback "
+                "chain can be resolved. THE GATE DID NOT RUN."
+            )
+        if not value:  # GitHub treats both an unset variable and "" as falsy.
+            continue
         try:
-            labels.extend(str(entry) for entry in json.loads(value))
+            candidate = _labels(json.loads(value) if decode_json else value)
         except json.JSONDecodeError as error:
             raise GateError(
-                f"{name} is not valid JSON ({value!r}): {error}. THE GATE DID NOT RUN."
+                f"runs-on value is not valid JSON ({value!r}): {error}. "
+                "THE GATE DID NOT RUN."
             ) from error
+        if labels is None:
+            labels = candidate
+        elif variable_seen:
+            fallback.extend(label for label in candidate if HOSTED_LABEL.match(label))
+    if labels is None:
+        raise GateError(
+            f"variables are unset at every scope and carry no literal fallback "
+            f"in {runs_on!r}; placement is undecidable. THE GATE DID NOT RUN."
+        )
     return labels, "; ".join(how), tuple(fallback)
 
 
@@ -1571,8 +1538,7 @@ def resolve_branches(runs_on: Any, variables: Variables) -> list[Branch]:
     An expression is not "unknown": it resolves, live, to whatever the
     repository's own variable scopes currently hold. It is resolved ARM BY ARM
     rather than flattened, because `A && X || Y` places a run on X or on Y and
-    never on both, and the two arms answer to different rules -- see the fork
-    paragraph in the module docstring.
+    never on both. Every selected arm is subject to the same prohibition.
     """
     if not isinstance(runs_on, str) or "${{" not in str(runs_on):
         return [Branch(guard="", labels=_labels(runs_on), how="literal")]
@@ -1581,10 +1547,25 @@ def resolve_branches(runs_on: Any, variables: Variables) -> list[Branch]:
     if inner.startswith("${{") and inner.endswith("}}"):
         inner = inner[3:-2]
 
+    segments = _split_top_level(inner, "||")
+    if all(len(_split_top_level(segment, "&&")) == 1 for segment in segments):
+        # A plain vars.X || 'label' is a value fallback chain, not a pair of
+        # event-guarded arms. The literal remains reachable if X is emptied.
+        labels, how, fallback = _labels_of(inner, runs_on, variables)
+        return [Branch(guard="", labels=labels, how=how, fallback=fallback)]
+
     branches: list[Branch] = []
-    for segment in _split_top_level(inner, "||"):
+    for segment in segments:
         operands = _split_top_level(segment, "&&")
         guard = " && ".join(operands[:-1]) if len(operands) > 1 else ""
+        if VAR_REF.fullmatch(_strip_parens(operands[-1])):
+            # The selected arm could become falsy when its variable is unset,
+            # causing an outer hosted fallback to run. Our event evaluator
+            # does not model that extra dimension, so it must not pass it.
+            raise GateError(
+                f"a guarded plain variable in {runs_on!r} can become falsy; "
+                "use fromJSON with an explicit fleet fallback. THE GATE DID NOT RUN."
+            )
         labels, how, fallback = _labels_of(operands[-1], runs_on, variables)
         branches.append(Branch(guard=guard, labels=labels, how=how, fallback=fallback))
     return branches
@@ -1624,9 +1605,9 @@ def _offending_placements(
 ) -> list[Placement]:
     """Every way this `runs-on` breaches the rule, and the events that reach it.
 
-    Two breaches, not one. A hosted arm selected under any event except a fork
-    pull request is the rule this gate is named for. An event that selects NO
-    arm is the other: `runs-on` evaluates to a falsy value and GitHub schedules
+    Two breaches, not one. A hosted arm selected under any declared event,
+    including a fork event, is the rule this gate is named for. An event that
+    selects NO arm is the other: `runs-on` evaluates to a falsy value and GitHub schedules
     the job onto nothing, which is a fork guard with nothing to fall back to
     seen from the event side.
 
@@ -1649,8 +1630,6 @@ def _offending_placements(
             index = _select(branches, context, slug, where)
             if index is None:
                 unplaced.append(context.key)
-            elif context.fork_exempt:
-                continue
             elif branches[index].hosted:
                 hosted_by_arm.setdefault(index, []).append(context.key)
             elif branches[index].fallback:
@@ -1672,7 +1651,7 @@ def _offending_placements(
                 branches[index],
                 labels=list(branches[index].fallback),
                 how=(
-                    "HOSTED LITERAL FALLBACK: an unset variable places this job "
+                    "HOSTED FALLBACK: an unset variable places this job "
                     f"on GitHub-hosted runners (live today: {branches[index].how})"
                 ),
             ),
@@ -1716,7 +1695,7 @@ def _latent(
     if not _needs_evaluation(branches):
         return latent
     for cell in EVENT_MATRIX:
-        if cell.key in declared_keys or cell.fork_exempt:
+        if cell.key in declared_keys:
             continue
         for context in _variants(cell, branches, refs):
             index = _select(branches, context, slug, where)
@@ -1817,7 +1796,6 @@ def declared_contexts(document: dict[str, Any], where: str) -> tuple[EventContex
                 key=name,
                 event_name=name,
                 head="absent",
-                fork_exempt=False,
                 why="an event outside the fixed matrix, carrying no "
                 "pull-request payload",
             )
@@ -1872,7 +1850,10 @@ def _placements(
         where = f"{uses}::{job_id}{pin}"
         nested = definition.get("uses")
         if "runs-on" in definition:
-            branches = resolve_branches(definition["runs-on"], variables)
+            try:
+                branches = resolve_branches(definition["runs-on"], variables)
+            except GateError as error:
+                raise GateError(f"{where}: {error}") from error
             notes.append(
                 f"note:     {uses}::{job_id} resolves to "
                 + " | ".join(
@@ -2003,7 +1984,10 @@ def scan(
                     f"note: {path.name}::{job_id} delegates to {definition['uses']}"
                 )
             if "runs-on" in definition:
-                branches = resolve_branches(definition["runs-on"], variables)
+                try:
+                    branches = resolve_branches(definition["runs-on"], variables)
+                except GateError as error:
+                    raise GateError(f"{where}: {error}") from error
                 matrix.extend(_matrix_report(branches, contexts, slug, where, refs))
                 for cell in _latent(branches, contexts, slug, where, refs):
                     latent.append(
@@ -2708,14 +2692,11 @@ def main(argv: list[str] | None = None) -> int:
         )
     print(
         "\nPlacement is read per TRIGGER EVENT: the `events:` line names the "
-        "events that actually reach the offending arm. A selector guarded on "
-        "the head repository alone reaches its public arm under EVERY event "
-        "carrying no pull-request payload, because that field is null there -- "
-        "test the event first:\n"
-        '  contains(fromJSON(\'["pull_request","pull_request_review"]\'), '
-        "github.event_name) &&\n"
-        "  github.event.pull_request.head.repo.full_name != github.repository\n"
-        "\nOtherwise move the job to the fleet: pin `[self-hosted, omnibase-ci]`, "
+        "events that actually reach the offending arm, including fork events. "
+        "Remove hosted placements and hosted defaults from private workflows. "
+        "Keep untrusted fork code isolated from credential-bearing runners; "
+        "this gate refuses hosted placement and does not reroute that code.\n"
+        "For trusted jobs, pin `[self-hosted, omnibase-ci]`, "
         "and give every `vars.X || '[...]'` a fleet literal fallback, never a "
         "hosted one -- an unset variable must never mean hosted. There is no "
         "exemption: since 2026-10-19 neither an annotation nor a "

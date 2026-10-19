@@ -179,6 +179,13 @@ requirements:
         statement: "a job whose runs-on is fromJSON(vars.X || '[\"ubuntu-latest\"]') fails the gate with X set to the fleet, its twin with a fleet fallback passes, the fork arm alone stays exempt, and a called workflow's hosted fallback fails the private caller -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'literal_fallback or fork_arm_alone' fails over the merge base"
       - id: AC45
         statement: "a hosted job carrying a private-repo-hosted-ok annotation fails like its bare twin, and a hosted-eligible declaration citing RULING 2026-10-16T17:44:31Z is refused against the shipped registry, which is empty -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'annotat or withdrawn_ruling or shipped_registry_carries_no_ruling' fails over the merge base"
+  - id: req-private-runner-placement-no-fork-exemption
+    statement: "The 2026-10-19 absolute hosted-runner prohibition supersedes AC44's historical fork-exemption clause; the existing acceptance statement is retained unchanged as a historical binding."
+    acceptance:
+      - id: AC48
+        statement: "a private caller's fork pull request or review cannot select a hosted runner or retain a hosted fallback, including through a pinned reusable workflow -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'private_no_hosted_refuses_fork or fork_arm_alone' fails over the merge base"
+      - id: AC49
+        statement: "JSON string labels and plain-variable hosted fallbacks are refused; unresolved collection expressions, unsupported variable transforms and guarded plain-variable arms fail closed; an empty variable takes its fleet fallback; the refusal suite is wired into CI and pre-commit -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py tests/workflows/test_private_repo_runner_placement_workflow.py -q -p no:randomly --no-cov -k 'private_no_hosted or hosted_refusal_regressions' fails over the merge base"
   - id: req-required-check-manifest-matches-live-dev
     statement: The required-check manifest's dev REQUIRED rows name exactly the contexts dev branch protection requires, so the Required-Check Manifest Reconcile job on dev passes; Comment Render Delegation (OMN-18512) stays enforced through CI Summary.
     acceptance:
@@ -873,7 +880,7 @@ dod_evidence:
     binds_ac:
       - AC43
   - id: dod-private-repo-no-hosted-runner-ac44
-    description: A hosted literal fallback is a finding while its variable is set, for a caller's own job and for a called workflow; the fork arm stays exempt.
+    description: A hosted literal fallback is a finding while its variable is set, for a caller's own job and for a called workflow; AC48 supersedes the historical fork exemption.
     source: manual
     status: verified
     checks:
@@ -890,6 +897,24 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'annotat or withdrawn_ruling or shipped_registry_carries_no_ruling'"
     binds_ac:
       - AC45
+  - id: dod-private-runner-placement-no-fork-exemption-ac46
+    description: Private fork jobs and pinned reusable fork jobs refuse hosted values and hosted fallbacks.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'private_no_hosted_refuses_fork or fork_arm_alone'"
+    binds_ac:
+      - AC48
+  - id: dod-private-runner-placement-expression-refusals-ac47
+    description: Runner expressions fail closed on unsupported shapes, string labels and fallback chains are judged, and CI and pre-commit execute the refusal suite.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py tests/workflows/test_private_repo_runner_placement_workflow.py -q -p no:randomly --no-cov -k 'private_no_hosted or hosted_refusal_regressions'"
+    binds_ac:
+      - AC49
   - id: dod-required-check-manifest-no-comment-render-row
     description: The manifest declares no REQUIRED row for Comment Render Delegation (OMN-18512), and CI Summary still gates and strictly requires that job.
     source: manual
