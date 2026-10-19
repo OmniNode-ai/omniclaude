@@ -139,6 +139,11 @@ requirements:
     acceptance:
       - id: AC34
         statement: "The Repo Evidence Gate caller uses omnibase_core's receipt-gate reusable at the pin that refuses a verifier-version below 0.4.303 and passes verifier-version 0.4.303 or later; 0.4.280 and 0.4.302 are refused and 0.4.303 and 0.4.310 are admitted; the call-repo-evidence-gate-verifier-floor pre-commit hook runs this check -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov fails when the caller's verifier-version is 0.4.302"
+  - id: req-delegate-skill-names-the-run
+    statement: The onex-delegate skill shows the answer first and then one line naming the run, so the M4 board's C30 probe finds the correlation id in the delegation's tool result.
+    acceptance:
+      - id: AC35
+        statement: "prompt.md carries one plain onex delegate --json command and no --result-only, tells the agent to reply with result.response and then one Run: <correlation_id> line, and the captured --json stdout parses to a UUID correlation_id under the probe's marker and UUID rules while the answer alone parses to none -- falsifier: uv run pytest plugins/onex-delegate/tests/test_delegate_run_id_surface.py -q --no-cov fails against the --result-only skill"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -700,3 +705,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov"
     binds_ac:
       - AC34
+  - id: dod-delegate-skill-names-the-run
+    description: The delegate skill runs onex delegate --json, replies with the answer and then one Run line carrying the correlation id the board probe parses.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_run_id_surface.py -q --no-cov"
+    binds_ac:
+      - AC35

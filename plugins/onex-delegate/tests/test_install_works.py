@@ -81,8 +81,9 @@ _RUN_TIMEOUT_SECONDS = 120
 #: rename shows up as a failing assertion instead of a silently vacuous probe.
 _BACKING_NODE = "node_delegate_skill_orchestrator"
 
-#: The flag the skill's one command depends on (OMN-21088). Shipped by omnibase-infra.
-_RESULT_ONLY_FLAG = "--result-only"
+#: The flag the skill's one command depends on (OMN-17427): the typed result on stdout
+#: carries the run id the skill's closing line names. Shipped by omnibase-infra.
+_JSON_FLAG = "--json"
 
 
 def _compat() -> dict:
@@ -214,16 +215,14 @@ def test_declared_pins_install_and_delegate_runs(tmp_path: Path) -> None:
     )
     assert "delegate" in run.stdout
 
-    # OMN-21088: the skill runs `onex delegate ... --result-only`, so the clean
-    # install must list that flag. It ships in the omnibase-infra release of
-    # OMN-21088 Lane A; until plugin-compat.yaml's floor reaches that release,
-    # the newest published omnibase-infra is the only thing that can satisfy this
-    # and an older one fails here, by name, instead of in a customer's terminal.
-    assert _RESULT_ONLY_FLAG in run.stdout, (
-        f"`onex delegate --help` does not list {_RESULT_ONLY_FLAG} after installing "
-        f"{requirements}. The skill runs `onex delegate ... {_RESULT_ONLY_FLAG}` and "
-        "needs the omnibase-infra release that adds it (OMN-21088 Lane A); raise "
-        "plugin-compat.yaml onex_cli.min_version to that release.\n"
+    # OMN-17427: the skill runs `onex delegate ... --json` and names the run from the
+    # typed result's correlation_id, so the clean install must list that flag. An
+    # older omnibase-infra fails here, by name, instead of in a customer's terminal.
+    assert _JSON_FLAG in run.stdout, (
+        f"`onex delegate --help` does not list {_JSON_FLAG} after installing "
+        f"{requirements}. The skill runs `onex delegate ... {_JSON_FLAG}` and needs "
+        "an omnibase-infra release that has it; raise plugin-compat.yaml "
+        "onex_cli.min_version to that release.\n"
         f"stdout:\n{run.stdout}"
     )
 

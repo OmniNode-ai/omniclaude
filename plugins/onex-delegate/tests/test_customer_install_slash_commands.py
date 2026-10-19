@@ -30,7 +30,7 @@ What it proves, and what it does not
   and its inventory is one skill, `delegate`, and nothing else, so the command
   list is Claude Code's built-ins plus exactly `onex:delegate`.
 * `/onex:delegate` resolves to this plugin's delegate skill, whose one command
-  is `onex delegate ... --result-only`.
+  is `onex delegate ... --json`.
 
 Answering a delegation needs a signed-in Claude Code session and a model; a
 scratch config has neither. `test_install_works.py` proves the command the
@@ -186,4 +186,4 @@ def test_customer_install_adds_only_the_delegate_command(tmp_path: Path) -> None
     assert f"{plugin_name}:delegate" == DELEGATE_COMMAND
 
     skill_md = Path(installed[0]["installPath"]) / "skills" / "delegate" / "SKILL.md"
-    assert 'onex delegate "<prompt>" --result-only' in skill_md.read_text()
+    assert 'onex delegate "<prompt>" --json' in skill_md.read_text()
