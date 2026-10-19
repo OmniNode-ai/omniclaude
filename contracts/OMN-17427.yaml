@@ -899,15 +899,6 @@ dod_evidence:
         check_value: "uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov -k 'gated_by_ci_summary_not_branch_protection or wired_to_ci_and_precommit'"
     binds_ac:
       - AC46
-  - id: dod-manifest-snapshot-refresh-trigger
-    description: Tests drive the snapshot-refresh trigger with manifest changes that drop an unrecorded row, drop a recorded row, and add a row outside the snapshot, and read the base manifest through git show.
-    source: manual
-    status: verified
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov -k 'manifest_change or manifest_required_pair or refresh_trigger_controls or required_checks_change_needs'"
-    binds_ac:
-      - AC47
   - id: dod-deploy-manifest-snapshot-refresh-trigger
     description: Hosted runners run the snapshot-refresh trigger tests and the manifest row test against this checkout with no branch-protection token.
     source: manual
