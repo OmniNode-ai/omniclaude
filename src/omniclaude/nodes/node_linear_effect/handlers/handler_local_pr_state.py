@@ -27,7 +27,6 @@ import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
 
 from omnibase_core.validators.no_unguarded_git_subprocess import (
     scrub_git_location_env,
@@ -102,7 +101,7 @@ class HandlerLocalPrState:
 
     def _read_watcher(
         self, name: str, number: int
-    ) -> tuple[dict[str, Any] | None, str]:
+    ) -> tuple[Mapping[str, object] | None, str]:
         """The watcher's facts for the PR via ``pr_state_local.py --json``, or why none."""
         script = self._watcher_script()
         if script is None:
