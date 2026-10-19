@@ -161,6 +161,8 @@ requirements:
     acceptance:
       - id: AC39
         statement: "the root README.md links the knowledge base and retains the customer install commands read by the plugin tests, no requirements*.txt is tracked, and the KB doc gate passes in strict mode with no docs/ prose entries in its allowed set -- falsifier: python3 scripts/kb_doc_gate.py --mode strict --repo-root . and uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov pass, and git ls-files 'requirements*.txt' '**/requirements*.txt' prints nothing, where the merge base tracks consumers/requirements.txt"
+      - id: AC48
+        statement: "plugins/onex/skills/gap/docs/POST_MERGE_STABILIZATION.md, CHANGELOG.md, .github/CONTRIBUTING.md, .github/CODE_OF_CONDUCT.md, plugins/onex/README.md and plugins/onex/GETTING_STARTED.md are absent, gap/SKILL.md no longer names the removed document, the hook convention files that conventions/routes.yaml routes to stay present, and the root README.md links the knowledge base -- falsifier: uv run pytest tests/scripts/test_repo_docs_removed_omn17427.py -q --no-cov fails over the merge base, which tracks POST_MERGE_STABILIZATION.md"
   - id: req-worktree-remove-partial-removal
     statement: Every omniclaude caller of git worktree remove (the SessionEnd hook and scripts/worktree_auto_prune.py) reports a tree that a failed removal half-deleted as partially_removed with git's own error line, and leaves a record to rebuild it from.
     acceptance:
@@ -909,3 +911,32 @@ dod_evidence:
     binds_ac:
       - AC46
       - AC47
+  - id: dod-repo-docs-removed-gap-stabilization
+    description: The gap post-merge stabilization document is removed with its SKILL.md reference, the earlier removed documents stay absent, and every convention file routes.yaml names that exists on the merge base stays present.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_repo_docs_removed_omn17427.py -q --no-cov"
+    binds_ac:
+      - AC48
+  - id: dod-deploy-repo-docs-removed-gap-stabilization
+    description: A hosted runner uses only Python's standard library to check that the removed documentation paths are absent from this checkout and that gap/SKILL.md does not name the removed document.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: |
+          python3 -c '
+          from pathlib import Path
+          removed = ("plugins/onex/skills/gap/docs/POST_MERGE_STABILIZATION.md", "CHANGELOG.md", ".github/CONTRIBUTING.md", ".github/CODE_OF_CONDUCT.md", "plugins/onex/README.md", "plugins/onex/GETTING_STARTED.md")
+          for name in removed:
+              assert not Path(name).exists(), name
+          assert "POST_MERGE_STABILIZATION" not in Path("plugins/onex/skills/gap/SKILL.md").read_text(encoding="utf-8")
+          for name in ("omniclaude-hooks", "omnidash-server", "onex-contracts"):
+              assert Path("plugins/onex/hooks/conventions", name + ".md").is_file(), name
+          assert "https://github.com/OmniNode-ai/knowledge-base" in Path("README.md").read_text(encoding="utf-8")
+          print("PASS: gap stabilization document removed, routed convention files kept, knowledge base linked")
+          '
+    binds_ac:
+      - AC48
