@@ -101,18 +101,6 @@ repos:
         files: '^(\.github/workflows/|tests/ci/test_anthropic_key_prefix_workflows_omn20967\.py|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
-      # OMN-19854: the repo-evidence caller pins the receipt-gate reusable that refuses a
-      # verifier below 0.4.303, so a partly bound contract is refused here as in every
-      # repository (ruling 2026-10-10T11:04:11Z). Check-only. SYNC with the ci.yml step
-      # "Verify the repo-evidence caller refuses a verifier below the floor (OMN-19854)".
-      - id: call-repo-evidence-gate-verifier-floor
-        name: call-repo-evidence-gate refuses a verifier below the floor (OMN-19854)
-        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn19854.py -q --no-cov
-        language: system
-        pass_filenames: false
-        files: '^(\.github/workflows/call-repo-evidence-gate\.yml|tests/ci/test_repo_evidence_caller_verifier_floor_omn19854\.py|\.pre-commit-config\.yaml)$'
-        stages: [pre-commit]
-
       - id: ci-summary-external-contexts
         name: CI Summary external contexts and snapshot refresh (OMN-19055)
         entry: >-

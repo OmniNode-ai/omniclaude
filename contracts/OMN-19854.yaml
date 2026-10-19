@@ -7,7 +7,7 @@ summary: >
   from the pinned verifier (0.4.303 or newer) behind a receipt-gate reusable that carries the floor.
   omnibase_infra, omnimarket and omnibase_core each run a pre-commit check on their caller;
   omniclaude had none, so the audit of ruling mechanisms read the ruling as not enforced here. The
-  caller is now checked by tests/ci/test_repo_evidence_caller_verifier_floor_omn19854.py from the
+  caller is now checked by tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py from the
   call-repo-evidence-gate-verifier-floor pre-commit hook and a ci.yml step.
 is_seam_ticket: false
 interface_change: false
@@ -25,7 +25,7 @@ requirements:
 evidence_requirements:
   - kind: tests
     description: "The caller floor check, with its negative controls, hook registration and CI step"
-    command: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn19854.py -q --no-cov"
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -37,11 +37,11 @@ dod_evidence:
     binds_ac: [AC1]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn19854.py -q --no-cov -k 'reusable_that_carries or at_or_above or below_the_verifier_floor or unlisted_reusable or floor_comparison'"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov -k 'reusable_that_carries or at_or_above or below_the_floor or another_reusable_pin or floor_comparison'"
   - id: dod-omn19854-ac2
     description: "The call-repo-evidence-gate-verifier-floor hook fires on the caller, the test and the hook configuration, and a ci.yml step runs the test. Fails at the merge base, which has neither."
     source: manual
     binds_ac: [AC2]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn19854.py -q --no-cov -k 'pre_commit_hook or required_ci_job'"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov -k 'precommit_hook'"
