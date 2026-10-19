@@ -112,10 +112,10 @@
     an expression against the repository's live variable scopes, so neither a
     prose mention of a hosted label nor an unresolved expression can read as a
     pass. Repository visibility is resolved live from the GitHub API, never
-    from a list that goes stale. A job the fleet genuinely cannot carry is
-    excused only by a per-job annotation naming the reason AND a ticket:
-    `# private-repo-hosted-ok: <reason> (OMN-nnnnn)`. There is no allowlist
-    file and no force flag. Unreadable visibility, an unresolvable variable
+    from a list that goes stale. A literal fallback naming a hosted label is a
+    finding even while its variable is set, and nothing excuses a hosted
+    placement: no annotation, no declaration, no force flag (OMN-17427,
+    operator 2026-10-19). Unreadable visibility, an unresolvable variable
     and a missing workflow directory are all exit 2, never a pass.
     A host that cannot read Actions variables (a lab-host lane, HTTP 403) sets
     PRRP_VARIABLES_SNAPSHOT to a file written by --write-variables-snapshot
