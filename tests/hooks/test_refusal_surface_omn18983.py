@@ -202,10 +202,6 @@ def test_dormant_surface_guard_is_explicitly_retired():
     script = "skip_token_surface_guard.sh"
     assert "RETIRED (OMN-18983)" in HOOKS.joinpath("scripts", script).read_text()
     assert script not in HOOKS.joinpath("hooks.json").read_text()
-    assert (
-        "Historical log disposition: abandoned"
-        in ROOT.joinpath("docs/guards/refusal-surface.md").read_text()
-    )
 
 
 def test_unresolved_retries_are_counted_even_when_ledger_deduplicates(surface):

@@ -4,7 +4,7 @@
 #
 # Stop/SubagentStop guard for unauthorized agent-surfaced [skip-*] bypass tokens.
 # RETIRED (OMN-18983): this dormant runtime wrapper is not an enforcement surface.
-# Repository token gates remain authoritative; see docs/guards/refusal-surface.md.
+# Repository token gates remain authoritative.
 
 set -eo pipefail
 

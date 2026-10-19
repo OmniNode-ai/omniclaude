@@ -79,18 +79,6 @@ def test_ac4_ac5_retired_unexecuted_surfaces_are_removed(relative: str) -> None:
     assert not (ROOT / relative).exists(), f"unexecuted surface remains: {relative}"
 
 
-def test_ac3_coverage_decisions_are_recorded() -> None:
-    note = (ROOT / "docs/testing/ci-evidence.md").read_text(encoding="utf-8")
-    for name in (
-        "test_enhanced_router.py",
-        "test_quality_gates.py",
-        "test_performance_thresholds.py",
-        "test_integration_kafka.py",
-        "test_omniclaw_proof_of_life.py",
-    ):
-        assert name in note
-
-
 @pytest.mark.parametrize(
     ("state", "expected"), [("missing", 4), ("empty", 5), ("red", 1), ("valid", 0)]
 )
