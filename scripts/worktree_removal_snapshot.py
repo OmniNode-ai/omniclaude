@@ -74,11 +74,13 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
 import time
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
@@ -584,6 +586,94 @@ def _append_index(root: Path, snapshot: Snapshot) -> None:
             handle.write("\t".join(fields) + "\n")
     except OSError as exc:
         print(f"WARNING: snapshot index not updated: {exc}", file=sys.stderr)
+
+
+# --- readback of a failed removal [OMN-18826] -------------------------------
+# `git worktree remove` is not atomic: git deletes the admin dir first, then
+# walks the tree and carries on past every failed unlink. A failed removal can
+# therefore leave a half-deleted tree that git can no longer be asked about.
+# These read it back without git, from the admin dir captured before removal.
+
+
+@dataclass(frozen=True)
+class ReadbackResult:
+    """Observed state after a failed removal [OMN-18826 AC1]."""
+
+    classification: str
+    survivors: int
+    detail: str
+
+
+def read_gitdir_pointer(worktree: Path) -> Path | None:
+    """Read a linked worktree's first-line gitdir target before removal."""
+    pointer = worktree / ".git"
+    try:
+        if not stat.S_ISREG(pointer.lstat().st_mode):
+            return None
+        with pointer.open(encoding="utf-8") as stream:
+            first_line = stream.readline()
+        if not first_line.startswith("gitdir: "):
+            return None
+        target = first_line.removeprefix("gitdir: ").strip()
+        if not target:
+            return None
+        admin_dir = Path(target)
+        return (
+            admin_dir if admin_dir.is_absolute() else (worktree / admin_dir).resolve()
+        )
+    except (OSError, UnicodeError, ValueError):
+        return None
+
+
+def is_half_removed(worktree: Path) -> bool:
+    """A surviving pointer to a missing admin dir proves a half removal."""
+    admin_dir = read_gitdir_pointer(worktree)
+    try:
+        return admin_dir is not None and not admin_dir.exists()
+    except OSError:
+        return False
+
+
+def find_half_removed_worktrees(worktrees: Iterable[Path]) -> list[Path]:
+    """Return half-removed paths in stable order [OMN-18826 AC3]."""
+    return sorted(worktree for worktree in worktrees if is_half_removed(worktree))
+
+
+def _count_survivors(worktree: Path) -> int:
+    """Count regular files, skipping symlinks and unreadable entries."""
+    if worktree.is_symlink():
+        return 0
+    survivors = 0
+    # os.walk skips unreadable directories by default and never follows links.
+    for directory, _, filenames in os.walk(worktree, followlinks=False):
+        for filename in filenames:
+            try:
+                if stat.S_ISREG((Path(directory) / filename).lstat().st_mode):
+                    survivors += 1
+            except OSError:
+                continue
+    return survivors
+
+
+def classify_failed_removal(worktree: Path, admin_dir: Path | None) -> ReadbackResult:
+    """Use the admin target captured BEFORE removal, even if .git is gone."""
+    if not worktree.exists():
+        return ReadbackResult("removed", 0, "removed")
+    survivors = _count_survivors(worktree)
+    if admin_dir is not None and not admin_dir.exists():
+        return ReadbackResult(
+            "partially_removed",
+            survivors,
+            f"partially_removed: admin dir {admin_dir} deleted, {survivors} files remain; "
+            "destroyed, unrecoverable in place",
+        )
+    if admin_dir is None:
+        return ReadbackResult(
+            "refused", survivors, "refused: admin dir unknown, path still present"
+        )
+    return ReadbackResult(
+        "refused", survivors, f"refused: admin dir {admin_dir} intact"
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
