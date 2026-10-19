@@ -6,25 +6,15 @@
 # names that repository, covers every hosted label's image family, and (where
 # the gate can read a ledger) is a RULING row on the ledger.
 #
-# Add an entry only for a RULING row that exists on the rolling work ledger,
-# copying its timestamp, lane and ticket exactly.
+# EMPTY since 2026-10-19 (OMN-17427). The operator's words, after GitHub
+# reported 90 percent of the included Enterprise Actions minutes used: "make it
+# impossible to run private repos actions on github". That reverses RULING
+# 2026-10-16T17:44:31Z (lane orchestrator-bb1a, OMN-19998), the one entry this
+# registry carried, so every hosted-eligible declaration is now refused.
+# tests/scripts/test_private_repo_runner_placement_gate.py pins it empty.
 #
 # repos_sha256 holds the sha256 of each lowercased `owner/name` the ruling
 # names, never the name: this repository is public and its hygiene gate
-# refuses a private repository's name in the tree. Compute one with
-#   printf '%s' 'owner/name' | tr '[:upper:]' '[:lower:]' | sha256sum
+# refuses a private repository's name in the tree.
 schema: 1
-rulings:
-  - ts: "2026-10-16T17:44:31Z"
-    lane: orchestrator-bb1a
-    ticket: OMN-19998
-    amends: "2026-09-14T11:38:53Z"
-    repos_sha256:
-      - 7146a97ae5b7765b1ea173a000a08aa8880ec91eefa6fe494e9dd01211774ea1
-      - bbf7655663525515c8e8e6b5a3ebc2f9fbf3992b44ff5e6680e949b836a0cdf2
-    label_families:
-      - ubuntu
-    scope: >-
-      Self-contained jobs only (lint, unit tests, type checks, validators);
-      Linux runners only; jobs that need the lab network, bus or database stay
-      on lab runners. One routing variable flips the jobs back to the lab.
+rulings: []
