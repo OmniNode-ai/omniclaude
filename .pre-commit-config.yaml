@@ -937,6 +937,17 @@ repos:
         files: '^(\.github/workflows/[^/]+\.ya?ml|tests/hooks/test_hostile_reviewer_workflow\.py|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
+      # OMN-17427: the review step hands cli_review the pull request head, so
+      # substitute receipts can be read. SYNC with the ci.yml refusal-surface step
+      # "Hostile Reviewer passes the pull request head to cli_review (OMN-17427)".
+      - id: hostile-review-passes-head-sha
+        name: Hostile Reviewer passes the pull request head to cli_review (OMN-17427)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_hostile_reviewer_head_sha_omn17427.py -q --no-cov -p no:randomly
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/hostile-reviewer\.yml|tests/ci/test_hostile_reviewer_head_sha_omn17427\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       # OMN-20911: the gh shim's lane read-strict switch, logged fallback and refusals.
       # SYNC with the ci.yml refusal-surface step "Verify gh shim lane read-strict switch
       # and fallback (OMN-20911)".
