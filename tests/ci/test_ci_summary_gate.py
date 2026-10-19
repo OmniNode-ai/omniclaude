@@ -964,7 +964,8 @@ class TestExternalContextCompleteness:
     and the classification tuples drift apart, not when branch protection
     changes without a snapshot refresh; re-capture the fixture file (and
     review the diff) when branch protection legitimately changes. OMN-19055
-    requires a fixture refresh with each manifest change and with each ci.yml
+    requires a fixture refresh when a manifest change adds a context outside
+    the snapshot or drops one it records (OMN-17427), and with each ci.yml
     change that alters the job-name set (OMN-20964: a ci.yml change that keeps
     the set equal to the snapshot has nothing to refresh); the existing
     privileged manifest reconcile detects live protection drift."""
@@ -1026,6 +1027,46 @@ class TestExternalContextCompleteness:
             .splitlines()
         )
 
+    @staticmethod
+    def _manifest_dev_required(text: str) -> set[str]:
+        manifest = yaml.safe_load(text) or {}
+        return {
+            row["name"]
+            for row in manifest.get("gates", [])
+            if row.get("mode") == "REQUIRED" and row.get("branch", "dev") == "dev"
+        }
+
+    @staticmethod
+    def _required_snapshot() -> set[str]:
+        return {
+            line.strip()
+            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-09-21.txt")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.strip()
+        }
+
+    @classmethod
+    def _manifest_required_pair(cls) -> tuple[set[str], set[str]]:
+        head = cls._manifest_dev_required(
+            (REPO_ROOT / ".github/required-checks.yaml").read_text(encoding="utf-8")
+        )
+        base = os.environ.get("CI_SNAPSHOT_BASE", "HEAD")
+        result = subprocess.run(
+            ["git", "show", f"{base}:.github/required-checks.yaml"],
+            cwd=REPO_ROOT,
+            env=scrub_git_location_env(os.environ),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return (
+            cls._manifest_dev_required(result.stdout)
+            if result.returncode == 0
+            else set(),
+            head,
+        )
+
     def test_ci_job_snapshot_matches_current_workflow(self) -> None:
         actual = self._workflow_job_names()
         snapshot = self._job_name_snapshot()
@@ -1033,7 +1074,10 @@ class TestExternalContextCompleteness:
 
     @classmethod
     def _assert_snapshot_refresh(
-        cls, changed: set[str], job_names: set[str] | None = None
+        cls,
+        changed: set[str],
+        job_names: set[str] | None = None,
+        manifest_required: tuple[set[str], set[str]] | None = None,
     ) -> None:
         pairs = (
             (
@@ -1045,6 +1089,19 @@ class TestExternalContextCompleteness:
         for source, fixture in pairs:
             if source not in changed:
                 continue
+            # OMN-17427: a manifest change that names nothing outside the
+            # snapshot and drops nothing it records has nothing to refresh.
+            # An added context outside the snapshot or a dropped context it
+            # records still demands the fixture in the same change.
+            if source == ".github/required-checks.yaml":
+                base, head = (
+                    cls._manifest_required_pair()
+                    if manifest_required is None
+                    else manifest_required
+                )
+                snapshot = cls._required_snapshot()
+                if head <= snapshot and not ((base - head) & snapshot):
+                    continue
             # OMN-20964: the job-name snapshot records ci.yml's job names and
             # nothing else, so a ci.yml change that leaves that set equal to
             # the snapshot has nothing to refresh. Any added, removed or
@@ -1070,12 +1127,20 @@ class TestExternalContextCompleteness:
     def test_snapshot_refresh_trigger_controls(self, source: str, fixture: str) -> None:
         # A drifted job-name set, so the ci.yml pair's trigger is live (OMN-20964).
         drifted = self._job_name_snapshot() | {"OMN-20964 Added Job"}
+        snapshot = self._required_snapshot()
+        manifest_required = (snapshot, snapshot | {"OMN-17427 Added Context"})
         with pytest.raises(AssertionError, match="refresh and review"):
-            self._assert_snapshot_refresh({source}, job_names=drifted)
+            self._assert_snapshot_refresh(
+                {source}, job_names=drifted, manifest_required=manifest_required
+            )
         self._assert_snapshot_refresh(
-            {source, f"tests/ci/fixtures/{fixture}"}, job_names=drifted
+            {source, f"tests/ci/fixtures/{fixture}"},
+            job_names=drifted,
+            manifest_required=manifest_required,
         )
-        self._assert_snapshot_refresh({"README.md"}, job_names=drifted)
+        self._assert_snapshot_refresh(
+            {"README.md"}, job_names=drifted, manifest_required=manifest_required
+        )
 
     def test_ci_change_with_unchanged_job_names_needs_no_job_name_refresh(
         self,
@@ -1112,10 +1177,89 @@ class TestExternalContextCompleteness:
     def test_required_checks_change_needs_its_refresh_whatever_the_job_names(
         self,
     ) -> None:
+        snapshot = self._required_snapshot()
         with pytest.raises(AssertionError, match="refresh and review"):
             self._assert_snapshot_refresh(
                 {".github/required-checks.yaml", ".github/workflows/ci.yml"},
                 job_names=self._job_name_snapshot(),
+                manifest_required=(snapshot, snapshot | {"OMN-17427 Added Context"}),
+            )
+
+    def test_manifest_change_dropping_an_unrecorded_row_needs_no_refresh(self) -> None:
+        snapshot = self._required_snapshot()
+        head = snapshot - {"repo-evidence / dod-verify"}
+        base = head | {"OMN-18512 Unrecorded Context"}
+        self._assert_snapshot_refresh(
+            {".github/required-checks.yaml"}, manifest_required=(base, head)
+        )
+
+    def test_manifest_change_dropping_a_recorded_row_still_needs_the_refresh(
+        self,
+    ) -> None:
+        snapshot = self._required_snapshot()
+        head = snapshot - {sorted(snapshot)[0]}
+        with pytest.raises(AssertionError, match="refresh and review"):
+            self._assert_snapshot_refresh(
+                {".github/required-checks.yaml"}, manifest_required=(snapshot, head)
+            )
+        self._assert_snapshot_refresh(
+            {
+                ".github/required-checks.yaml",
+                "tests/ci/fixtures/dev_required_contexts_snapshot_2026-09-21.txt",
+            },
+            manifest_required=(snapshot, head),
+        )
+
+    def test_manifest_change_adding_a_row_outside_the_snapshot_still_needs_the_refresh(
+        self,
+    ) -> None:
+        snapshot = self._required_snapshot()
+        head = snapshot | {"OMN-17427 Added Context"}
+        with pytest.raises(AssertionError, match="refresh and review"):
+            self._assert_snapshot_refresh(
+                {".github/required-checks.yaml"}, manifest_required=(snapshot, head)
+            )
+        self._assert_snapshot_refresh(
+            {
+                ".github/required-checks.yaml",
+                "tests/ci/fixtures/dev_required_contexts_snapshot_2026-09-21.txt",
+            },
+            manifest_required=(snapshot, head),
+        )
+
+    def test_manifest_required_pair_reads_the_base_manifest(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("CI_SNAPSHOT_BASE", "<sha>")
+        manifest = """gates:
+  - name: A
+    mode: REQUIRED
+  - name: B
+    mode: REQUIRED
+    branch: main
+  - name: C
+    mode: RETIRED
+"""
+
+        def manifest_read(
+            argv: list[str], **kwargs: Any
+        ) -> subprocess.CompletedProcess[str]:
+            assert argv == ["git", "show", "<sha>:.github/required-checks.yaml"]
+            assert kwargs["cwd"] == REPO_ROOT
+            assert kwargs["env"] == scrub_git_location_env(os.environ)
+            assert kwargs["capture_output"] is True
+            assert kwargs["text"] is True
+            assert kwargs["check"] is False
+            return subprocess.CompletedProcess(
+                argv, returncode, stdout=manifest, stderr=""
+            )
+
+        monkeypatch.setattr(subprocess, "run", manifest_read)
+        for returncode, expected in ((0, {"A"}), (128, set())):
+            base, head = self._manifest_required_pair()
+            assert base == expected
+            assert head == self._manifest_dev_required(
+                (REPO_ROOT / ".github/required-checks.yaml").read_text(encoding="utf-8")
             )
 
     def test_snapshot_diff_scrubs_git_location_env(
@@ -1162,13 +1306,7 @@ class TestExternalContextCompleteness:
         self._assert_snapshot_refresh(set(changed.splitlines()))
 
     def test_every_snapshot_external_context_is_classified(self) -> None:
-        required = {
-            line.strip()
-            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-09-21.txt")
-            .read_text(encoding="utf-8")
-            .splitlines()
-            if line.strip()
-        }
+        required = self._required_snapshot()
         ci_yml_job_names = {
             line.strip()
             for line in (FIXTURES_DIR / "ciyml_job_names_snapshot_2026-09-21.txt")
@@ -1190,13 +1328,7 @@ class TestExternalContextCompleteness:
     def test_no_classified_entry_is_a_phantom(self) -> None:
         # Every L4 entry names either a snapshot-required context or a
         # measured current producer enforced by CI Summary after S6.
-        required = {
-            line.strip()
-            for line in (FIXTURES_DIR / "dev_required_contexts_snapshot_2026-09-21.txt")
-            .read_text(encoding="utf-8")
-            .splitlines()
-            if line.strip()
-        }
+        required = self._required_snapshot()
         classified = (
             set(EXPECTED_EXTERNAL_CONTEXTS)
             | set(ALL_MUST_SUCCEED_EXTERNAL_NAMES)
