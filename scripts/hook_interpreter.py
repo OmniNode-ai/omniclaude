@@ -73,8 +73,6 @@ _SCAN_ALLOWLIST: dict[str, str] = {
     # Points at plugins/onex/hooks/lib/.venv — a `hooks/lib` path that has never
     # existed in this repo — and skips when it is absent.
     "tests/hooks/test_context_scope_auditor_smoke.py": "path that never existed; test skips",
-    # A changelog entry about the pre-plugin `claude/lib/.venv` layout.
-    "plugins/onex/ENVIRONMENT_VARIABLES.md": "historical changelog of an older path",
 }
 
 

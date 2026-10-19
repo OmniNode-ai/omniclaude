@@ -156,6 +156,11 @@ requirements:
         statement: "pyproject.toml pins omninode-intelligence and uv.lock records only 921b322b8e43f695961a06a04759dc88bb3e88ff, which carries omniintelligence#1107 and #1108 -- falsifier: uv run pytest tests/ci/test_hostile_reviewer_retry_budget_pin_omn17427.py -q --no-cov fails over the merge base, which pins 7f686d4bbca251dd3db49c1222ff8d6f738abd6c"
       - id: AC38
         statement: "timeout-minutes is 110 and HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS is 6600, so each of two review attempts gets 3142 s, at least the 3000 s two voters need at review_deadline_seconds 1500 -- falsifier: uv run pytest tests/ci/test_hostile_reviewer_chunk_deadline_budget_omn17427.py tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -q --no-cov fails over the merge base, where the per-attempt budget is 2092 s"
+  - id: req-repo-documentation-removed
+    statement: omniclaude tracks no human-prose documentation outside the files a loader, build, test or gate reads, and no requirements file.
+    acceptance:
+      - id: AC39
+        statement: "the root README.md links the knowledge base and retains the customer install commands read by the plugin tests, no requirements*.txt is tracked, and the KB doc gate passes in strict mode with no docs/ prose entries in its allowed set -- falsifier: python3 scripts/kb_doc_gate.py --mode strict --repo-root . and uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov pass, and git ls-files 'requirements*.txt' '**/requirements*.txt' prints nothing, where the merge base tracks consumers/requirements.txt"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -752,3 +757,57 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_hostile_reviewer_chunk_deadline_budget_omn17427.py tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -q --no-cov"
     binds_ac:
       - AC38
+  - id: dod-repo-documentation-removed
+    description: >
+      The three tests that read a removed document no longer name it and pass, the strict KB doc
+      gate passes over the tree after the prose removal, and no requirements file is tracked.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: >-
+          uv run pytest tests/scripts/test_kb_doc_gate.py tests/hooks/test_refusal_surface_omn18983.py tests/ci/test_ci_evidence_omn18784.py -q --no-cov && python3 scripts/kb_doc_gate.py --mode strict --repo-root . && test -z "$(git ls-files 'requirements*.txt' '**/requirements*.txt')"
+    binds_ac:
+      - AC39
+  - id: dod-deploy-repo-documentation-removed
+    description: A hosted runner reads this checkout with the standard library alone, runs the strict KB doc gate and checks that no requirements file is tracked.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: |
+          python3 scripts/kb_doc_gate.py --mode strict --repo-root . && test -z "$(git ls-files 'requirements*.txt' '**/requirements*.txt')" && echo "PASS: strict doc gate clean, no requirements file tracked"
+    binds_ac:
+      - AC39
+  - id: dod-repo-doc-removal-preserves-customer-install
+    description: The README is rewritten to a short knowledge base pointer that still carries the two customer install commands, and the customer install test passes, including a real install into an isolated Claude configuration.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: >-
+          test "$(wc -l < README.md)" -le 12 && grep -qx 'claude plugin marketplace add OmniNode-ai/omniclaude' README.md && grep -qx 'claude plugin install onex@omninode-tools' README.md && cli="$(mktemp -d)" && npm install --silent --no-audit --no-fund --prefix "$cli" "@anthropic-ai/claude-code@2.1.295" && PATH="$cli/node_modules/.bin:$PATH" PYTHONDONTWRITEBYTECODE=1 uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov
+    binds_ac:
+      - AC21
+      - AC22
+      - AC39
+  - id: dod-deploy-repo-doc-removal-customer-install
+    description: A hosted runner parses this checkout's README with the standard library, checks the exact customer marketplace and plugin commands and the knowledge base link, then runs the strict doc gate.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: |
+          python3 -c '
+          from pathlib import Path
+          import shlex
+          text = Path("README.md").read_text()
+          block = text.split("### Plugin Install", 1)[1].split("```bash", 1)[1].split("```", 1)[0]
+          commands = [shlex.split(line) for line in block.splitlines() if line.strip().startswith("claude plugin ")]
+          assert commands == [["claude", "plugin", "marketplace", "add", "OmniNode-ai/omniclaude"], ["claude", "plugin", "install", "onex@omninode-tools"]], commands
+          assert "https://github.com/OmniNode-ai/knowledge-base" in text
+          print("PASS: customer install commands and knowledge base link retained")
+          ' && python3 scripts/kb_doc_gate.py --mode strict --repo-root .
+    binds_ac:
+      - AC22
+      - AC39

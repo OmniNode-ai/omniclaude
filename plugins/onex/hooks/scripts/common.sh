@@ -340,9 +340,6 @@ _bg_verify_venv() {
     if [[ -n "$plugin_root_dir" && -f "${plugin_root_dir}/pyproject.toml" ]]; then
         "$python_bin" -m pip install --quiet --disable-pip-version-check \
             -e "${plugin_root_dir}" >> "$repair_log" 2>&1 || true
-    elif [[ -n "$plugin_root_dir" && -f "${plugin_root_dir}/requirements.txt" ]]; then
-        "$python_bin" -m pip install --quiet --disable-pip-version-check \
-            -r "${plugin_root_dir}/requirements.txt" >> "$repair_log" 2>&1 || true
     fi
 
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Sentinel verify: background repair finished" >> "$repair_log" 2>/dev/null || true
