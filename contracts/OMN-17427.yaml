@@ -897,7 +897,7 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'annotat or withdrawn_ruling or shipped_registry_carries_no_ruling'"
     binds_ac:
       - AC45
-  - id: dod-private-runner-placement-no-fork-exemption-ac46
+  - id: dod-private-runner-no-fork-exemption-ac48
     description: Private fork jobs and pinned reusable fork jobs refuse hosted values and hosted fallbacks.
     source: manual
     status: verified
@@ -906,7 +906,7 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'private_no_hosted_refuses_fork or fork_arm_alone'"
     binds_ac:
       - AC48
-  - id: dod-private-runner-placement-expression-refusals-ac47
+  - id: dod-private-runner-expression-refusals-ac49
     description: Runner expressions fail closed on unsupported shapes, string labels and fallback chains are judged, and CI and pre-commit execute the refusal suite.
     source: manual
     status: verified
