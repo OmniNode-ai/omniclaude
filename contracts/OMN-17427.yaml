@@ -144,6 +144,11 @@ requirements:
     acceptance:
       - id: AC35
         statement: "prompt.md carries one plain onex delegate --json command and no --result-only, tells the agent to reply with result.response and then one Run: <correlation_id> line, and the captured --json stdout parses to a UUID correlation_id under the probe's marker and UUID rules while the answer alone parses to none -- falsifier: uv run pytest plugins/onex-delegate/tests/test_delegate_run_id_surface.py -q --no-cov fails against the --result-only skill"
+  - id: req-hostile-review-passes-head-sha
+    statement: The Hostile Reviewer passes cli_review the pull request head commit, so clean signed off-CI review receipts can be read for a voter lost to a timeout or an unavailable endpoint.
+    acceptance:
+      - id: AC36
+        statement: "The review step's HEAD_SHA is github.event.pull_request.head.sha and cli_review gets --head-sha \"$HEAD_SHA\" -- falsifier: uv run pytest tests/ci/test_hostile_reviewer_head_sha_omn17427.py -q --no-cov fails over the merge base, where the review step passes no head"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -713,3 +718,12 @@ dod_evidence:
         check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_run_id_surface.py -q --no-cov"
     binds_ac:
       - AC35
+  - id: dod-hostile-review-passes-head-sha
+    description: The review step passes the pull request head to cli_review with --head-sha, and a step without it is caught.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_hostile_reviewer_head_sha_omn17427.py -q --no-cov"
+    binds_ac:
+      - AC36

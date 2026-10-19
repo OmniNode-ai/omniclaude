@@ -467,6 +467,14 @@ jobs:
         id: review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The pull request's head commit, never the merge ref the job checks out
+          # (OMN-17427, port of OMN-20947): a signed off-CI review receipt is bound
+          # to the head its reviewer read, and cli_review accepts receipts in place
+          # of a timed-out or unavailable voter only for exactly this commit and
+          # only when the voters overlay declares substitute_votes. Without it
+          # cli_review prints "substitute receipts need --pr, --repo and
+          # --head-sha, so none were read".
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
           # OMN-20910: no voter endpoint is set here. Every voter, its endpoint,
@@ -539,6 +547,7 @@ jobs:
             uv run python -m omniintelligence.review_pairing.cli_review \
               --pr "$PR_NUMBER" \
               --repo "$REPO" \
+              --head-sha "$HEAD_SHA" \
               --voters-overlay "$REVIEW_VOTERS_OVERLAY" \
               >"$REVIEW_JSON_FILE" 2>"$ATTEMPT_ERR"
             REVIEW_EXIT=$?

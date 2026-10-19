@@ -133,6 +133,9 @@ jobs:
       # OMN-20910: paired with the review-voter-model-from-overlay pre-commit hook.
       - name: Review voter model comes from the overlay (OMN-20910)
         run: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -p no:randomly
+      # OMN-17427: paired with the hostile-review-passes-head-sha pre-commit hook.
+      - name: Hostile Reviewer passes the pull request head to cli_review (OMN-17427)
+        run: uv run pytest tests/ci/test_hostile_reviewer_head_sha_omn17427.py -q --no-cov -p no:randomly
       # OMN-20911: paired with the gh-shim-lane-guards pre-commit hook. The read-strict
       # switch, the logged fallback and the lane read/write refusals of the gh shim.
       # OMN-17427: include the remote runner's declared exact-head field regression.
