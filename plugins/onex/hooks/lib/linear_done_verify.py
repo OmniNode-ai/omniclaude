@@ -626,12 +626,10 @@ def _gh_api_json(path: str, timeout: float) -> tuple[Any, str | None]:
 
 
 def fetch_pr_status(ref: PRRef, timeout: float = 15.0) -> PRStatus:
-    """Query GitHub for PR state by REST (``gh api repos/<repo>/pulls/<N>``).
+    """A PR's state from the PR watcher and the canonical clone, never gh (OMN-20368).
 
-    A CLOSED-unmerged PR also carries its body and conversation comments as
-    ``closing_notes``, so a "superseded by" note can be checked. A failure to
-    read the comments leaves only the body, which can keep a citation
-    blocking but never clears one.
+    A CLOSED-unmerged PR carries its body as ``closing_notes``, so a
+    "superseded by" note can be checked; ``timeout`` is kept for callers.
     """
     repo = ref.repo
     if not repo:
@@ -654,51 +652,32 @@ def fetch_pr_status(ref: PRRef, timeout: float = 15.0) -> PRStatus:
             ),
         )
 
-    data, error = _gh_api_json(f"repos/{repo}/pulls/{ref.number}", timeout)
-    if error is not None or not isinstance(data, dict):
+    # OMN-20368: a lane cannot call gh (OMN-19856); read the watcher, then the clone.
+    try:
+        from omniclaude.nodes.node_linear_effect.handlers.handler_local_pr_state import (
+            HandlerLocalPrState,
+        )
+        from omniclaude.nodes.node_linear_effect.models import ModelLocalPrStateRequest
+    except ImportError as exc:
         return PRStatus(
             ref=ref,
             state="UNKNOWN",
             merge_state="UNKNOWN",
-            error=f"PR state read failed for {repo}#{ref.number}: "
-            + (error or "unexpected response shape"),
+            error=f"cannot read {repo}#{ref.number} locally: omniclaude is not importable: {exc}",
         )
-
-    raw_state = str(data.get("state", "")).lower()
-    if data.get("merged") is True:
-        state = "MERGED"
-    elif raw_state == "open":
-        state = "OPEN"
-    elif raw_state == "closed":
-        state = "CLOSED"
-    else:
-        state = "UNKNOWN"
-
-    closing_notes: tuple[str, ...] = ()
-    if state == "CLOSED":
-        notes = [str(data.get("body") or "")]
-        comments, comments_error = _gh_api_json(
-            f"repos/{repo}/issues/{ref.number}/comments?per_page=100", timeout
-        )
-        if comments_error is None and isinstance(comments, list):
-            notes.extend(
-                str(c.get("body") or "") for c in comments if isinstance(c, dict)
-            )
-        closing_notes = tuple(n for n in notes if n)
-
+    read = HandlerLocalPrState().handle(
+        ModelLocalPrStateRequest(repo=repo, number=ref.number)
+    )
     return PRStatus(
         ref=ref,
-        state=state,
-        merge_state=str(data.get("mergeable_state") or "UNKNOWN").upper(),
-        title=str(data.get("title") or ""),
-        closing_notes=closing_notes,
-        merge_commit_sha=str(data.get("merge_commit_sha") or "")
-        if state == "MERGED"
-        else "",
-        head_sha=str(data["head"].get("sha") or "")
-        if isinstance(data.get("head"), dict)
-        else "",
-        merged_at=str(data.get("merged_at") or "") if state == "MERGED" else "",
+        state=read.state,
+        merge_state="UNKNOWN",
+        error=read.error,
+        title=read.title,
+        closing_notes=read.closing_notes,
+        head_sha=read.head_sha,
+        merge_commit_sha=read.merge_commit_sha,
+        merged_at=read.merged_at,
     )
 
 

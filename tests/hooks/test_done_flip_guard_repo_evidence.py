@@ -405,13 +405,35 @@ def test_rerun_in_progress_is_not_outranked_by_an_older_success() -> None:
     assert "run 7102" in decision.reason
 
 
+def _watcher_says(
+    monkeypatch: pytest.MonkeyPatch,
+    state: str,
+    head: Any,
+    *,
+    merged_at: Any = None,
+) -> None:
+    """The PR watcher's record for the PR under test (OMN-20368); no gh, no clone."""
+    facts = {
+        "state": state,
+        "repo": _REPO.rsplit("/", 1)[-1],
+        "number": _NUMBER,
+        "head_sha": head["sha"] if isinstance(head, dict) else "",
+        "merged_at": merged_at,
+    }
+    from omniclaude.nodes.node_linear_effect.handlers.handler_local_pr_state import (
+        HandlerLocalPrState,
+    )
+
+    monkeypatch.setattr(HandlerLocalPrState, "_read_watcher", lambda *_a: (facts, ""))
+    monkeypatch.setattr(HandlerLocalPrState, "_read_clone", lambda *_a: ("", "", ""))
+
+
 @pytest.mark.parametrize("state", ["open", "closed", "merged"])
 @pytest.mark.parametrize("head", [{"sha": _HEAD}, None, "malformed"])
 def test_rest_pr_head_is_populated_for_every_state(
     monkeypatch: pytest.MonkeyPatch, state: str, head: Any
 ) -> None:
-    data = {"state": state, "merged": state == "merged", "head": head}
-    monkeypatch.setattr(ldv, "_gh_api_json", lambda *_args: (data, None))
+    _watcher_says(monkeypatch, state.upper(), head)
     status = ldv.fetch_pr_status(ldv.PRRef(_NUMBER, _REPO))
     assert status.head_sha == (_HEAD if isinstance(head, dict) else "")
 
@@ -532,13 +554,12 @@ def test_merged_pr_without_a_merge_time_is_never_treated_as_superseded() -> None
 def test_rest_pr_merge_time_is_populated(
     monkeypatch: pytest.MonkeyPatch, merged: bool, merged_at: Any, expected: str
 ) -> None:
-    data = {
-        "state": "closed",
-        "merged": merged,
-        "merged_at": merged_at,
-        "head": {"sha": _HEAD},
-    }
-    monkeypatch.setattr(ldv, "_gh_api_json", lambda *_args: (data, None))
+    _watcher_says(
+        monkeypatch,
+        "MERGED" if merged else "CLOSED",
+        {"sha": _HEAD},
+        merged_at=merged_at,
+    )
     status = ldv.fetch_pr_status(ldv.PRRef(_NUMBER, _REPO))
     assert status.merged_at == expected
 
