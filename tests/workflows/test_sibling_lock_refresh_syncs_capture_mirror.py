@@ -74,7 +74,9 @@ def test_refresh_runs_the_mirror_sync_against_the_omnimarket_clone() -> None:
 def test_sync_runs_after_the_lock_is_written_and_before_the_delta() -> None:
     steps = _steps()
     sync, _ = _sync_step(steps)
-    relock = _index(steps, "scripts/relock_git_sources.py")
+    # OMN-19998: the dev-tag train step also runs relock_git_sources.py; the
+    # clone-governed relock is the one naming omnimarket.
+    relock = _index(steps, "--package omnimarket")
     uv_lock = _index(steps, 'uv lock "${ARGS[@]}"')
     delta = _index(steps, "git diff --quiet")
     assert relock < uv_lock < sync < delta, (relock, uv_lock, sync, delta)
@@ -112,4 +114,7 @@ def test_pr_step_is_gated_on_the_delta_step() -> None:
     delta = steps[_index(steps, "git diff --quiet")]
     pr = steps[_index(steps, "gh pr create")]
     assert delta.get("id"), "the delta step needs an id the PR step can read"
-    assert pr.get("if") == f"steps.{delta['id']}.outputs.changed == 'true'"
+    # OMN-19998: a train dry run also holds the PR step back.
+    assert str(pr.get("if")).startswith(
+        f"steps.{delta['id']}.outputs.changed == 'true'"
+    )

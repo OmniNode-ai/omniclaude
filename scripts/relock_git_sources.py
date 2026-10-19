@@ -52,9 +52,13 @@ count and the caller asserts it.
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import subprocess
 import sys
-from dataclasses import dataclass
+import tomllib
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -222,6 +226,301 @@ def advance_all(
     return advanced
 
 
+# ---------------------------------------------------------------------------
+# OMN-19998: the nightly sibling-pin train.
+#
+# RULING 2026-10-19T10:11:00Z: "turn this into a nightly release train where all
+# the tags are rolled up to a single bump". Every dev merge of an internal
+# sibling is tagged dev-<UTC YYYYMMDDHHMMSS>-<sha12> by the sibling's own
+# dev-merge-tag.yml, on push, before its dev CI has run. So the newest tag is
+# not the train's choice: the train walks the tags newer than the consumer's
+# pin, newest first, and takes the first whose commit has green dev CI. A red
+# tag and a tag whose CI it could not read (pending, no check runs, API
+# failure) are both passed over, and the pin never moves backwards. Every pin
+# that moves lands in ONE plan, so the workflow opens one PR per consumer.
+#
+# The set of train members is the consumer's own [tool.uv.sources]: every entry
+# that pins an OmniNode-ai repository by a dev merge tag. A rev, a release tag,
+# a branch or a PyPI range is not a member, and is left to the clone-governed
+# relock above or to `uv lock --upgrade-package`.
+#
+# The rewrite itself is omnimarket's node_dev_tag_pin_mover_compute (#4129),
+# called with --tests not_run: it writes the candidate pin in place, and the
+# bump PR's own CI is the consumer test run that decides whether it lands.
+# ---------------------------------------------------------------------------
+
+_OMNINODE_GIT = re.compile(
+    r"^https://github\.com/OmniNode-ai/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?$"
+)
+_DEV_MERGE_TAG = re.compile(r"^dev-(?P<stamp>[0-9]{14})-[0-9a-f]{12}$")
+# Tags examined per sibling, newest first. Bounds the CI reads a night costs; a
+# sibling with this many consecutive red or unread tags stays where it is and
+# the plan says why.
+_MAX_CANDIDATES = 15
+_GREEN_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
+MOVER_MODULE = "omnimarket.nodes.node_dev_tag_pin_mover_compute"
+_MOVER_EXIT_CANDIDATE_WRITTEN = 3
+
+
+@dataclass(frozen=True)
+class ModelDevTagPin:
+    distribution: str
+    repo: str
+    url: str
+    tag: str
+
+
+@dataclass(frozen=True)
+class ModelTagChoice:
+    new_tag: str | None
+    examined: list[str] = field(default_factory=list)
+    skipped: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ModelTrainMove:
+    distribution: str
+    repo: str
+    old_tag: str
+    new_tag: str
+
+
+@dataclass(frozen=True)
+class ModelTrainPlan:
+    moves: list[ModelTrainMove]
+    unchanged: list[str]
+    skipped: dict[str, dict[str, str]]
+
+    def to_json(self) -> str:
+        return json.dumps(asdict(self), indent=2, sort_keys=True)
+
+
+GreenOracle = Callable[[str, str], "bool | None"]
+Mover = Callable[[Path, ModelDevTagPin, str], None]
+
+
+def _stamp(tag: str) -> str | None:
+    match = _DEV_MERGE_TAG.match(tag)
+    return match.group("stamp") if match else None
+
+
+def parse_dev_tag_pins(pyproject_text: str) -> list[ModelDevTagPin]:
+    """Every [tool.uv.sources] entry pinning an OmniNode-ai repo by dev merge tag."""
+    sources = (
+        tomllib.loads(pyproject_text).get("tool", {}).get("uv", {}).get("sources", {})
+    )
+    pins: list[ModelDevTagPin] = []
+    for distribution, attrs in sources.items():
+        if not isinstance(attrs, dict) or set(attrs) & {"rev", "branch"}:
+            continue
+        url, tag = attrs.get("git"), attrs.get("tag")
+        if not isinstance(url, str) or not isinstance(tag, str) or _stamp(tag) is None:
+            continue
+        match = _OMNINODE_GIT.match(url)
+        if match is None:
+            continue
+        pins.append(
+            ModelDevTagPin(
+                distribution=distribution, repo=match.group("repo"), url=url, tag=tag
+            )
+        )
+    return pins
+
+
+def dev_tags_newest_first(clone: Path) -> list[tuple[str, str]]:
+    """(tag, commit) for every dev merge tag in ``clone``, newest stamp first."""
+    result = _git(
+        clone,
+        "for-each-ref",
+        "--format=%(refname:strip=2) %(*objectname) %(objectname)",
+        "refs/tags/dev-*",
+    )
+    if result.returncode != 0:
+        raise ErrorRelock(f"cannot list dev tags in {clone}: {result.stderr.strip()}")
+    tags: list[tuple[str, str]] = []
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if not parts or _stamp(parts[0]) is None:
+            continue
+        # Annotated tags carry the commit in %(*objectname); lightweight ones in
+        # %(objectname), and then the peeled column is empty.
+        tags.append((parts[0], parts[1] if len(parts) == 3 else parts[-1]))
+    return sorted(tags, key=lambda t: (_stamp(t[0]) or "", t[0]), reverse=True)
+
+
+def check_runs_verdict(runs: list[tuple[str, str]]) -> bool | None:
+    """Green, red, or None (unread) from (status, conclusion) pairs of one commit."""
+    if not runs:
+        return None
+    if any(
+        conclusion and conclusion not in _GREEN_CONCLUSIONS for _, conclusion in runs
+    ):
+        return False
+    if any(status != "completed" for status, _ in runs):
+        return None
+    return True
+
+
+def github_check_runs_green(repo: str, sha: str) -> bool | None:
+    """The workflow's oracle: every check run on the dev commit, read with gh.
+
+    Runs inside the train workflow, under its App token, never from a lane.
+    """
+    result = subprocess.run(
+        [
+            "gh",
+            "api",
+            "--paginate",
+            f"repos/OmniNode-ai/{repo}/commits/{sha}/check-runs?per_page=100",
+            "--jq",
+            r'.check_runs[] | "\(.status) \(.conclusion // "")"',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        print(
+            f"[train] {repo}@{sha[:12]}: check runs unreadable "
+            f"({result.stderr.strip()[:200]})",
+            file=sys.stderr,
+        )
+        return None
+    runs = []
+    for line in result.stdout.splitlines():
+        status, _, conclusion = line.partition(" ")
+        runs.append((status, conclusion.strip()))
+    return check_runs_verdict(runs)
+
+
+def pick_train_tag(
+    *,
+    pin: ModelDevTagPin,
+    clone: Path,
+    is_green: GreenOracle,
+    max_candidates: int = _MAX_CANDIDATES,
+) -> ModelTagChoice:
+    """The newest dev tag newer than the pin whose dev CI is green, or None."""
+    current = _stamp(pin.tag) or ""
+    examined: list[str] = []
+    skipped: dict[str, str] = {}
+    for tag, sha in dev_tags_newest_first(clone):
+        if (_stamp(tag) or "") <= current:
+            break
+        if len(examined) >= max_candidates:
+            skipped[tag] = "beyond-candidate-cap"
+            break
+        examined.append(tag)
+        verdict = is_green(pin.repo, sha)
+        if verdict is True:
+            return ModelTagChoice(new_tag=tag, examined=examined, skipped=skipped)
+        skipped[tag] = "red" if verdict is False else "unread"
+    return ModelTagChoice(new_tag=None, examined=examined, skipped=skipped)
+
+
+def mover_argv(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> list[str]:
+    return [
+        sys.executable,
+        "-m",
+        MOVER_MODULE,
+        "--pyproject",
+        str(pyproject),
+        "--distribution",
+        pin.distribution,
+        "--repository-url",
+        pin.url,
+        "--tag",
+        new_tag,
+        "--tests",
+        "not_run",
+    ]
+
+
+def node_mover(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> None:
+    """Rewrite one pin through omnimarket's dev-tag pin mover node."""
+    result = subprocess.run(
+        mover_argv(pyproject, pin, new_tag),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    if result.returncode != _MOVER_EXIT_CANDIDATE_WRITTEN:
+        raise ErrorRelock(
+            f"{pin.distribution}: the pin mover refused {pin.tag} -> {new_tag} "
+            f"(exit {result.returncode}): {result.stdout.strip()} {result.stderr.strip()}"
+        )
+
+
+def run_dev_tag_train(
+    *,
+    pyproject: Path,
+    registry_root: str | None,
+    is_green: GreenOracle,
+    mover: Mover = node_mover,
+    apply: bool,
+) -> ModelTrainPlan:
+    """One plan moving every dev-tag pin of ``pyproject`` to its newest green tag."""
+    moves: list[ModelTrainMove] = []
+    unchanged: list[str] = []
+    skipped: dict[str, dict[str, str]] = {}
+    for pin in parse_dev_tag_pins(pyproject.read_text(encoding="utf-8")):
+        clone = gsp.canonical_clone(pin.repo, registry_root)
+        if clone is None:
+            # Named, not skipped: a train that silently examined no clone is
+            # indistinguishable from one with nothing to move.
+            raise ErrorRelock(
+                f"{pin.distribution}: no canonical clone for {pin.repo!r} under "
+                f"{registry_root or '$OMNI_HOME'}"
+            )
+        choice = pick_train_tag(pin=pin, clone=clone, is_green=is_green)
+        if choice.skipped:
+            skipped[pin.distribution] = choice.skipped
+        if choice.new_tag is None:
+            unchanged.append(pin.distribution)
+            continue
+        if apply:
+            mover(pyproject, pin, choice.new_tag)
+        moves.append(
+            ModelTrainMove(
+                distribution=pin.distribution,
+                repo=pin.repo,
+                old_tag=pin.tag,
+                new_tag=choice.new_tag,
+            )
+        )
+    return ModelTrainPlan(moves=moves, unchanged=unchanged, skipped=skipped)
+
+
+def _assume_unread(repo: str, sha: str) -> None:
+    return None
+
+
+def main_train(args: argparse.Namespace) -> int:
+    oracle: GreenOracle = (
+        github_check_runs_green if args.green_from == "github" else _assume_unread
+    )
+    try:
+        plan = run_dev_tag_train(
+            pyproject=args.repo_root / "pyproject.toml",
+            registry_root=args.registry_root,
+            is_green=oracle,
+            apply=args.apply,
+        )
+    except ErrorRelock as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 1
+    rendered = plan.to_json()
+    print(rendered)
+    if args.plan_out:
+        Path(args.plan_out).write_text(rendered + "\n", encoding="utf-8")
+    for move in plan.moves:
+        verb = "moved" if args.apply else "would move"
+        print(f"[train] {verb} {move.distribution}: {move.old_tag} -> {move.new_tag}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -241,7 +540,29 @@ def main(argv: list[str] | None = None) -> int:
         dest="packages",
         help="restrict to this package (repeatable); default: every git source",
     )
+    parser.add_argument(
+        "--dev-tag-train",
+        action="store_true",
+        help="OMN-19998: move every dev-tag pin to its newest green dev tag",
+    )
+    parser.add_argument(
+        "--green-from",
+        choices=["github", "none"],
+        default="github",
+        help="train only: read dev CI with gh (github) or read none (dry runs)",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="train only: rewrite pyproject.toml (default: print the plan only)",
+    )
+    parser.add_argument(
+        "--plan-out", default=None, help="train only: write the plan JSON here"
+    )
     args = parser.parse_args(argv)
+
+    if args.dev_tag_train:
+        return main_train(args)
 
     try:
         advanced = advance_all(

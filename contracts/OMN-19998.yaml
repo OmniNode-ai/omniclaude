@@ -42,6 +42,11 @@ requirements:
     acceptance:
       - id: "AC6"
         statement: "AC6: scripts/check_dep_provenance.py exits 0 for omnibase-core, omnibase-infra, omnibase-spi and omnibase-compat pinned by git = their OmniNode-ai repository and tag = a dev merge tag, and exits 1 for a release tag, a malformed dev tag, another repository, a dev tag beside a rev or branch, and a branch pin to dev -- falsifier: uv run pytest tests/scripts/test_check_dep_provenance_dev_tag_omn19998.py -q fails at the merge base, where the two allow tests fail"
+  - id: "req-omn19998-nightly-sibling-pin-train"
+    statement: "RULING 2026-10-19T10:11:00Z: once a night, one bump PR per consumer moving every internal sibling pinned by a dev merge tag to its newest dev merge tag whose dev CI is green, plus a workflow_dispatch of the same train; no per-tag PRs. sibling-lock-refresh.yml runs scripts/relock_git_sources.py --dev-tag-train, which passes over red and unread tags, never moves a pin backwards and rewrites through omnimarket's node_dev_tag_pin_mover_compute; the PR step reuses one fixed branch and updates an open PR in place."
+    acceptance:
+      - id: "AC7"
+        statement: "AC7: the train picks the newest green dev tag newer than the pin, skips red and unread tags, moves every member in one plan, writes nothing on a dry run and refuses a member with no clone; the workflow runs the train before uv lock, honours dry_run and reuses one branch -- falsifier: uv run pytest tests/scripts/test_dev_tag_train_omn19998.py tests/workflows/test_sibling_pin_train_omn19998.py -q fails at the merge base"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -111,3 +116,11 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_check_dep_provenance_dev_tag_omn19998.py tests/scripts/test_check_dep_provenance.py tests/scripts/test_check_dep_provenance_infra_omn17176.py -q"
     binds_ac:
       - "AC6"
+  - id: "dod-omn19998-nightly-sibling-pin-train"
+    description: "The train selection and workflow tests pass at the head, beside the existing sibling-lock-refresh tests; at the merge base both new files fail."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_dev_tag_train_omn19998.py tests/workflows/test_sibling_pin_train_omn19998.py tests/workflows/test_sibling_lock_refresh_syncs_capture_mirror.py -q"
+    binds_ac:
+      - "AC7"
