@@ -134,6 +134,11 @@ requirements:
         statement: The exported and local pre-commit hooks inspect the index without a Markdown filter, and the reusable required CI gate retains canonical validation reports and run/fire events from the existing core report writer.
       - id: AC33
         statement: Hook Python imports do not leave root bytecode that the pre-push clean-root gate rejects, and direct pytest hook entries disable bytecode generation.
+  - id: req-repo-evidence-caller-verifier-floor
+    statement: The hosted repo-evidence / dod-verify context refuses a contract whose acceptance criteria are only partly bound, and a pre-commit hook holds the caller on that verifier floor.
+    acceptance:
+      - id: AC34
+        statement: "The Repo Evidence Gate caller uses omnibase_core's receipt-gate reusable at the pin that refuses a verifier-version below 0.4.303 and passes verifier-version 0.4.303 or later; 0.4.280 and 0.4.302 are refused and 0.4.303 and 0.4.310 are admitted; the call-repo-evidence-gate-verifier-floor pre-commit hook runs this check -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov fails when the caller's verifier-version is 0.4.302"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -681,3 +686,17 @@ dod_evidence:
         check_value: "uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k 'oversized_review_result or review_step_invokes_cli_review'"
     binds_ac:
       - AC27
+  - id: dod-repo-evidence-caller-verifier-floor
+    description: >
+      The caller workflow pins the receipt-gate reusable that carries the verifier floor and a
+      verifier-version at or above it; the refusing versions 0.4.280 and 0.4.302 and the admitting
+      versions 0.4.303 and 0.4.310 are both exercised. The call-repo-evidence-gate-verifier-floor
+      pre-commit hook runs the file when the caller, the test or the hook configuration changes,
+      and the file fails when that hook is missing from .pre-commit-config.yaml.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov"
+    binds_ac:
+      - AC34
