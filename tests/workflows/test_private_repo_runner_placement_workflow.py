@@ -127,3 +127,37 @@ def test_the_gate_judges_every_branch_that_runs_workflows() -> None:
     assert not any("branch" in name.lower() for name in inputs), (
         "branch enumeration is not optional"
     )
+
+
+def test_hosted_refusal_regressions_run_in_ci_and_precommit() -> None:
+    from scripts.ci.ci_summary_gate import GATE_JOBS, STRICT_SUCCESS_JOBS
+
+    root = WORKFLOW.parents[2]
+    ci = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+    job = ci["jobs"]["refusal-surface"]
+    assert job["name"] in GATE_JOBS
+    assert job["name"] in STRICT_SUCCESS_JOBS
+    assert not job.get("if")
+    assert not job.get("continue-on-error")
+    step = next(
+        step
+        for step in job["steps"]
+        if step.get("name")
+        == "Verify private runner placement refuses hosted paths (OMN-17427)"
+    )
+    assert not step.get("if")
+    assert not step.get("continue-on-error")
+    hooks = yaml.safe_load((root / ".pre-commit-config.yaml").read_text())
+    hook = next(
+        hook
+        for repo in hooks["repos"]
+        for hook in repo.get("hooks", [])
+        if hook["id"] == "private-runner-placement-refusals"
+    )
+    for suite in (
+        "tests/scripts/test_private_repo_runner_placement_gate.py",
+        "tests/workflows/test_private_repo_runner_placement_workflow.py",
+    ):
+        assert suite in step["run"]
+        assert suite in hook["entry"]
+    assert hook["pass_filenames"] is False

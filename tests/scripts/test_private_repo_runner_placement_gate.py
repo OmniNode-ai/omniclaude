@@ -226,7 +226,7 @@ def test_an_expression_is_resolved_against_live_values_not_skipped(
     body = (
         "name: CI\non:\n  pull_request: {}\njobs:\n"
         "  build:\n    runs-on: >-\n      "
-        + SEAM_EXPRESSION.replace("\n", "\n      ")
+        + SEAM_EXPRESSION.replace(HOSTED, FLEET).replace("\n", "\n      ")
         + "\n    steps:\n      - run: true\n"
     )
     root = _tree(tmp_path, "ci.yml", body)
@@ -244,29 +244,13 @@ def test_an_expression_is_resolved_against_live_values_not_skipped(
     assert _run(module, root, trusted_hosted, tmp_path) == 1
 
 
-def test_the_fork_branch_may_be_hosted_when_the_trusted_branch_is_not(
+def test_the_fork_branch_is_refused_when_the_trusted_branch_is_fleet(
     tmp_path: Path,
 ) -> None:
-    """Fork isolation is a TRUST constraint and outranks the cost ruling.
-
-    The canonical selector sends a pull request opened from a fork to the
-    public runner class and everything else to the trusted seam. For a private
-    repository both halves of that are required, not in tension: the
-    2026-09-14 ruling says a private repository's CI does not run on hosted
-    runners, and fork isolation says untrusted code never reaches a fleet
-    runner that bind-mounts lab credentials. The routing node's own contract
-    settles the order -- only a CAPACITY reason may be reversed for a
-    repository that may not run hosted, never a trust reason such as fork
-    isolation -- so the hosted fork branch is the REQUIRED placement here and
-    reporting it as a violation would be asking for the prohibited one.
-
-    THE NEGATIVE CONTROL OF THIS WHOLE CHANGE. The expression is the post-fix
-    omninode_infra one, verbatim, under the triggers that file really declares.
-    A gate that fails this is refusing the fix rather than the defect.
-    """
+    """The 2026-10-19 prohibition also applies to fork-triggered private jobs."""
     module = _module()
     root = _tree(tmp_path, "ci.yml", _seam_job(GUARDED_SEAM_EXPRESSION, CI_TRIGGERS))
-    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 0
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 1
 
 
 def test_positive_control_the_pre_fix_omninode_infra_expression_is_caught(
@@ -286,27 +270,19 @@ def test_positive_control_the_pre_fix_omninode_infra_expression_is_caught(
     assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 1
     reported = capsys.readouterr().err
     assert "push" in reported and "merge_group" in reported, reported
-    # The fork cell is the one hosted placement that is REQUIRED, so it must
-    # not be named among the offending events -- otherwise the gate would be
-    # asking for the prohibited placement.
-    assert "pull_request:fork" not in reported, reported
+    assert "pull_request:fork" in reported, reported
 
 
-def test_the_same_pre_fix_expression_is_latent_not_red_without_the_trigger(
+def test_a_push_only_hosted_expression_is_latent_without_the_trigger(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The narrowing, asserted rather than assumed.
-
-    A job cannot run under a trigger its workflow does not carry, so the very
-    same expression in a pull-request-only workflow places nothing hosted
-    today. It is still PRINTED, on the pass path, because that is the state
-    `infra-consistency-check.yml` sat in for months -- its own comment said
-    "a live defect the day somebody adds a push trigger" and nothing but that
-    comment was watching. The pull request that adds the trigger is judged by
-    this gate at that moment, which is the mechanism this narrowing rests on.
-    """
+    """An undeclared push is latent; declared fork events are still judged."""
     module = _module()
-    root = _tree(tmp_path, "ci.yml", _seam_job(SEAM_EXPRESSION, ("pull_request",)))
+    expression = SEAM_EXPRESSION.replace(
+        "github.event.pull_request.head.repo.full_name != github.repository",
+        "github.event_name == 'push'",
+    )
+    root = _tree(tmp_path, "ci.yml", _seam_job(expression, ("pull_request",)))
     assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 0
     printed = capsys.readouterr().out
     assert "LATENT" in printed and "push" in printed, printed
@@ -853,7 +829,7 @@ def test_a_repo_scoped_value_never_needs_the_organisation(tmp_path: Path) -> Non
         module,
         {"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET, "OMNI_PUBLIC_PR_RUNS_ON_JSON": FLEET},
     )
-    root = _tree(tmp_path, "ci.yml", _seam_job())
+    root = _tree(tmp_path, "ci.yml", _seam_job(SEAM_EXPRESSION.replace(HOSTED, FLEET)))
     assert module.scan(root, "OmniNode-ai/fixture", variables) == []
 
 
@@ -963,15 +939,10 @@ def test_a_delegated_required_job_inheriting_a_hosted_org_value_fails(
     )
 
 
-def test_the_same_delegation_passes_once_the_caller_carries_a_fleet_shadow(
+def test_the_same_delegation_passes_with_fleet_values_and_defaults(
     tmp_path: Path,
 ) -> None:
-    """The fix is the CALLER's routing variable, not an edit to the reusable.
-
-    Same caller file, same called workflow, byte for byte. Only the repository
-    scope differs. If this failed too, the gate would be reporting the shared
-    workflow rather than the placement, and no repository could ever be green.
-    """
+    """Caller values and the called workflow's defaults must all be safe."""
     module = _module()
     root = _tree(tmp_path, "kb-doc-gate.yml", CALLER)
     assert (
@@ -980,10 +951,10 @@ def test_the_same_delegation_passes_once_the_caller_carries_a_fleet_shadow(
             root,
             {
                 "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
-                "OMNI_PUBLIC_PR_RUNS_ON_JSON": HOSTED,
+                "OMNI_PUBLIC_PR_RUNS_ON_JSON": FLEET,
             },
             tmp_path,
-            {CALLED: REUSABLE_SEAM},
+            {CALLED: REUSABLE_SEAM.replace(HOSTED, FLEET)},
         )
         == 0
     )
@@ -1232,7 +1203,7 @@ def test_the_same_flags_still_work_outside_github_actions(
     """
     module = _module()
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    root = _tree(tmp_path, "ci.yml", _seam_job())
+    root = _tree(tmp_path, "ci.yml", _seam_job(SEAM_EXPRESSION.replace(HOSTED, FLEET)))
     assert _run(module, root, {"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET}, tmp_path) == 0
 
 
@@ -1278,7 +1249,11 @@ def test_an_unreachable_base_ref_comparison_is_not_a_finding(
     turn a silent pass into a live hosted placement with nothing watching.
     """
     module = _module()
-    root = _tree(tmp_path, "kb.yml", _seam_job(KB_DOC_GATE_EXPRESSION))
+    expression = KB_DOC_GATE_EXPRESSION.replace(
+        "github.event.pull_request.head.repo.full_name != github.repository",
+        "false",
+    )
+    root = _tree(tmp_path, "kb.yml", _seam_job(expression))
     assert _run(module, root, dict(SEAM_VARIABLES), tmp_path, ["main"]) == 0
 
 
@@ -1874,8 +1849,7 @@ def test_a_declaration_citing_the_withdrawn_ruling_is_refused(
 # resolves to the fleet today and to a hosted runner the day X is unset at
 # every scope -- which is how omnibase_internal and omniclaude-internal ran
 # hosted until 2026-10-19. A hosted literal fallback is a finding whatever the
-# variable currently holds; the fork arm alone is exempt, as it is for a live
-# hosted value.
+# variable currently holds, including when it is reached by a fork event.
 
 
 def test_a_set_variable_whose_literal_fallback_is_hosted_fails(
@@ -1900,17 +1874,17 @@ def test_the_same_job_passes_once_the_literal_fallback_is_the_fleet(
     assert _run(module, root, {}, tmp_path) == 0
 
 
-def test_a_hosted_fallback_on_the_fork_arm_alone_stays_exempt(
+def test_a_hosted_fallback_on_the_fork_arm_alone_is_refused(
     tmp_path: Path,
 ) -> None:
-    """Fork isolation outranks the cost rule for the fork cell, and only there."""
+    """A fork event cannot excuse a hosted default in a private workflow."""
     module = _module()
     root = _tree(tmp_path, "ci.yml", _seam_job(GUARDED_SEAM_EXPRESSION, CI_TRIGGERS))
     both_fleet = {
         "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
         "OMNI_PUBLIC_PR_RUNS_ON_JSON": FLEET,
     }
-    assert _run(module, root, both_fleet, tmp_path) == 0
+    assert _run(module, root, both_fleet, tmp_path) == 1
 
 
 def test_a_called_workflow_whose_literal_fallback_is_hosted_fails(
@@ -1926,6 +1900,106 @@ def test_a_called_workflow_whose_literal_fallback_is_hosted_fails(
     )
     variables = {"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET}
     assert _run_delegating(module, root, variables, tmp_path, {CALLED: called}) == 1
+
+
+@pytest.mark.parametrize("event", ["pull_request", "pull_request_review"])
+@pytest.mark.parametrize("live_hosted", [True, False])
+def test_private_no_hosted_refuses_fork_placement_and_fallback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], event: str, live_hosted: bool
+) -> None:
+    """OMN-17427: the absolute prohibition includes fork events."""
+    module = _module()
+    root = _tree(tmp_path, "ci.yml", _seam_job(GUARDED_SEAM_EXPRESSION, (event,)))
+    variables = dict(SEAM_VARIABLES)
+    if not live_hosted:
+        variables["OMNI_PUBLIC_PR_RUNS_ON_JSON"] = FLEET
+    assert _run(module, root, variables, tmp_path) == 1
+    assert f"{event}:fork" in capsys.readouterr().err
+
+
+def test_private_no_hosted_refuses_fork_in_called_workflow(tmp_path: Path) -> None:
+    module = _module()
+    pinned = CALLED.rsplit("@", 1)[0] + "@" + "a" * 40
+    root = _tree(tmp_path, "caller.yml", CALLER.replace(CALLED, pinned))
+    called = _seam_job(GUARDED_SEAM_EXPRESSION, ("workflow_call",))
+    assert (
+        _run_delegating(module, root, dict(SEAM_VARIABLES), tmp_path, {pinned: called})
+        == 1
+    )
+
+
+@pytest.mark.parametrize(
+    "runs_on",
+    [
+        ["${{ vars.RUNNER }}"],
+        {"labels": ["${{ vars.RUNNER }}"]},
+        {"group": "${{ vars.RUNNER_GROUP }}"},
+    ],
+)
+def test_private_no_hosted_refuses_unresolved_collection_expression(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], runs_on: object
+) -> None:
+    module = _module()
+    workflow = yaml.safe_dump(
+        {
+            "on": ["push"],
+            "jobs": {"build": {"runs-on": runs_on, "steps": [{"run": "true"}]}},
+        }
+    )
+    root = _tree(tmp_path, "ci.yml", workflow)
+    assert _run(module, root, {"RUNNER": "ubuntu-latest"}, tmp_path) == 2
+    assert "ci.yml::build" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("expression", "variables"),
+    [
+        ("${{ fromJSON(vars.RUNNER) }}", {"RUNNER": '"ubuntu-latest"'}),
+        ("${{ fromJSON(vars.RUNNER || '\"ubuntu-latest\"') }}", {"RUNNER": FLEET}),
+        ("${{ fromJSON(vars.RUNNER || '\"ubuntu-latest\"') }}", {}),
+    ],
+)
+def test_private_no_hosted_refuses_json_string_label(
+    tmp_path: Path, expression: str, variables: dict[str, str]
+) -> None:
+    module = _module()
+    root = _tree(tmp_path, "ci.yml", _light_workflow("lint", runs_on=expression))
+    assert _run(module, root, variables, tmp_path) == 1
+
+
+def test_private_no_hosted_refuses_unsupported_variable_transform(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    expression = "${{ fromJSON(format('[\"ubuntu-latest\"]{1}', vars.RUNNER, '')) }}"
+    root = _tree(tmp_path, "ci.yml", _light_workflow("lint", runs_on=expression))
+    assert _run(module, root, {"RUNNER": FLEET}, tmp_path) == 2
+
+
+@pytest.mark.parametrize("label", ["ubuntu-latest", "macos-15", "windows-2025"])
+def test_private_no_hosted_refuses_plain_variable_fallback(
+    tmp_path: Path, label: str
+) -> None:
+    module = _module()
+    expression = "${{ vars.RUNNER || '" + label + "' }}"
+    root = _tree(tmp_path, "ci.yml", _light_workflow("lint", runs_on=expression))
+    assert _run(module, root, {"RUNNER": "self-hosted"}, tmp_path) == 1
+
+
+def test_private_no_hosted_refuses_guarded_plain_variable_fallback(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    expression = "${{ github.event_name == 'push' && vars.RUNNER || 'ubuntu-latest' }}"
+    root = _tree(tmp_path, "ci.yml", _seam_job(expression, ("push",)))
+    assert _run(module, root, {"RUNNER": "self-hosted"}, tmp_path) == 2
+
+
+def test_private_no_hosted_empty_variable_uses_fleet_fallback(tmp_path: Path) -> None:
+    module = _module()
+    expression = '${{ fromJSON(vars.RUNNER || \'["self-hosted","omnibase-ci"]\') }}'
+    root = _tree(tmp_path, "ci.yml", _light_workflow("lint", runs_on=expression))
+    assert _run(module, root, {"RUNNER": ""}, tmp_path) == 0
 
 
 def test_the_rulings_override_is_refused_inside_github_actions(
