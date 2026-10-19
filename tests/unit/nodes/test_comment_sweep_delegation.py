@@ -411,3 +411,20 @@ def test_regression_check_is_wired_to_ci_and_precommit() -> None:
     )
     assert "tests/unit/nodes/test_comment_sweep_delegation.py" in hook["entry"]
     assert hook["pass_filenames"] is False
+
+
+def test_regression_check_is_gated_by_ci_summary_not_branch_protection() -> None:
+    # OMN-17427: dev branch protection does not require this context, so the
+    # required-check manifest carries no REQUIRED row for it (a row there turns
+    # the Required-Check Manifest Reconcile job red); CI Summary enforces it.
+    from scripts.ci.ci_summary_gate import GATE_JOBS, STRICT_SUCCESS_JOBS
+
+    name = "Comment Render Delegation (OMN-18512)"
+    assert name in GATE_JOBS
+    assert name in STRICT_SUCCESS_JOBS
+    manifest = yaml.safe_load((ROOT / ".github/required-checks.yaml").read_text())
+    assert [
+        gate
+        for gate in manifest["gates"]
+        if gate["name"] == name and gate.get("mode") == "REQUIRED"
+    ] == []

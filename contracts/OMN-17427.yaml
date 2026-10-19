@@ -179,6 +179,13 @@ requirements:
         statement: "a job whose runs-on is fromJSON(vars.X || '[\"ubuntu-latest\"]') fails the gate with X set to the fleet, its twin with a fleet fallback passes, the fork arm alone stays exempt, and a called workflow's hosted fallback fails the private caller -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'literal_fallback or fork_arm_alone' fails over the merge base"
       - id: AC45
         statement: "a hosted job carrying a private-repo-hosted-ok annotation fails like its bare twin, and a hosted-eligible declaration citing RULING 2026-10-16T17:44:31Z is refused against the shipped registry, which is empty -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'annotat or withdrawn_ruling or shipped_registry_carries_no_ruling' fails over the merge base"
+  - id: req-required-check-manifest-matches-live-dev
+    statement: The required-check manifest's dev REQUIRED rows name exactly the contexts dev branch protection requires, so the Required-Check Manifest Reconcile job on dev passes; Comment Render Delegation (OMN-18512) stays enforced through CI Summary.
+    acceptance:
+      - id: AC46
+        statement: "the manifest has no REQUIRED row for Comment Render Delegation (OMN-18512), a context dev branch protection does not require (63 contexts, read 2026-10-19T15:19:07Z), and CI Summary still lists it in GATE_JOBS and STRICT_SUCCESS_JOBS -- falsifier: uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov -k gated_by_ci_summary_not_branch_protection fails over the merge base, whose manifest line 40 declares the row REQUIRED"
+      - id: AC47
+        statement: "a manifest change that names no context outside the dev contexts snapshot and drops no context it records needs no snapshot refresh; an added context outside the snapshot or a dropped context the snapshot records still needs the fixture in the same change -- falsifier: uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov -k 'manifest_change or manifest_required_pair or refresh_trigger_controls or required_checks_change_needs' fails over the merge base, which has none of the manifest_change tests"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -883,3 +890,31 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'annotat or withdrawn_ruling or shipped_registry_carries_no_ruling'"
     binds_ac:
       - AC45
+  - id: dod-required-check-manifest-no-comment-render-row
+    description: The manifest declares no REQUIRED row for Comment Render Delegation (OMN-18512), and CI Summary still gates and strictly requires that job.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov -k 'gated_by_ci_summary_not_branch_protection or wired_to_ci_and_precommit'"
+    binds_ac:
+      - AC46
+  - id: dod-manifest-snapshot-refresh-trigger
+    description: Tests drive the snapshot-refresh trigger with manifest changes that drop an unrecorded row, drop a recorded row, and add a row outside the snapshot, and read the base manifest through git show.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov -k 'manifest_change or manifest_required_pair or refresh_trigger_controls or required_checks_change_needs'"
+    binds_ac:
+      - AC47
+  - id: dod-deploy-manifest-snapshot-refresh-trigger
+    description: Hosted runners run the snapshot-refresh trigger tests and the manifest row test against this checkout with no branch-protection token.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_ci_summary_gate.py tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov -k 'TestExternalContextCompleteness or gated_by_ci_summary_not_branch_protection'"
+    binds_ac:
+      - AC46
+      - AC47
