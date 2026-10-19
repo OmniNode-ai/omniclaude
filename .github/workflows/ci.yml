@@ -130,6 +130,9 @@ jobs:
         run: uv run pytest tests/ci/test_mod_file_growth_pin_omn18531.py -q --no-cov
       - name: No Anthropic key value in a workflow (OMN-20967)
         run: uv run pytest tests/ci/test_anthropic_key_prefix_workflows_omn20967.py -q --no-cov
+      # OMN-19854: paired with the call-repo-evidence-gate-verifier-floor pre-commit hook.
+      - name: Verify the repo-evidence caller refuses a verifier below the floor (OMN-19854)
+        run: uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov
       # OMN-20910: paired with the review-voter-model-from-overlay pre-commit hook.
       - name: Review voter model comes from the overlay (OMN-20910)
         run: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -p no:randomly
