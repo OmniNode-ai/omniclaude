@@ -158,9 +158,13 @@ jobs:
     # this ceiling fails in seconds with a named cause instead of being
     # cancelled at the ceiling with none. Keep HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS
     # below equal to this value times 60.
-    timeout-minutes: 75
+    # OMN-17427: each of two attempts gets 3142 s ((6600 - 300 - 15) / 2),
+    # holding two voters at review_deadline_seconds 1500 (3000 s).
+    # This is the chunk-scaled deadline omniintelligence 921b322b reads from
+    # the overlay; 4500 gave 2092 s per attempt.
+    timeout-minutes: 110
     env:
-      HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS: "4500"
+      HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS: "6600"
       UV_HTTP_TIMEOUT: "900"
       # Same fork/non-fork test as `runs-on:` above, threaded into the steps so
       # the fork path can refuse loudly instead of attempting a LAN call it
