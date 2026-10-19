@@ -19,6 +19,8 @@ requirements:
         statement: "AC3: a PostCompact payload run through claude_hook_capture.sh starts the metadata capture and the compact content capture, and no other event starts the compact capture -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k 'postcompact_capture_registration or no_other_event'"
       - id: "AC4"
         statement: "AC4: the canonical-file-shape ratchet accepts the change, so neither baselined mod script gained a code line -- falsifier: pre-commit run canonical-file-shape reports mod-file-growth for hook_content_capture.py or claude_hook_capture.sh"
+      - id: "AC5"
+        statement: "AC5: an installed omnimarket without node_compact_package_read_effect journals nothing and fails loud: the capture raises ModuleNotFoundError naming the node and main exits 1, which makes onex_emit_bounded raise its alarm, instead of passing for an empty package -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k fails_loud"
 evidence_requirements:
   - kind: "tests"
     description: "The compact capture kind tests pass beside the existing content capture tests"
@@ -63,3 +65,11 @@ dod_evidence:
         check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k postcompact_capture_registration"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC4"]
+  - id: "dod-omn21122-ac5-fail-loud"
+    description: "A missing compact reader raises a named ModuleNotFoundError, main exits 1, and nothing is journalled."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k fails_loud"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC5"]

@@ -283,17 +283,64 @@ def test_a_transcript_with_no_boundary_journals_nothing(
     assert _records(jdir) == []
 
 
-def test_a_reader_that_is_not_installed_journals_nothing(
+def _without_the_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An omnimarket that carries every other node but not the compact reader.
+
+    Only the reader's file is withheld: the resolver and the item-identity
+    handler still load, so the capture reaches the compact read itself. Hiding
+    every omnimarket file instead stops the capture at the item-identity load,
+    before the compact read, and a test written that way passes for that reason.
+    """
+    sys.modules.pop("omnimarket_compact_read", None)
+    real = capture_mod.package_files
+
+    def package_files(package: str, *parts: str) -> list[Path]:
+        if parts and parts[-1] == "handler_compact_package_read.py":
+            return []
+        return real(package, *parts)
+
+    monkeypatch.setattr(capture_mod, "package_files", package_files)
+
+
+def test_a_reader_that_is_not_installed_journals_nothing_and_fails_loud(
     jdir: Path, transcript: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An omnimarket without the node: the capture journals nothing, not a guess."""
-    monkeypatch.setattr(capture_mod, "package_files", lambda *_a, **_k: [])
+    """An omnimarket without the node journals nothing, and says so by raising.
 
-    written = capture_mod.capture(
-        _hook_input(transcript), kind="compact", journal_dir=jdir, session_id=SESSION
-    )
+    On 2026-10-19 a session went through 27 compactions with no compact record:
+    the hook interpreter's omnimarket predated the node, and the capture
+    returned no items without a word. A missing reader is a dependency defect,
+    so the capture names the node instead of passing for an empty package.
+    """
+    _without_the_reader(monkeypatch)
 
-    assert written == 0
+    with pytest.raises(ModuleNotFoundError, match="node_compact_package_read_effect"):
+        capture_mod.capture(
+            _hook_input(transcript),
+            kind="compact",
+            journal_dir=jdir,
+            session_id=SESSION,
+        )
+
+    assert _records(jdir) == []
+
+
+def test_main_exits_one_naming_the_node_when_the_reader_is_not_installed_fails_loud(
+    jdir: Path,
+    transcript: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Exit 1 is what makes onex_emit_bounded raise its alarm (OMN-20110)."""
+    _without_the_reader(monkeypatch)
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(_hook_input(transcript))))
+
+    rc = capture_mod.main(["--kind", "compact", "--journal-dir", str(jdir)])
+
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "content NOT journalled" in err
+    assert "node_compact_package_read_effect" in err
     assert _records(jdir) == []
 
 

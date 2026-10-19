@@ -282,13 +282,15 @@ def items_for_checkpoint(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
     return [{"content_kind": "checkpoint", "content": checkpoint}]
 
 
+_COMPACT = ("node_compact_package_read_effect", "handler_compact_package_read.py")
+
+
 def items_for_compact(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
-    # The newest compact_boundary record and all after it: the node's read (TA.20b).
-    node = "node_compact_package_read_effect"
-    reader = load_node_handler(
-        "omnimarket_compact_read", node, "handler_compact_package_read.py"
-    )
-    return reader.compact_items(hook_input) if reader else []
+    # The node's read (TA.20b); an omnimarket without the node fails loud (OMN-21122).
+    reader = load_node_handler("omnimarket_compact_read", *_COMPACT)
+    if reader is None:
+        raise ModuleNotFoundError(f"{_COMPACT[0]} is not in the installed omnimarket")
+    return reader.compact_items(hook_input)
 
 
 def items_for_tool(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
