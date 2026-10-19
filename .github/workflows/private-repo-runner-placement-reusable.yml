@@ -32,6 +32,11 @@
 # `.github/hosted-eligible-jobs.yaml`, citing a ruling that the registry
 # `config/private_repo_hosted_rulings.yaml` carries for that repository. The
 # registry is read from the validator checkout below, at the same pin.
+# The registry is EMPTY since 2026-10-19 (OMN-17427): the operator withdrew
+# hosted eligibility ("make it impossible to run private repos actions on
+# github"), so every declaration is refused, no annotation excuses a hosted
+# placement, and a hosted literal fallback is a finding even while its
+# variable is set.
 #
 # Usage in caller repos:
 #   jobs:

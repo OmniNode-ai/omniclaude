@@ -161,7 +161,7 @@ requirements:
     acceptance:
       - id: AC39
         statement: "the root README.md links the knowledge base and retains the customer install commands read by the plugin tests, no requirements*.txt is tracked, and the KB doc gate passes in strict mode with no docs/ prose entries in its allowed set -- falsifier: python3 scripts/kb_doc_gate.py --mode strict --repo-root . and uv run pytest plugins/onex-delegate/tests/test_customer_install_slash_commands.py -q --no-cov pass, and git ls-files 'requirements*.txt' '**/requirements*.txt' prints nothing, where the merge base tracks consumers/requirements.txt"
-      - id: AC44
+      - id: AC46
         statement: "plugins/onex/skills/gap/docs/POST_MERGE_STABILIZATION.md, CHANGELOG.md, .github/CONTRIBUTING.md, .github/CODE_OF_CONDUCT.md, plugins/onex/README.md and plugins/onex/GETTING_STARTED.md are absent, gap/SKILL.md no longer names the removed document, the hook convention files that conventions/routes.yaml routes to stay present, and the root README.md links the knowledge base -- falsifier: uv run pytest tests/scripts/test_repo_docs_removed_omn17427.py -q --no-cov fails over the merge base, which tracks POST_MERGE_STABILIZATION.md"
   - id: req-worktree-remove-partial-removal
     statement: Every omniclaude caller of git worktree remove (the SessionEnd hook and scripts/worktree_auto_prune.py) reports a tree that a failed removal half-deleted as partially_removed with git's own error line, and leaves a record to rebuild it from.
@@ -174,6 +174,13 @@ requirements:
         statement: "find_half_removed_worktrees finds a planted tree whose .git pointer names a missing admin dir and returns nothing for a clean worktree; the pruner reports such trees in their own section, keeps them out of classification, and does so on --no-debris runs -- falsifier: uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py -q -p no:randomly --no-cov -k 'half_removed_scan_and_clean_control or main_reports_half_removed_without_classifying or report_empty_half_removed_section' fails over the merge base"
       - id: AC43
         statement: "a failed removal leaves a snapshot whose MANIFEST names the path and HEAD, and the pruner's attempt carries head_oid, saved before the removal -- falsifier: uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py tests/scripts/test_every_worktree_removal_saves_first.py -q -p no:randomly --no-cov -k 'pruner_records_partial_removal or session_end_partial_removal_left_a_snapshot or missing_snapshot_helper or every_removal_site_saves' fails over the merge base"
+  - id: req-private-repo-no-hosted-runner
+    statement: "The private-repo runner-placement gate refuses every way a private repository's job can reach a GitHub-hosted runner: a hosted literal fallback is a finding even while its variable is set, an annotation excuses nothing, and the hosted-rulings registry is empty."
+    acceptance:
+      - id: AC44
+        statement: "a job whose runs-on is fromJSON(vars.X || '[\"ubuntu-latest\"]') fails the gate with X set to the fleet, its twin with a fleet fallback passes, the fork arm alone stays exempt, and a called workflow's hosted fallback fails the private caller -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'literal_fallback or fork_arm_alone' fails over the merge base"
+      - id: AC45
+        statement: "a hosted job carrying a private-repo-hosted-ok annotation fails like its bare twin, and a hosted-eligible declaration citing RULING 2026-10-16T17:44:31Z is refused against the shipped registry, which is empty -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'annotat or withdrawn_ruling or shipped_registry_carries_no_ruling' fails over the merge base"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -860,6 +867,24 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_worktree_remove_partial_removal_omn18826.py tests/scripts/test_every_worktree_removal_saves_first.py -q -p no:randomly --no-cov -k 'pruner_records_partial_removal or session_end_partial_removal_left_a_snapshot or missing_snapshot_helper or every_removal_site_saves'"
     binds_ac:
       - AC43
+  - id: dod-private-repo-no-hosted-runner-ac44
+    description: A hosted literal fallback is a finding while its variable is set, for a caller's own job and for a called workflow; the fork arm stays exempt.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'literal_fallback or fork_arm_alone'"
+    binds_ac:
+      - AC44
+  - id: dod-private-repo-no-hosted-runner-ac45
+    description: No annotation or hosted-eligible declaration excuses a hosted placement; the shipped registry is empty.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'annotat or withdrawn_ruling or shipped_registry_carries_no_ruling'"
+    binds_ac:
+      - AC45
   - id: dod-repo-docs-removed-gap-stabilization
     description: The gap post-merge stabilization document is removed with its SKILL.md reference, the earlier removed documents stay absent, and every convention file routes.yaml names that exists on the merge base stays present.
     source: manual
@@ -868,7 +893,7 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/scripts/test_repo_docs_removed_omn17427.py -q --no-cov"
     binds_ac:
-      - AC44
+      - AC46
   - id: dod-deploy-repo-docs-removed-gap-stabilization
     description: A hosted runner uses only Python's standard library to check that the removed documentation paths are absent from this checkout and that gap/SKILL.md does not name the removed document.
     source: manual
@@ -888,4 +913,4 @@ dod_evidence:
           print("PASS: gap stabilization document removed, routed convention files kept, knowledge base linked")
           '
     binds_ac:
-      - AC44
+      - AC46

@@ -36,6 +36,18 @@
 # that is not a strict descendant of the current rev is refused and nothing is
 # written.
 #
+# OMN-19998: the nightly sibling-pin train. RULING 2026-10-19T10:11:00Z: "turn
+# this into a nightly release train where all the tags are rolled up to a single
+# bump". Every [tool.uv.sources] entry pinning an OmniNode-ai sibling by a dev
+# merge tag (dev-<UTC YYYYMMDDHHMMSS>-<sha12>) moves to that sibling's newest dev
+# tag whose dev CI is green, read from the commit's check runs; a red or unread
+# tag is passed over and a pin never moves backwards. Every move rides one PR on
+# one fixed branch, updated in place when that PR is already open, so a night is
+# one bump per consumer and never one PR per tag. workflow_dispatch runs the same
+# train for an urgent fix; dry_run prints the plan and opens nothing. The rewrite
+# is omnimarket's node_dev_tag_pin_mover_compute; the selection is
+# `scripts/relock_git_sources.py --dev-tag-train`.
+#
 # Canary rollout (OMN-13902): landed on omnimemory first per canary-before-
 # fan-out. Once proven green, the same workflow file is copied to the other
 # PyPI-range-pinned consumers (omniclaude, omniintelligence, omnibase_infra).
@@ -52,6 +64,11 @@ on:
         description: "Space-separated sibling packages to refresh (default: all omninode siblings)."
         required: false
         default: ""
+      dry_run:
+        description: "OMN-19998: print the train's plan and open no PR."
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -137,6 +154,34 @@ jobs:
             --registry-root "$PWD/.clones" \
             --package omnimarket
 
+      # OMN-19998: the train's members are read from pyproject.toml itself, so
+      # each member's repository is cloned here with its tags (blobless: the
+      # train reads tag names and their commits, never file contents). A member
+      # whose clone fails stops the job: a train that examined no clone is
+      # indistinguishable from one with nothing to move.
+      - name: Clone the dev-tag train's siblings
+        run: |
+          set -euo pipefail
+          members="$(python3 -c 'import sys; sys.path.insert(0, "scripts"); import relock_git_sources as r; print(" ".join(sorted({p.repo for p in r.parse_dev_tag_pins(open("pyproject.toml").read())})))')"
+          echo "Train members: ${members:-<none>}"
+          for repo in $members; do
+            [[ -d ".clones/$repo/.git" ]] && { git -C ".clones/$repo" fetch --quiet --tags origin; continue; }
+            git clone --quiet --filter=blob:none --no-checkout \
+              "https://github.com/OmniNode-ai/${repo}.git" ".clones/$repo"
+          done
+
+      - name: Move dev-tag pins to their newest green dev tag
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          set -euo pipefail
+          apply=(--apply)
+          [[ "$DRY_RUN" == "true" ]] && apply=()
+          uv run --frozen python scripts/relock_git_sources.py --dev-tag-train \
+            --registry-root "$PWD/.clones" --green-from github \
+            --plan-out /tmp/sibling_pin_train_plan.json "${apply[@]}"
+
       - name: Refresh sibling package locks
         env:
           REQUESTED_PACKAGES: ${{ github.event.inputs.packages }}
@@ -193,8 +238,8 @@ jobs:
             git --no-pager diff --stat -- uv.lock pyproject.toml src/omniclaude/hooks/contracts/capture_redaction.yaml
           fi
 
-      - name: Open refresh PR
-        if: steps.delta.outputs.changed == 'true'
+      - name: Open or update the refresh PR
+        if: steps.delta.outputs.changed == 'true' && github.event.inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -203,38 +248,44 @@ jobs:
           # MESSAGE, not only the PR title. The Receipt Gate's identity
           # binding reads Evidence-Ticket from the title and then requires
           # that same ticket to appear in the branch name or in one of the
-          # PR's commit messages. This workflow named it in the title alone,
-          # so every PR it opened failed that check and needed a hand-pushed
-          # commit before it could merge -- an automation that cannot land
-          # its own output. First observed on #2262, its first real PR.
-          BRANCH="bot/omn-13902-sibling-lock-refresh-$(date -u +%Y%m%d%H%M%S)"
-          # OMN-18273: commit as the App this job already authenticates as. The
-          # previous identity resolved to no GitHub account, so the commit rendered
-          # unlinked and named neither a bot nor a run; the credential and the
-          # committer disagreeing was itself misleading about who made the change.
+          # PR's commit messages.
+          # OMN-19998: ONE fixed branch, so a night with an open refresh PR
+          # updates that PR in place instead of opening a second one. The
+          # branch is rebuilt from this run's base every time and force-pushed;
+          # the previous night's moves are re-derived, never stacked.
+          BRANCH="bot/omn-13902-sibling-lock-refresh"
+          # OMN-18273: commit as the App this job already authenticates as.
           # The numeric prefix on the address is what links it to the App account.
           git config user.name "onexbot-occ-writer[bot]"
           git config user.email "307849072+onexbot-occ-writer[bot]@users.noreply.github.com"
-          git checkout -b "$BRANCH"
+          git checkout -B "$BRANCH"
           git add uv.lock pyproject.toml src/omniclaude/hooks/contracts/capture_redaction.yaml
           git commit -m "chore(deps, OMN-13902): refresh omninode sibling locks [bot]" \
             --trailer "Onex-Workflow: ${GITHUB_WORKFLOW}" \
             --trailer "Onex-Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          git push origin "$BRANCH"
+          git push --force origin "$BRANCH"
+          existing="$(gh pr list --head "$BRANCH" --base "${GITHUB_REF_NAME}" --state open --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            echo "Updated refresh PR #${existing} in place."
+            exit 0
+          fi
           # Build the PR body in a file to avoid heredoc-in-YAML indentation pitfalls.
           {
-            printf '%s\n' "Automated sibling version-alignment (OMN-13902)."
+            printf '%s\n' "Automated sibling version-alignment (OMN-13902) and the nightly"
+            printf '%s\n' "sibling-pin train (OMN-19998)."
             printf '\n'
-            printf '%s\n' "\`uv lock --upgrade-package\` refreshed the omninode sibling pins in"
-            printf '%s\n' "\`uv.lock\` to the latest in-range PyPI releases."
-            printf '\n'
+            printf '%s\n' "Every sibling pinned by a dev merge tag was moved to its newest dev"
+            printf '%s\n' "merge tag whose dev CI is green; red and unread tags were passed over."
+            printf '%s\n' "\`uv lock --upgrade-package\` refreshed the PyPI-range sibling pins."
             printf '%s\n' "Git-pinned siblings declared clone-governed in"
             printf '%s\n' "\`[tool.onex.git-source-authority]\` were advanced to their canonical"
-            printf '%s\n' "clone head first, forward only (OMN-18752). Every other git rev was"
-            printf '%s\n' "left exactly where review put it."
+            printf '%s\n' "clone head first, forward only (OMN-18752)."
             printf '\n'
-            printf '%s\n' "Opened automatically so stale-sibling-lock drift no longer requires a"
-            printf '%s\n' "manual repin ticket. Review the lock delta and merge on green CI."
+            printf '%s\n' "This branch is rebuilt and force-pushed each night while the PR is open."
+            printf '%s\n' "Train plan at open:"
+            printf '\n%s\n' '```json'
+            cat /tmp/sibling_pin_train_plan.json
+            printf '%s\n' '```'
           } > /tmp/sibling_refresh_body.md
           # `chore(deps):` prefix is exempt from the pr-title ticket gate, matching
           # the existing publish-downstream-pin-bump bot convention.

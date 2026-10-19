@@ -394,10 +394,15 @@ def test_a_guard_that_is_not_a_fork_test_excuses_nothing(
     assert "schedule" in capsys.readouterr().err
 
 
-def test_an_annotated_job_passes_and_an_unannotated_twin_does_not(
+def test_an_annotated_hosted_job_fails_like_its_unannotated_twin(
     tmp_path: Path,
 ) -> None:
-    """A named reason is the escape hatch; a bare pin is the failure."""
+    """The annotation is no longer an escape hatch (OMN-17427, 2026-10-19).
+
+    The operator's words: "make it impossible to run private repos actions on
+    github". A comment that excused a hosted pin is a way to run one, so it
+    excuses nothing now: the annotated job and its bare twin both fail.
+    """
     module = _module()
     annotated = _tree(
         tmp_path / "a",
@@ -407,7 +412,7 @@ def test_an_annotated_job_passes_and_an_unannotated_twin_does_not(
         "(OMN-12345)\n"
         "  build:\n    runs-on: macos-15\n    steps:\n      - run: true\n",
     )
-    assert _run(module, annotated, {}, tmp_path) == 0
+    assert _run(module, annotated, {}, tmp_path) == 1
 
     bare = _tree(
         tmp_path / "b",
@@ -421,14 +426,7 @@ def test_an_annotated_job_passes_and_an_unannotated_twin_does_not(
 def test_an_annotation_without_a_ticket_does_not_excuse_anything(
     tmp_path: Path,
 ) -> None:
-    """Free text is a justification, not a commitment to move the job.
-
-    The verdict is 2 rather than 1 as of OMN-18431, and the distinction is the
-    point: an incomplete marker is not judged as an ordinary bare pin, it is
-    REFUSED with its own message naming what is missing. Both fail the run;
-    only one of them tells the author that the exemption they wrote was read
-    and rejected rather than never seen.
-    """
+    """No annotation excuses a hosted pin, so an incomplete one is a finding."""
     module = _module()
     root = _tree(
         tmp_path,
@@ -437,7 +435,7 @@ def test_an_annotation_without_a_ticket_does_not_excuse_anything(
         "  # private-repo-hosted-ok: it has always been like this\n"
         "  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
     )
-    assert _run(module, root, {}, tmp_path) == 2
+    assert _run(module, root, {}, tmp_path) == 1
 
 
 def test_an_unset_variable_with_no_fallback_fails_closed(tmp_path: Path) -> None:
@@ -770,16 +768,10 @@ def test_a_workflow_with_no_trigger_block_fails_closed(tmp_path: Path) -> None:
     assert _run(module, root, {}, tmp_path) == 2
 
 
-def test_a_wrapped_annotation_fails_closed_instead_of_being_ignored(
+def test_a_wrapped_annotation_excuses_nothing_either(
     tmp_path: Path,
 ) -> None:
-    """A wrapped annotation is a refusal that names itself, not a silent miss.
-
-    The reason and its ticket have to share a line. When an author wraps the
-    comment the ticket lands where the pattern cannot reach it, and without
-    this the job is simply reported as a bare pin -- the right verdict for a
-    reason the author cannot see from the message.
-    """
+    """A wrapped annotation is a finding like any other annotated hosted pin."""
     module = _module()
     root = _tree(
         tmp_path,
@@ -791,7 +783,7 @@ def test_a_wrapped_annotation_fails_closed_instead_of_being_ignored(
         "    runs-on: ubuntu-latest\n"
         "    steps:\n      - run: true\n",
     )
-    assert _run(module, root, {}, tmp_path) == 2
+    assert _run(module, root, {}, tmp_path) == 1
 
 
 def _variables_with_unreadable_org(module, repo_scope: dict[str, str]):
@@ -1049,15 +1041,10 @@ def test_a_called_workflow_that_cannot_be_fetched_fails_closed(
     )
 
 
-def test_a_delegated_hosted_placement_is_excused_beside_the_CALLER_job(
+def test_a_delegated_hosted_placement_is_not_excused_beside_the_CALLER_job(
     tmp_path: Path,
 ) -> None:
-    """The annotation goes where the repository can write it, and only there.
-
-    Writing it beside the called job would excuse every other caller of the
-    same shared workflow at once, which is the allowlist this gate refuses to
-    have.
-    """
+    """An annotation beside the caller's job excuses nothing (2026-10-19)."""
     module = _module()
     root = _tree(
         tmp_path,
@@ -1078,7 +1065,7 @@ def test_a_delegated_hosted_placement_is_excused_beside_the_CALLER_job(
             tmp_path,
             {CALLED: REUSABLE_SEAM},
         )
-        == 0
+        == 1
     )
 
 
@@ -1856,18 +1843,89 @@ def test_the_declaration_needs_no_comment_marker(tmp_path: Path) -> None:
     assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 0
 
 
-def test_the_shipped_registry_carries_the_2026_10_16_ruling_for_two_repos() -> None:
+def test_the_shipped_registry_carries_no_ruling() -> None:
+    """The operator withdrew hosted eligibility on 2026-10-19 (OMN-17427).
+
+    "make it impossible to run private repos actions on github" reverses RULING
+    2026-10-16T17:44:31Z, so the registry a declaration must cite is empty and
+    every `.github/hosted-eligible-jobs.yaml` entry is refused.
+    """
     module = _module()
-    registry = module.load_hosted_rulings(module.DEFAULT_HOSTED_RULINGS)
-    assert set(registry) == {RULING_TS}
-    ruling = registry[RULING_TS]
-    assert ruling.ticket == "OMN-19998"
-    assert ruling.lane == "orchestrator-bb1a"
-    # Two repositories, held as digests: this tree is public and may not name
-    # them. The lab run against the real tree is what matches each digest.
-    assert len(ruling.repo_hashes) == 2
-    assert not ruling.covers("OmniNode-ai/fixture")
-    assert ruling.label_families == ("ubuntu",)
+    assert module.load_hosted_rulings(module.DEFAULT_HOSTED_RULINGS) == {}
+
+
+def test_a_declaration_citing_the_withdrawn_ruling_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Fixture: the shipped registry refuses the 2026-10-16 listing outright."""
+    module = _module()
+    root = _tree(tmp_path / "repo", "ci.yml", _light_workflow("lint"))
+    _declare(root, ("ci.yml", "lint", RULING_TS))
+    shipped = module.DEFAULT_HOSTED_RULINGS
+    variables = {"PRIVATE_CI_LIGHT_RUNS_ON": FLEET}
+    assert _run_eligible(module, root, tmp_path, shipped, variables=variables) == 2
+    assert RULING_TS in capsys.readouterr().err
+
+
+# --- OMN-17427, 2026-10-19: an expression that COULD fall back to hosted ----
+#
+# The operator's words: "make it impossible to run private repos actions on
+# github". `fromJSON(vars.X || '["ubuntu-latest"]')` with X set to the fleet
+# resolves to the fleet today and to a hosted runner the day X is unset at
+# every scope -- which is how omnibase_internal and omniclaude-internal ran
+# hosted until 2026-10-19. A hosted literal fallback is a finding whatever the
+# variable currently holds; the fork arm alone is exempt, as it is for a live
+# hosted value.
+
+
+def test_a_set_variable_whose_literal_fallback_is_hosted_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    module = _module()
+    root = _tree(tmp_path, "ci.yml", _light_workflow("lint"))
+    assert _run(module, root, {"PRIVATE_CI_LIGHT_RUNS_ON": FLEET}, tmp_path) == 1
+    assert "ci.yml::lint" in capsys.readouterr().err
+
+
+def test_the_same_job_passes_once_the_literal_fallback_is_the_fleet(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    fleet_fallback = (
+        "${{ fromJSON(vars.PRIVATE_CI_LIGHT_RUNS_ON || "
+        '\'["self-hosted","omnibase-ci"]\') }}'
+    )
+    root = _tree(tmp_path, "ci.yml", _light_workflow("lint", runs_on=fleet_fallback))
+    assert _run(module, root, {"PRIVATE_CI_LIGHT_RUNS_ON": FLEET}, tmp_path) == 0
+    assert _run(module, root, {}, tmp_path) == 0
+
+
+def test_a_hosted_fallback_on_the_fork_arm_alone_stays_exempt(
+    tmp_path: Path,
+) -> None:
+    """Fork isolation outranks the cost rule for the fork cell, and only there."""
+    module = _module()
+    root = _tree(tmp_path, "ci.yml", _seam_job(GUARDED_SEAM_EXPRESSION, CI_TRIGGERS))
+    both_fleet = {
+        "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
+        "OMNI_PUBLIC_PR_RUNS_ON_JSON": FLEET,
+    }
+    assert _run(module, root, both_fleet, tmp_path) == 0
+
+
+def test_a_called_workflow_whose_literal_fallback_is_hosted_fails(
+    tmp_path: Path,
+) -> None:
+    """The run is billed to the private caller, so the fallback is judged there."""
+    module = _module()
+    root = _tree(tmp_path, "kb-doc-gate.yml", CALLER)
+    called = (
+        "name: Reusable\non:\n  workflow_call: {}\njobs:\n"
+        "  kb-doc-gate:\n    runs-on: ${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON"
+        " || '[\"ubuntu-latest\"]') }}\n    steps:\n      - run: true\n"
+    )
+    variables = {"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET}
+    assert _run_delegating(module, root, variables, tmp_path, {CALLED: called}) == 1
 
 
 def test_the_rulings_override_is_refused_inside_github_actions(

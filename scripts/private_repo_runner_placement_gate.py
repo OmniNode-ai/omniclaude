@@ -126,15 +126,15 @@ is the one property every non-pull-request event shares; a `workflow_call`
 workflow is judged over the WHOLE matrix, because the event that reaches it is
 whatever its caller fired and this gate cannot know it.
 
-A JOB THAT CANNOT MOVE GETS A NAMED REASON, NOT A QUIET PIN. The escape hatch
-is a per-job annotation in the workflow file recording WHY the fleet cannot
-carry it and the ticket that will move it:
-
-    # private-repo-hosted-ok: <reason> (<OMN-nnnnn>)
-
-placed on the line immediately before, or anywhere inside, the job's mapping.
-A bare pin with no annotation is the failure. There is no global allowlist
-file and no `--force`: an allowlist is where exemptions go to stop being read.
+THERE IS NO ESCAPE HATCH (OMN-17427, operator 2026-10-19: "make it
+impossible to run private repos actions on github"). The per-job annotation
+`# private-repo-hosted-ok: <reason> (<OMN-nnnnn>)` that used to excuse a
+hosted pin excuses nothing now and is only named in the output; the
+hosted-eligible declaration below survives as machinery, but its registry is
+empty, so every entry is refused. And an expression that is on the fleet today
+only because its variable is set -- `fromJSON(vars.X || '["ubuntu-latest"]')`
+-- is a finding: the day X is unset at every scope it runs hosted, which is how
+two private repositories spent Enterprise minutes until 2026-10-19.
 
 A JOB AN OPERATOR RULING PUTS ON HOSTED RUNNERS IS DECLARED, NOT ANNOTATED
 (OMN-19998). RULING 2026-10-16T17:44:31Z amends the 2026-09-14 rule: named
@@ -207,17 +207,10 @@ import yaml
 # stale into a false green.
 HOSTED_LABEL = re.compile(r"^(ubuntu|macos|windows)-", re.IGNORECASE)
 
-ANNOTATION = re.compile(
-    r"#\s*private-repo-hosted-ok:\s*(?P<reason>.+?)\s*\((?P<ticket>OMN-\d+)\)",
-    re.IGNORECASE,
-)
-
-# The same marker WITHOUT the rest of the pattern on its line. A comment block
-# wrapped across several lines puts the ticket on a line the annotation regex
-# cannot reach, so the annotation reads as absent and the job is reported as a
-# bare pin -- a correct verdict for an incomprehensible reason, and the author
-# sees a gate that ignored the exemption they wrote. Detected separately so the
-# failure names itself: an annotation is ONE line, reason and ticket together.
+# The retired per-job escape hatch. It excused a hosted pin until the operator's
+# 2026-10-19 words ("make it impossible to run private repos actions on
+# github", OMN-17427); it is still detected, so a job carrying one is reported
+# with a note saying it was read and excuses nothing.
 ANNOTATION_MARKER = re.compile(r"#\s*private-repo-hosted-ok:", re.IGNORECASE)
 
 VAR_REF = re.compile(r"vars\.([A-Z0-9_]+)")
@@ -288,6 +281,10 @@ class Branch:
     guard: str
     labels: list[str]
     how: str
+    # Hosted labels named by the literal fallback of a variable that is SET
+    # today (OMN-17427, 2026-10-19). The arm resolves to `labels` now and to
+    # these the day the variable is unset at every scope.
+    fallback: tuple[str, ...] = ()
 
     @property
     def hosted(self) -> list[str]:
@@ -766,7 +763,7 @@ def _needs_evaluation(branches: list[Branch]) -> bool:
     gets switched off. Asked in one place so the verdict, the latent report and
     the matrix report cannot disagree about when evaluation is owed.
     """
-    return any(branch.hosted for branch in branches) or not any(
+    return any(branch.hosted or branch.fallback for branch in branches) or not any(
         not branch.guard for branch in branches
     )
 
@@ -1517,8 +1514,13 @@ def _split_top_level(expression: str, operator: str) -> list[str]:
 
 def _labels_of(
     fragment: str, runs_on: str, variables: Variables
-) -> tuple[list[str], str]:
-    """Resolve one arm's value to labels, live, or refuse to guess."""
+) -> tuple[list[str], str, tuple[str, ...]]:
+    """Resolve one arm's value to labels, live, or refuse to guess.
+
+    Also returns the hosted labels a SET variable's literal fallback names:
+    an expression that could fall back to a hosted runner is a finding
+    whatever the variable holds today (OMN-17427, 2026-10-19).
+    """
     names = VAR_REF.findall(fragment)
     if not names:
         raise GateError(
@@ -1527,10 +1529,23 @@ def _labels_of(
         )
     labels: list[str] = []
     how: list[str] = []
+    fallback: list[str] = []
     for name in dict.fromkeys(names):
         value = variables.get(name)
+        match = re.search(FALLBACK_FOR.format(name=name), fragment)
+        if value is not None and match is not None:
+            try:
+                fallback.extend(
+                    str(entry)
+                    for entry in json.loads(match.group(1))
+                    if HOSTED_LABEL.match(str(entry))
+                )
+            except json.JSONDecodeError as error:
+                raise GateError(
+                    f"the literal fallback of {name} is not valid JSON "
+                    f"({match.group(1)!r}): {error}. THE GATE DID NOT RUN."
+                ) from error
         if value is None:
-            match = re.search(FALLBACK_FOR.format(name=name), fragment)
             if match is None:
                 raise GateError(
                     f"{name} is unset at every scope and carries no literal "
@@ -1547,7 +1562,7 @@ def _labels_of(
             raise GateError(
                 f"{name} is not valid JSON ({value!r}): {error}. THE GATE DID NOT RUN."
             ) from error
-    return labels, "; ".join(how)
+    return labels, "; ".join(how), tuple(fallback)
 
 
 def resolve_branches(runs_on: Any, variables: Variables) -> list[Branch]:
@@ -1570,8 +1585,8 @@ def resolve_branches(runs_on: Any, variables: Variables) -> list[Branch]:
     for segment in _split_top_level(inner, "||"):
         operands = _split_top_level(segment, "&&")
         guard = " && ".join(operands[:-1]) if len(operands) > 1 else ""
-        labels, how = _labels_of(operands[-1], runs_on, variables)
-        branches.append(Branch(guard=guard, labels=labels, how=how))
+        labels, how, fallback = _labels_of(operands[-1], runs_on, variables)
+        branches.append(Branch(guard=guard, labels=labels, how=how, fallback=fallback))
     return branches
 
 
@@ -1627,14 +1642,19 @@ def _offending_placements(
         return []
 
     hosted_by_arm: dict[int, list[str]] = {}
+    fallback_by_arm: dict[int, list[str]] = {}
     unplaced: list[str] = []
     for declared in contexts:
         for context in _variants(declared, branches, refs):
             index = _select(branches, context, slug, where)
             if index is None:
                 unplaced.append(context.key)
-            elif branches[index].hosted and not context.fork_exempt:
+            elif context.fork_exempt:
+                continue
+            elif branches[index].hosted:
                 hosted_by_arm.setdefault(index, []).append(context.key)
+            elif branches[index].fallback:
+                fallback_by_arm.setdefault(index, []).append(context.key)
 
     placements = [
         Placement(
@@ -1644,6 +1664,23 @@ def _offending_placements(
         )
         for index, keys in sorted(hosted_by_arm.items())
     ]
+    # OMN-17427, 2026-10-19: an arm that is on the fleet only because its
+    # variable is set today falls back to a hosted label the day it is unset.
+    placements.extend(
+        Placement(
+            branch=replace(
+                branches[index],
+                labels=list(branches[index].fallback),
+                how=(
+                    "HOSTED LITERAL FALLBACK: an unset variable places this job "
+                    f"on GitHub-hosted runners (live today: {branches[index].how})"
+                ),
+            ),
+            events=tuple(keys),
+            reason="could fall back to a GitHub-hosted label",
+        )
+        for index, keys in sorted(fallback_by_arm.items())
+    )
     if unplaced:
         placements.append(
             Placement(
@@ -1996,20 +2033,14 @@ def scan(
                     )
             if not offenders:
                 continue
-            # The annotation lives beside the CALLER's job, because that is the
-            # mapping in this repository. A `uses:` job's excuse belongs here
-            # too: the called workflow is shared, and an exemption written
-            # there would excuse every other caller of it as well.
-            source = _job_source(text, str(job_id))
-            if ANNOTATION.search(source):
-                continue
-            if ANNOTATION_MARKER.search(source):
-                raise GateError(
-                    f"{path.name}::{job_id} carries a private-repo-hosted-ok "
-                    "marker whose reason and (OMN-nnnnn) ticket are not on the "
-                    "SAME line, so it excuses nothing. Put the whole annotation "
-                    "on one comment line; continuation lines beneath it are "
-                    "fine. THE GATE DID NOT RUN."
+            # OMN-17427, 2026-10-19: the per-job annotation no longer excuses
+            # a hosted placement ("make it impossible to run private repos
+            # actions on github"). It is named in the output so its author
+            # sees it was read and refused, not missed.
+            if ANNOTATION_MARKER.search(_job_source(text, str(job_id))):
+                notes.append(
+                    f"note: {path.name}::{job_id} carries a private-repo-hosted-ok "
+                    "annotation; it excuses nothing since 2026-10-19 (OMN-17427)"
                 )
             for runs_on, placement, via in offenders:
                 findings.append(
@@ -2684,12 +2715,11 @@ def main(argv: list[str] | None = None) -> int:
         '  contains(fromJSON(\'["pull_request","pull_request_review"]\'), '
         "github.event_name) &&\n"
         "  github.event.pull_request.head.repo.full_name != github.repository\n"
-        "\nOtherwise move the job to the fleet; if an operator ruling in "
-        "config/private_repo_hosted_rulings.yaml lets this repository run it "
-        f"hosted, list it in {ELIGIBLE_FILE} citing that ruling; or -- if the "
-        "fleet genuinely cannot carry it -- record WHY beside the job:\n"
-        "  # private-repo-hosted-ok: <reason> (OMN-nnnnn)\n"
-        "A pin with no reason is the failure this gate exists to refuse.\n"
+        "\nOtherwise move the job to the fleet: pin `[self-hosted, omnibase-ci]`, "
+        "and give every `vars.X || '[...]'` a fleet literal fallback, never a "
+        "hosted one -- an unset variable must never mean hosted. There is no "
+        "exemption: since 2026-10-19 neither an annotation nor a "
+        f"{ELIGIBLE_FILE} entry excuses a hosted placement (OMN-17427).\n"
         "A finding carrying a `via:` line is a job that DELEGATES: the label is "
         "chosen by the called workflow but resolved in THIS repository's "
         "variable scopes, so the fix is usually this repository's routing "

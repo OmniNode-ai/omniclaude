@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""The repository's prose documentation lives in the knowledge base (OMN-17427 AC44).
+"""The repository's prose documentation lives in the knowledge base (OMN-17427 AC46).
 
 The removed documentation files stay removed, the root README.md links the
 knowledge base, and the convention files that ``conventions/routes.yaml``
