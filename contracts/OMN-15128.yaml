@@ -1,0 +1,78 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-15128
+title: "Seeded secret and baseline launder driven through the real pre-commit hook and the real CI job"
+summary: >
+  Proof-only ticket. A synthetic seeded secret (the AWS documented example key,
+  non-functional) staged on a throwaway branch is blocked by the installed
+  detect-secrets-update pre-commit hook; the same seed with its own baseline
+  launder turns the required Secret Detection CI job red; after the seed is
+  removed the installed hook passes and the Secret Detection job runs green on
+  the remediated head. The throwaway branch and pull request are closed and
+  deleted, and no synthetic secret reaches dev. This pull request carries no
+  code; it is never merged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn15128-hook-red
+    statement: The installed pre-commit hook blocks a seeded secret and its baseline launder.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: a seeded secret staged on a throwaway branch is BLOCKED by the real installed pre-commit hook, with non-zero exit'
+  - id: req-omn15128-ci-red
+    statement: The required Secret Detection CI job turns red on a seeded secret that arrives with its own baseline launder.
+    acceptance:
+      - id: AC2
+        statement: 'AC2: the seeded commit pushed on a throwaway PR turns the real detect-secrets job in ci.yml red, run id cited'
+  - id: req-omn15128-green
+    statement: After the seed is removed, the installed hook exits 0 and the Secret Detection job runs green.
+    acceptance:
+      - id: AC3
+        statement: 'AC3: after removing the seed, hook exit 0 and a green Secret Detection CI run id are cited'
+  - id: req-omn15128-cleanup
+    statement: The throwaway branch and PR are closed and deleted, and no synthetic secret reached dev.
+    acceptance:
+      - id: AC4
+        statement: 'AC4: throwaway branch and PR closed and deleted; no synthetic secret on dev'
+evidence_requirements:
+  - kind: tests
+    description: "Secrets guard and CI diff tests pass"
+    command: "uv run pytest tests/scripts/test_detect_secrets_guard.py tests/scripts/test_detect_secrets_ci_diff.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn15128-ac1-hook-blocks
+    description: 'The guard the installed hook runs blocks a new unaudited finding and leaves the baseline unstaged.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_detect_secrets_guard.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn15128-ac2-ci-blocks
+    description: 'The CI diff the Secret Detection job runs blocks a finding absent from the target-branch baseline, even when the launder arrives in the same commit.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_detect_secrets_ci_diff.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn15128-ac3-green
+    description: 'With no seeded file in the tree, the guard and the CI diff both pass.'
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_detect_secrets_guard.py tests/scripts/test_detect_secrets_ci_diff.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn15128-ac4-no-seed-on-dev
+    description: 'No synthetic seed file is tracked on dev.'
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: command
+        check_value: "test -z \"$(git ls-tree -r --name-only origin/dev -- scratch_seed_test)\""
+        cwd: "${OMNI_HOME}/omniclaude"
