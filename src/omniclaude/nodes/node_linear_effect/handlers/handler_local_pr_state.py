@@ -39,7 +39,7 @@ from omniclaude.nodes.node_linear_effect.models import (
 
 LOCAL_READ_TIMEOUT_S = 30
 _WATCHER_SCRIPT = Path("skills") / "merge-drain" / "scripts" / "pr_state_local.py"
-_INTERNAL_PLUGIN = Path("omniclaude-internal") / "plugins" / "omni"
+_REGISTRY_PLUGIN = Path("plugins") / "omni"
 _FALLBACK_BASES = ("dev", "main")
 
 
@@ -92,8 +92,12 @@ class HandlerLocalPrState:
             if self._env.get("OMNI_PLUGIN_ROOT")
             else []
         )
-        if self._env.get("OMNI_HOME"):
-            roots.append(Path(self._env["OMNI_HOME"]) / _INTERNAL_PLUGIN)
+        registry = Path(self._env.get("OMNI_HOME", ""))
+        if registry.is_absolute() and registry.is_dir():
+            # Any registry clone that carries the omni plugin.
+            roots.extend(
+                sorted(c / _REGISTRY_PLUGIN for c in registry.iterdir() if c.is_dir())
+            )
         return next(
             (r / _WATCHER_SCRIPT for r in roots if (r / _WATCHER_SCRIPT).is_file()),
             None,
@@ -140,13 +144,13 @@ class HandlerLocalPrState:
             *self._env.get("ONEX_REGISTRY_ROOTS", "").split(":"),
         ]
         candidates = [Path(r) / name for r in roots if r and Path(r).is_absolute()]
-        if name == "omnibase_internal":
-            # The sibling of the registry, not a child of it (OMN-17427).
-            named = self._env.get("OMNIBASE_INTERNAL_HOME", "")
-            if named:
-                candidates.append(Path(named))
-            elif self._env.get("OMNI_HOME"):
-                candidates.append(Path(self._env["OMNI_HOME"]).parent / name)
+        # A clone beside the registry rather than in it (OMN-17427): the one
+        # OMNIBASE_INTERNAL_HOME names, else the registry's sibling of that name.
+        named = Path(self._env.get("OMNIBASE_INTERNAL_HOME", ""))
+        if named.is_absolute() and named.name == name:
+            candidates.append(named)
+        elif self._env.get("OMNI_HOME"):
+            candidates.append(Path(self._env["OMNI_HOME"]).parent / name)
         clones: list[Path] = []
         for candidate in candidates:
             if (candidate / ".git").is_dir() and candidate.resolve() not in {

@@ -9,6 +9,12 @@ summary: >
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
+requirements:
+  - id: req-omn20368-done-flip-local-pr-state
+    statement: The Done-flip guard reads PR merge state from local surfaces, never from gh.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: a PR proven merged by the PR watcher state or the canonical clone passes with no gh on PATH, and an unmerged PR still refuses naming it -- falsifier: pytest tests/hooks/test_done_flip_guard_local_pr_state.py fails before this change and passes after it'
 evidence_requirements:
   - kind: tests
     description: "The skill documents the execution audience flag"
@@ -36,6 +42,19 @@ dod_evidence:
       with no gh on PATH, and still refuses an unmerged PR naming it.
     source: manual
     status: verified
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_local_pr_state.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20368-deploy-local-pr-state-handler
+    description: A hosted runner starts an isolated Python runtime container with the changed handler mounted and verifies it defines HandlerLocalPrState and never runs gh. No fleet service or private endpoint is required.
+    source: manual
     checks:
       - check_type: command
-        check_value: "uv run pytest tests/hooks/test_done_flip_guard_local_pr_state.py -q"
+        check_value: >-
+          env docker run --rm --network none
+          --mount "type=bind,src=${OMNI_HOME}/omniclaude/src,dst=/runtime,readonly"
+          python:3.13-slim python -c
+          'import ast; src = open("/runtime/omniclaude/nodes/node_linear_effect/handlers/handler_local_pr_state.py").read(); tree = ast.parse(src); assert "HandlerLocalPrState" in {n.name for n in tree.body if isinstance(n, ast.ClassDef)}; assert not [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and n.value == "gh"]'
+        cwd: "${OMNI_HOME}/omniclaude"

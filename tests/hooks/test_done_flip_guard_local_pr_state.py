@@ -341,7 +341,7 @@ def test_the_watcher_script_is_located_through_omni_home_when_no_plugin_root(
     env: dict[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("OMNI_PLUGIN_ROOT")
-    internal = env["registry"] / "omniclaude-internal" / "plugins" / "omni"
+    internal = env["registry"] / "plugin-clone" / "plugins" / "omni"
     _fake_pr_state_local(
         internal,
         {
