@@ -5,10 +5,10 @@ summary: >
   The ruling of 2026-10-10T11:04:11Z requires the hosted repo-evidence / dod-verify context to refuse
   a contract whose acceptance criteria are only partly bound, in every repository. The refusal comes
   from the pinned verifier (0.4.303 or newer) behind a receipt-gate reusable that carries the floor.
-  omnibase_infra, omnimarket and omnibase_core each run a pre-commit check on their caller;
-  omniclaude had none, so the audit of ruling mechanisms read the ruling as not enforced here. The
-  caller is now checked by tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py from the
-  call-repo-evidence-gate-verifier-floor pre-commit hook and a ci.yml step.
+  The merge base already carries the call-repo-evidence-gate-verifier-floor pre-commit hook and
+  tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py. This change adds a required ci.yml
+  step running that same module. A registration test fails when the CI step is absent, conditional,
+  allowed to fail, or does not run the complete caller-floor module.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -24,24 +24,24 @@ requirements:
           AC2: a pre-commit hook runs the check whenever the caller, the test or the hook configuration changes, and a ci.yml step runs the same module -- falsifier: the hook missing, matching none of those three paths, or no ci.yml step naming the test.
 evidence_requirements:
   - kind: tests
-    description: "The caller floor check, with its negative controls, hook registration and CI step"
-    command: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov"
+    description: "The caller floor check, its negative controls and hook registration, and required CI registration"
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_repo_evidence_floor_ci_registration_omn19854.py -q -p no:randomly --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn19854-ac1
-    description: "The caller pins a floor-carrying reusable and verifier-version 0.4.303 or newer; a copy with 0.4.302 and a copy with an unlisted reusable commit are both refused. Fails at the merge base, where the test file does not exist."
+    description: "The caller pins a floor-carrying reusable and verifier-version 0.4.303 or newer; below-floor and unlisted-pin copies are refused. Required CI runs the complete floor check. The registration assertion fails at the merge base, which lacks the CI step."
     source: manual
     binds_ac: [AC1]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov -k 'reusable_that_carries or at_or_above or below_the_floor or another_reusable_pin or floor_comparison'"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_repo_evidence_floor_ci_registration_omn19854.py -q -p no:randomly --no-cov"
   - id: dod-omn19854-ac2
-    description: "The call-repo-evidence-gate-verifier-floor hook fires on the caller, the test and the hook configuration, and a ci.yml step runs the test. Fails at the merge base, which has neither."
+    description: "The existing call-repo-evidence-gate-verifier-floor hook fires on the caller, the test and the hook configuration, and required CI runs the complete test module. The registration assertion fails at the merge base, which lacks the CI step."
     source: manual
     binds_ac: [AC2]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q -p no:randomly --no-cov -k 'precommit_hook'"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_repo_evidence_floor_ci_registration_omn19854.py -q -p no:randomly --no-cov -k 'precommit_hook or required_ci_job'"
