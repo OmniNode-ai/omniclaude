@@ -1,0 +1,65 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-21122"
+title: "Capture kind compact: the omniclaude half (plan task TA.20b)"
+summary: >-
+  hook_content_capture.py accepts --kind compact: at PostCompact it asks node_compact_package_read_effect's handler, loaded by file path from the installed omnimarket package, for the newest compact_boundary record of transcript_path and every record after it, and journals that package unmodified as one compact item through the existing size policy, refusals and content.captured event. claude_hook_capture.sh, the existing PostCompact capture registration, starts that capture after its hook.event capture. Neither mod script gains a code line (canonical-file-shape mod-file-growth). The node and the session-content projection test are the omnimarket half of the task.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn21122-compact-capture-kind"
+    statement: "A PostCompact hook call journals the installed compaction as a compact content item through the existing capture path."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: with the reader installed, the capture journals the package the reader returns as content_kind compact, the chunks reassemble to it, and a missing transcript_path, a missing reader or an empty package journal nothing -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k 'newest_boundary or unmodified or larger_than_one_chunk or main_reads or not_installed or missing_transcript_path or no_boundary'"
+      - id: "AC2"
+        statement: "AC2: with OMNICLAUDE_CONTENT_CAPTURE=0 the kind journals nothing, and the fail-closed refusal when the drainer cannot publish content.captured covers it -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k 'newest_boundary or opt_out or cannot_publish'"
+      - id: "AC3"
+        statement: "AC3: a PostCompact payload run through claude_hook_capture.sh starts the metadata capture and the compact content capture, and no other event starts the compact capture -- falsifier: uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k 'postcompact_capture_registration or no_other_event'"
+      - id: "AC4"
+        statement: "AC4: the canonical-file-shape ratchet accepts the change, so neither baselined mod script gained a code line -- falsifier: pre-commit run canonical-file-shape reports mod-file-growth for hook_content_capture.py or claude_hook_capture.sh"
+evidence_requirements:
+  - kind: "tests"
+    description: "The compact capture kind tests pass beside the existing content capture tests"
+    command: "uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py tests/unit/hooks/test_hook_content_capture_checkpoint_omn18531.py tests/unit/hooks/test_hook_content_capture_omn19551.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn21122-ac1-journal"
+    description: "The package is journalled as a compact item and reassembles; the three no-package cases journal nothing."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k 'newest_boundary or unmodified or larger_than_one_chunk or main_reads or not_installed or missing_transcript_path or no_boundary'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn21122-ac2-refusals"
+    description: "The compact kind journals with capture enabled; the operator opt-out and the drainer refusal each stop it."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k 'newest_boundary or opt_out or cannot_publish'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
+  - id: "dod-omn21122-ac3-registration"
+    description: "claude_hook_capture.sh starts the compact capture for PostCompact and for no other event."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k 'postcompact_capture_registration or no_other_event'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]
+  - id: "dod-omn21122-ac4-shape"
+    description: "The compact registration runs while the canonical file shape baseline remains unchanged; the shape ratchet runs in pre-commit and CI."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "git diff --exit-code origin/dev -- .onex_ratchets/canonical_file_shape_baseline.txt"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/hooks/test_hook_content_capture_compact_omn21122.py -q --no-cov -k postcompact_capture_registration"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC4"]

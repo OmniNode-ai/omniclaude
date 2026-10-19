@@ -29,6 +29,11 @@ What this does, per hook call
   raw text over untouched, so the reassembled content hashes to the file's own
   sha256 (a parse and re-serialise would not). Same raw capture, size
   policy, refusals and topic as every other kind.
+* ``--kind compact`` (OMN-21122, plan task TA.20b): at PostCompact, the newest
+  ``compact_boundary`` record of ``transcript_path`` and every record after it,
+  unmodified, journalled as one ``compact`` item. The transcript read is
+  ``node_compact_package_read_effect``'s handler, loaded by file path like the
+  item-identity handler. Same size policy, refusals and topic as every other kind.
 
 Operator prompts (OMN-20905)
 ----------------------------
@@ -84,6 +89,7 @@ Fail-open like every hook on this path: always exits 0, never writes stdout.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import importlib
 import importlib.util
@@ -155,10 +161,8 @@ def capture_enabled_by_operator() -> bool:
 
 def drainer_can_publish(status_path: Path) -> bool:
     """True only when the drainer's status names this event type as publishable."""
-    status = health.read_status(status_path)
-    if status is None or status.publishable_event_types is None:
-        return False
-    return CONTENT_EVENT_TYPE in status.publishable_event_types
+    types = getattr(health.read_status(status_path), "publishable_event_types", None)
+    return types is not None and CONTENT_EVENT_TYPE in types
 
 
 def status_path_for(journal_dir: Path) -> Path:
@@ -207,15 +211,18 @@ def load_resolver() -> ModuleType | None:
     return load_by_path(_RESOLVER_MODULE_NAME, _resolver_candidates())
 
 
+def load_node_handler(name: str, node: str, handler: str) -> ModuleType | None:
+    """The stdlib-only handler module of an omnimarket node, loaded by file path."""
+    parts = ("nodes", node, "handlers", handler)
+    return load_by_path(name, package_files("omnimarket", *parts))
+
+
 def load_item_identity() -> ModuleType | None:
     """The stdlib-only handler of node_capture_item_identity_effect (TA.21)."""
-    handler = (
+    return load_node_handler(
+        _ITEM_IDENTITY_MODULE_NAME,
         "node_capture_item_identity_effect",
-        "handlers",
         "handler_item_identity.py",
-    )
-    return load_by_path(
-        _ITEM_IDENTITY_MODULE_NAME, package_files("omnimarket", "nodes", *handler)
     )
 
 
@@ -273,6 +280,15 @@ def items_for_checkpoint(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(checkpoint, str) or not checkpoint:
         return []
     return [{"content_kind": "checkpoint", "content": checkpoint}]
+
+
+def items_for_compact(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
+    # The newest compact_boundary record and all after it: the node's read (TA.20b).
+    node = "node_compact_package_read_effect"
+    reader = load_node_handler(
+        "omnimarket_compact_read", node, "handler_compact_package_read.py"
+    )
+    return reader.compact_items(hook_input) if reader else []
 
 
 def items_for_tool(hook_input: dict[str, Any]) -> list[dict[str, Any]]:
@@ -412,16 +428,12 @@ def _reply_already_captured(turn_dir: Path, session_id: str, digest: str) -> boo
     """Stop can fire more than once for one reply; record each reply once."""
     safe = hashlib.sha256(session_id.encode("utf-8")).hexdigest()
     marker = turn_dir / f"{safe}{_REPLY_MARKER_SUFFIX}"
-    try:
+    with contextlib.suppress(OSError):
         if marker.read_text(encoding="utf-8").strip() == digest:
             return True
-    except OSError:
-        pass
-    try:
+    with contextlib.suppress(OSError):
         turn_dir.mkdir(parents=True, exist_ok=True)
         marker.write_text(digest, encoding="utf-8")
-    except OSError:
-        pass
     return False
 
 
@@ -639,13 +651,13 @@ _ITEMS = {
     "tool_failure": items_for_tool_failure,
     "stop": items_for_stop,
     "checkpoint": items_for_checkpoint,
+    "compact": items_for_compact,
 }
-_HOOK_SOURCE = {
+#: Kinds absent here are their own hook source (stop, checkpoint, compact).
+_SRC = {
     "prompt": "user_prompt_submit",
     "tool": "post_tool_use",
     "tool_failure": "post_tool_use_failure",
-    "stop": "stop",
-    "checkpoint": "checkpoint",
 }
 
 
@@ -664,20 +676,18 @@ def raw_chunks(
     text = content if isinstance(content, str) else _as_text(content)
     plan = resolver.plan_content_chunks(text, topic)
     bound = resolver.load_contract().topics[topic].content_policy
-    records: list[dict[str, Any]] = []
-    for index, chunk in enumerate(plan.chunks):
-        records.append(
-            {
-                **record,
-                "content": chunk,
-                "chunk_index": index,
-                "chunk_count": len(plan.chunks),
-                "content_sha256": plan.content_sha256,
-                bound.original_field: plan.original_chars,
-                bound.truncated_field: plan.truncated,
-            }
-        )
-    return records
+    return [
+        {
+            **record,
+            "content": chunk,
+            "chunk_index": index,
+            "chunk_count": len(plan.chunks),
+            "content_sha256": plan.content_sha256,
+            bound.original_field: plan.original_chars,
+            bound.truncated_field: plan.truncated,
+        }
+        for index, chunk in enumerate(plan.chunks)
+    ]
 
 
 def capture(
@@ -751,7 +761,7 @@ def capture(
 
     chunks: list[dict[str, Any]] = []
     for item in items:
-        record = {"session_id": session, "hook_source": _HOOK_SOURCE[kind], **item}
+        record = {"session_id": session, "hook_source": _SRC.get(kind, kind), **item}
         chunks.extend(raw_chunks(resolver, record, topic=topic))
     # OMN-18531 (TA.21): one call stamps the content_record_id each record shares
     # with its lineage reference, and the content stream's sequence block.
@@ -800,14 +810,9 @@ def main(argv: list[str] | None = None) -> int:
         description="Journal full hook content (OMN-19551)."
     )
     parser.add_argument("--kind", required=True, choices=sorted(_ITEMS))
-    parser.add_argument("--correlation-id", default=None)
-    parser.add_argument("--cwd", default=None)
-    parser.add_argument("--actor", default=None)
-    parser.add_argument("--turn-id", default=None)
-    parser.add_argument("--agent-id", default=None)
-    parser.add_argument("--transcript-path", default=None)
-    parser.add_argument("--session-id", default=None)
-    parser.add_argument("--journal-dir", default=None)
+    options = "correlation-id cwd actor turn-id agent-id transcript-path session-id journal-dir"
+    for option in options.split():
+        parser.add_argument(f"--{option}", default=None)
     try:
         args = parser.parse_args(argv)
     except SystemExit:

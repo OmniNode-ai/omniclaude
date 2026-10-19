@@ -196,13 +196,19 @@ _HOOK_CAPTURE_PY="${HOOKS_LIB}/hook_claude_capture.py"
 # per episode. The disowned capture this replaces is how thousands of stuck
 # captures were orphaned to ppid 1 on 2026-09-29 with nothing reporting it.
 source "${HOOKS_LIB}/emit_bounded.sh"
-if [[ -n "${_ONEX_CAPTURE_DETACHED:-}" ]]; then
-    printf '%s' "$INPUT" | onex_emit_bounded hook.event \
-        "$PYTHON_CMD" "$_HOOK_CAPTURE_PY" --actor "$HOOK_ACTOR_ARG"
-    exit 0
-fi
 printf '%s' "$INPUT" | onex_emit_bounded hook.event \
     "$PYTHON_CMD" "$_HOOK_CAPTURE_PY" --actor "$HOOK_ACTOR_ARG" \
-    || onex_emit_fail_exit "$INPUT"
+    || [[ -n "${_ONEX_CAPTURE_DETACHED:-}" ]] || onex_emit_fail_exit "$INPUT"
+
+# OMN-21122 (plan task TA.20b): a PostCompact also journals the installed
+# compaction -- the newest compact_boundary record of transcript_path and every
+# record after it -- as a `compact` content item. hook_content_capture.py owns
+# the opt-out (OMNICLAUDE_CONTENT_CAPTURE), the drainer refusal and the size
+# policy, and reads the transcript path off the same payload.
+if [[ "$INPUT" =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PostCompact\" ]]; then
+    printf '%s' "$INPUT" | onex_emit_bounded content.captured \
+        "$PYTHON_CMD" "${HOOKS_LIB}/hook_content_capture.py" --kind compact \
+        --actor "$HOOK_ACTOR_ARG" || onex_emit_fail_exit "$INPUT"
+fi
 
 exit 0
