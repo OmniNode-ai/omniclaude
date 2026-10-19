@@ -572,59 +572,58 @@ class _FakeRun:
         return subprocess.CompletedProcess(argv, code, stdout=out, stderr=err)
 
 
-def test_d_fetch_pr_status_reads_state_by_rest(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = _FakeRun(
-        {
-            "repos/OmniNode-ai/omnibase_infra/pulls/2471": (
-                0,
-                {"state": "closed", "merged": True, "mergeable_state": "unknown"},
-            )
-        }
+def _watcher_says(
+    monkeypatch: pytest.MonkeyPatch, facts: dict[str, Any] | None
+) -> None:
+    """Stand in for the PR watcher and clone reads (OMN-20368); no gh, no clone."""
+    from omniclaude.nodes.node_linear_effect.handlers.handler_local_pr_state import (
+        HandlerLocalPrState,
     )
-    monkeypatch.setattr(ldv.subprocess, "run", fake)
+
+    monkeypatch.setattr(
+        HandlerLocalPrState, "_read_watcher", lambda *_a: (facts, "missing")
+    )
+    monkeypatch.setattr(
+        HandlerLocalPrState, "_read_clone", lambda *_a: ("", "", "no clone")
+    )
+
+
+def test_d_fetch_pr_status_reads_state_locally_never_by_gh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refuse_gh(argv: list[str], **_kwargs: Any) -> Any:
+        raise AssertionError(f"PR state must not be read through gh: {argv}")
+
+    monkeypatch.setattr(ldv.subprocess, "run", refuse_gh)
+    _watcher_says(
+        monkeypatch,
+        {"state": "MERGED", "repo": "omnibase_infra", "number": 2471},
+    )
     status = ldv.fetch_pr_status(ldv.PRRef(2471, "OmniNode-ai/omnibase_infra"))
     assert status.error is None, status.error
     assert status.state == "MERGED"
-    assert all(argv[:2] == ["gh", "api"] for argv in fake.argvs)
-    assert not any("graphql" in a or a == "view" for argv in fake.argvs for a in argv)
 
 
-def test_d_rest_state_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = _FakeRun(
-        {
-            "repos/O/r/pulls/1": (
-                0,
-                {"state": "open", "merged": False, "mergeable_state": "blocked"},
-            ),
-            "repos/O/r/pulls/2": (
-                0,
-                {
-                    "state": "closed",
-                    "merged": False,
-                    "title": "chore(OMN-1): x",
-                    "body": "first attempt",
-                },
-            ),
-            "repos/O/r/issues/2/comments": (0, [{"body": "Superseded by #3."}]),
-        }
+def test_d_local_state_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
+    _watcher_says(monkeypatch, {"state": "OPEN"})
+    assert ldv.fetch_pr_status(ldv.PRRef(1, "O/r")).state == "OPEN"
+    _watcher_says(
+        monkeypatch,
+        {"state": "CLOSED", "title": "chore(OMN-1): x", "body": "Superseded by #3."},
     )
-    monkeypatch.setattr(ldv.subprocess, "run", fake)
-    open_status = ldv.fetch_pr_status(ldv.PRRef(1, "O/r"))
-    assert (open_status.state, open_status.merge_state) == ("OPEN", "BLOCKED")
     closed = ldv.fetch_pr_status(ldv.PRRef(2, "O/r"))
     assert closed.state == "CLOSED"
     assert closed.title == "chore(OMN-1): x"
     assert "Superseded by #3." in closed.closing_notes
 
 
-def test_d_control_rest_failure_still_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = _FakeRun(
-        {"repos/OmniNode-ai/omnibase_infra/pulls/2471": (1, "API rate limit exceeded")}
-    )
-    monkeypatch.setattr(ldv.subprocess, "run", fake)
+def test_d_control_unreadable_state_still_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _watcher_says(monkeypatch, None)
     status = ldv.fetch_pr_status(ldv.PRRef(2471, "OmniNode-ai/omnibase_infra"))
     assert status.error is not None
-    assert "rate limit" in status.error
+    assert "OmniNode-ai/omnibase_infra#2471" in status.error
     assert ldv.classify_blocking(status) is True
 
 

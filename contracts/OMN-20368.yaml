@@ -13,6 +13,9 @@ evidence_requirements:
   - kind: tests
     description: "The skill documents the execution audience flag"
     command: "uv run pytest tests/skills/test_dod_verify_names_execution_audience.py -q"
+  - kind: tests
+    description: "The Done-flip guard reads PR merge state from the PR watcher and the canonical clone, never gh"
+    command: "uv run pytest tests/hooks/test_done_flip_guard_local_pr_state.py -q"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -26,3 +29,13 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/skills/test_dod_verify_names_execution_audience.py -q"
+  - id: dod-done-flip-local-pr-state
+    description: >
+      The Done-flip guard proves a PR merged from the PR watcher state or the
+      canonical clone's base branch (a squash commit whose subject ends (#N)),
+      with no gh on PATH, and still refuses an unmerged PR naming it.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_local_pr_state.py -q"
