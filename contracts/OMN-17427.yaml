@@ -149,6 +149,13 @@ requirements:
     acceptance:
       - id: AC36
         statement: "The review step's HEAD_SHA is github.event.pull_request.head.sha and cli_review gets --head-sha \"$HEAD_SHA\" -- falsifier: uv run pytest tests/ci/test_hostile_reviewer_head_sha_omn17427.py -q --no-cov fails over the merge base, where the review step passes no head"
+  - id: req-hostile-review-chunk-deadline
+    statement: The Hostile Reviewer installs an omniintelligence that scales a voter's review deadline by chunk count, and its job ceiling holds two voters at a 1500 s review deadline per attempt.
+    acceptance:
+      - id: AC37
+        statement: "pyproject.toml pins omninode-intelligence and uv.lock records only 921b322b8e43f695961a06a04759dc88bb3e88ff, which carries omniintelligence#1107 and #1108 -- falsifier: uv run pytest tests/ci/test_hostile_reviewer_retry_budget_pin_omn17427.py -q --no-cov fails over the merge base, which pins 7f686d4bbca251dd3db49c1222ff8d6f738abd6c"
+      - id: AC38
+        statement: "timeout-minutes is 110 and HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS is 6600, so each of two review attempts gets 3142 s, at least the 3000 s two voters need at review_deadline_seconds 1500 -- falsifier: uv run pytest tests/ci/test_hostile_reviewer_chunk_deadline_budget_omn17427.py tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -q --no-cov fails over the merge base, where the per-attempt budget is 2092 s"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -727,3 +734,21 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_hostile_reviewer_head_sha_omn17427.py -q --no-cov"
     binds_ac:
       - AC36
+  - id: dod-hostile-review-chunk-deadline-pin
+    description: The source pin and lock carry omniintelligence's chunk-scaled deadline and last endpoint timeout fixes.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_hostile_reviewer_retry_budget_pin_omn17427.py -q --no-cov"
+    binds_ac:
+      - AC37
+  - id: dod-hostile-review-chunk-deadline-budget
+    description: Each review attempt holds two 1500 s voter deadlines, and the previous ceiling fails that budget.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_hostile_reviewer_chunk_deadline_budget_omn17427.py tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -q --no-cov"
+    binds_ac:
+      - AC38
