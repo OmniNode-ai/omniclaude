@@ -119,3 +119,12 @@ dod_evidence:
       - AC7
       - AC8
       - AC9
+  - id: dod-omn21058-guide-pins-chosen-models
+    description: "ONBOARDING.md pins omniclaude 03bb86f9 (#2915) by commit and sha256: the pinned script downloads its bootstrap handler from #2910's merge, whose handler lists each key's and Ollama's models, takes the developer's ordered pick and registers and tests each one. The pinned sha256 is the script at that commit."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -x --no-cov -k \"pin_carries_the_chosen_models or pinned_digest_is_the_script\""
+    binds_ac:
+      - AC5
+      - AC10

@@ -88,6 +88,25 @@ def _is_ancestor(ancestor: str, descendant: str) -> bool:
     return _git("merge-base", "--is-ancestor", ancestor, descendant).returncode == 0
 
 
+def _downloaded_handler(script: bytes) -> bytes:
+    """The bootstrap handler a script fetches from the commit its URL names, or
+    nothing for a script that downloads none."""
+    url = re.search(
+        rb"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
+        script,
+    )
+    if not url:
+        return b""
+    commit = url.group(1).decode()
+    _require_commit(commit)
+    shown = _git(
+        "show",
+        f"{commit}:src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/"
+        "handler_onboarding_preflight.sh",
+    )
+    return shown.stdout if shown.returncode == 0 else b""
+
+
 def test_guide_pins_the_script_at_a_full_commit_and_digest() -> None:
     assert re.fullmatch(r"[0-9a-f]{40}", _pinned_commit())
     assert re.fullmatch(r"[0-9a-f]{64}", _pinned_digest())
@@ -111,24 +130,16 @@ def test_pinned_digest_is_the_script_at_the_pinned_commit() -> None:
     assert hashlib.sha256(shown.stdout).hexdigest() == _pinned_digest()
 
 
-# OMN-20844 AC3 (amended): the pinned script names no OpenRouter model; phase 3
-# asks onex for the default its overlay declares, so the guide never goes stale
-# on a model id.
-# OMN-21059: the call takes the provider as an argument, for every keyed provider.
-OVERLAY_DEFAULT_MODEL_CALL = "models_cmd default-model"
-
-
-def test_pinned_script_takes_the_openrouter_model_from_the_overlay() -> None:
+# OMN-20844 AC3: the pinned script names no OpenRouter model. OMN-21058 retired
+# the overlay default it read: the developer picks each key's models from a list.
+def test_pinned_script_names_no_model_and_takes_none_from_the_overlay() -> None:
     pinned = _pinned_commit()
     _require_commit(pinned)
     shown = _git("show", f"{pinned}:{SCRIPT_PATH}")
     assert shown.returncode == 0, shown.stderr.decode(errors="replace")
     text = shown.stdout.decode()
-    assert OVERLAY_DEFAULT_MODEL_CALL in text, (
-        f"ONBOARDING.md pins {pinned}, whose script does not ask onex for the "
-        "overlay's default OpenRouter model"
-    )
     assert "OPENROUTER_MODEL=" not in text
+    assert "models_cmd default-model" not in text
 
 
 # The merge commit of omniclaude#2789, the second half of OMN-21087: a Mac that
@@ -173,27 +184,50 @@ def test_pin_carries_the_local_model_server_choice() -> None:
     shown = _git("show", f"{pinned}:{SCRIPT_PATH}")
     assert shown.returncode == 0, shown.stderr.decode(errors="replace")
     assert b"--local-url" in shown.stdout
-    assert b"local_url_add_args" in shown.stdout
+    # Phase 3's model setup, which passes the local URL to onex, lives in the
+    # bootstrap handler the script downloads since omniclaude#2910 (OMN-21058).
+    assert b"local_url_add_args" in shown.stdout + _downloaded_handler(shown.stdout)
 
 
-# OMN-21059 AC3: the merge commit of omniclaude#2909, the first script that passes a
-# model for every key it registers (a key with no chosen model is refused), from
-# `onex models default-model <provider>` with the key on stdin.
-EVERY_KEY_MODEL_SCRIPT_COMMIT = "e64119d6bb8bb35de633029c8753ae72de2ca5f2"
+# OMN-21058 AC5 and AC10: the merge commit of omniclaude#2915, the first script
+# whose download fetches the handler (omniclaude#2910's) that asks each key and
+# Ollama for its models, in order. omniclaude#2909's default-model pick
+# (OMN-21059), which #2910 replaced, is in its history.
+CHOSEN_MODELS_SCRIPT_COMMIT = "03bb86f966e209c37f548a5a639693b07eab5792"
+CHOSEN_MODELS_HANDLER_COMMIT = "b4239e2d274723bdf69b3314ef339c9cfc6dee3f"
+HANDLER_PATH = (
+    "src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/"
+    "handler_onboarding_preflight.sh"
+)
 
 
-def test_pin_carries_every_keys_default_model() -> None:
+def test_pin_carries_the_chosen_models_in_order() -> None:
     pinned = _pinned_commit()
     _require_commit(pinned)
-    _require_commit(EVERY_KEY_MODEL_SCRIPT_COMMIT)
-    assert _is_ancestor(EVERY_KEY_MODEL_SCRIPT_COMMIT, pinned), (
+    _require_commit(CHOSEN_MODELS_SCRIPT_COMMIT)
+    assert _is_ancestor(CHOSEN_MODELS_SCRIPT_COMMIT, pinned), (
         f"ONBOARDING.md pins {pinned}, which does not contain "
-        f"{EVERY_KEY_MODEL_SCRIPT_COMMIT} (omniclaude#2909, OMN-21059)"
+        f"{CHOSEN_MODELS_SCRIPT_COMMIT} (omniclaude#2915, OMN-21058)"
     )
     shown = _git("show", f"{pinned}:{SCRIPT_PATH}")
     assert shown.returncode == 0, shown.stderr.decode(errors="replace")
-    assert b"default_model() { # provider key" in shown.stdout
-    assert b'models_cmd default-model "$1"' in shown.stdout
+    url = re.search(
+        rb"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
+        shown.stdout,
+    )
+    assert url, f"the script at {pinned} names no handler download"
+    served_at = url.group(1).decode()
+    _require_commit(served_at)
+    assert _is_ancestor(CHOSEN_MODELS_HANDLER_COMMIT, served_at)
+    handler = _git("show", f"{served_at}:{HANDLER_PATH}")
+    assert handler.returncode == 0, handler.stderr.decode(errors="replace")
+    for function in (
+        b"key_models",
+        b"choose_models",
+        b"ask_ollama_models",
+        b"setup_model",
+    ):
+        assert b"\n" + function + b"() {" in handler.stdout
 
 
 # OMN-21058 AC5 and AC10: the guide says every key and Ollama ask for models, in
