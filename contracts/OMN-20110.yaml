@@ -61,7 +61,7 @@ dod_evidence:
     check_value: uv run pytest tests/hooks/test_hook_emit_journal.py -q -k append_does_not_scan
     cwd: ${OMNI_HOME}/omniclaude
   - check_type: test_passes
-    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py::test_append_journals_before_any_bus_emit -q --no-cov
+    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py -q --no-cov -k test_append_journals_before_any_bus_emit
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC1
@@ -73,7 +73,7 @@ dod_evidence:
     check_value: uv run pytest tests/hooks/test_hook_emit_journal.py -q -k list_pending_limit
     cwd: ${OMNI_HOME}/omniclaude
   - check_type: test_passes
-    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py::test_append_journals_before_any_bus_emit -q --no-cov
+    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py -q --no-cov -k test_append_journals_before_any_bus_emit
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC2
@@ -86,7 +86,7 @@ dod_evidence:
     check_value: uv run pytest tests/hooks/test_hook_emit_bounded.py -q -k lock_held
     cwd: ${OMNI_HOME}/omniclaude
   - check_type: test_passes
-    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py::test_append_journals_before_any_bus_emit -q --no-cov
+    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py -q --no-cov -k test_append_journals_before_any_bus_emit
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC3
@@ -99,7 +99,7 @@ dod_evidence:
     check_value: uv run pytest tests/hooks/test_hook_emit_bounded.py -q -k alarm_once_per_episode
     cwd: ${OMNI_HOME}/omniclaude
   - check_type: test_passes
-    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py::test_append_journals_before_any_bus_emit -q --no-cov
+    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py -q --no-cov -k test_append_journals_before_any_bus_emit
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC4
@@ -112,7 +112,7 @@ dod_evidence:
     check_value: uv run pytest tests/hooks/test_hook_emit_bounded.py -q -k no_disowned_emit
     cwd: ${OMNI_HOME}/omniclaude
   - check_type: test_passes
-    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py::test_append_journals_before_any_bus_emit -q --no-cov
+    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py -q --no-cov -k test_append_journals_before_any_bus_emit
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC5
