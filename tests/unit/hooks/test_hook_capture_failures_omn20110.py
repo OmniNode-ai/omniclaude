@@ -222,6 +222,8 @@ def test_real_stop_hook_is_silent_on_success_and_logs_append_failure(
         "ONEX_HOOK_EMIT_BUDGET_S": "5",
         "ONEX_EMIT_ALARM_CMD": "/usr/bin/true",
         "ONEX_EMIT_EPISODE_MARKER": str(tmp_path / "episode"),
+        # tmp_path has no OmniNode project marker; a lane name lets the hook run, as on a lab lane.
+        "ONEX_LANE": "test-omn20110",
     }
     stdin = {
         "hook_event_name": "Stop",
