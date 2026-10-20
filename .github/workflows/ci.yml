@@ -169,6 +169,11 @@ jobs:
             BASE_REF="HEAD"
           fi
           uv run python scripts/validation/validate_plugin_version_bump.py --base "$BASE_REF"
+      # OMN-17427: paired with the contractor-hook-policy pre-commit hook.
+      - name: Verify contractor hook class policy and journal root (OMN-17427)
+        run: >-
+          uv run pytest tests/hooks/test_contractor_hook_policy.py
+          tests/scripts/test_install_hook_emit_drainer_config_root.py -q --no-cov
       # OMN-19513 (operator RULING 2026-10-15T04:24:42Z): hook and content capture stays
       # raw. SYNC with pre-commit hook 'raw-capture-guard'.
       - name: Verify hook capture journals without network delivery (OMN-20110)

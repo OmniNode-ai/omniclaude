@@ -299,6 +299,10 @@ if [[ -n "${ONEX_WORKSPACE_CONFIG_ROOT:-}" ]] \
   echo "ERROR: ONEX_WORKSPACE_CONFIG_ROOT lacks config/lab/hook_edge_lane.yaml: ${ONEX_WORKSPACE_CONFIG_ROOT}" >&2
   exit 1
 fi
+if [[ -n "${ONEX_STATE_DIR:-}" && "${ONEX_STATE_DIR}" != /* ]]; then
+  echo "ERROR: ONEX_STATE_DIR must be absolute." >&2
+  exit 1
+fi
 case "${ONEX_HOOK_EMIT_PRESERVE_BACKLOG:-0}" in
   0|1) ;;
   *) echo "ERROR: ONEX_HOOK_EMIT_PRESERVE_BACKLOG must be 0 or 1." >&2; exit 1 ;;
@@ -339,13 +343,16 @@ s = sys.stdin.read()
 # stray <true/> elsewhere in the plist (KeepAlive, RunAtLoad) is untouched.
 s = s.replace('<key>Disabled</key>\n  <true/>', '<key>Disabled</key>\n  <false/>', 1)
 config_root = os.environ.get('ONEX_WORKSPACE_CONFIG_ROOT', '')
+state_root = os.environ.get('ONEX_STATE_DIR', '')
 preserve_backlog = os.environ.get('ONEX_HOOK_EMIT_PRESERVE_BACKLOG', '0') == '1'
-if config_root or preserve_backlog:
+if config_root or state_root or preserve_backlog:
     payload = plistlib.loads(s.encode('utf-8'))
     if config_root:
         payload['EnvironmentVariables']['ONEX_WORKSPACE_CONFIG_ROOT'] = str(
             Path(config_root).expanduser().resolve()
         )
+    if state_root:
+        payload['EnvironmentVariables']['ONEX_STATE_DIR'] = state_root
     if preserve_backlog:
         payload['ProgramArguments'].append('--preserve-backlog')
     s = plistlib.dumps(payload).decode('utf-8')

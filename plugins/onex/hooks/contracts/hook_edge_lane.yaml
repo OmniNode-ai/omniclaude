@@ -495,6 +495,19 @@ governed_event_classes:
 # produce grant yet)") and the topic held 42 records, none from a live session.
 produce_grant_pending: []
 
+# Non-operator developer identities are declared in the existing issuer overlay.
+# Install its non-secret declaration under the selected workspace config root
+# alongside the broker overlay before enabling contractor hooks. Exact principal
+# matching keeps the operator's own developer identities unchanged. Suppression
+# happens before local-bus publish, journal, fan-out (including evt halves) or spool.
+developer_event_policy:
+  principal_declaration: "config/lab/developer-principal-overlay.yaml"
+  excluded_event_classes:
+    - "prompt.submitted"
+    - "content.captured"
+    - "session.outcome"
+    - "utilization.scoring.requested"
+
 # ---------------------------------------------------------------------------
 # Surfaces explicitly demoted from authority (AC3).
 # ---------------------------------------------------------------------------

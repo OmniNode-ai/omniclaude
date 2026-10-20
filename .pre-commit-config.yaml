@@ -101,6 +101,18 @@ repos:
         files: '^(src/omniclaude/hooks/model_claude_hook_event\.py|plugins/onex/hooks/(lib/(hook_claude_capture|hook_emit_append)\.py|scripts/claude_hook_capture\.sh)|tests/(unit/hooks/test_hook_capture_failures_omn20110\.py|fixtures/hooks/claude_hook_capture/sidecars/.*)|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
+      # OMN-17427: contractor class suppression and Mac journal-root agreement.
+      - id: contractor-hook-policy
+        name: Contractor hook classes stop before publication and spool
+        entry: >-
+          bash scripts/uv-run-worktree-safe.sh pytest
+          tests/hooks/test_contractor_hook_policy.py
+          tests/scripts/test_install_hook_emit_drainer_config_root.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/handlers/handler_hook_local_bus_publish\.py|plugins/onex/hooks/(lib/(hook_edge_lane|hook_emit_append|hook_content_capture)\.py|contracts/hook_edge_lane\.yaml)|scripts/install-hook-emit-drainer\.sh|tests/(hooks/test_contractor_hook_policy|scripts/test_install_hook_emit_drainer_config_root)\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
+        stages: [pre-commit]
+
       - id: raw-capture-guard
         name: Hook and content capture stays raw (OMN-19513)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov

@@ -28,6 +28,7 @@
   "tests/hooks/test_context_injection_cache.py": 0.14,
   "tests/hooks/test_context_injection_schemas.py": 0.15,
   "tests/hooks/test_context_scope_auditor_smoke.py": 0.05,
+  "tests/hooks/test_contractor_hook_policy.py": 3.1,
   "tests/hooks/test_contracts.py": 0.96,
   "tests/hooks/test_correlation_manager_hierarchy.py": 0.13,
   "tests/hooks/test_correlation_trace_emitter.py": 0.15,

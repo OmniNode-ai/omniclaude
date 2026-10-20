@@ -28,9 +28,10 @@ Outcomes, and what the caller does with each:
   can never succeed: it is moved to the journal's quarantine directory with
   its reason beside it and is never sent, never retried.
 
-This handler never raises: capture must not fail or block the hook. Stdlib
-only, like every module on the hook fast path; plain ``NamedTuple`` models
-instead of Pydantic for the same reason (``test_handler_imports_nothing_heavy``).
+The publish transport never raises and uses only the standard library.
+Contractor admission reads the existing lane and YAML declarations before
+transport or capture writes. Models remain ``NamedTuple`` values so loading
+this handler does not import the publisher stack.
 """
 
 from __future__ import annotations
@@ -310,3 +311,94 @@ if __name__ == "__main__":
     args = parser.parse_args()
     counts = replay_journal(args.replay_journal, limit=args.limit, pause_s=args.pause_s)
     sys.stdout.write(json.dumps(counts) + "\n")
+
+
+def developer_event_suppressed(event_type: str) -> bool:
+    """Apply the declared contractor admission policy before capture or transport.
+
+    Read only identity metadata from the selected lane's declared surface. The
+    existing issuer overlay identifies non-operator developer principals. A
+    profile without that declaration retains its existing operator behavior.
+    """
+    import importlib
+
+    import yaml
+
+    # The edge lane module ships in the plugin tree, not in this package, so it
+    # is resolved by name at call time.
+    lane = importlib.import_module("hook_edge_lane")
+
+    lane_file = lane.__file__
+    if lane_file is None:
+        raise lane.HookEdgeLaneError("hook edge lane module has no source file")
+    path = Path(lane_file).parent.parent / "contracts/hook_edge_lane.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    policy = raw.get("developer_event_policy", {})
+    if not isinstance(policy, dict):
+        raise lane.HookEdgeLaneError("developer event policy must be a mapping")
+    excluded = policy.get("excluded_event_classes", [])
+    if not isinstance(excluded, list):
+        raise lane.HookEdgeLaneError("developer excluded classes must be a list")
+    if event_type not in excluded:
+        return False
+    relative = policy.get("principal_declaration")
+    if (
+        not isinstance(relative, str)
+        or not relative.strip()
+        or Path(relative).is_absolute()
+        or ".." in Path(relative).parts
+    ):
+        raise lane.HookEdgeLaneError(
+            "developer principal declaration must be a relative path"
+        )
+    declaration = lane._onex_state().workspace_config_file(relative)
+    if declaration is None:
+        return False
+    identities = yaml.safe_load(declaration.read_text(encoding="utf-8"))
+    if (
+        not isinstance(identities, dict)
+        or identities.get("schema_version") != "developer_principal.v1"
+        or not isinstance(identities.get("principals"), list)
+        or not identities["principals"]
+        or not all(
+            isinstance(row, dict)
+            and isinstance(row.get("principal"), str)
+            and row["principal"].strip()
+            for row in identities["principals"]
+        )
+    ):
+        raise lane.HookEdgeLaneError("developer principal declaration is malformed")
+    contract = lane.load_contract(path)
+    if not set(excluded) <= set(contract.governed_event_classes):
+        raise lane.HookEdgeLaneError("developer policy names ungoverned event classes")
+    endpoint = contract.known_lanes[contract.lane]
+    if endpoint.sasl_credential_source == lane.CREDENTIAL_SOURCE_ONEX_LANE_STORE:
+        identity_path = lane.onex_home_path() / lane.LANE_STORE_CONFIG_FILE
+        try:
+            identity = yaml.safe_load(identity_path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as exc:
+            # A YAML exception can include a source excerpt containing a value.
+            raise lane.HookEdgeLaneCredentialError(
+                "selected lane identity metadata is unreadable"
+            ) from exc
+        try:
+            principal = identity[lane.LANE_STORE_LANES_BLOCK][contract.lane][
+                lane.LANE_STORE_USERNAME_KEY
+            ]
+        except (KeyError, TypeError) as exc:
+            raise lane.HookEdgeLaneCredentialError(
+                "selected lane has no declared principal"
+            ) from exc
+    elif endpoint.sasl_credential_source == lane.CREDENTIAL_SOURCE_OPERATOR_ENV_FILE:
+        principal = lane.read_operator_env_file(lane.operator_env_file_path()).get(
+            f"{endpoint.sasl_env_prefix or ''}{lane.ENV_SASL_USERNAME}"
+        )
+    else:
+        return False
+    if not isinstance(principal, str) or not principal.strip():
+        raise lane.HookEdgeLaneCredentialError(
+            "selected lane has no declared principal"
+        )
+    if endpoint.sasl_credential_source == lane.CREDENTIAL_SOURCE_ONEX_LANE_STORE:
+        principal = principal.strip()
+    return principal in {row["principal"] for row in identities["principals"]}

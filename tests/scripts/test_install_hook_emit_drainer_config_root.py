@@ -144,3 +144,66 @@ def test_invalid_recovery_setting_refuses_install(
 
     assert result.returncode != 0
     assert "must be 0 or 1" in result.stderr
+
+
+def test_explicit_state_root_is_shared_by_hooks_and_launchd(
+    installer: tuple[Path, dict[str, str]],
+    tmp_path: Path,
+) -> None:
+    script, env = installer
+    state_root = tmp_path / 'contractor state & "journal"'
+    env["ONEX_STATE_DIR"] = str(state_root)
+    result = run(script, env, "--dry-run")
+    assert result.returncode == 0, result.stderr
+    rendered = plistlib.loads(result.stdout[result.stdout.index("<?xml") :].encode())
+    assert rendered["EnvironmentVariables"]["ONEX_STATE_DIR"] == str(state_root)
+    hook = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; printf "%s" "$ONEX_STATE_DIR"',
+            "bash",
+            str(ROOT / "plugins/onex/hooks/scripts/onex-paths.sh"),
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert hook.returncode == 0, hook.stderr
+    assert hook.stdout == rendered["EnvironmentVariables"]["ONEX_STATE_DIR"]
+    assert not (Path(env["HOME"]) / "Library/LaunchAgents").exists()
+
+
+def test_fresh_profile_hook_default_differs_from_drainer_without_explicit_state(
+    installer: tuple[Path, dict[str, str]],
+) -> None:
+    """Onboarding exports OMNIBASE_PATH, so the documented state step is needed."""
+    script, env = installer
+    env.pop("ONEX_STATE_DIR", None)
+    env.pop("XDG_STATE_HOME", None)
+    env["OMNIBASE_PATH"] = env.pop("OMNI_HOME")
+    result = run(script, env, "--dry-run")
+    assert result.returncode == 0, result.stderr
+    rendered = plistlib.loads(result.stdout[result.stdout.index("<?xml") :].encode())
+    hook = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; printf "%s" "$ONEX_STATE_DIR"',
+            "bash",
+            str(ROOT / "plugins/onex/hooks/scripts/onex-paths.sh"),
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert hook.returncode == 0, hook.stderr
+    assert hook.stdout == str(Path(env["HOME"]) / ".local/state/omniclaude")
+    # The installer derives its workspace from its checkout, not OMNIBASE_PATH.
+    assert rendered["EnvironmentVariables"]["ONEX_STATE_DIR"] == str(
+        script.parents[2] / ".onex_state"
+    )
