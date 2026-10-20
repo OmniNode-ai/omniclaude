@@ -25,6 +25,9 @@ evidence_requirements:
   - kind: tests
     description: "A Gemini key's model from onex models default-model reaches onex models add --model with the key on stdin; a refused default stores nothing and names onex models add gemini --model; an onex that names a default for OpenRouter alone registers as before."
     command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k suggest -x"
+  - kind: tests
+    description: "The onboarding guide pins the script that passes a model for every key it registers."
+    command: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -k every_keys_default_model -x"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -36,5 +39,13 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k suggest -x"
+    binds_ac:
+      - AC3
+  - id: dod-omn21059-guide-pins-every-key-model
+    description: "ONBOARDING.md pins omniclaude e64119d6 (#2909) by commit and sha256, so the downloaded script passes a model for every key it registers: the script at that commit defines default_model for any provider and calls onex models default-model with the provider and the key on stdin."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -k every_keys_default_model -x"
     binds_ac:
       - AC3

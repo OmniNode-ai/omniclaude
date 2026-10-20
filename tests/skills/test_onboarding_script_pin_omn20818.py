@@ -114,7 +114,8 @@ def test_pinned_digest_is_the_script_at_the_pinned_commit() -> None:
 # OMN-20844 AC3 (amended): the pinned script names no OpenRouter model; phase 3
 # asks onex for the default its overlay declares, so the guide never goes stale
 # on a model id.
-OVERLAY_DEFAULT_MODEL_CALL = "models_cmd default-model openrouter"
+# OMN-21059: the call takes the provider as an argument, for every keyed provider.
+OVERLAY_DEFAULT_MODEL_CALL = "models_cmd default-model"
 
 
 def test_pinned_script_takes_the_openrouter_model_from_the_overlay() -> None:
@@ -173,3 +174,23 @@ def test_pin_carries_the_local_model_server_choice() -> None:
     assert shown.returncode == 0, shown.stderr.decode(errors="replace")
     assert b"--local-url" in shown.stdout
     assert b"local_url_add_args" in shown.stdout
+
+
+# OMN-21059 AC3: the merge commit of omniclaude#2909, the first script that passes a
+# model for every key it registers (a key with no chosen model is refused), from
+# `onex models default-model <provider>` with the key on stdin.
+EVERY_KEY_MODEL_SCRIPT_COMMIT = "e64119d6bb8bb35de633029c8753ae72de2ca5f2"
+
+
+def test_pin_carries_every_keys_default_model() -> None:
+    pinned = _pinned_commit()
+    _require_commit(pinned)
+    _require_commit(EVERY_KEY_MODEL_SCRIPT_COMMIT)
+    assert _is_ancestor(EVERY_KEY_MODEL_SCRIPT_COMMIT, pinned), (
+        f"ONBOARDING.md pins {pinned}, which does not contain "
+        f"{EVERY_KEY_MODEL_SCRIPT_COMMIT} (omniclaude#2909, OMN-21059)"
+    )
+    shown = _git("show", f"{pinned}:{SCRIPT_PATH}")
+    assert shown.returncode == 0, shown.stderr.decode(errors="replace")
+    assert b"default_model() { # provider key" in shown.stdout
+    assert b'models_cmd default-model "$1"' in shown.stdout
