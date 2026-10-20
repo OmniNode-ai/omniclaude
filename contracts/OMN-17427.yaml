@@ -195,6 +195,11 @@ requirements:
         statement: "the manifest has no REQUIRED row for Comment Render Delegation (OMN-18512), a context dev branch protection does not require (63 contexts, read 2026-10-19T15:19:07Z), and CI Summary still lists it in GATE_JOBS and STRICT_SUCCESS_JOBS -- falsifier: uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov -k gated_by_ci_summary_not_branch_protection fails over the merge base, whose manifest line 40 declares the row REQUIRED"
       - id: AC47
         statement: "a manifest change that names no context outside the dev contexts snapshot and drops no context it records needs no snapshot refresh; an added context outside the snapshot or a dropped context the snapshot records still needs the fixture in the same change -- falsifier: uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov -k 'manifest_change or manifest_required_pair or refresh_trigger_controls or required_checks_change_needs' fails over the merge base, which has none of the manifest_change tests"
+  - id: req-coderabbit-triage-skill-removed
+    statement: "The coderabbit_triage skill leaves omniclaude with its backing node, which omnimarket#4070 deleted, so the validate-skill-backing-node hook passes against an omnimarket pin past that merge."
+    acceptance:
+      - id: AC50
+        statement: "the coderabbit_triage skill directory and the coderabbit_triage hook handler are absent, and the distribution manifest, plugin-compat.yaml and the canonical file shape baseline name neither coderabbit_triage nor coderabbit-triage -- falsifier: uv run pytest tests/scripts/test_coderabbit_triage_removed_omn17427.py -q --no-cov fails over the merge base, where both paths exist"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -965,3 +970,29 @@ dod_evidence:
           '
     binds_ac:
       - AC48
+  - id: dod-coderabbit-triage-skill-removed
+    description: The coderabbit_triage skill and its hook handler are removed, and the distribution manifest, plugin-compat.yaml and the file shape baseline do not name them.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_coderabbit_triage_removed_omn17427.py -q --no-cov"
+    binds_ac:
+      - AC50
+  - id: dod-deploy-coderabbit-triage-skill-removed
+    description: A hosted runner uses only Python's standard library to check that the coderabbit_triage skill and hook handler are absent from this checkout and that plugin-compat.yaml and the distribution manifest do not name them.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: |
+          python3 -c '
+          from pathlib import Path
+          for name in ("plugins/onex/skills/coderabbit_triage", "src/omniclaude/hooks/handlers/coderabbit_triage.py"):
+              assert not Path(name).exists(), name
+          for name in ("plugins/onex/plugin-compat.yaml", "plugins/distribution_manifest.yaml"):
+              assert "coderabbit_triage" not in Path(name).read_text(encoding="utf-8").replace("-", "_"), name
+          print("PASS: coderabbit_triage skill and hook handler removed")
+          '
+    binds_ac:
+      - AC50
