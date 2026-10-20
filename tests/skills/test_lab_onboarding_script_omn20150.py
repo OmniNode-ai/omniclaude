@@ -512,9 +512,14 @@ def test_one_question_after_preflight_decides_docker(
 # ---------------------------------------------------------------------------
 
 
-def _function_body(name: str, source: Path = SCRIPT) -> str:
-    """The text of one top-level shell function, from its first line to its `}`."""
-    lines = source.read_text(encoding="utf-8").splitlines()
+def _function_body(name: str, source: Path | None = None) -> str:
+    """The text of one top-level shell function, from its first line to its `}`,
+    from ``source`` or else the script and its bootstrap handler."""
+    lines = (
+        source.read_text(encoding="utf-8")
+        if source
+        else SCRIPT.read_text(encoding="utf-8") + HANDLER.read_text(encoding="utf-8")
+    ).splitlines()
     start = next(i for i, line in enumerate(lines) if line.startswith(f"{name}() "))
     end = next(i for i in range(start, len(lines)) if lines[i] == "}")
     return "\n".join(lines[start : end + 1])
@@ -830,10 +835,12 @@ def _stored_keys(tmp_path: Path, *providers: str) -> None:
     onex.chmod(0o755)
 
 
-def _functions(*names: str, source: Path = SCRIPT) -> str:
-    """The named top-level functions of the script (or ``source``), as bash source."""
+def _functions(*names: str, source: Path | None = None) -> str:
+    """The named top-level functions of ``source``, or of the script and its
+    bootstrap handler, as bash source."""
+    text = source.read_text() if source else SCRIPT.read_text() + HANDLER.read_text()
     out, keep = [], False
-    for line in source.read_text().splitlines():
+    for line in text.splitlines():
         if any(line.startswith(f"{n}() {{") for n in names):
             keep = True
         if keep:

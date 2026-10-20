@@ -716,7 +716,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="542c:f4ac:cb32:6415:a19a:de21:9495:8bb8:6b65:1062:d5c5:0f60:5106:a533:d7cd:9768" root candidate \
+  local digest="a287:5b14:6553:a8a6:8dc6:ca4e:e523:154a:312b:4b6a:4923:5bf9:99e0:ad9d:e4f3:37aa" root candidate \
     download_digest="d176:b199:ae21:0c4d:0182:a465:8b61:8c4f:dc63:03ce:6de1:960a:2000:a346:e18b:3a64"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -1429,34 +1429,6 @@ set_result() { case "$1" in gemini) RES_GEMINI="$2" ;; openrouter) RES_OPENROUTE
 result_of() { case "$1" in gemini) echo "$RES_GEMINI" ;; openrouter) echo "$RES_OPENROUTER" ;; openai) echo "$RES_OPENAI" ;; ollama) echo "$RES_OLLAMA" ;; local) echo "$RES_LOCAL" ;; esac; }
 passed_models() { local p out=""; for p in $MODELS; do case "$(result_of "$p")" in pass*) out="$out $p" ;; esac; done; echo "${out# }"; }
 
-# One line per chosen model tested, so each gets its own result line:
-# provider|model|pass:<answered model> or provider|model|fail:<reason>
-MODEL_RES=""
-add_model_res() { MODEL_RES="${MODEL_RES}$1|$2|$3
-"; }
-
-# result_line provider -> "Gemini  ✓ answered (model)" and the like, one line
-# per chosen model when the developer chose several
-result_line() {
-  local p="$1" r label m n
-  r="$(result_of "$p")"; label="$(printf '%-11s' "$(provider_label "$p")")"
-  n="$(printf '%s' "$MODEL_RES" | grep -c "^$p|")"
-  if [ "$n" -gt 0 ]; then
-    printf '%s' "$MODEL_RES" | grep "^$p|" | while IFS='|' read -r _ m r; do
-      case "$r" in
-        pass:*) echo "$label ✓ answered (${r#pass:})" ;;
-        *) if [ "$n" -gt 1 ]; then echo "$label ✗ $m: ${r#fail:}"; else echo "$label ✗ ${r#fail:}"; fi ;;
-      esac
-    done
-    return 0
-  fi
-  case "$r" in
-    pass:*) echo "$label ✓ answered (${r#pass:})" ;;
-    fail:*) echo "$label ✗ ${r#fail:}" ;;
-    *) echo "$label skipped (no key)" ;;
-  esac
-}
-
 record_model_status() { # provider
   local r verdict
   r="$(result_of "$1")"
@@ -1470,92 +1442,6 @@ record_model_status() { # provider
 cause_of() {
   awk '/^Error: /{e=substr($0, 8)} /REFUSED|refused/{r=$0} END{if (e != "") print e; else if (r != "") print r}' |
     cut -c1-300
-}
-
-# model_result out errfile provider -> pass:<model> or fail:<reason>, from one
-# `onex models add` or `onex models test` run
-model_result() {
-  local line status reason cause
-  printf '%s\n' "$1" | grep -vE '^\{' >>"$LOG"
-  cat "$2" >>"$LOG" 2>/dev/null
-  line="$(printf '%s\n' "$1" | grep -E '^\{' | tail -n 1)"
-  status="$(receipt_field "$line" status)"
-  cause="$({ printf '%s\n' "$1" | grep -vE '^\{'; cat "$2" 2>/dev/null; } | cause_of)"
-  case "$status" in
-    passed) echo "pass:$(receipt_field "$line" model)" ;;
-    failed)
-      reason="$(receipt_field "$line" reason | cut -c1-300)"
-      case "$reason" in
-        ""|*"exited with status"*) [ -n "$cause" ] && reason="${reason:+$reason: }$cause" ;;
-      esac
-      echo "fail:$reason" ;;
-    not_set_up) echo "fail:no key is stored for it" ;;
-    *) echo "unknown:$cause" ;;
-  esac
-}
-
-# put_first provider model chosen -> the provider's routes try model first
-put_first() {
-  local m others=""
-  for m in $3; do [ "$m" = "$2" ] || others="$others $m"; done
-  if [ "$1" = "ollama" ]; then write_ollama_overrides "$2"
-  else models_cmd reorder "$1" "$2" $others >>"$LOG" 2>&1; fi
-}
-
-# onex_order provider -> the provider's models in the order onex holds them
-onex_order() {
-  models_cmd list --json 2>>"$LOG" | jq -r --arg p "$1" 'select(.provider? == $p) | (.models // []) | join(" ")' 2>/dev/null | tail -n 1
-}
-
-setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason>
-  local p="$1" key out err r models m first="" passed="" held
-  err="$RUN_DIR/models.err"
-  key="$(pending_key "$p")"; set_pending_key "$p" ""
-  models="$(chosen_models "$p")"
-  if [ -n "$key" ] && [ -z "$models" ]; then
-    # A key is never handed to onex without a model the developer chose.
-    key=""
-    set_result "$p" "fail:no $(provider_label "$p") model was chosen, so nothing was stored"
-    return 0
-  fi
-  if [ -n "$key" ] || [ "$p" = "local" ]; then
-    # Model ids hold no spaces. Unquoted on purpose: preflight admits a local server's URL and model only without spaces.
-    out="$(printf '%s' "$key" | models_cmd add "$p" --json $(for m in $models; do printf -- '--model %s ' "$m"; done) $(local_url_add_args "$p") 2>"$err")"
-  else
-    [ "$p" = "ollama" ] && [ -n "$models" ] && write_ollama_overrides "${models%% *}"
-    out="$(models_cmd test "$p" --json 2>"$err")"
-  fi
-  key=""
-  r="$(model_result "$out" "$err" "$p")"
-  case "$r" in unknown:*) r="fail:${r#unknown:}"; [ "$p" = "local" ] && { set_result "$p" "$r"; stop_local_url_unanswered; } ;; esac
-  [ "$r" = "fail:" ] && r="fail:onex models gave no result; see the log"
-  rm -f "$err"
-  if [ -z "$models" ] || [ "$p" = "local" ]; then set_result "$p" "$r"; return 0; fi
-  first="${models%% *}"
-  add_model_res "$p" "$first" "$r"
-  case "$r" in pass:*) passed="$r" ;; esac
-  # Each further chosen model gets its own delegation pinned to it: put it
-  # first, test, then put the developer's order back.
-  if [ "$models" != "$first" ] && { [ "$p" = "ollama" ] || [ -n "$(onex_order "$p")" ]; }; then
-    for m in ${models#* }; do
-      if put_first "$p" "$m" "$models"; then
-        out="$(models_cmd test "$p" --json 2>"$err")"
-        r="$(model_result "$out" "$err" "$p")"
-        case "$r" in unknown:*|fail:) r="fail:${r#*:}"; [ "$r" = "fail:" ] && r="fail:onex models gave no result; see the log" ;; esac
-      else
-        r="fail:it could not be put first to test it; see the log"
-      fi
-      rm -f "$err"
-      add_model_res "$p" "$m" "$r"
-      [ -z "$passed" ] && case "$r" in pass:*) passed="$r" ;; esac
-    done
-    put_first "$p" "$first" "$models" || say "  ⚠ Your $(provider_label "$p") order could not be put back; set it with: onex models reorder $p $models"
-  fi
-  if [ "$p" != "ollama" ]; then
-    held="$(onex_order "$p")"
-    [ -n "$held" ] && say "  onex holds your $(provider_label "$p") models in this order: $(comma_list "$held")"
-  fi
-  set_result "$p" "${passed:-$(printf '%s' "$MODEL_RES" | grep "^$p|$first|" | head -n 1 | cut -d'|' -f3-)}"
 }
 
 phase3() {
