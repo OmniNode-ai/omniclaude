@@ -17,4 +17,4 @@ concurrency:
 jobs:
   call:
     # self-gating-ok: reusable workflow in omnibase_core — not a required status check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/validate-docs.yml@b05c7d6f6336659d4965123bbc78a5d5b8822d70
+    uses: OmniNode-ai/omnibase_core/.github/workflows/validate-docs.yml@fc24698bfbab2fe58d26853217625f34f7156720
