@@ -1477,6 +1477,20 @@ openrouter_default_model() {
   return 1
 }
 
+# OMN-21059: a key runs only models its owner chose, so `onex models add` needs
+# --model for every provider. For a key other than OpenRouter's, onex suggests
+# the best match on that key's own model list, and the model is passed on (the
+# summary names it). An onex from before `suggest-model` picks the model at
+# registration itself, so no model is passed to it.
+# stdout: the suggested model, or nothing for an older onex (return 0), or the reason (return 1)
+suggested_model() { # provider key
+  local out
+  out="$(printf '%s' "$2" | models_cmd suggest-model "$1" 2>&1)" && { printf '%s\n' "$out" | tail -n 1; return 0; }
+  case "$out" in *"No such command"*) return 0 ;; esac
+  printf '%s\n' "$out" | sed -n 's/^Error: //p' | tail -n 1
+  return 1
+}
+
 # cause_of < text -> the line that says why a delegation failed: the last
 # "Error: ..." line, else the last refusal, else nothing. A summary such as "the
 # test delegation exited with status 1" is never the whole message on its own.
@@ -1493,6 +1507,12 @@ setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason
     if ! model="$(openrouter_default_model)"; then
       key=""
       set_result "$p" "fail:$(printf '%s' "${model:-no overlay declares a default OpenRouter model}" | cut -c1-240) Nothing was stored. To choose a model yourself: onex models add openrouter --model <model id>"
+      return 0
+    fi
+  elif [ -n "$key" ] && [ "$p" != "local" ]; then
+    if ! model="$(suggested_model "$p" "$key")"; then
+      key=""
+      set_result "$p" "fail:$(printf '%s' "${model:-onex could not suggest a model for this key}" | cut -c1-240) Nothing was stored. To choose a model yourself: onex models add $p --model <model id>"
       return 0
     fi
   fi
