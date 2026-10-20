@@ -85,9 +85,11 @@ lineage:
     Deliberately absent from the event. The ordered projection fold derives it
     from the PreToolUse carrying parent_tool_use_id.
   sidecar: >
+    Current harness sidecars can omit description and both origin fields;
+    known model, type and depth are retained without inventing a parent.
     SubagentStart has no spawning tool_use_id. ModelSubagentSidecar accepts the
     harness keys agentType, description, model, requestNonInteractive,
-    requestShape, spawnDepth, and exactly one of toolUseId or workflowPhase.
+    requestShape, spawnDepth, and at most one of toolUseId or workflowPhase.
     workflow_run_id is supplied by the caller from the workflow sidecar path.
 
 content_reference:

@@ -144,18 +144,6 @@ NEVER_REGISTERED: Mapping[str, str] = {
 _OUTSIDE_A_TURN = frozenset({"SessionStart", "SessionEnd", "Setup"})
 
 _CONTRACT_MODULE_NAME = "omniclaude_claude_hook_capture_contract_by_path"
-_SIDECAR_KEYS = frozenset(
-    {
-        "agentType",
-        "description",
-        "model",
-        "requestNonInteractive",
-        "requestShape",
-        "spawnDepth",
-        "toolUseId",
-        "workflowPhase",
-    }
-)
 _VERSION_RE = re.compile(r"(\d+)[.-](\d+)[.-](\d+)")
 
 
@@ -374,8 +362,8 @@ def read_sidecar(
 
     ``None`` becomes ``parent_tool_use_id: null``, which the projection reads
     as ``parent_resolution: unknown``, never as "main thread": the contract
-    keeps the two apart. Keys the harness adds later are dropped before
-    validation so a new sidecar field cannot turn every parent unknown.
+    keeps the two apart. The model ignores keys the harness adds later so a
+    new sidecar field cannot turn every parent unknown.
     """
     if not agent_id:
         return None
@@ -386,13 +374,19 @@ def read_sidecar(
             continue
         if not isinstance(raw, dict):
             continue
-        fields = {k: v for k, v in raw.items() if k in _SIDECAR_KEYS}
+        fields = raw | {"workflow_run_id": None}
         if path.parent.parent.name == "workflows":
             fields["workflow_run_id"] = path.parent.name
         try:
             return contract.ModelSubagentSidecar.model_validate(fields)
         except ValueError as exc:
-            _log(f"sidecar {path.name} did not validate: {type(exc).__name__}")
+            # Structured errors omit private input and ValueError context.
+            detail = getattr(exc, "errors", lambda **_: [])(
+                include_input=False, include_context=False, include_url=False
+            )
+            _log(
+                f"sidecar {path.name} did not validate: {type(exc).__name__}: {detail}"
+            )
             return None
     return None
 

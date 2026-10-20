@@ -137,7 +137,7 @@ class ModelSubagentSidecar(BaseModel):
 
     model_config = ConfigDict(
         frozen=True,
-        extra="forbid",
+        extra="ignore",
         populate_by_name=True,
     )
 
@@ -145,7 +145,8 @@ class ModelSubagentSidecar(BaseModel):
         min_length=1,
         validation_alias=AliasChoices("agent_type", "agentType"),
     )
-    description: str
+    # Current harness sidecars can omit the spawning call's label and origin.
+    description: str | None = None
     model: str = Field(min_length=1)
     request_non_interactive: bool = Field(
         validation_alias=AliasChoices(
@@ -173,10 +174,8 @@ class ModelSubagentSidecar(BaseModel):
     def validate_origin(self) -> ModelSubagentSidecar:
         has_tool = self.tool_use_id is not None
         has_workflow = self.workflow_phase is not None
-        if has_tool == has_workflow:
-            raise ValueError(
-                "sidecar requires exactly one of toolUseId or workflowPhase"
-            )
+        if has_tool and has_workflow:
+            raise ValueError("sidecar cannot carry both toolUseId and workflowPhase")
         if has_workflow and self.workflow_run_id is None:
             raise ValueError("workflowPhase requires caller-supplied workflow_run_id")
         if has_tool and self.workflow_run_id is not None:

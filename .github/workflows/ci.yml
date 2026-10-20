@@ -171,6 +171,8 @@ jobs:
           uv run python scripts/validation/validate_plugin_version_bump.py --base "$BASE_REF"
       # OMN-19513 (operator RULING 2026-10-15T04:24:42Z): hook and content capture stays
       # raw. SYNC with pre-commit hook 'raw-capture-guard'.
+      - name: Verify hook capture journals without network delivery (OMN-20110)
+        run: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py -q --no-cov
       - name: Verify hook and content capture stays raw (OMN-19513)
         run: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
       - name: Verify a bad plugin version is refused and one bot bump PR is kept (OMN-20710)

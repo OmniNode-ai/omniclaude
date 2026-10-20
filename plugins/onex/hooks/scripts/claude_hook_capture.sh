@@ -191,8 +191,10 @@ _HOOK_CAPTURE_PY="${HOOKS_LIB}/hook_claude_capture.py"
 
 # OMN-20110: every hook but SessionEnd (detached above, because the harness
 # ignores its exit code and kills it at ~1.5 s) captures in the FOREGROUND
-# through the bounded runner: own process group, a time budget, the group
-# killed on a miss, a blocking exit naming the cause and one operator alarm
+# through the bounded runner. The appender writes only to the local journal;
+# the resident drainer owns bus publication. The runner supplies a separate process
+# group and a time budget. A miss kills the group and produces a blocking
+# exit naming the cause and one operator alarm
 # per episode. The disowned capture this replaces is how thousands of stuck
 # captures were orphaned to ppid 1 on 2026-09-29 with nothing reporting it.
 source "${HOOKS_LIB}/emit_bounded.sh"
