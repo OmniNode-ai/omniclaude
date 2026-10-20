@@ -32,6 +32,15 @@ CANONICAL_SKILLS: frozenset[str] = frozenset(
     }
 )
 
+# Entries are temporary and must be deleted with the node.
+_ORPHAN_REMOVAL_PENDING: dict[str, str] = {
+    "coderabbit-triage": (
+        "OMN-17427: skill removed because omnimarket#4070 deleted its backing"
+        " node; removing the node's pyproject.toml entry point waits on the"
+        " uv.lock omnimarket pin matching the canonical clone."
+    ),
+}
+
 
 def _normalize(name: str) -> str:
     """Canonical slug: always hyphens, never underscores."""
@@ -84,11 +93,21 @@ def test_all_skills_have_nodes() -> None:
 
 @pytest.mark.unit
 def test_no_orphaned_nodes() -> None:
-    orphans = _get_node_skills() - _get_skills()
+    orphans = _get_node_skills() - _get_skills() - set(_ORPHAN_REMOVAL_PENDING)
     assert not orphans, (
         f"{len(orphans)} orphaned node(s) with no matching skill:\n"
         + "\n".join(f"  - {s}" for s in sorted(orphans))
     )
+
+
+@pytest.mark.unit
+def test_orphan_removal_pending_entries_are_still_orphans() -> None:
+    orphans = _get_node_skills() - _get_skills()
+    for skill in _ORPHAN_REMOVAL_PENDING:
+        assert skill in orphans, (
+            f"Stale _ORPHAN_REMOVAL_PENDING entry: {skill}. "
+            "Delete the stale entry once the node is removed."
+        )
 
 
 @pytest.mark.unit

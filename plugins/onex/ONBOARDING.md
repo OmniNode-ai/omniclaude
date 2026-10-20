@@ -43,8 +43,8 @@ Fetch the script, check it is the one this page was written against, then run it
 
 ```bash
 curl -fsSL -o lab-onboarding.sh \
-  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/2265616f6ca81e76e117671acca57fd5161b39b5/plugins/onex/skills/_bin/lab-onboarding.sh
-echo "6700bd05875b0000a4dd51c6c7a587fb06a1d96b2a8d319f2c754ec472667dac  lab-onboarding.sh" | shasum -a 256 -c -
+  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/e64119d6bb8bb35de633029c8753ae72de2ca5f2/plugins/onex/skills/_bin/lab-onboarding.sh
+echo "3d5d541ec07f7639d9d050e349890d1806a63d9202894845f258a9eaf94dad57  lab-onboarding.sh" | shasum -a 256 -c -
 bash lab-onboarding.sh
 ```
 
@@ -94,7 +94,9 @@ Every question comes before anything is installed:
    hidden. If this Mac already has a key stored you are offered it rather than asked again.
    OpenRouter runs the default model onex's overlay declares, so you are not asked for a
    model; change it any time with `onex models add openrouter --model <model id>`. The key
-   needs credit on its openrouter.ai account for a paid model.
+   needs credit on its openrouter.ai account for a paid model. A Gemini or OpenAI key runs
+   the model onex names as the best match on that key's own model list, shown in the result;
+   change it with `onex models add gemini --model <model id>` (or `openai`).
 2. **Whether to run the local stack in Docker.** "Not now" is a complete setup — you can
    add it later. In a macOS VM the question is skipped, because Docker cannot run there.
 

@@ -1,0 +1,47 @@
+---
+schema_version: 1.0.0
+ticket_id: OMN-21216
+title: Private callers' fork arms fall through to the fleet instead of a hosted label
+summary: omniclaude half. The private-repo placement gate reads github.event.repository.private (true for every repository
+  it judges, null under schedule so a guard on it fails closed there), and the kb-doc-gate reusable closes its hosted fork
+  arm to private callers and gives them their trusted variable with no hosted default.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-private-fork-arm-fleet
+  statement: A private repository's fork pull requests never resolve to a GitHub-hosted label, through its own workflows or
+    the shared reusables it calls.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: the placement gate passes a private caller of a reusable whose fork arm is guarded by `!github.event.repository.private`,
+      and still refuses the same arm under schedule -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py
+      -k repository_private fails'
+  - id: AC3
+    statement: 'AC3: the omniclaude kb-doc-gate and omnimarket merge-hold-gate reusables guard their hosted fork arm with
+      `!github.event.repository.private` and give a private caller an arm with no hosted default -- falsifier: a private caller''s
+      arm in either reusable names or defaults to a hosted label'
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn21216-gate-reads-repository-private
+  description: A reusable whose fork arm is guarded by !github.event.repository.private passes a private caller; the same
+    guard under schedule is still refused.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -o addopts='' -k repository_private
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC1
+- id: dod-omn21216-kb-doc-gate-private-arm
+  description: The kb-doc-gate reusable's private arm takes the trusted variable with no hosted default.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: grep -q '|| github.event.repository.private' .github/workflows/kb-doc-gate-reusable.yml
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC3

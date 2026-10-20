@@ -127,10 +127,11 @@ class TestPluginCompatYamlNodes:
             )
 
     def test_minimum_node_count(self, compat_doc: dict) -> None:
-        # DoD requires exactly 46 R-class nodes declared (OMN-16301: node_doc_freshness_sweep
-        # removed -- omnimarket#2100/OMN-16191 deleted the node itself, this was a dangling entry)
+        # DoD requires exactly 45 R-class nodes declared (OMN-16301: node_doc_freshness_sweep
+        # removed -- omnimarket#2100/OMN-16191 deleted the node itself, this was a dangling entry;
+        # OMN-17427: coderabbit_triage removed -- omnimarket#4070 deleted node_coderabbit_triage)
         node_count = len(compat_doc["nodes"])
-        assert node_count == 46, (
-            f"Expected exactly 46 R-class nodes declared, got {node_count}. "
+        assert node_count == 45, (
+            f"Expected exactly 45 R-class nodes declared, got {node_count}. "
             "Add missing nodes to plugin-compat.yaml."
         )

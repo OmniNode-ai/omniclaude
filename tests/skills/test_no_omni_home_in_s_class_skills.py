@@ -17,7 +17,6 @@ S_CLASS_SKILLS = [
     "baseline",
     "checkpoint",
     "ci_watch",
-    "coderabbit_triage",
     "create_followup_tickets",
     "create_ticket",
     "decision_store",

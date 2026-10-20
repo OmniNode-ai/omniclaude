@@ -93,7 +93,7 @@ Skills that create PRs, dispatch agent teams, trigger releases, or write to exte
 ```
 epic_team, build_loop, release, redeploy, merge_sweep, overnight,
 ticket_pipeline, ticket_work, create_ticket, create_followup_tickets,
-plan_to_tickets, wave_scheduler, dispatch_worker, coderabbit_triage,
+plan_to_tickets, wave_scheduler, dispatch_worker,
 pr_polish, pr_review, pr_review_bot, auto_merge, dep_cascade_dedup,
 dashboard_sweep, local_review, refill_sprint, generate_node,
 adversarial_pipeline, multi_agent, integration_sweep, ticketing_epic_org,

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import json
 import runpy
 from pathlib import Path
@@ -378,6 +379,32 @@ def test_contract_and_schedule_wire_the_native_bus_worker() -> None:
     assert "create-github-app-token" in mint["uses"]
     assert mint["with"]["permission-actions"] == "read"
     assert mint["with"]["permission-pull-requests"] == "write"
+
+
+def test_monitor_provisions_its_contract_topics_before_subscribing() -> None:
+    job = _host_workflow()["jobs"]["dev-head-red-alert"]
+    runs = "\n".join(step.get("run", "") for step in job["steps"])
+    assert "TopicProvisioner" in runs
+    assert "ensure_topic_exists" in runs
+    assert (
+        runs.index('os.environ["KAFKA_SASL_MECHANISM"]')
+        < runs.index("ensure_topic_exists")
+        < runs.index("run_monitor_tick.run()")
+    )
+    assert "subscribe_topics" in runs
+    assert "publish_topics" in runs
+    assert "onex.cmd.omniclaude.dev-head-monitor.v1" not in runs
+
+
+def test_locked_infra_provisioner_has_the_interface_the_monitor_calls() -> None:
+    from omnibase_infra.event_bus.service_topic_manager import TopicProvisioner
+
+    assert "contracts_root" in inspect.signature(TopicProvisioner.__init__).parameters
+    assert (
+        "topic_name"
+        in inspect.signature(TopicProvisioner.ensure_topic_exists).parameters
+    )
+    assert inspect.iscoroutinefunction(TopicProvisioner.ensure_topic_exists)
 
 
 def test_monitor_survives_the_occ_heal_workflow_retirement() -> None:
