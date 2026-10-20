@@ -1928,6 +1928,41 @@ def test_private_no_hosted_refuses_fork_in_called_workflow(tmp_path: Path) -> No
     )
 
 
+# The shared-workflow shape for a reusable called by public AND private
+# repositories: the fork arm keeps its hosted default for public callers, and
+# `!github.event.repository.private` makes it unreachable from a private one.
+PRIVATE_GUARDED_SEAM_EXPRESSION = GUARDED_SEAM_EXPRESSION.replace(
+    "  (contains(", "  (!github.event.repository.private &&\n   contains(", 1
+)
+
+
+def test_a_fork_arm_guarded_by_repository_private_passes_a_private_caller(
+    tmp_path: Path,
+) -> None:
+    """A private caller never reaches the public arm, whatever its fallback."""
+    module = _module()
+    pinned = CALLED.rsplit("@", 1)[0] + "@" + "a" * 40
+    root = _tree(tmp_path, "caller.yml", CALLER.replace(CALLED, pinned))
+    called = _seam_job(PRIVATE_GUARDED_SEAM_EXPRESSION, ("workflow_call",))
+    assert (
+        _run_delegating(module, root, dict(SEAM_VARIABLES), tmp_path, {pinned: called})
+        == 0
+    )
+
+
+def test_a_repository_private_guard_on_schedule_fails_closed(tmp_path: Path) -> None:
+    """A schedule payload carries no repository, so the guard cannot excuse it."""
+    module = _module()
+    expression = (
+        "${{ !github.event.repository.private"
+        " && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '[\"ubuntu-latest\"]')"
+        " || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || "
+        '\'["self-hosted","omnibase-ci"]\') }}'
+    )
+    root = _tree(tmp_path, "ci.yml", _seam_job(expression, ("schedule",)))
+    assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 1
+
+
 @pytest.mark.parametrize(
     "runs_on",
     [

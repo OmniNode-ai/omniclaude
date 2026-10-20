@@ -205,6 +205,11 @@ requirements:
     acceptance:
       - id: AC52
         statement: "the github-actions update in .github/dependabot.yml ignores exactly receipt-gate.yml, imperative-contract-guard.yml and the validate-boundaries action of OmniNode-ai/omnibase_core, each still pinned by one full SHA that a tests/ci file asserts -- falsifier: uv run pytest tests/ci/test_dependabot_ignores_hand_pinned_core_refs_omn17427.py -q --no-cov fails over the merge base, which has no ignore list"
+  - id: req-coderabbit-triage-skill-removed
+    statement: "The coderabbit_triage skill leaves omniclaude with its backing node, which omnimarket#4070 deleted, so the validate-skill-backing-node hook passes against an omnimarket pin past that merge."
+    acceptance:
+      - id: AC50
+        statement: "the coderabbit_triage skill directory and the coderabbit_triage hook handler are absent; the distribution manifest, plugin-compat.yaml and the canonical file shape baseline name neither coderabbit_triage nor coderabbit-triage; the orchestrator node stays exempted in tests/unit/nodes/test_skill_node_coverage.py _ORPHAN_REMOVAL_PENDING until its entry point is removed -- falsifier: uv run pytest tests/scripts/test_coderabbit_triage_removed_omn17427.py -q --no-cov fails over the merge base, where both paths exist"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1026,3 +1031,29 @@ dod_evidence:
           '
     binds_ac:
       - AC52
+  - id: dod-coderabbit-triage-skill-removed
+    description: The coderabbit_triage skill and its hook handler are removed, and the distribution manifest, plugin-compat.yaml and the file shape baseline do not name them.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_coderabbit_triage_removed_omn17427.py -q --no-cov"
+    binds_ac:
+      - AC50
+  - id: dod-deploy-coderabbit-triage-skill-removed
+    description: A hosted runner uses only Python's standard library to check that the coderabbit_triage skill and hook handler are absent from this checkout and that plugin-compat.yaml and the distribution manifest do not name them.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: |
+          python3 -c '
+          from pathlib import Path
+          for name in ("plugins/onex/skills/coderabbit_triage", "src/omniclaude/hooks/handlers/coderabbit_triage.py"):
+              assert not Path(name).exists(), name
+          for name in ("plugins/onex/plugin-compat.yaml", "plugins/distribution_manifest.yaml"):
+              assert "coderabbit_triage" not in Path(name).read_text(encoding="utf-8").replace("-", "_"), name
+          print("PASS: coderabbit_triage skill and hook handler removed")
+          '
+    binds_ac:
+      - AC50

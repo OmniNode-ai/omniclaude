@@ -43,7 +43,6 @@ ONEX_SKILL_SHIMS = (
     "data_flow_sweep",
     "auto_merge",
     "build_loop",
-    "coderabbit_triage",
     "compliance_sweep",
     "coverage_sweep",
     "create_ticket",

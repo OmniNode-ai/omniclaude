@@ -145,12 +145,6 @@ nodes:
         schema_version: v1
         role: subscribe
 
-  - node: node_coderabbit_triage
-    topics:
-      - name: onex.cmd.omnimarket.coderabbit-triage-start.v1
-        schema_version: v1
-        role: subscribe
-
   - node: node_compliance_sweep
     topics:
       - name: onex.cmd.omnimarket.compliance-sweep-start.v1
