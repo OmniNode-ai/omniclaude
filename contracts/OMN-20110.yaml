@@ -51,12 +51,17 @@ emergency_bypass:
   justification: ''
   follow_up_ticket_id: ''
 dod_evidence:
+# Each retained invariant also requires this PR's foreground path to reach the
+# journal. The inherited checks alone pass before capture stopped emitting inline.
 - id: dod-omn20110-ac1
   description: journal append performs no directory scan, so its cost does not grow with the backlog, and the bound is enforced by the drainer
   source: manual
   checks:
   - check_type: test_passes
     check_value: uv run pytest tests/hooks/test_hook_emit_journal.py -q -k append_does_not_scan
+    cwd: ${OMNI_HOME}/omniclaude
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py::test_append_journals_before_any_bus_emit -q --no-cov
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC1
@@ -66,6 +71,9 @@ dod_evidence:
   checks:
   - check_type: test_passes
     check_value: uv run pytest tests/hooks/test_hook_emit_journal.py -q -k list_pending_limit
+    cwd: ${OMNI_HOME}/omniclaude
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py::test_append_journals_before_any_bus_emit -q --no-cov
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC2
@@ -77,6 +85,9 @@ dod_evidence:
   - check_type: test_passes
     check_value: uv run pytest tests/hooks/test_hook_emit_bounded.py -q -k lock_held
     cwd: ${OMNI_HOME}/omniclaude
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py::test_append_journals_before_any_bus_emit -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC3
 - id: dod-omn20110-ac4
@@ -87,6 +98,9 @@ dod_evidence:
   - check_type: test_passes
     check_value: uv run pytest tests/hooks/test_hook_emit_bounded.py -q -k alarm_once_per_episode
     cwd: ${OMNI_HOME}/omniclaude
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py::test_append_journals_before_any_bus_emit -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC4
 - id: dod-omn20110-ac5
@@ -96,6 +110,9 @@ dod_evidence:
   checks:
   - check_type: test_passes
     check_value: uv run pytest tests/hooks/test_hook_emit_bounded.py -q -k no_disowned_emit
+    cwd: ${OMNI_HOME}/omniclaude
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py::test_append_journals_before_any_bus_emit -q --no-cov
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
   - AC5
