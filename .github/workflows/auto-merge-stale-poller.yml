@@ -281,9 +281,11 @@ jobs:
           PY
           )
           uv run --no-project --with "${packages[0]}" --with "${packages[1]}" --with click python - <<'PY'
-          import importlib.util, json, logging, os, sys, tempfile, uuid
+          import asyncio, importlib.util, json, logging, os, sys, tempfile, uuid
+          import yaml
           from pathlib import Path
           from omnibase_core.runtime.runtime_local import RuntimeLocal
+          from omnibase_infra.event_bus.service_topic_manager import TopicProvisioner
 
           logging.basicConfig(level=logging.INFO)
           path = Path(".monitor-bus/scripts/publish_occ_autobind_command.py")
@@ -307,6 +309,23 @@ jobs:
           os.environ["KAFKA_SECURITY_PROTOCOL"] = protocol
           os.environ["KAFKA_SASL_MECHANISM"] = mechanism
           os.environ["KAFKA_ENVIRONMENT"] = "dev"
+          # OMN-17427: this node is hosted only here, so no deployed runtime
+          # provisions its contract topics and the dev broker does not auto-create
+          # them; the run provisions them itself before subscribing.
+          contract_path = Path("src/omniclaude/nodes/node_dev_head_monitor_effect/contract.yaml")
+          contract = yaml.safe_load(contract_path.read_text())
+          topics = contract["event_bus"]["subscribe_topics"] + contract["event_bus"]["publish_topics"]
+
+          async def provision_monitor_topics():
+              provisioner = TopicProvisioner(broker, contracts_root=contract_path.parent)
+              missing = []
+              for topic in topics:
+                  if not await provisioner.ensure_topic_exists(topic_name=topic):
+                      missing.append(topic)
+              if missing:
+                  raise SystemExit("dev CI bus did not confirm the monitor contract topics ready: " + ", ".join(missing))
+
+          asyncio.run(provision_monitor_topics())
           with tempfile.TemporaryDirectory(prefix="dev-head-monitor-") as state:
               request = Path(state) / "request.json"
               request.write_text(json.dumps({"correlation_id": str(uuid.uuid4()), "dry_run": os.environ["DRY_RUN"] == "true"}))
