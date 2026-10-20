@@ -195,6 +195,11 @@ requirements:
         statement: "the manifest has no REQUIRED row for Comment Render Delegation (OMN-18512), a context dev branch protection does not require (63 contexts, read 2026-10-19T15:19:07Z), and CI Summary still lists it in GATE_JOBS and STRICT_SUCCESS_JOBS -- falsifier: uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q --no-cov -k gated_by_ci_summary_not_branch_protection fails over the merge base, whose manifest line 40 declares the row REQUIRED"
       - id: AC47
         statement: "a manifest change that names no context outside the dev contexts snapshot and drops no context it records needs no snapshot refresh; an added context outside the snapshot or a dropped context the snapshot records still needs the fixture in the same change -- falsifier: uv run pytest tests/ci/test_ci_summary_gate.py -q --no-cov -k 'manifest_change or manifest_required_pair or refresh_trigger_controls or required_checks_change_needs' fails over the merge base, which has none of the manifest_change tests"
+  - id: req-dependabot-skips-hand-pinned-core-refs
+    statement: Dependabot does not bump the three omnibase_core refs omniclaude re-pins by hand and asserts in tests/ci, so its actions-group pull request is not red on those assertions.
+    acceptance:
+      - id: AC50
+        statement: "the github-actions update in .github/dependabot.yml ignores exactly receipt-gate.yml, imperative-contract-guard.yml and the validate-boundaries action of OmniNode-ai/omnibase_core, each still pinned by one full SHA that a tests/ci file asserts -- falsifier: uv run pytest tests/ci/test_dependabot_ignores_hand_pinned_core_refs_omn17427.py -q --no-cov fails over the merge base, which has no ignore list"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -965,3 +970,29 @@ dod_evidence:
           '
     binds_ac:
       - AC48
+  - id: dod-dependabot-skips-hand-pinned-core-refs
+    description: A test reads the Dependabot configuration and the workflows and checks that the ignore list names exactly the three hand-pinned omnibase_core refs and that each is still pinned and test-asserted.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_dependabot_ignores_hand_pinned_core_refs_omn17427.py -q --no-cov"
+    binds_ac:
+      - AC50
+  - id: dod-deploy-dependabot-skips-hand-pinned-core-refs
+    description: A hosted runner uses only Python's standard library to check that .github/dependabot.yml names each hand-pinned omnibase_core ref as an ignored dependency.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: |
+          python3 -c '
+          from pathlib import Path
+          text = Path(".github/dependabot.yml").read_text(encoding="utf-8")
+          assert "ignore:" in text
+          for name in ("OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml", "OmniNode-ai/omnibase_core/.github/workflows/imperative-contract-guard.yml", "OmniNode-ai/omnibase_core/.github/actions/validate-boundaries"):
+              assert "- dependency-name: \"" + name + "\"" in text, name
+          print("PASS: Dependabot ignores the three hand-pinned omnibase_core refs")
+          '
+    binds_ac:
+      - AC50
