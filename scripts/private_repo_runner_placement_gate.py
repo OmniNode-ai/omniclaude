@@ -565,6 +565,17 @@ def _value(fragment: str, context: EventContext, slug: str, where: str) -> objec
         return slug
     if lowered == "github.repository_owner":
         return slug.split("/", 1)[0]
+    if lowered == "github.event.repository.private":
+        # Every repository this gate judges is private or internal -- a public
+        # one is answered OK before any arm is read -- and GitHub reports both
+        # as `private: true`. A shared workflow can therefore keep a hosted arm
+        # for its public callers behind `!github.event.repository.private`, and
+        # that arm is unreachable from a private caller. A `schedule` payload
+        # is read as carrying no repository object, so the field is null there
+        # and the negation holds: fail-closed, the hosted arm stays reachable.
+        if context.event_name == "schedule":
+            return MISSING
+        return True
     if lowered == "github.event.pull_request.head.repo.full_name":
         return context.head_field("full_name", slug)
     if lowered == "github.event.pull_request.head.repo.fork":
