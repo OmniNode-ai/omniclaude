@@ -10,9 +10,9 @@ to Kafka inline; profiling put 31.08s of a 31.65s ``handle()`` in a lazily-
 imported ``omnibase_infra`` chain that builds ~2,497 Pydantic classes. With
 one such process forked per tool call, 14 ran concurrently at ~270% CPU.
 
-Here the hook lands the event on the host's local bus with one stdlib HTTP
-POST (OMN-19513, ``handler_hook_local_bus_publish``) and journals it only
-while that bus is unreachable or the host declares none.
+The hook always journals locally and returns. Only the resident drainer
+publishes to the bus: even a short HTTP timeout does not bound DNS resolution,
+and a remote acknowledgement must never consume the hook's time budget.
 
 Deliberately stdlib-only and free of any ``omnibase_infra`` / ``omnimarket``
 import -- see ``hook_emit_journal`` for why that constraint is load-bearing
@@ -28,7 +28,6 @@ may not fail silently.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -40,23 +39,6 @@ import hook_actor  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
 import hook_lane_attribution as lane_attribution  # noqa: E402
 import hook_turn_id  # noqa: E402
-
-# OMN-19513: the stdlib handler that lands an event on the host's local bus. A
-# missing file (a plugin tree without src/) or a load failure means the journal.
-_BUS_HANDLER = (
-    Path(__file__).resolve().parents[4]
-    / "src/omniclaude/handlers/handler_hook_local_bus_publish.py"
-)
-
-
-def _landed_on_local_bus(target: Path, event: dict[str, Any]) -> bool:
-    """True when the event is on the local bus, or quarantined there as too large."""
-    spec = importlib.util.spec_from_file_location("hook_local_bus", _BUS_HANDLER)
-    if spec is None or spec.loader is None or not _BUS_HANDLER.is_file():
-        return False
-    bus = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(bus)
-    return bool(bus.landed(bus.ModelHookBusPublishRequest(journal_dir=target, **event)))
 
 
 def _parse_payload(raw: str) -> dict[str, Any]:
@@ -113,11 +95,8 @@ def append_event(
     Raises whatever the journal raises; :func:`main` turns it into exit 1.
     """
     target = Path(journal_dir) if journal_dir else journal.default_journal_dir()
-    # Lane attribution is merged here rather than in the shell hook so the
-    # registry read costs nothing on the foreground path: this process is
-    # already forked and disowned by the time it runs. Caller-supplied
-    # lane keys are never trusted -- the registry is the authority, so an
-    # existing key is overwritten rather than preserved.
+    # The registry is the authority for lane attribution. Caller-supplied
+    # lane keys are overwritten rather than trusted.
     payload.update(
         lane_attribution.attribution_fields(
             cwd,
@@ -151,7 +130,7 @@ def append_event(
     }
     if _deferred_by_status(event_type, drainer_status):
         journal.defer(target, **event)
-    elif not _landed_on_local_bus(target, event):
+    else:
         journal.append(target, **event)
     return turn_id
 

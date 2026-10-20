@@ -93,6 +93,14 @@ repos:
         files: '^(\.github/workflows/(plugin-version-bump|ci)\.yml|scripts/validation/validate_plugin_version_bump\.py|tests/ci/test_plugin_version_bump_gate\.py|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
+      - id: hook-capture-fast-path
+        name: Hook capture journals without network delivery (OMN-20110)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/unit/hooks/test_hook_capture_failures_omn20110.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(src/omniclaude/hooks/model_claude_hook_event\.py|plugins/onex/hooks/(lib/(hook_claude_capture|hook_emit_append)\.py|scripts/claude_hook_capture\.sh)|tests/(unit/hooks/test_hook_capture_failures_omn20110\.py|fixtures/hooks/claude_hook_capture/sidecars/.*)|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: raw-capture-guard
         name: Hook and content capture stays raw (OMN-19513)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov

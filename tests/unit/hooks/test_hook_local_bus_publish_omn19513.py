@@ -247,13 +247,13 @@ def _journalled(jdir: Path) -> list[Path]:
     return sorted(jdir.glob("*.json")) if jdir.is_dir() else []
 
 
-def test_append_lands_on_the_local_bus_and_journals_nothing(
+def test_append_journals_without_calling_even_a_healthy_local_bus(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, proxy: tuple[_Proxy, str]
 ) -> None:
     state, url = proxy
     jdir = _append(tmp_path, monkeypatch, url)
-    assert len(state.requests) == 1
-    assert _journalled(jdir) == []
+    assert state.requests == []
+    assert len(_journalled(jdir)) == 1
 
 
 def test_append_journals_while_the_local_bus_is_unreachable(

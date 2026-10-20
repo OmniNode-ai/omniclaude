@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "spawnDepth": 1,
+  "requestShape": "foreground",
+  "requestNonInteractive": true,
+  "model": "fixture-model"
+}
