@@ -70,7 +70,7 @@ dod_evidence:
       - AC2
       - AC3
       - AC4
-  - id: dod-omn21058-openrouter-chosen-from-list-recommended
+  - id: dod-omn21058-openrouter-chosen-recommended
     description: "After the #2721 fixed-model change, OpenRouter is again chosen by number from the key's own list, now with the catalogue's preferred models first and marked recommended; the choice reaches onex models add --model, no key is added without a chosen model, an unreadable list ends OpenRouter alone, and an unattended run with a stored key asks nothing. Providers are local stand-ins."
     source: manual
     checks:
@@ -99,3 +99,12 @@ dod_evidence:
     binds_ac:
       - AC8
       - AC9
+  - id: dod-omn21058-guide-models-in-order
+    description: "ONBOARDING.md says that after each key, and for Ollama, onboarding lists the models from the provider's own list (OpenRouter's free ones; for Ollama those this Mac has the memory for), the recommended first, and the developer picks one or more by number in order with nothing picked for them; the overlay default is gone. The pin to the script that does follows once that script is on dev."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q -x --no-cov -k models_in_order"
+    binds_ac:
+      - AC5
+      - AC10
