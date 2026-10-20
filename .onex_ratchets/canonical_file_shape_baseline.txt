@@ -754,7 +754,6 @@ src/omniclaude/hooks/handler_incremental_extraction.py
 src/omniclaude/hooks/handler_session_cost_emitter.py
 src/omniclaude/hooks/handlers/__init__.py
 src/omniclaude/hooks/handlers/audit_dispatch_validator.py
-src/omniclaude/hooks/handlers/coderabbit_triage.py
 src/omniclaude/hooks/handlers/context_scope_auditor.py
 src/omniclaude/hooks/handlers/handler_delegation_prompt_builder.py
 src/omniclaude/hooks/handlers/handler_session_limit_transfer.py

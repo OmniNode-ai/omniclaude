@@ -172,15 +172,6 @@ components:
     the gateway, so the node that serves it runs platform-side and is not a locally
     resolvable plugin component. Beta, not stable: this is a new customer-facing surface and the stable set is
     frozen to [''delegate''] pending Phase 2 admission proof.'
-- id: coderabbit_triage
-  kind: skill
-  exposure: beta
-  owning_package: onex-skills-beta
-  surface_class: dispatch
-  path: plugins/onex/skills/coderabbit_triage/SKILL.md
-  backing_nodes:
-  - node_coderabbit_triage
-  rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_coderabbit_triage'']. Beta-CANDIDATE pending Phase 2 admission proof.'
 - id: comment_sweep
   kind: skill
   exposure: hidden
