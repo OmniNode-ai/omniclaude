@@ -440,6 +440,211 @@ shell_runs_workspace_onex() {
   is_workspace_onex "$path" || { echo "a new terminal runs $path"; return 1; }
 }
 
+# ---------------------------------------------------------------------------
+# The models for each key, and for Ollama (OMN-21058). After each key,
+# onboarding reads the models that key can use from the provider's own list,
+# numbered, and the developer picks one or more in the order to try them; that
+# order is the key's routing order in onex (`onex models add --model`,
+# repeated, the OMN-21059 path). Nothing is picked for the developer: an empty
+# or out-of-range answer asks again. The models onex's provider catalogue
+# prefers for the key (its `model_preference`, newest generation of each
+# family) are listed first and recommended, so nobody needs to know a model id.
+#
+# Where the list lives (`models_url`) and the preference are the provider
+# catalogue's, the rows `onex models add` checks a choice against. Preflight
+# runs before the workspace is cloned, so it reads the catalogue from the
+# omnimarket clone when there is one, else from omnimarket's default branch.
+# Ollama's list is the model config's `ollama` block: the models this Mac has
+# the memory for, the one sized to it recommended.
+# ---------------------------------------------------------------------------
+CATALOGUE_REL="omnimarket/src/omnimarket/configs/byok_provider_backends.v1.yaml"
+MODEL_CONFIG_REL="omnimarket/src/omnimarket/configs/bifrost_delegation.yaml"
+CHOSEN_GEMINI=""; CHOSEN_OPENROUTER=""; CHOSEN_OPENAI=""; CHOSEN_OLLAMA=""
+MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""
+
+chosen_models() { case "$1" in gemini) echo "$CHOSEN_GEMINI" ;; openrouter) echo "$CHOSEN_OPENROUTER" ;; openai) echo "$CHOSEN_OPENAI" ;; ollama) echo "$CHOSEN_OLLAMA" ;; esac; }
+set_chosen_models() { case "$1" in gemini) CHOSEN_GEMINI="$2" ;; openrouter) CHOSEN_OPENROUTER="$2" ;; openai) CHOSEN_OPENAI="$2" ;; ollama) CHOSEN_OLLAMA="$2" ;; esac; }
+comma_list() { printf '%s' "$1" | sed 's/ /, /g'; }
+
+omnimarket_file() { # rel seam -> the file: the test seam, else the workspace clone, else omnimarket's default branch
+  if [ -n "$2" ]; then cat "$2" 2>/dev/null
+  elif [ -f "$WORKSPACE/$1" ]; then cat "$WORKSPACE/$1"
+  else curl -fsS -m 30 "https://raw.githubusercontent.com/OmniNode-ai/omnimarket/HEAD/${1#omnimarket/}" 2>/dev/null; fi
+}
+
+# catalogue_row provider -> "url <models_url>", then "pattern <regex>" for each
+# model_preference entry in order, from the provider's first row
+catalogue_row() {
+  omnimarket_file "$CATALOGUE_REL" "${ONBOARD_TEST_CATALOGUE:-}" | awk -v want="$1" '
+    /^  - provider:/ { if (seen) exit; v = $3; gsub(/["'"'"']/, "", v); row = (v == want); if (row) seen = 1; next }
+    !row { next }
+    /^    models_url:/ { v = $2; gsub(/["'"'"']/, "", v); print "url " v; next }
+    /^      - pattern:/ { v = $0; sub(/^      - pattern: */, "", v); gsub(/^["'"'"']|["'"'"']$/, "", v); print "pattern " v }'
+}
+
+# The catalogue's full-match Python regex as an ERE: named and non-capturing
+# groups become plain groups.
+to_ere() { printf '^(%s)$' "$(printf '%s' "$1" | sed -e 's/(?P<[A-Za-z_]*>/(/g' -e 's/(?:/(/g')"; }
+
+offered_models() { # provider < ids -> the chat models worth offering, one per line
+  case "$1" in
+    openrouter) grep -E ':free$' ;;  # the free ones: no credit needed; the full list runs to hundreds
+    gemini) grep -E '^gemini-' | grep -vE 'embedding|tts|image|audio|live|native' ;;
+    openai) grep -E '^(gpt-|o[0-9]|chatgpt-)' | grep -vE 'audio|realtime|tts|transcribe|image|search|instruct|embedding|moderation' ;;
+    *) cat ;;
+  esac
+}
+
+# list_recommended_first ids patterns -> MODEL_LIST (the newest match of each
+# preferred family in preference order, then the rest sorted) and RECOMMENDED
+# (their numbers, comma-separated)
+list_recommended_first() {
+  local pat m best="" i=0
+  while IFS= read -r pat; do
+    [ -n "$pat" ] || continue
+    m="$(printf '%s\n' "$1" | grep -E "$(to_ere "$pat")" | sort -V -r | head -n 1)"
+    [ -n "$m" ] || continue
+    printf '%s\n' "$best" | grep -qxF "$m" && continue
+    best="${best}${best:+
+}$m"
+  done <<EOF
+$2
+EOF
+  MODEL_LIST="$best"
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    i=$((i + 1)); RECOMMENDED="${RECOMMENDED}${RECOMMENDED:+,}$i"
+  done <<EOF
+$best
+EOF
+  m="$(printf '%s\n' "$1" | grep -vxF "${best:-/}" | grep .)"
+  [ -n "$m" ] && MODEL_LIST="${MODEL_LIST}${MODEL_LIST:+
+}$m"
+  return 0
+}
+
+# key_models provider key -> MODEL_LIST and RECOMMENDED; 1 with MODEL_LIST_ERR
+# (the provider's own words when it gave any) when the list cannot be read or
+# offers nothing. The key goes to its provider alone, in a header read from
+# stdin, so it never appears in an argument.
+key_models() {
+  local p="$1" row url out code body reason ids
+  MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""
+  row="$(catalogue_row "$p")"
+  url="$(printf '%s\n' "$row" | sed -n 's/^url //p' | head -n 1)"
+  if [ -z "$url" ]; then
+    MODEL_LIST_ERR="onex's provider catalogue, which names where its model list is, could not be read"
+    return 1
+  fi
+  if ! out="$(printf 'Authorization: Bearer %s\n' "$2" | curl -sS -m 30 -H @- -w '\n%{http_code}' "$url" 2>&1)"; then
+    MODEL_LIST_ERR="its model list could not be reached ($(printf '%s\n' "$out" | tail -n 1 | sed 's/^curl: ([0-9]*) //' | cut -c1-200))"
+    return 1
+  fi
+  code="$(printf '%s\n' "$out" | tail -n 1)"
+  body="$(printf '%s\n' "$out" | sed '$d')"
+  if [ "$code" != "200" ]; then
+    reason="$(printf '%s' "$body" | grep -oE '"message"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed -E 's/^"message"[[:space:]]*:[[:space:]]*"(.*)"$/\1/' | cut -c1-200)"
+    MODEL_LIST_ERR="its model list answered HTTP $code${reason:+: $reason}"
+    return 1
+  fi
+  ids="$(printf '%s' "$body" | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]+"' | sed -E 's/^.*"([^"]+)"$/\1/' | sed 's#^models/##' | offered_models "$p" | sort -u)"
+  if [ -z "$ids" ]; then
+    if [ "$p" = "openrouter" ]; then MODEL_LIST_ERR="its model list names no free model for this key"
+    else MODEL_LIST_ERR="its model list names no chat model for this key"; fi
+    return 1
+  fi
+  list_recommended_first "$ids" "$(printf '%s\n' "$row" | sed -n 's/^pattern //p')"
+}
+
+# ollama_models -> MODEL_LIST: the model config's Ollama models this Mac has
+# the memory for, largest first, the first (the one sized to this Mac)
+# recommended; 1 with MODEL_LIST_ERR when there is none.
+ollama_models() {
+  MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""
+  MODEL_LIST="$(omnimarket_file "$MODEL_CONFIG_REL" "${ONBOARD_TEST_MODEL_CONFIG:-}" | awk -v ram="$(ram_gb)" '
+    function flush() { if (model != "" && mem != "" && mem + 0 <= ram + 0) print mem "\t" model; model = ""; mem = "" }
+    /^ollama:/ { inb = 1; next }
+    inb && /^[^ #]/ { exit }
+    !inb { next }
+    /^    - / { flush() }
+    /min_memory_gb:/ { mem = $NF }
+    /^ *(- )?model:/ { model = $NF; gsub(/["'"'"']/, "", model) }
+    END { flush() }' | sort -t "$TAB" -k1,1nr | cut -f2)"
+  if [ -z "$MODEL_LIST" ]; then
+    MODEL_LIST_ERR="the model config lists no Ollama model for this Mac's $(ram_gb) GB of memory"
+    return 1
+  fi
+  RECOMMENDED=1
+}
+
+# parse_ordered_choice answer count -> the numbers, in the order given; 1 when
+# the answer is empty, out of range, or names a number twice
+parse_ordered_choice() {
+  local w out=""
+  for w in $(printf '%s' "$1" | tr ',' ' '); do
+    case "$w" in ''|*[!0-9]*) return 1 ;; esac
+    w=$((10#$w))
+    { [ "$w" -ge 1 ] && [ "$w" -le "$2" ]; } || return 1
+    in_list "$w" "$out" && return 1
+    out="$out $w"
+  done
+  [ -n "$out" ] || return 1
+  echo "${out# }"
+}
+
+# choose_models provider -> its chosen models from MODEL_LIST, in the order
+# given, by number; an empty or out-of-range answer asks again
+choose_models() {
+  local p="$1" label a n i=0 m nums picked="" what
+  label="$(provider_label "$p")"
+  n="$(printf '%s\n' "$MODEL_LIST" | grep -c .)"
+  case "$p" in
+    openrouter) what="the $n free models OpenRouter lists for your key" ;;
+    ollama) what="the $n models Ollama can run in this Mac's $(ram_gb) GB of memory" ;;
+    *) what="the $n chat models $label lists for your key" ;;
+  esac
+  say ""
+  say "  Your $label models: $what."
+  say ""
+  while IFS= read -r m; do
+    i=$((i + 1))
+    if in_list "$i" "$(printf '%s' "$RECOMMENDED" | tr ',' ' ')"; then say "    $(printf '%2d' "$i")) $m  (recommended)"
+    else say "    $(printf '%2d' "$i")) $m"; fi
+  done <<EOF
+$MODEL_LIST
+EOF
+  say ""
+  [ -n "$RECOMMENDED" ] && say "  Recommended, in this order: $RECOMMENDED (the models onex prefers for this key)."
+  say "  Pick one or more in the order to try them, first tried first (for example 2,1)."
+  [ "$p" = "openrouter" ] && say "  A model that uses credits can be added later: onex models add-model openrouter --model <id>"
+  while :; do
+    say ""
+    printf '  Choose your %s models, 1 to %s: ' "$label" "$n"
+    IFS= read -r a || quit_setup
+    case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
+    nums="$(parse_ordered_choice "$a" "$n")" && break
+    say "  Choose one or more numbers, 1 to $n (for example 2,1), or q to quit."
+  done
+  for i in $nums; do picked="$picked $(printf '%s\n' "$MODEL_LIST" | sed -n "${i}p")"; done
+  set_chosen_models "$p" "${picked# }"
+  say "  $label models, first tried first: $(comma_list "${picked# }")"
+}
+
+# A list that cannot be read is a skip that carries the reason: nothing is
+# stored for that model, and the others carry on.
+drop_unlisted() { # provider
+  drop_model "$1"; SKIPPED="${SKIPPED:+$SKIPPED }$1"
+  set_result "$1" "fail:$MODEL_LIST_ERR"
+  say "  ✗ $(provider_label "$1"): $MODEL_LIST_ERR. Nothing was stored for it; your other models carry on."
+}
+
+ask_ollama_models() {
+  [ -n "$CHOSEN_OLLAMA" ] && return 0
+  if [ -n "$OLLAMA_MODEL" ]; then CHOSEN_OLLAMA="$OLLAMA_MODEL"; return 0; fi  # --ollama-model
+  ollama_overrides_ours && return 0  # set up by an earlier run: kept
+  if ollama_models; then choose_models ollama; else drop_unlisted ollama; fi
+}
+
 settle_models() {
   STORED="$(stored_key_providers 2>/dev/null | tr '\n' ' ')"; STORED="${STORED% }"
   local models_from="--provider"
@@ -448,7 +653,7 @@ settle_models() {
     MODELS="$(in_menu_order "$(saved_choice models)")"; models_from="your last run"
   fi
   if [ "$PROMPT_TTY" -eq 0 ]; then settle_models_unattended; else
-    local asked_by_flag=0
+    local asked_by_flag=0 p
     [ -n "$MODELS" ] && asked_by_flag=1
     while :; do
       if [ "$asked_by_flag" -eq 1 ]; then
@@ -458,8 +663,9 @@ settle_models() {
       else
         ask_models
       fi
-      SKIPPED=""; set_result openrouter ""
+      SKIPPED=""; for p in gemini openrouter openai ollama; do set_result "$p" ""; done
       ask_keys
+      if has_model ollama; then ask_ollama_models; fi
       if [ -z "$MODELS" ]; then
         say ""
         say "  Every model was skipped. Choose at least one."
@@ -468,9 +674,9 @@ settle_models() {
       if has_model local; then settle_local_url; fi
       confirm_models && break
     done
-    # Keys for models dropped at the summary are forgotten here.
-    local p
+    # Keys and models for models dropped at the summary are forgotten here.
     for p in gemini openrouter openai; do has_model "$p" || set_pending_key "$p" ""; done
+    for p in gemini openrouter openai ollama; do has_model "$p" || set_chosen_models "$p" ""; done
   fi
   if has_model ollama; then settle_ollama; fi
   if [ "$PROMPT_TTY" -eq 0 ] && has_model local; then settle_local_url; fi
@@ -571,7 +777,9 @@ ask_keys() {
       fi
       set_pending_key "$p" "$value"; value=""
       say "  $label key received."
-      [ "$p" = "openrouter" ] && say "  OpenRouter model: the default the onex overlay declares (change it any time: onex models add openrouter --model <model id>)"
+      say "  Asking $label which models your key can use…"
+      if key_models "$p" "$(pending_key "$p")"; then choose_models "$p"
+      else set_pending_key "$p" ""; drop_unlisted "$p"; fi
       break
     done
   done
@@ -583,12 +791,13 @@ confirm_models() { # 0 continue, 1 change the choice; q quits
   say "  Ready to set up:"
   for p in $MODELS; do
     if [ "$p" = "ollama" ]; then
-      if ollama_overrides_ours; then say "    Ollama      already set up on this Mac"
+      if [ -n "$CHOSEN_OLLAMA" ]; then say "    Ollama      no key; models $(comma_list "$CHOSEN_OLLAMA"), downloaded in phase 3"
+      elif ollama_overrides_ours; then say "    Ollama      already set up on this Mac"
       else say "    Ollama      no key; downloads a model sized to this Mac's $(ram_gb) GB of memory"; fi
     elif [ "$p" = "local" ]; then
       say "    Local URL   no key; $LOCAL_MODEL on the server at $LOCAL_URL"
-    elif [ "$p" = "openrouter" ] && [ -n "$(pending_key "$p")" ]; then
-      say "    $(printf '%-11s' "$(provider_label "$p")") key received, default model from the overlay"
+    elif [ -n "$(pending_key "$p")" ] && [ -n "$(chosen_models "$p")" ]; then
+      say "    $(printf '%-11s' "$(provider_label "$p")") key received, models $(comma_list "$(chosen_models "$p")")"
     elif [ -n "$(pending_key "$p")" ]; then
       say "    $(printf '%-11s' "$(provider_label "$p")") key received"
     else
@@ -785,4 +994,124 @@ vm_notice() {
   say "  Docker can't run inside a macOS VM, so the local stack isn't offered here."
   say "  Everything else works. A model on this Mac (Ollama) will be slow in a VM;"
   say "  a key (Gemini, OpenRouter or OpenAI) is the better choice."
+}
+
+# ===========================================================================
+# Phase 3: each chosen model registered and tested (OMN-21058). The script's
+# phase 3 calls setup_model for each model and prints result_line for it.
+# ===========================================================================
+# One line per chosen model tested, so each gets its own result line:
+# provider|model|pass:<answered model> or provider|model|fail:<reason>
+MODEL_RES=""
+add_model_res() {
+  MODEL_RES="${MODEL_RES}$1|$2|$3
+"
+}
+
+# result_line provider -> "Gemini  ✓ answered (model)" and the like, one line
+# per chosen model when the developer chose several
+result_line() {
+  local p="$1" r label m n
+  r="$(result_of "$p")"; label="$(printf '%-11s' "$(provider_label "$p")")"
+  n="$(printf '%s' "$MODEL_RES" | grep -c "^$p|")"
+  if [ "$n" -gt 0 ]; then
+    printf '%s' "$MODEL_RES" | grep "^$p|" | while IFS='|' read -r _ m r; do
+      case "$r" in
+        pass:*) echo "$label ✓ answered (${r#pass:})" ;;
+        *) if [ "$n" -gt 1 ]; then echo "$label ✗ $m: ${r#fail:}"; else echo "$label ✗ ${r#fail:}"; fi ;;
+      esac
+    done
+    return 0
+  fi
+  case "$r" in
+    pass:*) echo "$label ✓ answered (${r#pass:})" ;;
+    fail:*) echo "$label ✗ ${r#fail:}" ;;
+    *) echo "$label skipped (no key)" ;;
+  esac
+}
+
+# model_result out errfile provider -> pass:<model> or fail:<reason>, from one
+# `onex models add` or `onex models test` run
+model_result() {
+  local line status reason cause
+  printf '%s\n' "$1" | grep -vE '^\{' >>"$LOG"
+  cat "$2" >>"$LOG" 2>/dev/null
+  line="$(printf '%s\n' "$1" | grep -E '^\{' | tail -n 1)"
+  status="$(receipt_field "$line" status)"
+  cause="$({ printf '%s\n' "$1" | grep -vE '^\{'; cat "$2" 2>/dev/null; } | cause_of)"
+  case "$status" in
+    passed) echo "pass:$(receipt_field "$line" model)" ;;
+    failed)
+      reason="$(receipt_field "$line" reason | cut -c1-300)"
+      case "$reason" in
+        ""|*"exited with status"*) [ -n "$cause" ] && reason="${reason:+$reason: }$cause" ;;
+      esac
+      echo "fail:$reason" ;;
+    not_set_up) echo "fail:no key is stored for it" ;;
+    *) echo "unknown:$cause" ;;
+  esac
+}
+
+# put_first provider model chosen -> the provider's routes try model first
+put_first() {
+  local m others=""
+  for m in $3; do [ "$m" = "$2" ] || others="$others $m"; done
+  if [ "$1" = "ollama" ]; then write_ollama_overrides "$2"
+  else models_cmd reorder "$1" "$2" $others >>"$LOG" 2>&1; fi
+}
+
+# onex_order provider -> the provider's models in the order onex holds them
+onex_order() {
+  models_cmd list --json 2>>"$LOG" | jq -r --arg p "$1" 'select(.provider? == $p) | (.models // []) | join(" ")' 2>/dev/null | tail -n 1
+}
+
+setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason>
+  local p="$1" key out err r models m first="" passed="" held
+  err="$RUN_DIR/models.err"
+  key="$(pending_key "$p")"; set_pending_key "$p" ""
+  models="$(chosen_models "$p")"
+  if [ -n "$key" ] && [ -z "$models" ]; then
+    # A key is never handed to onex without a model the developer chose.
+    key=""
+    set_result "$p" "fail:no $(provider_label "$p") model was chosen, so nothing was stored"
+    return 0
+  fi
+  if [ -n "$key" ] || [ "$p" = "local" ]; then
+    # Model ids hold no spaces. Unquoted on purpose: preflight admits a local server's URL and model only without spaces.
+    out="$(printf '%s' "$key" | models_cmd add "$p" --json $(for m in $models; do printf -- '--model %s ' "$m"; done) $(local_url_add_args "$p") 2>"$err")"
+  else
+    [ "$p" = "ollama" ] && [ -n "$models" ] && write_ollama_overrides "${models%% *}"
+    out="$(models_cmd test "$p" --json 2>"$err")"
+  fi
+  key=""
+  r="$(model_result "$out" "$err" "$p")"
+  case "$r" in unknown:*) r="fail:${r#unknown:}"; [ "$p" = "local" ] && { set_result "$p" "$r"; stop_local_url_unanswered; } ;; esac
+  [ "$r" = "fail:" ] && r="fail:onex models gave no result; see the log"
+  rm -f "$err"
+  if [ -z "$models" ] || [ "$p" = "local" ]; then set_result "$p" "$r"; return 0; fi
+  first="${models%% *}"
+  add_model_res "$p" "$first" "$r"
+  case "$r" in pass:*) passed="$r" ;; esac
+  # Each further chosen model gets its own delegation pinned to it: put it
+  # first, test, then put the developer's order back.
+  if [ "$models" != "$first" ] && { [ "$p" = "ollama" ] || [ -n "$(onex_order "$p")" ]; }; then
+    for m in ${models#* }; do
+      if put_first "$p" "$m" "$models"; then
+        out="$(models_cmd test "$p" --json 2>"$err")"
+        r="$(model_result "$out" "$err" "$p")"
+        case "$r" in unknown:*|fail:) r="fail:${r#*:}"; [ "$r" = "fail:" ] && r="fail:onex models gave no result; see the log" ;; esac
+      else
+        r="fail:it could not be put first to test it; see the log"
+      fi
+      rm -f "$err"
+      add_model_res "$p" "$m" "$r"
+      [ -z "$passed" ] && case "$r" in pass:*) passed="$r" ;; esac
+    done
+    put_first "$p" "$first" "$models" || say "  ⚠ Your $(provider_label "$p") order could not be put back; set it with: onex models reorder $p $models"
+  fi
+  if [ "$p" != "ollama" ]; then
+    held="$(onex_order "$p")"
+    [ -n "$held" ] && say "  onex holds your $(provider_label "$p") models in this order: $(comma_list "$held")"
+  fi
+  set_result "$p" "${passed:-$(printf '%s' "$MODEL_RES" | grep "^$p|$first|" | head -n 1 | cut -d'|' -f3-)}"
 }

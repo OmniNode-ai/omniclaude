@@ -194,3 +194,17 @@ def test_pin_carries_every_keys_default_model() -> None:
     assert shown.returncode == 0, shown.stderr.decode(errors="replace")
     assert b"default_model() { # provider key" in shown.stdout
     assert b'models_cmd default-model "$1"' in shown.stdout
+
+
+# OMN-21058 AC5 and AC10: the guide says every key and Ollama ask for models, in
+# order, from a list, and that nothing is picked for the developer. The pin to
+# the script that does follows once that script is on dev.
+def test_guide_says_every_key_and_ollama_ask_for_models_in_order() -> None:
+    text = GUIDE.read_text(encoding="utf-8")
+    assert "**Your models, for each key and for Ollama, in order.**" in text
+    assert "you pick one or\n   more by number in the order to try them" in text
+    assert "OpenRouter lists its free models" in text
+    assert "Ollama\n   lists the models this Mac has the memory for" in text
+    assert "Nothing is picked for you" in text
+    assert "marked recommended" in text
+    assert "overlay declares" not in text

@@ -92,12 +92,14 @@ Every question comes before anything is installed:
 1. **Which model.** Gemini, OpenRouter, OpenAI, Ollama or a local model server by URL. For
    a local server you are asked its URL and model name, never a key. Then your key, with the input
    hidden. If this Mac already has a key stored you are offered it rather than asked again.
-   OpenRouter runs the default model onex's overlay declares, so you are not asked for a
-   model; change it any time with `onex models add openrouter --model <model id>`. The key
-   needs credit on its openrouter.ai account for a paid model. A Gemini or OpenAI key runs
-   the model onex names as the best match on that key's own model list, shown in the result;
-   change it with `onex models add gemini --model <model id>` (or `openai`).
-2. **Whether to run the local stack in Docker.** "Not now" is a complete setup — you can
+2. **Your models, for each key and for Ollama, in order.** After each key, onboarding lists
+   the models that key can use, read from the provider's own list for it, and you pick one or
+   more by number in the order to try them, for example `2,1`; the first is tried first. The
+   models onex prefers come first, marked recommended. OpenRouter lists its free models. Ollama
+   lists the models this Mac has the memory for. Nothing is picked for you, and each chosen model
+   is tested in phase 3. Change them later with `onex models add-model`, `onex models reorder`
+   and `onex models remove`.
+3. **Whether to run the local stack in Docker.** "Not now" is a complete setup — you can
    add it later. In a macOS VM the question is skipped, because Docker cannot run there.
 
 Every prompt has a **Quit setup** option. Choosing it before phase 1 leaves the machine
@@ -253,7 +255,7 @@ bash lab-onboarding.sh --restart
 | `--preflight-only` | Run phase 0, print the verdict, exit |
 | `--containers` / `--no-containers` | Answer the Docker question in advance |
 | `--provider NAME` | `gemini`, `openrouter`, `openai`, `ollama` or `local`, or several, comma-separated |
-| `--ollama-model NAME` | The model Ollama downloads; the default is sized to this Mac |
+| `--ollama-model NAME` | The model Ollama downloads, instead of asking; with no terminal, the one sized to this Mac |
 | `--local-url URL` | With `local`: the model server's base URL, such as `http://127.0.0.1:1234` |
 | `--local-model NAME` | With `local`: the model that server runs, as it names it |
 | `--workspace DIR` | Where the clones go; defaults to `$OMNIBASE_PATH`, else `~/Code/omnibase`. `OMNI_HOME` is never read |
