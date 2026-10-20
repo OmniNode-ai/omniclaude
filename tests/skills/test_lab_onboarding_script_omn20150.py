@@ -1341,13 +1341,16 @@ def _phase3_harness(
     ``own_roots`` points ``ONEX_SKILL_OVERLAY_ROOTS`` at an overlay the developer
     already has, so the script must not fetch one.
 
-    ``suggested`` maps a provider to what ``onex models suggest-model`` prints
-    for its key (OMN-21059); a value starting with ``!`` is its refusal. ``None``
-    is an onex from before the command, which answers "No such command".
+    ``suggested`` maps a provider other than OpenRouter to what ``onex models
+    default-model`` prints for its key (OMN-21059); a value starting with ``!``
+    is its refusal. ``None`` is an onex that names a default for OpenRouter alone.
     """
     fake = tmp_path / "onex-models"
     if suggested is None:
-        suggest = '  echo "Error: No such command \'suggest-model\'." >&2; exit 2\n'
+        suggest = (
+            '  echo "Error: only a provider where you choose the model has a '
+            'default declared (openrouter); name one of them" >&2; exit 1\n'
+        )
     else:
         arms = "".join(
             f"    {p}) echo 'Error: {m[1:]}' >&2; exit 1 ;;\n"
@@ -1355,13 +1358,18 @@ def _phase3_harness(
             else f"    {p}) echo '{m}'; exit 0 ;;\n"
             for p, m in suggested.items()
         )
-        suggest = f'  case "$2" in\n{arms}  esac\n  echo "Error: no suggestion" >&2; exit 1\n'
+        suggest = (
+            f'  case "$2" in\n{arms}  esac\n  echo "Error: no suggestion" >&2; exit 1\n'
+        )
 
     calls = tmp_path / "calls"
     cases = "".join(f"  *' {p} '*) echo '{line}' ;;\n" for p, line in answers.items())
     fake.write_text(
         "#!/bin/bash\n"
         f'stdin="$(cat)"; echo "$* stdin=${{#stdin}}" >>"{calls}"\n'
+        'if [ "$1" = default-model ] && [ "$2" != openrouter ]; then\n'
+        + suggest
+        + "fi\n"
         'if [ "$1" = default-model ]; then\n'
         '  for r in $(echo "$ONEX_SKILL_OVERLAY_ROOTS" | tr : " "); do\n'
         '    f="$r/node_model_setup_effect/overlay.yaml"\n'
@@ -1369,7 +1377,6 @@ def _phase3_harness(
         "  done\n"
         '  echo "Error: node_model_setup_effect: openrouter_default_model is not configured" >&2; exit 1\n'
         "fi\n"
-        'if [ "$1" = suggest-model ]; then\n' + suggest + "fi\n"
         f'case " $* " in\n{cases}esac\n'
     )
     fake.chmod(0o755)
@@ -1405,8 +1412,7 @@ def _phase3_harness(
             "result_line",
             "record_model_status",
             "fetch_model_overlay",
-            "openrouter_default_model",
-            "suggested_model",
+            "default_model",
             "setup_model",
             "count_words",
             "labels",
@@ -1526,8 +1532,8 @@ def test_openrouter_overlay_model_reaches_onex_models_add(tmp_path: Path) -> Non
     )
     calls = (tmp_path / "calls").read_text().splitlines()
     assert calls == [
-        "default-model openrouter stdin=0",
-        "default-model openrouter stdin=0",
+        f"default-model openrouter stdin={len(_OR_KEY)}",
+        f"default-model openrouter stdin={len(_OR_KEY)}",
         f"add openrouter --json --model {_OR_DEFAULT} stdin={len(_OR_KEY)}",
     ]
     assert len((tmp_path / "gh-calls").read_text().splitlines()) == 1
@@ -1549,7 +1555,7 @@ def test_openrouter_overlay_model_uses_an_overlay_the_developer_already_has(
     )
     calls = (tmp_path / "calls").read_text().splitlines()
     assert calls == [
-        "default-model openrouter stdin=0",
+        f"default-model openrouter stdin={len(_OR_KEY)}",
         f"add openrouter --json --model fixture-vendor/developers-own-model stdin={len(_OR_KEY)}",
     ]
     assert not (tmp_path / "gh-calls").exists()
@@ -1626,7 +1632,7 @@ def test_openrouter_overlay_model_unattended_with_a_stored_key_asks_nothing(
 # ---------------------------------------------------------------------------
 # OMN-21059: a key runs only models its owner chose, so every provider's key
 # reaches `onex models add` with --model. For a key other than OpenRouter's the
-# model is the one `onex models suggest-model` names from that key's own list.
+# model is the one `onex models default-model` names from that key's own list.
 # Every model id below is a fixture.
 # ---------------------------------------------------------------------------
 
@@ -1635,7 +1641,7 @@ _GEMINI_SUGGESTED = "fixture-vendor/gemini-suggested"
 
 
 def test_a_suggested_model_reaches_onex_models_add(tmp_path: Path) -> None:
-    """The key goes to `suggest-model` on stdin, and the model it names to
+    """The key goes to `default-model` on stdin, and the model it names to
     `onex models add gemini --model`; the test answers on that model."""
     result = _phase3_harness(
         tmp_path,
@@ -1647,10 +1653,12 @@ def test_a_suggested_model_reaches_onex_models_add(tmp_path: Path) -> None:
     )
     calls = (tmp_path / "calls").read_text().splitlines()
     assert calls == [
-        f"suggest-model gemini stdin={len(_GEMINI_KEY)}",
+        f"default-model gemini stdin={len(_GEMINI_KEY)}",
         f"add gemini --json --model {_GEMINI_SUGGESTED} stdin={len(_GEMINI_KEY)}",
     ]
-    assert f"Gemini      ✓ answered ({_GEMINI_SUGGESTED})" in result.stdout, result.stderr
+    assert f"Gemini      ✓ answered ({_GEMINI_SUGGESTED})" in result.stdout, (
+        result.stderr
+    )
     assert "passed: gemini" in result.stdout
 
 
@@ -1682,9 +1690,9 @@ def test_a_refused_suggestion_stores_nothing_and_names_the_way_out(
     assert _GEMINI_KEY not in out
 
 
-def test_an_onex_without_suggest_model_registers_as_before(tmp_path: Path) -> None:
-    """An onex from before the command picks the model at registration itself:
-    the key reaches `onex models add` with no --model."""
+def test_an_onex_that_suggests_no_model_registers_as_before(tmp_path: Path) -> None:
+    """An onex that names a default for OpenRouter alone picks the model at
+    registration itself: the key reaches `onex models add` with no --model."""
     result = _phase3_harness(
         tmp_path,
         {"gemini": '{"provider": "gemini", "status": "passed", "model": "picked"}'},
@@ -1693,7 +1701,7 @@ def test_an_onex_without_suggest_model_registers_as_before(tmp_path: Path) -> No
     )
     calls = (tmp_path / "calls").read_text().splitlines()
     assert calls == [
-        f"suggest-model gemini stdin={len(_GEMINI_KEY)}",
+        f"default-model gemini stdin={len(_GEMINI_KEY)}",
         f"add gemini --json stdin={len(_GEMINI_KEY)}",
     ]
     assert "passed: gemini" in result.stdout, result.stderr

@@ -384,7 +384,7 @@ def test_a_failed_model_test_prints_the_error_that_caused_it(tmp_path: Path) -> 
             "result_of",
             "result_line",
             "cause_of",
-            "openrouter_default_model",
+            "default_model",
             "setup_model",
         )
         + f'\nmodels_cmd() {{ "{fake}" "$@"; }}\n'

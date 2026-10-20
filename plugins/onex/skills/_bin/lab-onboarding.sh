@@ -1465,28 +1465,20 @@ fetch_model_overlay() { # -> 0 when $RUN_DIR/overlay-roots holds the overlay
   return 1
 }
 
-# stdout: the overlay's model (return 0), or the reason (return 1)
-openrouter_default_model() {
+# A key runs only models its owner chose, so every key reaches `onex models add`
+# with --model. `onex models default-model` names it: OpenRouter's from the
+# overlay, any other key's from the best match on that key's own model list (the
+# key on stdin). An onex that names a default for OpenRouter alone leaves the
+# model to registration, as before: nothing is printed and 0 is returned.
+# stdout: the model (return 0), or the reason (return 1)
+default_model() { # provider key
   local out roots="${ONEX_SKILL_OVERLAY_ROOTS:-}"
-  out="$(models_cmd default-model openrouter 2>&1)" && { printf '%s\n' "$out" | tail -n 1; return 0; }
+  out="$(printf '%s' "$2" | models_cmd default-model "$1" 2>&1)" && { printf '%s\n' "$out" | tail -n 1; return 0; }
+  case "$out" in *"only a provider where you choose the model has a default"*) return 0 ;; esac
   if fetch_model_overlay; then
-    out="$(export ONEX_SKILL_OVERLAY_ROOTS="$RUN_DIR/overlay-roots${roots:+:$roots}"; models_cmd default-model openrouter 2>&1)" &&
+    out="$(export ONEX_SKILL_OVERLAY_ROOTS="$RUN_DIR/overlay-roots${roots:+:$roots}"; printf '%s' "$2" | models_cmd default-model "$1" 2>&1)" &&
       { printf '%s\n' "$out" | tail -n 1; return 0; }
   fi
-  printf '%s\n' "$out" | sed -n 's/^Error: //p' | tail -n 1
-  return 1
-}
-
-# OMN-21059: a key runs only models its owner chose, so `onex models add` needs
-# --model for every provider. For a key other than OpenRouter's, onex suggests
-# the best match on that key's own model list, and the model is passed on (the
-# summary names it). An onex from before `suggest-model` picks the model at
-# registration itself, so no model is passed to it.
-# stdout: the suggested model, or nothing for an older onex (return 0), or the reason (return 1)
-suggested_model() { # provider key
-  local out
-  out="$(printf '%s' "$2" | models_cmd suggest-model "$1" 2>&1)" && { printf '%s\n' "$out" | tail -n 1; return 0; }
-  case "$out" in *"No such command"*) return 0 ;; esac
   printf '%s\n' "$out" | sed -n 's/^Error: //p' | tail -n 1
   return 1
 }
@@ -1503,16 +1495,9 @@ setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason
   local p="$1" key out err line status model="" reason cause
   err="$RUN_DIR/models.err"
   key="$(pending_key "$p")"; set_pending_key "$p" ""
-  if [ "$p" = "openrouter" ] && [ -n "$key" ]; then
-    if ! model="$(openrouter_default_model)"; then
-      key=""
-      set_result "$p" "fail:$(printf '%s' "${model:-no overlay declares a default OpenRouter model}" | cut -c1-240) Nothing was stored. To choose a model yourself: onex models add openrouter --model <model id>"
-      return 0
-    fi
-  elif [ -n "$key" ] && [ "$p" != "local" ]; then
-    if ! model="$(suggested_model "$p" "$key")"; then
-      key=""
-      set_result "$p" "fail:$(printf '%s' "${model:-onex could not suggest a model for this key}" | cut -c1-240) Nothing was stored. To choose a model yourself: onex models add $p --model <model id>"
+  if [ -n "$key" ] && [ "$p" != "local" ]; then
+    if ! model="$(default_model "$p" "$key")"; then
+      set_result "$p" "fail:$(printf '%s' "${model:-onex named no model for this key}" | cut -c1-240) Nothing was stored. To choose a model yourself: onex models add $p --model <model id>"
       return 0
     fi
   fi
