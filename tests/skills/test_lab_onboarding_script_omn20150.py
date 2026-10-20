@@ -12,6 +12,7 @@ stock macOS /bin/bash 3.2 (the D4 failure class).
 from __future__ import annotations
 
 import errno
+import hashlib
 import json
 import os
 import pty
@@ -2611,3 +2612,38 @@ def test_local_url_choice_reaches_a_downloaded_script() -> None:
     assert served.returncode == 0, served.stderr.decode(errors="replace")
     assert b"$i) Local URL" in served.stdout
     assert b"settle_local_url" in served.stdout
+
+
+def test_chosen_models_reach_a_downloaded_script() -> None:
+    """AC6 to AC9 on the download path: a script downloaded on its own fetches
+    its handler from the commit its URL names, so that commit's handler must be
+    the one that asks for each key's models and registers them in order, with
+    the bytes download_digest checks."""
+    text = SCRIPT.read_text()
+    commit = re.search(
+        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
+        text,
+    )
+    digest = re.search(r'\bdownload_digest="([0-9a-f:]+)"', text)
+    assert commit and digest
+    repo = SCRIPT.parents[4]
+    rel = HANDLER.relative_to(repo).as_posix()
+
+    def git(*args: str) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(
+            ["git", "-C", str(repo), *args],
+            capture_output=True,
+            check=False,
+            env=scrub_git_location_env(os.environ),
+        )
+
+    if git("cat-file", "-e", f"{commit.group(1)}^{{commit}}").returncode != 0:
+        git("fetch", "--no-tags", "--depth=1", "origin", commit.group(1))
+    served = git("show", f"{commit.group(1)}:{rel}")
+    assert served.returncode == 0, served.stderr.decode(errors="replace")
+    handler = served.stdout.decode()
+    for function in ("key_models", "choose_models", "ask_ollama_models", "setup_model"):
+        assert f"\n{function}() {{" in handler, (
+            f"the handler a downloaded script fetches has no {function}"
+        )
+    assert hashlib.sha256(served.stdout).hexdigest() == digest.group(1).replace(":", "")
