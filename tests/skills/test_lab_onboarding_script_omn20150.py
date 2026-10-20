@@ -24,8 +24,10 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 
 import pytest
 from omnibase_core.validators.no_unguarded_git_subprocess import (
@@ -489,12 +491,14 @@ def test_one_question_after_preflight_decides_docker(
         "ONBOARD_TEST_NO_GUI": "1",
         # Docker present, so a yes asks no licence question (CI runners have none).
         "ONBOARD_TEST_DOCKER": "running",
+        "ONBOARD_TEST_CATALOGUE": _catalogue(tmp_path, _default_lists()),
     }
     out, returncode = _drive_tty(
         ["/bin/bash", str(phase0_only), "--provider", "gemini"],
         env,
         [
             ("(input is hidden):", "AIza-not-a-real-key"),
+            ("Choose your Gemini models", "1"),
             ("Continue?", "y"),
             ("Set up the local stack in Docker too?", answer),
         ],
@@ -508,9 +512,9 @@ def test_one_question_after_preflight_decides_docker(
 # ---------------------------------------------------------------------------
 
 
-def _function_body(name: str) -> str:
+def _function_body(name: str, source: Path = SCRIPT) -> str:
     """The text of one top-level shell function, from its first line to its `}`."""
-    lines = SCRIPT.read_text(encoding="utf-8").splitlines()
+    lines = source.read_text(encoding="utf-8").splitlines()
     start = next(i for i, line in enumerate(lines) if line.startswith(f"{name}() "))
     end = next(i for i in range(start, len(lines)) if lines[i] == "}")
     return "\n".join(lines[start : end + 1])
@@ -653,6 +657,9 @@ def _phase0_env(tmp_path: Path, **extra: str) -> dict[str, str]:
         "ONBOARD_TEST_VM": "0",
         "ONBOARD_TEST_ADMIN": "1",
         "ONBOARD_TEST_NEEDS_ADMIN": "0",
+        # OMN-21058: no test reaches a real provider's model list or omnimarket.
+        "ONBOARD_TEST_CATALOGUE": _catalogue(tmp_path, _default_lists()),
+        "ONBOARD_TEST_MODEL_CONFIG": _model_config(tmp_path),
         **extra,
     }
 
@@ -661,6 +668,133 @@ def _phase0_only(tmp_path: Path) -> Path:
     p = tmp_path / "phase0.sh"
     p.write_text(SCRIPT.read_text().replace("\nmain\n", "\nphase0\n"))
     return p
+
+
+# OMN-21058: a stand-in for each provider's model list, so no test that enters a
+# key reaches a real provider. ``routes`` maps a provider to (status, body); the
+# rest serve _DEFAULT_LISTS. Each request's Authorization lands in ``auth``.
+_DEFAULT_LISTS: dict[str, object] = {
+    "gemini": {
+        "data": [
+            {"id": "models/gemini-3-flash-lite"},
+            {"id": "models/gemini-3-flash"},
+        ]
+    },
+    "openrouter": {"data": [{"id": "fx/free-a:free"}, {"id": "fx/free-b:free"}]},
+    "openai": {"data": [{"id": "gpt-4.1-nano"}, {"id": "gpt-4.1-mini"}]},
+}
+
+
+def _start_models_server(
+    routes: dict[str, tuple[int, object]] | None = None,
+) -> tuple[ThreadingHTTPServer, dict[str, Any]]:
+    served: dict[str, Any] = {"auth": {}}
+    table = {p: (200, body) for p, body in _DEFAULT_LISTS.items()} | (routes or {})
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            provider = self.path.strip("/")
+            served["auth"].setdefault(provider, []).append(
+                self.headers.get("Authorization")
+            )
+            status, body = table.get(provider, (404, {"error": {"message": "no"}}))
+            payload = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    served["url"] = f"http://127.0.0.1:{server.server_address[1]}"
+    return server, served
+
+
+@contextmanager
+def _models_server(
+    routes: dict[str, tuple[int, object]] | None = None,
+) -> Iterator[dict[str, Any]]:
+    server, served = _start_models_server(routes)
+    try:
+        yield served
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+# One server for every test that does not serve its own lists. It is never shut
+# down: its thread is a daemon and ends with the test process, and a shutdown
+# at interpreter exit would wait on a thread that no longer runs.
+_DEFAULT_URL: list[str] = []
+
+
+def _default_lists() -> str:
+    if not _DEFAULT_URL:
+        _DEFAULT_URL.append(_start_models_server()[1]["url"])
+    return _DEFAULT_URL[0]
+
+
+def _catalogue(tmp_path: Path, base: str) -> str:
+    """A provider catalogue shaped like omnimarket's, its lists served at ``base``."""
+    path = tmp_path / f"catalogue-{abs(hash(base))}.yaml"
+    path.write_text(
+        "providers:\n"
+        "  - provider: openrouter\n"
+        "    plan: free_tier\n"
+        f'    models_url: "{base}/openrouter"\n'
+        "    model_preference:\n"
+        "      - pattern: 'fx/fam-(?P<generation>[0-9]+)-it:free'\n"
+        "        tags: [free]\n"
+        "  - provider: gemini\n"
+        f'    models_url: "{base}/gemini"\n'
+        "    model_preference:\n"
+        "      - pattern: 'gemini-(?P<generation>[0-9]+(?:\\.[0-9]+)?)-flash-lite'\n"
+        "      - pattern: 'gemini-(?P<generation>[0-9]+(?:\\.[0-9]+)?)-flash'\n"
+        "  - provider: openai\n"
+        f'    models_url: "{base}/openai"\n'
+        "    model_preference:\n"
+        "      - pattern: 'gpt-4\\.(?P<generation>[0-9]+)-nano'\n"
+        "  - provider: anthropic\n"
+        f'    models_url: "{base}/not-this-one"\n'
+    )
+    return str(path)
+
+
+def _model_config(tmp_path: Path) -> str:
+    """The `ollama` block of a model config shaped like omnimarket's."""
+    path = tmp_path / "bifrost_delegation.yaml"
+    path.write_text(
+        "backends: []\n"
+        "ollama:\n"
+        "  port: 11434\n"
+        "  chat_path: /v1/chat/completions\n"
+        "  models:\n"
+        "    - min_memory_gb: 64\n"
+        "      model: fixture-ollama-huge\n"
+        "      download_gb: 40\n"
+        "    - min_memory_gb: 16\n"
+        "      model: fixture-ollama-mid\n"
+        "      download_gb: 5\n"
+        "    - min_memory_gb: 0\n"
+        "      model: fixture-ollama-small\n"
+        "      download_gb: 1\n"
+        "other: {}\n"
+    )
+    return str(path)
+
+
+def _listed(out: str, heading: str) -> list[str]:
+    """The model ids numbered under ``heading``, in the order shown."""
+    listing = out.split(heading, 1)[1].split("Pick one or more", 1)[0]
+    return [
+        ln.split(") ", 1)[1].split("  (recommended)")[0]
+        for ln in listing.splitlines()
+        if re.match(r"^ +[0-9]+\) ", ln)
+    ]
 
 
 @pytest.mark.parametrize("provider", ["none", "glm"])
@@ -1090,7 +1224,10 @@ def test_several_models_are_chosen_by_number(tmp_path: Path, answer: str) -> Non
         [
             (_MENU, answer),
             (_HIDDEN, "AIza-g"),
+            ("Choose your Gemini models", "1"),
             (_HIDDEN, "sk-proj-o"),
+            ("Choose your OpenAI models", "1"),
+            ("Choose your Ollama models", "1"),
             ("Continue?", "q"),
         ],
     )
@@ -1114,7 +1251,10 @@ def test_each_key_is_asked_one_at_a_time_naming_its_provider(tmp_path: Path) -> 
         [
             (_MENU, "1,2,4"),
             ("Gemini key (1 of 2)", "AIza-g"),
+            ("Choose your Gemini models", "1"),
             ("OpenRouter key (2 of 2)", "sk-or-v1-r"),
+            ("Choose your OpenRouter models", "1"),
+            ("Choose your Ollama models", "1"),
             ("Continue?", "q"),
         ],
     )
@@ -1157,9 +1297,11 @@ def test_an_empty_key_offers_to_skip_and_the_rest_carry_on(tmp_path: Path) -> No
         [
             (_MENU, "1,2,3"),
             ("Gemini key", "AIza-g"),
+            ("Choose your Gemini models", "1"),
             ("OpenRouter key", ""),
             ("Skip OpenRouter for now?", "y"),
             ("OpenAI key", "sk-proj-o"),
+            ("Choose your OpenAI models", "1"),
             ("Continue?", "q"),
         ],
     )
@@ -1178,6 +1320,7 @@ def test_n_at_the_skip_question_asks_for_the_key_again(tmp_path: Path) -> None:
             (_HIDDEN, ""),
             ("Skip Gemini for now?", "n"),
             (_HIDDEN, "AIza-g"),
+            ("Choose your Gemini models", "1"),
             ("Continue?", "q"),
         ],
     )
@@ -1221,9 +1364,11 @@ def test_change_at_the_summary_keeps_keys_already_entered(tmp_path: Path) -> Non
         [
             (_MENU, "1"),
             (_HIDDEN, "AIza-g"),
+            ("Choose your Gemini models", "1"),
             ("Continue?", "c"),
             (_MENU, "1,3"),
             ("OpenAI key (2 of 2)", "sk-proj-o"),
+            ("Choose your OpenAI models", "1"),
             ("Continue?", "q"),
         ],
     )
@@ -1232,7 +1377,9 @@ def test_change_at_the_summary_keeps_keys_already_entered(tmp_path: Path) -> Non
 
 
 def test_quit_at_the_summary_installs_nothing(tmp_path: Path) -> None:
-    out, returncode = _preflight(tmp_path, [(_MENU, "4"), ("Continue?", "q")])
+    out, returncode = _preflight(
+        tmp_path, [(_MENU, "4"), ("Choose your Ollama models", "1"), ("Continue?", "q")]
+    )
     assert returncode == 4
     assert "Nothing was installed." in out
     assert sorted((tmp_path / "home").rglob("*")) == []
@@ -1248,6 +1395,7 @@ def test_every_question_comes_before_the_preflight_verdict(tmp_path: Path) -> No
         [
             (_MENU, "1"),
             (_HIDDEN, "AIza-g"),
+            ("Choose your Gemini models", "1"),
             ("Continue?", "y"),
             ("Set up the local stack in Docker too?", "y"),
             ("Accept it now?", "y"),
@@ -1270,7 +1418,12 @@ def test_provider_takes_a_comma_separated_list(tmp_path: Path) -> None:
     """AC11: --provider gemini,ollama skips the menu and still asks Gemini's key."""
     out, _ = _preflight(
         tmp_path,
-        [(_HIDDEN, "AIza-g"), ("Continue?", "q")],
+        [
+            (_HIDDEN, "AIza-g"),
+            ("Choose your Gemini models", "1"),
+            ("Choose your Ollama models", "1"),
+            ("Continue?", "q"),
+        ],
         "--provider",
         "ollama,gemini",
     )
@@ -1325,55 +1478,53 @@ def _phase3_harness(
     answers: dict[str, str],
     skipped: str = "",
     preamble: str = 'KEY_GEMINI="AIza-g"\n',
-    overlay: str | None = None,
-    own_roots: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Phase 3's model loop with `onex models` and the delegation faked.
 
-    ``answers`` maps a provider to the JSON line the fake `onex models` prints.
-    Each call's arguments, and whether a key came on stdin, land in ``calls``.
-
-    ``overlay`` is the text of the node_model_setup_effect overlay the faked
-    ``gh`` serves (``None``: the login cannot read it). The fake ``onex models
-    default-model`` reads ``openrouter_default_model`` from the overlay under
-    ``ONEX_SKILL_OVERLAY_ROOTS``, as the real command does, and refuses without it.
-    ``own_roots`` points ``ONEX_SKILL_OVERLAY_ROOTS`` at an overlay the developer
-    already has, so the script must not fetch one.
+    ``answers`` maps a provider, or ``provider:model``, to the JSON line the fake
+    `onex models` prints when that provider is tested (``MODEL`` in it becomes
+    the model the fake holds first). The fake keeps each key's ordered models as
+    `add --model`, repeated, and `reorder` leave them, and `list --json` prints
+    them, as the real command does. Each call's arguments, and whether a key came
+    on stdin, land in ``calls``.
     """
     fake = tmp_path / "onex-models"
     calls = tmp_path / "calls"
-    cases = "".join(f"  *' {p} '*) echo '{line}' ;;\n" for p, line in answers.items())
+    state = tmp_path / "onex-state"
+    state.mkdir(exist_ok=True)
     fake.write_text(
-        "#!/bin/bash\n"
-        f'stdin="$(cat)"; echo "$* stdin=${{#stdin}}" >>"{calls}"\n'
-        'if [ "$1" = default-model ]; then\n'
-        '  for r in $(echo "$ONEX_SKILL_OVERLAY_ROOTS" | tr : " "); do\n'
-        '    f="$r/node_model_setup_effect/overlay.yaml"\n'
-        '    [ -f "$f" ] && { sed -n "s/^openrouter_default_model: *//p" "$f"; exit 0; }\n'
-        "  done\n"
-        '  echo "Error: node_model_setup_effect: openrouter_default_model is not configured" >&2; exit 1\n'
-        "fi\n"
-        f'case " $* " in\n{cases}esac\n'
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        f"answers = json.loads({json.dumps(json.dumps(answers))})\n"
+        f"state, calls = Path({str(state)!r}), Path({str(calls)!r})\n"
+        "stdin = '' if sys.stdin.isatty() else sys.stdin.read()\n"
+        "args = sys.argv[1:]\n"
+        "with calls.open('a') as f:\n"
+        "    f.write(' '.join(args) + f' stdin={len(stdin)}\\n')\n"
+        "cmd = args[0]\n"
+        "if cmd == 'list':\n"
+        "    for f in sorted(state.glob('*.order')):\n"
+        "        print(json.dumps({'provider': f.stem, 'models': f.read_text().split()}))\n"
+        "    sys.exit(0)\n"
+        "p = args[1]\n"
+        "order = state / f'{p}.order'\n"
+        "if cmd == 'reorder':\n"
+        "    order.write_text(' '.join(args[2:]))\n"
+        "    sys.exit(0)\n"
+        "if cmd == 'add':\n"
+        "    models = [args[i + 1] for i, a in enumerate(args) if a == '--model']\n"
+        "    if models:\n"
+        "        order.write_text(' '.join(models))\n"
+        "first = order.read_text().split()[0] if order.exists() else ''\n"
+        "line = answers.get(f'{p}:{first}') or answers.get(p)\n"
+        "if line:\n"
+        "    print(line.replace('MODEL', first))\n"
     )
     fake.chmod(0o755)
-    gh_calls = tmp_path / "gh-calls"
-    served = tmp_path / "overlay-served.yaml"
-    if overlay is not None:
-        served.write_text(overlay)
-    own = tmp_path / "own-roots"
-    if own_roots:
-        (own / "node_model_setup_effect").mkdir(parents=True)
-        (own / "node_model_setup_effect" / "overlay.yaml").write_text(
-            "openrouter_default_model: fixture-vendor/developers-own-model\n"
-        )
-    roots = f'export ONEX_SKILL_OVERLAY_ROOTS="{own}"\n' if own_roots else ""
-    gh_fn = (
-        f'gh() {{ echo "$*" >>"{gh_calls}"; '
-        + (f'cat "{served}"' if overlay is not None else "return 1")
-        + "; }\n"
-    )
+    providers = list(dict.fromkeys(k.split(":", 1)[0] for k in answers))
     snippet = (
-        f'LOG=/dev/null; STATUS={tmp_path}/status; RUN_DIR={tmp_path}; MODELS="{" ".join(answers)}"; SKIPPED="{skipped}"\n'
+        f'LOG=/dev/null; STATUS={tmp_path}/status; RUN_DIR={tmp_path}; MODELS="{" ".join(providers)}"; SKIPPED="{skipped}"\n'
         "say() { printf '%s\\n' \"$*\"; }\n"
         + _functions(
             "pending_key",
@@ -1385,21 +1536,26 @@ def _phase3_harness(
             "set_result",
             "result_of",
             "passed_models",
+            "add_model_res",
             "result_line",
             "record_model_status",
-            "fetch_model_overlay",
-            "openrouter_default_model",
+            "cause_of",
+            "model_result",
+            "put_first",
+            "onex_order",
             "setup_model",
             "count_words",
             "labels",
         )
+        + "\n"
+        + _functions("chosen_models", "set_chosen_models", "comma_list", source=HANDLER)
         + f'\nmodels_cmd() {{ "{fake}" "$@"; }}\n'
-        + 'KEY_OPENROUTER=""; KEY_OPENAI=""\n'
-        + 'MODEL_OVERLAY_REPO="fixture/overlay-repo"; MODEL_OVERLAY_FILE="fixture/overlay.yaml"\n'
-        + roots
-        + gh_fn
+        + f'write_ollama_overrides() {{ echo "overrides $1" >>"{calls}"; echo "$1" >"{state}/ollama.order"; }}\n'
+        + "local_url_add_args() { :; }\n"
+        + 'KEY_OPENROUTER=""; KEY_OPENAI=""; MODEL_RES=""\n'
+        + 'CHOSEN_GEMINI=""; CHOSEN_OPENROUTER=""; CHOSEN_OPENAI=""; CHOSEN_OLLAMA=""\n'
         + preamble
-        + 'for p in $MODELS; do setup_model "$p"; say "$(result_line "$p")"; done\n'
+        + 'for p in $MODELS; do setup_model "$p"; result_line "$p" | while IFS= read -r l; do say "$l"; done; done\n'
         + 'for p in $SKIPPED; do say "$(result_line "$p")"; done\n'
         + 'for p in $MODELS $SKIPPED; do record_model_status "$p"; done\n'
         + 'say "passed: $(passed_models)"\n'
@@ -1424,6 +1580,7 @@ def test_phase_3_reports_one_line_per_model_and_keeps_the_ones_that_passed(
             "openai": '{"provider": "openai", "status": "failed", "reason": "provider_error: insufficient_quota"}',
         },
         skipped="openrouter",
+        preamble='KEY_GEMINI="AIza-g"; CHOSEN_GEMINI="gemini-3.5-flash-lite"\n',
     )
     out = result.stdout
     assert "Gemini      ✓ answered (gemini-3.5-flash-lite)" in out, result.stderr
@@ -1459,116 +1616,159 @@ def test_phase_4_accepts_an_answer_from_any_key_that_passed_and_nothing_else() -
 
 
 # ---------------------------------------------------------------------------
-# OpenRouter runs the default model the onex overlay declares (OMN-20844, AC3):
-# onboarding asks no model question, the script names no model, and
-# `onex models add openrouter --model` gets what `onex models default-model
-# openrouter` reads from the overlay. Every model id below is a fixture.
+# OMN-21058: after each key, onboarding lists the models that key can use,
+# numbered, from the provider's own list for that key, with onex's preferred
+# models first and recommended, and the developer picks one or more by number
+# in the order to try them. The order reaches onex through `onex models add
+# --model`, repeated (the OMN-21059 path), and each chosen model is tested with
+# a delegation pinned to it. Ollama offers the models this Mac can run. Nothing
+# is picked for the developer, and a list that cannot be read ends that model
+# alone. Every model id below is a fixture.
 # ---------------------------------------------------------------------------
 
-# The merge-base control runs these against a script that asks for a model:
-# fail inside the verifier's 30 s per-check ceiling, not after 120 s.
+# The merge-base control runs these against a script that asks no model
+# question: fail inside the verifier's 30 s per-check ceiling, not after 120 s.
 _OR_TIMEOUT = 10.0
 _OR_KEY = "sk-or-v1-test"
-_OR_DEFAULT = "fixture-vendor/default-model-a"
-_OR_OVERLAY = f"openrouter_default_model: {_OR_DEFAULT}\n"
-_OR_CHANGE = "onex models add openrouter --model"
+_OR_MODELS = {
+    "data": [
+        {"id": "z-lab/zeta-7b:free"},
+        {"id": "a-lab/alpha-70b"},
+        {"id": "m-lab/mu-12b-it:free"},
+        {"id": "b-lab/beta-coder:free", "hugging_face_id": "b-lab/not-an-id:free"},
+        {"id": "fx/fam-2-it:free"},
+        {"id": "fx/fam-10-it:free"},
+    ]
+}
+# fam (newest generation first) is the catalogue's preferred family here.
+_OR_LISTED = [
+    "fx/fam-10-it:free",
+    "b-lab/beta-coder:free",
+    "fx/fam-2-it:free",
+    "m-lab/mu-12b-it:free",
+    "z-lab/zeta-7b:free",
+]
+_OR_PICK = "Choose your OpenRouter models, 1 to 5:"
 
 
-def test_openrouter_overlay_model_asks_no_model_question(tmp_path: Path) -> None:
-    """After the OpenRouter key, no model list, no question and no model id in the
-    script's words: the default comes from the overlay, and the change command is named."""
-    out, _ = _preflight(
-        tmp_path,
-        [
-            (_MENU, "2"),
-            ("OpenRouter key (1 of 1)", _OR_KEY),
-            ("Continue?", "q"),
-        ],
-        timeout=_OR_TIMEOUT,
-    )
-    assert "Choose one OpenRouter model" not in out
-    assert "OpenRouter model: the default the onex overlay declares" in out
-    assert _OR_CHANGE in out
+def test_openrouter_model_is_chosen_by_number_from_the_keys_own_list(
+    tmp_path: Path,
+) -> None:
+    """AC1: the key's live list, numbered, the preferred model first and
+    recommended; empty and out-of-range answers ask again."""
+    with _models_server({"openrouter": (200, _OR_MODELS)}) as served:
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "2"),
+                ("OpenRouter key (1 of 1)", _OR_KEY),
+                (_OR_PICK, ""),
+                (_OR_PICK, "6"),
+                (_OR_PICK, "0"),
+                (_OR_PICK, "x"),
+                (_OR_PICK, "4"),
+                ("Continue?", "q"),
+            ],
+            timeout=_OR_TIMEOUT,
+            ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, served["url"]),
+        )
+    assert served["auth"] == {"openrouter": [f"Bearer {_OR_KEY}"]}  # read for this key
+    assert _listed(out, "free models OpenRouter lists for your key.") == _OR_LISTED
+    assert " 1) fx/fam-10-it:free  (recommended)" in out
+    assert "Recommended, in this order: 1 " in out
+    assert "a-lab/alpha-70b" not in out and "not-an-id" not in out
+    assert out.count(_OR_PICK) == 5
+    assert out.count("Choose one or more numbers, 1 to 5 (for example 2,1)") == 4
+    assert "OpenRouter models, first tried first: m-lab/mu-12b-it:free" in out
     summary = out.split("Ready to set up:")[1]
-    assert "OpenRouter  key received, default model from the overlay" in summary
+    assert "OpenRouter  key received, models m-lab/mu-12b-it:free" in summary
     assert _OR_KEY not in out  # never echoed
 
 
-def test_openrouter_overlay_model_reaches_onex_models_add(tmp_path: Path) -> None:
-    """The overlay's model is read with `onex models default-model openrouter` and
-    passed to `onex models add openrouter --model`, key on stdin; the pinned test
-    delegation answers on that model. The overlay is fetched once, for this login."""
+def test_openrouter_model_key_is_sent_by_header_on_stdin_never_as_an_argument() -> None:
+    body = _function_body("key_models", source=HANDLER)
+    assert "| curl -sS -m 30 -H @- " in body
+    assert "Authorization: Bearer %s" in body
+
+
+def test_openrouter_model_chosen_reaches_onex_models_add(tmp_path: Path) -> None:
+    """AC2: `onex models add openrouter --model <chosen>`, key on stdin; the
+    pinned test delegation answers on that model."""
     result = _phase3_harness(
         tmp_path,
         {
-            "openrouter": f'{{"provider": "openrouter", "status": "passed", "model": "{_OR_DEFAULT}"}}'
+            "openrouter": '{"provider": "openrouter", "status": "passed", "model": "MODEL"}'
         },
-        preamble=f'KEY_OPENROUTER="{_OR_KEY}"\n',
-        overlay=_OR_OVERLAY,
+        preamble=f'KEY_OPENROUTER="{_OR_KEY}"; CHOSEN_OPENROUTER="m-lab/mu-12b-it:free"\n',
     )
     calls = (tmp_path / "calls").read_text().splitlines()
-    assert calls == [
-        "default-model openrouter stdin=0",
-        "default-model openrouter stdin=0",
-        f"add openrouter --json --model {_OR_DEFAULT} stdin={len(_OR_KEY)}",
-    ]
-    assert len((tmp_path / "gh-calls").read_text().splitlines()) == 1
-    assert f"OpenRouter  ✓ answered ({_OR_DEFAULT})" in result.stdout, result.stderr
+    assert calls[0] == (
+        f"add openrouter --json --model m-lab/mu-12b-it:free stdin={len(_OR_KEY)}"
+    )
+    assert not [c for c in calls if c.startswith(("reorder", "test"))]
+    assert "OpenRouter  ✓ answered (m-lab/mu-12b-it:free)" in result.stdout, (
+        result.stderr
+    )
     assert "passed: openrouter" in result.stdout
 
 
-def test_openrouter_overlay_model_uses_an_overlay_the_developer_already_has(
-    tmp_path: Path,
-) -> None:
+def test_openrouter_model_never_stored_unless_chosen(tmp_path: Path) -> None:
+    """AC3: an OpenRouter key with no chosen model is never handed to onex."""
     result = _phase3_harness(
         tmp_path,
-        {
-            "openrouter": '{"provider": "openrouter", "status": "passed", "model": "fixture-vendor/developers-own-model"}'
-        },
+        {"openrouter": '{"provider": "openrouter", "status": "passed", "model": "x"}'},
         preamble=f'KEY_OPENROUTER="{_OR_KEY}"\n',
-        overlay=_OR_OVERLAY,
-        own_roots=True,
     )
-    calls = (tmp_path / "calls").read_text().splitlines()
-    assert calls == [
-        "default-model openrouter stdin=0",
-        f"add openrouter --json --model fixture-vendor/developers-own-model stdin={len(_OR_KEY)}",
-    ]
-    assert not (tmp_path / "gh-calls").exists()
-    assert "passed: openrouter" in result.stdout, result.stderr
+    assert not (tmp_path / "calls").exists()
+    assert (
+        "OpenRouter  ✗ no OpenRouter model was chosen, so nothing was stored"
+        in result.stdout
+    )
 
 
-def test_openrouter_overlay_model_without_an_overlay_stores_nothing_and_names_the_way_out(
+@pytest.mark.parametrize(
+    ("status", "body", "reason"),
+    [
+        (
+            401,
+            {"error": {"message": "No auth credentials found", "code": 401}},
+            "its model list answered HTTP 401: No auth credentials found",
+        ),
+        (
+            200,
+            {"data": [{"id": "a-lab/alpha-70b"}]},
+            "its model list names no free model for this key",
+        ),
+    ],
+)
+def test_openrouter_model_list_unreadable_ends_openrouter_and_the_rest_carry_on(
+    tmp_path: Path, status: int, body: object, reason: str
+) -> None:
+    """AC3: the provider's reason, nothing stored for OpenRouter, Gemini carries on."""
+    with _models_server({"openrouter": (status, body)}) as served:
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "1,2"),
+                ("Gemini key (1 of 2)", "AIza-g"),
+                ("Choose your Gemini models", "1"),
+                ("OpenRouter key (2 of 2)", _OR_KEY),
+                ("Continue?", "q"),
+            ],
+            timeout=_OR_TIMEOUT,
+            ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, served["url"]),
+        )
+    assert f"✗ OpenRouter: {reason}. Nothing was stored for it" in out
+    assert _OR_PICK not in out
+    summary = out.split("Ready to set up:")[1]
+    assert "Gemini      key received, models" in summary
+    assert f"OpenRouter  ✗ {reason}" in summary
+
+
+def test_openrouter_model_unattended_with_a_stored_key_asks_nothing(
     tmp_path: Path,
 ) -> None:
-    """No overlay declares a default: OpenRouter ends with the reason and the
-    command that names a model, no key reaches `onex models add`, and the other
-    models carry on."""
-    result = _phase3_harness(
-        tmp_path,
-        {
-            "gemini": '{"provider": "gemini", "status": "passed", "model": "fixture-vendor/gemini-a"}',
-            "openrouter": '{"provider": "openrouter", "status": "passed", "model": "x"}',
-        },
-        preamble=f'KEY_GEMINI="AIza-g"; KEY_OPENROUTER="{_OR_KEY}"\n',
-        overlay=None,
-    )
-    calls = (tmp_path / "calls").read_text().splitlines()
-    assert not [c for c in calls if c.startswith("add openrouter")]
-    out = result.stdout
-    assert "OpenRouter  ✗ " in out, result.stderr
-    assert "openrouter_default_model is not configured" in out
-    assert _OR_CHANGE in out
-    assert "OpenRouter  ✓" not in out
-    assert "Gemini      ✓ answered (fixture-vendor/gemini-a)" in out
-    assert "passed: gemini" in out
-    assert _OR_KEY not in out
-
-
-def test_openrouter_overlay_model_unattended_with_a_stored_key_asks_nothing(
-    tmp_path: Path,
-) -> None:
-    """--provider openrouter, no terminal, a stored key: no question, and
+    """AC4: --provider openrouter, no terminal, a stored key: no question, and
     phase 3 tests the stored key's model rather than adding one."""
     _stored_keys(tmp_path, "openrouter")
     result = subprocess.run(
@@ -1583,14 +1783,14 @@ def test_openrouter_overlay_model_unattended_with_a_stored_key_asks_nothing(
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=_OR_TIMEOUT * 2,
         check=False,
     )
     assert result.returncode == 0, result.stdout
     assert (
         "No terminal to ask on, so these models are used: OpenRouter." in result.stdout
     )
-    assert "Choose one OpenRouter model" not in result.stdout
+    assert "Choose your OpenRouter models" not in result.stdout
 
     kept = _phase3_harness(
         tmp_path,
@@ -1603,6 +1803,224 @@ def test_openrouter_overlay_model_unattended_with_a_stored_key_asks_nothing(
         "test openrouter --json stdin=0"
     ]
     assert "OpenRouter  ✓ answered (stored/model)" in kept.stdout
+
+
+# AC6 to AC9: every key and Ollama, one or more models, in order.
+
+_GEMINI_MODELS = {
+    "object": "list",
+    "data": [
+        {"id": "models/gemini-2.0-flash-lite", "object": "model"},
+        {"id": "models/gemini-3-flash", "object": "model"},
+        {"id": "models/gemini-embedding-001", "object": "model"},
+        {"id": "models/gemini-3-pro", "object": "model"},
+        {"id": "models/gemini-3-flash-lite", "object": "model"},
+        {"id": "models/gemini-2.5-flash", "object": "model"},
+    ],
+}
+
+
+def test_chosen_models_for_each_key_are_picked_by_number_in_order(
+    tmp_path: Path,
+) -> None:
+    """AC6: after each key its own list; one or more by number, in the order given."""
+    with _models_server() as served:
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "1,2,3"),
+                ("Gemini key (1 of 3)", "AIza-g"),
+                ("Choose your Gemini models, 1 to 2:", "2,1"),
+                ("OpenRouter key (2 of 3)", _OR_KEY),
+                ("Choose your OpenRouter models, 1 to 2:", "2"),
+                ("OpenAI key (3 of 3)", "sk-proj-o"),
+                ("Choose your OpenAI models, 1 to 2:", "1 2"),
+                ("Continue?", "q"),
+            ],
+            timeout=_OR_TIMEOUT,
+            ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, served["url"]),
+        )
+    assert served["auth"] == {
+        "gemini": ["Bearer AIza-g"],
+        "openrouter": [f"Bearer {_OR_KEY}"],
+        "openai": ["Bearer sk-proj-o"],
+    }
+    summary = out.split("Ready to set up:")[1]
+    assert (
+        "Gemini      key received, models gemini-3-flash, gemini-3-flash-lite"
+        in summary
+    )
+    assert "OpenRouter  key received, models fx/free-b:free" in summary
+    assert "OpenAI      key received, models gpt-4.1-nano, gpt-4.1-mini" in summary
+
+
+@pytest.mark.parametrize("answer", ["", "0", "3", "x", "1,1", "2,,9"])
+def test_chosen_models_empty_or_out_of_range_asks_again(
+    tmp_path: Path, answer: str
+) -> None:
+    """AC6: nothing is picked for the developer."""
+    with _models_server() as served:
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "3"),
+                ("OpenAI key (1 of 1)", "sk-proj-o"),
+                ("Choose your OpenAI models, 1 to 2:", answer),
+                ("Choose one or more numbers, 1 to 2", "q"),
+            ],
+            timeout=_OR_TIMEOUT,
+            ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, served["url"]),
+        )
+    assert out.count("Choose your OpenAI models, 1 to 2:") == 2
+
+
+def test_chosen_models_list_recommends_the_preferred_models_first(
+    tmp_path: Path,
+) -> None:
+    """AC6, recommended: the newest of each family onex's catalogue prefers, in
+    its order, then the rest; models that are not for chat are not offered."""
+    with _models_server({"gemini": (200, _GEMINI_MODELS)}) as served:
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "1"),
+                ("Gemini key (1 of 1)", "AIza-g"),
+                ("Choose your Gemini models, 1 to 5:", "3,1"),
+                ("Continue?", "q"),
+            ],
+            timeout=_OR_TIMEOUT,
+            ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, served["url"]),
+        )
+    assert _listed(out, "chat models Gemini lists for your key.") == [
+        "gemini-3-flash-lite",
+        "gemini-3-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-3-pro",
+    ]
+    assert " 2) gemini-3-flash  (recommended)" in out
+    assert " 3) gemini-2.0-flash-lite\n" in out
+    assert "Recommended, in this order: 1,2 " in out
+    assert "embedding" not in out
+    assert (
+        "Gemini models, first tried first: gemini-2.0-flash-lite, gemini-3-flash-lite"
+        in out
+    )
+
+
+def test_chosen_models_for_ollama_come_from_what_this_mac_can_run(
+    tmp_path: Path,
+) -> None:
+    """AC7: the model config's Ollama models that fit this Mac's memory, the one
+    sized to it recommended; picked in order instead of chosen by memory."""
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "4"),
+            ("Choose your Ollama models, 1 to 2:", "2,1"),
+            ("Continue?", "q"),
+        ],
+        timeout=_OR_TIMEOUT,
+        ONBOARD_TEST_RAM_GB="32",
+    )
+    assert _listed(out, "models Ollama can run in this Mac's 32 GB of memory.") == [
+        "fixture-ollama-mid",
+        "fixture-ollama-small",
+    ]
+    assert "fixture-ollama-huge" not in out
+    assert " 1) fixture-ollama-mid  (recommended)" in out
+    summary = out.split("Ready to set up:")[1]
+    assert (
+        "Ollama      no key; models fixture-ollama-small, fixture-ollama-mid" in summary
+    )
+
+
+def test_chosen_models_for_ollama_are_each_downloaded() -> None:
+    """AC7: phase 3 downloads every model chosen, not only the first."""
+    body = _function_body("setup_ollama")
+    assert "for m in ${CHOSEN_OLLAMA:-$OLLAMA_MODEL}; do" in body
+    assert 'pull "$m"' in body
+
+
+def test_chosen_models_reach_onex_in_order_and_onex_models_list_shows_it(
+    tmp_path: Path,
+) -> None:
+    """AC8: one `onex models add` naming each model in the chosen order, the key
+    on stdin; the order onex holds afterwards is the developer's."""
+    result = _phase3_harness(
+        tmp_path,
+        {"gemini": '{"provider": "gemini", "status": "passed", "model": "MODEL"}'},
+        preamble='KEY_GEMINI="AIza-g"; CHOSEN_GEMINI="g-b g-a"\n',
+    )
+    calls = (tmp_path / "calls").read_text().splitlines()
+    assert calls[0] == "add gemini --json --model g-b --model g-a stdin=6"
+    assert (tmp_path / "onex-state" / "gemini.order").read_text() == "g-b g-a"
+    assert "onex holds your Gemini models in this order: g-b, g-a" in result.stdout, (
+        result.stderr
+    )
+
+
+def test_chosen_models_each_get_a_pinned_test_and_a_result_line(
+    tmp_path: Path,
+) -> None:
+    """AC9: every chosen model is put first and tested with one pinned
+    delegation, gets its own line, and the developer's order is put back."""
+    result = _phase3_harness(
+        tmp_path,
+        {
+            "openai": '{"provider": "openai", "status": "passed", "model": "MODEL"}',
+            "openai:o-b": '{"provider": "openai", "status": "failed", "reason": "provider_error: model_not_found"}',
+        },
+        preamble='KEY_OPENAI="sk-proj-o"; CHOSEN_OPENAI="o-a o-b o-c"\n',
+    )
+    out = result.stdout
+    assert "OpenAI      ✓ answered (o-a)" in out, result.stderr
+    assert "OpenAI      ✗ o-b: provider_error: model_not_found" in out
+    assert "OpenAI      ✓ answered (o-c)" in out
+    assert "passed: openai" in out
+    calls = (tmp_path / "calls").read_text().splitlines()
+    assert [c for c in calls if not c.startswith("list")] == [
+        "add openai --json --model o-a --model o-b --model o-c stdin=9",
+        "reorder openai o-b o-a o-c stdin=0",
+        "test openai --json stdin=0",
+        "reorder openai o-c o-a o-b stdin=0",
+        "test openai --json stdin=0",
+        "reorder openai o-a o-b o-c stdin=0",
+    ]
+    assert (tmp_path / "onex-state" / "openai.order").read_text() == "o-a o-b o-c"
+
+
+def test_chosen_models_for_ollama_each_get_a_pinned_test(tmp_path: Path) -> None:
+    """AC9: Ollama's routes point at each chosen model in turn for its test,
+    then back at the first."""
+    result = _phase3_harness(
+        tmp_path,
+        {"ollama": '{"provider": "ollama", "status": "passed", "model": "MODEL"}'},
+        preamble='CHOSEN_OLLAMA="ol-a ol-b"\n',
+    )
+    assert "Ollama      ✓ answered (ol-a)" in result.stdout, result.stderr
+    assert "Ollama      ✓ answered (ol-b)" in result.stdout
+    assert (tmp_path / "calls").read_text().splitlines() == [
+        "overrides ol-a",
+        "test ollama --json stdin=0",
+        "overrides ol-b",
+        "test ollama --json stdin=0",
+        "overrides ol-a",
+    ]
+
+
+def test_chosen_models_never_register_a_key_with_none_chosen(tmp_path: Path) -> None:
+    """AC9: a key with no chosen model never reaches onex."""
+    result = _phase3_harness(
+        tmp_path,
+        {"gemini": '{"provider": "gemini", "status": "passed", "model": "x"}'},
+        preamble='KEY_GEMINI="AIza-g"\n',
+    )
+    assert not (tmp_path / "calls").exists()
+    assert (
+        "Gemini      ✗ no Gemini model was chosen, so nothing was stored"
+        in result.stdout
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1881,6 +2299,7 @@ def test_local_url_beside_a_keyed_model_asks_only_that_models_key(
         [
             (_MENU, "5,1"),
             ("Gemini key (1 of 1)", "AIza-g"),
+            ("Choose your Gemini models", "1"),
             ("Its URL, such as http://127.0.0.1:1234", local_model_server),
             ("The model it runs", _LOCAL_MODEL),
             ("Continue?", "q"),
@@ -1987,14 +2406,21 @@ def _local_url_phase3(
             "set_result",
             "result_of",
             "passed_models",
+            "add_model_res",
             "result_line",
             "cause_of",
+            "model_result",
             "setup_model",
         )
         + "\n"
-        + _functions("local_url_add_args", "stop_local_url_unanswered", source=HANDLER)
+        + _functions(
+            "local_url_add_args",
+            "stop_local_url_unanswered",
+            "chosen_models",
+            source=HANDLER,
+        )
         + f'\nmodels_cmd() {{ "{fake}" "$@"; }}\n'
-        + 'KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""\n'
+        + 'KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""; MODEL_RES=""\n'
         + f'LOCAL_URL="http://127.0.0.1:1234"; LOCAL_MODEL="{_LOCAL_MODEL}"\n'
         + 'setup_model local; say "$(result_line local)"\n'
         + 'say "passed: $(passed_models)"\n'

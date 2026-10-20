@@ -26,10 +26,34 @@ requirements:
       - id: "AC4"
         statement: |-
           AC4: `--provider openrouter` run unattended with a stored key keeps the stored key's model and asks nothing -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model -x
+  - id: req-chosen-models-every-key
+    statement: "Every key and Ollama ask for one or more models, in order, and the order reaches onex."
+    acceptance:
+      - id: "AC5"
+        statement: |-
+          AC5: ONBOARDING.md says OpenRouter asks for a model from a list after the key, and its pin and sha256 point at the script that does -- falsifier: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q
+      - id: "AC6"
+        statement: |-
+          AC6: after each Gemini, OpenRouter or OpenAI key, onboarding lists the models that key can use and the developer picks one or more by number in the order they want them tried (for example 2,1); an empty or out-of-range answer asks again -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k chosen_models
+      - id: "AC7"
+        statement: |-
+          AC7: for Ollama, onboarding lists the local models it can run on this Mac and the developer picks one or more in order, instead of the script choosing one by memory -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k chosen_models
+      - id: "AC8"
+        statement: |-
+          AC8: the chosen models reach onex in the chosen order through the OMN-21059 registration path, and onex models list shows that order after onboarding -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k chosen_models
+      - id: "AC9"
+        statement: |-
+          AC9: each chosen model is tested with one delegation pinned to it and gets its own result line, and onboarding never registers a key with no chosen model -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k chosen_models
+      - id: "AC10"
+        statement: |-
+          AC10: ONBOARDING.md says every key and Ollama ask for models in order, and its pin and sha256 point at the script that does -- falsifier: uv run pytest tests/skills/test_onboarding_script_pin_omn20818.py -q
 evidence_requirements:
   - kind: tests
     description: "The OpenRouter model is chosen by number from the key's list, reaches onex models add --model, is never picked for the developer, and an unattended run keeps the stored model"
     command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model -x"
+  - kind: tests
+    description: "Every key and Ollama: models listed with the recommended first, picked in order, registered in that order, each tested with its own result line"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k chosen_models -x --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -46,3 +70,32 @@ dod_evidence:
       - AC2
       - AC3
       - AC4
+  - id: dod-omn21058-openrouter-chosen-from-list-recommended
+    description: "After the #2721 fixed-model change, OpenRouter is again chosen by number from the key's own list, now with the catalogue's preferred models first and marked recommended; the choice reaches onex models add --model, no key is added without a chosen model, an unreadable list ends OpenRouter alone, and an unattended run with a stored key asks nothing. Providers are local stand-ins."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k openrouter_model -x --no-cov"
+    binds_ac:
+      - AC1
+      - AC2
+      - AC3
+      - AC4
+  - id: dod-omn21058-chosen-models-listed-and-picked
+    description: "Gemini, OpenRouter and OpenAI each list the key's chat models after the key, read with that key, the catalogue's preferred first and recommended, picked one or more by number in order with empty, out-of-range and repeated answers asked again; Ollama lists the config's models this Mac has the memory for, the one sized to it recommended, picked in order, and phase 3 downloads each chosen. Providers are local stand-ins; a live run is the onboarding walk."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -x --no-cov -k \"chosen_models and not (reach_onex or pinned_test or never_register)\""
+    binds_ac:
+      - AC6
+      - AC7
+  - id: dod-omn21058-chosen-models-registered-and-tested
+    description: "One onex models add names the chosen models in order with the key on stdin and onex models list shows that order; each chosen model, Ollama's too, is put first, tested with one pinned delegation and given its own result line, then the developer's order is put back; a key with no chosen model is never registered. onex is a local stand-in."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -x --no-cov -k \"chosen_models and (reach_onex or pinned_test or never_register)\""
+    binds_ac:
+      - AC8
+      - AC9

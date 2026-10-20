@@ -364,7 +364,6 @@ def test_a_failed_model_test_prints_the_error_that_caused_it(tmp_path: Path) -> 
     fake = tmp_path / "models"
     fake.write_text(
         "#!/bin/bash\n"
-        'if [ "$1" = default-model ]; then echo fixture-vendor/model; exit 0; fi\n'
         "cat >/dev/null\n"
         'echo "delegate artifacts (REFUSED -- refused_before_dispatch): /x" >&2\n'
         'echo "Error: lab tenant declaration /y/lab_run_hosts.yaml refused: '
@@ -375,6 +374,7 @@ def test_a_failed_model_test_prints_the_error_that_caused_it(tmp_path: Path) -> 
     fake.chmod(0o755)
     snippet = (
         f"LOG=/dev/null; RUN_DIR={tmp_path}; KEY_OPENROUTER=k; KEY_GEMINI=; KEY_OPENAI=\n"
+        "CHOSEN_OPENROUTER=fixture-vendor/model; MODEL_RES=\n"
         + _functions(
             "pending_key",
             "set_pending_key",
@@ -384,9 +384,13 @@ def test_a_failed_model_test_prints_the_error_that_caused_it(tmp_path: Path) -> 
             "result_of",
             "result_line",
             "cause_of",
-            "openrouter_default_model",
+            "add_model_res",
+            "model_result",
+            "onex_order",
             "setup_model",
         )
+        + "\n"
+        + _functions("chosen_models", "comma_list", source=_preflight.HANDLER)
         + f'\nmodels_cmd() {{ "{fake}" "$@"; }}\n'
         + "setup_model openrouter; result_line openrouter\n"
     )

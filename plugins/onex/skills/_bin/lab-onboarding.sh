@@ -45,7 +45,8 @@
 #                        model on this Mac, no key; local is a model server you already run
 #                        (LM Studio, llama.cpp, vLLM, MLX) that speaks the OpenAI API, by its
 #                        URL and model name, no key. Delegation chooses among the ones set up
-#   --ollama-model NAME  the model Ollama downloads (default: chosen from this Mac's memory)
+#   --ollama-model NAME  the model Ollama downloads (default: asked, from the models this Mac has
+#                        the memory for; with no terminal, the one sized to it)
 #   --local-url URL      the local model server's base URL, such as http://127.0.0.1:1234
 #                        (default: asked when local is chosen)
 #   --local-model NAME   the model that server runs, as it names it (default: asked)
@@ -505,8 +506,9 @@ ask_docker() { # note -> 0 yes, 1 no, 2 quit. Asked in the terminal; never a fla
 
 # ---------------------------------------------------------------------------
 # Your models: any combination of Gemini, OpenRouter, OpenAI, Ollama and a
-# local model server by URL, at least one. Delegation chooses among them for each task; the developer never
-# picks one per run. Settled in preflight, before anything installs, so the run
+# local model server by URL, at least one. For each key and for Ollama the developer picks
+# the models, in order (see the bootstrap handler); delegation chooses among them for each
+# task, so the developer never picks one per run. Settled in preflight, before anything installs, so the run
 # never stops mid-way to ask. Each key is held only in this process (never
 # exported, logged or written) until phase 3 hands it to `onex models add` on
 # stdin.
@@ -554,14 +556,6 @@ key_looks_like() {
     sk-*) echo openai ;;
   esac
 }
-
-# OpenRouter: every OpenRouter key runs the default model the onex overlay
-# declares, so onboarding asks no model question and the developer never needs a
-# model id. This script names no model: `onex models default-model openrouter`
-# reads it from the node_model_setup_effect overlay (setup_model, phase 3). The
-# model may be a paid one, so the key needs credit on openrouter.ai. Another
-# model is one command later:
-# onex models add openrouter --model <id>
 
 stored_key_providers() { # every provider an earlier run already stored a key for, one per line
   [ -x "$HOME/.local/bin/onex" ] || return 1
@@ -651,8 +645,11 @@ ollama_overrides_ours() { head -n 1 "$HOME/$OVERRIDES_FILE_REL" 2>/dev/null | gr
 
 settle_ollama() { # preflight: no key, and an honest word on speed. The model is chosen in phase 3.
   # A re-run keeps the model an earlier run downloaded.
+  [ -n "$CHOSEN_OLLAMA" ] && OLLAMA_MODEL="${CHOSEN_OLLAMA%% *}"
   [ -n "$OLLAMA_MODEL" ] || OLLAMA_MODEL="$(sed -n 's/^    model_name: "\(.*\)"$/\1/p' "$HOME/$OVERRIDES_FILE_REL" 2>/dev/null | head -n 1)"
-  if [ -n "$OLLAMA_MODEL" ]; then
+  if [ -n "$CHOSEN_OLLAMA" ]; then
+    say "  Models: Ollama on this Mac, no key. Your models, first tried first: $(comma_list "$CHOSEN_OLLAMA")."
+  elif [ -n "$OLLAMA_MODEL" ]; then
     say "  Model: Ollama on this Mac, no key. Model: $OLLAMA_MODEL."
   else
     say "  Model: Ollama on this Mac, no key. The model is chosen for this Mac's $(ram_gb) GB of memory"
@@ -719,7 +716,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="d176:b199:ae21:0c4d:0182:a465:8b61:8c4f:dc63:03ce:6de1:960a:2000:a346:e18b:3a64" root candidate \
+  local digest="542c:f4ac:cb32:6415:a19a:de21:9495:8bb8:6b65:1062:d5c5:0f60:5106:a533:d7cd:9768" root candidate \
     download_digest="d176:b199:ae21:0c4d:0182:a465:8b61:8c4f:dc63:03ce:6de1:960a:2000:a346:e18b:3a64"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -1432,10 +1429,27 @@ set_result() { case "$1" in gemini) RES_GEMINI="$2" ;; openrouter) RES_OPENROUTE
 result_of() { case "$1" in gemini) echo "$RES_GEMINI" ;; openrouter) echo "$RES_OPENROUTER" ;; openai) echo "$RES_OPENAI" ;; ollama) echo "$RES_OLLAMA" ;; local) echo "$RES_LOCAL" ;; esac; }
 passed_models() { local p out=""; for p in $MODELS; do case "$(result_of "$p")" in pass*) out="$out $p" ;; esac; done; echo "${out# }"; }
 
-# result_line provider -> "Gemini  ✓ answered (model)" and the like
+# One line per chosen model tested, so each gets its own result line:
+# provider|model|pass:<answered model> or provider|model|fail:<reason>
+MODEL_RES=""
+add_model_res() { MODEL_RES="${MODEL_RES}$1|$2|$3
+"; }
+
+# result_line provider -> "Gemini  ✓ answered (model)" and the like, one line
+# per chosen model when the developer chose several
 result_line() {
-  local p="$1" r label
+  local p="$1" r label m n
   r="$(result_of "$p")"; label="$(printf '%-11s' "$(provider_label "$p")")"
+  n="$(printf '%s' "$MODEL_RES" | grep -c "^$p|")"
+  if [ "$n" -gt 0 ]; then
+    printf '%s' "$MODEL_RES" | grep "^$p|" | while IFS='|' read -r _ m r; do
+      case "$r" in
+        pass:*) echo "$label ✓ answered (${r#pass:})" ;;
+        *) if [ "$n" -gt 1 ]; then echo "$label ✗ $m: ${r#fail:}"; else echo "$label ✗ ${r#fail:}"; fi ;;
+      esac
+    done
+    return 0
+  fi
   case "$r" in
     pass:*) echo "$label ✓ answered (${r#pass:})" ;;
     fail:*) echo "$label ✗ ${r#fail:}" ;;
@@ -1450,33 +1464,6 @@ record_model_status() { # provider
   printf 'model=%s result=%s detail="%s"\n' "$1" "$verdict" "$(printf '%s' "${r#*:}" | tr '"' "'")" >>"$STATUS"
 }
 
-# The OpenRouter default model is a deployment fact kept in the onex-overlays
-# plugin, not here. An overlay the developer's ONEX_SKILL_OVERLAY_ROOTS already
-# reaches is used as it is; otherwise the one overlay file is read from the
-# private repository for this GitHub login, the way phase 5 reaches its plugins.
-MODEL_OVERLAY_REPO="OmniNode-ai/omniclaude-internal"
-MODEL_OVERLAY_FILE="plugins/onex-overlays/overlays/node_model_setup_effect/overlay.yaml"
-
-fetch_model_overlay() { # -> 0 when $RUN_DIR/overlay-roots holds the overlay
-  local dest="$RUN_DIR/overlay-roots/node_model_setup_effect"
-  mkdir -p "$dest" || return 1
-  gh api "repos/$MODEL_OVERLAY_REPO/contents/$MODEL_OVERLAY_FILE" -H "Accept: application/vnd.github.raw" >"$dest/overlay.yaml" 2>>"$LOG" && [ -s "$dest/overlay.yaml" ] && return 0
-  rm -f "$dest/overlay.yaml"
-  return 1
-}
-
-# stdout: the overlay's model (return 0), or the reason (return 1)
-openrouter_default_model() {
-  local out roots="${ONEX_SKILL_OVERLAY_ROOTS:-}"
-  out="$(models_cmd default-model openrouter 2>&1)" && { printf '%s\n' "$out" | tail -n 1; return 0; }
-  if fetch_model_overlay; then
-    out="$(export ONEX_SKILL_OVERLAY_ROOTS="$RUN_DIR/overlay-roots${roots:+:$roots}"; models_cmd default-model openrouter 2>&1)" &&
-      { printf '%s\n' "$out" | tail -n 1; return 0; }
-  fi
-  printf '%s\n' "$out" | sed -n 's/^Error: //p' | tail -n 1
-  return 1
-}
-
 # cause_of < text -> the line that says why a delegation failed: the last
 # "Error: ..." line, else the last refusal, else nothing. A summary such as "the
 # test delegation exited with status 1" is never the whole message on its own.
@@ -1485,47 +1472,95 @@ cause_of() {
     cut -c1-300
 }
 
-setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason>
-  local p="$1" key out err line status model="" reason cause
-  err="$RUN_DIR/models.err"
-  key="$(pending_key "$p")"; set_pending_key "$p" ""
-  if [ "$p" = "openrouter" ] && [ -n "$key" ]; then
-    if ! model="$(openrouter_default_model)"; then
-      key=""
-      set_result "$p" "fail:$(printf '%s' "${model:-no overlay declares a default OpenRouter model}" | cut -c1-240) Nothing was stored. To choose a model yourself: onex models add openrouter --model <model id>"
-      return 0
-    fi
-  fi
-  if [ -n "$key" ] || [ "$p" = "local" ]; then
-    # Unquoted on purpose: preflight admits a local server's URL and model only without spaces.
-    out="$(printf '%s' "$key" | models_cmd add "$p" --json ${model:+--model "$model"} $(local_url_add_args "$p") 2>"$err")"
-  else
-    out="$(models_cmd test "$p" --json 2>"$err")"
-  fi
-  key=""
-  printf '%s\n' "$out" | grep -vE '^\{' >>"$LOG"
-  cat "$err" >>"$LOG" 2>/dev/null
-  line="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
+# model_result out errfile provider -> pass:<model> or fail:<reason>, from one
+# `onex models add` or `onex models test` run
+model_result() {
+  local line status reason cause
+  printf '%s\n' "$1" | grep -vE '^\{' >>"$LOG"
+  cat "$2" >>"$LOG" 2>/dev/null
+  line="$(printf '%s\n' "$1" | grep -E '^\{' | tail -n 1)"
   status="$(receipt_field "$line" status)"
-  cause="$({ printf '%s\n' "$out" | grep -vE '^\{'; cat "$err" 2>/dev/null; } | cause_of)"
+  cause="$({ printf '%s\n' "$1" | grep -vE '^\{'; cat "$2" 2>/dev/null; } | cause_of)"
   case "$status" in
-    passed) set_result "$p" "pass:$(receipt_field "$line" model)" ;;
+    passed) echo "pass:$(receipt_field "$line" model)" ;;
     failed)
       reason="$(receipt_field "$line" reason | cut -c1-300)"
       case "$reason" in
         ""|*"exited with status"*) [ -n "$cause" ] && reason="${reason:+$reason: }$cause" ;;
       esac
-      set_result "$p" "fail:$reason" ;;
-    not_set_up) set_result "$p" "fail:no key is stored for it" ;;
-    *) set_result "$p" "fail:$cause"; [ "$p" = "local" ] && stop_local_url_unanswered ;;
+      echo "fail:$reason" ;;
+    not_set_up) echo "fail:no key is stored for it" ;;
+    *) echo "unknown:$cause" ;;
   esac
-  [ "$(result_of "$p")" = "fail:" ] && set_result "$p" "fail:onex models gave no result; see the log"
+}
+
+# put_first provider model chosen -> the provider's routes try model first
+put_first() {
+  local m others=""
+  for m in $3; do [ "$m" = "$2" ] || others="$others $m"; done
+  if [ "$1" = "ollama" ]; then write_ollama_overrides "$2"
+  else models_cmd reorder "$1" "$2" $others >>"$LOG" 2>&1; fi
+}
+
+# onex_order provider -> the provider's models in the order onex holds them
+onex_order() {
+  models_cmd list --json 2>>"$LOG" | jq -r --arg p "$1" 'select(.provider? == $p) | (.models // []) | join(" ")' 2>/dev/null | tail -n 1
+}
+
+setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason>
+  local p="$1" key out err r models m first="" passed="" held
+  err="$RUN_DIR/models.err"
+  key="$(pending_key "$p")"; set_pending_key "$p" ""
+  models="$(chosen_models "$p")"
+  if [ -n "$key" ] && [ -z "$models" ]; then
+    # A key is never handed to onex without a model the developer chose.
+    key=""
+    set_result "$p" "fail:no $(provider_label "$p") model was chosen, so nothing was stored"
+    return 0
+  fi
+  if [ -n "$key" ] || [ "$p" = "local" ]; then
+    # Model ids hold no spaces. Unquoted on purpose: preflight admits a local server's URL and model only without spaces.
+    out="$(printf '%s' "$key" | models_cmd add "$p" --json $(for m in $models; do printf -- '--model %s ' "$m"; done) $(local_url_add_args "$p") 2>"$err")"
+  else
+    [ "$p" = "ollama" ] && [ -n "$models" ] && write_ollama_overrides "${models%% *}"
+    out="$(models_cmd test "$p" --json 2>"$err")"
+  fi
+  key=""
+  r="$(model_result "$out" "$err" "$p")"
+  case "$r" in unknown:*) r="fail:${r#unknown:}"; [ "$p" = "local" ] && { set_result "$p" "$r"; stop_local_url_unanswered; } ;; esac
+  [ "$r" = "fail:" ] && r="fail:onex models gave no result; see the log"
   rm -f "$err"
+  if [ -z "$models" ] || [ "$p" = "local" ]; then set_result "$p" "$r"; return 0; fi
+  first="${models%% *}"
+  add_model_res "$p" "$first" "$r"
+  case "$r" in pass:*) passed="$r" ;; esac
+  # Each further chosen model gets its own delegation pinned to it: put it
+  # first, test, then put the developer's order back.
+  if [ "$models" != "$first" ] && { [ "$p" = "ollama" ] || [ -n "$(onex_order "$p")" ]; }; then
+    for m in ${models#* }; do
+      if put_first "$p" "$m" "$models"; then
+        out="$(models_cmd test "$p" --json 2>"$err")"
+        r="$(model_result "$out" "$err" "$p")"
+        case "$r" in unknown:*|fail:) r="fail:${r#*:}"; [ "$r" = "fail:" ] && r="fail:onex models gave no result; see the log" ;; esac
+      else
+        r="fail:it could not be put first to test it; see the log"
+      fi
+      rm -f "$err"
+      add_model_res "$p" "$m" "$r"
+      [ -z "$passed" ] && case "$r" in pass:*) passed="$r" ;; esac
+    done
+    put_first "$p" "$first" "$models" || say "  ⚠ Your $(provider_label "$p") order could not be put back; set it with: onex models reorder $p $models"
+  fi
+  if [ "$p" != "ollama" ]; then
+    held="$(onex_order "$p")"
+    [ -n "$held" ] && say "  onex holds your $(provider_label "$p") models in this order: $(comma_list "$held")"
+  fi
+  set_result "$p" "${passed:-$(printf '%s' "$MODEL_RES" | grep "^$p|$first|" | head -n 1 | cut -d'|' -f3-)}"
 }
 
 phase3() {
   phase_start 3 "onex, local identity and your models" "3-10 minutes, more when Ollama downloads a model"
-  local p passed
+  local p passed line
   is_done 3 && rerun_note 3 "its model tests are not kept between runs and the later phases need them; it rebuilds nothing that is current"
 
   if dispatch_venv_current >>"$LOG" 2>&1; then
@@ -1568,7 +1603,7 @@ phase3() {
       say "  Setting up $(provider_label "$p") and running one delegation on it…"
       setup_model "$p"
     fi
-    say "  $(result_line "$p")"
+    result_line "$p" | while IFS= read -r line; do say "  $line"; done
   done
   for p in $SKIPPED; do say "  $(result_line "$p")"; done
   for p in $MODELS $SKIPPED; do record_model_status "$p"; done
@@ -1615,13 +1650,16 @@ setup_ollama() {
     say "  Ollama: present"
   fi
   step "start Ollama" start_ollama || { LAST_ERR="open the Ollama app once"; return 1; }
-  if ollama_has_model "$OLLAMA_MODEL"; then
-    say "  Model $OLLAMA_MODEL: present"
-  else
-    say "  Downloading $OLLAMA_MODEL (about $OLLAMA_DOWNLOAD_GB GB)…"
-    retry "download $OLLAMA_MODEL" "$(ollama_bin)" pull "$OLLAMA_MODEL" || {
-      LAST_ERR="run 'ollama pull $OLLAMA_MODEL' to see the error"; return 1; }
-  fi
+  local m
+  for m in ${CHOSEN_OLLAMA:-$OLLAMA_MODEL}; do  # every model the developer chose, in order
+    if ollama_has_model "$m"; then
+      say "  Model $m: present"
+    else
+      say "  Downloading $m$([ "$m" = "$OLLAMA_MODEL" ] && echo " (about $OLLAMA_DOWNLOAD_GB GB)")…"
+      retry "download $m" "$(ollama_bin)" pull "$m" || {
+        LAST_ERR="run 'ollama pull $m' to see the error"; return 1; }
+    fi
+  done
   step "point onex's local routes at Ollama" write_ollama_overrides "$OLLAMA_MODEL" || {
     LAST_ERR="$HOME/$OVERRIDES_FILE_REL was not written"; return 1; }
 }
@@ -2026,7 +2064,7 @@ phase6() {
 
 # ===========================================================================
 main() {
-  local p
+  local p line
   say "OmniNode developer onboarding (local runtime). Status file: $STATUS"
   [ "$RESTART" -eq 1 ] && rm -f "$DONE_FILE"
   bind_workspace_env
@@ -2042,7 +2080,7 @@ main() {
   hr
   say "Done. Set up: $SELECTED."
   say "Your models:"
-  for p in $MODELS $SKIPPED; do say "  $(result_line "$p")"; done
+  for p in $MODELS $SKIPPED; do result_line "$p" | while IFS= read -r line; do say "  $line"; done; done
   say "$(count_words "$(passed_models)") of $(count_words "$MODELS $SKIPPED") models ready. Delegation chooses among them for each task."
   say "Add or fix one any time: onex models add <gemini|openrouter|openai|local>; see them all: onex models list"
   say "Next:"
