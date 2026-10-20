@@ -108,3 +108,14 @@ dod_evidence:
     binds_ac:
       - AC5
       - AC10
+  - id: dod-omn21058-download-fetches-chosen-models
+    description: "A script downloaded on its own fetches its bootstrap handler from the commit its URL names; that commit is omniclaude#2910's merge (b4239e2d), whose handler lists each key's and Ollama's models, takes the developer's ordered pick and registers and tests each model, and download_digest is that handler's sha256. Before this change the download fetched a handler that asked no model question, so phase 3 refused every key."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -x --no-cov -k chosen_models_reach_a_downloaded"
+    binds_ac:
+      - AC6
+      - AC7
+      - AC8
+      - AC9
