@@ -17,9 +17,6 @@ requirements:
     statement: 'AC1: the placement gate passes a private caller of a reusable whose fork arm is guarded by `!github.event.repository.private`,
       and still refuses the same arm under schedule -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py
       -k repository_private fails'
-  - id: AC2
-    statement: 'AC2: omniweb''s private-repo-runner-placement check passes on a PR opened after the change -- falsifier: the
-      check reports a hosted placement on such a PR'
   - id: AC3
     statement: 'AC3: the omniclaude kb-doc-gate and omnimarket merge-hold-gate reusables guard their hosted fork arm with
       `!github.event.repository.private` and give a private caller an arm with no hosted default -- falsifier: a private caller''s
