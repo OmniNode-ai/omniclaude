@@ -6,10 +6,11 @@ summary: >
   ticket): onex models add with no --model is refused with BYOK_MODEL_NOT_CHOSEN
   for Gemini and OpenAI as it already was for OpenRouter. Onboarding therefore
   passes a model for every key it registers: OpenRouter keeps the overlay's
-  default, and a Gemini or OpenAI key gets the model onex models suggest-model
-  names from that key's own list, shown in the run's result line. A suggestion
-  onex cannot make ends that key with the reason and the command that chooses a
-  model, storing nothing; an onex from before suggest-model registers as before.
+  default, and a Gemini or OpenAI key gets the model onex models default-model
+  names from that key's own list (the key on stdin), shown in the run's result
+  line. A default onex cannot name ends that key with the reason and the command
+  that chooses a model, storing nothing; an onex that names a default for
+  OpenRouter alone gets the key with no --model, as before.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -22,7 +23,7 @@ requirements:
           AC3: a key with no chosen model is refused with a message naming how to choose one, never a silent cheapest-model fallback -- falsifier: uv run pytest on a delegation test with a key holding no chosen model that expects the refusal code and message and no stored or used default model
 evidence_requirements:
   - kind: tests
-    description: "A Gemini key's suggested model reaches onex models add --model with the key on stdin; a refused suggestion stores nothing and names onex models add gemini --model; an onex without suggest-model registers as before."
+    description: "A Gemini key's model from onex models default-model reaches onex models add --model with the key on stdin; a refused default stores nothing and names onex models add gemini --model; an onex that names a default for OpenRouter alone registers as before."
     command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k suggest -x"
 emergency_bypass:
   enabled: false
@@ -30,7 +31,7 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn21059-onboarding-passes-a-model
-    description: "Phase 3 asks onex models suggest-model for a Gemini key's model and passes it to onex models add gemini --model with the key on stdin; a suggestion onex refuses ends Gemini with the reason and onex models add gemini --model <model id>, with no key reaching onex models add, while OpenAI carries on; an onex from before suggest-model gets the key with no --model. onex models is a stand-in; a live run is the onboarding walk."
+    description: "Phase 3 asks onex models default-model for a Gemini key's model, the key on stdin, and passes it to onex models add gemini --model; a default onex refuses ends Gemini with the reason and onex models add gemini --model <model id>, with no key reaching onex models add, while OpenAI carries on; an onex that names a default for OpenRouter alone gets the key with no --model. onex models is a stand-in; a live run is the onboarding walk."
     source: manual
     checks:
       - check_type: test_passes
