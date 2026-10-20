@@ -210,6 +210,13 @@ requirements:
     acceptance:
       - id: AC50
         statement: "the coderabbit_triage skill directory and the coderabbit_triage hook handler are absent; the distribution manifest, plugin-compat.yaml and the canonical file shape baseline name neither coderabbit_triage nor coderabbit-triage; the orchestrator node stays exempted in tests/unit/nodes/test_skill_node_coverage.py _ORPHAN_REMOVAL_PENDING until its entry point is removed -- falsifier: uv run pytest tests/scripts/test_coderabbit_triage_removed_omn17427.py -q --no-cov fails over the merge base, where both paths exist"
+  - id: req-contractor-hook-event-policy
+    statement: Non-operator developer principals keep held hook classes off both transports and durable queues.
+    acceptance:
+      - id: AC53
+        statement: "A principal in the developer declaration drops prompt.submitted, content.captured, session.outcome and utilization.scoring.requested before the journal and capture state; other declared classes are journalled for the drainer, and the selected operator principal keeps its existing behavior."
+      - id: AC54
+        statement: "The Mac drainer installer preserves an explicit absolute ONEX_STATE_DIR in its rendered LaunchAgent so contractor hooks and the drainer can share one journal; the existing workspace default remains when it is unset."
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1057,3 +1064,31 @@ dod_evidence:
           '
     binds_ac:
       - AC50
+  - id: dod-contractor-hook-event-policy
+    description: Contractor fixtures exercise the real appender and journal drain, with operator and permitted-class positive controls and malformed declaration refusal.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_contractor_hook_policy.py -q --no-cov"
+    binds_ac:
+      - AC53
+  - id: dod-contractor-hook-state-root
+    description: A fresh HOME and stubbed Mac supervisors exercise actual installer rendering and shell hook state resolution with a custom state root and the existing defaults.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_install_hook_emit_drainer_config_root.py -q --no-cov"
+    binds_ac:
+      - AC54
+  - id: dod-deploy-contractor-hook-policy
+    description: A hosted runner exercises the hook policy and Mac installer with synthetic identities and a fresh HOME, without broker or credential access.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_contractor_hook_policy.py tests/scripts/test_install_hook_emit_drainer_config_root.py -q --no-cov"
+    binds_ac:
+      - AC53
+      - AC54

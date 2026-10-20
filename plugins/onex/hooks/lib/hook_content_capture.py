@@ -709,12 +709,14 @@ def capture(
 ) -> int:
     """Journal every content record for one hook call. Returns how many.
 
-    ``now`` anchors the first Stop's operator-prompt lookback; ``main`` passes
-    the wall clock. ``key_reader`` reads the payload key by its secret-store
-    reference; it is consulted only when the ``payload_encryption`` setting is
-    on (OMN-19513), and a key that cannot be read journals nothing.
+    ``now`` anchors the operator-prompt lookback. ``key_reader`` is consulted
+    only with payload encryption enabled; an unreadable key journals nothing.
     """
     if not capture_enabled_by_operator():
+        return 0
+    # Before transcript reads, chunking, sequence allocation or dedup markers.
+    # append_event enforces the same policy for every other caller.
+    if appender.developer_event_suppressed(CONTENT_EVENT_TYPE):
         return 0
     if not drainer_can_publish(status_path_for(journal_dir)):
         _log(

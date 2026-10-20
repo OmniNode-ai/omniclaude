@@ -2,32 +2,18 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Fast-path hook emitter (OMN-17224): append one event, exit.
+"""Admit and stamp one hook event, journal it and exit (OMN-17224, OMN-17427).
 
-This replaces ``node_event_emit_effect_dispatch.py`` on the per-tool-call
-hook path. That script imported the omnimarket handler stack and published
-to Kafka inline; profiling put 31.08s of a 31.65s ``handle()`` in a lazily-
-imported ``omnibase_infra`` chain that builds ~2,497 Pydantic classes. With
-one such process forked per tool call, 14 ran concurrently at ~270% CPU.
-
-The hook always journals locally and returns. Only the resident drainer
-publishes to the bus: even a short HTTP timeout does not bound DNS resolution,
-and a remote acknowledgement must never consume the hook's time budget.
-
-Deliberately stdlib-only and free of any ``omnibase_infra`` / ``omnimarket``
-import -- see ``hook_emit_journal`` for why that constraint is load-bearing
-and mechanically tested.
-
-Fail-loud (OMN-20110): an event that cannot be journalled exits 1 with the
-cause on stderr. The hook runs this under ``hook_emit_bounded.py``, which
-turns that exit, or a missed time budget, into a blocking error and one
-operator alarm per failure episode. The operator ruling of 2026-09-29: a hook
-may not fail silently.
+Only the resident drainer publishes; a remote acknowledgement must never spend
+the hook's time budget. Stdlib-only (see ``hook_emit_journal``). A journal
+failure exits 1, which ``hook_emit_bounded.py`` turns into a block (OMN-20110).
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.machinery
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -39,6 +25,32 @@ import hook_actor  # noqa: E402
 import hook_emit_journal as journal  # noqa: E402
 import hook_lane_attribution as lane_attribution  # noqa: E402
 import hook_turn_id  # noqa: E402
+
+# OMN-17427: the stdlib handler that owns developer-principal admission. A
+# missing file (a plugin tree without src/) falls back to the installed package.
+_HANDLER = "handlers/handler_hook_local_bus_publish.py"
+_BUS_HANDLER = Path(__file__).resolve().parents[4] / "src/omniclaude" / _HANDLER
+
+
+def _load_bus_handler() -> Any:
+    source: Path | None = _BUS_HANDLER
+    if not _BUS_HANDLER.is_file():
+        # Plugin caches carry no src tree. Locate the installed package without
+        # executing its expensive __init__; the verified plugin venv owns it.
+        package = importlib.machinery.PathFinder.find_spec("omniclaude")
+        roots = (package.submodule_search_locations if package else None) or []
+        source = next((p for r in roots if (p := Path(r) / _HANDLER).is_file()), None)
+    spec = source and importlib.util.spec_from_file_location("hook_local_bus", source)
+    if not spec or spec.loader is None:
+        return None
+    bus = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bus)
+    return bus
+
+
+def developer_event_suppressed(event_type: str) -> bool:
+    admission = getattr(_load_bus_handler(), "developer_event_suppressed", None)
+    return bool(admission and admission(event_type))
 
 
 def _parse_payload(raw: str) -> dict[str, Any]:
@@ -79,21 +91,16 @@ def append_event(
     journal_dir: str | None,
     drainer_status: str | None = None,
 ) -> str | None:
-    """Stamp lane, actor and turn onto ``payload`` and journal it.
+    """Admit, stamp and journal one event, returning its turn id.
 
-    Returns the turn id stamped on the record, so a caller journalling a
-    second record for the same hook call (OMN-19551's content record) can
-    carry the SAME turn instead of racing a second allocation.
-
-    ``drainer_status`` is the drainer's status file (OMN-20735). When given, a
-    ``work.ledger.*`` record whose type the status does not list as publishable
-    (no status, no types, or the type absent) is DEFERRED beside the journal
-    instead of journalled, because an unknown type at the journal head stalls
-    every record behind it. The drainer releases it once it lists the type. The
-    row is held, never skipped.
-
-    Raises whatever the journal raises; :func:`main` turns it into exit 1.
+    Unknown work-ledger types are deferred beside the journal until the drainer
+    lists them as publishable. A journal failure propagates to main's error path.
     """
+    # OMN-17427: drop the complete class before turn allocation, transport or
+    # journal. Filtering a fan-out topic downstream would leave its evt half and
+    # could still spool a command the contractor cannot publish.
+    if developer_event_suppressed(event_type):
+        return host_turn_id
     target = Path(journal_dir) if journal_dir else journal.default_journal_dir()
     # The registry is the authority for lane attribution. Caller-supplied
     # lane keys are overwritten rather than trusted.
