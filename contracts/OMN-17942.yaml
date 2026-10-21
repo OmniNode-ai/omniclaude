@@ -50,6 +50,23 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q"
     binds_ac:
       - AC1
+  - id: dod-subagent-lane-identity
+    description: >
+      The lane identity AC1 requires, for a workflow subagent with no declared
+      ONEX_LANE or ONEX_REMOTE_LANE: its agent sidecar names the lane and the
+      rolling work ledger holds an open CLAIM for that same lane, both agreeing.
+      A sidecar with no CLAIM, a CLAIM closed by its TERMINAL, a CLAIM with no
+      sidecar and an agent_id that is a path are still refused
+      lane_identity_missing, and a declared lane still wins. Falsifier: these
+      cases fail at the merge base, whose intake reads the lane only from the
+      environment.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'workflow_subagent or claimed_subagent or claim_closed or claim_without_a_sidecar or agent_id_that_is_a_path or declared_lane_still_wins'"
+    binds_ac:
+      - AC1
   - id: dod-deploy-lane-intake-handler
     description: >
       Deploy probe: the lane-intake handler read from GitHub at the
