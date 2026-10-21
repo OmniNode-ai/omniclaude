@@ -217,6 +217,13 @@ requirements:
         statement: "A principal in the developer declaration drops prompt.submitted, content.captured, session.outcome and utilization.scoring.requested before the journal and capture state; other declared classes are journalled for the drainer, and the selected operator principal keeps its existing behavior."
       - id: AC54
         statement: "The Mac drainer installer preserves an explicit absolute ONEX_STATE_DIR in its rendered LaunchAgent so contractor hooks and the drainer can share one journal; the existing workspace default remains when it is unset."
+  - id: req-migrated-ticket-contracts
+    statement: The 24 migrated ticket contracts are readable beside omniclaude code and retain their historical evidence identities and executable checks.
+    acceptance:
+      - id: AC55
+        statement: Each migrated contract parses as YAML with schema version 1.0.0, its own ticket_id and a nonempty title.
+      - id: AC56
+        statement: Each migrated contract retains every historical evidence ID with nonempty check types and commands, and evidence IDs remain unique.
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1092,3 +1099,31 @@ dod_evidence:
     binds_ac:
       - AC53
       - AC54
+  - id: dod-migrated-ticket-contract-identity
+    description: The focused tests parse all 24 migrated files from this checkout and check their schema, ticket identities and titles.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/contracts/test_migrated_ticket_contracts_omn17427.py -q --no-cov -k test_migrated_contract_identifies_its_ticket"
+    binds_ac:
+      - AC55
+  - id: dod-migrated-ticket-contract-evidence
+    description: The focused tests check that all historical evidence IDs remain unique and retain nonempty checks in the migrated files.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/contracts/test_migrated_ticket_contracts_omn17427.py -q --no-cov -k test_migrated_contract_retains_its_evidence"
+    binds_ac:
+      - AC56
+  - id: dod-deploy-migrated-ticket-contracts
+    description: A hosted runner parses the repository-owned contracts and checks their identities and retained evidence without credentials, services or a change-control checkout.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/contracts/test_migrated_ticket_contracts_omn17427.py -q --no-cov"
+    binds_ac:
+      - AC55
+      - AC56
