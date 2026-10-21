@@ -75,6 +75,8 @@ def _run(
     agent_id: str | None = None,
     state: bool = True,
     flags: tuple[str, ...] = (),
+    extra_env: dict[str, str] | None = None,
+    extra_payload: dict[str, Any] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
@@ -83,12 +85,14 @@ def _run(
         env["ONEX_STATE_DIR"] = str(tmp_path / "state")
     if lane is not None:
         env["ONEX_LANE"] = lane
+    env.update(extra_env or {})
     payload: dict[str, Any] = {
         "tool_name": "mcp__linear-server__save_issue",
         "tool_input": tool_input,
     }
     if agent_id is not None:
         payload["agent_id"] = agent_id
+    payload.update(extra_payload or {})
     return subprocess.run(
         [sys.executable, str(_GUARD_PY), *flags],
         input=json.dumps(payload),
@@ -325,3 +329,129 @@ def test_the_guard_and_handler_spell_none_of_the_lane_intake_vocabulary() -> Non
         text = source.read_text(encoding="utf-8")
         for literal in (_LABEL, _STAMP_PREFIX):
             assert literal not in text, f"{literal!r} is spelled in {source.name}"
+
+
+# ---------------------------------------------------------------------------
+# A workflow subagent: harness sidecar plus its own open CLAIM (OMN-17942)
+# ---------------------------------------------------------------------------
+
+_SESSION = "0f0e0d0c-session"
+_AGENT = "a5ub4gent0000001"
+
+
+def _workflow_subagent(
+    tmp_path: Path,
+    *,
+    sidecar_lane: str | None = "lane-w",
+    ledger_rows: tuple[str, ...] = (),
+) -> tuple[dict[str, str], dict[str, Any]]:
+    """The hook env and payload extras of a Mac workflow subagent.
+
+    The harness writes ``agent-<id>.meta.json`` under the PARENT session's
+    ``subagents/workflows/<run>/`` with the dispatch label (lane name, then the
+    ROUTE line) as its ``description``; the payload carries ``agent_id`` and the
+    parent transcript path. No ``ONEX_LANE`` is set: a subagent cannot set it.
+    """
+    project = tmp_path / "projects" / "-proj"
+    transcript = project / f"{_SESSION}.jsonl"
+    project.mkdir(parents=True, exist_ok=True)
+    transcript.write_text("", encoding="utf-8")
+    if sidecar_lane is not None:
+        run = project / _SESSION / "subagents" / "workflows" / "wf_0001"
+        run.mkdir(parents=True, exist_ok=True)
+        (run / f"agent-{_AGENT}.meta.json").write_text(
+            json.dumps(
+                {
+                    "agentType": "workflow-subagent",
+                    "description": f"{sidecar_lane} ROUTE: band=B4 model=opus",
+                }
+            ),
+            encoding="utf-8",
+        )
+    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
+    ledger.write_text("".join(f"{row}\n" for row in ledger_rows), encoding="utf-8")
+    env = {"ONEX_LEDGER_PATH": str(ledger)}
+    payload = {"session_id": _SESSION, "transcript_path": str(transcript)}
+    return env, payload
+
+
+def _claim(lane: str, at: str = "2026-10-21T21:00:00Z") -> str:
+    return f"{at} | CLAIM | lane={lane} | ticket=OMN-17942 | the lane's work"
+
+
+def _terminal(lane: str, at: str = "2026-10-21T21:30:00Z") -> str:
+    return f"{at} | TERMINAL | lane={lane} | ticket=OMN-17942 | outcome=done | done"
+
+
+def test_a_workflow_subagent_with_an_open_claim_mints(tmp_path: Path) -> None:
+    env, extra = _workflow_subagent(tmp_path, ledger_rows=(_claim("lane-w"),))
+    ok = _create(description=_stamped("lane-w"), labels=[_LABEL])
+    _admitted(_run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra))
+    rows = _ledger(tmp_path / "state").read_text(encoding="utf-8").splitlines()
+    assert [json.loads(r)["lane"] for r in rows] == ["lane-w"]
+    assert json.loads(rows[0])["lane_source"] == "sidecar+claim"
+
+
+def test_the_claimed_subagent_still_needs_its_stamp(tmp_path: Path) -> None:
+    """The resolved lane is the one the stamp must name -- not any lane."""
+    env, extra = _workflow_subagent(tmp_path, ledger_rows=(_claim("lane-w"),))
+    wrong = _create(description=_stamped("lane-other"), labels=[_LABEL])
+    result = _run(wrong, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
+    assert result.returncode == 3
+    reason = _reason(result)
+    assert "lane_stamp_missing" in reason and f"{_STAMP_PREFIX} lane-w" in reason
+    assert "lane_identity_missing" not in reason
+
+
+def test_a_workflow_subagent_without_a_claim_is_refused(tmp_path: Path) -> None:
+    env, extra = _workflow_subagent(tmp_path, ledger_rows=(_claim("lane-other"),))
+    ok = _create(description=_stamped("lane-w"), labels=[_LABEL])
+    result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
+    assert result.returncode == 3
+    reason = _reason(result)
+    assert "lane_identity_missing" in reason
+    assert "no open CLAIM for lane 'lane-w'" in reason, "names the missing CLAIM"
+    assert not _ledger(tmp_path / "state").exists(), "a refusal spends no budget"
+
+
+def test_a_claim_closed_by_its_terminal_no_longer_names_the_lane(
+    tmp_path: Path,
+) -> None:
+    env, extra = _workflow_subagent(
+        tmp_path, ledger_rows=(_claim("lane-w"), _terminal("lane-w"))
+    )
+    ok = _create(description=_stamped("lane-w"), labels=[_LABEL])
+    result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_a_claim_without_a_sidecar_names_no_lane(tmp_path: Path) -> None:
+    """An open CLAIM alone is not identity: the harness must name the caller."""
+    env, extra = _workflow_subagent(
+        tmp_path, sidecar_lane=None, ledger_rows=(_claim("lane-w"),)
+    )
+    ok = _create(description=_stamped("lane-w"), labels=[_LABEL])
+    result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_an_agent_id_that_is_a_path_names_no_lane(tmp_path: Path) -> None:
+    env, extra = _workflow_subagent(tmp_path, ledger_rows=(_claim("lane-w"),))
+    ok = _create(description=_stamped("lane-w"), labels=[_LABEL])
+    result = _run(ok, tmp_path, agent_id="../x", extra_env=env, extra_payload=extra)
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+@pytest.mark.parametrize("key", ["ONEX_LANE", "ONEX_REMOTE_LANE"])
+def test_a_declared_lane_still_wins_over_the_sidecar(key: str, tmp_path: Path) -> None:
+    """The remote-lane path is unchanged: its declaration names the lane, with
+    no CLAIM read, even when a sidecar and a claim name another lane."""
+    env, extra = _workflow_subagent(tmp_path, ledger_rows=(_claim("lane-w"),))
+    env[key] = "lane-remote"
+    ok = _create(description=_stamped("lane-remote"), labels=[_LABEL])
+    _admitted(_run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra))
+    row = json.loads(_ledger(tmp_path / "state").read_text("utf-8").splitlines()[0])
+    assert (row["lane"], row["lane_source"]) == ("lane-remote", "env")

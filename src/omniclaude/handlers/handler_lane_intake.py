@@ -7,7 +7,11 @@ existing Linear key, so its author field reads as the operator's own (scorecard
 S3: 135 of 148 new items 2026-10-12..2026-10-16). The operator ruled the key
 stays, so the item itself carries the fact:
 
-* rule 11 -- a create from a lane or node context declares its lane identity;
+* rule 11 -- a create from a lane or node context declares its lane identity:
+  the launcher's ``ONEX_LANE``/``ONEX_REMOTE_LANE``, or, for a workflow
+  subagent that cannot set its harness environment, the lane the harness's
+  ``agent-<agent id>.meta.json`` sidecar names, accepted only while that lane
+  holds an open CLAIM on the rolling work ledger;
 * rule 12 -- it carries the lane-intake label (``lane_intake.label``);
 * rule 13 -- its description's first line is ``<stamp_prefix> <lane>``;
 * rule 14 -- no more than ``lane_intake.daily_budget`` such items are admitted
@@ -26,11 +30,14 @@ are handed; the filesystem is touched only by :func:`begin` and :func:`record`.
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import json
 import os
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
+from types import ModuleType
 from typing import NamedTuple
 
 #: The launcher's declarations of a lane's identity, most specific first -- the
@@ -39,6 +46,21 @@ from typing import NamedTuple
 _LANE_ENV_KEYS = ("ONEX_LANE", "ONEX_REMOTE_LANE")
 #: ``CLAUDE_CODE_ENTRYPOINT`` prefix of a headless (``claude -p``) session.
 _HEADLESS_ENTRYPOINT_PREFIX = "sdk-"
+#: Where a lane's identity came from: the launcher's environment, or a
+#: workflow subagent's harness sidecar confirmed by its open ledger CLAIM.
+LANE_SOURCE_ENV = "env"
+LANE_SOURCE_SIDECAR_CLAIM = "sidecar+claim"
+#: The repository root, from ``src/omniclaude/handlers/<this file>``.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+#: The stdlib-only readers this module reuses rather than re-implements: the
+#: refusal recorder's sidecar and open-CLAIM reading (OMN-19381), which sits on
+#: the hook library's ``hook_lane_attribution`` sidecar locator (OMN-18609).
+_HOOKS_LIB = _REPO_ROOT / "plugins/onex/hooks/lib"
+_REFUSAL_LANE_PY = (
+    _REPO_ROOT
+    / "src/omniclaude/nodes/node_hook_refusal_record_effect/handlers"
+    / "handler_hook_refusal_lane.py"
+)
 
 
 class LaneIntakePolicy(NamedTuple):
@@ -63,6 +85,11 @@ class LaneAdmission(NamedTuple):
     intake_count: int | None
     ledger: Path | None
     at: str
+    #: :data:`LANE_SOURCE_ENV`, :data:`LANE_SOURCE_SIDECAR_CLAIM` or ``""``.
+    lane_source: str = ""
+    #: The lane a subagent's sidecar named, kept when no open CLAIM confirmed
+    #: it, so the refusal can say which CLAIM is missing.
+    unclaimed_sidecar_lane: str = ""
 
 
 def load_policy(policy_path: Path) -> LaneIntakePolicy:
@@ -109,6 +136,74 @@ def read_intake_count(ledger: Path | None) -> int | None:
     return sum(1 for line in text.splitlines() if line.strip())
 
 
+def _refusal_lane_module() -> ModuleType | None:
+    """The refusal recorder's lane reader, loaded by path, or ``None``.
+
+    Loaded by path for the reason the guard loads this module by path: the
+    hook's bare interpreter has no ``omniclaude`` package. ``None`` when it
+    cannot be loaded, which resolves no lane and so refuses.
+    """
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "handler_hook_refusal_lane", _REFUSAL_LANE_PY
+        )
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.use_hooks_lib(str(_HOOKS_LIB))
+    except (OSError, ImportError, SyntaxError, AttributeError):
+        return None
+    return module
+
+
+def subagent_lane(
+    payload: Mapping[str, object], environ: Mapping[str, str]
+) -> tuple[str, str]:
+    """``(lane, sidecar_lane)`` for a workflow subagent's create.
+
+    A workflow subagent cannot set ``ONEX_LANE`` in the Claude Code process
+    environment the hook reads, so its identity comes from two facts it did
+    not assert in the call itself: the harness's ``agent-<agent id>.meta.json``
+    sidecar, found from the payload's ``agent_id`` and transcript path, names
+    the lane it was dispatched as; and the rolling work ledger holds an open
+    CLAIM for exactly that lane. ``lane`` is that name when both agree and
+    ``""`` otherwise; ``sidecar_lane`` is the sidecar's name whatever the
+    ledger says, so a refusal can name the CLAIM that is missing. Never raises.
+    """
+    agent_id = payload.get("agent_id")
+    if not isinstance(agent_id, str) or not agent_id.strip():
+        return "", ""
+    reader = _refusal_lane_module()
+    if reader is None:
+        return "", ""
+    try:
+        attribution = importlib.import_module("hook_lane_attribution")
+    except ImportError:
+        return "", ""
+    session = payload.get("session_id")
+    session_id = session.strip() if isinstance(session, str) else ""
+    named = ""
+    for key in ("transcript_path", "agent_transcript_path"):
+        transcript = payload.get(key)
+        if not isinstance(transcript, str) or not transcript.strip():
+            continue
+        # Both readers never raise: an unreadable sidecar names no lane.
+        meta = attribution.read_sidecar(
+            transcript, session_id or None, agent_id.strip()
+        )
+        named = reader.lane_cell(reader.sidecar_lane(meta))
+        if named:
+            break
+    if not named:
+        return "", ""
+    # An unreadable ledger reads as no open CLAIM, which confirms nothing.
+    claims = reader.open_claims(environ)
+    if any(claim.get("lane") == named for claim in claims):
+        return named, named
+    return "", named
+
+
 def begin(
     payload: Mapping[str, object],
     environ: Mapping[str, str],
@@ -123,21 +218,32 @@ def begin(
     (``agent_id`` in the hook payload) or a headless ``sdk-*`` entrypoint -- the
     markers the lane GitHub-read guard uses. ``force`` is the node path: the
     caller IS a node, whatever its environment says.
+
+    The declared environment names the lane first, unchanged for the
+    remote-lane runner. A subagent with no declaration is named by
+    :func:`subagent_lane` (sidecar plus open CLAIM) or by nothing.
     """
     lane = next(
         (environ[k].strip() for k in _LANE_ENV_KEYS if environ.get(k, "").strip()), ""
     )
+    source = LANE_SOURCE_ENV if lane else ""
     agent_id = payload.get("agent_id")
+    is_subagent = isinstance(agent_id, str) and bool(agent_id.strip())
     in_lane = (
         force
         or bool(lane)
-        or (isinstance(agent_id, str) and bool(agent_id.strip()))
+        or is_subagent
         or environ.get("CLAUDE_CODE_ENTRYPOINT", "").startswith(
             _HEADLESS_ENTRYPOINT_PREFIX
         )
     )
     if not in_lane:
         return None
+    unclaimed = ""
+    if not lane and is_subagent:
+        lane, named = subagent_lane(payload, environ)
+        source = LANE_SOURCE_SIDECAR_CLAIM if lane else ""
+        unclaimed = "" if lane else named
     policy = load_policy(policy_path)
     ledger = ledger_path(environ, policy, now.strftime("%Y-%m-%d"))
     return LaneAdmission(
@@ -146,6 +252,8 @@ def begin(
         read_intake_count(ledger),
         ledger,
         now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        source,
+        unclaimed,
     )
 
 
@@ -171,6 +279,7 @@ def findings(
     policy, lane = admission.policy, admission.lane
     out: list[dict[str, str]] = []
     if not lane:
+        unclaimed = admission.unclaimed_sidecar_lane
         out.append(
             {
                 "code": "lane_identity_missing",
@@ -179,10 +288,22 @@ def findings(
                     "this create comes from a lane or node context but declares "
                     "no lane identity, so the item cannot be stamped as "
                     "lane-opened and would again read as the operator's own"
+                    + (
+                        f"; the harness names this subagent '{unclaimed}', but "
+                        f"the rolling work ledger holds no open CLAIM for lane "
+                        f"'{unclaimed}'"
+                        if unclaimed
+                        else ""
+                    )
                 ),
                 "fix": (
-                    "run the lane with its identity declared (ONEX_LANE=<lane>), "
-                    "or have the calling node pass its own name as the lane"
+                    f"append this lane's CLAIM (lane={unclaimed}) through "
+                    "/omni:ledger-write before minting"
+                    if unclaimed
+                    else "run the lane with its identity declared "
+                    "(ONEX_LANE=<lane>); a workflow subagent is named by its "
+                    "harness sidecar while its own CLAIM is open on the rolling "
+                    "work ledger; a calling node passes its own name as the lane"
                 ),
             }
         )
@@ -261,7 +382,12 @@ def record(admission: LaneAdmission, title: str) -> None:
         raise OSError("no intake ledger path resolves")
     admission.ledger.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(
-        {"at": admission.at, "lane": admission.lane, "title": title[:200]}
+        {
+            "at": admission.at,
+            "lane": admission.lane,
+            "lane_source": admission.lane_source,
+            "title": title[:200],
+        }
     )
     fd = os.open(admission.ledger, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
     try:
@@ -271,6 +397,8 @@ def record(admission: LaneAdmission, title: str) -> None:
 
 
 __all__ = [
+    "LANE_SOURCE_ENV",
+    "LANE_SOURCE_SIDECAR_CLAIM",
     "LaneAdmission",
     "LaneIntakePolicy",
     "begin",
@@ -280,4 +408,5 @@ __all__ = [
     "read_intake_count",
     "record",
     "stamp_line",
+    "subagent_lane",
 ]

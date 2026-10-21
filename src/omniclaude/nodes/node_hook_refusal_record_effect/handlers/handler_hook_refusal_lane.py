@@ -68,6 +68,8 @@ __all__ = [
     "LEDGER_TAIL_BYTES",
     "candidate_paths",
     "claim_lane",
+    "lane_cell",
+    "open_claims",
     "resolve_refusal_lane",
     "sidecar_lane",
     "skill_lane",
@@ -439,6 +441,20 @@ def _ledger_path(explicit: str | None, env: Mapping[str, str]) -> Path | None:
     return None
 
 
+def open_claims(
+    env: Mapping[str, str], ledger: str | None = None
+) -> list[dict[str, str]]:
+    """The open CLAIM rows in the ledger's bounded tail, oldest first.
+
+    Open means no later TERMINAL for the same lane. ``[]`` when no ledger
+    path resolves or the file cannot be read. Also read by the ticket-creation
+    guard's lane intake (OMN-17942), which names a workflow subagent's lane
+    only when that lane holds an open CLAIM.
+    """
+    ledger_file = _ledger_path(ledger, env)
+    return _open_claims(_ledger_tail(ledger_file)) if ledger_file else []
+
+
 # ---------------------------------------------------------------------------
 # the chain
 # ---------------------------------------------------------------------------
@@ -564,8 +580,7 @@ def _resolve_refusal_lane(
     if not worktrees:
         return "", LANE_SOURCE_UNRESOLVED
 
-    ledger_file = _ledger_path(ledger, environment)
-    claims = _open_claims(_ledger_tail(ledger_file)) if ledger_file else []
+    claims = open_claims(environment, ledger)
     for tree in worktrees:
         lane, ambiguous = claim_lane(tree, claims, environment)
         if lane:
