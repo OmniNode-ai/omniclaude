@@ -1645,7 +1645,7 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.47.50"
+version = "0.47.51"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "blake3" },
@@ -1662,9 +1662,9 @@ dependencies = [
     { name = "tree-sitter" },
     { name = "tree-sitter-python" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ad/7d/c80732c3073e3fc1acd8abe9b57caeef42811f7bcd378595eff0fea746aa/omnibase_core-0.47.50.tar.gz", hash = "sha256:1e5d34042fef242e6290d8fc6092e316eedf7af52f343d389100a0c4fa6a815a", size = 11273303, upload-time = "2026-10-20T09:18:23.52Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ea/a7/faacba41056417ae3580f3e1d2a5e86383fc75b58be9ebe523d974939690/omnibase_core-0.47.51.tar.gz", hash = "sha256:00ed1a56ac9b992966dfd655eaedc432db7ad19dc664034e50035a0328524619", size = 11284292, upload-time = "2026-10-21T00:14:57.868Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/ee/476c8f6ac838c90a377216035bc6ffc40eb8fea347e2ea6547eaf801116a/omnibase_core-0.47.50-py3-none-any.whl", hash = "sha256:8a75c7ed0ba62532f50c9097190df1562e339b3ad1a8eaa330189b2a36ef14f1", size = 7913197, upload-time = "2026-10-20T09:18:20.58Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/82/fff13b6edf8b5574a55a86b2b36f0014cdb05efff1d7671db8815041350c/omnibase_core-0.47.51-py3-none-any.whl", hash = "sha256:2d3c77858b21c1cfa2155edaa87b19a842974ec064a265eee154ce40a3a3317f", size = 7916981, upload-time = "2026-10-21T00:14:55.151Z" },
 ]
 
 [[package]]
