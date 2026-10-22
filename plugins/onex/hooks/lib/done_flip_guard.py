@@ -4,15 +4,11 @@
 
 """Fail-closed Done-flip and acceptance-box guard.
 
-A Done transition requires repo-owned evidence: a merged product PR's
-``contracts/<TICKET>.yaml`` binds every labelled acceptance criterion, and a
-green ``repo-evidence / dod-verify`` check verifies the same contract that
-merged. Every blocking product PR must be merged and no unchecked acceptance
-boxes may remain. An edit that ticks an acceptance box needs the same evidence.
-
-No merged PR, missing contract, missing check, or an unreadable verdict refuses
-the write. Non-Done edits without ticks and cancel-class transitions pass.
-Exit codes: 0 allows the tool call; 2 blocks with a JSON decision on stderr.
+Done, or an edit ticking an acceptance box, needs repo evidence: a merged PR's
+``contracts/<TICKET>.yaml`` binding every labelled criterion and a green
+``repo-evidence / dod-verify`` run on the contract that merged (or, for a
+docs-only ticket, its merged docs PR). Cited PRs merged, no box unchecked.
+The hook's readers read no GitHub through gh (OMN-20368). Exit 0 allows; 2 blocks.
 """
 
 from __future__ import annotations
@@ -57,14 +53,7 @@ _MAX_UNCHECKED_BOX_SNIPPET_CHARS = 240
 
 
 def find_unchecked_acceptance_boxes(description: str) -> list[str]:
-    """Return every unchecked GFM task-list line (`- [ ]  ...`) in ``description``.
-
-    Matches ``-``/``*``/``+`` bullets and ``1.``/``1)`` numbered items whose
-    checkbox is unchecked (``[ ]``) and followed by non-blank text — a bare
-    ``[ ]`` token elsewhere in prose (not a list-item checkbox) does not
-    match. Checked boxes (``[x]``/``[X]``) never match. Pure function — no
-    I/O, no network, no subprocess.
-    """
+    """Every unchecked list-item box with text (``- [ ] x``, ``1. [ ] x``). Pure."""
     return [
         line.strip()[:_MAX_UNCHECKED_BOX_SNIPPET_CHARS]
         for line in _UNCHECKED_BOX_RE.findall(description or "")
@@ -85,12 +74,7 @@ class Decision:
 
 
 def _default_linear_fetcher(ticket_id: str) -> dict[str, Any] | None:
-    """Fetch a Linear issue's description/labels via the shared implementation.
-
-    Delegates to ``linear_done_verify._fetch_linear_issue`` (GraphQL). Returns
-    ``None`` on network/API failure, ``{}`` when ``LINEAR_API_KEY`` is unset, or
-    the issue dict otherwise.
-    """
+    """The issue dict via ``_fetch_linear_issue``; ``{}`` with no key, None on failure."""
     from linear_done_verify import _fetch_linear_issue
 
     result = _fetch_linear_issue(ticket_id)
@@ -481,15 +465,31 @@ def _load_stdin_call() -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def main() -> int:
-    """Read a PreToolUse tool call on stdin; exit 0 (allow) or 2 (block).
+def _lane_readers() -> dict[str, Callable[..., Any]]:
+    """``decide``'s readers from the node_linear_effect handler, imported on first use."""
 
-    OMN-20368: fail CLOSED. A guard that cannot decide refuses the Linear
-    write and says why; before this a runtime error in the guard was an allow.
-    """
+    def reader(name: str) -> Callable[..., Any]:
+        def read(*args: Any) -> Any:
+            os.environ.setdefault("ONEX_PLUGIN_HOOK_LIB", os.path.dirname(__file__))
+            from omniclaude.nodes.node_linear_effect.handlers import (
+                handler_lane_repo_evidence as handler,
+            )
+
+            return getattr(handler.hook_evidence_readers(), name)(*args)
+
+        return read
+
+    return {
+        "repo_evidence_probe": reader("repo_evidence"),
+        "pr_fetcher": reader("pr_status"),
+    }
+
+
+def main() -> int:
+    """Read a PreToolUse call on stdin; exit 0 or 2. Fail CLOSED (OMN-20368)."""
     call = _load_stdin_call()
     try:
-        decision = decide(call)
+        decision = decide(call, **_lane_readers())
     except (
         ArithmeticError,
         AttributeError,

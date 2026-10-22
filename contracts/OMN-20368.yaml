@@ -58,3 +58,28 @@ dod_evidence:
           python:3.13-slim python -c
           'import ast; src = open("/runtime/omniclaude/nodes/node_linear_effect/handlers/handler_local_pr_state.py").read(); tree = ast.parse(src); assert "HandlerLocalPrState" in {n.name for n in tree.body if isinstance(n, ast.ClassDef)}; assert not [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and n.value == "gh"]'
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20368-done-flip-lane-readers
+    description: >
+      The Done-flip hook hands decide() the node_linear_effect handler's
+      HookEvidenceReaders (PR watcher and canonical clone first, then the onex
+      scm read node through LaneRepoEvidence), so no PR-state, contract or
+      check-run read goes through gh; the tick rule and the Done rule share the
+      product-repository verdict; and a documentation-only ticket closes on a
+      merged docs-only PR that names it and carries no contract, and on nothing
+      weaker.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_lane_readers.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20368-deploy-hook-evidence-readers
+    description: A hosted runner starts an isolated Python container with the changed handler and hook library mounted and verifies the handler defines HookEvidenceReaders with the docs-only verdict, the hook wires it, and neither file names gh. No fleet service or private endpoint is required.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: >-
+          env docker run --rm --network none
+          --mount "type=bind,src=${OMNI_HOME}/omniclaude,dst=/repo,readonly"
+          python:3.13-slim python -c
+          'import ast; h = ast.parse(open("/repo/src/omniclaude/nodes/node_linear_effect/handlers/handler_lane_repo_evidence.py").read()); g = open("/repo/plugins/onex/hooks/lib/done_flip_guard.py").read(); c = {n.name: n for n in h.body if isinstance(n, ast.ClassDef)}; assert {"repo_evidence", "docs_evidence", "pr_status"} <= {f.name for f in c["HookEvidenceReaders"].body if isinstance(f, ast.FunctionDef)}; assert "hook_evidence_readers()" in g and "decide(call, **_lane_readers())" in g; assert not [n for t in (h, ast.parse(g)) for n in ast.walk(t) if isinstance(n, ast.Constant) and n.value == "gh"]'
+        cwd: "${OMNI_HOME}/omniclaude"
