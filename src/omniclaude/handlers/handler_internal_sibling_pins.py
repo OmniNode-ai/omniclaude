@@ -225,7 +225,7 @@ def handle(request: ModelInternalSiblingPinsRequest) -> ModelInternalSiblingPins
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n", 1)[0])
     parser.add_argument("--head-lock", type=Path, required=True)
     parser.add_argument(
         "--base-lock", type=Path, default=None, help="omit to judge every pin"
