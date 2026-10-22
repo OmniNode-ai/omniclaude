@@ -1,0 +1,51 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-19916
+title: "The runner-placement gate resolves a nested runs-on selector instead of refusing it"
+summary: >
+  omnibase_core receipt-gate.yml (OMN-21280, core f1706ad2c) wraps its runner
+  selector in a private-caller guard with a public default, a selector nested
+  inside an arm. The private-repo-runner-placement gate refused the nesting as
+  unreadable, so every private repository whose tree calls receipt-gate.yml@main
+  exited 2 with THE GATE DID NOT RUN whatever its own workflows held; that is
+  the red on omninode_infra#1904 (job 119834792684), whose dashboard-token
+  change this ticket carries. The gate now flattens a nested selector into its
+  arms under the outer guard and distributes a selector out of a value
+  fallback chain, so the expression gets a verdict per event: the fleet where
+  the private guard holds, a finding where a hosted arm or fallback is
+  reachable, and still a refusal for a nested plain variable that can turn
+  falsy.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-prrp-nested-selector
+    statement: The placement gate resolves a runs-on selector nested inside an arm, and a selector inside a fromJSON fallback chain, per event instead of refusing it.
+    acceptance:
+      - id: AC1
+        statement: "the omnibase_core receipt-gate expression, multi-line and single-line, exits 0 for a private caller's push with the fleet variables set, and flattens to four arms in order with the outer private guard on the three nested ones -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_core_receipt_gate_resolves or nested_selector_arms_are_flattened' fails at the merge base, where the gate exits 2"
+      - id: AC2
+        statement: "the same expression is still a finding (exit 1) under pull_request:fork and under schedule, and a selector inside a fromJSON fallback chain passes on push and is a finding on schedule -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_fork_arm or nested_selector_public_default or nested_selector_inside_a_fallback_chain' fails at the merge base, where the gate exits 2"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn19916-nested-selector-resolves
+    description: The core receipt-gate expression gets a verdict and flattens to its arms in order.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_core_receipt_gate_resolves or nested_selector_arms_are_flattened'"
+    binds_ac:
+      - AC1
+  - id: dod-omn19916-nested-selector-findings
+    description: Reachable hosted arms and fallbacks under the nested selector are still findings.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_fork_arm or nested_selector_public_default or nested_selector_inside_a_fallback_chain'"
+    binds_ac:
+      - AC2
