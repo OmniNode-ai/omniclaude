@@ -38,7 +38,9 @@ def resolve_test_paths(
     """Map changed file paths to deterministic unit test directories.
 
     Behavior:
-      - Source changes under src/omniclaude/<module>: include tests/unit/<module>/.
+      - Source changes under src/omniclaude/<module>: include tests/unit/<module>/
+        for the module and its reverse dependencies, falling back to tests/unit/
+        when a module's test directory does not exist.
       - Test-only changes under tests/unit/: include the changed unit-test directory.
       - Test-only changes under tests/integration/: ignored (integration runs always).
       - Files matching a configured `path_triggers` prefix: include that
@@ -83,7 +85,12 @@ def _resolve(changed_files: list[str], config: ModelAdjacencyMap) -> list[str]:
         expanded.update(config.adjacency[module].reverse_deps)
 
     for module in expanded:
-        selected.add(f"{TEST_UNIT_PREFIX}{module}/")
+        test_path = f"{TEST_UNIT_PREFIX}{module}/"
+        if (REPO_ROOT / test_path).is_dir():
+            selected.add(test_path)
+        else:
+            # Module tests may be flat files, so conservatively select the unit root.
+            selected.add(TEST_UNIT_PREFIX)
 
     return sorted(selected)
 

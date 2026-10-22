@@ -283,6 +283,9 @@ class ModelTrainMove:
     repo: str
     old_tag: str
     new_tag: str
+    # OMN-21282: every dev tag newer than old_tag up to new_tag, newest first --
+    # the tags this one bump rolls in.
+    rolled: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -482,15 +485,49 @@ def run_dev_tag_train(
             continue
         if apply:
             mover(pyproject, pin, choice.new_tag)
+        old, new = _stamp(pin.tag) or "", _stamp(choice.new_tag) or ""
         moves.append(
             ModelTrainMove(
                 distribution=pin.distribution,
                 repo=pin.repo,
                 old_tag=pin.tag,
                 new_tag=choice.new_tag,
+                rolled=[
+                    tag
+                    for tag, _ in dev_tags_newest_first(clone)
+                    if old < (_stamp(tag) or "") <= new
+                ],
             )
         )
     return ModelTrainPlan(moves=moves, unchanged=unchanged, skipped=skipped)
+
+
+def render_pr_body(plan: ModelTrainPlan) -> str:
+    """The one PR body a night's bump opens with (OMN-21282 AC1).
+
+    One line per moved sibling naming every dev tag it rolls in, so a night is
+    one bump per consumer however many tags its siblings cut.
+    """
+    lines = ["## Dev-tag pin train", ""]
+    if not plan.moves:
+        lines.append("The train found no sibling moved: no newer green dev tag.")
+    for move in plan.moves:
+        lines.append(
+            f"- `{move.distribution}` ({move.repo}): `{move.old_tag}` -> "
+            f"`{move.new_tag}`, rolling {len(move.rolled)} dev tag(s): "
+            + ", ".join(f"`{tag}`" for tag in move.rolled)
+        )
+    if plan.unchanged or plan.skipped:
+        lines += ["", "### Left where they were", ""]
+    for distribution in plan.unchanged:
+        passed = plan.skipped.get(distribution, {})
+        detail = (
+            "; passed over " + ", ".join(f"`{t}` ({why})" for t, why in passed.items())
+            if passed
+            else ""
+        )
+        lines.append(f"- `{distribution}`{detail}")
+    return "\n".join(lines) + "\n"
 
 
 def _assume_unread(repo: str, sha: str) -> None:
@@ -515,6 +552,8 @@ def main_train(args: argparse.Namespace) -> int:
     print(rendered)
     if args.plan_out:
         Path(args.plan_out).write_text(rendered + "\n", encoding="utf-8")
+    if args.body_out:
+        Path(args.body_out).write_text(render_pr_body(plan), encoding="utf-8")
     for move in plan.moves:
         verb = "moved" if args.apply else "would move"
         print(f"[train] {verb} {move.distribution}: {move.old_tag} -> {move.new_tag}")
@@ -558,6 +597,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--plan-out", default=None, help="train only: write the plan JSON here"
+    )
+    parser.add_argument(
+        "--body-out",
+        default=None,
+        help="train only: write the one bump PR body here (OMN-21282)",
     )
     args = parser.parse_args(argv)
 

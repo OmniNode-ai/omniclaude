@@ -180,7 +180,8 @@ jobs:
           [[ "$DRY_RUN" == "true" ]] && apply=()
           uv run --frozen python scripts/relock_git_sources.py --dev-tag-train \
             --registry-root "$PWD/.clones" --green-from github \
-            --plan-out /tmp/sibling_pin_train_plan.json "${apply[@]}"
+            --plan-out /tmp/sibling_pin_train_plan.json \
+            --body-out /tmp/sibling_pin_train_body.md "${apply[@]}"
 
       - name: Refresh sibling package locks
         env:
@@ -264,15 +265,12 @@ jobs:
             --trailer "Onex-Workflow: ${GITHUB_WORKFLOW}" \
             --trailer "Onex-Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           git push --force origin "$BRANCH"
-          existing="$(gh pr list --head "$BRANCH" --base "${GITHUB_REF_NAME}" --state open --json number --jq '.[0].number // empty')"
-          if [[ -n "$existing" ]]; then
-            echo "Updated refresh PR #${existing} in place."
-            exit 0
-          fi
           # Build the PR body in a file to avoid heredoc-in-YAML indentation pitfalls.
+          # OMN-21282: the train section is the script's one rendered body, naming
+          # every dev tag the bump rolls in.
           {
             printf '%s\n' "Automated sibling version-alignment (OMN-13902) and the nightly"
-            printf '%s\n' "sibling-pin train (OMN-19998)."
+            printf '%s\n' "sibling-pin train (OMN-19998, OMN-21282)."
             printf '\n'
             printf '%s\n' "Every sibling pinned by a dev merge tag was moved to its newest dev"
             printf '%s\n' "merge tag whose dev CI is green; red and unread tags were passed over."
@@ -281,12 +279,17 @@ jobs:
             printf '%s\n' "\`[tool.onex.git-source-authority]\` were advanced to their canonical"
             printf '%s\n' "clone head first, forward only (OMN-18752)."
             printf '\n'
-            printf '%s\n' "This branch is rebuilt and force-pushed each night while the PR is open."
-            printf '%s\n' "Train plan at open:"
-            printf '\n%s\n' '```json'
-            cat /tmp/sibling_pin_train_plan.json
-            printf '%s\n' '```'
+            printf '%s\n' "This branch is rebuilt and force-pushed each night while the PR is open,"
+            printf '%s\n' "and this body is rewritten with it."
+            printf '\n'
+            cat /tmp/sibling_pin_train_body.md
           } > /tmp/sibling_refresh_body.md
+          existing="$(gh pr list --head "$BRANCH" --base "${GITHUB_REF_NAME}" --state open --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            gh pr edit "$existing" --body-file /tmp/sibling_refresh_body.md
+            echo "Updated refresh PR #${existing} in place."
+            exit 0
+          fi
           # `chore(deps):` prefix is exempt from the pr-title ticket gate, matching
           # the existing publish-downstream-pin-bump bot convention.
           gh pr create \
