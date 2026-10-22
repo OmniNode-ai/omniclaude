@@ -16,6 +16,12 @@ nothing below the subprocess boundary is replaced.
 * AC3: an input the hook cannot resolve is exit 2, and the output names the
   missing input and how to supply it.
 
+The snapshot stays schema 1: omnimarket's ``onex-prrp-snapshot-publish``
+(OMN-19998) runs ``--write-variables-snapshot`` once per registry repository,
+refuses any other schema, merges the pieces and copies one file to the lab
+hosts. A schema change here would break that publisher and every lab host's
+copy at once, so the last test pins the writer's shape.
+
 The test ids carry the names the ticket's falsifiers select with ``-k``.
 """
 
@@ -29,8 +35,10 @@ import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "private_repo_runner_placement_gate.py"
@@ -90,16 +98,16 @@ def _snapshot(
     visibility: str = "private",
 ) -> Path:
     stamp = _stamp(read_at or datetime.now(UTC) - timedelta(hours=1))
-    scopes: dict[str, object] = {f"repo:{SLUG}": {"variables": {}, "read_at": stamp}}
+    scopes: dict[str, dict[str, str]] = {f"repo:{SLUG}": {}}
     if org is not None:
-        scopes["org:OmniNode-ai"] = {"variables": org, "read_at": stamp}
+        scopes["org:OmniNode-ai"] = org
     path = tmp_path / "runner-variables-snapshot.json"
     path.write_text(
         json.dumps(
             {
-                "schema": 2,
+                "schema": 1,
                 "captured_at": stamp,
-                "visibility": {SLUG: {"value": visibility, "read_at": stamp}},
+                "visibility": {SLUG: visibility},
                 "scopes": scopes,
             }
         ),
@@ -197,6 +205,7 @@ def test_runner_placement_hook_hosted_runner_still_refused_as_a_literal(
 def _assert_names_remedy(output: str) -> None:
     assert "THE GATE DID NOT RUN" in output
     assert "--write-variables-snapshot" in output
+    assert "onex-prrp-snapshot-publish" in output
     assert "PRRP_VARIABLES_SNAPSHOT" in output
 
 
@@ -236,7 +245,7 @@ def test_runner_placement_hook_refusal_names_remedy_on_a_stale_snapshot(
     _assert_names_remedy(result.stderr)
 
 
-# --- one file answers every repository a lane commits to ---------------------
+# --- the publisher's file format --------------------------------------------
 
 
 def _module():
@@ -250,9 +259,10 @@ def _module():
     return module
 
 
-def test_a_second_write_keeps_the_first_repository(
+def test_the_writer_keeps_the_shape_the_snapshot_publisher_reads(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """onex-prrp-snapshot-publish refuses any schema but 1 and merges flat maps."""
     module = _module()
 
     def live(args: list[str], env_name: str = "GH_TOKEN"):
@@ -264,25 +274,36 @@ def test_a_second_write_keeps_the_first_repository(
         )
 
     monkeypatch.setattr(module, "_gh", live)
-    out = tmp_path / "snapshot.json"
-    first = datetime(2026, 10, 22, 1, 0, 0, tzinfo=UTC)
-    monkeypatch.setattr(module, "_utcnow", lambda: first)
-    module.write_snapshot(SLUG, out)
-    monkeypatch.setattr(module, "_utcnow", lambda: first + timedelta(hours=2))
-    module.write_snapshot(OTHER, out)
-
-    written = json.loads(out.read_text(encoding="utf-8"))
-    assert written["visibility"] == {
-        SLUG: {"value": "private", "read_at": "2026-10-22T01:00:00Z"},
-        OTHER: {"value": "private", "read_at": "2026-10-22T03:00:00Z"},
-    }
-    assert written["scopes"][f"repo:{SLUG}"]["read_at"] == "2026-10-22T01:00:00Z"
-    assert written["scopes"]["org:OmniNode-ai"]["read_at"] == "2026-10-22T03:00:00Z"
-
-    # The kept entry is judged against its OWN read time, not the last write.
-    late = module.VariablesSnapshot(
-        out, timedelta(hours=24), now=lambda: first + timedelta(hours=25)
+    monkeypatch.setattr(
+        module, "_utcnow", lambda: datetime(2026, 10, 22, 1, 0, 0, tzinfo=UTC)
     )
-    assert late.visibility(OTHER) == "private"
-    with pytest.raises(module.GateError, match="stale for the visibility of"):
-        late.visibility(SLUG)
+    out = tmp_path / "snapshot.json"
+    module.write_snapshot(SLUG, out)
+    assert json.loads(out.read_text(encoding="utf-8")) == {
+        "schema": 1,
+        "captured_at": "2026-10-22T01:00:00Z",
+        "visibility": {SLUG: "private"},
+        "scopes": {
+            "org:OmniNode-ai": {"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET},
+            f"repo:{SLUG}": {},
+        },
+    }
+
+
+def test_the_ci_step_and_the_paired_hook_collect_this_file() -> None:
+    """AC4: the hook's tests and its CI half cannot drift apart."""
+    name = Path(__file__).name
+    ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    hooks = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    step = next(
+        line
+        for line in ci.splitlines()
+        if "test_private_repo_runner_placement_gate.py" in line
+    )
+    entry = next(
+        line
+        for line in hooks.splitlines()
+        if "test_private_repo_runner_placement_gate.py" in line
+    )
+    assert name in step
+    assert name in entry

@@ -131,12 +131,13 @@ are refused by the lane read guard, so visibility and the variable scopes cannot
 read live there. Set `PRRP_VARIABLES_SNAPSHOT` (or pass `--variables-snapshot`) to a
 file written by `--write-variables-snapshot` from a host whose credential CAN read
 them. The snapshot is consulted only after a live read failed, so a live answer
-always wins; an entry older than `--snapshot-max-age-hours` (24), dated ahead, or a
-file missing, unparseable, or silent about the repository or scope asked for is a
-REFUSAL, exit 2, and the refusal names the missing input and this remedy. Each
-visibility and scope entry carries its own read time, and a write keeps the entries
-of other repositories, so one file answers every repository a lane commits to
-(OMN-20141).
+always wins; one older than `--snapshot-max-age-hours` (24), dated ahead, missing,
+unparseable, or silent about the repository or scope asked for is a REFUSAL, exit 2,
+and every such refusal names the missing input and the sanctioned remedy (OMN-20141):
+the lab hosts' copy is published by omnimarket's `onex-prrp-snapshot-publish` (one
+gate read per registry repository, merged into one schema-1 file), and the lane
+runner exports `PRRP_VARIABLES_SNAPSHOT` at it. The file format is that publisher's
+contract, so it stays schema 1.
 A hosted value inside a fresh snapshot is judged exactly like a live one. Inside
 GitHub Actions the flag and the variable are refused: hosted CI is the enforced
 merge gate and resolves live. Use the environment variable, not hook `args`, so the
@@ -774,7 +775,7 @@ def _gh(
     )
 
 
-SNAPSHOT_SCHEMA = 2
+SNAPSHOT_SCHEMA = 1
 SNAPSHOT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 DEFAULT_SNAPSHOT_MAX_AGE_HOURS = 24.0
 # A snapshot dated slightly ahead of this host's clock is skew, not forgery.
@@ -795,10 +796,7 @@ class VariablesSnapshot:
     verdict: it is consulted only AFTER a live read failed, so a live answer
     always wins, and every way it cannot be trusted is a refusal.
 
-    * an ENTRY older than ``max_age``, or dated in the future: refused as
-      stale. Every visibility and every scope carries its own ``read_at``
-      (OMN-20141), because one file answers several repositories and each
-      was read at its own time; the file's ``captured_at`` is its last write;
+    * older than ``max_age``, or dated in the future: refused as stale;
     * missing, unparseable, wrong schema, or silent about the scope or the
       repository asked for: refused -- "the snapshot does not mention it" is
       not "it is unset";
@@ -820,37 +818,13 @@ class VariablesSnapshot:
         self._max_age = max_age
         self._now = now
         self._data: dict[str, Any] | None = None
-        self._read_at: dict[str, datetime] = {}
+        self._captured_at: datetime | None = None
 
     def _clock(self) -> datetime:
         return (self._now or _utcnow)()
 
     def _refresh_hint(self, slug: str = "<owner/name>") -> str:
         return f"refresh it: {snapshot_remedy(slug, str(self._path))}"
-
-    def _check_age(self, stamp: object, what: str, slug: str) -> datetime:
-        try:
-            read_at = datetime.strptime(str(stamp), SNAPSHOT_TIME_FORMAT).replace(
-                tzinfo=UTC
-            )
-        except ValueError as error:
-            raise GateError(
-                f"snapshot {self._path} has no usable read time for {what}; "
-                f"{self._refresh_hint(slug)}"
-            ) from error
-        age = self._clock() - read_at
-        if age < -SNAPSHOT_CLOCK_SKEW:
-            raise GateError(
-                f"snapshot {self._path} records {what} as read in the future "
-                f"({stamp}); {self._refresh_hint(slug)}"
-            )
-        if age > self._max_age:
-            raise GateError(
-                f"snapshot {self._path} is stale for {what}: read {stamp}, "
-                f"{self._format_age(age)} old, limit {self._format_age(self._max_age)}; "
-                f"{self._refresh_hint(slug)}"
-            )
-        return read_at
 
     def _load(self) -> dict[str, Any]:
         if self._data is not None:
@@ -867,21 +841,34 @@ class VariablesSnapshot:
                 f"snapshot {self._path} is not schema {SNAPSHOT_SCHEMA}; "
                 f"{self._refresh_hint()}"
             )
-        if "captured_at" not in data:
+        try:
+            captured = datetime.strptime(
+                str(data["captured_at"]), SNAPSHOT_TIME_FORMAT
+            ).replace(tzinfo=UTC)
+        except (KeyError, ValueError) as error:
             raise GateError(
                 f"snapshot {self._path} has no usable captured_at; "
                 f"{self._refresh_hint()}"
-            )
-        # The last write bounds every entry (each read_at is at or before it),
-        # so a file whose last write is stale or future-dated answers nothing.
-        self._check_age(data["captured_at"], "its last write", "<owner/name>")
+            ) from error
         scopes, visibility = data.get("scopes"), data.get("visibility")
         if not isinstance(scopes, dict) or not isinstance(visibility, dict):
             raise GateError(
                 f"snapshot {self._path} has no scopes/visibility objects; "
                 f"{self._refresh_hint()}"
             )
-        self._data = data
+        age = self._clock() - captured
+        if age < -SNAPSHOT_CLOCK_SKEW:
+            raise GateError(
+                f"snapshot {self._path} is dated in the future ({data['captured_at']}); "
+                f"{self._refresh_hint()}"
+            )
+        if age > self._max_age:
+            raise GateError(
+                f"snapshot {self._path} is stale: captured {data['captured_at']}, "
+                f"{self._format_age(age)} old, limit {self._format_age(self._max_age)}; "
+                f"{self._refresh_hint()}"
+            )
+        self._data, self._captured_at = data, captured
         return data
 
     @staticmethod
@@ -889,52 +876,47 @@ class VariablesSnapshot:
         minutes = max(int(age.total_seconds() // 60), 0)
         return f"{minutes // 60}h{minutes % 60:02d}m"
 
-    def describe(self, key: str) -> str:
-        """Where an entry came from and how old it is, for the run's own output.
-
-        ``key`` is a scope key or ``visibility:<owner/name>``, already read.
-        """
-        age = self._format_age(self._clock() - self._read_at[key])
+    def describe(self) -> str:
+        """Where a value came from and how old it is, for the run's own output."""
+        self._load()
+        assert self._captured_at is not None
+        age = self._format_age(self._clock() - self._captured_at)
         limit = self._format_age(self._max_age)
         return f"snapshot {self._path} (age {age}, limit {limit})"
 
-    def scope(self, key: str, slug: str) -> dict[str, str]:
+    def scope(self, key: str) -> dict[str, str]:
         """The recorded variables of ``org:<org>`` or ``repo:<owner/name>``."""
-        entry = self._load()["scopes"].get(key)
-        values = entry.get("variables") if isinstance(entry, dict) else None
+        scopes = self._load()["scopes"]
+        values = scopes.get(key)
         if not isinstance(values, dict) or not all(
             isinstance(k, str) and isinstance(v, str) for k, v in values.items()
         ):
+            slug = key[len("repo:") :] if key.startswith("repo:") else "<owner/name>"
             raise GateError(
                 f"snapshot {self._path} does not record scope {key}; "
                 f"{self._refresh_hint(slug)}"
             )
-        self._read_at[key] = self._check_age(entry.get("read_at"), f"scope {key}", slug)
         return dict(values)
 
     def visibility(self, slug: str) -> str:
-        entry = self._load()["visibility"].get(slug)
-        recorded = entry.get("value") if isinstance(entry, dict) else None
+        recorded = self._load()["visibility"].get(slug)
         if recorded not in {"public", "private", "internal"}:
             raise GateError(
                 f"snapshot {self._path} does not record the visibility of {slug}; "
                 f"{self._refresh_hint(slug)}"
             )
-        self._read_at[f"visibility:{slug}"] = self._check_age(
-            entry.get("read_at"), f"the visibility of {slug}", slug
-        )
         return str(recorded)
 
 
 def snapshot_remedy(slug: str, path: str = "<file>") -> str:
     """The sanctioned way to supply what a host cannot read live (OMN-20141)."""
     return (
-        "from a host whose credential can read the repository and its Actions "
-        "variables, run `private_repo_runner_placement_gate.py --repo "
-        f"{slug} --write-variables-snapshot {path}`, then set "
+        "on a host whose credential can read the repository and its Actions "
+        "variables, run omnimarket's `onex-prrp-snapshot-publish` (every registry "
+        "repository, copied to the lab hosts) or `private_repo_runner_placement_gate.py "
+        f"--repo {slug} --write-variables-snapshot {path}`, then set "
         f"PRRP_VARIABLES_SNAPSHOT={path} here (or pass --variables-snapshot); "
-        "one file answers every repository written into it, each entry for "
-        f"{DEFAULT_SNAPSHOT_MAX_AGE_HOURS:g} hours"
+        f"a snapshot answers for {DEFAULT_SNAPSHOT_MAX_AGE_HOURS:g} hours"
     )
 
 
@@ -959,7 +941,7 @@ def resolve_visibility(slug: str, snapshot: VariablesSnapshot | None = None) -> 
             )
         try:
             recorded = snapshot.visibility(slug)
-            where = snapshot.describe(f"visibility:{slug}")
+            where = snapshot.describe()
         except GateError as error:
             raise GateError(
                 f"could not resolve the visibility of {slug} from the GitHub API "
@@ -1052,8 +1034,8 @@ class Variables:
             return
         key = f"org:{self._org_name}" if which == "org" else f"repo:{self._slug}"
         try:
-            self._scopes[which] = snapshot.scope(key, self._slug)
-            where = snapshot.describe(key)
+            self._scopes[which] = snapshot.scope(key)
+            where = snapshot.describe()
         except GateError as error:
             self._scopes.pop(which, None)
             self._errors[which] = f"{live_error}; the snapshot cannot answer: {error}"
@@ -2389,52 +2371,23 @@ def scan_every_workflow_branch(
     return findings
 
 
-def _existing_snapshot(path: Path) -> dict[str, Any]:
-    """The entries already in ``path``, to keep beside a new write, or none.
-
-    Only a file of the current schema is merged; anything else is replaced.
-    Entries are kept with their own ``read_at`` and judged against it when
-    read, so carrying an old entry forward never makes it look fresh.
-    """
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    if not isinstance(data, dict) or data.get("schema") != SNAPSHOT_SCHEMA:
-        return {}
-    return data
-
-
 def write_snapshot(slug: str, path: Path) -> None:
     """Record the LIVE answers a lab host cannot read, dated, for ``--variables-snapshot``.
 
     Run from a host whose credential can read both Actions variable scopes. Every
     read is live and every failure is a GateError, so a snapshot is only ever
     written from a complete read -- never from a partial one or from another
-    snapshot. The entries for ``slug`` and its organisation are replaced, each
-    with its own read time; entries for OTHER repositories already in the file
-    are kept, so one ``PRRP_VARIABLES_SNAPSHOT`` answers every repository a
-    lane commits to (OMN-20141). The file is replaced atomically.
+    snapshot. The file is replaced atomically.
     """
     org = slug.split("/", 1)[0]
     visibility = resolve_visibility(slug)
-    org_scope = Variables._read("--org", org)
-    repo_scope = Variables._read("--repo", slug)
-    stamp = _utcnow().strftime(SNAPSHOT_TIME_FORMAT)
-    existing = _existing_snapshot(path)
-    kept_visibility = existing.get("visibility")
-    kept_scopes = existing.get("scopes")
     body = {
         "schema": SNAPSHOT_SCHEMA,
-        "captured_at": stamp,
-        "visibility": {
-            **(kept_visibility if isinstance(kept_visibility, dict) else {}),
-            slug: {"value": visibility, "read_at": stamp},
-        },
+        "captured_at": _utcnow().strftime(SNAPSHOT_TIME_FORMAT),
+        "visibility": {slug: visibility},
         "scopes": {
-            **(kept_scopes if isinstance(kept_scopes, dict) else {}),
-            f"org:{org}": {"variables": org_scope, "read_at": stamp},
-            f"repo:{slug}": {"variables": repo_scope, "read_at": stamp},
+            f"org:{org}": Variables._read("--org", org),
+            f"repo:{slug}": Variables._read("--repo", slug),
         },
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -2493,8 +2446,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "read visibility and both variable scopes LIVE and write them, "
             "dated, to this path for --variables-snapshot; run it from a host "
-            "whose credential can read Actions variables. Entries for other "
-            "repositories already in the file are kept. Writes nothing and "
+            "whose credential can read Actions variables. Writes nothing and "
             "exits 2 if any read fails."
         ),
     )
