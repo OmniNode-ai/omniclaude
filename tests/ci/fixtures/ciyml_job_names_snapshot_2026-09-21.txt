@@ -54,6 +54,7 @@ Aislop Sweep
 Agent Contract Validation
 Skill Monorepo-Ref Gate
 Arch: No polymorphic-agent in enforcement paths (OMN-9143)
+internal-sibling-pins
 Quality Gate
 Tests Gate
 Security Gate
