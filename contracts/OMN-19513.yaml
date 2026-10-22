@@ -140,13 +140,8 @@ dod_evidence:
     checks:
       - check_type: command
         cwd: "."
-        check_value: |-
-          set -eu;
-          runtime_env="$(mktemp)";
-          trap 'rm -f "$runtime_env"' EXIT;
-          uv run python -c 'import sys, sysconfig; print(f"{sys.version_info.major}.{sys.version_info.minor}", sysconfig.get_path("purelib"))' > "$runtime_env";
-          read -r python_minor site_packages < "$runtime_env";
-          docker run --rm --volume "$PWD:/workspace:ro" --volume "$site_packages:/runtime:ro" --workdir /workspace --env CI=true --env PYTHONPATH=/runtime ghcr.io/astral-sh/uv:python${python_minor}-bookworm-slim python -m pytest tests/hooks/test_hook_turn_prune_off_hook_path_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py -x -q --no-cov -p no:cacheprovider
+        check_value: >-
+          bash -c 'set -eu; site_packages="$(uv run python -c "import sysconfig; print(sysconfig.get_path(\"purelib\"))")"; minor="$(uv run python -c "import sys; print(sys.version_info.minor)")"; docker run --rm --volume "$PWD:/workspace:ro" --volume "$site_packages:/runtime:ro" --workdir /workspace --env CI=true --env PYTHONPATH=/runtime ghcr.io/astral-sh/uv:python3.${minor}-bookworm-slim python -m pytest tests/hooks/test_hook_turn_prune_off_hook_path_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py -x -q --no-cov -p no:cacheprovider'
     binds_ac:
       - AC6
       - AC10
