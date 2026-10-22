@@ -1739,17 +1739,61 @@ def resolve_branches(runs_on: Any, variables: Variables) -> list[Branch]:
     if inner.startswith("${{") and inner.endswith("}}"):
         inner = inner[3:-2]
 
-    segments = _split_top_level(inner, "||")
-    if all(len(_split_top_level(segment, "&&")) == 1 for segment in segments):
+    branches: list[Branch] = []
+    for guard, value in _arms(inner, runs_on):
+        labels, how, fallback = _labels_of(value, runs_on, variables)
+        branches.append(Branch(guard=guard, labels=labels, how=how, fallback=fallback))
+    return branches
+
+
+def _is_selector(fragment: str) -> bool:
+    """Is this fragment a guarded selector rather than a value?
+
+    `g && X || Y` is a selector: which value it yields depends on the event.
+    `vars.X || 'label'` is a value fallback chain, and so is
+    `vars.X || (g && 'A' || 'B')` -- the parenthesised selector is one OPERAND
+    of the chain, and is distributed by `_chain_arms`.
+    """
+    fragment = _strip_parens(fragment)
+    return any(
+        len(_split_top_level(segment, "&&")) > 1
+        for segment in _split_top_level(fragment, "||")
+    )
+
+
+def _conjoin(outer: str, inner: str) -> str:
+    if not outer:
+        return inner
+    if not inner:
+        return outer
+    return f"({outer}) && ({inner})"
+
+
+def _arms(expression: str, runs_on: str) -> list[tuple[str, str]]:
+    """Flatten a `runs-on` expression into `(guard, value)` arms, in order.
+
+    Every value is a vars.* / literal fallback chain, optionally inside
+    fromJSON, which `_labels_of` resolves. The first arm whose guard holds is
+    the one that places the run, as in `_select`.
+
+    A selector may nest: omnibase_core `receipt-gate.yml` since OMN-21280
+    writes `private && ( fork && X || Y ) || 'ubuntu-latest'`. Because every
+    arm value is truthy (`_labels` refuses an empty label list), `G && (S)`
+    yields S's value when G holds and falls through otherwise, so it flattens
+    to S's arms, each guarded by G and its own guard. Before OMN-19916 the
+    nested selector was refused as unreadable, which turned every private
+    caller of that workflow into THE GATE DID NOT RUN.
+    """
+    expression = _strip_parens(expression)
+    if not _is_selector(expression):
         # A plain vars.X || 'label' is a value fallback chain, not a pair of
         # event-guarded arms. The literal remains reachable if X is emptied.
-        labels, how, fallback = _labels_of(inner, runs_on, variables)
-        return [Branch(guard="", labels=labels, how=how, fallback=fallback)]
+        return _value_arms(expression, runs_on)
 
-    branches: list[Branch] = []
-    for segment in segments:
+    arms: list[tuple[str, str]] = []
+    for segment in _split_top_level(expression, "||"):
         operands = _split_top_level(segment, "&&")
-        guard = " && ".join(operands[:-1]) if len(operands) > 1 else ""
+        guard = " && ".join(operands[:-1])
         if VAR_REF.fullmatch(_strip_parens(operands[-1])):
             # The selected arm could become falsy when its variable is unset,
             # causing an outer hosted fallback to run. Our event evaluator
@@ -1758,9 +1802,56 @@ def resolve_branches(runs_on: Any, variables: Variables) -> list[Branch]:
                 f"a guarded plain variable in {runs_on!r} can become falsy; "
                 "use fromJSON with an explicit fleet fallback. THE GATE DID NOT RUN."
             )
-        labels, how, fallback = _labels_of(operands[-1], runs_on, variables)
-        branches.append(Branch(guard=guard, labels=labels, how=how, fallback=fallback))
-    return branches
+        arms.extend(
+            (_conjoin(guard, inner_guard), value)
+            for inner_guard, value in _value_arms(operands[-1], runs_on)
+        )
+    return arms
+
+
+def _value_arms(value: str, runs_on: str) -> list[tuple[str, str]]:
+    """The arms of one arm's value: itself, unless it nests a selector."""
+    value = _strip_parens(value)
+    if _is_selector(value):
+        return _arms(value, runs_on)
+    args = _call_args(value, "fromjson")
+    if args is not None and len(args) == 1:
+        return [
+            (guard, f"fromJSON({chain})")
+            for guard, chain in _chain_arms(args[0], runs_on)
+        ]
+    return _chain_arms(value, runs_on)
+
+
+def _chain_arms(chain: str, runs_on: str) -> list[tuple[str, str]]:
+    """Distribute a selector operand out of a value fallback chain.
+
+    `V || (g && A || B)` is `g && (V || A) || (V || B)`: when V is truthy both
+    yield V, and when it is not, both yield A if g holds and B otherwise. The
+    distributed form gives each event its own arm, so a hosted literal behind
+    a guard that event cannot pass is not reported as that event's fallback,
+    and one it can pass still is.
+    """
+    chain = _strip_parens(chain)
+    operands = _split_top_level(chain, "||")
+    for index, operand in enumerate(operands):
+        if _is_selector(operand):
+            head, tail = operands[:index], operands[index + 1 :]
+            inner = _arms(operand, runs_on)
+            arms = [
+                (_conjoin(guard, rest_guard), rest)
+                for guard, value in inner
+                for rest_guard, rest in _chain_arms(
+                    " || ".join([*head, value, *tail]), runs_on
+                )
+            ]
+            if all(guard for guard, _ in inner) and (head or tail):
+                # A selector with no unguarded arm is falsy when every guard
+                # fails, and the chain then moves past it: `V || (g && A) ||
+                # 'hosted'` still reaches 'hosted' on an event that fails g.
+                arms.extend(_chain_arms(" || ".join([*head, *tail]), runs_on))
+            return arms
+    return [("", chain)]
 
 
 def _job_source(text: str, job_id: str) -> str:
