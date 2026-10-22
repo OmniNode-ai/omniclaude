@@ -3,7 +3,7 @@
 
 # repo_manifest.yaml
 #
-# Static config mapping the 14 primary omni repos to keyword lists and
+# Static config mapping the 13 primary omni repos to keyword lists and
 # precedence weights used by epic_decomposer.py for ticket → repo assignment.
 #
 # Scoring: presence/absence (not frequency). A keyword appearing anywhere in
@@ -120,36 +120,6 @@ repos:
       - alembic
       - sqlalchemy
     precedence: 3
-
-  - name: omniagent
-    description: >
-      Agent framework — agent definitions, agent YAML configs, agent routing
-      logic, agent registry, multi-agent coordination, agent lifecycle
-      management, and agent behavioral specifications.
-    keywords:
-      - agent
-      - agents
-      - routing
-      - route
-      - router
-      - dispatch
-      - selector
-      - coordinator
-      - orchestration
-      - lifecycle
-      - behavioral
-      - spawn
-      - worker
-      - delegation
-      - delegate
-      - polymorphic
-      - activation
-      - trigger
-      - candidate
-      - selection
-      - matching
-      - fuzzy
-    precedence: 4
 
   - name: omniclaude
     description: >
