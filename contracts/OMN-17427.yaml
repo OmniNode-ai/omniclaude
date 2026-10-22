@@ -229,6 +229,11 @@ requirements:
     acceptance:
       - id: AC57
         statement: The tick copies tenant overlays into its owned checkout and generates defaults before starting Vite, leaves canonical HEAD, status and worktree metadata unchanged, restarts on overlay or origin/dev movement while retaining the tenant, stays silent when unchanged and never logs overlay values.
+  - id: req-dev-group-pre-commit
+    statement: The dev dependency group installs pre-commit, so the contributing guide's uv run pre-commit install works on a fresh clone.
+    acceptance:
+      - id: AC57
+        statement: "pyproject.toml lists pre-commit in the dev dependency group and uv.lock records it among the omninode-claude dev dependencies -- falsifier: uv run pytest tests/ci/test_dependency_shape.py -q --no-cov -k pre_commit fails over the merge base, where neither names pre-commit"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1148,5 +1153,23 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "env PYTHONDONTWRITEBYTECODE=1 bash tests/scripts/test_omnidash_lab_dev_tick.sh"
+    binds_ac:
+      - AC57
+  - id: dod-dev-group-pre-commit
+    description: The dependency shape test reads pyproject.toml and uv.lock and finds pre-commit in the dev group and in the locked dev dependencies.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_dependency_shape.py -q --no-cov -k pre_commit"
+    binds_ac:
+      - AC57
+  - id: dod-deploy-dev-group-pre-commit
+    description: A hosted runner installs the locked dev group and runs the pre-commit it provides, without credentials or services.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run --frozen pre-commit --version"
     binds_ac:
       - AC57
