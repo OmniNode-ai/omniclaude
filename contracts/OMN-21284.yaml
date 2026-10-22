@@ -53,7 +53,7 @@ dod_evidence:
           env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest
           tests/ci/test_epic_team_manifest_retired_repos_omn21284.py::test_the_manifest_still_names_the_live_repositories
           -q --no-cov
-  - id: "dod-omn21284-ac3-routing-excludes-retired-repository"
+  - id: "dod-omn21284-ac3-routing-excludes-retired-repo"
     binds_ac: [AC3]
     description: "Epic decomposition does not assign the routing keyword ticket to the retired repository."
     source: "generated"
@@ -62,5 +62,5 @@ dod_evidence:
         cwd: "."
         check_value: >-
           env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest
-          tests/ci/test_epic_team_manifest_retired_repos_omn21284.py::test_agent_routing_dispatch_ticket_is_assigned_to_the_active_web_repository
+          tests/ci/test_epic_team_manifest_retired_repos_omn21284.py::test_agent_routing_dispatch_ticket_is_assigned_to_one_active_repository
           -q --no-cov
