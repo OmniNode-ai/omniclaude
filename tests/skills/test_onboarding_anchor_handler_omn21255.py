@@ -16,6 +16,9 @@ from pathlib import Path
 
 import pytest
 import yaml
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 NODE = REPO / "src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator"
@@ -35,7 +38,7 @@ pytestmark = pytest.mark.unit
 
 def _git(repo: Path, *args: str, when: str | None = None) -> str:
     env = {
-        "PATH": os.environ["PATH"],
+        **scrub_git_location_env(os.environ),
         "HOME": str(repo),
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_CONFIG_GLOBAL": os.devnull,
@@ -160,9 +163,7 @@ def test_checkout_anchored_detaches_and_clone_at_anchor_agrees(
     )
     assert result.stdout.strip() == "ok", result.stderr
     assert _git(infra, "rev-parse", "HEAD") == ws["a1"]
-    assert subprocess.run(
-        ["git", "-C", str(infra), "symbolic-ref", "-q", "HEAD"], check=False
-    ).returncode != 0
+    assert _git(infra, "rev-parse", "--abbrev-ref", "HEAD") == "HEAD"
 
 
 def test_clone_at_anchor_is_false_off_the_anchor(ws: dict[str, str]) -> None:
