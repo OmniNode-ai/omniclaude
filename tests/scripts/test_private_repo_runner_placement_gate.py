@@ -2122,7 +2122,7 @@ def _every_branch_eligible(
 # selector in a private-caller guard with a public default. The gate refused
 # the nesting as unreadable, so every private repository whose tree calls
 # `receipt-gate.yml@main` exited 2 whatever its own workflows held
-# (omninode_infra#1904, job 119834792684). One line or several makes no
+# (downstream caller, job 119834792684). One line or several makes no
 # difference; the nesting is the cause. Carried verbatim from core main
 # cf95d2a10, jobs `verify` and `dod-verify`.
 CORE_RECEIPT_GATE_EXPRESSION = (

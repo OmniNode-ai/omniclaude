@@ -8,11 +8,10 @@ summary: >
   inside an arm. The private-repo-runner-placement gate refused the nesting as
   unreadable, so every private repository whose tree calls receipt-gate.yml@main
   exited 2 with THE GATE DID NOT RUN whatever its own workflows held; that is
-  the red on omninode_infra#1904 (job 119834792684), whose dashboard-token
-  change this ticket carries. The gate now flattens a nested selector into its
-  arms under the outer guard and distributes a selector out of a value
-  fallback chain, so the expression gets a verdict per event: the fleet where
-  the private guard holds, a finding where a hosted arm or fallback is
+  the red in a downstream caller (job 119834792684). The gate now flattens a
+  nested selector into its arms under the outer guard and distributes a
+  selector out of a value fallback chain, so the expression gets a verdict per
+  event: the fleet where the private guard holds, a finding where a hosted arm or fallback is
   reachable, and still a refusal for a nested plain variable that can turn
   falsy.
 is_seam_ticket: false
