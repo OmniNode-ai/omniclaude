@@ -1,10 +1,9 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""epic_team's repo manifest names no retired repository (OMN-21284).
+"""epic_team's repo manifest uses the 13 active repositories (OMN-21284).
 
-RULING 2026-10-18T05:25:04Z retired omniagent and omniarchon. While omniagent stayed in
-``repo_manifest.yaml`` with the keywords agent, routing, route, router and dispatch, the
-keyword scorer in ``epic_decomposer`` could assign an epic's ticket to it.
+The removed repository's keywords included agent, routing, route, router and
+dispatch. A ticket containing those keywords must now reach an active repository.
 """
 
 from __future__ import annotations
@@ -21,7 +20,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = (
     REPO_ROOT / "plugins" / "onex" / "skills" / "epic_team" / "repo_manifest.yaml"
 )
-RETIRED = frozenset({"omniagent", "omniarchon"})
 
 sys.path.insert(0, str(REPO_ROOT / "plugins" / "onex" / "hooks" / "lib"))
 
@@ -33,8 +31,8 @@ def _manifest_names() -> set[str]:
     return {repo["name"] for repo in data["repos"]}
 
 
-def test_the_manifest_names_no_retired_repository() -> None:
-    assert _manifest_names().isdisjoint(RETIRED), sorted(_manifest_names() & RETIRED)
+def test_the_manifest_has_13_active_repositories() -> None:
+    assert len(_manifest_names()) == 13
 
 
 def test_the_manifest_still_names_the_live_repositories() -> None:
@@ -42,7 +40,7 @@ def test_the_manifest_still_names_the_live_repositories() -> None:
     assert _manifest_names() >= {"omnibase_core", "omniclaude"}
 
 
-def test_agent_routing_dispatch_ticket_is_not_assigned_to_a_retired_repository() -> (
+def test_agent_routing_dispatch_ticket_is_assigned_to_the_active_web_repository() -> (
     None
 ):
     ticket = {
@@ -55,6 +53,7 @@ def test_agent_routing_dispatch_ticket_is_not_assigned_to_a_retired_repository()
     result = decompose_epic([ticket], str(MANIFEST))
 
     assigned = {repo for repo, ids in result.assignments.items() if "T-1" in ids}
-    in_cross_repo = {repo for cr in result.cross_repo for repo in cr.repos}
-    assert (assigned | in_cross_repo).isdisjoint(RETIRED)
-    assert RETIRED.isdisjoint(result.assignments)
+    assert assigned == {"omniweb"}
+    assert result.cross_repo == []
+    assert result.unmatched == []
+    assert len(result.assignments) == 13
