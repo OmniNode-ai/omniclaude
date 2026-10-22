@@ -1,0 +1,82 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21255
+title: "Onboarding installs one frozen code set: the script anchors omnibase_infra, and with it every sibling pin and the runtime config, to a named commit"
+summary: >
+  lab-onboarding.sh names one omnibase_infra commit, INFRA_ANCHOR. Phase 2 checks
+  omnibase_infra out at it, detached, instead of at the tip of dev, then checks
+  every sibling out at the pin that commit's .github/sibling-pins.yaml names, and
+  every repo with no pin at the last commit of origin's default branch at or
+  before the anchor's commit time. The workspace runtime config phase 2 writes
+  names the anchor and is committed as one root commit dated at the anchor with a
+  fixed identity and message, so the commit onex's materialiser reads and reports
+  is a function of the anchor alone. A run after dev moves installs the same
+  commits. ONBOARDING.md says what the anchor is and that a new email pin is how
+  participants get fixes. OMN-21087's fast-forward of clean clones to origin, and
+  its return of a clean detached clone to its branch, are replaced by the anchored
+  checkout; its dirty-clone stops and its "clone is N commits behind" wording stay.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21255-anchor
+    statement: The script names one omnibase_infra commit and phase 2 installs omnibase_infra and every sibling from it, not from dev.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the script names one omnibase_infra commit and phase 2 checks omnibase_infra out at it, not at `dev`; every sibling then comes from that commit's sibling-pins.yaml"
+  - id: req-omn21255-runtime-config
+    statement: The workspace runtime config is materialised from a commit determined by the anchor.
+    acceptance:
+      - id: AC2
+        statement: "AC2: the workspace runtime config is materialised from the same anchor commit, not `origin/main`"
+  - id: req-omn21255-dev-moves
+    statement: A run with the anchor set installs the same commits after dev moves.
+    acceptance:
+      - id: AC3
+        statement: "AC3: a test proves a run with the anchor set installs the same commits after `dev` moves (fixture repo with a moved `dev`)"
+  - id: req-omn21255-guide
+    statement: ONBOARDING.md explains the anchor and how fixes reach participants.
+    acceptance:
+      - id: AC4
+        statement: "AC4: ONBOARDING.md says what the anchor is and that a new email pin is how participants get fixes"
+evidence_requirements:
+  - kind: tests
+    description: "Onboarding script tests pass"
+    command: "uv run pytest tests/skills/test_lab_onboarding_anchor_omn21255.py tests/skills/test_lab_onboarding_proven_set_omn20381.py tests/skills/test_onboarding_clone_currency_omn21087.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21255-ac1-anchor
+    description: 'The script defines INFRA_ANCHOR once as a 40-hex omnibase_infra commit; against fixture remotes whose dev has moved past the anchor, phase 2 leaves omnibase_infra at the anchor and omnimarket and omnibase_core at the anchor''s pins, all detached. Fails at the merge base, which names no anchor and installs dev''s pins.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_anchor_omn21255.py -q --no-cov -k 'names_one_infra_anchor or anchor_not_dev'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21255-ac2-runtime-config
+    description: 'The workspace runtime config commit is one root commit whose file names the anchor, authored and committed by the fixed setup identity at the anchor''s date with a message naming the anchor, so every field its sha hashes comes from the anchor; omnibase_infra''s HandlerWorkspaceRuntimeConfigMaterializer reports that commit. Fails at the merge base, whose config names no anchor and is committed at run time.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_anchor_omn21255.py -q --no-cov -k materialised_from_the_anchor"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21255-ac3-dev-moves
+    description: 'With every fixture remote''s dev moved after a first run, phase 2 re-run in the same workspace and run in a fresh one installs exactly the first run''s commits and the same workspace runtime config commit. Fails at the merge base, which follows dev.'
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_anchor_omn21255.py -q --no-cov -k same_commits_install_after_dev_moves"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21255-ac4-guide
+    description: 'ONBOARDING.md has a section naming INFRA_ANCHOR, omnibase_infra and sibling-pins.yaml, and saying a fix reaches participants through a new email that pins a newer script by commit and sha256. Fails at the merge base, which has no such section.'
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_anchor_omn21255.py -q --no-cov -k guide_says"
+        cwd: "${OMNI_HOME}/omniclaude"

@@ -82,6 +82,28 @@ checksum to verify against, and the script that runs tomorrow is not necessarily
 read today. The pinned form above is the recommended one, and it is what the onboarding walks
 are graded against.
 
+### What the script installs: its anchor
+
+The pinned script freezes what you **run**. Its anchor freezes what it **installs**. The script
+names one omnibase_infra commit, `INFRA_ANCHOR` near the top of phase 2, and phase 2 checks
+omnibase_infra out at that commit, never at the tip of `dev`. Every other repository follows from
+it:
+
+- a repository named in that commit's `.github/sibling-pins.yaml` is checked out at its pin;
+- a repository with no pin there is checked out at the last commit of its default branch at or
+  before the anchor's commit time;
+- the workspace runtime config phase 2 writes names the anchor, and is recorded as one commit
+  dated at the anchor, so `onex delegate` reports the same config commit on every Mac.
+
+So the same pinned script installs the same commits no matter how far `dev` has moved since it
+was emailed, and two people who ran it a week apart have the same code. Every clone is left at a
+detached `HEAD`, which is expected.
+
+**A fix reaches you through a new email, never through `dev`.** When something you were sent is
+broken, the fix is merged, a script naming a newer anchor is published, and a new email pins that
+script by commit and sha256. Running the script you already have again installs the same anchor
+again; it never picks up the fix on its own.
+
 ### What it asks you
 
 Every question comes before anything is installed:
@@ -117,7 +139,7 @@ find out something failed.
 |---|---|---|
 | 0 | Preflight | Reads the machine and what an earlier setup left. Changes nothing unless you agree to set leftovers aside. Asks the questions above. |
 | 1 | Base tools | Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv. |
-| 2 | Workspace | The canonical clones, `OMNIBASE_PATH`, your `PATH`. |
+| 2 | Workspace | The clones at the script's anchor (see above), `OMNIBASE_PATH`, your `PATH`. |
 | 3 | onex + model key | The dispatch venv, onex, a local identity, your key, and **one delegation run on it**. |
 | 4 | Docker | Only if you said yes. Installs or starts Docker Desktop, then the local stack on the same key. |
 | 5 | Claude Code | The onex plugin from your omniclaude clone. |
@@ -148,7 +170,9 @@ uses the first that exists:
 3. **`.onex/workspace-config`** inside your workspace. This is the owner of a **developer
    install**, the one this guide builds. Phase 2 writes it and exports
    `ONEX_WORKSPACE_CONFIG_ROOT` to point at it, so a developer install needs no private
-   repository and no GitHub account.
+   repository and no GitHub account. Its one commit names the script's anchor, so
+   "materialised at" in `onex delegate`'s output is the same commit on every Mac set up
+   from the same script.
 
 If none of the three exists, `onex delegate` refuses before dispatching. The message names
 `ONEX_WORKSPACE_CONFIG_ROOT` and phase 2 of this script: re-run the script so phase 2 writes
