@@ -71,10 +71,10 @@ repos:
 
       - id: private-runner-placement-refusals
         name: Private runner placement refuses hosted paths (OMN-17427)
-        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/scripts/test_private_repo_runner_placement_gate.py tests/scripts/test_private_repo_runner_placement_snapshot.py tests/scripts/test_private_repo_runner_placement_lane_omn20141.py tests/workflows/test_private_repo_runner_placement_workflow.py -q -p no:randomly --no-cov
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/scripts/test_private_repo_runner_placement_gate.py tests/scripts/test_private_repo_runner_placement_snapshot.py tests/scripts/test_private_repo_runner_placement_lane_omn20141.py tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py tests/workflows/test_private_repo_runner_placement_workflow.py -q -p no:randomly --no-cov
         language: system
         pass_filenames: false
-        files: '^(scripts/private_repo_runner_placement_gate\.py|tests/(scripts/test_private_repo_runner_placement_(gate|snapshot|lane_omn20141)|workflows/test_private_repo_runner_placement_workflow)\.py|\.github/workflows/(private-repo-runner-placement-reusable|ci)\.yml|\.pre-commit-config\.yaml)$'
+        files: '^(scripts/private_repo_runner_placement_gate\.py|tests/(scripts/test_private_repo_runner_placement_(gate|snapshot|lane_omn20141|local_sources_omn20074)|workflows/test_private_repo_runner_placement_workflow)\.py|\.github/workflows/(private-repo-runner-placement-reusable|ci)\.yml|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
       - id: mod-file-growth-pin

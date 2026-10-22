@@ -124,7 +124,11 @@
     Each entry records its own read time and a write keeps other repositories'
     entries, so one snapshot answers visibility and variables for every
     repository a lane commits to, and every refusal names the missing input
-    and that remedy (OMN-20141).
+    and that remedy (OMN-20141). With PRRP_VARIABLES_SNAPSHOT unset the
+    publisher's copy at ~/.omninode/prrp/variables-snapshot.json is read, and
+    a called workflow pinned to a full sha is read from a local clone whose
+    origin branches hold it, both only after the live read failed and never
+    inside Actions (OMN-20074).
     See scripts/private_repo_runner_placement_gate.py.
   language: script
   entry: scripts/private_repo_runner_placement_gate.py --repo-root .
