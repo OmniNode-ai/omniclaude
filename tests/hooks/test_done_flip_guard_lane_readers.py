@@ -201,6 +201,18 @@ def test_main_hands_decide_the_handler_readers(
     assert calls == [("pr_status", ("ref",)), ("repo_evidence", ("t", [], []))]
 
 
+def test_a_hook_venv_older_than_the_plugin_keeps_the_old_readers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A branch-installed plugin over a venv without the handler refuses nothing new."""
+    monkeypatch.delattr(handler, "hook_evidence_readers")
+    monkeypatch.setattr(guard, "fetch_pr_status", lambda ref: ("old-pr-read", ref))
+    monkeypatch.setattr(guard, "evaluate_repo_evidence", lambda *a: ("old-bar", a))
+    readers = guard._lane_readers()
+    assert readers["pr_fetcher"]("ref") == ("old-pr-read", "ref")
+    assert readers["repo_evidence_probe"]("t", [], []) == ("old-bar", ("t", [], []))
+
+
 def test_main_does_not_import_the_handler_for_a_call_needing_no_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

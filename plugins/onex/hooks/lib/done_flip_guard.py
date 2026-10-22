@@ -106,12 +106,7 @@ def checked_acceptance_boxes(description: str) -> set[str]:
 
 
 def newly_ticked_boxes(before: str | None, after: str) -> list[str]:
-    """Checked boxes in ``after`` that were not checked in ``before``.
-
-    ``before`` is None when the current description could not be read; every
-    checked box in ``after`` then counts as newly ticked (fail closed: an edit
-    whose effect cannot be compared is treated as the edit that ticks).
-    """
+    """Boxes checked in ``after`` and not ``before``; all of them if ``before`` is None."""
     previously = checked_acceptance_boxes(before) if before is not None else set()
     return sorted(checked_acceptance_boxes(after) - previously)
 
@@ -468,20 +463,23 @@ def _load_stdin_call() -> dict[str, Any]:
 def _lane_readers() -> dict[str, Callable[..., Any]]:
     """``decide``'s readers from the node_linear_effect handler, imported on first use."""
 
-    def reader(name: str) -> Callable[..., Any]:
+    def reader(name: str, before: Callable[..., Any]) -> Callable[..., Any]:
         def read(*args: Any) -> Any:
             os.environ.setdefault("ONEX_PLUGIN_HOOK_LIB", os.path.dirname(__file__))
             from omniclaude.nodes.node_linear_effect.handlers import (
                 handler_lane_repo_evidence as handler,
             )
 
+            # A hook venv older than this plugin has no such handler: the old reader.
+            if not hasattr(handler, "hook_evidence_readers"):
+                return before(*args)
             return getattr(handler.hook_evidence_readers(), name)(*args)
 
         return read
 
     return {
-        "repo_evidence_probe": reader("repo_evidence"),
-        "pr_fetcher": reader("pr_status"),
+        "repo_evidence_probe": reader("repo_evidence", evaluate_repo_evidence),
+        "pr_fetcher": reader("pr_status", fetch_pr_status),
     }
 
 
