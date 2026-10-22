@@ -45,6 +45,11 @@ requirements:
     acceptance:
       - id: AC9
         statement: 'AC9: an oversized payload on a reused or fresh emit bus raises without a retry, the bus count stays at one and the next record publishes on the same bus -- falsifier: uv run pytest tests/unit/hooks/test_hook_emit_drainer_persistent_bus.py -q --no-cov -k oversized_payload fails against the pre-fix hook_emit_bus'
+  - id: req-hook-turn-prune-off-hook-path
+    statement: No hook emit scans the turn counter directory, so simultaneous session starts no longer queue behind each other's directory scans and miss the emit budget unjournalled.
+    acceptance:
+      - id: AC10
+        statement: 'AC10: a session.started turn resolution and a session.started emit never glob or stat the counter directory, and prune_stale still removes only stale counters when called -- falsifier: uv run pytest tests/hooks/test_hook_turn_prune_off_hook_path_omn19513.py -q --no-cov fails against the pre-fix hook_turn_id'
 evidence_requirements:
   - kind: tests
     description: Selected configuration survives launchd rendering and missing overlays preserve the previous agent.
@@ -67,6 +72,9 @@ evidence_requirements:
   - kind: tests
     description: An oversized payload keeps the reused emit bus and is not retried on a fresh one.
     command: uv run pytest tests/unit/hooks/test_hook_emit_drainer_persistent_bus.py -q --no-cov -k oversized_payload
+  - kind: tests
+    description: A session start never scans the turn counters.
+    command: uv run pytest tests/hooks/test_hook_turn_prune_off_hook_path_omn19513.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ''
@@ -170,3 +178,11 @@ dod_evidence:
         check_value: uv run pytest tests/unit/hooks/test_hook_emit_drainer_persistent_bus.py -q --no-cov -k oversized_payload
     binds_ac:
       - AC9
+  - id: dod-omn19513-turn-prune-off-hook-path
+    description: The turn prune tests run session.started through resolve_turn_id and hook_emit_append with the counter directory scan forbidden.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_hook_turn_prune_off_hook_path_omn19513.py -q --no-cov
+    binds_ac:
+      - AC10
