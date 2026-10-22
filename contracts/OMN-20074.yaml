@@ -105,6 +105,13 @@ requirements:
       - id: "AC12"
         statement: |-
           AC12: no Python module under src, plugins, scripts or tests imports onex_change_control, the DoD evidence runner demotes an inert check with no change-control engine importable, the OCC materialization script and its test are deleted, script defaults no longer target the change-control repository, and the alias registry rejects its retired names -- falsifier: uv run pytest tests/ci/test_no_occ_code_imports_omn20074.py tests/lib/test_dod_evidence_runner.py tests/scripts/test_occ_repo_retirement_omn20074.py -q --no-cov
+  - id: "req-omn20074-private-caller-fork-arms"
+    statement: |-
+      The shared reusables a private repository pins must never place that caller's run on a GitHub-hosted label, fork pull requests included, while a public caller keeps its hosted default (the OMN-21216 shape, operator rule 2026-10-19).
+    acceptance:
+      - id: "AC19"
+        statement: |-
+          AC19: advisory-job-gate-reusable.yml, ban-hardcoded-runner-ip.yml, hardcoded-model-config-reusable.yml, kb-doc-gate-reusable.yml and reject-deploy-gate-skip.yml, each called at a full-sha pin from a private caller declaring pull_request, push, merge_group and workflow_dispatch, pass the placement gate with the trusted variable set and are refused with it unset, and a selector with a hosted fork arm is refused -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -k "private_caller or pre_omn_20074" fails at the merge base
   - id: "req-omn20074-dead-companion-gate"
     statement: |-
       omniclaude must not host the OCC companion-merged gate script once no workflow runs it, and the PR-body stamp guard that mirrored its stamp pattern must pin that pattern itself.
@@ -162,6 +169,9 @@ evidence_requirements:
   - kind: tests
     description: "No module imports the change-control package, the inert-check predicate is local, and script defaults and aliases no longer target the retired repository."
     command: "uv run pytest tests/ci/test_no_occ_code_imports_omn20074.py tests/lib/test_dod_evidence_runner.py tests/scripts/test_occ_repo_retirement_omn20074.py -q --no-cov"
+  - kind: tests
+    description: "A private caller of each shared reusable it pins lands only on the fleet, fork pull requests included, and the pre-change selector is a finding."
+    command: 'uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -k "private_caller or pre_omn_20074"'
   - kind: tests
     description: "The dead companion-merged gate script and its test are gone and the stamp guard pins its own pattern."
     command: "uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py tests/hooks/test_pr_body_stamp_guard.py -q --no-cov"
@@ -284,6 +294,14 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_no_occ_code_imports_omn20074.py tests/lib/test_dod_evidence_runner.py tests/scripts/test_occ_repo_retirement_omn20074.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC12"]
+  - id: dod-omn20074-private-caller-fork-arms
+    description: "The placement gate judges each shared reusable from a private caller at a sha pin and finds no hosted arm, refuses an unset trusted variable, and refuses the pre-change selector."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: 'uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -k "private_caller or pre_omn_20074"'
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC19"]
   - id: dod-omn20074-dead-companion-gate
     description: "The structural test proves the companion-merged gate script and its test are deleted and unlisted, and the stamp guard test pins the policy pattern as a literal."
     source: manual
