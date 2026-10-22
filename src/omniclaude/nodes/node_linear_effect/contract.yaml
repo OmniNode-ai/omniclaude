@@ -158,6 +158,14 @@ handler_routing:
         module: omniclaude.nodes.node_linear_effect.handlers.handler_lane_repo_evidence
         name: LaneRepoEvidence
       output_events: [ModelLinearResult]
+    - operation: ticket_done_flip_hook_evidence
+      event_model:
+        module: omniclaude.nodes.node_linear_effect.models
+        name: ModelLinearRequest
+      handler:
+        module: omniclaude.nodes.node_linear_effect.handlers.handler_hook_evidence_readers
+        name: HookEvidenceReaders
+      output_events: [ModelLinearResult]
     - operation: ticket_pr_state_local
       event_model:
         module: omniclaude.nodes.node_linear_effect.models

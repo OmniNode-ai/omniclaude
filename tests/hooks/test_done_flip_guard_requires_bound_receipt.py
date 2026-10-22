@@ -284,7 +284,7 @@ def test_repo_pass_state_by_id_is_refused() -> None:
 def test_fail_closed_main_refuses_when_decide_raises(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def _boom(_call: dict[str, Any]) -> Any:
+    def _boom(_call: dict[str, Any], **_readers: Any) -> Any:
         raise RuntimeError("synthetic guard defect")
 
     monkeypatch.setattr(guard, "decide", _boom)
