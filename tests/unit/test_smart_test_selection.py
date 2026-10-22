@@ -188,9 +188,38 @@ def test_adjacency_expansion_works() -> None:
     # routing_models → reverse_deps: routing, hooks, delegation
     # BUT hooks is shared_module — only *changed* modules are checked for shared_module
     # routing_models is NOT a shared_module, so no escalation
-    assert "tests/unit/routing_models/" in sel.selected_paths
+    assert "tests/unit/" in sel.selected_paths
     # routing should be included via expansion
     assert "tests/unit/routing/" in sel.selected_paths
+
+
+def test_enums_change_selects_existing_directories() -> None:
+    sel = compute_selection(
+        changed_files=["src/omniclaude/enums/enum_sibling_pin_kind.py"],
+        adjacency_path=ADJACENCY,
+        ref_name="omn-21282-selector-missing-dir",
+    )
+    assert "tests/unit/" in sel.selected_paths
+    repo_root = Path(__file__).resolve().parents[2]
+    for path in sel.selected_paths:
+        assert (repo_root / path).is_dir(), path
+
+
+def test_all_adjacency_modules_select_existing_directories() -> None:
+    from scripts.ci.test_selection_loader import load_adjacency_map
+
+    config = load_adjacency_map(ADJACENCY)
+    repo_root = Path(__file__).resolve().parents[2]
+    for module in config.adjacency:
+        sel = compute_selection(
+            changed_files=[f"src/omniclaude/{module}/x.py"],
+            adjacency_path=ADJACENCY,
+            ref_name="omn-21282-selector-missing-dir",
+        )
+        for path in sel.selected_paths:
+            assert (repo_root / path).is_dir(), (
+                f"{module} selected missing path: {path}"
+            )
 
 
 def test_matrix_length_equals_split_count() -> None:
