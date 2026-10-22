@@ -59,6 +59,9 @@ nbe: Any = importlib.import_module("no_pr_bound_evidence")
 handler: Any = importlib.import_module(
     "omniclaude.nodes.node_linear_effect.handlers.handler_lane_repo_evidence"
 )
+readers_mod: Any = importlib.import_module(
+    "omniclaude.nodes.node_linear_effect.handlers.handler_hook_evidence_readers"
+)
 
 _TICKET = "OMN-90002"
 _CODE_REPO = "OmniNode-ai/omnimarket"
@@ -147,7 +150,7 @@ def _readers(
     merge_commit: tuple[str, list[str]] | None = None,
 ) -> Any:
     """``HookEvidenceReaders`` over a fake evidence handler and local PR read."""
-    return handler.HookEvidenceReaders(
+    return readers_mod.HookEvidenceReaders(
         cast("Any", evidence),
         local_pr_status=local or (lambda ref: _status(ref, merge_commit_sha=_MERGE)),
         read_merge_commit=lambda _repo, _sha: merge_commit,
@@ -392,7 +395,7 @@ def test_a_docs_pr_with_no_cited_merge_does_not_engage() -> None:
     ],
 )
 def test_is_doc_path(path: str, doc: bool) -> None:
-    assert handler.is_doc_path(path) is doc
+    assert readers_mod.is_doc_path(path) is doc
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -425,7 +428,7 @@ def test_read_merge_commit_reads_subject_and_paths_from_the_clone(
     sha = _git(clone, "rev-parse", "HEAD")
 
     evidence = handler.LaneRepoEvidence(scm=lambda *_a: None, clone_root=tmp_path)
-    readers = handler.HookEvidenceReaders(evidence)
+    readers = readers_mod.HookEvidenceReaders(evidence)
     assert readers.read_merge_commit(_DOCS_REPO, sha) == (
         f"docs({_TICKET}): dictionary (#1415)",
         ["docs/dictionary.md"],
