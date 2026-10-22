@@ -39,6 +39,11 @@ requirements:
     acceptance:
       - id: AC4
         statement: "AC4: ONBOARDING.md says what the anchor is and that a new email pin is how participants get fixes"
+  - id: req-omn21255-handler
+    statement: The anchor selection is behaviour of the onboarding node's bash handler, so lab-onboarding.sh does not grow.
+    acceptance:
+      - id: AC5
+        statement: "AC5: proven_pin, anchor_time, anchored_commit, checkout_anchored and clone_at_anchor are defined in the node's bootstrap handler and declared in its contract, and the script only names INFRA_ANCHOR and calls them"
 evidence_requirements:
   - kind: tests
     description: "Onboarding script tests pass"
@@ -79,4 +84,12 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lab_onboarding_anchor_omn21255.py -q --no-cov -k guide_says"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21255-ac5-handler
+    description: 'The five anchor functions are defined in handler_onboarding_preflight.sh and listed as entrypoints in the node contract, none is defined in lab-onboarding.sh, and each behaves as specified against fixture clones. Fails at the merge base, whose handler has none of them.'
+    source: manual
+    binds_ac: [AC5]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_anchor_handler_omn21255.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"

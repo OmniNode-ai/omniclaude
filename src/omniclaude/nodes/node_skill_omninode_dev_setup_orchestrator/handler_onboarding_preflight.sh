@@ -1115,3 +1115,56 @@ setup_model() { # provider -> result_of provider is pass:<model> or fail:<reason
   fi
   set_result "$p" "${passed:-$(printf '%s' "$MODEL_RES" | grep "^$p|$first|" | head -n 1 | cut -d'|' -f3-)}"
 }
+
+# ---------------------------------------------------------------------------
+# The anchor: which commit each clone is checked out at.
+#
+# lab-onboarding.sh names INFRA_ANCHOR, one omnibase_infra commit. omnibase_infra
+# is checked out there; a sibling at the pin that commit's
+# .github/sibling-pins.yaml names; a repo with no pin at the last commit of
+# origin's default branch at or before the anchor's commit time.
+# ---------------------------------------------------------------------------
+proven_pin() { # repo -> the CI-proven commit, empty when the repo has no pin
+  local pins="$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml"
+  [ -f "$pins" ] || return 0
+  sed -n "/^pins:[[:space:]]*$/,/^[^[:space:]]/s/^  $1: \([0-9a-fA-F]\{40\}\)[[:space:]]*$/\1/p" "$pins"
+}
+
+anchor_time() { # -> the anchor's committer date, ISO 8601
+  git -C "$WORKSPACE/omnibase_infra" show -s --format=%cI "$INFRA_ANCHOR" 2>/dev/null
+}
+
+# anchored_commit repo -> the commit this setup installs for the repo. It reads
+# the pins file in the working tree, so omnibase_infra is checked out first.
+anchored_commit() { # repo
+  local pin def when
+  [ "$1" = omnibase_infra ] && { printf '%s\n' "$INFRA_ANCHOR"; return 0; }
+  pin="$(proven_pin "$1")" || return 1
+  [ -n "$pin" ] && { printf '%s\n' "$pin"; return 0; }
+  def="$(clone_default_branch "$1")"
+  when="$(anchor_time)"
+  [ -n "$def" ] && [ -n "$when" ] || return 1
+  git -C "$WORKSPACE/$1" rev-list -1 --first-parent --before="$when" "origin/$def"
+}
+
+checkout_anchored() { # repo commit
+  local d="$WORKSPACE/$1" changes
+  [ "$(git -C "$d" rev-parse HEAD)" = "$2" ] &&
+    ! git -C "$d" symbolic-ref --quiet HEAD >/dev/null 2>&1 && return 0
+  changes="$(git -C "$d" status --porcelain --untracked-files=no)" || return 1
+  if [ -n "$changes" ]; then
+    say "  $1: clone has uncommitted changes; cannot check out its anchored commit"
+    return 1
+  fi
+  if ! git -C "$d" cat-file -e "$2^{commit}" 2>/dev/null; then
+    git -C "$d" fetch --quiet origin "$2" 2>/dev/null || git -C "$d" fetch --quiet origin || return 1
+    git -C "$d" cat-file -e "$2^{commit}" 2>/dev/null || return 1
+  fi
+  git -C "$d" checkout --quiet --detach "$2"
+}
+
+clone_at_anchor() { # repo
+  local want
+  want="$(anchored_commit "$1")" && [ -n "$want" ] || return 1
+  [ "$(git -C "$WORKSPACE/$1" rev-parse HEAD)" = "$want" ]
+}

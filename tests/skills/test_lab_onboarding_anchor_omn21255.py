@@ -27,6 +27,11 @@ SCRIPT = (
     / "_bin"
     / "lab-onboarding.sh"
 )
+HANDLER = (
+    Path(__file__).resolve().parents[2]
+    / "src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator"
+    / "handler_onboarding_preflight.sh"
+)
 REPOS = ("omnibase_infra", "omnimarket", "omnibase_core", "omnibase_spi")
 PINNED = ("omnimarket", "omnibase_core")
 CONFIG_REL = "config/onex/runtime/runtime_config.yaml"
@@ -128,7 +133,16 @@ class Harness:
             capture_output=True,
             check=True,
         )
-        self.fragment.write_text(extracted.stdout)
+        # The anchor functions live in the node's bash handler, which the script
+        # sources whole; here only that section is sourced, as it has no side effects.
+        anchor = subprocess.run(
+            ["awk", "/^# The anchor: which commit/ { on = 1 } on { print }", str(HANDLER)],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        assert "anchored_commit()" in anchor.stdout
+        self.fragment.write_text(extracted.stdout + anchor.stdout)
         self.env = {
             **os.environ,
             "HOME": str(self.home),

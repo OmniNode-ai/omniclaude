@@ -716,7 +716,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="a287:5b14:6553:a8a6:8dc6:ca4e:e523:154a:312b:4b6a:4923:5bf9:99e0:ad9d:e4f3:37aa" root candidate \
+  local digest="7f96:7d1b:ba3c:aae3:d4ed:d234:a933:964d:b5bf:2f75:5ae9:23b4:e9ca:939c:8387:3cba" root candidate \
     download_digest="a287:5b14:6553:a8a6:8dc6:ca4e:e523:154a:312b:4b6a:4923:5bf9:99e0:ad9d:e4f3:37aa"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -1121,51 +1121,6 @@ clone_fix() { # repo
 # A participant gets a fix only through a new email that pins a script naming a
 # newer anchor. ONBOARD_TEST_INFRA_ANCHOR exists for the tests' fixture repos.
 INFRA_ANCHOR="${ONBOARD_TEST_INFRA_ANCHOR:-aa81312c2c405424d4c947d61c7763d38e67b3a1}"
-
-proven_pin() { # repo -> the CI-proven commit, empty when the repo has no pin
-  local pins="$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml"
-  [ -f "$pins" ] || return 0
-  sed -n "/^pins:[[:space:]]*$/,/^[^[:space:]]/s/^  $1: \([0-9a-fA-F]\{40\}\)[[:space:]]*$/\1/p" "$pins"
-}
-
-anchor_time() { # -> the anchor's committer date, ISO 8601
-  git -C "$WORKSPACE/omnibase_infra" show -s --format=%cI "$INFRA_ANCHOR" 2>/dev/null
-}
-
-# anchored_commit repo -> the commit this setup installs for the repo. It reads
-# the pins file in the working tree, so omnibase_infra is checked out first.
-anchored_commit() { # repo
-  local pin def when
-  [ "$1" = omnibase_infra ] && { printf '%s\n' "$INFRA_ANCHOR"; return 0; }
-  pin="$(proven_pin "$1")" || return 1
-  [ -n "$pin" ] && { printf '%s\n' "$pin"; return 0; }
-  def="$(clone_default_branch "$1")"
-  when="$(anchor_time)"
-  [ -n "$def" ] && [ -n "$when" ] || return 1
-  git -C "$WORKSPACE/$1" rev-list -1 --first-parent --before="$when" "origin/$def"
-}
-
-checkout_anchored() { # repo commit
-  local d="$WORKSPACE/$1" changes
-  [ "$(git -C "$d" rev-parse HEAD)" = "$2" ] &&
-    ! git -C "$d" symbolic-ref --quiet HEAD >/dev/null 2>&1 && return 0
-  changes="$(git -C "$d" status --porcelain --untracked-files=no)" || return 1
-  if [ -n "$changes" ]; then
-    say "  $1: clone has uncommitted changes; cannot check out its anchored commit"
-    return 1
-  fi
-  if ! git -C "$d" cat-file -e "$2^{commit}" 2>/dev/null; then
-    git -C "$d" fetch --quiet origin "$2" 2>/dev/null || git -C "$d" fetch --quiet origin || return 1
-    git -C "$d" cat-file -e "$2^{commit}" 2>/dev/null || return 1
-  fi
-  git -C "$d" checkout --quiet --detach "$2"
-}
-
-clone_at_anchor() { # repo
-  local want
-  want="$(anchored_commit "$1")" && [ -n "$want" ] || return 1
-  [ "$(git -C "$WORKSPACE/$1" rev-parse HEAD)" = "$want" ]
-}
 
 # ---------------------------------------------------------------------------
 # The workspace's tier-1 runtime config.
