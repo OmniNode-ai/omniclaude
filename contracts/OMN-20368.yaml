@@ -15,6 +15,13 @@ requirements:
     acceptance:
       - id: AC1
         statement: 'AC1: a PR proven merged by the PR watcher state or the canonical clone passes with no gh on PATH, and an unmerged PR still refuses naming it -- falsifier: pytest tests/hooks/test_done_flip_guard_local_pr_state.py fails before this change and passes after it'
+  - id: req-omn20368-done-flip-lane-readers
+    statement: The Done-flip hook uses the handler readers for both criterion ticks and Done decisions, including documentation-only evidence.
+    acceptance:
+      - id: AC2
+        statement: 'AC2: the hook passes the handler PR-state and product-contract readers to decide(), ticks and Done share the contract verdict, and missing or refused evidence still refuses without a gh read'
+      - id: AC3
+        statement: 'AC3: a ticket without a product contract may tick criteria and reach Done only when every cited PR is merged and documentation-only, a merge subject names the ticket, and all acceptance criteria are ticked for Done'
 evidence_requirements:
   - kind: tests
     description: "The skill documents the execution audience flag"
@@ -68,6 +75,7 @@ dod_evidence:
       merged docs-only PR that names it and carries no contract, and on nothing
       weaker.
     source: manual
+    binds_ac: [AC2, AC3]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_done_flip_guard_lane_readers.py -q --no-cov"
@@ -75,6 +83,7 @@ dod_evidence:
   - id: dod-omn20368-deploy-hook-evidence-readers
     description: A hosted runner starts an isolated Python container with the changed handler and hook library mounted and verifies the handler defines HookEvidenceReaders with the docs-only verdict, the hook wires it, and neither file names gh. No fleet service or private endpoint is required.
     source: manual
+    binds_ac: [AC2]
     checks:
       - check_type: command
         check_value: >-
