@@ -51,12 +51,22 @@ jobs:
   advisory-job-gate:
     name: advisory-job-gate
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to ubuntu-latest; public FORK PRs default to ubuntu-latest
+    # OMN-21216 (OMN-20074): since 2026-10-19 a private repository may not run
+    # on a hosted label at all, fork pull requests included, and a hosted
+    # default behind a variable counts. A private caller therefore never takes
+    # the public arm and takes its own trusted variable with NO default: the
+    # private-repo placement gate refuses a private caller where that variable
+    # is unset, so a passing caller always has it. Public callers keep the
+    # hosted default. Same shape as kb-doc-gate-reusable.yml.
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
+        (!github.event.repository.private &&
+         github.event_name == 'pull_request' &&
          github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || (github.event.repository.private && '["self-hosted","omnibase-ci"]' || '["ubuntu-latest"]'))
+        || github.event.repository.private
+        && fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON)
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["ubuntu-latest"]')
       }}
     timeout-minutes: 10
     steps:
