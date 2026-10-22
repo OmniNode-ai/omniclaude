@@ -1109,7 +1109,7 @@ clone_fix() { # repo
 }
 
 # ---------------------------------------------------------------------------
-# The anchor (OMN-21255).
+# The anchor.
 #
 # This script is emailed pinned by commit and sha256, and the code it installs
 # is pinned here, by one omnibase_infra commit. Phase 2 checks omnibase_infra
@@ -1220,7 +1220,7 @@ YAML
 # root is a plain directory. So the root is a repository whose main, and the local
 # ref origin/main beside it, carry the file. It has no remote and never pushes.
 #
-# The commit the materialiser reports is the anchor's (OMN-21255): one root
+# The commit the materialiser reports is the anchor's: one root
 # commit whose file names INFRA_ANCHOR, dated at the anchor's commit time, with a
 # fixed identity and message. Its sha is then a function of the anchor alone,
 # the same on every Mac and every run, and it moves only when the anchor does.
