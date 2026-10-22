@@ -106,6 +106,9 @@ dev = [
     "types-psycopg2>=2.9.21.20251012",
     "types-docker>=7.1.0.20260109",
     "bandit>=1.9.3",
+    # OMN-17427: the contributing guide's `uv run pre-commit install` needs pre-commit in this
+    # environment; without it a fresh clone fails with "Failed to spawn: pre-commit".
+    "pre-commit>=4.3.0,<5.0.0",
     # OTEL SDK for phoenix_otel_exporter tests
     "opentelemetry-api>=1.23.0,<2.0.0",
     "opentelemetry-sdk>=1.23.0,<2.0.0",
