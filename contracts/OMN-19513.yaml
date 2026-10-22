@@ -45,6 +45,11 @@ requirements:
     acceptance:
       - id: AC9
         statement: 'AC9: an oversized payload on a reused or fresh emit bus raises without a retry, the bus count stays at one and the next record publishes on the same bus -- falsifier: uv run pytest tests/unit/hooks/test_hook_emit_drainer_persistent_bus.py -q --no-cov -k oversized_payload fails against the pre-fix hook_emit_bus'
+  - id: req-hook-turn-prune-off-hook-path
+    statement: No hook emit scans the turn counter directory, so simultaneous session starts no longer queue behind each other's directory scans and miss the emit budget unjournalled.
+    acceptance:
+      - id: AC10
+        statement: 'AC10: a session.started turn resolution and a session.started emit never glob or stat the counter directory, and prune_stale still removes only stale counters when called -- falsifier: uv run pytest tests/hooks/test_hook_turn_prune_off_hook_path_omn19513.py -q --no-cov fails against the pre-fix hook_turn_id'
 evidence_requirements:
   - kind: tests
     description: Selected configuration survives launchd rendering and missing overlays preserve the previous agent.
@@ -67,6 +72,9 @@ evidence_requirements:
   - kind: tests
     description: An oversized payload keeps the reused emit bus and is not retried on a fresh one.
     command: uv run pytest tests/unit/hooks/test_hook_emit_drainer_persistent_bus.py -q --no-cov -k oversized_payload
+  - kind: tests
+    description: A session start never scans the turn counters.
+    command: uv run pytest tests/hooks/test_hook_turn_prune_off_hook_path_omn19513.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ''
@@ -121,14 +129,22 @@ dod_evidence:
     binds_ac:
       - AC6
   - id: dod-omn19513-encryption-container-smoke
-    description: Run the payload encryption smoke tests in a fresh Python container against the checked-out runtime. Both capture classes must seal and open with a throwaway key, refuse unavailable keys and leave the off path unchanged. No production key or service is used.
+    description: >-
+      In a fresh Python container, both capture classes seal and open with a
+      throwaway key, refuse unavailable keys and leave the off path unchanged.
+      Session-start turn resolution and emission also run with counter scans
+      forbidden. Mount the project's lock-exact site-packages read-only,
+      including the real omnimarket item-identity handler, under the same
+      Python minor version. No production key or service is used.
     source: manual
     checks:
       - check_type: command
+        cwd: "."
         check_value: >-
-          bash -c 'docker run --rm --volume "$PWD:/workspace:ro" --workdir /workspace --env CI=true ghcr.io/astral-sh/uv:python3.12-bookworm-slim uv run --no-project --with pytest==9.1.1 --with pytest-asyncio==1.3.0 --with pytest-cov==7.1.0 --with python-dotenv==1.2.2 --with pydantic==2.13.4 --with pydantic-settings==2.15.0 --with cryptography==50.0.1 --with pyyaml==6.0.3 --with omnibase-infra==0.38.74 --with tiktoken==0.12.0 --with requests==2.33.1 pytest tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov -p no:cacheprovider'
+          bash -c 'set -eu; site_packages="$(uv run python -c "import sysconfig; print(sysconfig.get_path(\"purelib\"))")"; minor="$(uv run python -c "import sys; print(sys.version_info.minor)")"; docker run --rm --volume "$PWD:/workspace:ro" --volume "$site_packages:/runtime:ro" --workdir /workspace --env CI=true --env PYTHONPATH=/runtime ghcr.io/astral-sh/uv:python3.${minor}-bookworm-slim python -m pytest tests/hooks/test_hook_turn_prune_off_hook_path_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py -x -q --no-cov -p no:cacheprovider'
     binds_ac:
       - AC6
+      - AC10
   - id: dod-omn19513-raw-capture-guard
     description: The guard test passes on the raw producer and its negative controls refuse each reintroduced scrub, digest or redaction field. Registration checks require its pre-commit hook and its unconditional, fail-closed CI refusal-surface step; either registration missing at the merge base fails the evidence.
     source: manual
@@ -170,3 +186,11 @@ dod_evidence:
         check_value: uv run pytest tests/unit/hooks/test_hook_emit_drainer_persistent_bus.py -q --no-cov -k oversized_payload
     binds_ac:
       - AC9
+  - id: dod-omn19513-turn-prune-off-hook-path
+    description: The turn prune tests run session.started through resolve_turn_id and hook_emit_append with the counter directory scan forbidden.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_hook_turn_prune_off_hook_path_omn19513.py -q --no-cov
+    binds_ac:
+      - AC10

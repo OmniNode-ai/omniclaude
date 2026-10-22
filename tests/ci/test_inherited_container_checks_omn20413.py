@@ -82,11 +82,18 @@ def test_container_check_still_runs_docker(contract: str, evidence_id: str) -> N
 
 
 def test_encryption_container_smoke_installs_what_omniclaude_hooks_imports() -> None:
+    """The container mounts the project's lock-exact site-packages (OMN-19513).
+
+    A hand-listed ``--with`` set could not carry the omnimarket item-identity
+    handler the capture hooks load by path, so the capture probe skipped and
+    seven tests asserted 0 == 1 in the container only. The check now reads the
+    project's own interpreter and purelib, mounts it read-only under the same
+    Python minor version, and the lock must still carry what the hooks import.
+    """
     value = _check_value("OMN-19513.yaml", "dod-omn19513-encryption-container-smoke")
-    for requirement in (
-        "--with pydantic-settings==",
-        "--with omnibase-infra==",
-        "--with tiktoken==",
-        "--with requests==",
-    ):
-        assert requirement in value, requirement
+    assert '--volume "$site_packages:/runtime:ro"' in value
+    assert "--env PYTHONPATH=/runtime" in value
+    assert "ghcr.io/astral-sh/uv:python3.${minor}-bookworm-slim" in value
+    lock = (_REPO_ROOT / "uv.lock").read_text()
+    for package in ("pydantic-settings", "omnibase-infra", "tiktoken", "requests"):
+        assert f'name = "{package}"' in lock, package

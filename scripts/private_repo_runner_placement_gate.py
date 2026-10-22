@@ -132,7 +132,12 @@ read live there. Set `PRRP_VARIABLES_SNAPSHOT` (or pass `--variables-snapshot`) 
 file written by `--write-variables-snapshot` from a host whose credential CAN read
 them. The snapshot is consulted only after a live read failed, so a live answer
 always wins; one older than `--snapshot-max-age-hours` (24), dated ahead, missing,
-unparseable, or silent about the repository or scope asked for is a REFUSAL, exit 2.
+unparseable, or silent about the repository or scope asked for is a REFUSAL, exit 2,
+and every such refusal names the missing input and the sanctioned remedy (OMN-20141):
+the lab hosts' copy is published by omnimarket's `onex-prrp-snapshot-publish` (one
+gate read per registry repository, merged into one schema-1 file), and the lane
+runner exports `PRRP_VARIABLES_SNAPSHOT` at it. The file format is that publisher's
+contract, so it stays schema 1.
 A hosted value inside a fresh snapshot is judged exactly like a live one. Inside
 GitHub Actions the flag and the variable are refused: hosted CI is the enforced
 merge gate and resolves live. Use the environment variable, not hook `args`, so the
@@ -818,12 +823,8 @@ class VariablesSnapshot:
     def _clock(self) -> datetime:
         return (self._now or _utcnow)()
 
-    def _refresh_hint(self) -> str:
-        return (
-            "refresh it from a host whose credential can read Actions variables: "
-            "private_repo_runner_placement_gate.py --repo <owner/name> "
-            f"--write-variables-snapshot {self._path}"
-        )
+    def _refresh_hint(self, slug: str = "<owner/name>") -> str:
+        return f"refresh it: {snapshot_remedy(slug, str(self._path))}"
 
     def _load(self) -> dict[str, Any]:
         if self._data is not None:
@@ -890,16 +891,33 @@ class VariablesSnapshot:
         if not isinstance(values, dict) or not all(
             isinstance(k, str) and isinstance(v, str) for k, v in values.items()
         ):
-            raise GateError(f"snapshot {self._path} does not record scope {key}")
+            slug = key[len("repo:") :] if key.startswith("repo:") else "<owner/name>"
+            raise GateError(
+                f"snapshot {self._path} does not record scope {key}; "
+                f"{self._refresh_hint(slug)}"
+            )
         return dict(values)
 
     def visibility(self, slug: str) -> str:
         recorded = self._load()["visibility"].get(slug)
         if recorded not in {"public", "private", "internal"}:
             raise GateError(
-                f"snapshot {self._path} does not record the visibility of {slug}"
+                f"snapshot {self._path} does not record the visibility of {slug}; "
+                f"{self._refresh_hint(slug)}"
             )
         return str(recorded)
+
+
+def snapshot_remedy(slug: str, path: str = "<file>") -> str:
+    """The sanctioned way to supply what a host cannot read live (OMN-20141)."""
+    return (
+        "on a host whose credential can read the repository and its Actions "
+        "variables, run omnimarket's `onex-prrp-snapshot-publish` (every registry "
+        "repository, copied to the lab hosts) or `private_repo_runner_placement_gate.py "
+        f"--repo {slug} --write-variables-snapshot {path}`, then set "
+        f"PRRP_VARIABLES_SNAPSHOT={path} here (or pass --variables-snapshot); "
+        f"a snapshot answers for {DEFAULT_SNAPSHOT_MAX_AGE_HOURS:g} hours"
+    )
 
 
 def resolve_visibility(slug: str, snapshot: VariablesSnapshot | None = None) -> str:
@@ -917,7 +935,9 @@ def resolve_visibility(slug: str, snapshot: VariablesSnapshot | None = None) -> 
                 f"could not resolve the visibility of {slug} from the GitHub API "
                 f"({live}). The rule applies to private "
                 "repositories only, so a gate that cannot read visibility has not "
-                "passed -- it has not run. THE GATE DID NOT RUN."
+                "passed -- it has not run. Missing input: the visibility of "
+                f"{slug}. To supply it {snapshot_remedy(slug)}. "
+                "THE GATE DID NOT RUN."
             )
         try:
             recorded = snapshot.visibility(slug)
@@ -1032,9 +1052,9 @@ class Variables:
             f"{name} is needed to resolve a runs-on expression and {where} "
             f"variable scope could not be read ({self._errors[which]}). An "
             "Actions job token cannot read Actions variables at either scope; "
-            "pass a credential that can as the ACTIONS_VARIABLES_TOKEN secret "
-            "(a lab host with no such credential supplies a fresh "
-            "--variables-snapshot instead). "
+            "pass a credential that can as the ACTIONS_VARIABLES_TOKEN secret. "
+            f"Missing input: {name}. A host with no such credential (a lane) "
+            f"supplies it this way: {snapshot_remedy(self._slug)}. "
             "Guessing the expression own default instead would report a "
             "repository inheriting a hosted organisation value as green. "
             "THE GATE DID NOT RUN."
