@@ -1,0 +1,66 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-21284"
+title: "Remove the retired agent repository from epic team assignment"
+summary: >
+  The epic team repository manifest excludes the retired agent repository and retains 13 active
+  repositories. Tickets containing its former routing keywords cannot be
+  assigned to the retired repository.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-active-repository-assignment"
+    statement: "Epic decomposition assigns tickets using the active repository manifest."
+    acceptance:
+      - id: "AC1"
+        statement: "The manifest contains only the 13 active repositories after the retired entry is removed."
+      - id: "AC2"
+        statement: "The manifest retains 13 active repositories, including core and the plugin."
+      - id: "AC3"
+        statement: "Former agent routing keywords cannot assign a ticket to the retired repository."
+evidence_requirements:
+  - kind: "tests"
+    description: "Focused manifest regression tests and epic decomposition unit tests."
+    command: >-
+      env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest
+      tests/ci/test_epic_team_manifest_retired_repos_omn21284.py
+      tests/unit/hooks/lib/test_epic_decomposer.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn21284-ac1-retired-entry-absent"
+    binds_ac: [AC1]
+    description: "The checked-out manifest excludes the retired agent repository."
+    source: "generated"
+    checks:
+      - check_type: "test_passes"
+        cwd: "."
+        check_value: >-
+          env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest
+          tests/ci/test_epic_team_manifest_retired_repos_omn21284.py::test_the_manifest_has_13_active_repositories
+          -q --no-cov
+  - id: "dod-omn21284-ac2-active-repositories-retained"
+    binds_ac: [AC2]
+    description: "The manifest retains 13 active repository names and the core and plugin entries."
+    source: "generated"
+    checks:
+      - check_type: "test_passes"
+        cwd: "."
+        check_value: >-
+          env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest
+          tests/ci/test_epic_team_manifest_retired_repos_omn21284.py::test_the_manifest_still_names_the_live_repositories
+          -q --no-cov
+  - id: "dod-omn21284-ac3-routing-excludes-retired-repo"
+    binds_ac: [AC3]
+    description: "Epic decomposition does not assign the routing keyword ticket to the retired repository."
+    source: "generated"
+    checks:
+      - check_type: "test_passes"
+        cwd: "."
+        check_value: >-
+          env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest
+          tests/ci/test_epic_team_manifest_retired_repos_omn21284.py::test_agent_routing_dispatch_ticket_is_assigned_to_one_active_repository
+          -q --no-cov

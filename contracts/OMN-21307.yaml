@@ -1,0 +1,36 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21307
+title: "A downloaded onboarding script at the anchored commit fetches a handler without the anchor functions, so phase 2 stops"
+summary: >
+  lab-onboarding.sh's handler download URL moves from b4239e2d to
+  ad32c82a0a9274c6506b9016aae40fd87590e620, and download_digest moves to
+  7f967d1b... The handler at that commit defines anchor_time, anchored_commit,
+  checkout_anchored, clone_at_anchor and proven_pin, so a downloaded script
+  fetches a handler with the anchor functions.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21307-download-handler
+    statement: lab-onboarding.sh's handler download URL names a commit whose handler defines anchor_time, anchored_commit, checkout_anchored, clone_at_anchor and proven_pin and hashes to download_digest.
+    acceptance:
+      - id: AC1
+        statement: "AC1: a script downloaded on its own fetches a handler that defines anchor_time, anchored_commit, checkout_anchored, clone_at_anchor and proven_pin, with the bytes download_digest checks"
+evidence_requirements:
+  - kind: tests
+    description: "Onboarding anchor download test passes"
+    command: "uv run pytest tests/skills/test_onboarding_anchor_download_omn21307.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21307-ac1-download-handler
+    description: 'The handler at ad32c82a0a9274c6506b9016aae40fd87590e620, the commit the download URL names, defines anchor_time, anchored_commit, checkout_anchored, clone_at_anchor and proven_pin and hashes to download_digest, 7f967d1b... Fails at the merge base, whose URL names b4239e2d.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_anchor_download_omn21307.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
