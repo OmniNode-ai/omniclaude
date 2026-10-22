@@ -65,7 +65,7 @@ readers_mod: Any = importlib.import_module(
 
 _TICKET = "OMN-90002"
 _CODE_REPO = "OmniNode-ai/omnimarket"
-_DOCS_REPO = "OmniNode-ai/knowledge_base_internal"
+_DOCS_REPO = "OmniNode-ai/docs_repo"
 _NUMBER = 4222
 _MERGE = "m" * 40
 _HEAD = "h" * 40
@@ -326,9 +326,7 @@ def test_docs_only_ticket_closes_on_its_merged_docs_pr(paths: list[str]) -> None
     assert decision.allowed, decision.reason
     verdict = readers.repo_evidence(_TICKET, [_DOCS_DESCRIPTION], [_merged_docs()])
     assert verdict.outcome is nbe.RepoEvidenceOutcome.PASSED
-    assert verdict.detail.startswith(
-        "docs-only: OmniNode-ai/knowledge_base_internal#1415"
-    )
+    assert verdict.detail.startswith("docs-only: OmniNode-ai/docs_repo#1415")
 
 
 def _merged_docs() -> Any:
@@ -412,7 +410,7 @@ def _git(cwd: Path, *args: str) -> str:
 def test_read_merge_commit_reads_subject_and_paths_from_the_clone(
     tmp_path: Path,
 ) -> None:
-    clone = tmp_path / "knowledge_base_internal"
+    clone = tmp_path / "docs_repo"
     clone.mkdir()
     _git(clone, "init", "-q", "-b", "main")
     _git(clone, "config", "user.email", "t@example.invalid")
