@@ -136,7 +136,11 @@ class Harness:
         # The anchor functions live in the node's bash handler, which the script
         # sources whole; here only that section is sourced, as it has no side effects.
         anchor = subprocess.run(
-            ["awk", "/^# The anchor: which commit/ { on = 1 } on { print }", str(HANDLER)],
+            [
+                "awk",
+                "/^# The anchor: which commit/ { on = 1 } on { print }",
+                str(HANDLER),
+            ],
             text=True,
             capture_output=True,
             check=True,

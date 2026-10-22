@@ -81,7 +81,9 @@ def ws(tmp_path: Path) -> dict[str, str]:
     o2 = _commit(other, "o2", "2001-09-09T02:00:00+00:00")
     for repo in (infra, other):
         _git(repo, "update-ref", "refs/remotes/origin/dev", "HEAD")
-        _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/dev")
+        _git(
+            repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/dev"
+        )
     (infra / ".github/sibling-pins.yaml").write_text(
         f"pins:\n  pinned: {PIN}\nother_key:\n  other: {'c' * 40}\n"
     )
@@ -143,13 +145,20 @@ def test_proven_pin_reads_only_the_pins_section(ws: dict[str, str]) -> None:
 def test_anchored_commit_infra_is_the_anchor_and_unpinned_is_time_bound(
     ws: dict[str, str],
 ) -> None:
-    result = _run(ws, "anchored_commit omnibase_infra; anchored_commit pinned; anchored_commit other")
+    result = _run(
+        ws,
+        "anchored_commit omnibase_infra; anchored_commit pinned; anchored_commit other",
+    )
     # anchor time 01:46:40 sits between o1 (01:00) and o2 (02:00)
     assert result.stdout.split() == [ws["a1"], PIN, ws["o1"]]
 
 
 def test_anchor_time_is_the_anchor_commit_date(ws: dict[str, str]) -> None:
-    assert _run(ws, "anchor_time").stdout.strip() == "2001-09-09T01:46:40+00:00"
+    # git prints a UTC offset as +00:00 or Z depending on its version
+    assert _run(ws, "anchor_time").stdout.strip() in {
+        "2001-09-09T01:46:40+00:00",
+        "2001-09-09T01:46:40Z",
+    }
 
 
 def test_checkout_anchored_detaches_and_clone_at_anchor_agrees(

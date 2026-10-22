@@ -114,7 +114,11 @@ class Harness:
         )
         # The anchor functions live in the node's bash handler (functions only).
         anchor = subprocess.run(
-            ["awk", "/^# The anchor: which commit/ { on = 1 } on { print }", str(HANDLER)],
+            [
+                "awk",
+                "/^# The anchor: which commit/ { on = 1 } on { print }",
+                str(HANDLER),
+            ],
             text=True,
             capture_output=True,
             check=True,
