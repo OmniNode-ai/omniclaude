@@ -224,6 +224,11 @@ requirements:
         statement: Each migrated contract parses as YAML with schema version 1.0.0, its own ticket_id and a nonempty title.
       - id: AC56
         statement: Each migrated contract retains every historical evidence ID with nonempty check types and commands, and evidence IDs remain unique.
+  - id: req-omnidash-lab-owned-checkout
+    statement: The lab omnidash tick builds tenant defaults and serves Vite from its private checkout while leaving the canonical clone clean.
+    acceptance:
+      - id: AC57
+        statement: The tick copies tenant overlays into its owned checkout and generates defaults before starting Vite, leaves canonical HEAD, status and worktree metadata unchanged, restarts on overlay or origin/dev movement while retaining the tenant, stays silent when unchanged and never logs overlay values.
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1127,3 +1132,21 @@ dod_evidence:
     binds_ac:
       - AC55
       - AC56
+  - id: dod-omnidash-lab-owned-checkout
+    description: The isolated shell regression exercises the tick with local Git repositories and stubbed npm and process commands, checking owned-checkout startup, tenant generation, canonical cleanliness and restart behavior.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 bash tests/scripts/test_omnidash_lab_dev_tick.sh"
+    binds_ac:
+      - AC57
+  - id: dod-deploy-omnidash-lab-owned-checkout
+    description: A hosted runner exercises the deployed tick script with synthetic tenant overlays and local process stubs, without launchd, a live Vite server, credentials or network access; the previous canonical-serving script fails the owned-checkout assertion.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 bash tests/scripts/test_omnidash_lab_dev_tick.sh"
+    binds_ac:
+      - AC57
