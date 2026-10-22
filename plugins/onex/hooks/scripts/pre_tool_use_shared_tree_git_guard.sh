@@ -123,7 +123,9 @@ _resolve_python() {
         "$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)/.venv/bin/python3" "${OMNI_HOME:+${OMNI_HOME}/omniclaude/.venv/bin/python3}" \
         /opt/homebrew/bin/python3.13 /usr/local/bin/python3.13 "$(command -v python3 || true)"; do  # public-skill-ok: canonical brew interpreter path, CLAUDE.md rule 11 precedent
         [[ -n "$c" && -x "$c" ]] || continue
-        (unset PYTHONPATH; "$c" -c "import ${GUARD_MODULE}") >/dev/null 2>&1 && { GUARD_PYTHON="$c"; return 0; }
+        # Collection only records argv; replay consumes the shared result. The
+        # shared runner imports the core and reports any import error fail-closed.
+        { [[ "${ONEX_BASH_GUARDS_PHASE:-}" == collect || "${ONEX_BASH_GUARDS_PHASE:-}" == replay ]] || (unset PYTHONPATH; "$c" -c "import ${GUARD_MODULE}") >/dev/null 2>&1; } && { GUARD_PYTHON="$c"; return 0; }
         _GUARD_PY_TRIED="${_GUARD_PY_TRIED:+$_GUARD_PY_TRIED, }$c"
     done
     return 1

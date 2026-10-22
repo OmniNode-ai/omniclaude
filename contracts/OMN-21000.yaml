@@ -4,14 +4,21 @@ title: "Shared-tree git guard resolves an interpreter that imports its decision 
 summary: >
   pre_tool_use_shared_tree_git_guard.sh took PLUGIN_PYTHON_BIN without checking
   that it imports the admission handler, so a host whose override named a bare
-  interpreter refused every Bash call holding git vocabulary plus a refused verb
+  interpreter refused standalone Bash hook calls holding git vocabulary plus a refused verb
   word with "could not evaluate (exit 1)". The guard now tries each candidate
   interpreter in turn, accepts the first that imports the handler, and refuses
   by name, listing the interpreters that failed, when none does. The fail-closed
-  policy is unchanged. The grants half of OMN-21000 (AC1) lives in omnibase_infra.
+  policy is unchanged. Bundled calls use the shared runner without extra import
+  probes during collection or replay. The grants half of OMN-21000 (AC1) lives in omnibase_infra.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
+requirements:
+  - id: req-guard-importable-interpreter
+    statement: The standalone shared-tree guard must select an interpreter that imports its decision core, or refuse by name when none does.
+    acceptance:
+      - id: AC2
+        statement: A configured Python without the decision core falls through to an importable candidate; when none imports the core the guard refuses and names the module and failed interpreters.
 evidence_requirements:
   - kind: tests
     description: "Shared-tree git guard tests pass, including the two interpreter-resolution cases"
@@ -25,11 +32,22 @@ dod_evidence:
     description: "A PLUGIN_PYTHON_BIN that cannot import the handler no longer decides the guard; a later candidate that imports it runs the real decision core"
     source: manual
     checks:
-      - check_type: command
+      - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov -k plugin_python_bin_without_the_core"
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac: [AC2]
   - id: dod-guard-refuses-host-without-importable-core
     description: "When no interpreter imports the handler the guard refuses, naming the module and the interpreters tried"
     source: manual
     checks:
-      - check_type: command
+      - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov -k no_interpreter_imports_the_core"
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac: [AC2]
+  - id: dod-guard-shared-interpreter-budget
+    description: "The bundled entrypoint starts one interpreter for all matching guards, with both refusal reasons and fail-closed handling when that interpreter dies"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks_system/test_bash_guards_differential.py -q --no-cov -k 'at_most_one_interpreter_per_call or two_refusals_carry_both_reasons or a_dead_shared_interpreter_fails_every_guard_closed'"
+        cwd: ${OMNI_HOME}/omniclaude
