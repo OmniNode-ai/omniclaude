@@ -18,7 +18,7 @@
 #                        stop), your models and their keys, Docker, and the Mac password.
 #                        Changes nothing unless you agree to set leftovers aside
 #   1 Base tools         Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv
-#   2 Workspace          the canonical clones, OMNIBASE_PATH, PATH
+#   2 Workspace          the clones at this script's anchor (one omnibase_infra commit), OMNIBASE_PATH, PATH
 #   3 onex + models      dispatch venv, onex, local identity, then each model you chose set up
 #                        with `onex models add` and tested with one delegation pinned to it
 #   4 Docker             optional: only if you said yes; Docker Desktop installed, or started
@@ -716,7 +716,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="a287:5b14:6553:a8a6:8dc6:ca4e:e523:154a:312b:4b6a:4923:5bf9:99e0:ad9d:e4f3:37aa" root candidate \
+  local digest="7f96:7d1b:ba3c:aae3:d4ed:d234:a933:964d:b5bf:2f75:5ae9:23b4:e9ca:939c:8387:3cba" root candidate \
     download_digest="a287:5b14:6553:a8a6:8dc6:ca4e:e523:154a:312b:4b6a:4923:5bf9:99e0:ad9d:e4f3:37aa"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -1011,7 +1011,7 @@ refuse_foreign_workspace() {
   phase_fail "choose an empty or new directory with --workspace DIR (or set OMNIBASE_PATH to one); nothing was changed in $WORKSPACE"
 }
 
-# Clone or fetch only; what an existing clone needs is decided by bring_clone_current.
+# Clone or fetch only; the commit each clone is checked out at is decided by anchored_commit.
 sync_clone() { # repo
   local d="$WORKSPACE/$1"
   if [ -e "$d/.git" ]; then
@@ -1070,8 +1070,8 @@ EOF
   local why="" diverged=0
   [ "${changed:-0}" -gt 0 ] && why="$changed tracked file(s) changed or deleted"
   [ "${unique:-0}" -gt 0 ] && why="${why}${why:+; }$unique commit(s) that origin does not have"
-  # Off its branch, the clone returns to it before fast-forwarding; a branch with
-  # commits origin lacks cannot fast-forward, so it is named here, before any move.
+  # A default branch holding commits origin lacks is the developer's work, even
+  # with the clone off it, so it is named here, before any clone moves.
   if [ -n "$def" ] && [ "$where" != "$def" ] &&
      git -C "$WORKSPACE/$1" rev-parse --verify --quiet "refs/heads/$def" >/dev/null; then
     diverged="$(git -C "$WORKSPACE/$1" rev-list --count "origin/$def..refs/heads/$def" 2>/dev/null || echo 0)"
@@ -1102,69 +1102,25 @@ EOF
   printf '%s' "$note"
 }
 
-# A clean clone that still would not fast-forward: named with its state, how far
-# behind it is and the command that moves it aside, like a clone holding work.
-clone_cannot_fast_forward() { # repo
-  local where changed behind unique def
-  IFS='|' read -r where changed behind unique def <<EOF
-$(clone_state "$1")
-EOF
-  say "  ✗ $1: cannot fast-forward ($(clone_where "$where"), $(commits_behind "${behind:-0}") behind origin/${def:-?})"
-  say "      to move it aside: $(clone_fix "$1")"
-  FAILED_STEP="bring $1 up to date with origin"
-  LAST_ERR="$1 cannot fast-forward to origin/${def:-?}"
-  phase_fail "run 'git -C $WORKSPACE/$1 status' to see why, or move it aside with the command above (the next run clones it fresh), then run this again"
-}
-
 # The command that clears clone_problem without losing anything: the clone moves
 # aside whole, and the next run clones it fresh.
 clone_fix() { # repo
   printf 'mkdir -p "%s" && mv "%s" "%s"' "$WORKSPACE/.set-aside" "$WORKSPACE/$1" "$WORKSPACE/.set-aside/$1.$STAMP"
 }
 
-# A clean clone is brought to origin's default branch, so a returning machine
-# never fails later on a file newer than its checkout. Pinned clones are then
-# checked out at their pin by pin_clone_to_proven.
-bring_clone_current() { # repo
-  local d="$WORKSPACE/$1" def
-  def="$(clone_default_branch "$1")"
-  [ -n "$def" ] || { echo "origin has no default branch" >&2; return 1; }
-  if [ "$(git -C "$d" symbolic-ref --quiet --short HEAD 2>/dev/null)" != "$def" ]; then
-    git -C "$d" checkout --quiet "$def" 2>/dev/null ||
-      git -C "$d" checkout --quiet -b "$def" "origin/$def" || return 1
-  fi
-  git -C "$d" merge --ff-only --quiet "origin/$def"
-}
-
-proven_pin() { # repo -> the CI-proven commit, empty when the repo has no pin
-  local pins="$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml"
-  [ -f "$pins" ] || return 0
-  sed -n "/^pins:[[:space:]]*$/,/^[^[:space:]]/s/^  $1: \([0-9a-fA-F]\{40\}\)[[:space:]]*$/\1/p" "$pins"
-}
-
-pin_clone_to_proven() { # repo
-  local d="$WORKSPACE/$1" pin changes
-  pin="$(proven_pin "$1")" || return 1
-  [ -n "$pin" ] || return 0
-  [ "$(git -C "$d" rev-parse HEAD)" = "$pin" ] && return 0
-  changes="$(git -C "$d" status --porcelain --untracked-files=no)" || return 1
-  if [ -n "$changes" ]; then
-    say "  $1: clone has uncommitted changes; cannot check out the proven commit"
-    return 1
-  fi
-  if ! git -C "$d" cat-file -e "$pin^{commit}" 2>/dev/null; then
-    git -C "$d" fetch --quiet origin || return 1
-    git -C "$d" cat-file -e "$pin^{commit}" 2>/dev/null || return 1
-  fi
-  git -C "$d" checkout --quiet --detach "$pin"
-}
-
-pin_clone_at_proven() { # repo
-  local pin
-  pin="$(proven_pin "$1")" || return 1
-  [ -n "$pin" ] || return 0
-  [ "$(git -C "$WORKSPACE/$1" rev-parse HEAD)" = "$pin" ]
-}
+# ---------------------------------------------------------------------------
+# The anchor.
+#
+# This script is emailed pinned by commit and sha256, and the code it installs
+# is pinned here, by one omnibase_infra commit. Phase 2 checks omnibase_infra
+# out at INFRA_ANCHOR, never at its branch tip, so the sibling pins it reads
+# (.github/sibling-pins.yaml) and the commits they name are the anchor's. A repo
+# the pins file does not name is checked out at the last commit of origin's
+# default branch at or before the anchor's commit time. Nothing then depends on
+# where any `dev` has moved since: the same email installs the same commits.
+# A participant gets a fix only through a new email that pins a script naming a
+# newer anchor. ONBOARD_TEST_INFRA_ANCHOR exists for the tests' fixture repos.
+INFRA_ANCHOR="${ONBOARD_TEST_INFRA_ANCHOR:-aa81312c2c405424d4c947d61c7763d38e67b3a1}"
 
 # ---------------------------------------------------------------------------
 # The workspace's tier-1 runtime config.
@@ -1200,6 +1156,7 @@ $WORKSPACE_RUNTIME_CONFIG_MARK
 # The tier-1 runtime configuration of this developer workspace. The workspace
 # root is bound through OMNIBASE_PATH, so its transport is declared here rather
 # than inherited. It names no lab address, deliberately.
+# Anchor: omnibase_infra $INFRA_ANCHOR
 description: "Developer workspace tier-1 runtime configuration: in-memory bus, local profile"
 input_topic: "requests"
 output_topic: "responses"
@@ -1217,18 +1174,34 @@ YAML
 # warns "Could not locate runtime config repository" on every delegation when the
 # root is a plain directory. So the root is a repository whose main, and the local
 # ref origin/main beside it, carry the file. It has no remote and never pushes.
+#
+# The commit the materialiser reports is the anchor's: one root
+# commit whose file names INFRA_ANCHOR, dated at the anchor's commit time, with a
+# fixed identity and message. Its sha is then a function of the anchor alone,
+# the same on every Mac and every run, and it moves only when the anchor does.
 config_git() { # git in the workspace config root, with an identity of its own
   git -C "$WORKSPACE_CONFIG_ROOT" -c user.name=omninode-dev-setup \
     -c user.email=dev-setup@omninode.invalid -c commit.gpgsign=false "$@"
 }
 
 commit_workspace_runtime_config() {
+  local when tree commit
   if [ ! -d "$WORKSPACE_CONFIG_ROOT/.git" ]; then
     config_git init --quiet && config_git symbolic-ref HEAD refs/heads/main || return 1
   fi
+  when="$(anchor_time)"
+  [ -n "$when" ] || return 1
   config_git add "$WORKSPACE_RUNTIME_CONFIG_REL" || return 1
-  config_git diff --cached --quiet || config_git commit --quiet -m "workspace runtime config (omninode-dev-setup)" || return 1
-  config_git update-ref refs/remotes/origin/main HEAD
+  tree="$(config_git write-tree)" || return 1
+  commit="$(GIT_AUTHOR_DATE="$when" GIT_COMMITTER_DATE="$when" config_git commit-tree "$tree" \
+    -m "workspace runtime config for omnibase_infra $INFRA_ANCHOR (omninode-dev-setup)")" || return 1
+  config_git update-ref refs/heads/main "$commit" &&
+    config_git update-ref refs/remotes/origin/main "$commit"
+}
+
+workspace_runtime_config_anchored() {
+  git -C "$WORKSPACE_CONFIG_ROOT" show "origin/main:$WORKSPACE_RUNTIME_CONFIG_REL" 2>/dev/null |
+    grep -qxF "# Anchor: omnibase_infra $INFRA_ANCHOR"
 }
 
 # Bound for every run, not inside phase 2 alone: a resumed run skips phase 2,
@@ -1245,13 +1218,14 @@ workspace_runtime_config_present() {
 
 phase2_verified() {
   local r
+  [ -d "$WORKSPACE/omnibase_infra/.git" ] && clone_at_anchor omnibase_infra || return 1
   [ -f "$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml" ] || return 1
   for r in $REPOS; do
     [ -d "$WORKSPACE/$r/.git" ] || return 1
-    pin_clone_at_proven "$r" || return 1
+    clone_at_anchor "$r" || return 1
   done
   workspace_runtime_config_present || return 1
-  git -C "$WORKSPACE_CONFIG_ROOT" rev-parse --verify --quiet "origin/main:$WORKSPACE_RUNTIME_CONFIG_REL" >/dev/null || return 1
+  workspace_runtime_config_anchored || return 1
   [ -f "$WORKSPACE_MARKER" ] || return 1
   grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null || return 1
   # A V1 block still exports OMNI_HOME: redo the phase so the block is rewritten.
@@ -1267,12 +1241,12 @@ profile_block_names_legacy_home() { # file
 phase2() {
   phase_start 2 "Workspace ($WORKSPACE)" "2-5 minutes"
   if is_done 2 && phase2_verified; then phase_pass "already in place"; return; fi
-  is_done 2 && rerun_note 2 "the workspace no longer checks out (every clone at its proven commit, the pins file, the runtime config and the profile block)"
+  is_done 2 && rerun_note 2 "the workspace no longer checks out (every clone at its anchored commit, the pins file, the runtime config and the profile block)"
   refuse_foreign_workspace
   mkdir -p "$WORKSPACE" || { FAILED_STEP="create $WORKSPACE"; phase_fail "choose another directory with --workspace"; }
   [ -f "$WORKSPACE_MARKER" ] || printf 'This workspace was created by omninode-dev-setup.\n' >"$WORKSPACE_MARKER" ||
     { FAILED_STEP="mark the workspace"; phase_fail "could not write $WORKSPACE_MARKER; check the directory is writable"; }
-  local r pin default_repos="" problem problems="" state note seen=""
+  local r pin want default_repos="" problem problems="" state note seen=""
   for r in $REPOS; do
     if [ -e "$WORKSPACE/$r/.git" ]; then say "  $r: present, fetching"; else say "  $r: cloning"; fi
     retry "clone or fetch $r" sync_clone "$r" || phase_fail "check that github.com is reachable, then run this again"
@@ -1295,37 +1269,40 @@ phase2() {
     LAST_ERR="these clones hold work setup will not move: $problems"
     phase_fail "commit or stash that work, or move each clone aside with the command under it (the next run clones it fresh), then run this again"
   fi
-  # Every clean clone is fast-forwarded to origin, not just fetched; a pinned one
-  # is then checked out at its proven commit below. The proven set lives in
-  # omnibase_infra, so it goes first: an old checkout that predates the pins file
-  # is named as behind and updated, never reported as missing the file.
+  # omnibase_infra goes first, at the anchor: the pins file every other clone is
+  # checked out from is the anchor's, never the one on origin's branch tip.
   for r in omnibase_infra $REPOS; do
     case " $seen " in *" $r "*) continue ;; esac
     seen="${seen}${seen:+ }$r"
-    pin="$(proven_pin "$r")"
-    # Detached at its proven commit, the layout an earlier run left: nothing to move.
-    [ -n "$pin" ] && [ "$(git -C "$WORKSPACE/$r" rev-parse HEAD 2>/dev/null)" = "$pin" ] &&
-      ! git -C "$WORKSPACE/$r" symbolic-ref --quiet HEAD >/dev/null 2>&1 && continue
-    note="$(clone_behind_note "$r" "$(clone_state "$r")")"
-    [ -n "$note" ] && say "  $r: $note; fast-forwarding it"
-    step "bring $r up to date with origin" bring_clone_current "$r" || clone_cannot_fast_forward "$r"
-  done
-  [ -f "$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml" ] ||
-    { FAILED_STEP="read the proven set (omnibase_infra/.github/sibling-pins.yaml)"
-      LAST_ERR="omnibase_infra is current with origin/$(clone_default_branch omnibase_infra), and origin has no .github/sibling-pins.yaml"
-      phase_fail "nothing on this Mac is wrong: origin's omnibase_infra lacks its proven set; report it and run this again once it is restored"; }
-  for r in $REPOS; do
-    pin="$(proven_pin "$r")"
-    if [ -n "$pin" ]; then
-      pin_clone_to_proven "$r" ||
-        { FAILED_STEP="check out the proven commit of $r"
-          phase_fail "check that origin has commit $pin in $r ('git -C $WORKSPACE/$r fetch origin'), then run this again"; }
-      say "  $r: proven ${pin:0:12}"
+    want="$(anchored_commit "$r")"
+    [ -n "$want" ] ||
+      { FAILED_STEP="find the commit of $r at the anchor"
+        LAST_ERR="origin/$(clone_default_branch "$r") of $r has no commit at or before omnibase_infra ${INFRA_ANCHOR:0:12}"
+        phase_fail "check that github.com is reachable and run this again; if it repeats, report it with the log"; }
+    # An old clone is named as behind before it moves, never as missing a file.
+    if [ "$(git -C "$WORKSPACE/$r" rev-parse HEAD 2>/dev/null)" != "$want" ]; then
+      note="$(clone_behind_note "$r" "$(clone_state "$r")")"
+      [ -n "$note" ] && say "  $r: $note; checking out its anchored commit"
+    fi
+    checkout_anchored "$r" "$want" ||
+      { FAILED_STEP="check out the anchored commit of $r"
+        phase_fail "check that origin has commit $want in $r ('git -C $WORKSPACE/$r fetch origin'), then run this again"; }
+    pin=""
+    [ "$r" = omnibase_infra ] || pin="$(proven_pin "$r")"
+    if [ "$r" = omnibase_infra ]; then
+      say "  $r: anchor ${want:0:12}"
+      [ -f "$WORKSPACE/omnibase_infra/.github/sibling-pins.yaml" ] ||
+        { FAILED_STEP="read the proven set (omnibase_infra/.github/sibling-pins.yaml)"
+          LAST_ERR="omnibase_infra at the anchor ${INFRA_ANCHOR:0:12} has no .github/sibling-pins.yaml"
+          phase_fail "nothing on this Mac is wrong: this script's anchor lacks its proven set; report it"; }
+    elif [ -n "$pin" ]; then
+      say "  $r: proven ${want:0:12}"
     else
       default_repos="${default_repos}${default_repos:+ }$r"
+      say "  $r: ${want:0:12} (origin/$(clone_default_branch "$r") at the anchor's time)"
     fi
   done
-  say "  Default branch (no proven pin): ${default_repos:-none}"
+  say "  Anchor: omnibase_infra ${INFRA_ANCHOR:0:12}; no proven pin, taken at the anchor's time: ${default_repos:-none}"
   write_workspace_runtime_config ||
     { FAILED_STEP="declare the workspace runtime config"
       phase_fail "could not write $WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL; check the directory is writable"; }

@@ -22,6 +22,11 @@ SCRIPT = (
     / "_bin"
     / "lab-onboarding.sh"
 )
+HANDLER = (
+    Path(__file__).resolve().parents[2]
+    / "src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator"
+    / "handler_onboarding_preflight.sh"
+)
 REPOS = ("omnibase_infra", "omnimarket", "omnibase_core", "omnibase_spi")
 
 pytestmark = pytest.mark.unit
@@ -107,7 +112,18 @@ class Harness:
             capture_output=True,
             check=True,
         )
-        self.fragment.write_text(extracted.stdout)
+        # The anchor functions live in the node's bash handler (functions only).
+        anchor = subprocess.run(
+            [
+                "awk",
+                "/^# The anchor: which commit/ { on = 1 } on { print }",
+                str(HANDLER),
+            ],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        self.fragment.write_text(extracted.stdout + anchor.stdout)
         self.env = {
             **os.environ,
             "HOME": str(self.home),
@@ -156,6 +172,8 @@ class Harness:
             _git(repo, "update-ref", "refs/heads/dev", newer)
             _git(repo, "symbolic-ref", "HEAD", "refs/heads/dev")
             self.commits[name] = (older, newer)
+        # OMN-21255: the script installs the code of one omnibase_infra commit.
+        self.env["ONBOARD_TEST_INFRA_ANCHOR"] = self.commits["omnibase_infra"][1]
 
     def run(self, commands: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -216,14 +234,15 @@ def test_phase2_installs_detached_proven_siblings_without_a_floor(
         older, newer = harness.commits[name]
         pinned = name in ("omnimarket", "omnibase_core")
         assert _git(clone, "rev-parse", "HEAD") == (older if pinned else newer)
-        assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD") == (
-            "HEAD" if pinned else "dev"
-        )
+        assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD") == "HEAD"
         if pinned:
             assert f"{name}: proven {older[:12]}" in result.stdout
+    anchor = harness.commits["omnibase_infra"][1]
+    assert f"omnibase_infra: anchor {anchor[:12]}" in result.stdout
     assert (
-        "Default branch (no proven pin): omnibase_infra omnibase_spi" in result.stdout
-    )
+        f"Anchor: omnibase_infra {anchor[:12]}; no proven pin, taken at the "
+        "anchor's time: omnibase_spi"
+    ) in result.stdout
     assert not (harness.workspace / ".onex-workspace-floor.json").exists()
 
 
@@ -266,7 +285,7 @@ def test_missing_pins_fails_instead_of_accepting_dev_head(harness: Harness) -> N
     assert "FAIL read the proven set (omnibase_infra/.github/sibling-pins.yaml)" in (
         result.stdout
     )
-    assert "origin's omnibase_infra lacks its proven set" in result.stdout
+    assert "this script's anchor lacks its proven set" in result.stdout
     assert "PASS" not in result.stdout
     assert harness.run("phase2_verified").returncode == 1
     assert not (harness.workspace / ".onex-workspace-floor.json").exists()
@@ -396,7 +415,10 @@ def _heads(harness: Harness) -> dict[str, str]:
 def test_an_old_clean_checkout_from_before_the_pins_file_is_brought_current(
     harness: Harness,
 ) -> None:
-    """The reported case: omnibase_infra far behind and older than its pins file."""
+    """The reported case: omnibase_infra far behind and older than its pins file.
+
+    It is checked out at the anchor (OMN-21255), detached, never left on its
+    old branch."""
     harness.make_remotes(pins_in_older=False)
     _passed(harness.run("phase2"))
     infra = harness.workspace / "omnibase_infra"
@@ -407,10 +429,10 @@ def test_an_old_clean_checkout_from_before_the_pins_file_is_brought_current(
     _passed(result)
     assert "restore the pins file" not in result.stdout
     assert _git(infra, "rev-parse", "HEAD") == newer
-    assert _git(infra, "rev-parse", "--abbrev-ref", "HEAD") == "dev"
+    assert _git(infra, "rev-parse", "--abbrev-ref", "HEAD") == "HEAD"
 
 
-def test_a_clean_detached_unpinned_clone_returns_to_its_branch(
+def test_a_clean_unpinned_clone_moved_off_its_anchor_is_put_back(
     harness: Harness,
 ) -> None:
     harness.make_remotes()
@@ -418,9 +440,10 @@ def test_a_clean_detached_unpinned_clone_returns_to_its_branch(
     spi = harness.workspace / "omnibase_spi"
     older, newer = harness.commits["omnibase_spi"]
     _git(spi, "checkout", "--quiet", "--detach", older)
+    assert harness.run("phase2_verified").returncode == 1
     _passed(harness.run("phase2"))
     assert _git(spi, "rev-parse", "HEAD") == newer
-    assert _git(spi, "rev-parse", "--abbrev-ref", "HEAD") == "dev"
+    assert _git(spi, "rev-parse", "--abbrev-ref", "HEAD") == "HEAD"
 
 
 def test_one_stop_names_every_clone_holding_work_and_moves_none(
