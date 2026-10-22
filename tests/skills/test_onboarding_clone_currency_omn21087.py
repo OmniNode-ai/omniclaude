@@ -3,10 +3,10 @@
 """OMN-21087: a returning machine's clones are brought current, or named, and a
 resumed run picks up at the phase that failed.
 
-Phase 2 fast-forwards every clean clone to origin rather than only fetching it.
-A clone that is dirty or cannot fast-forward stops the phase, named with its
+Phase 2 checks every clean clone out at its anchored commit (OMN-21255 replaced
+the fast-forward to origin). A clone that holds work stops the phase, named with its
 state, how far behind origin it is and the command that moves it aside; a clean
-detached clone is returned to its branch, and a dirty detached clone stops. An
+detached clone is put back at its anchored commit, and a dirty detached clone stops. An
 old clone that lacks a file origin has is reported as behind, never as a file to
 restore. A resumed run (including from a freshly downloaded copy of the script)
 skips the phases an earlier run passed and runs the one that failed, and says
@@ -77,13 +77,15 @@ def _third_infra_commit(harness: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# AC1: a clean clone on its branch is fast-forwarded, not just fetched
+# AC1: a clean clone on its branch is moved to its anchored commit (OMN-21255)
 # ---------------------------------------------------------------------------
 
 
-def test_ac1_a_clean_clone_on_its_branch_is_fast_forwarded_not_just_fetched(
+def test_ac1_a_clean_clone_on_its_branch_is_moved_to_its_anchored_commit(
     harness: Any,
 ) -> None:
+    """OMN-21255 supersedes the fast-forward: every clean clone, on a branch or
+    not, is checked out detached at its anchored commit, never at origin's tip."""
     harness.make_remotes()
     _passed(harness.run("phase2"))
     for repo in REPOS:
@@ -100,21 +102,18 @@ def test_ac1_a_clean_clone_on_its_branch_is_fast_forwarded_not_just_fetched(
     for repo in REPOS:
         clone = harness.workspace / repo
         older, newer = harness.commits[repo]
-        assert _git(clone, "rev-parse", "refs/heads/dev") == newer, repo
-        if repo in PINNED:
-            assert _git(clone, "rev-parse", "HEAD") == older, repo
-        else:
-            assert _git(clone, "rev-parse", "HEAD") == newer, repo
-            assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD") == "dev", repo
+        expected = older if repo in PINNED else newer
+        assert _git(clone, "rev-parse", "HEAD") == expected, repo
+        assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD") == "HEAD", repo
     assert (
-        "omnibase_spi: clone is 1 commit behind origin/dev; fast-forwarding it"
-        in result.stdout
-    )
+        "omnibase_spi: clone is 1 commit behind origin/dev; "
+        "checking out its anchored commit"
+    ) in result.stdout
 
 
 # ---------------------------------------------------------------------------
-# AC2: dirty or cannot fast-forward stops, named; a clean detached clone returns
-# to its branch; a dirty detached clone stops
+# AC2: dirty stops, named; a clean detached clone is put back at its anchored
+# commit (OMN-21255); a dirty detached clone stops
 # ---------------------------------------------------------------------------
 
 
@@ -163,7 +162,9 @@ def test_ac2_a_clean_clone_that_cannot_fast_forward_stops_and_moves_nothing(
     assert _heads(harness) == before
 
 
-def test_ac2_a_clean_detached_clone_returns_to_its_branch(harness: Any) -> None:
+def test_ac2_a_clean_detached_clone_is_put_back_at_its_anchored_commit(
+    harness: Any,
+) -> None:
     harness.make_remotes()
     _passed(harness.run("phase2"))
     spi = harness.workspace / "omnibase_spi"
@@ -171,7 +172,7 @@ def test_ac2_a_clean_detached_clone_returns_to_its_branch(harness: Any) -> None:
     _git(spi, "checkout", "--quiet", "--detach", older)
     _passed(harness.run("phase2"))
     assert _git(spi, "rev-parse", "HEAD") == newer
-    assert _git(spi, "rev-parse", "--abbrev-ref", "HEAD") == "dev"
+    assert _git(spi, "rev-parse", "--abbrev-ref", "HEAD") == "HEAD"
 
 
 def test_ac2_a_dirty_detached_clone_stops(harness: Any) -> None:
@@ -216,10 +217,13 @@ def test_ac3_an_old_clean_clone_missing_the_pins_file_is_reported_as_behind(
     _passed(result)
     assert (
         "omnibase_infra: clone is 2 commits behind origin/dev and predates "
-        ".github/sibling-pins.yaml, which origin has; fast-forwarding it"
+        ".github/sibling-pins.yaml, which origin has; checking out its anchored "
+        "commit"
     ) in result.stdout
     assert "restore the pins file" not in result.stdout
-    assert _git(infra, "rev-parse", "HEAD") == third
+    # OMN-21255: the anchor, not origin's tip.
+    assert _git(infra, "rev-parse", "HEAD") == harness.commits["omnibase_infra"][1]
+    assert _git(infra, "rev-parse", "HEAD") != third
 
 
 def test_ac3_an_old_dirty_clone_missing_the_pins_file_is_reported_as_behind(

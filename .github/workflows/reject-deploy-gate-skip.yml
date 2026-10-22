@@ -51,15 +51,24 @@ jobs:
     # What the extra clause actually did was pin every private repository's
     # required checks to GitHub-hosted runners, which the 2026-09-14 operator
     # ruling forbids and which the enterprise hosted-runner switch has since
-    # made unrunnable. A genuine fork pull request still resolves to
-    # OMNI_PUBLIC_PR_RUNS_ON_JSON, so the boundary OMN-16683 exists to hold
-    # is unchanged.
+    # made unrunnable. A public caller's genuine fork pull request still
+    # resolves to OMNI_PUBLIC_PR_RUNS_ON_JSON (OMN-16683).
+    # OMN-21216 (OMN-20074): since 2026-10-19 a private repository may not run
+    # on a hosted label at all, fork pull requests included, and a hosted
+    # default behind a variable counts. A private caller therefore never takes
+    # the public arm and takes its own trusted variable with NO default: the
+    # private-repo placement gate refuses a private caller where that variable
+    # is unset, so a passing caller always has it. Public callers keep the
+    # hosted default. Same shape as kb-doc-gate-reusable.yml.
     runs-on: >-
       ${{
-        (github.event_name == 'pull_request' &&
+        (!github.event.repository.private &&
+         github.event_name == 'pull_request' &&
          github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || (github.event.repository.private && '["self-hosted","omnibase-ci"]' || '["ubuntu-latest"]'))
+        || github.event.repository.private
+        && fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON)
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["ubuntu-latest"]')
       }}
     timeout-minutes: 5
 
