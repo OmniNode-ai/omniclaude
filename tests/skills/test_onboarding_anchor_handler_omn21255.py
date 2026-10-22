@@ -37,21 +37,20 @@ pytestmark = pytest.mark.unit
 
 
 def _git(repo: Path, *args: str, when: str | None = None) -> str:
-    env = {
-        **scrub_git_location_env(os.environ),
-        "HOME": str(repo),
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_AUTHOR_NAME": "F",
-        "GIT_AUTHOR_EMAIL": "f@example.invalid",
-        "GIT_COMMITTER_NAME": "F",
-        "GIT_COMMITTER_EMAIL": "f@example.invalid",
-    }
-    if when:
-        env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = when
+    dated = {"GIT_AUTHOR_DATE": when, "GIT_COMMITTER_DATE": when} if when else {}
     done = subprocess.run(
         ["git", "-C", str(repo), *args],
-        env=env,
+        env={
+            **scrub_git_location_env(os.environ),
+            "HOME": str(repo),
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_AUTHOR_NAME": "F",
+            "GIT_AUTHOR_EMAIL": "f@example.invalid",
+            "GIT_COMMITTER_NAME": "F",
+            "GIT_COMMITTER_EMAIL": "f@example.invalid",
+            **dated,
+        },
         capture_output=True,
         text=True,
         check=True,
