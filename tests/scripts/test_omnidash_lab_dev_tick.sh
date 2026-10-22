@@ -27,7 +27,13 @@ cat > "$SANDBOX/bin/npm" <<'SH'
 #!/usr/bin/env bash
 printf 'npm %s\n' "$*" >> "$CALLS"
 if [[ "$1" == ci ]]; then mkdir -p node_modules; fi
-if [[ "$1" == run ]]; then
+if [[ "$1" == run && "$2" == generate:config ]]; then
+  # Stand-in for the generator: bake the overlay's tenant into the tracked generated file.
+  mkdir -p src/config/generated
+  { printf 'TENANT='; cat contract.local.yaml 2>/dev/null || true; } > src/config/generated/data-source-defaults.ts
+fi
+if [[ "$1" == run && "$2" == dev ]]; then
+  printf 'cwd %s\n' "$(pwd -P)" >> "$CALLS"
   if [[ "${EXPECT_ENV:-false}" == true ]]; then
     [[ "${VITE_PROJECTION_API_URL:-}" == 'private-api-value' ]] || exit 1
     [[ "${VITE_PROJECTION_TENANT_ID:-}" == 'private-tenant-value' ]] || exit 1
@@ -59,7 +65,9 @@ await_start() {
 assert_start() {
   await_start
   grep -Fxq 'npm run dev -- --host 0.0.0.0 --port 3001 --strictPort' "$CALLS" || fail 'dev argv'
-  [[ "$(cat "$STATE_FILE")" == "$(git -C "$CLONE" rev-parse HEAD)" ]] || fail 'served HEAD'
+  [[ "$(cat "$STATE_FILE")" == "$(canonical_head)" ]] || fail 'served HEAD'
+  grep -Fxq "cwd $(cd "$SERVE" && pwd -P)" "$CALLS" || fail 'dev server must start in the owned checkout'
+  [[ "$(git -C "$SERVE" rev-parse HEAD)" == "$(canonical_head)" ]] || fail 'owned checkout HEAD'
 }
 assert_no_npm() {
   if grep -q '^npm ' "$CALLS"; then fail 'unexpected npm invocation'; fi
@@ -83,24 +91,31 @@ printf '{"lockfileVersion": 3}\n' > "$CLONE/package-lock.json"
 # Build local fixture history with plumbing; no commit command or hooks.
 fixture_head() {
   local tree revision
-  git -C "$CLONE" add package.json package-lock.json
+  mkdir -p "$CLONE/src/config/generated"
+  printf 'TENANT=\n' > "$CLONE/src/config/generated/data-source-defaults.ts"
+  printf '%s\n' "$1" >> "$CLONE/src/config/generated/data-source-defaults.ts"
+  git -C "$CLONE" add package.json package-lock.json src/config/generated/data-source-defaults.ts
   tree="$(git -C "$CLONE" write-tree)"
   revision="$(printf 'tree %s\nauthor Test <test@example.invalid> 1000000000 +0000\ncommitter Test <test@example.invalid> 1000000000 +0000\n\nfixture %s\n' "$tree" "$1" |
     git -C "$CLONE" hash-object -t commit -w --stdin)"
   git -C "$CLONE" update-ref HEAD "$revision"
+  # The tick follows the canonical clone's origin/dev ref, which canonical-clone-sync moves.
+  git -C "$CLONE" update-ref refs/remotes/origin/dev "$revision"
 }
+printf 'contract.local.yaml\n.env\n.env.local\nnode_modules\n' >> "$CLONE/.git/info/exclude"
 fixture_head initial
-mkdir -p "$CLONE/node_modules"
 STATE_FILE="$ONEX_STATE_DIR/omnidash-lab-dev/served_head"
+SERVE="$ONEX_STATE_DIR/omnidash-lab-dev/serve/omnidash"
+canonical_head() { git -C "$CLONE" rev-parse refs/remotes/origin/dev; }
 
-# (b) No process starts vite, without reinstalling existing dependencies.
+# (b) No process starts vite from a fresh owned checkout, installing its dependencies once.
 clear_calls
 run_tick
 assert_start
-if grep -q '^npm ci' "$CALLS"; then fail 'first start with dependencies must skip ci'; fi
+grep -Fxq 'npm ci --prefer-offline --no-audit --no-fund' "$CALLS" || fail 'fresh checkout must install'
 grep -q 'started: not running' "$SANDBOX/tick.log" || fail 'start reason'
 grep -Fxq 'ps -axo pid,pgid,command' "$CALLS" || fail 'ps argv'
-pass 'absent vite starts and records HEAD'
+pass 'absent vite starts from the owned checkout and records HEAD'
 
 # (c) Matching process and HEAD are a silent no-op.
 printf '12345 23456 node /fake/node_modules/.bin/vite --host 0.0.0.0 --port 3001 --strictPort\n' > "$PS_OUTPUT"
@@ -124,9 +139,12 @@ grep -Fq "head moved $old_head->$(cat "$STATE_FILE")" "$SANDBOX/tick.log" || fai
 if grep -q '^npm ci' "$CALLS"; then fail 'unchanged lockfile must skip ci'; fi
 pass 'moved HEAD signals only vite group and restarts'
 
-# (e) No git mutation commands, including pull.
-if grep -E 'git[[:space:]]+([^;]*[[:space:]])?(fetch|merge|pull|checkout|reset|stash|clean)([[:space:]]|$)' "$TICK"; then
+# (e) The canonical clone is read only: git may write only in the owned checkout.
+if grep -E 'git[[:space:]]+([^;]*[[:space:]])?(pull|merge|stash|clean|reset|worktree|gc|prune)([[:space:]]|$)' "$TICK"; then
   fail 'forbidden git mutation'
+fi
+if grep -E 'git -C "\$CLONE"' "$TICK" | grep -Ev 'rev-parse'; then
+  fail 'the canonical clone may only be read with rev-parse'
 fi
 pass 'tick contains no forbidden git mutations'
 
@@ -139,7 +157,7 @@ grep -Fxq 'npm ci --prefer-offline --no-audit --no-fund' "$CALLS" || fail 'lockf
 pass 'changed lockfile installs dependencies'
 
 : > "$PS_OUTPUT"
-rm -rf "$CLONE/node_modules"
+rm -rf "$SERVE/node_modules"
 rm -f "$STATE_FILE"
 clear_calls
 run_tick
@@ -172,10 +190,67 @@ pass 'grep and nonexact vite commands are excluded'
 # Exercise the derived state directory fallback.
 unset ONEX_STATE_DIR
 STATE_FILE="$OMNI_HOME/.onex_state/omnidash-lab-dev/served_head"
+SERVE="$OMNI_HOME/.onex_state/omnidash-lab-dev/serve/omnidash"
 clear_calls
 run_tick
 assert_start
 pass 'state directory falls back to required OMNI_HOME'
+
+# Tenant overlay: the overlay is built into the owned checkout, never into the canonical clone.
+export EXPECT_ENV=false
+unset VITE_PROJECTION_API_URL
+rm -f "$OMNIDASH_LAB_DEV_ENV_FILE"
+export ONEX_STATE_DIR="$SANDBOX/state2"
+STATE_FILE="$ONEX_STATE_DIR/omnidash-lab-dev/served_head"
+SERVE="$ONEX_STATE_DIR/omnidash-lab-dev/serve/omnidash"
+: > "$PS_OUTPUT"
+printf 'tenant-overlay-value-1\n' > "$CLONE/contract.local.yaml"
+printf 'env-local-secret-value\n' > "$CLONE/.env.local"
+canonical_before="$(git -C "$CLONE" rev-parse HEAD)"
+clear_calls
+run_tick
+assert_start
+[[ "$(cat "$SERVE/contract.local.yaml")" == 'tenant-overlay-value-1' ]] || fail 'overlay not copied'
+[[ "$(cat "$SERVE/.env.local")" == 'env-local-secret-value' ]] || fail '.env.local not copied'
+[[ ! -e "$SERVE/.env" ]] || fail 'absent overlay file must not appear'
+grep -Fq 'TENANT=tenant-overlay-value-1' "$SERVE/src/config/generated/data-source-defaults.ts" || fail 'generated defaults lack the overlay'
+generate_line="$(grep -n '^npm run generate:config' "$CALLS" | head -1 | cut -d: -f1)"
+dev_line="$(grep -n '^npm run dev' "$CALLS" | head -1 | cut -d: -f1)"
+[[ -n "$generate_line" && -n "$dev_line" && "$generate_line" -lt "$dev_line" ]] || fail 'generate:config must run before the server starts'
+[[ -z "$(git -C "$CLONE" status --porcelain)" ]] || fail 'canonical clone is dirty'
+[[ "$(git -C "$CLONE" rev-parse HEAD)" == "$canonical_before" ]] || fail 'canonical HEAD moved'
+[[ ! -d "$CLONE/.git/worktrees" ]] || fail 'canonical clone gained worktree metadata'
+if grep -q 'tenant-overlay-value\|env-local-secret-value' "$SANDBOX/tick.log"; then fail 'overlay value leaked into the log'; fi
+pass 'overlay is built in the owned checkout and the canonical clone stays clean'
+
+# A running server at the same head and overlay is left alone.
+printf '12345 23456 node /fake/node_modules/.bin/vite --host 0.0.0.0 --port 3001 --strictPort\n' > "$PS_OUTPUT"
+clear_calls
+run_tick
+assert_no_npm
+[[ ! -s "$SANDBOX/tick.log" ]] || fail 'unchanged overlay must be silent'
+pass 'unchanged head and overlay are a silent no-op'
+
+# A changed overlay alone restarts the server and rebuilds the defaults.
+printf 'tenant-overlay-value-2\n' > "$CLONE/contract.local.yaml"
+clear_calls
+run_tick
+await_start
+grep -Fxq 'kill -TERM -- -23456' "$CALLS" || fail 'overlay change must stop the old server'
+grep -Fq 'started: overlay changed' "$SANDBOX/tick.log" || fail 'overlay change reason'
+grep -Fq 'TENANT=tenant-overlay-value-2' "$SERVE/src/config/generated/data-source-defaults.ts" || fail 'overlay change not rebuilt'
+pass 'changed overlay restarts and rebuilds'
+
+# origin/dev moves while the built (dirty) defaults sit in the owned checkout: the tenant survives the move.
+printf '{"name":"moved-again"}\n' > "$CLONE/package.json"
+fixture_head moved_again
+clear_calls
+run_tick
+assert_start
+grep -Fq 'TENANT=tenant-overlay-value-2' "$SERVE/src/config/generated/data-source-defaults.ts" || fail 'tenant lost after origin/dev moved'
+grep -Fq 'moved_again' "$SERVE/src/config/generated/data-source-defaults.ts" && fail 'generated file kept stale upstream text'
+[[ -z "$(git -C "$CLONE" status --porcelain)" ]] || fail 'canonical clone is dirty after the move'
+pass 'origin/dev move keeps the tenant and leaves the canonical clone clean'
 
 for bundle in install uninstall; do
   awk '/^TICKS=\(/{active=1; next} /^\)/{active=0} active' "$REPO_ROOT/scripts/tick-bundle-$bundle.sh" |
