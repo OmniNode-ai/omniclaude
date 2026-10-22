@@ -131,6 +131,9 @@ def _run_hook(
         if key not in {"GITHUB_ACTIONS", "PRRP_VARIABLES_SNAPSHOT", "GITHUB_REPOSITORY"}
     }
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+    # The host's own published snapshot (~/.omninode/prrp/) is read when no
+    # path is set (OMN-20074), so HOME is the test's directory, which holds none.
+    env["HOME"] = str(tmp_path / "home")
     env["STUB_GH_LOG"] = str(tmp_path / "gh-calls.log")
     env["STUB_GH_LANE_REFUSAL"] = LANE_REFUSAL
     env["GH_TOKEN"] = "stub-session-token"

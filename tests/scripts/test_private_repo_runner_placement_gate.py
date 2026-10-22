@@ -1963,6 +1963,85 @@ def test_a_repository_private_guard_on_schedule_fails_closed(tmp_path: Path) -> 
     assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 1
 
 
+# OMN-20074: the shared reusables a private caller (omninode_infra) pins, each
+# judged as the gate judges it from that caller: the REAL file text, called at
+# a full-sha pin, under every event the caller declares. Before this change
+# four of them sent a private caller's fork pull request to the hosted arm
+# (and spelled the trusted fallback in a shape the evaluator refuses); the
+# kb-doc-gate one carried the OMN-21216 shape already.
+PRIVATE_CALLER_REUSABLES = (
+    "advisory-job-gate-reusable.yml",
+    "ban-hardcoded-runner-ip.yml",
+    "hardcoded-model-config-reusable.yml",
+    "kb-doc-gate-reusable.yml",
+    "reject-deploy-gate-skip.yml",
+)
+PRIVATE_CALLER_EVENTS = ("pull_request", "push", "merge_group", "workflow_dispatch")
+PRE_OMN_20074_SELECTOR = (
+    "${{\n"
+    "  (github.event_name == 'pull_request' &&\n"
+    "   github.event.pull_request.head.repo.full_name != github.repository)\n"
+    "  && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '[\"ubuntu-latest\"]')\n"
+    '  || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || \'["self-hosted","omnibase-ci"]\')\n'
+    "}}"
+)
+
+
+def _private_caller_of(tmp_path: Path, reusable: str) -> tuple[Path, str]:
+    pinned = f"OmniNode-ai/omniclaude/.github/workflows/{reusable}@{'b' * 40}"
+    caller = (
+        "name: Caller\non:\n"
+        + "".join(f"  {event}: {{}}\n" for event in PRIVATE_CALLER_EVENTS)
+        + "jobs:\n  gate:\n    uses: "
+        + pinned
+        + "\n"
+    )
+    return _tree(tmp_path, "caller.yml", caller), pinned
+
+
+@pytest.mark.parametrize("reusable", PRIVATE_CALLER_REUSABLES)
+def test_a_private_caller_of_the_shared_reusable_runs_only_on_the_fleet(
+    tmp_path: Path, reusable: str
+) -> None:
+    """No event a private caller declares, fork pull requests included, lands hosted."""
+    module = _module()
+    root, pinned = _private_caller_of(tmp_path, reusable)
+    called = (REPO_ROOT / ".github" / "workflows" / reusable).read_text(
+        encoding="utf-8"
+    )
+    assert (
+        _run_delegating(module, root, dict(SEAM_VARIABLES), tmp_path, {pinned: called})
+        == 0
+    )
+
+
+@pytest.mark.parametrize("reusable", PRIVATE_CALLER_REUSABLES)
+def test_a_private_caller_with_no_trusted_variable_is_refused(
+    tmp_path: Path, reusable: str
+) -> None:
+    """The private arm has no default, so an unset trusted variable is not a pass."""
+    module = _module()
+    root, pinned = _private_caller_of(tmp_path, reusable)
+    called = (REPO_ROOT / ".github" / "workflows" / reusable).read_text(
+        encoding="utf-8"
+    )
+    variables = {"OMNI_PUBLIC_PR_RUNS_ON_JSON": '["ubuntu-latest"]'}
+    assert _run_delegating(module, root, variables, tmp_path, {pinned: called}) != 0
+
+
+def test_the_pre_omn_20074_selector_sends_a_private_fork_hosted(
+    tmp_path: Path,
+) -> None:
+    """Negative control: the selector those four reusables carried is a finding."""
+    module = _module()
+    root, pinned = _private_caller_of(tmp_path, "advisory-job-gate-reusable.yml")
+    called = _seam_job(PRE_OMN_20074_SELECTOR, ("workflow_call",))
+    assert (
+        _run_delegating(module, root, dict(SEAM_VARIABLES), tmp_path, {pinned: called})
+        == 1
+    )
+
+
 @pytest.mark.parametrize(
     "runs_on",
     [
@@ -2114,3 +2193,138 @@ def _every_branch_eligible(
         "",
     ]
     return _fixture_call(lambda: module.main(argv))
+
+
+# --- OMN-19916: a nested selector is resolved, not refused ------------------
+#
+# omnibase_core `receipt-gate.yml` (OMN-21280, core f1706ad2c) wraps its
+# selector in a private-caller guard with a public default. The gate refused
+# the nesting as unreadable, so every private repository whose tree calls
+# `receipt-gate.yml@main` exited 2 whatever its own workflows held
+# (downstream caller, job 119834792684). One line or several makes no
+# difference; the nesting is the cause. Carried verbatim from core main
+# cf95d2a10, jobs `verify` and `dod-verify`.
+CORE_RECEIPT_GATE_EXPRESSION = (
+    "${{\n"
+    "  github.event.repository.private && (\n"
+    "    (github.event_name == 'pull_request' &&\n"
+    "     github.event.pull_request.head.repo.full_name != github.repository)\n"
+    "    && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '[\"ubuntu-latest\"]')\n"
+    "    || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || "
+    '(github.event.repository.private && \'["self-hosted","omnibase-ci"]\' '
+    "|| '[\"ubuntu-latest\"]'))\n"
+    "  ) || 'ubuntu-latest'\n"
+    "}}"
+)
+ALL_FLEET = {
+    "OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET,
+    "OMNI_PUBLIC_PR_RUNS_ON_JSON": FLEET,
+}
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [CORE_RECEIPT_GATE_EXPRESSION, " ".join(CORE_RECEIPT_GATE_EXPRESSION.split())],
+    ids=["multi_line", "single_line"],
+)
+def test_nested_selector_core_receipt_gate_resolves_to_the_fleet_on_push(
+    tmp_path: Path, expression: str
+) -> None:
+    """A private caller's push takes the trusted arm: a verdict, not exit 2."""
+    module = _module()
+    root = _tree(tmp_path, "ci.yml", _seam_job(expression, ("push",)))
+    assert _run(module, root, ALL_FLEET, tmp_path) == 0
+
+
+def test_nested_selector_arms_are_flattened_in_order() -> None:
+    module = _module()
+    branches = module.resolve_branches(
+        CORE_RECEIPT_GATE_EXPRESSION, module.Variables.from_fixture(ALL_FLEET)
+    )
+    fleet = ["self-hosted", "omnibase-ci"]
+    assert [branch.labels for branch in branches] == [
+        fleet,
+        fleet,
+        fleet,
+        ["ubuntu-latest"],
+    ]
+    # Every nested arm keeps the outer private guard; the public default is
+    # the one unguarded arm.
+    assert all(
+        "github.event.repository.private" in branch.guard for branch in branches[:3]
+    )
+    assert branches[3].guard == ""
+    # The inner `private && fleet || hosted` default is distributed: the arm a
+    # private caller selects carries no hosted fallback, the unreachable one does.
+    assert branches[1].fallback == ()
+    assert branches[2].fallback == ("ubuntu-latest",)
+
+
+def test_nested_selector_fork_arm_is_still_a_finding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The fork arm's hosted fallback is reachable from a private caller."""
+    module = _module()
+    root = _tree(
+        tmp_path, "ci.yml", _seam_job(CORE_RECEIPT_GATE_EXPRESSION, ("pull_request",))
+    )
+    assert _run(module, root, ALL_FLEET, tmp_path) == 1
+    assert "pull_request:fork" in capsys.readouterr().err
+
+
+def test_nested_selector_public_default_is_reached_on_schedule(
+    tmp_path: Path,
+) -> None:
+    """A schedule payload carries no repository, so the hosted default runs."""
+    module = _module()
+    root = _tree(
+        tmp_path, "ci.yml", _seam_job(CORE_RECEIPT_GATE_EXPRESSION, ("schedule",))
+    )
+    assert _run(module, root, ALL_FLEET, tmp_path) == 1
+
+
+@pytest.mark.parametrize(("event", "verdict"), [("push", 0), ("schedule", 1)])
+def test_nested_selector_inside_a_fallback_chain_is_distributed(
+    tmp_path: Path, event: str, verdict: int
+) -> None:
+    module = _module()
+    expression = (
+        "${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || "
+        '(github.event.repository.private && \'["self-hosted","omnibase-ci"]\' '
+        "|| '[\"ubuntu-latest\"]')) }}"
+    )
+    root = _tree(tmp_path, "ci.yml", _seam_job(expression, (event,)))
+    assert _run(module, root, ALL_FLEET, tmp_path) == verdict
+
+
+def test_nested_selector_plain_variable_is_still_refused(tmp_path: Path) -> None:
+    """A nested arm that can turn falsy is refused, as at the top level."""
+    module = _module()
+    expression = (
+        "${{ github.event.repository.private && "
+        "(github.event_name == 'push' && vars.RUNNER || 'self-hosted') "
+        "|| 'ubuntu-latest' }}"
+    )
+    root = _tree(tmp_path, "ci.yml", _seam_job(expression, ("push",)))
+    assert _run(module, root, {"RUNNER": "self-hosted"}, tmp_path) == 2
+
+
+def test_nested_selector_with_no_default_keeps_the_chain_after_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A selector whose guards all fail is falsy; the chain moves past it."""
+    module = _module()
+    expression = (
+        "${{ vars.RUNNER || (github.event_name == 'push' && 'self-hosted') "
+        "|| 'ubuntu-latest' }}"
+    )
+    branches = module.resolve_branches(
+        expression, module.Variables.from_fixture({"RUNNER": ""})
+    )
+    assert branches[-1].guard == ""
+    assert branches[-1].labels == ["ubuntu-latest"]
+    root = _tree(tmp_path, "ci.yml", _seam_job(expression, ("workflow_dispatch",)))
+    assert _run(module, root, {"RUNNER": ""}, tmp_path) == 1
+    err = capsys.readouterr().err
+    assert "resolves: ubuntu-latest" in err
+    assert "selects no arm" not in err
