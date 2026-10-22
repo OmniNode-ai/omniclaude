@@ -1676,13 +1676,20 @@ def _chain_arms(chain: str, runs_on: str) -> list[tuple[str, str]]:
     for index, operand in enumerate(operands):
         if _is_selector(operand):
             head, tail = operands[:index], operands[index + 1 :]
-            return [
+            inner = _arms(operand, runs_on)
+            arms = [
                 (_conjoin(guard, rest_guard), rest)
-                for guard, value in _arms(operand, runs_on)
+                for guard, value in inner
                 for rest_guard, rest in _chain_arms(
                     " || ".join([*head, value, *tail]), runs_on
                 )
             ]
+            if all(guard for guard, _ in inner) and (head or tail):
+                # A selector with no unguarded arm is falsy when every guard
+                # fails, and the chain then moves past it: `V || (g && A) ||
+                # 'hosted'` still reaches 'hosted' on an event that fails g.
+                arms.extend(_chain_arms(" || ".join([*head, *tail]), runs_on))
+            return arms
     return [("", chain)]
 
 

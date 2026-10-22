@@ -2228,3 +2228,24 @@ def test_nested_selector_plain_variable_is_still_refused(tmp_path: Path) -> None
     )
     root = _tree(tmp_path, "ci.yml", _seam_job(expression, ("push",)))
     assert _run(module, root, {"RUNNER": "self-hosted"}, tmp_path) == 2
+
+
+def test_nested_selector_with_no_default_keeps_the_chain_after_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A selector whose guards all fail is falsy; the chain moves past it."""
+    module = _module()
+    expression = (
+        "${{ vars.RUNNER || (github.event_name == 'push' && 'self-hosted') "
+        "|| 'ubuntu-latest' }}"
+    )
+    branches = module.resolve_branches(
+        expression, module.Variables.from_fixture({"RUNNER": ""})
+    )
+    assert branches[-1].guard == ""
+    assert branches[-1].labels == ["ubuntu-latest"]
+    root = _tree(tmp_path, "ci.yml", _seam_job(expression, ("workflow_dispatch",)))
+    assert _run(module, root, {"RUNNER": ""}, tmp_path) == 1
+    err = capsys.readouterr().err
+    assert "resolves: ubuntu-latest" in err
+    assert "selects no arm" not in err

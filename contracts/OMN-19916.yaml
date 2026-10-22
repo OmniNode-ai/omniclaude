@@ -25,7 +25,7 @@ requirements:
       - id: AC1
         statement: "the omnibase_core receipt-gate expression, multi-line and single-line, exits 0 for a private caller's push with the fleet variables set, and flattens to four arms in order with the outer private guard on the three nested ones -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_core_receipt_gate_resolves or nested_selector_arms_are_flattened' fails at the merge base, where the gate exits 2"
       - id: AC2
-        statement: "the same expression is still a finding (exit 1) under pull_request:fork and under schedule, and a selector inside a fromJSON fallback chain passes on push and is a finding on schedule -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_fork_arm or nested_selector_public_default or nested_selector_inside_a_fallback_chain' fails at the merge base, where the gate exits 2"
+        statement: "the same expression is still a finding (exit 1) under pull_request:fork and under schedule, a selector inside a fromJSON fallback chain passes on push and is a finding on schedule, and a chain still reaches its hosted literal past a selector whose guards all fail -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_fork_arm or nested_selector_public_default or nested_selector_inside_a_fallback_chain or nested_selector_with_no_default' fails at the merge base, where the gate exits 2"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -46,6 +46,6 @@ dod_evidence:
     status: verified
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_fork_arm or nested_selector_public_default or nested_selector_inside_a_fallback_chain'"
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_fork_arm or nested_selector_public_default or nested_selector_inside_a_fallback_chain or nested_selector_with_no_default'"
     binds_ac:
       - AC2
