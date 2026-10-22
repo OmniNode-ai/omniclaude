@@ -6,26 +6,19 @@ summary: >
   A lane cannot read repository visibility (raw GitHub read budget 0) and no
   session token can read organisation Actions variables (HTTP 403), so the
   private-repo-runner-placement hook exited 2 at the visibility read with a
-  refusal that named no way through. Run as pre-commit runs it, under a stub
-  gh that answers the lane refusal and HTTP 403, the hook judges the workflow
-  from a fresh PRRP_VARIABLES_SNAPSHOT, still refuses a hosted placement on
-  that path, and when an input is missing names it and the sanctioned remedy
+  refusal that named no way through. The ticket's AC1 and AC2 (judge the
+  workflow from a source a session token can read, and still refuse a hosted
+  placement there) were already met on dev by the schema-1 snapshot reader of
+  OMN-17427: this PR's lane tests for them pass at the merge base too, so they
+  are a positive control and are not bound here. This contract binds what the
+  PR changes: every refusal names the missing input and the sanctioned remedy
   (omnimarket's onex-prrp-snapshot-publish or --write-variables-snapshot) with
-  exit 2. The snapshot stays schema 1, the format that publisher reads.
+  exit 2, the CI step and the paired hook collect the lane tests, and the
+  writer keeps schema 1, the format that publisher reads.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
-  - id: req-prrp-lane-commit-judged-from-snapshot
-    statement: With the live visibility read refused and the organisation variables read answering HTTP 403, the hook resolves its inputs from a fresh snapshot and judges the workflow.
-    acceptance:
-      - id: AC1
-        statement: "a fleet runs-on expression in a private repository passes with visibility and the organisation variable read from the snapshot after the live reads were tried -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k runner_placement_hook_without_org_variables_read fails at the merge base, where the test file is absent"
-  - id: req-prrp-lane-hosted-still-refused
-    statement: A private-repository job placed on a hosted runner is still refused on the snapshot path.
-    acceptance:
-      - id: AC2
-        statement: "a hosted organisation value behind the expression and a literal ubuntu-latest pin both exit 1 on the snapshot path -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k runner_placement_hook_hosted_runner_still_refused"
   - id: req-prrp-refusal-names-remedy
     statement: When the hook cannot resolve an input, it exits 2 and names the missing input and the sanctioned way to supply it.
     acceptance:
@@ -41,24 +34,6 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
-  - id: dod-omn20141-lane-commit-judged
-    description: The hook runs as a subprocess under a stub gh that refuses the visibility read and answers HTTP 403 for variables, and passes a fleet expression from a fresh snapshot.
-    source: manual
-    status: verified
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k runner_placement_hook_without_org_variables_read"
-    binds_ac:
-      - AC1
-  - id: dod-omn20141-hosted-still-refused
-    description: The same lane hook refuses a hosted organisation value and a literal hosted pin read through the snapshot.
-    source: manual
-    status: verified
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k runner_placement_hook_hosted_runner_still_refused"
-    binds_ac:
-      - AC2
   - id: dod-omn20141-refusal-names-remedy
     description: Each unresolvable input exits 2 and the output names the input, the snapshot variable, the publisher and the per-repository write.
     source: manual
