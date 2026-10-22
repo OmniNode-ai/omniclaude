@@ -47,11 +47,22 @@ from typing import IO
 #: The directory, beside the journal, that holds one counter file per session.
 TURN_DIRNAME = "hook_turns"
 
-#: Counter files untouched for this long are removed when a session starts.
-#: A session resumed after that loses nothing but turn continuity: its next
-#: prompt restarts at turn 1 with the same session id, which keeps the id
-#: unique only if no record from the old turns is still in flight, and after
-#: thirty days none is.
+#: Counter files untouched for this long are stale (:func:`prune_stale`). A
+#: session resumed after that loses nothing but turn continuity: its next prompt
+#: restarts at turn 1 with the same session id, which keeps the id unique only if
+#: no record from the old turns is still in flight, and after thirty days none is.
+#:
+#: NEVER ON THE HOOK PATH (OMN-19513). The prune used to run inside every
+#: ``session.started`` emit: a glob over the whole counter directory and a stat
+#: of every counter. The directory is shared with the reply and usage markers
+#: (17,674 entries on the operator Mac on 2026-10-22) and a workflow starts its
+#: agents together, so dozens of emits scanned it at once. Sampled at
+#: 2026-10-22T01:22:34Z, four ``session.started`` writers had sat 8 s each in
+#: uninterruptible ``stat`` inside this loop; the slowest ones missed the 30 s
+#: emit budget and were killed before journalling ("The event was NOT recorded
+#: (nothing reached the journal)", 77 session-start and 27 hook-capture blocks in
+#: the hook logs over three days). It never removed a counter there either: the
+#: oldest was 27 days old. Pruning is a maintenance job's, never an emit's.
 STALE_AFTER_SECONDS = 30 * 24 * 3600
 
 _OPENS_A_TURN = frozenset({"prompt.submitted"})
@@ -194,6 +205,5 @@ def resolve_turn_id(
         return _format(session, _open_turn(turn_dir, session))
     if event_type in _INSIDE_A_TURN:
         return _format(session, _current_turn(turn_dir, session))
-    if event_type == "session.started":
-        prune_stale(turn_dir)
+    # Session start and end are not turns, and never scan the directory (OMN-19513).
     return None
