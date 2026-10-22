@@ -1,0 +1,54 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-20141
+title: "The runner-placement hook judges a lane's commit from the dated snapshot and names the remedy when it cannot"
+summary: >
+  A lane cannot read repository visibility (raw GitHub read budget 0) and no
+  session token can read organisation Actions variables (HTTP 403), so the
+  private-repo-runner-placement hook exited 2 at the visibility read with a
+  refusal that named no way through. The ticket's AC1 and AC2 (judge the
+  workflow from a source a session token can read, and still refuse a hosted
+  placement there) were already met on dev by the schema-1 snapshot reader of
+  OMN-17427: this PR's lane tests for them pass at the merge base too, so they
+  are a positive control and are not bound here. This contract binds what the
+  PR changes: every refusal names the missing input and the sanctioned remedy
+  (omnimarket's onex-prrp-snapshot-publish or --write-variables-snapshot) with
+  exit 2, the CI step and the paired hook collect the lane tests, and the
+  writer keeps schema 1, the format that publisher reads.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-prrp-refusal-names-remedy
+    statement: When the hook cannot resolve an input, it exits 2 and names the missing input and the sanctioned way to supply it.
+    acceptance:
+      - id: AC3
+        statement: "no snapshot, a snapshot silent about the organisation variable and a stale snapshot each exit 2 with THE GATE DID NOT RUN, the missing input, PRRP_VARIABLES_SNAPSHOT, onex-prrp-snapshot-publish and --write-variables-snapshot in the output -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k runner_placement_hook_refusal_names_remedy fails at the merge base, where the refusal names no remedy"
+  - id: req-prrp-tests-collected-by-ci
+    statement: The tests above are collected by the omniclaude CI tests job and the paired pre-commit hook, and the snapshot writer keeps the schema the publisher reads.
+    acceptance:
+      - id: AC4
+        statement: "ci.yml's placement step and the private-runner-placement-refusals hook both name test_private_repo_runner_placement_lane_omn20141.py, and --write-variables-snapshot writes schema 1 with flat visibility and scope maps -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k 'the_writer_keeps_the_shape_the_snapshot_publisher_reads or collect_this_file'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20141-refusal-names-remedy
+    description: Each unresolvable input exits 2 and the output names the input, the snapshot variable, the publisher and the per-repository write.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k runner_placement_hook_refusal_names_remedy"
+    binds_ac:
+      - AC3
+  - id: dod-omn20141-writer-schema-and-collection
+    description: The writer's output is the schema-1 shape onex-prrp-snapshot-publish validates, and the CI step and paired hook collect the lane test file.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k 'the_writer_keeps_the_shape_the_snapshot_publisher_reads or collect_this_file'"
+    binds_ac:
+      - AC4
