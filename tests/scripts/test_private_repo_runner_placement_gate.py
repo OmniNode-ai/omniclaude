@@ -1963,6 +1963,85 @@ def test_a_repository_private_guard_on_schedule_fails_closed(tmp_path: Path) -> 
     assert _run(module, root, dict(SEAM_VARIABLES), tmp_path) == 1
 
 
+# OMN-20074: the shared reusables a private caller (omninode_infra) pins, each
+# judged as the gate judges it from that caller: the REAL file text, called at
+# a full-sha pin, under every event the caller declares. Before this change
+# four of them sent a private caller's fork pull request to the hosted arm
+# (and spelled the trusted fallback in a shape the evaluator refuses); the
+# kb-doc-gate one carried the OMN-21216 shape already.
+PRIVATE_CALLER_REUSABLES = (
+    "advisory-job-gate-reusable.yml",
+    "ban-hardcoded-runner-ip.yml",
+    "hardcoded-model-config-reusable.yml",
+    "kb-doc-gate-reusable.yml",
+    "reject-deploy-gate-skip.yml",
+)
+PRIVATE_CALLER_EVENTS = ("pull_request", "push", "merge_group", "workflow_dispatch")
+PRE_OMN_20074_SELECTOR = (
+    "${{\n"
+    "  (github.event_name == 'pull_request' &&\n"
+    "   github.event.pull_request.head.repo.full_name != github.repository)\n"
+    "  && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '[\"ubuntu-latest\"]')\n"
+    '  || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || \'["self-hosted","omnibase-ci"]\')\n'
+    "}}"
+)
+
+
+def _private_caller_of(tmp_path: Path, reusable: str) -> tuple[Path, str]:
+    pinned = f"OmniNode-ai/omniclaude/.github/workflows/{reusable}@{'b' * 40}"
+    caller = (
+        "name: Caller\non:\n"
+        + "".join(f"  {event}: {{}}\n" for event in PRIVATE_CALLER_EVENTS)
+        + "jobs:\n  gate:\n    uses: "
+        + pinned
+        + "\n"
+    )
+    return _tree(tmp_path, "caller.yml", caller), pinned
+
+
+@pytest.mark.parametrize("reusable", PRIVATE_CALLER_REUSABLES)
+def test_a_private_caller_of_the_shared_reusable_runs_only_on_the_fleet(
+    tmp_path: Path, reusable: str
+) -> None:
+    """No event a private caller declares, fork pull requests included, lands hosted."""
+    module = _module()
+    root, pinned = _private_caller_of(tmp_path, reusable)
+    called = (REPO_ROOT / ".github" / "workflows" / reusable).read_text(
+        encoding="utf-8"
+    )
+    assert (
+        _run_delegating(module, root, dict(SEAM_VARIABLES), tmp_path, {pinned: called})
+        == 0
+    )
+
+
+@pytest.mark.parametrize("reusable", PRIVATE_CALLER_REUSABLES)
+def test_a_private_caller_with_no_trusted_variable_is_refused(
+    tmp_path: Path, reusable: str
+) -> None:
+    """The private arm has no default, so an unset trusted variable is not a pass."""
+    module = _module()
+    root, pinned = _private_caller_of(tmp_path, reusable)
+    called = (REPO_ROOT / ".github" / "workflows" / reusable).read_text(
+        encoding="utf-8"
+    )
+    variables = {"OMNI_PUBLIC_PR_RUNS_ON_JSON": '["ubuntu-latest"]'}
+    assert _run_delegating(module, root, variables, tmp_path, {pinned: called}) != 0
+
+
+def test_the_pre_omn_20074_selector_sends_a_private_fork_hosted(
+    tmp_path: Path,
+) -> None:
+    """Negative control: the selector those four reusables carried is a finding."""
+    module = _module()
+    root, pinned = _private_caller_of(tmp_path, "advisory-job-gate-reusable.yml")
+    called = _seam_job(PRE_OMN_20074_SELECTOR, ("workflow_call",))
+    assert (
+        _run_delegating(module, root, dict(SEAM_VARIABLES), tmp_path, {pinned: called})
+        == 1
+    )
+
+
 @pytest.mark.parametrize(
     "runs_on",
     [
