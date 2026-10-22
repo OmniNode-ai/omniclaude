@@ -94,6 +94,7 @@
   "tests/hooks/test_hook_refusal_effect_parity.py": 0.08,
   "tests/hooks/test_hook_repo_scoping.py": 0.08,
   "tests/hooks/test_hook_scripts_bash32_parse.py": 0.74,
+  "tests/hooks/test_hook_turn_prune_off_hook_path_omn19513.py": 0.04,
   "tests/hooks/test_hook_wire_owners_omn17047.py": 118.8,
   "tests/hooks/test_hooks_baseline_omn_13244.py": 0.42,
   "tests/hooks/test_hooks_bus_bootstrap.py": 0.01,
