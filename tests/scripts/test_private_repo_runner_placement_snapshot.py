@@ -76,16 +76,21 @@ def _snapshot_file(
     visibility: str | None = "private",
     slug: str = SLUG,
 ) -> Path:
-    scopes: dict[str, dict[str, str]] = {}
+    stamp = captured_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+    scopes: dict[str, dict[str, object]] = {}
     if org is not None:
-        scopes[f"org:{slug.split('/', 1)[0]}"] = org
+        scopes[f"org:{slug.split('/', 1)[0]}"] = {"variables": org, "read_at": stamp}
     if repo is not None:
-        scopes[f"repo:{slug}"] = repo
+        scopes[f"repo:{slug}"] = {"variables": repo, "read_at": stamp}
     body: dict[str, object] = {
-        "schema": 1,
-        "captured_at": captured_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "schema": 2,
+        "captured_at": stamp,
         "scopes": scopes,
-        "visibility": {} if visibility is None else {slug: visibility},
+        "visibility": (
+            {}
+            if visibility is None
+            else {slug: {"value": visibility, "read_at": stamp}}
+        ),
     }
     path = tmp_path / "runner-variables-snapshot.json"
     path.write_text(json.dumps(body), encoding="utf-8")
@@ -432,10 +437,14 @@ def test_the_refresh_command_writes_a_snapshot_the_gate_then_accepts(
     assert _main(module, ["--repo", SLUG, "--write-variables-snapshot", str(out)]) == 0
     written = json.loads(out.read_text(encoding="utf-8"))
     assert written["captured_at"] == "2026-10-14T12:00:00Z"
-    assert written["visibility"] == {SLUG: "private"}
+    stamp = "2026-10-14T12:00:00Z"
+    assert written["visibility"] == {SLUG: {"value": "private", "read_at": stamp}}
     assert written["scopes"] == {
-        "org:OmniNode-ai": {"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET},
-        f"repo:{SLUG}": {},
+        "org:OmniNode-ai": {
+            "variables": {"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET},
+            "read_at": stamp,
+        },
+        f"repo:{SLUG}": {"variables": {}, "read_at": stamp},
     }
     variables = _unreadable_variables(module, _snapshot(module, out))
     assert module.scan(_tree(tmp_path), SLUG, variables) == []

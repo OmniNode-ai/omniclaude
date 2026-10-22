@@ -120,7 +120,7 @@ jobs:
         run: uv run pytest tests/scripts/test_kb_doc_gate.py -q --no-cov
       # OMN-17427: paired with the private-runner-placement-refusals hook.
       - name: Verify private runner placement refuses hosted paths (OMN-17427)
-        run: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py tests/workflows/test_private_repo_runner_placement_workflow.py -q -p no:randomly --no-cov
+        run: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py tests/scripts/test_private_repo_runner_placement_snapshot.py tests/scripts/test_private_repo_runner_placement_lane_omn20141.py tests/workflows/test_private_repo_runner_placement_workflow.py -q -p no:randomly --no-cov
       - name: Verify hook runners leave no root bytecode (OMN-17427)
         run: uv run pytest tests/scripts/test_uv_run_worktree_safe.py -q --no-cov
       - name: Verify ledger ruling re-read before publishing (OMN-18645)
