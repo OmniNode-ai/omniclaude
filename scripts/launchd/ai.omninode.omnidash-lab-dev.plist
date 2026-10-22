@@ -6,11 +6,15 @@
   Replaces the hand-installed ai.omninode.omnidash-lab-dev-sync from 2026-09-27.
   On 2026-09-28 its ticket worktree was pruned, leaving every tick failing.
   The power outage at 11:15Z also exposed that restarting only on HEAD changes
-  could not recover vite after reboot. This agent serves OMNI_HOME/omnidash
-  every 120 seconds and starts vite when absent or when the served HEAD moves.
-  It never writes git state: ai.omninode.canonical-clone-sync keeps the canonical
-  clone on origin/dev every 180 seconds. Dependencies are installed when absent
-  or when the lockfile changes. Per-machine VITE_PROJECTION_API_URL and
+  could not recover vite after reboot. This agent serves a private checkout it
+  owns under ONEX_STATE_DIR/omnidash-lab-dev/serve/omnidash and starts vite when
+  absent, when the canonical clone's origin/dev ref moves, or when its local
+  overlay files (contract.local.yaml, .env, .env.local) change. It copies the
+  overlay into the private checkout and runs generate:config there, so the
+  tenant-bearing generated defaults never dirty the canonical clone, which
+  ai.omninode.canonical-clone-sync keeps on origin/dev every 180 seconds and
+  which this agent only reads. Dependencies are installed when absent or when
+  the lockfile changes. Per-machine VITE_PROJECTION_API_URL and
   VITE_PROJECTION_TENANT_ID may be sourced from HOME/.omnibase/omnidash-lab-dev.env
   (override with OMNIDASH_LAB_DEV_ENV_FILE); only exported names are logged.
 
