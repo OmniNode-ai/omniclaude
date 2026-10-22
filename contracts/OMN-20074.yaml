@@ -119,6 +119,16 @@ requirements:
       - id: "AC16"
         statement: |-
           AC16: scripts/ci/check_occ_companion_merged.py and tests/ci/test_check_occ_companion_merged.py are absent, the canonical-file-shape baseline lists neither, and the stamp guard policy pattern and flags equal the literal pin in tests/hooks/test_pr_body_stamp_guard.py -- falsifier: uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py tests/hooks/test_pr_body_stamp_guard.py -q --no-cov fails at the merge base
+  - id: "req-omn20074-prrp-local-sources"
+    statement: |-
+      The private-repo-runner-placement hook must judge a commit made in a lane, whose GitHub reads are refused, from non-live sources without weakening its verdict: the snapshot the publisher puts on the host, and a local clone for a called workflow pinned to a full commit sha.
+    acceptance:
+      - id: "AC17"
+        statement: |-
+          AC17: with no PRRP_VARIABLES_SNAPSHOT, the publisher's ~/.omninode/prrp/variables-snapshot.json answers a refused visibility read and a stale one there is still exit 2; a called workflow pinned to a sha is read at that sha from a clone of the called repository whose origin branches hold it, and a hosted runs-on there is still exit 1 -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py -q --no-cov -k "published_snapshot_answers or published_snapshot_stale or local_clone_answers or local_clone_hosted" fails at the merge base
+      - id: "AC18"
+        statement: |-
+          AC18: a commit on no origin branch is refused naming the clone remedy, Actions reads neither the published snapshot nor a clone, and the CI step and the paired hook collect the test file -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py -q --no-cov -k "no_origin_branch or inside_github_actions or collect_this_file" fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -165,6 +175,9 @@ evidence_requirements:
   - kind: tests
     description: "The dead companion-merged gate script and its test are gone and the stamp guard pins its own pattern."
     command: "uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py tests/hooks/test_pr_body_stamp_guard.py -q --no-cov"
+  - kind: tests
+    description: "The placement hook judges a lane's commit from the published snapshot and from a local clone at a sha pin, and still refuses a hosted placement and every source it cannot trust."
+    command: "uv run pytest tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -297,3 +310,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_occ_unused_reusables_deleted_omn20074.py tests/hooks/test_pr_body_stamp_guard.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC16"]
+  - id: dod-omn20074-prrp-local-sources
+    description: "The placement hook reads the published snapshot and a local clone at a sha pin after a refused live read, judges what they hold, and refuses a stale snapshot, an unpublished commit and any local source inside Actions."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC17", "AC18"]

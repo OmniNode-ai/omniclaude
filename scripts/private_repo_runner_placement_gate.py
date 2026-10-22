@@ -136,8 +136,20 @@ unparseable, or silent about the repository or scope asked for is a REFUSAL, exi
 and every such refusal names the missing input and the sanctioned remedy (OMN-20141):
 the lab hosts' copy is published by omnimarket's `onex-prrp-snapshot-publish` (one
 gate read per registry repository, merged into one schema-1 file), and the lane
-runner exports `PRRP_VARIABLES_SNAPSHOT` at it. The file format is that publisher's
-contract, so it stays schema 1.
+runner exports `PRRP_VARIABLES_SNAPSHOT` at it. With neither the flag nor the
+variable set, the publisher's own destination on this host,
+`~/.omninode/prrp/variables-snapshot.json`, is read when it exists (OMN-20074), so a
+lane needs no exported environment; every refusal above applies to it unchanged.
+The file format is that publisher's contract, so it stays schema 1.
+
+A CALLED WORKFLOW PINNED TO A SHA IS READ FROM A LOCAL CLONE WHEN THE LIVE READ
+FAILS (OMN-20074). A `uses:` job is judged by its called workflow's runs-on, and a
+lane cannot fetch it. Outside Actions, a pin to a full commit sha is answered from
+a clone of the called repository under `$OMNI_HOME` or beside this repository's
+canonical clone, when its origin names that repository and one of its origin
+branches holds the commit: a sha names one tree, so the bytes are the ones the
+contents API serves. A branch or tag pin, a commit nobody pushed and a clone of
+another repository answer nothing, and the refusal says so.
 A hosted value inside a fresh snapshot is judged exactly like a live one. Inside
 GitHub Actions the flag and the variable are refused: hosted CI is the enforced
 merge gate and resolves live. Use the environment variable, not hook `args`, so the
@@ -188,8 +200,10 @@ USES_CROSS_REPO = re.compile(
 )
 USES_LOCAL = re.compile(r"^\./(?P<path>\.github/workflows/.+)$")
 
-# A ref that names an immutable commit. Used only to decide whether the commit
-# a mutable ref resolved to is worth printing -- never to refuse a ref.
+# A ref that names an immutable commit. Used to decide whether the commit a
+# mutable ref resolved to is worth printing, and whether a local clone may
+# answer for a called workflow whose live read failed (only an immutable pin
+# has one answer) -- never to refuse a ref.
 SHA_REF = re.compile(r"^[0-9a-f]{40}$")
 
 # GitHub evaluates at most four levels of nested reusable workflows. Past that
@@ -776,6 +790,12 @@ def _gh(
 
 
 SNAPSHOT_SCHEMA = 1
+# Where omnimarket's onex-prrp-snapshot-publish puts the snapshot on every host
+# it serves, relative to that host's home (its `--destination`, OMN-19998). A
+# run outside GitHub Actions with no --variables-snapshot and no
+# PRRP_VARIABLES_SNAPSHOT reads this file when it exists, so a lane's commit
+# needs no environment the lane runner may not have exported (OMN-20074).
+PUBLISHED_SNAPSHOT_RELPATH = Path(".omninode") / "prrp" / "variables-snapshot.json"
 SNAPSHOT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 DEFAULT_SNAPSHOT_MAX_AGE_HOURS = 24.0
 # A snapshot dated slightly ahead of this host's clock is skew, not forgery.
@@ -920,6 +940,19 @@ def snapshot_remedy(slug: str, path: str = "<file>") -> str:
     )
 
 
+def published_snapshot_path() -> Path | None:
+    """The publisher's copy on this host, or None (always None inside Actions).
+
+    Only WHERE the snapshot is found changes: it is still read only after a
+    live read failed, and every age and coverage refusal of VariablesSnapshot
+    applies to it unchanged.
+    """
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return None
+    candidate = Path.home() / PUBLISHED_SNAPSHOT_RELPATH
+    return candidate if candidate.is_file() else None
+
+
 def resolve_visibility(slug: str, snapshot: VariablesSnapshot | None = None) -> str:
     """Live repository visibility. Never a list, never an inference.
 
@@ -945,8 +978,8 @@ def resolve_visibility(slug: str, snapshot: VariablesSnapshot | None = None) -> 
         except GateError as error:
             raise GateError(
                 f"could not resolve the visibility of {slug} from the GitHub API "
-                f"({live}) and the snapshot cannot answer: {error}. "
-                "THE GATE DID NOT RUN."
+                f"({live}) and the snapshot cannot answer: {error}. Missing "
+                f"input: the visibility of {slug}. THE GATE DID NOT RUN."
             ) from error
         print(
             f"NOTE: visibility of {slug} is {recorded}, read from {where} because "
@@ -1148,13 +1181,60 @@ class CalledWorkflows:
     repository. A read that fails is a REFUSAL naming what could not be
     fetched: the alternative is to skip the job, which is the exact silence
     this change exists to remove.
+
+    OUTSIDE GitHub Actions a failed live read of a workflow pinned to a full
+    commit sha is answered from a local clone of the called repository
+    (OMN-20074): a lane's GitHub reads are refused, and every reusable an
+    omninode repository calls is pinned to a sha its canonical clone already
+    holds. A sha names one tree, so `git cat-file` of `<sha>:<path>` is the
+    same bytes the contents API returns for it. The clone must be the called
+    repository (its origin names the slug) and the commit must be on one of
+    its origin branches, so a commit nobody pushed answers nothing. A mutable
+    ref (a branch or a tag) is never answered locally, and Actions never reads
+    a clone: hosted CI resolves live.
     """
 
-    def __init__(self, repo_root: Path, fixture: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        repo_root: Path,
+        fixture: dict[str, str] | None = None,
+        clone_roots: list[Path] | None = None,
+    ) -> None:
         self._repo_root = repo_root
         self._fixture = fixture
+        self._clone_roots = clone_roots
         self._cache: dict[str, str] = {}
         self._commits: dict[str, str] = {}
+
+    def _roots(self) -> list[Path]:
+        if self._clone_roots is None:
+            self._clone_roots = local_clone_roots(self._repo_root)
+        return self._clone_roots
+
+    def _from_clone(self, slug: str, path: str, ref: str) -> tuple[str, Path] | None:
+        """The called workflow at an immutable pin, from a clone of `slug`."""
+        if not SHA_REF.match(ref):
+            return None
+        name = slug.split("/", 1)[1]
+        for root in self._roots():
+            clone = root / name
+            if not (clone / ".git").exists() or not _origin_is(clone, slug):
+                continue
+            published = _run_git_in_clone(
+                clone,
+                "for-each-ref",
+                "--count=1",
+                "--format=%(refname)",
+                "--contains",
+                ref,
+                "refs/remotes/origin",
+            )
+            if published.returncode != 0 or not published.stdout.strip():
+                continue
+            blob = _run_git_in_clone(clone, "cat-file", "blob", f"{ref}:{path}")
+            if blob.returncode == 0:
+                return blob.stdout.decode("utf-8", "replace"), clone
+        return None
 
     @staticmethod
     def _parse(uses: str) -> tuple[str, str, str]:
@@ -1234,18 +1314,99 @@ class CalledWorkflows:
             env_name="GH_TOKEN_VARIABLES",
         )
         if result.returncode != 0:
+            live = result.stderr.strip()[:200]
+            cloned = self._from_clone(slug, path, ref)
+            if cloned is not None:
+                text, clone = cloned
+                print(
+                    f"NOTE: called workflow {uses} read from the local clone "
+                    f"{clone} at its pinned commit because the live read "
+                    f"failed ({live}).",
+                    file=sys.stderr,
+                )
+                self._cache[uses] = text
+                return text
+            where = ", ".join(str(root) for root in self._roots()) or "(none)"
             raise GateError(
                 f"could not fetch the called workflow {uses!r} "
-                f"({result.stderr.strip()[:200]}). A `uses:` job's placement is "
+                f"({live}). A `uses:` job's placement is "
                 "decided by the called workflow's runs-on resolved in THIS "
                 "repository's variable scopes, so a gate that cannot read it "
                 "has not judged the job -- and this repository's required "
                 "checks may be the jobs in question. Supply a credential with "
-                "cross-repository read as ACTIONS_VARIABLES_TOKEN. "
-                "THE GATE DID NOT RUN."
+                "cross-repository read as ACTIONS_VARIABLES_TOKEN. Outside "
+                "Actions a workflow pinned to a full commit sha is also read "
+                f"from a clone of {slug} under {where} whose origin branches "
+                "hold that commit; fetch the clone, or set OMNI_HOME to the "
+                "directory holding it. THE GATE DID NOT RUN."
             )
         self._cache[uses] = result.stdout
         return self._cache[uses]
+
+
+# Git exports these into a hook's environment, and each overrides `git -C`, so
+# a read of ANOTHER clone made under them would read the committing repository.
+GIT_LOCATION_VARIABLES = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+)
+
+
+def _run_git_in_clone(clone: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+    """`git -C clone ...` with the hook's repository location removed."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in GIT_LOCATION_VARIABLES
+    }
+    return subprocess.run(
+        ["git", "-C", str(clone), *args],
+        check=False,
+        capture_output=True,
+        timeout=120,
+        env=env,
+    )
+
+
+def _origin_is(clone: Path, slug: str) -> bool:
+    """Does this clone's origin name the repository `slug` on GitHub?"""
+    result = _run_git_in_clone(clone, "remote", "get-url", "origin")
+    url = result.stdout.decode("utf-8", "replace").strip()
+    return result.returncode == 0 and bool(
+        re.search(rf"github\.com[:/]{re.escape(slug)}(\.git)?/?$", url, re.IGNORECASE)
+    )
+
+
+def local_clone_roots(repo_root: Path) -> list[Path]:
+    """Directories that may hold clones of called repositories, by name.
+
+    `$OMNI_HOME`, then the directory holding this repository's canonical
+    clone (the parent of its git common dir's parent, which is the same
+    directory for the clone and for every worktree of it). Empty inside
+    GitHub Actions, which resolves every called workflow live.
+    """
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return []
+    roots: list[Path] = []
+    if os.environ.get("OMNI_HOME"):
+        roots.append(Path(os.environ["OMNI_HOME"]))
+    common = _run_git(
+        repo_root, "rev-parse", "--path-format=absolute", "--git-common-dir"
+    )
+    if common.returncode == 0 and common.stdout.strip():
+        roots.append(
+            Path(common.stdout.decode("utf-8", "replace").strip()).parent.parent
+        )
+    unique: list[Path] = []
+    for root in roots:
+        resolved = root.resolve()
+        if resolved not in unique:
+            unique.append(resolved)
+    return unique
 
 
 def _called_jobs(uses: str, text: str) -> dict[str, Any]:
@@ -1578,17 +1739,61 @@ def resolve_branches(runs_on: Any, variables: Variables) -> list[Branch]:
     if inner.startswith("${{") and inner.endswith("}}"):
         inner = inner[3:-2]
 
-    segments = _split_top_level(inner, "||")
-    if all(len(_split_top_level(segment, "&&")) == 1 for segment in segments):
+    branches: list[Branch] = []
+    for guard, value in _arms(inner, runs_on):
+        labels, how, fallback = _labels_of(value, runs_on, variables)
+        branches.append(Branch(guard=guard, labels=labels, how=how, fallback=fallback))
+    return branches
+
+
+def _is_selector(fragment: str) -> bool:
+    """Is this fragment a guarded selector rather than a value?
+
+    `g && X || Y` is a selector: which value it yields depends on the event.
+    `vars.X || 'label'` is a value fallback chain, and so is
+    `vars.X || (g && 'A' || 'B')` -- the parenthesised selector is one OPERAND
+    of the chain, and is distributed by `_chain_arms`.
+    """
+    fragment = _strip_parens(fragment)
+    return any(
+        len(_split_top_level(segment, "&&")) > 1
+        for segment in _split_top_level(fragment, "||")
+    )
+
+
+def _conjoin(outer: str, inner: str) -> str:
+    if not outer:
+        return inner
+    if not inner:
+        return outer
+    return f"({outer}) && ({inner})"
+
+
+def _arms(expression: str, runs_on: str) -> list[tuple[str, str]]:
+    """Flatten a `runs-on` expression into `(guard, value)` arms, in order.
+
+    Every value is a vars.* / literal fallback chain, optionally inside
+    fromJSON, which `_labels_of` resolves. The first arm whose guard holds is
+    the one that places the run, as in `_select`.
+
+    A selector may nest: omnibase_core `receipt-gate.yml` since OMN-21280
+    writes `private && ( fork && X || Y ) || 'ubuntu-latest'`. Because every
+    arm value is truthy (`_labels` refuses an empty label list), `G && (S)`
+    yields S's value when G holds and falls through otherwise, so it flattens
+    to S's arms, each guarded by G and its own guard. Before OMN-19916 the
+    nested selector was refused as unreadable, which turned every private
+    caller of that workflow into THE GATE DID NOT RUN.
+    """
+    expression = _strip_parens(expression)
+    if not _is_selector(expression):
         # A plain vars.X || 'label' is a value fallback chain, not a pair of
         # event-guarded arms. The literal remains reachable if X is emptied.
-        labels, how, fallback = _labels_of(inner, runs_on, variables)
-        return [Branch(guard="", labels=labels, how=how, fallback=fallback)]
+        return _value_arms(expression, runs_on)
 
-    branches: list[Branch] = []
-    for segment in segments:
+    arms: list[tuple[str, str]] = []
+    for segment in _split_top_level(expression, "||"):
         operands = _split_top_level(segment, "&&")
-        guard = " && ".join(operands[:-1]) if len(operands) > 1 else ""
+        guard = " && ".join(operands[:-1])
         if VAR_REF.fullmatch(_strip_parens(operands[-1])):
             # The selected arm could become falsy when its variable is unset,
             # causing an outer hosted fallback to run. Our event evaluator
@@ -1597,9 +1802,56 @@ def resolve_branches(runs_on: Any, variables: Variables) -> list[Branch]:
                 f"a guarded plain variable in {runs_on!r} can become falsy; "
                 "use fromJSON with an explicit fleet fallback. THE GATE DID NOT RUN."
             )
-        labels, how, fallback = _labels_of(operands[-1], runs_on, variables)
-        branches.append(Branch(guard=guard, labels=labels, how=how, fallback=fallback))
-    return branches
+        arms.extend(
+            (_conjoin(guard, inner_guard), value)
+            for inner_guard, value in _value_arms(operands[-1], runs_on)
+        )
+    return arms
+
+
+def _value_arms(value: str, runs_on: str) -> list[tuple[str, str]]:
+    """The arms of one arm's value: itself, unless it nests a selector."""
+    value = _strip_parens(value)
+    if _is_selector(value):
+        return _arms(value, runs_on)
+    args = _call_args(value, "fromjson")
+    if args is not None and len(args) == 1:
+        return [
+            (guard, f"fromJSON({chain})")
+            for guard, chain in _chain_arms(args[0], runs_on)
+        ]
+    return _chain_arms(value, runs_on)
+
+
+def _chain_arms(chain: str, runs_on: str) -> list[tuple[str, str]]:
+    """Distribute a selector operand out of a value fallback chain.
+
+    `V || (g && A || B)` is `g && (V || A) || (V || B)`: when V is truthy both
+    yield V, and when it is not, both yield A if g holds and B otherwise. The
+    distributed form gives each event its own arm, so a hosted literal behind
+    a guard that event cannot pass is not reported as that event's fallback,
+    and one it can pass still is.
+    """
+    chain = _strip_parens(chain)
+    operands = _split_top_level(chain, "||")
+    for index, operand in enumerate(operands):
+        if _is_selector(operand):
+            head, tail = operands[:index], operands[index + 1 :]
+            inner = _arms(operand, runs_on)
+            arms = [
+                (_conjoin(guard, rest_guard), rest)
+                for guard, value in inner
+                for rest_guard, rest in _chain_arms(
+                    " || ".join([*head, value, *tail]), runs_on
+                )
+            ]
+            if all(guard for guard, _ in inner) and (head or tail):
+                # A selector with no unguarded arm is falsy when every guard
+                # fails, and the chain then moves past it: `V || (g && A) ||
+                # 'hosted'` still reaches 'hosted' on an event that fails g.
+                arms.extend(_chain_arms(" || ".join([*head, *tail]), runs_on))
+            return arms
+    return [("", chain)]
 
 
 def _job_source(text: str, job_id: str) -> str:
@@ -2346,7 +2598,11 @@ def scan_every_workflow_branch(
                 root,
                 slug,
                 variables,
-                CalledWorkflows(root, fixture=called_fixture),
+                CalledWorkflows(
+                    root,
+                    fixture=called_fixture,
+                    clone_roots=local_clone_roots(repo_root),
+                ),
                 notes,
                 latent,
                 matrix,
@@ -2430,8 +2686,10 @@ def main(argv: list[str] | None = None) -> int:
             "repository variable scopes, read ONLY for an answer whose live read "
             "failed (a lab host cannot read Actions variables). Older than "
             "--snapshot-max-age-hours, dated ahead, or silent about what is "
-            "needed: the gate refuses. Defaults to $PRRP_VARIABLES_SNAPSHOT. "
-            "Refused inside GitHub Actions, which must resolve live (OMN-17427)."
+            "needed: the gate refuses. Defaults to $PRRP_VARIABLES_SNAPSHOT, "
+            "then to ~/.omninode/prrp/variables-snapshot.json when it exists "
+            "(OMN-20074). Refused inside GitHub Actions, which must resolve "
+            "live (OMN-17427)."
         ),
     )
     parser.add_argument(
@@ -2585,12 +2843,14 @@ def main(argv: list[str] | None = None) -> int:
     ledger = Path(ledger_arg) if ledger_arg else None
     accepted: list[str] = []
 
-    snapshot = (
-        VariablesSnapshot(
-            Path(args.variables_snapshot),
-            timedelta(hours=args.snapshot_max_age_hours),
-        )
+    snapshot_path = (
+        Path(args.variables_snapshot)
         if args.variables_snapshot
+        else published_snapshot_path()
+    )
+    snapshot = (
+        VariablesSnapshot(snapshot_path, timedelta(hours=args.snapshot_max_age_hours))
+        if snapshot_path is not None
         else None
     )
 
