@@ -39,6 +39,7 @@ from typing import Final
 
 from omniclaude.enums.enum_sibling_pin_kind import EnumSiblingPinKind
 from omniclaude.enums.enum_sibling_pin_verdict import EnumSiblingPinVerdict
+from omniclaude.handlers.handler_dev_merge_tag import dev_merge_tag_stamp
 from omniclaude.models.model_internal_sibling_pins import (
     ModelInternalSiblingPinFinding,
     ModelInternalSiblingPinsRequest,
@@ -60,13 +61,7 @@ _OMNINODE_GIT: Final = re.compile(
     r"^https://github\.com/OmniNode-ai/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?"
     r"(?:\?(?P<query>[^#]*))?(?:#.*)?$"
 )
-_DEV_MERGE_TAG: Final = re.compile(r"^dev-(?P<stamp>[0-9]{14})-[0-9a-f]{12}$")
 _STAMP_FORMAT: Final = "%Y%m%d%H%M%S"
-
-
-def _stamp_of(tag: str) -> str | None:
-    match = _DEV_MERGE_TAG.match(tag)
-    return match.group("stamp") if match else None
 
 
 def _release_stamp(package: dict[str, object]) -> str | None:
@@ -109,7 +104,7 @@ def _classify(
         tag = query.get("tag")
         if tag is None:
             return match.group("repo"), EnumSiblingPinKind.REV, query.get("rev"), None
-        if _stamp_of(tag) is not None:
+        if dev_merge_tag_stamp(tag) is not None:
             return match.group("repo"), EnumSiblingPinKind.DEV_TAG, tag, None
         return match.group("repo"), EnumSiblingPinKind.RELEASE_TAG, tag, None
     if "registry" in source and name in REGISTRY_SIBLING_REPOS:
@@ -136,8 +131,8 @@ def _pin_identity(package: dict[str, object] | None) -> tuple[str, str] | None:
 
 
 def _newest_dev_tag(tags: list[str]) -> str | None:
-    dev = [t for t in tags if _stamp_of(t) is not None]
-    return max(dev, key=lambda t: _stamp_of(t) or "") if dev else None
+    dev = [t for t in tags if dev_merge_tag_stamp(t) is not None]
+    return max(dev, key=lambda t: dev_merge_tag_stamp(t) or "") if dev else None
 
 
 def handle(request: ModelInternalSiblingPinsRequest) -> ModelInternalSiblingPinsResult:
@@ -206,7 +201,7 @@ def handle(request: ModelInternalSiblingPinsRequest) -> ModelInternalSiblingPins
             continue
         newest = _newest_dev_tag(request.dev_tags[repo])
         newer = newest is not None and (
-            released is None or (_stamp_of(newest) or "") > released
+            released is None or (dev_merge_tag_stamp(newest) or "") > released
         )
         if newer:
             when = f"published {released}" if released else "with no recorded time"

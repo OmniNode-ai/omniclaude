@@ -150,7 +150,7 @@ jobs:
           # [tool.onex.git-source-authority] in the same change.
           test -d .clones/omnimarket/.git \
             || { echo "::error::omnimarket checkout missing; refusing to report a refresh that examined no clone"; exit 1; }
-          python3 scripts/relock_git_sources.py \
+          PYTHONPATH=src python3 scripts/relock_git_sources.py \
             --registry-root "$PWD/.clones" \
             --package omnimarket
 
@@ -162,7 +162,7 @@ jobs:
       - name: Clone the dev-tag train's siblings
         run: |
           set -euo pipefail
-          members="$(python3 -c 'import sys; sys.path.insert(0, "scripts"); import relock_git_sources as r; print(" ".join(sorted({p.repo for p in r.parse_dev_tag_pins(open("pyproject.toml").read())})))')"
+          members="$(PYTHONPATH=src python3 -c 'import sys; sys.path.insert(0, "scripts"); import relock_git_sources as r; print(" ".join(sorted({p.repo for p in r.parse_dev_tag_pins(open("pyproject.toml").read())})))')"
           echo "Train members: ${members:-<none>}"
           for repo in $members; do
             [[ -d ".clones/$repo/.git" ]] && { git -C ".clones/$repo" fetch --quiet --tags origin; continue; }

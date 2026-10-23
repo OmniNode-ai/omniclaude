@@ -61,6 +61,8 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from omniclaude.handlers.handler_dev_merge_tag import dev_merge_tag_stamp
+
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
@@ -252,7 +254,6 @@ def advance_all(
 _OMNINODE_GIT = re.compile(
     r"^https://github\.com/OmniNode-ai/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?$"
 )
-_DEV_MERGE_TAG = re.compile(r"^dev-(?P<stamp>[0-9]{14})-[0-9a-f]{12}$")
 # Tags examined per sibling, newest first. Bounds the CI reads a night costs; a
 # sibling with this many consecutive red or unread tags stays where it is and
 # the plan says why.
@@ -302,11 +303,6 @@ GreenOracle = Callable[[str, str], "bool | None"]
 Mover = Callable[[Path, ModelDevTagPin, str], None]
 
 
-def _stamp(tag: str) -> str | None:
-    match = _DEV_MERGE_TAG.match(tag)
-    return match.group("stamp") if match else None
-
-
 def parse_dev_tag_pins(pyproject_text: str) -> list[ModelDevTagPin]:
     """Every [tool.uv.sources] entry pinning an OmniNode-ai repo by dev merge tag."""
     sources = (
@@ -317,7 +313,11 @@ def parse_dev_tag_pins(pyproject_text: str) -> list[ModelDevTagPin]:
         if not isinstance(attrs, dict) or set(attrs) & {"rev", "branch"}:
             continue
         url, tag = attrs.get("git"), attrs.get("tag")
-        if not isinstance(url, str) or not isinstance(tag, str) or _stamp(tag) is None:
+        if (
+            not isinstance(url, str)
+            or not isinstance(tag, str)
+            or dev_merge_tag_stamp(tag) is None
+        ):
             continue
         match = _OMNINODE_GIT.match(url)
         if match is None:
@@ -343,12 +343,14 @@ def dev_tags_newest_first(clone: Path) -> list[tuple[str, str]]:
     tags: list[tuple[str, str]] = []
     for line in result.stdout.splitlines():
         parts = line.split()
-        if not parts or _stamp(parts[0]) is None:
+        if not parts or dev_merge_tag_stamp(parts[0]) is None:
             continue
         # Annotated tags carry the commit in %(*objectname); lightweight ones in
         # %(objectname), and then the peeled column is empty.
         tags.append((parts[0], parts[1] if len(parts) == 3 else parts[-1]))
-    return sorted(tags, key=lambda t: (_stamp(t[0]) or "", t[0]), reverse=True)
+    return sorted(
+        tags, key=lambda t: (dev_merge_tag_stamp(t[0]) or "", t[0]), reverse=True
+    )
 
 
 def check_runs_verdict(runs: list[tuple[str, str]]) -> bool | None:
@@ -405,11 +407,11 @@ def pick_train_tag(
     max_candidates: int = _MAX_CANDIDATES,
 ) -> ModelTagChoice:
     """The newest dev tag newer than the pin whose dev CI is green, or None."""
-    current = _stamp(pin.tag) or ""
+    current = dev_merge_tag_stamp(pin.tag) or ""
     examined: list[str] = []
     skipped: dict[str, str] = {}
     for tag, sha in dev_tags_newest_first(clone):
-        if (_stamp(tag) or "") <= current:
+        if (dev_merge_tag_stamp(tag) or "") <= current:
             break
         if len(examined) >= max_candidates:
             skipped[tag] = "beyond-candidate-cap"
@@ -485,7 +487,10 @@ def run_dev_tag_train(
             continue
         if apply:
             mover(pyproject, pin, choice.new_tag)
-        old, new = _stamp(pin.tag) or "", _stamp(choice.new_tag) or ""
+        old, new = (
+            dev_merge_tag_stamp(pin.tag) or "",
+            dev_merge_tag_stamp(choice.new_tag) or "",
+        )
         moves.append(
             ModelTrainMove(
                 distribution=pin.distribution,
@@ -495,7 +500,7 @@ def run_dev_tag_train(
                 rolled=[
                     tag
                     for tag, _ in dev_tags_newest_first(clone)
-                    if old < (_stamp(tag) or "") <= new
+                    if old < (dev_merge_tag_stamp(tag) or "") <= new
                 ],
             )
         )
