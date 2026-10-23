@@ -665,7 +665,6 @@ def _phase0_env(tmp_path: Path, **extra: str) -> dict[str, str]:
         "ONBOARD_TEST_NEEDS_ADMIN": "0",
         # OMN-21058: no test reaches a real provider's model list or omnimarket.
         "ONBOARD_TEST_CATALOGUE": _catalogue(tmp_path, _default_lists()),
-        "ONBOARD_TEST_MODEL_CONFIG": _model_config(tmp_path),
         **extra,
     }
 
@@ -765,32 +764,42 @@ def _catalogue(tmp_path: Path, base: str) -> str:
         "    model_preference:\n"
         "      - pattern: 'gpt-4\\.(?P<generation>[0-9]+)-nano'\n"
         "  - provider: anthropic\n"
-        f'    models_url: "{base}/not-this-one"\n'
+        f'    models_url: "{base}/not-this-one"\n' + _LOCAL_BLOCK
     )
     return str(path)
 
 
-def _model_config(tmp_path: Path) -> str:
-    """The `ollama` block of a model config shaped like omnimarket's."""
-    path = tmp_path / "bifrost_delegation.yaml"
-    path.write_text(
-        "backends: []\n"
-        "ollama:\n"
-        "  port: 11434\n"
-        "  chat_path: /v1/chat/completions\n"
-        "  models:\n"
-        "    - min_memory_gb: 64\n"
-        "      model: fixture-ollama-huge\n"
-        "      download_gb: 40\n"
-        "    - min_memory_gb: 16\n"
-        "      model: fixture-ollama-mid\n"
-        "      download_gb: 5\n"
-        "    - min_memory_gb: 0\n"
-        "      model: fixture-ollama-small\n"
-        "      download_gb: 1\n"
-        "other: {}\n"
-    )
-    return str(path)
+# The catalogue's `local` row: one Ollama model per memory class (OMN-21215),
+# which onboarding lists for Ollama, the one sized to this Mac recommended.
+_LOCAL_BLOCK = (
+    "local:\n"
+    "  default_models: [fixture-ollama-small, fixture-ollama-mid, fixture-ollama-huge]\n"
+    "  memory_classes:\n"
+    '    - memory_class: "8gb"\n'
+    "      min_memory_gb: 8\n"
+    "      model: fixture-ollama-small\n"
+    "      server: ollama\n"
+    "      download_gb: 1\n"
+    '    - memory_class: "16gb"\n'
+    "      min_memory_gb: 16\n"
+    "      model: fixture-ollama-mid\n"
+    "      server: ollama\n"
+    "      download_gb: 5\n"
+    '    - memory_class: "64gb_plus"\n'
+    "      min_memory_gb: 64\n"
+    '      model: "fixture-ollama-huge"\n'
+    "      server: ollama\n"
+    "      download_gb: 40\n"
+    "recommended_order:\n"
+    "  onboarding: baseline\n"
+    "  orders:\n"
+    "    baseline:\n"
+    "      models: default_models\n"
+    '      basis: "OMN-21215"\n'
+    "  classes:\n"
+    "    code_generation: baseline\n"
+    "not_offered: []\n"
+)
 
 
 def _listed(out: str, heading: str) -> list[str]:
@@ -1663,14 +1672,14 @@ def test_openrouter_model_is_chosen_by_number_from_the_keys_own_list(
     tmp_path: Path,
 ) -> None:
     """AC1: the key's live list, numbered, the preferred model first and
-    recommended; empty and out-of-range answers ask again."""
+    recommended; out-of-range answers ask again (an empty one takes the
+    recommended order, OMN-21209)."""
     with _models_server({"openrouter": (200, _OR_MODELS)}) as served:
         out, _ = _preflight(
             tmp_path,
             [
                 (_MENU, "2"),
                 ("OpenRouter key (1 of 1)", _OR_KEY),
-                (_OR_PICK, ""),
                 (_OR_PICK, "6"),
                 (_OR_PICK, "0"),
                 (_OR_PICK, "x"),
@@ -1685,8 +1694,8 @@ def test_openrouter_model_is_chosen_by_number_from_the_keys_own_list(
     assert " 1) fx/fam-10-it:free  (recommended)" in out
     assert "Recommended, in this order: 1 " in out
     assert "a-lab/alpha-70b" not in out and "not-an-id" not in out
-    assert out.count(_OR_PICK) == 5
-    assert out.count("Choose one or more numbers, 1 to 5 (for example 2,1)") == 4
+    assert out.count(_OR_PICK) == 4
+    assert out.count("Choose one or more numbers, 1 to 5 (for example 2,1)") == 3
     assert "OpenRouter models, first tried first: m-lab/mu-12b-it:free" in out
     summary = out.split("Ready to set up:")[1]
     assert "OpenRouter  key received, models m-lab/mu-12b-it:free" in summary
@@ -1862,11 +1871,10 @@ def test_chosen_models_for_each_key_are_picked_by_number_in_order(
     assert "OpenAI      key received, models gpt-4.1-nano, gpt-4.1-mini" in summary
 
 
-@pytest.mark.parametrize("answer", ["", "0", "3", "x", "1,1", "2,,9"])
-def test_chosen_models_empty_or_out_of_range_asks_again(
-    tmp_path: Path, answer: str
-) -> None:
-    """AC6: nothing is picked for the developer."""
+@pytest.mark.parametrize("answer", ["0", "3", "x", "1,1", "2,,9"])
+def test_chosen_models_out_of_range_asks_again(tmp_path: Path, answer: str) -> None:
+    """AC6: a bad answer picks nothing; an empty one takes the recommended
+    order (OMN-21209, test_recommended_order_*)."""
     with _models_server() as served:
         out, _ = _preflight(
             tmp_path,
@@ -2647,3 +2655,222 @@ def test_chosen_models_reach_a_downloaded_script() -> None:
             f"the handler a downloaded script fetches has no {function}"
         )
     assert hashlib.sha256(served.stdout).hexdigest() == digest.group(1).replace(":", "")
+
+
+# OMN-21209: the routing contract's recommended order is the pre-selected
+# answer. A key's order is its catalogue row's default_models, the models of it
+# the key lists, in that order; Ollama's is the catalogue's local model sized to
+# this Mac. Enter takes it, so a developer types no model id.
+
+
+def _catalogue_with_order(tmp_path: Path, base: str) -> str:
+    """The fixture catalogue with a default_models order on the Gemini and
+    OpenAI rows: OpenAI's opposite to its preferred family, Gemini's naming a
+    model the key does not list."""
+    path = Path(_catalogue(tmp_path, base))
+    text = path.read_text()
+    text = text.replace(
+        f'    models_url: "{base}/openai"\n',
+        f'    models_url: "{base}/openai"\n'
+        "    default_models:\n"
+        '      - "gpt-4.1-mini"\n'
+        '      - "gpt-4.1-nano"\n',
+    ).replace(
+        f'    models_url: "{base}/gemini"\n',
+        f'    models_url: "{base}/gemini"\n'
+        "    default_models:\n"
+        '      - "gemini-9-unlisted"\n'
+        '      - "gemini-3-flash"\n',
+    )
+    ordered = tmp_path / "catalogue-ordered.yaml"
+    ordered.write_text(text)
+    return str(ordered)
+
+
+def test_recommended_order_is_the_preselected_answer_for_each_key(
+    tmp_path: Path,
+) -> None:
+    with _models_server() as served:
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "1,3"),
+                ("Gemini key (1 of 2)", "AIza-g"),
+                ("Choose your Gemini models, 1 to 2:", ""),
+                ("OpenAI key (2 of 2)", "sk-proj-o"),
+                ("Choose your OpenAI models, 1 to 2:", ""),
+                ("Continue?", "q"),
+            ],
+            timeout=_OR_TIMEOUT,
+            ONBOARD_TEST_CATALOGUE=_catalogue_with_order(tmp_path, served["url"]),
+        )
+    assert out.count("Press Enter to take the recommended order.") == 2
+    assert _listed(out, "chat models OpenAI lists for your key.") == [
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+    ]
+    assert "Recommended, in this order: 1,2 " in out
+    assert "gemini-9-unlisted" not in out
+    assert "Choose one or more numbers" not in out
+    summary = out.split("Ready to set up:")[1]
+    assert "Gemini      key received, models gemini-3-flash" in summary
+    assert "OpenAI      key received, models gpt-4.1-mini, gpt-4.1-nano" in summary
+
+
+def test_recommended_order_is_the_preselected_answer_for_ollama(
+    tmp_path: Path,
+) -> None:
+    out, _ = _preflight(
+        tmp_path,
+        [
+            (_MENU, "4"),
+            ("Choose your Ollama models, 1 to 2:", ""),
+            ("Continue?", "q"),
+        ],
+        timeout=_OR_TIMEOUT,
+        ONBOARD_TEST_RAM_GB="32",
+    )
+    assert " 1) fixture-ollama-mid  (recommended)" in out
+    assert "Press Enter to take the recommended order." in out
+    summary = out.split("Ready to set up:")[1]
+    assert "Ollama      no key; models fixture-ollama-mid" in summary
+
+
+def test_recommended_order_with_none_listed_keeps_the_preferred_families(
+    tmp_path: Path,
+) -> None:
+    with _models_server() as served:
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "3"),
+                ("OpenAI key (1 of 1)", "sk-proj-o"),
+                ("Choose your OpenAI models, 1 to 2:", ""),
+                ("Continue?", "q"),
+            ],
+            timeout=_OR_TIMEOUT,
+            ONBOARD_TEST_CATALOGUE=_catalogue(tmp_path, served["url"]),
+        )
+    assert " 1) gpt-4.1-nano  (recommended)" in out
+    summary = out.split("Ready to set up:")[1]
+    assert "OpenAI      key received, models gpt-4.1-nano" in summary
+
+
+def test_recommended_order_holds_no_model_id_in_the_script() -> None:
+    """The order is read from the catalogue; neither file names a model."""
+    for text in (SCRIPT.read_text(), HANDLER.read_text()):
+        assert not re.search(r"qwen|gemma|nemotron|gpt-4|gemini-[0-9]", text)
+
+
+def test_recommended_order_ollama_download_is_sized_from_the_catalogue(
+    tmp_path: Path,
+) -> None:
+    """The catalogue's local model is offered for Ollama, so its download size
+    is read from the catalogue's local row when the model config omits it."""
+    ws = _workspace_with_config(tmp_path, _OLLAMA_BLOCK)
+    catalogue = ws / "omnimarket" / "src" / "omnimarket" / "configs"
+    (catalogue / "byok_provider_backends.v1.yaml").write_text(
+        "providers: []\n" + _LOCAL_BLOCK.replace("download_gb: 40", "download_gb: 9")
+    )
+    consts = "\n".join(
+        line
+        for line in SCRIPT.read_text().splitlines()
+        if line.startswith(("OLLAMA_CONFIG_REL=", "OLLAMA_CATALOGUE_REL="))
+    )
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            f"WORKSPACE={ws}\n{consts}\n"
+            + _functions("ollama_config")
+            + '\nollama_config 64 "fixture-ollama-huge"\n',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.stdout.strip() == "11434 /v1/chat/completions fixture-ollama-huge 9"
+
+
+def test_recommended_order_names_the_record_it_rests_on(tmp_path: Path) -> None:
+    """AC4: the order is offered with the basis the routing contract names."""
+    with _models_server() as served:
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "3,4"),
+                ("OpenAI key (1 of 1)", "sk-proj-o"),
+                ("Choose your OpenAI models, 1 to 2:", ""),
+                ("Choose your Ollama models, 1 to 2:", ""),
+                ("Continue?", "q"),
+            ],
+            timeout=_OR_TIMEOUT,
+            ONBOARD_TEST_CATALOGUE=_catalogue_with_order(tmp_path, served["url"]),
+        )
+    assert (
+        out.count("(the routing contract's order for this key; it rests on OMN-21215).")
+        == 2
+    )
+
+
+def test_recommended_order_without_a_basis_is_not_presented_as_the_contracts(
+    tmp_path: Path,
+) -> None:
+    """AC4: an order the catalogue gives no basis for is not offered as sourced."""
+    with _models_server() as served:
+        catalogue = Path(_catalogue_with_order(tmp_path, served["url"]))
+        catalogue.write_text(
+            catalogue.read_text().replace('      basis: "OMN-21215"\n', "")
+        )
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "3"),
+                ("OpenAI key (1 of 1)", "sk-proj-o"),
+                ("Choose your OpenAI models, 1 to 2:", ""),
+                ("Continue?", "q"),
+            ],
+            timeout=_OR_TIMEOUT,
+            ONBOARD_TEST_CATALOGUE=str(catalogue),
+        )
+    assert "it rests on" not in out
+    assert (
+        "Recommended, in this order: 1,2 (the models onex prefers for this key)." in out
+    )
+
+
+def test_recommended_order_accepted_reaches_onex_models_add_in_order(
+    tmp_path: Path,
+) -> None:
+    """AC3: the contract's order, as accepted, is the list `onex models add`
+    registers (the OMN-21059 path), first tried first."""
+    with _models_server() as served:
+        catalogue = _catalogue_with_order(tmp_path, served["url"])
+    order = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            "ram_gb() { echo 32; }\nWORKSPACE=/nonexistent\n"
+            'CATALOGUE_REL="omnimarket/src/omnimarket/configs/byok_provider_backends.v1.yaml"\n'
+            + _functions("omnimarket_file", "recommended_order")
+            + "\nrecommended_order openai | tr '\\n' ' '\n",
+        ],
+        env={"PATH": "/usr/bin:/bin", "ONBOARD_TEST_CATALOGUE": catalogue},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    ).stdout.strip()
+    assert order == "gpt-4.1-mini gpt-4.1-nano"
+    _phase3_harness(
+        tmp_path,
+        {"openai": '{"provider": "openai", "status": "passed", "model": "MODEL"}'},
+        preamble=f'KEY_OPENAI="sk-proj-o"; CHOSEN_OPENAI="{order}"\n',
+    )
+    calls = (tmp_path / "calls").read_text().splitlines()
+    assert (
+        calls[0]
+        == "add openai --json --model gpt-4.1-mini --model gpt-4.1-nano stdin=9"
+    )
+    assert (tmp_path / "onex-state" / "openai.order").read_text() == order

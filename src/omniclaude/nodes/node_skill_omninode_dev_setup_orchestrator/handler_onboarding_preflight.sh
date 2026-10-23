@@ -458,8 +458,7 @@ shell_runs_workspace_onex() {
 # the memory for, the one sized to it recommended.
 # ---------------------------------------------------------------------------
 CATALOGUE_REL="omnimarket/src/omnimarket/configs/byok_provider_backends.v1.yaml"
-MODEL_CONFIG_REL="omnimarket/src/omnimarket/configs/bifrost_delegation.yaml"
-CHOSEN_GEMINI=""; CHOSEN_OPENROUTER=""; CHOSEN_OPENAI=""; CHOSEN_OLLAMA=""
+CHOSEN_GEMINI=""; CHOSEN_OPENROUTER=""; CHOSEN_OPENAI=""; CHOSEN_OLLAMA=""; REC_BASIS=""
 MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""
 
 chosen_models() { case "$1" in gemini) echo "$CHOSEN_GEMINI" ;; openrouter) echo "$CHOSEN_OPENROUTER" ;; openai) echo "$CHOSEN_OPENAI" ;; ollama) echo "$CHOSEN_OLLAMA" ;; esac; }
@@ -485,6 +484,51 @@ catalogue_row() {
 # The catalogue's full-match Python regex as an ERE: named and non-capturing
 # groups become plain groups.
 to_ere() { printf '^(%s)$' "$(printf '%s' "$1" | sed -e 's/(?P<[A-Za-z_]*>/(/g' -e 's/(?:/(/g')"; }
+
+# recommended_order provider -> the routing contract's recommended models for
+# it, first tried first, one per line (OMN-21209): a key's catalogue row's
+# default_models; for ollama, the catalogue's local model sized to this Mac.
+recommended_order() {
+  omnimarket_file "$CATALOGUE_REL" "${ONBOARD_TEST_CATALOGUE:-}" | awk -v want="$1" -v ram="$(ram_gb)" '
+    function unq(v) { gsub(/^["'"'"']|["'"'"']$/, "", v); return v }
+    /^[^ #]/ { top = $1 }
+    top == "providers:" && /^  - provider:/ { if (seen) done = 1; row = (unq($3) == want) && !done; if (row) seen = 1; inlist = 0; next }
+    top == "providers:" && row && /^    default_models:/ { inlist = 1; next }
+    top == "providers:" && row && inlist { if ($0 ~ /^      - /) { print unq($2); next } inlist = 0 }
+    want == "ollama" && top == "local:" && /min_memory_gb:/ { mem = $NF }
+    want == "ollama" && top == "local:" && /^      model:/ { if (mem + 0 <= ram + 0 && mem + 0 >= best + 0) { best = mem; pick = unq($NF) } }
+    END { if (pick != "") print pick }'
+}
+
+# recommended_basis -> the record the onboarding order rests on, as the
+# catalogue's recommended_order names it (OMN-21209); empty when it names none
+recommended_basis() {
+  omnimarket_file "$CATALOGUE_REL" "${ONBOARD_TEST_CATALOGUE:-}" | awk '
+    function unq(v) { gsub(/^["'"'"']|["'"'"']$/, "", v); return v }
+    /^[^ #]/ { top = $1; next }
+    top != "recommended_order:" { next }
+    /^  onboarding:/ { want = unq($2); next }
+    /^    [A-Za-z0-9_]+:$/ { name = $1; sub(/:$/, "", name); next }
+    /^      basis:/ { v = $0; sub(/^      basis: */, "", v); basis[name] = unq(v) }
+    END { if (want != "" && basis[want] != "") print basis[want] }'
+}
+
+# list_in_order ids recommended -> MODEL_LIST (the recommended ids, in order,
+# then the rest) and RECOMMENDED (their numbers, comma-separated)
+list_in_order() {
+  local m i=0
+  MODEL_LIST="$2"
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    i=$((i + 1)); RECOMMENDED="${RECOMMENDED}${RECOMMENDED:+,}$i"
+  done <<EOF
+$2
+EOF
+  m="$(printf '%s\n' "$1" | grep -vxF "$2" | grep .)"
+  [ -n "$m" ] && MODEL_LIST="${MODEL_LIST}${MODEL_LIST:+
+}$m"
+  return 0
+}
 
 offered_models() { # provider < ids -> the chat models worth offering, one per line
   case "$1" in
@@ -528,8 +572,8 @@ EOF
 # offers nothing. The key goes to its provider alone, in a header read from
 # stdin, so it never appears in an argument.
 key_models() {
-  local p="$1" row url out code body reason ids
-  MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""
+  local p="$1" row url out code body reason ids rec
+  MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""; REC_BASIS=""
   row="$(catalogue_row "$p")"
   url="$(printf '%s\n' "$row" | sed -n 's/^url //p' | head -n 1)"
   if [ -z "$url" ]; then
@@ -553,28 +597,30 @@ key_models() {
     else MODEL_LIST_ERR="its model list names no chat model for this key"; fi
     return 1
   fi
-  list_recommended_first "$ids" "$(printf '%s\n' "$row" | sed -n 's/^pattern //p')"
+  # The routing contract's recommended order: the models of it this key lists,
+  # in its order (OMN-21209). A key that lists none of them falls back to the
+  # catalogue's preferred families.
+  rec="$(recommended_order "$p" | grep -xF "$ids")"
+  if [ -n "$rec" ]; then list_in_order "$ids" "$rec"; REC_BASIS="$(recommended_basis)"
+  else list_recommended_first "$ids" "$(printf '%s\n' "$row" | sed -n 's/^pattern //p')"; fi
 }
 
-# ollama_models -> MODEL_LIST: the model config's Ollama models this Mac has
-# the memory for, largest first, the first (the one sized to this Mac)
-# recommended; 1 with MODEL_LIST_ERR when there is none.
+# ollama_models -> MODEL_LIST: the catalogue's local models this Mac has the
+# memory for, largest first, the first (the one sized to this Mac, the routing
+# contract's recommended order for Ollama, OMN-21209) recommended; 1 with
+# MODEL_LIST_ERR when there is none.
 ollama_models() {
-  MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""
-  MODEL_LIST="$(omnimarket_file "$MODEL_CONFIG_REL" "${ONBOARD_TEST_MODEL_CONFIG:-}" | awk -v ram="$(ram_gb)" '
-    function flush() { if (model != "" && mem != "" && mem + 0 <= ram + 0) print mem "\t" model; model = ""; mem = "" }
-    /^ollama:/ { inb = 1; next }
-    inb && /^[^ #]/ { exit }
-    !inb { next }
-    /^    - / { flush() }
+  MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""; REC_BASIS=""
+  MODEL_LIST="$(omnimarket_file "$CATALOGUE_REL" "${ONBOARD_TEST_CATALOGUE:-}" | awk -v ram="$(ram_gb)" '
+    /^[^ #]/ { top = $1 }
+    top != "local:" { next }
     /min_memory_gb:/ { mem = $NF }
-    /^ *(- )?model:/ { model = $NF; gsub(/["'"'"']/, "", model) }
-    END { flush() }' | sort -t "$TAB" -k1,1nr | cut -f2)"
+    /^      model:/ { m = $NF; gsub(/["'"'"']/, "", m); if (mem + 0 <= ram + 0) print mem "\t" m }' | sort -t "$TAB" -k1,1nr | cut -f2)"
   if [ -z "$MODEL_LIST" ]; then
-    MODEL_LIST_ERR="the model config lists no Ollama model for this Mac's $(ram_gb) GB of memory"
+    MODEL_LIST_ERR="onex's provider catalogue recommends no Ollama model for this Mac's $(ram_gb) GB of memory"
     return 1
   fi
-  RECOMMENDED=1
+  RECOMMENDED=1; REC_BASIS="$(recommended_basis)"
 }
 
 # parse_ordered_choice answer count -> the numbers, in the order given; 1 when
@@ -614,14 +660,23 @@ choose_models() {
 $MODEL_LIST
 EOF
   say ""
-  [ -n "$RECOMMENDED" ] && say "  Recommended, in this order: $RECOMMENDED (the models onex prefers for this key)."
+  if [ -n "$REC_BASIS" ]; then
+    # OMN-21209: the routing contract's order, and the record it rests on.
+    say "  Recommended, in this order: $RECOMMENDED (the routing contract's order for this key; it rests on $REC_BASIS)."
+  elif [ -n "$RECOMMENDED" ]; then
+    say "  Recommended, in this order: $RECOMMENDED (the models onex prefers for this key)."
+  fi
   say "  Pick one or more in the order to try them, first tried first (for example 2,1)."
+  # OMN-21209: the recommended order is the pre-selected answer, so a developer
+  # with no opinion about model ids presses Enter and types none.
+  [ -n "$RECOMMENDED" ] && say "  Press Enter to take the recommended order."
   [ "$p" = "openrouter" ] && say "  A model that uses credits can be added later: onex models add-model openrouter --model <id>"
   while :; do
     say ""
     printf '  Choose your %s models, 1 to %s: ' "$label" "$n"
     IFS= read -r a || quit_setup
     case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
+    [ -z "$a" ] && [ -n "$RECOMMENDED" ] && a="$RECOMMENDED"
     nums="$(parse_ordered_choice "$a" "$n")" && break
     say "  Choose one or more numbers, 1 to $n (for example 2,1), or q to quit."
   done

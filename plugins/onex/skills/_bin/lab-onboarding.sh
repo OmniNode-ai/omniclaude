@@ -599,15 +599,17 @@ settle_models_unattended() {
 # chooses only the host, which depends on where the call comes from: this Mac,
 # or the Docker stack.
 OLLAMA_CONFIG_REL="omnimarket/src/omnimarket/configs/bifrost_delegation.yaml"
+OLLAMA_CATALOGUE_REL="omnimarket/src/omnimarket/configs/byok_provider_backends.v1.yaml"
 OVERRIDES_FILE_REL=".omninode/delegation/bifrost_overrides.yaml"
 OLLAMA_MARK="# Written by omninode-dev-setup: Ollama on this Mac."
 OLLAMA_PORT=""; OLLAMA_CHAT_PATH=""; OLLAMA_DOWNLOAD_GB=""; OLLAMA_URL=""
 
 # ram_gb [model] -> "port chat_path model download_gb": the first `models` entry
-# whose min_memory_gb fits this Mac, or the named model (its size when listed,
-# else the largest listed).
+# whose min_memory_gb fits this Mac, or the named model (its size when the model
+# config or the catalogue's local row lists it, else the largest listed).
 ollama_config() {
-  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$WORKSPACE/$OLLAMA_CONFIG_REL" "$1" "${2:-}" <<'PYCFG'
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$WORKSPACE/$OLLAMA_CONFIG_REL" "$1" "${2:-}" "$WORKSPACE/$OLLAMA_CATALOGUE_REL" <<'PYCFG'
+import os
 import sys
 import yaml
 block = (yaml.safe_load(open(sys.argv[1])) or {}).get("ollama") or {}
@@ -616,8 +618,12 @@ if not port or not path or not models:
     sys.exit("the model config has no complete ollama block (port, chat_path, models)")
 ram, wanted = int(sys.argv[2]), sys.argv[3]
 models = sorted(models, key=lambda m: int(m["min_memory_gb"]), reverse=True)
+# OMN-21209: onboarding offers the catalogue's local models, so their sizes count.
+local = []
+if len(sys.argv) > 4 and os.path.isfile(sys.argv[4]):
+    local = ((yaml.safe_load(open(sys.argv[4])) or {}).get("local") or {}).get("memory_classes") or []
 if wanted:
-    size = next((m["download_gb"] for m in models if m["model"] == wanted), max(m["download_gb"] for m in models))
+    size = next((m["download_gb"] for m in [*models, *local] if m["model"] == wanted), max(m["download_gb"] for m in models))
     print(port, path, wanted, size)
 else:
     pick = next((m for m in models if int(m["min_memory_gb"]) <= ram), models[-1])
@@ -716,7 +722,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="7f96:7d1b:ba3c:aae3:d4ed:d234:a933:964d:b5bf:2f75:5ae9:23b4:e9ca:939c:8387:3cba" root candidate \
+  local digest="68dc:569e:6e7b:85ba:40b1:db40:7b8e:d135:adc0:dc19:dec9:0cd8:95f8:9d23:e339:996e" root candidate \
     download_digest="7f96:7d1b:ba3c:aae3:d4ed:d234:a933:964d:b5bf:2f75:5ae9:23b4:e9ca:939c:8387:3cba"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
