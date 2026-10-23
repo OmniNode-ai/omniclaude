@@ -605,6 +605,33 @@ key_models() {
   else list_recommended_first "$ids" "$(printf '%s\n' "$row" | sed -n 's/^pattern //p')"; fi
 }
 
+# ram_gb [model] -> "port chat_path model download_gb": the first `models` entry
+# whose min_memory_gb fits this Mac, or the named model (its size when the model
+# config or the catalogue's local row lists it, else the largest listed).
+ollama_config() {
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$WORKSPACE/$OLLAMA_CONFIG_REL" "$1" "${2:-}" "$WORKSPACE/$CATALOGUE_REL" <<'PYCFG'
+import os
+import sys
+import yaml
+block = (yaml.safe_load(open(sys.argv[1])) or {}).get("ollama") or {}
+port, path, models = block.get("port"), block.get("chat_path"), block.get("models") or []
+if not port or not path or not models:
+    sys.exit("the model config has no complete ollama block (port, chat_path, models)")
+ram, wanted = int(sys.argv[2]), sys.argv[3]
+models = sorted(models, key=lambda m: int(m["min_memory_gb"]), reverse=True)
+# Onboarding offers the catalogue's local models (OMN-21209), so their sizes count.
+local = []
+if len(sys.argv) > 4 and os.path.isfile(sys.argv[4]):
+    local = ((yaml.safe_load(open(sys.argv[4])) or {}).get("local") or {}).get("memory_classes") or []
+if wanted:
+    size = next((m["download_gb"] for m in [*models, *local] if m["model"] == wanted), max(m["download_gb"] for m in models))
+    print(port, path, wanted, size)
+else:
+    pick = next((m for m in models if int(m["min_memory_gb"]) <= ram), models[-1])
+    print(port, path, pick["model"], pick["download_gb"])
+PYCFG
+}
+
 # ollama_models -> MODEL_LIST: the catalogue's local models this Mac has the
 # memory for, largest first, the first (the one sized to this Mac, the routing
 # contract's recommended order for Ollama, OMN-21209) recommended; 1 with

@@ -2776,8 +2776,8 @@ def test_recommended_order_ollama_download_is_sized_from_the_catalogue(
     )
     consts = "\n".join(
         line
-        for line in SCRIPT.read_text().splitlines()
-        if line.startswith(("OLLAMA_CONFIG_REL=", "OLLAMA_CATALOGUE_REL="))
+        for line in (SCRIPT.read_text() + HANDLER.read_text()).splitlines()
+        if line.startswith(("OLLAMA_CONFIG_REL=", "CATALOGUE_REL="))
     )
     result = subprocess.run(
         [
@@ -2876,3 +2876,36 @@ def test_recommended_order_accepted_reaches_onex_models_add_in_order(
         == "add openai --json --model gpt-4.1-mini --model gpt-4.1-nano stdin=9"
     )
     assert (tmp_path / "onex-state" / "openai.order").read_text() == order
+
+
+@pytest.mark.parametrize(
+    ("answer", "chosen"), [("\n", "gpt-b gpt-a"), ("1\n", "gpt-a")]
+)
+def test_recommended_order_enter_takes_it_without_a_model_id(
+    answer: str, chosen: str
+) -> None:
+    """AC2: Enter takes the recommended order (2,1 here); no model id is typed."""
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            "say() { printf '%s\\n' \"$*\"; }\nquit_setup() { echo QUIT; exit 3; }\n"
+            "provider_label() { echo OpenAI; }\nram_gb() { echo 32; }\n"
+            + _functions(
+                "in_list",
+                "comma_list",
+                "set_chosen_models",
+                "parse_ordered_choice",
+                "choose_models",
+            )
+            + '\nMODEL_LIST="gpt-a\ngpt-b"; RECOMMENDED="2,1"\n'
+            + 'choose_models openai; echo "CHOSEN=$CHOSEN_OPENAI"\n',
+        ],
+        input=answer,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert "Press Enter to take the recommended order." in result.stdout
+    assert f"CHOSEN={chosen}" in result.stdout, result.stdout + result.stderr
