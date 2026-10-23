@@ -25,6 +25,13 @@ requirements:
         statement: "the omnibase_core receipt-gate expression, multi-line and single-line, exits 0 for a private caller's push with the fleet variables set, and flattens to four arms in order with the outer private guard on the three nested ones -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_core_receipt_gate_resolves or nested_selector_arms_are_flattened' fails at the merge base, where the gate exits 2"
       - id: AC2
         statement: "the same expression is still a finding (exit 1) under pull_request:fork and under schedule, a selector inside a fromJSON fallback chain passes on push and is a finding on schedule, and a chain still reaches its hosted literal past a selector whose guards all fail -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_fork_arm or nested_selector_public_default or nested_selector_inside_a_fallback_chain or nested_selector_with_no_default' fails at the merge base, where the gate exits 2"
+  - id: req-omn19916-dev-merge-tag
+    statement: Every push to omniclaude dev gets a lightweight dev-<UTC YYYYMMDDHHMMSS>-<sha12> tag from a dev-merge-tag workflow shaped like omnimarket's, so a consumer can read omniclaude's shared reusable workflows by tag; the occ-preflight calls that v0.27.0 nested in ban-hardcoded-runner-ip.yml and reject-deploy-gate-skip.yml are already gone from dev (OMN-20073, OMN-20074).
+    acceptance:
+      - id: AC5
+        statement: "dev-merge-tag.yml triggers on push to dev only, names the tag from the commit's UTC committer time and first 12 hex of the sha, is idempotent per sha, pushes nothing on a dry run and refuses a non-sha -- falsifier: uv run pytest tests/workflows/test_dev_merge_tag_workflow_omn19916.py -q fails at the merge base, where the workflow file does not exist"
+      - id: AC6
+        statement: "no workflow in .github/workflows calls occ-preflight.yml, so a caller at a dev-* tag of this repository does not nest the retired reusable -- falsifier: grep -rn 'workflows/occ-preflight.yml' .github/workflows prints a line"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -48,3 +55,29 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -p no:randomly --no-cov -k 'nested_selector_fork_arm or nested_selector_public_default or nested_selector_inside_a_fallback_chain or nested_selector_with_no_default'"
     binds_ac:
       - AC2
+  - id: dod-omn19916-dev-merge-tag
+    description: The dev merge tag workflow's name, idempotency, dry-run and trigger tests pass at the head.
+    source: manual
+    binds_ac:
+      - AC5
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/workflows/test_dev_merge_tag_workflow_omn19916.py tests/workflows/test_automated_pusher_identity_omn18273.py -q -p no:randomly --no-cov"
+  - id: dod-omn19916-no-nested-occ-preflight
+    description: No workflow file calls the deleted occ-preflight reusable.
+    source: manual
+    binds_ac:
+      - AC6
+    checks:
+      - check_type: command
+        check_value: "bash -c '! grep -rn \"workflows/occ-preflight.yml\" .github/workflows'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn19916-deploy-probe
+    description: Deploy probe. Read the workflow from GitHub at the checked-out commit and require its tag step. It fails at the merge base, where the file does not exist.
+    source: manual
+    binds_ac:
+      - AC5
+    checks:
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/.github/workflows/dev-merge-tag.yml?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"Create the dev merge tag\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"

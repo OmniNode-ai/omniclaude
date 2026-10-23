@@ -78,6 +78,11 @@ BRANCH_PUSHERS: dict[str, tuple[str, ...]] = {
 # blanket. Every file here contains the literal ``git push`` without running
 # one; each reason says what the occurrence actually is.
 EXEMPT: dict[str, str] = {
+    "dev-merge-tag.yml": (
+        "pushes one lightweight tag, never a branch: a tag carries no commit message "
+        "for a trailer, and the push uses the job's workflow token on purpose so "
+        "that the new dev-* tag starts no workflow (OMN-19916)"
+    ),
     "release.yml": (
         "runs no `git push`: the release/main-sync moves the ref through the REST "
         "API, and the only occurrences of the literal are the comments explaining "
