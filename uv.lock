@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine != 's390x'",
@@ -13,7 +13,7 @@ overrides = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=d25b2beef687a10dce54ce5f745eee6b57943997" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=39c422c1a3251926fe3334bd1e184fc2aa1d5064" },
 ]
 
 [[package]]
@@ -1681,7 +1681,7 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.47.52"
+version = "0.47.53"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "blake3" },
@@ -1698,9 +1698,9 @@ dependencies = [
     { name = "tree-sitter" },
     { name = "tree-sitter-python" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7e/03/62054ddb4036888d52be869747616e475ec4fdfa2f2e56b506aa61f99a12/omnibase_core-0.47.52.tar.gz", hash = "sha256:be1fad1f86e9b982447d5777d4be83678ae13e212200745717d5d745e5f73b37", size = 11314402, upload-time = "2026-10-22T10:46:12.876Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/14/73035fb80a5e558548fc3921ad48ddf89119c3249fc6f80d9af9e6ab6555/omnibase_core-0.47.53.tar.gz", hash = "sha256:f0b941a162a32ddf405ab849ffb53be379361d227ace5d28b203067e647de2e4", size = 11322087, upload-time = "2026-10-22T16:44:48.116Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/14/6b9e61ae3cbe3cad03ce2eb2b1f217b378ebab1d7aecfcf3500e9bbd016e/omnibase_core-0.47.52-py3-none-any.whl", hash = "sha256:5210a255405c51d736d16254347bb25f6e7680aac656c59a8c9f1b3bd1ff69a7", size = 7921035, upload-time = "2026-10-22T10:46:10.438Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/27/08b55f73f8897c7427368e7879838020b440263ab841f00a7d77c816eea4/omnibase_core-0.47.53-py3-none-any.whl", hash = "sha256:8d2522b41f0995023e1ec69d1ee6e26d649ae4a94259fbd33bfff2da3ec1daa9", size = 7921381, upload-time = "2026-10-22T16:44:45.031Z" },
 ]
 
 [[package]]
@@ -1781,8 +1781,8 @@ wheels = [
 
 [[package]]
 name = "omnimarket"
-version = "0.4.319"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=d25b2beef687a10dce54ce5f745eee6b57943997#d25b2beef687a10dce54ce5f745eee6b57943997" }
+version = "0.4.320"
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=39c422c1a3251926fe3334bd1e184fc2aa1d5064#39c422c1a3251926fe3334bd1e184fc2aa1d5064" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1912,7 +1912,7 @@ requires-dist = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=d25b2beef687a10dce54ce5f745eee6b57943997" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=39c422c1a3251926fe3334bd1e184fc2aa1d5064" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=921b322b8e43f695961a06a04759dc88bb3e88ff" },
     { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=921b322b8e43f695961a06a04759dc88bb3e88ff" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
