@@ -73,7 +73,7 @@ dod_evidence:
         check_value: "bash -c '! grep -rn \"workflows/occ-preflight.yml\" .github/workflows'"
         cwd: "${OMNI_HOME}/omniclaude"
       - check_type: test_passes
-        check_value: "uv run pytest tests/workflows/test_dev_merge_tag_workflow_omn19916.py::test_tag_name_is_dev_utc_committer_time_and_sha12 -q -p no:randomly --no-cov"
+        check_value: "uv run pytest tests/workflows/test_dev_merge_tag_workflow_omn19916.py -q -p no:randomly --no-cov -k test_tag_name_is_dev_utc_committer_time_and_sha12"
   - id: dod-omn19916-deploy-probe
     description: Deploy probe. Read the workflow from GitHub at the checked-out commit and require its tag step. It fails at the merge base, where the file does not exist.
     source: manual
