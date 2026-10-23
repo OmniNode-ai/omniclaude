@@ -65,7 +65,7 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k 'a_path_doubled_onto_the_root_is_refused or the_hook_refuses_the_doubled_mkdir_end_to_end or the_hook_still_admits_an_ordinary_command'"
-        cwd: ${OMNI_HOME}/omniclaude
+        cwd: "."
     binds_ac: [AC1]
   - id: dod-omn18607-red-baseline-pinned
     description: >
@@ -76,8 +76,8 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k the_policy_declares_the_vocabulary"
-        cwd: ${OMNI_HOME}/omniclaude
+        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k the_policy_declares_the_arm"
+        cwd: "."
     binds_ac: [AC2]
   - id: dod-omn18607-refusal-text
     description: >
@@ -88,7 +88,7 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k the_refusal_names_the_root_and_the_correction"
-        cwd: ${OMNI_HOME}/omniclaude
+        cwd: "."
     binds_ac: [AC3]
   - id: dod-omn18607-anchored-not-substring
     description: >
@@ -100,6 +100,51 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k 'a_path_that_is_not_anchored_at_the_root_is_admitted or no_resolved_root_means_no_anchor_and_no_refusal or a_segment_nobody_types_admits_every_doubled_path'"
-        cwd: ${OMNI_HOME}/omniclaude
+        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k 'a_path_that_is_not_anchored_at_the_root_is_admitted or no_resolved_root_means_no_anchor_and_no_refusal or a_clone_whose_name_differs_admits_every_doubled_path'"
+        cwd: "."
     binds_ac: [AC4]
+  - id: dod-omn18607-deploy-container-admission
+    description: >
+      A hosted runner starts a fresh Python container with this checkout's source
+      and locked dependencies mounted read-only. Without network or fleet access,
+      the running admission handler refuses a path doubled onto a temporary git
+      registry root, names the correction, and admits an ordinary path. A missing
+      doubled-root arm fails the refusal assertion.
+    source: manual
+    checks:
+      - check_type: command
+        cwd: "."
+        check_value: |
+          set -eu;
+          runtime_env="$(mktemp)";
+          trap 'rm -f "$runtime_env"' EXIT;
+          uv run python -c 'import sys, sysconfig; print(f"{sys.version_info.major}.{sys.version_info.minor}", sysconfig.get_path("purelib"))' > "$runtime_env";
+          read -r python_minor site_packages < "$runtime_env";
+          docker run --rm --network none --interactive \
+            --mount "type=bind,src=$PWD/src,dst=/runtime,readonly" \
+            --mount "type=bind,src=$site_packages,dst=/deps,readonly" \
+            --env PYTHONPATH=/runtime:/deps --env PYTHONDONTWRITEBYTECODE=1 \
+            "python:${python_minor}-bookworm" python - <<'PROBE'
+          import subprocess
+          import tempfile
+          from pathlib import Path
+          from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (
+              evaluate_bash_command,
+              load_policy,
+          )
+
+          policy = load_policy(Path("/runtime/omniclaude/nodes/node_git_effect/git_admission_policy.json"))
+          with tempfile.TemporaryDirectory() as temporary:
+              root = Path(temporary) / "registry_clone"
+              subprocess.run(["git", "init", "-q", str(root)], check=True)
+              subprocess.run(["git", "-C", str(root), "remote", "add", "origin", "https://example.invalid/acme/registry_clone.git"], check=True)
+              refused = evaluate_bash_command(f"mkdir -p {root}/registry_clone/reports", policy, cwd=root, registry_root=root)
+              assert refused.blocked, refused
+              assert str(root / "registry_clone") in refused.reason, refused.reason
+              assert str(root / "reports") in refused.reason, refused.reason
+              assert "$OMNI_HOME" in refused.reason, refused.reason
+              admitted = evaluate_bash_command(f"mkdir -p {root}/reports", policy, cwd=root, registry_root=root)
+              assert not admitted.blocked, admitted
+          print("Container admission probe passed: doubled path refused; ordinary path admitted")
+          PROBE
+    binds_ac: [AC1, AC3, AC4]
