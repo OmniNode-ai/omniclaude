@@ -2328,3 +2328,106 @@ def test_nested_selector_with_no_default_keeps_the_chain_after_it(
     err = capsys.readouterr().err
     assert "resolves: ubuntu-latest" in err
     assert "selects no arm" not in err
+
+
+# OMN-21348, operator ruling 2026-10-23: a pull request cannot change another
+# branch, so on a pull_request event another branch's hosted placement is a
+# warning and only the checkout's own tree decides the verdict. In
+# omninode_infra a pull request into main failed on dev's findings and one into
+# dev failed on main's, so neither repair could merge first. Push and schedule
+# runs still fail on any branch's finding.
+
+
+def _run_every_branch_mode(
+    module,
+    root: Path,
+    tmp_path: Path,
+    event_branch: str,
+    branches: list[str],
+    mode: str,
+) -> int:
+    vars_file = tmp_path / "vars.json"
+    vars_file.write_text(json.dumps(dict(SEAM_VARIABLES)), encoding="utf-8")
+    argv = [
+        "--repo-root",
+        str(root),
+        "--repo",
+        "OmniNode-ai/fixture",
+        "--assume-visibility",
+        "private",
+        "--variables-json",
+        str(vars_file),
+        "--branches-json",
+        json.dumps(branches),
+        "--every-workflow-branch",
+        "--event-branch",
+        event_branch,
+        "--other-branches",
+        mode,
+    ]
+    return _fixture_call(lambda: module.main(argv))
+
+
+def test_other_branches_warn_passes_a_clean_checkout_and_names_each_finding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": FLEET_CI}, "main": {"ci.yml": STALE_MAIN_CI}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert (
+        _run_every_branch_mode(module, work, tmp_path, "dev", ["dev", "main"], "warn")
+        == 0
+    )
+    err = capsys.readouterr().err
+    assert "::warning::" in err
+    for job in STALE_MAIN_HOSTED_JOBS:
+        assert f"main:ci.yml::{job}\n" in err, job
+
+
+def test_other_branches_warn_still_fails_the_checkouts_own_finding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": STALE_MAIN_CI}, "main": {"ci.yml": FLEET_CI}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert (
+        _run_every_branch_mode(module, work, tmp_path, "dev", ["dev", "main"], "warn")
+        == 1
+    )
+    assert "ci.yml::gates\n" in capsys.readouterr().err
+
+
+def test_other_branches_fail_mode_fails_on_another_branch(tmp_path: Path) -> None:
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": FLEET_CI}, "main": {"ci.yml": STALE_MAIN_CI}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert (
+        _run_every_branch_mode(module, work, tmp_path, "dev", ["dev", "main"], "fail")
+        == 1
+    )
+
+
+def test_other_branches_reusable_warns_only_on_pull_request_events() -> None:
+    reusable = (
+        Path(__file__).resolve().parents[2]
+        / ".github"
+        / "workflows"
+        / "private-repo-runner-placement-reusable.yml"
+    ).read_text(encoding="utf-8")
+    assert (
+        "OTHER_BRANCHES: ${{ (startsWith(github.event_name, 'pull_request') "
+        "|| github.event_name == 'merge_group') && 'warn' || 'fail' }}"
+    ) in reusable
+    assert 'args+=(--other-branches "${OTHER_BRANCHES}")' in reusable

@@ -166,6 +166,11 @@ jobs:
           # merge checkout supersedes its old tip) or, on a push, the pushed
           # branch. Passed through env, never interpolated into the script.
           EVENT_BRANCH: ${{ github.base_ref || github.ref_name }}
+          # OMN-21348: a pull request (or its merge-queue run) cannot change
+          # another branch, so there another branch's hosted placement is a
+          # warning; a push or schedule run still fails on it. Derived from
+          # the event, never an input.
+          OTHER_BRANCHES: ${{ (startsWith(github.event_name, 'pull_request') || github.event_name == 'merge_group') && 'warn' || 'fail' }}
         run: |
           set -euo pipefail
           args=(--repo-root . --repo "${GITHUB_REPOSITORY}")
@@ -173,6 +178,7 @@ jobs:
           # file never reached, and an input that could turn it off would be a
           # bypass by another name.
           args+=(--every-workflow-branch --event-branch "${EVENT_BRANCH}")
+          args+=(--other-branches "${OTHER_BRANCHES}")
           if [ "${{ inputs.report_reusable_calls }}" = "true" ]; then
             args+=(--report-reusable-calls)
           fi
