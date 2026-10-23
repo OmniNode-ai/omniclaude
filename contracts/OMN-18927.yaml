@@ -50,7 +50,7 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
-  - id: dod-omn18927-multi-statement-merge-allowed-and-read
+  - id: dod-omn18927-merge-read-multi-statement
     description: >
       The publish-loop merge is allowed on `main` in eight multi-statement shapes, and
       refused in every one of them off `main` -- the half that proves the merge segment
