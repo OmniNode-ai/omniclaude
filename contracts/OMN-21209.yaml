@@ -1,0 +1,84 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21209
+title: "Onboarding offers a recommended model order per work class, declared in the routing contract with its basis"
+summary: >
+  Onboarding's model pick (handler_onboarding_preflight.sh) lists the routing contract's
+  recommended order first, read from the BYOK catalogue's default_models and its local
+  row, and an empty answer takes it. Ollama's list comes from the catalogue's local row;
+  phase 3 sizes that download from it. The handler's pinned sha256 moves with its bytes.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21209-ac1
+    statement: "the routing contract declares a recommended ordered model list for every served work class, with no model id literal in the onboarding script or the dashboard"
+    acceptance:
+      - id: AC1
+        statement: "AC1: the routing contract declares a recommended ordered model list for every served work class, with no model id literal in the onboarding script or the dashboard -- falsifier: uv run pytest in omnimarket on a contract test that resolves the recommended order for every served class and fails on a class whose order is empty or absent"
+  - id: req-omn21209-ac2
+    statement: "onboarding offers that recommended order as the pre-selected answer for each provider key and for Ollama, and a developer who accepts it types no model id"
+    acceptance:
+      - id: AC2
+        statement: "AC2: onboarding offers that recommended order as the pre-selected answer for each provider key and for Ollama, and a developer who accepts it types no model id -- falsifier: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q -k recommended_order"
+  - id: req-omn21209-ac3
+    statement: "accepting the recommendation registers the same ordered list through the OMN-21059 path and the next routing plan follows it"
+    acceptance:
+      - id: AC3
+        statement: "AC3: accepting the recommendation registers the same ordered list through the OMN-21059 path and the next routing plan follows it -- falsifier: uv run pytest on a routing test that accepts the recommendation for one key and asserts the plan lists the recommended models in the recommended order"
+  - id: req-omn21209-ac4
+    statement: "each class's recommended order names the measurement or operator ruling it rests on, so a recommendation cannot be an unsourced opinion"
+    acceptance:
+      - id: AC4
+        statement: "AC4: each class's recommended order names the measurement or operator ruling it rests on, so a recommendation cannot be an unsourced opinion -- falsifier: uv run pytest on a contract test asserting every recommended class carries a non-empty basis reference, which fails today because no recommendation field exists"
+evidence_requirements:
+  - kind: tests
+    description: "Onboarding recommended-order tests pass"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k recommended_order"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21209-ac2-recommended-order-preselected
+    description: "Onboarding lists the routing contract's recommended order first for each key (the catalogue row's default_models the key lists) and for Ollama (the catalogue's local model sized to the Mac), and Enter takes it, so no model id is typed: the model pick with an empty answer chooses the recommended order. Fails at the merge base, where an empty answer asks again."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k recommended_order_enter_takes"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21209-ac1-no-model-id-in-onboarding
+    description: "The onboarding script and its bootstrap handler read the recommended order from the catalogue and name no model id. Fails at the merge base, which has no recommended_order tests."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k recommended_order_holds_no_model_id"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21209-ac3-accepted-order-reaches-models-add
+    description: "The routing contract's order, read by onboarding and accepted, is the list onboarding passes to onex models add (the OMN-21059 path) in that order, and the order onex holds afterwards. The route walk over the registered list is proven by the omnimarket contract's AC3 item. Fails at the merge base, which has no recommended_order reader."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k recommended_order_accepted_reaches"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21209-ac4-order-names-its-basis
+    description: "Onboarding offers the recommended order with the basis the routing contract names for it (OMN-21215), and an order the catalogue gives no basis is not presented as the contract's. Fails at the merge base, which reads no basis."
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k \"recommended_order_names or recommended_order_without\""
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn21209-deploy-probe"
+    description: "Deploy probe. Read the onboarding bootstrap handler from GitHub at the checked-out commit and require the recommended_order reader in it, with the Enter-takes-it test. It fails at the merge base, where the handler has no recommended_order."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k recommended_order_enter_takes"
+      - check_type: "command"
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"recommended_order() {\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]

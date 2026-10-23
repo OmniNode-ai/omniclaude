@@ -117,8 +117,10 @@ Every question comes before anything is installed:
 2. **Your models, for each key and for Ollama, in order.** After each key, onboarding lists
    the models that key can use, read from the provider's own list for it, and you pick one or
    more by number in the order to try them, for example `2,1`; the first is tried first. The
-   models onex prefers come first, marked recommended. OpenRouter lists its free models. Ollama
-   lists the models this Mac has the memory for. Nothing is picked for you, and each chosen model
+   models onex prefers come first, marked recommended: the order the routing contract recommends
+   for that key. OpenRouter lists its free models. Ollama
+   lists the models this Mac has the memory for, the one sized to it recommended. Press Enter to
+   take the recommended order, so you never need to know or type a model id. Each chosen model
    is tested in phase 3. Change them later with `onex models add-model`, `onex models reorder`
    and `onex models remove`.
 3. **Whether to run the local stack in Docker.** "Not now" is a complete setup — you can

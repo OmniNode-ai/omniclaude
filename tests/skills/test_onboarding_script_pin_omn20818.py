@@ -239,6 +239,6 @@ def test_guide_says_every_key_and_ollama_ask_for_models_in_order() -> None:
     assert "you pick one or\n   more by number in the order to try them" in text
     assert "OpenRouter lists its free models" in text
     assert "Ollama\n   lists the models this Mac has the memory for" in text
-    assert "Nothing is picked for you" in text
+    assert "Press Enter to\n   take the recommended order" in text
     assert "marked recommended" in text
     assert "overlay declares" not in text
