@@ -257,8 +257,6 @@ plugins/onex/hooks/scripts/post_tool_use_team_observability.sh
 plugins/onex/hooks/scripts/post_tool_use_trajectory.sh
 plugins/onex/hooks/scripts/post_tool_use_tsc_check.sh
 plugins/onex/hooks/scripts/pre-commit-no-inprocess-fallback.sh
-plugins/onex/hooks/scripts/pre-compact-probe.sh
-plugins/onex/hooks/scripts/pre-compact.sh
 plugins/onex/hooks/scripts/pre-tool-use-quality.sh
 plugins/onex/hooks/scripts/pre_tool_use_actor_line_guard.sh
 plugins/onex/hooks/scripts/pre_tool_use_agent_dispatch_gate.sh

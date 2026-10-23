@@ -317,7 +317,7 @@ strict priority chain (`PLUGIN_PYTHON_BIN` → `CLAUDE_PLUGIN_DATA/.venv` → re
 `ONEX_REGISTRY_ROOT/omniclaude/.venv` → `OMNICLAUDE_PROJECT_ROOT/.venv` → lite-mode system
 python). If nothing resolves, **critical hooks hard-fail (exit 1)** with an actionable message —
 running against the wrong interpreter produces non-reproducible bugs. Advisory hooks
-(session-end, stop, pre-compact, post-tool-use-quality with `OMNICLAUDE_HOOK_CRITICALITY=advisory`)
+(session-end, stop, post-tool-use-quality with `OMNICLAUDE_HOOK_CRITICALITY=advisory`)
 exit 0 gracefully instead.
 
 ---

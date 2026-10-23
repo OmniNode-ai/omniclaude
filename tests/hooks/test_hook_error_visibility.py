@@ -329,7 +329,6 @@ def test_all_hook_scripts_source_error_guard() -> None:
         "user-prompt-submit.sh",
         "session-end.sh",
         "stop.sh",
-        "pre-compact.sh",
         "post-tool-use-quality.sh",
         "post-tool-delegation-counter.sh",
         "post-skill-delegation-enforcer.sh",
