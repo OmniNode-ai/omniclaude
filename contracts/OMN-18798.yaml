@@ -1,0 +1,46 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-18798
+title: "The shared-tree git guard's refusal names the missing module when its decision core cannot be imported"
+summary: >
+  bash_guard_cores.run_core writes one summary line before the traceback of a
+  decision core that cannot be imported or that raises. The shared-tree git
+  guard builds its refusal from the first 400 characters of that output, so the
+  refusal now names the cause (for example the module that is missing) instead
+  of a truncated traceback. The guard still fails closed.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn18798-guard-core-cause
+    statement: A decision core that cannot be imported, or that raises, leaves a one-line cause at the head of the shared guard runner's output.
+    acceptance:
+      - id: AC1
+        statement: "AC1: run_core returns exit status 1 and, as the first line of its output, a summary that names the exception type and message, followed by the traceback"
+      - id: AC2
+        statement: "AC2: the registered pre_tool_use_bash_guards.sh, run with an interpreter that cannot import omniclaude, still refuses (exit 2, decision block) and its Detail starts with the import cause"
+evidence_requirements:
+  - kind: tests
+    description: "Shared guard runner and registered entrypoint tests pass"
+    command: "uv run pytest tests/hooks/test_git_admission_runtime.py tests/hooks/test_shared_tree_git_guard.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn18798-ac1-run-core-summary
+    description: 'run_core returns rc 1 with "guard core cannot be imported: ModuleNotFoundError: No module named ..." (or "guard core crashed: ...") as its first line and the traceback after it. Fails at the merge base, which prints the traceback alone.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_git_admission_runtime.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn18798-ac2-entrypoint-refusal
+    description: 'The registered entrypoint refuses with an interpreter that cannot import omniclaude and its Detail starts with "guard core cannot be imported: ModuleNotFoundError". Fails at the merge base, whose Detail ends in a truncated importlib frame.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov -k registered_entrypoint_reports_missing_core_before_traceback"
+        cwd: "${OMNI_HOME}/omniclaude"

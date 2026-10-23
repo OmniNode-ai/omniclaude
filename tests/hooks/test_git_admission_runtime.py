@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -65,8 +67,6 @@ def test_hook_refuses_failed_dispatch(monkeypatch: pytest.MonkeyPatch, capsys):
 def test_batched_adapter_reuses_loaded_node_without_changing_verdict(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    import os
-
     from tests.hooks_system import bash_guard_corpus as corpus
 
     lib = corpus.REPO_ROOT / "plugins/onex/hooks/lib"
@@ -90,3 +90,76 @@ def test_batched_adapter_reuses_loaded_node_without_changing_verdict(
     assert first == second
     assert first[0] == 2
     assert json.loads(first[1])["decision"] == "block"
+
+
+def test_batched_adapter_reports_missing_core_before_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).resolve().parents[2] / "plugins/onex/hooks/lib")
+    )
+    import bash_guard_cores
+
+    rc, output = bash_guard_cores.run_core(
+        bash_guard_cores.Request(
+            stderr_mode="merge",
+            cwd=str(tmp_path),
+            stdin="{}",
+            argv=(sys.executable, "-m", "onex_no_such_core_module"),
+            env=dict(os.environ),
+        )
+    )
+    first, rest = output.split("\n", 1)
+    assert rc == 1
+    assert first.startswith(
+        "guard core cannot be imported: ModuleNotFoundError: "
+        "No module named 'onex_no_such_core_module'"
+    )
+    assert len(first) < 300
+    assert f"(interpreter {sys.executable};" in first
+    assert "PLUGIN_PYTHON_BIN/CLAUDE_PLUGIN_DATA/.venv/OMNI_HOME" in first
+    assert rest.startswith("Traceback (most recent call last):\n")
+    assert rest.rstrip().endswith(
+        "ModuleNotFoundError: No module named 'onex_no_such_core_module'"
+    )
+
+
+@pytest.mark.parametrize(
+    ("exception", "message", "summary"),
+    [
+        ("RuntimeError", "boom", "RuntimeError: boom"),
+        ("ImportError", "boom", "ImportError: boom"),
+        ("RuntimeError", "boom\n  more\t detail", "RuntimeError: boom more detail"),
+    ],
+)
+def test_batched_adapter_reports_main_crash_before_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    exception: str,
+    message: str,
+    summary: str,
+):
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).resolve().parents[2] / "plugins/onex/hooks/lib")
+    )
+    import bash_guard_cores
+
+    name = f"onex_test_crashing_core_{uuid4().hex}"
+    (tmp_path / f"{name}.py").write_text(
+        f"def main(argv):\n    raise {exception}({message!r})\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    rc, output = bash_guard_cores.run_core(
+        bash_guard_cores.Request(
+            stderr_mode="merge",
+            cwd=str(tmp_path),
+            stdin="{}",
+            argv=(sys.executable, "-m", name),
+            env=dict(os.environ),
+        )
+    )
+    first, rest = output.split("\n", 1)
+    assert rc == 1
+    assert first == f"guard core crashed: {summary} (core {name})"
+    assert rest.startswith("Traceback (most recent call last):\n")
+    assert rest.rstrip().endswith(f"{exception}: {message}")
