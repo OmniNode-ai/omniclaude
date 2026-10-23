@@ -24,7 +24,7 @@ requirements:
     statement: "The pre-compact pair and its restore lifecycle are deleted with every reference."
     acceptance:
       - id: "AC3"
-        statement: "AC3: `git grep -n -e _COMPACT_CTX -e pre-compact -e OMNICLAUDE_POSTCOMPACT_RESTORE` returns nothing outside CHANGELOG, and `bash -n user-prompt-submit.sh` passes -- falsifier: a match or a syntax error."
+        statement: "AC3: `git grep -n -e _COMPACT_CTX -e pre-compact -e OMNICLAUDE_POSTCOMPACT_RESTORE` returns nothing outside CHANGELOG and this contract, and `bash -n user-prompt-submit.sh` passes -- falsifier: a match or a syntax error."
       - id: "AC4"
         statement: "AC4: baseline count drops by exactly the deleted files -- falsifier: unchanged or off."
 evidence_requirements:
@@ -41,7 +41,8 @@ dod_evidence:
       AC3: the restore lifecycle and the pair leave no reference. The one remaining match is the generic
       filename-prefix table HOOK_EVENT_NAME_PREFIXES in plugins/onex/hooks/lib/hook_inventory.py ("pre-compact"
       maps a hyphen-named script to PreCompact); it names no deleted file and is kept because removing it would
-      narrow the undeclared-gate scan. The check asserts that line is the only match, and that user-prompt-submit.sh
+      narrow the undeclared-gate scan. This contract names the deleted files itself, so the grep excludes it
+      along with CHANGELOG.md. The check asserts that line is the only match, and that user-prompt-submit.sh
       parses. It fails at the merge base, where pre-compact.sh and the restore lifecycle still match.
     source: "manual"
     checks:
