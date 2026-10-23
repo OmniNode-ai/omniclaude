@@ -40,6 +40,11 @@ requirements:
     acceptance:
       - id: AC6
         statement: 'AC6: The capture contract keeps its payload_encryption block with enabled and key_secret_ref, and no scrub, content hash or redaction field returns to the hook and content capture producer. Both producers refuse unreadable or malformed encryption configuration; enabled encryption survives the refreshed raw fan-out and decrypts to the captured content. -- falsifier: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov'
+  - id: req-sibling-refresh-holds-refused-release-pins
+    statement: The sibling-lock refresh holds refused release pins at their checked-out lock versions before publishing a refresh delta.
+    acceptance:
+      - id: AC7
+        statement: 'AC7: After upgrading packages and before capture-mirror sync or delta detection, the refresh judges the lock against HEAD:uv.lock with live dev tags, re-locks every refused pin at its base version, and requires an unguarded final judgement to pass. -- falsifier: uv run pytest -q -o addopts="" --noconftest tests/workflows/test_sibling_lock_refresh_holds_refused_pins_omn13902.py'
 evidence_requirements:
   - kind: tests
     command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
@@ -56,6 +61,9 @@ evidence_requirements:
   - kind: tests
     command: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov
     description: Verifies the raw-capture guard keeps the payload_encryption option and refuses redaction returning to the capture producer.
+  - kind: tests
+    command: uv run pytest -q -o addopts="" --noconftest tests/workflows/test_sibling_lock_refresh_holds_refused_pins_omn13902.py
+    description: Verifies hold-back ordering, base-lock and dev-tag inputs, refused-pin re-locking, and final judgement before publishing the refresh delta.
 dod_evidence:
   - id: dod-omniclaude-sibling-refresh-behavior
     source: manual
@@ -105,3 +113,11 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov
+  - id: dod-omniclaude-sibling-refresh-holds-refused-pins
+    source: manual
+    binds_ac:
+      - AC7
+    description: Hosted workflow checks require the hold-back step, its base-lock and dev-tag inputs, refused-pin re-locking, and an unguarded final judgement. They fail against the merge-base workflow, which has no hold-back step.
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest -q -o addopts="" --noconftest tests/workflows/test_sibling_lock_refresh_holds_refused_pins_omn13902.py
