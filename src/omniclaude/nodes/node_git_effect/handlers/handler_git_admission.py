@@ -364,7 +364,6 @@ class Policy:
     fetch_allow_env: tuple[tuple[str, str], ...] = ()
     # The doubled registry-root arm (OMN-18607). See _doubled_root_refusal.
     doubled_root_ticket: str = ""
-    doubled_root_segments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -464,7 +463,6 @@ def load_policy(path: Path | None = None) -> Policy:
         fetch_lane_path_markers=tuple(_str_list(raw, "fetch_lane_path_markers")),
         fetch_allow_env=_str_pairs(raw, "fetch_allow_env"),
         doubled_root_ticket=_require_str(raw, "doubled_root_ticket"),
-        doubled_root_segments=tuple(_str_list(raw, "doubled_root_segments")),
     )
 
 
@@ -1863,6 +1861,33 @@ def _plainly_names_refused_verb(command: str, policy: Policy) -> bool:
 _PATH_WORD: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_${}~./@+=:,-]+")
 
 
+def _registry_repo_name(registry_root: Path, policy: Policy) -> str:
+    """The registry clone's own repository name, read from its remote.
+
+    Derived, never declared: the name of the directory a doubled path repeats
+    is the repository's own, which the clone already knows. Returns "" when the
+    clone names no remote or the probe cannot answer -- with no name there is
+    no doubling to recognise, and this arm then refuses nothing.
+    """
+    try:
+        result = _run_git(
+            ["remote", "get-url", "origin"],
+            registry_root,
+            policy.git_probe_timeout_seconds,
+        )
+    except GitProbeError:
+        return ""
+    if result.returncode != 0:
+        return ""
+    url = result.stdout.decode("utf-8", "replace").strip().rstrip("/")
+    if not url:
+        return ""
+    name = url.rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+    if name.endswith(".git"):
+        name = name[: -len(".git")]
+    return name if name and "/" not in name else ""
+
+
 def _doubled_root_refusal(
     command: str,
     policy: Policy,
@@ -1884,17 +1909,17 @@ def _doubled_root_refusal(
     ANCHORED at the resolved root, never a substring match: a path that merely
     carries the same characters elsewhere -- a worktree for a ticket named
     after the repository -- is a real place and is admitted. With no root
-    resolved there is nothing to anchor to and nothing is refused.
+    resolved, or no name to read off the clone's own remote, there is nothing
+    to anchor to and nothing is refused.
     """
-    if registry_root is None or not policy.doubled_root_segments:
+    if registry_root is None:
         return None
     root = os.path.normpath(str(registry_root))
+    name = _registry_repo_name(registry_root, policy)
+    if not name:
+        return None
     roots = {root, os.path.realpath(root)}
-    doubled = {
-        os.path.join(base, segment)
-        for base in roots
-        for segment in policy.doubled_root_segments
-    }
+    doubled = {os.path.join(base, name) for base in roots}
     for word in _PATH_WORD.findall(command):
         expanded = word.strip("'\"")
         for spelling in ("${OMNI_HOME}", "$OMNI_HOME"):

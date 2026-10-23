@@ -5,9 +5,9 @@
 
 Written red first against omniclaude c0bb5b38, where no PreToolUse guard refused
 a doubled path: every case in ``DOUBLED_REFUSED`` was ADMITTED there, through the
-decision core and through the hook script end to end. The policy carried no
-``doubled_root_segments`` at all, so ``test_the_policy_declares_the_vocabulary``
-also fails on that tree.
+decision core and through the hook script end to end. The policy named no
+``doubled_root_ticket`` at all, so ``test_the_policy_declares_the_arm`` fails on
+that tree at its loader.
 
 The registry root IS the repository's own root on this fleet. The old
 `CLAUDE.md:169` said to run from a copy of the repo nested one segment inside it;
@@ -21,8 +21,11 @@ refusing every path naming the segment would refuse half the ordinary commands
 in the registry clone. The anchored half (AC4) separates them: the same
 characters OUTSIDE the resolved root are a real place and are admitted.
 
-The segment itself is never spelled here. It is read from the policy the guard
-reads, so this file and the guard cannot drift apart on it.
+The repeated segment is never spelled here, and the guard declares it nowhere:
+it is the registry clone's OWN repository name, read off its remote, so the
+fixture names its remote after the fixture and the real fleet gets the real
+repository. A clone with no remote has no name to double, which is the second
+control below.
 """
 
 from __future__ import annotations
@@ -75,11 +78,14 @@ def policy() -> Policy:
     return load_policy(POLICY_PATH)
 
 
+#: The fixture clone's own name: what a path doubled onto its root repeats.
+SEGMENT = "registry_clone"
+
+
 @pytest.fixture
-def segment(policy: Policy) -> str:
-    """The segment that must not sit directly under the root, from the policy."""
-    assert policy.doubled_root_segments, "the policy declares no doubled segment"
-    return policy.doubled_root_segments[0]
+def segment() -> str:
+    """The segment that must not sit directly under the root."""
+    return SEGMENT
 
 
 @pytest.fixture
@@ -97,6 +103,16 @@ def registry(tmp_path: Path, policy: Policy) -> Path:
         target.write_text("fixture\n")
     _git("-C", str(root), "add", "-A")
     _git("-C", str(root), "commit", "-q", "-m", "markers")
+    # The clone's own repository name is what the guard reads off its remote;
+    # here that is the fixture's own directory name, as it is on the fleet.
+    _git(
+        "-C",
+        str(root),
+        "remote",
+        "add",
+        "origin",
+        f"https://example.invalid/acme/{root.name}.git",
+    )
     (root / "omni_worktrees").mkdir()
     return root
 
@@ -178,19 +194,27 @@ def test_no_resolved_root_means_no_anchor_and_no_refusal(
         assert not decision.blocked, command
 
 
-def test_a_segment_nobody_types_admits_every_doubled_path(
-    tmp_path: Path, registry: Path, segment: str
+def test_a_clone_whose_name_differs_admits_every_doubled_path(
+    registry: Path, policy: Policy, segment: str
 ) -> None:
-    """Second control: the vocabulary is what refuses, not the code path."""
-    raw = json.loads(POLICY_PATH.read_text())
-    raw["doubled_root_segments"] = ["a-directory-nobody-makes"]
-    quiet_path = tmp_path / "no-doubled-segments.json"
-    quiet_path.write_text(json.dumps(raw))
-    quiet = load_policy(quiet_path)
+    """Second control: the clone's own name is what refuses, not the code path.
+
+    Point the remote at another repository and the same paths stop being a
+    doubling of anything -- the pre-change behaviour, and the reason a worktree
+    named after some other repo is never refused here.
+    """
+    _git(
+        "-C",
+        str(registry),
+        "remote",
+        "set-url",
+        "origin",
+        "https://example.invalid/acme/another_repo.git",
+    )
     for template in DOUBLED_REFUSED:
         command = _fill(template, registry, segment)
         decision = evaluate_bash_command(
-            command, quiet, cwd=registry, registry_root=registry
+            command, policy, cwd=registry, registry_root=registry
         )
         assert not decision.blocked, command
 
@@ -224,12 +248,10 @@ def test_the_refusal_names_the_root_and_the_correction(
 # ---------------------------------------------------------------------------
 
 
-def test_the_policy_declares_the_vocabulary(policy: Policy) -> None:
-    """AC2: at c0bb5b38 the policy had no such field, so this failed on import
-    of its own expectation. The ticket id travels with the vocabulary."""
+def test_the_policy_declares_the_arm(policy: Policy) -> None:
+    """AC2: at c0bb5b38 the policy named no such ticket and the loader refused
+    the field, so this failed there. The ticket id travels with the arm."""
     assert policy.doubled_root_ticket == "OMN-18607"
-    assert policy.doubled_root_segments
-    assert all(seg and "/" not in seg for seg in policy.doubled_root_segments)
 
 
 # ---------------------------------------------------------------------------
