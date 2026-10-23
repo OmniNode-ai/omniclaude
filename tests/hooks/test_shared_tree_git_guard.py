@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -1505,6 +1506,7 @@ def _run_hook(
     cwd: Path,
     omni_home_dir: str | None = None,
     mask: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
@@ -1533,6 +1535,8 @@ def _run_hook(
         env["OMNI_HOME"] = omni_home_dir
     if mask is not None:
         env["ONEX_HOOKS_MASK"] = mask
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
         ["bash", str(HOOK_SCRIPT)],
         input=json.dumps(payload),
@@ -1712,3 +1716,75 @@ def test_same_spellings_aimed_at_the_registry_stay_refused(
         command, policy, cwd=registry, registry_root=registry
     )
     assert decision.blocked, command
+
+
+# ---------------------------------------------------------------------------
+# OMN-21000: the guard's interpreter must import its decision core
+# ---------------------------------------------------------------------------
+
+
+def _non_importing_python(tmp_path: Path) -> Path:
+    """An executable that stands in for a bare Homebrew python: no omniclaude."""
+    fake = tmp_path / "bare-python3"
+    fake.write_text("#!/bin/sh\nexit 1\n")
+    fake.chmod(0o755)
+    return fake
+
+
+def test_plugin_python_bin_without_the_core_falls_through_to_one_that_imports(
+    tmp_path: Path, registry: Path
+) -> None:
+    data = tmp_path / "plugin-data"
+    (data / ".venv" / "bin").mkdir(parents=True)
+    (data / ".venv" / "bin" / "python3").symlink_to(sys.executable)
+    result = _run_hook(
+        tmp_path,
+        "git reset --hard origin/main",
+        cwd=registry,
+        omni_home_dir=str(registry),
+        extra_env={
+            "PLUGIN_PYTHON_BIN": str(_non_importing_python(tmp_path)),
+            "CLAUDE_PLUGIN_DATA": str(data),
+        },
+    )
+    # the real decision core ran (a refusal), not "could not evaluate"
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert "could not evaluate" not in result.stdout
+
+
+def test_host_where_no_interpreter_imports_the_core_is_refused_by_name(
+    tmp_path: Path, registry: Path
+) -> None:
+    # A plugin copy outside the repo, so no repo venv sits two levels above it.
+    plugin = tmp_path / "plugin" / "plugins" / "onex"
+    shutil.copytree(HOOKS_DIR, plugin / "hooks")
+    fake = _non_importing_python(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "git reset --hard origin/main"},
+        "cwd": str(registry),
+    }
+    result = subprocess.run(
+        ["bash", str(plugin / "hooks" / "scripts" / HOOK_SCRIPT.name)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(home),
+            "CLAUDE_PLUGIN_ROOT": str(plugin),
+            "CLAUDE_PROJECT_DIR": str(REPO_ROOT),
+            "ONEX_HOOK_LOG": str(tmp_path / "hook.log"),
+            "ONEX_STATE_DIR": str(tmp_path / "state"),
+            "OMNICLAUDE_MODE": "full",
+            "OMNI_HOME": str(registry),
+            "PLUGIN_PYTHON_BIN": str(fake),
+        },
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert "imports omniclaude.nodes.node_git_effect" in result.stdout
+    assert str(fake) in result.stdout

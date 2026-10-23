@@ -323,10 +323,20 @@ class LaneRepoEvidence:
         return self._show(clone, merge, path)
 
 
+def hook_evidence_readers() -> object:
+    """The Done-flip hook's readers (OMN-20368); see ``handler_hook_evidence_readers``."""
+    from omniclaude.nodes.node_linear_effect.handlers.handler_hook_evidence_readers import (
+        shared_readers,
+    )
+
+    return shared_readers()
+
+
 __all__ = [
     "DEFAULT_BUS_LANE",
     "LaneRepoEvidence",
     "ScmRunner",
+    "hook_evidence_readers",
     "hook_lib_dir",
     "hook_module",
     "run_scm",
