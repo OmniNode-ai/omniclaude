@@ -65,6 +65,9 @@ from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (  #
     TICKET,
     Policy,
     PolicyError,
+    _parse_git,
+    _peel_grouping,
+    _segments,
     evaluate_bash_command,
     load_policy,
     resolve_registry_root,
@@ -1823,3 +1826,191 @@ def test_registered_entrypoint_reports_missing_core_before_traceback(
     assert "Traceback" not in detail or detail.index("No module named") < detail.index(
         "Traceback"
     )
+
+
+# ---------------------------------------------------------------------------
+# OMN-18927: one segment's tokens are its own.
+#
+# Reported as a false BLOCK: the sanctioned publish-loop merge was refused
+# mid-loop whenever a second, unrelated statement shared the same Bash call
+# (`git merge --no-edit origin/main` then `echo hi`). That half no longer
+# reproduces -- OMN-17427 replaced shlex with the shared tokenizer, which ends
+# a command at a newline -- and the cases below pin it so it cannot return.
+#
+# The same isolation defect was still live in the other direction, as a false
+# ALLOW: a reserved word standing in front of a simple command stayed in the
+# segment, so `_parse_git` read the program as `then` and the git call inside
+# a compound command was never judged at all. Measured on dev 43a2b2b6 in the
+# registry fixture: `if true; then git reset --hard origin/main; fi` was
+# ADMITTED, while the identical `git reset --hard origin/main` alone was
+# refused. `do` and `{` were already peeled (OMN-19380); the rest were not.
+# ---------------------------------------------------------------------------
+
+#: AC1. The publish-loop merge, each time sharing its Bash call with another
+#: statement. Allowed on `main`, and -- the half that proves the merge is
+#: actually READ rather than skipped -- refused off it.
+MULTI_STATEMENT_PUBLISH_LOOP = [
+    "git merge --no-edit origin/main\necho hi",
+    "git merge --no-edit origin/main && echo hi",
+    "git merge --no-edit origin/main; git status",
+    "echo start\ngit merge --no-edit origin/main",
+    "git merge --no-edit origin/main > /tmp/merge.log 2>&1",
+    "if true; then git merge --no-edit origin/main; fi",
+    "if git merge --no-edit origin/main; then echo ok; fi",
+    "for ref in origin/main; do git merge --no-edit origin/main; done",
+]
+
+
+@pytest.mark.parametrize("command", MULTI_STATEMENT_PUBLISH_LOOP)
+def test_multi_statement_publish_loop_merge_is_allowed_on_main(
+    command: str, registry: Path, policy: Policy
+) -> None:
+    """AC1: the trailing statement does not change the merge's own shape."""
+    decision = evaluate_bash_command(
+        command, policy, cwd=registry, registry_root=registry
+    )
+    assert not decision.blocked, (command, decision.reason)
+
+
+def test_multi_statement_publish_loop_merge_is_refused_off_main(
+    registry: Path, policy: Policy
+) -> None:
+    """AC1/AC3: every shape above is READ, so the branch rule still binds.
+
+    An allowance that comes from the guard never recognising the merge is
+    indistinguishable from the correct allowance when the clone is on `main`.
+    Off `main` the two part company: a merge that is read is refused, and a
+    merge the segmenter dropped is admitted. The keyword-wrapped shapes were
+    admitted here before this ticket.
+    """
+    _git("-C", str(registry), "checkout", "-q", "-b", "lane/omn-18927-probe")
+    try:
+        for command in MULTI_STATEMENT_PUBLISH_LOOP:
+            decision = evaluate_bash_command(
+                command, policy, cwd=registry, registry_root=registry
+            )
+            assert decision.blocked, command
+            assert "main" in decision.reason, command
+    finally:
+        _git("-C", str(registry), "checkout", "-q", "main")
+
+    # Positive control: back on main every one of them is allowed again.
+    for command in MULTI_STATEMENT_PUBLISH_LOOP:
+        allowed = evaluate_bash_command(
+            command, policy, cwd=registry, registry_root=registry
+        )
+        assert not allowed.blocked, (command, allowed.reason)
+
+
+#: AC3. A refused verb carried by a compound command. Each one is the exact
+#: command the guard refuses on its own, wearing a reserved word in front.
+KEYWORD_WRAPPED_REFUSED = [
+    "if true; then git reset --hard origin/main; fi",
+    "if git reset --hard origin/main; then echo ok; fi",
+    "if false; then echo no; else git clean -fd; fi",
+    "if false; then echo no; elif git switch -c lane/x; then echo y; fi",
+    "while git reset --hard origin/main; do echo spin; done",
+    "until git clean -fdx; do echo spin; done",
+    "! git reset --hard origin/main",
+]
+
+
+@pytest.mark.parametrize("command", KEYWORD_WRAPPED_REFUSED)
+def test_refused_verb_behind_a_shell_keyword_is_still_refused(
+    command: str, registry: Path, policy: Policy
+) -> None:
+    """AC3: the keyword belongs to the compound command, not to the git call."""
+    decision = evaluate_bash_command(
+        command, policy, cwd=registry, registry_root=registry
+    )
+    assert decision.blocked, command
+    assert "OMN-18798" in decision.reason, command
+
+
+def test_keyword_wrapped_refusals_are_the_policy_speaking(
+    tmp_path: Path, registry: Path
+) -> None:
+    """Operating Rule 16 control for the set above: prove the zero.
+
+    With no refused vocabulary the same commands are admitted, so the
+    refusals above come from the policy rather than from a guard that
+    refuses every compound command it cannot read.
+    """
+    raw = json.loads(POLICY_PATH.read_text())
+    raw["refused_subcommands"] = ["a-verb-nobody-types"]
+    raw["unconditional_subcommands"] = ["a-verb-nobody-types"]
+    noop_path = tmp_path / "noop-omn18927.json"
+    noop_path.write_text(json.dumps(raw))
+    noop = load_policy(noop_path)
+    for command in KEYWORD_WRAPPED_REFUSED:
+        decision = evaluate_bash_command(
+            command, noop, cwd=registry, registry_root=registry
+        )
+        assert not decision.blocked, command
+
+
+def test_segment_operands_never_carry_another_segments_words(policy: Policy) -> None:
+    """AC3, read off the segmenter itself rather than off a verdict.
+
+    Two assertions, one per direction of the defect: the words of segment
+    N+1 are absent from the invocation computed for segment N, and a
+    segment whose first word is a reserved word still yields the git
+    invocation it carries (it yielded None before this ticket).
+    """
+    segments = _segments("git merge --no-edit origin/main\necho hi")
+    assert len(segments) == 2
+    first, _, _ = _peel_grouping(segments[0])
+    invocation = _parse_git(first)
+    assert invocation is not None
+    assert invocation.subcommand == "merge"
+    assert invocation.args == ("--no-edit", "origin/main")
+    assert "echo" not in invocation.args
+    assert "hi" not in invocation.args
+
+    for command, index in (
+        ("if true; then git merge --no-edit origin/main; fi", 1),
+        ("if git merge --no-edit origin/main; then echo ok; fi", 0),
+        ("while true; do git merge --no-edit origin/main; done", 1),
+    ):
+        carried, _, _ = _peel_grouping(_segments(command)[index])
+        parsed = _parse_git(carried)
+        assert parsed is not None, command
+        assert parsed.subcommand == "merge", command
+        assert parsed.args == ("--no-edit", "origin/main"), command
+
+
+def test_heredoc_body_naming_a_refused_verb_is_data_not_a_command(
+    registry: Path, policy: Policy
+) -> None:
+    """AC2: the other guard false-block of 2026-09-20, pinned where it stands.
+
+    The first occurrence that day was a heredoc whose BODY carried
+    git-verb-shaped text and was refused as untokenisable. OMN-17427 made the
+    body a `HereDoc` token instead of command words, so the shape is admitted
+    today and the RED baseline that AC2 asks for no longer exists to
+    reproduce; this pins the admission so it cannot regress into a refusal
+    again. The two controls keep the pin honest: a command that genuinely
+    cannot be tokenised and names a refused verb is still refused, and a real
+    refused verb in the same command string as such a body is still read.
+    """
+    body_only = "cat <<'EOF'\ngit reset --hard origin/main\nEOF"
+    decision = evaluate_bash_command(
+        body_only, policy, cwd=registry, registry_root=registry
+    )
+    assert not decision.blocked, decision.reason
+
+    untokenisable = "git reset --hard 'origin/main"
+    refused = evaluate_bash_command(
+        untokenisable, policy, cwd=registry, registry_root=registry
+    )
+    assert refused.blocked
+    assert "could not be tokenised" in refused.reason
+
+    with_real_command = (
+        "cat <<'EOF'\ngit reset --hard origin/main\nEOF\n"
+        "if true; then git reset --hard origin/main; fi"
+    )
+    both = evaluate_bash_command(
+        with_real_command, policy, cwd=registry, registry_root=registry
+    )
+    assert both.blocked, both.reason
