@@ -129,6 +129,16 @@ requirements:
       - id: "AC18"
         statement: |-
           AC18: a commit on no origin branch is refused naming the clone remedy, Actions reads neither the published snapshot nor a clone, and the CI step and the paired hook collect the test file -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py -q --no-cov -k "no_origin_branch or inside_github_actions or collect_this_file" fails at the merge base
+  - id: "req-omn20074-placement-own-branches"
+    statement: |-
+      The placement gate still scans every workflow branch, but only findings on the checked-out tree, the event branch or a same-repository pull request's own head block its run. Other branches remain visible as notices naming their branch, file, source line and job.
+    acceptance:
+      - id: "AC20"
+        statement: |-
+          AC20: a clean pull request or hotfix push passes with notices for other branches, while findings on the pull request head, base checkout or pushed hotfix fail; partitioning keeps checkout findings blocking -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -p no:randomly -k "partition_findings_blocks_checkout_head_and_event_branch or only_the_prs_own_branches_or_pushed_tree_block" fails against the merge-base implementation
+      - id: "AC21"
+        statement: |-
+          AC21: another branch's notice names its branch, file, positive source line and job; the reusable passes the head branch only for same-repository pull requests and keeps unconditional workflow-branch enumeration -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py tests/workflows/test_private_repo_runner_placement_workflow.py -q --no-cov -p no:randomly -k "positive_control_a_stale_main_is_a_notice_from_dev or branch_finding_line_uses_the_placement_or_job_key or a_branch_named_by_a_push_filter_glob_is_judged or the_gate_judges_every_branch_that_runs_workflows" fails against the merge-base implementation
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -318,3 +328,19 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC17", "AC18"]
+  - id: dod-omn20074-placement-own-branches
+    description: "The branch verdict matrix checks clean and stale PR heads, the base checkout and hotfix pushes; partitioning keeps checkout, head and event findings blocking."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: 'uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -p no:randomly -k "partition_findings_blocks_checkout_head_and_event_branch or only_the_prs_own_branches_or_pushed_tree_block"'
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC20"]
+  - id: dod-omn20074-placement-branch-notices
+    description: "Other judged branches produce notices with source locations, and the reusable supplies the same-repository head branch while keeping branch enumeration unconditional."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: 'uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py tests/workflows/test_private_repo_runner_placement_workflow.py -q --no-cov -p no:randomly -k "positive_control_a_stale_main_is_a_notice_from_dev or branch_finding_line_uses_the_placement_or_job_key or a_branch_named_by_a_push_filter_glob_is_judged or the_gate_judges_every_branch_that_runs_workflows"'
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC21"]
