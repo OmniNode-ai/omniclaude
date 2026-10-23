@@ -201,6 +201,52 @@ jobs:
           echo "Refreshing: ${ARGS[*]}"
           uv lock "${ARGS[@]}"
 
+      # OMN-21282: internal-sibling-pins (ci.yml, under Quality Gate) refuses a
+      # moved release pin whose sibling carries a newer dev merge tag. A sibling
+      # is dev-tagged on every dev merge and released less often, so the PyPI
+      # upgrade above moved such a pin on most nights and the refresh PR was red
+      # by construction (omniclaude#2947: omnibase-core 0.47.52 -> 0.47.53 under
+      # dev-20261022195312-6890233443b4). The check's own handler judges the
+      # refreshed lock against the checked-out one, with the dev tags read the
+      # way ci.yml reads them, and every pin it refuses is put back at the
+      # version the base lock pins. The re-judged lock must pass, or the job
+      # stops rather than open a PR the check refuses.
+      - name: Hold back release pins internal-sibling-pins refuses
+        env:
+          PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          git show HEAD:uv.lock > "$RUNNER_TEMP/base.lock"
+          check=(uv run --frozen --no-sync python -m omniclaude.handlers.handler_internal_sibling_pins
+            --head-lock uv.lock --base-lock "$RUNNER_TEMP/base.lock")
+          tags_dir="$RUNNER_TEMP/dev-tags"
+          mkdir -p "$tags_dir"
+          for repo in $("${check[@]}" --needs-tags); do
+            if listing="$(git ls-remote --tags --refs "https://github.com/OmniNode-ai/${repo}.git" 'dev-*')"; then
+              printf '%s\n' "$listing" | sed -n 's#.*refs/tags/##p' > "$tags_dir/$repo"
+            else
+              echo "::warning::could not read the dev tags of ${repo}; its moved pin is held back"
+            fi
+          done
+          python3 -c 'import json, pathlib, sys; d = pathlib.Path(sys.argv[1]); print(json.dumps({p.name: p.read_text().split() for p in d.iterdir()}))' \
+            "$tags_dir" > "$RUNNER_TEMP/dev-tags.json"
+          check+=(--dev-tags "$RUNNER_TEMP/dev-tags.json")
+          if "${check[@]}" > "$RUNNER_TEMP/verdict.txt"; then
+            cat "$RUNNER_TEMP/verdict.txt"
+            exit 0
+          fi
+          cat "$RUNNER_TEMP/verdict.txt"
+          HOLD=()
+          for name in $(sed -n 's/^REFUSED \([^:]*\):.*/\1/p' "$RUNNER_TEMP/verdict.txt"); do
+            version="$(python3 -c 'import sys, tomllib; print({p["name"]: p["version"] for p in tomllib.load(open(sys.argv[1], "rb"))["package"]}.get(sys.argv[2], ""))' \
+              "$RUNNER_TEMP/base.lock" "$name")"
+            [[ -n "$version" ]] || { echo "::error::${name} is refused and the base lock pins no version to hold it at"; exit 1; }
+            HOLD+=("--upgrade-package" "${name}==${version}")
+          done
+          echo "Holding back: ${HOLD[*]}"
+          uv lock "${HOLD[@]}"
+          "${check[@]}"
+
       # OMN-17427: the omnimarket rev this lock now pins is the rev Registry
       # Consistency reads omnimarket at (ci.yml `om_pin`, OMN-20001), and at
       # that rev it compares the capture-redaction mirror against omnimarket's
