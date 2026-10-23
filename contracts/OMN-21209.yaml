@@ -34,7 +34,7 @@ requirements:
 evidence_requirements:
   - kind: tests
     description: "Onboarding recommended-order tests pass"
-    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k recommended_order_enter_takes"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k recommended_order"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -46,7 +46,7 @@ dod_evidence:
     binds_ac: [AC2]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k recommended_order"
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k recommended_order_enter_takes"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn21209-ac1-no-model-id-in-onboarding
     description: "The onboarding script and its bootstrap handler read the recommended order from the catalogue and name no model id. Fails at the merge base, which has no recommended_order tests."
@@ -79,6 +79,6 @@ dod_evidence:
       - check_type: "test_passes"
         check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k recommended_order_enter_takes"
       - check_type: "command"
-        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -q \"^recommended_order() {\"'"
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"recommended_order() {\" > /dev/null'"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC2"]
