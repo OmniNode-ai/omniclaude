@@ -68,12 +68,15 @@ dod_evidence:
   - id: "dod-omn21116-ac5-auto-unbound"
     description: >-
       AC5: no registration in hooks.json runs the binding adapter, so no trigger (auto included) is bound from
-      this repository, and the hook-inventory client_bindings tests pass. Unbound: this holds at the merge base
-      too (nothing on dev binds a trigger), so it has no failing control, and AC5 is not declared by this slice.
+      this repository; the distribution manifest no longer ships a PreCompact hook script (at the merge base it
+      shipped pre-compact.sh and pre-compact-probe.sh, an installable registration that fires on the auto
+      trigger, so this check fails there); and the hook-inventory client_bindings tests pass.
     source: "manual"
     checks:
       - check_type: "command"
-        check_value: "! grep -q 'onex-claude-code-hook' plugins/onex/hooks/hooks.json"
+        check_value: >-
+          ! grep -q 'onex-claude-code-hook' plugins/onex/hooks/hooks.json
+          && ! grep -qi 'compact' plugins/distribution_manifest.yaml
       - check_type: "test_passes"
         check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov"
     binds_ac: []
