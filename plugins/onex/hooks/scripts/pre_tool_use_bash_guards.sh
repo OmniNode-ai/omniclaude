@@ -14,6 +14,14 @@
 #   pre_tool_use_shared_tree_git_guard.sh           (OMN-18798, SCOPE_GATE)
 #   pre_tool_use_pr_body_stamp_guard.sh             (OMN-18335, BRANCH_PROTECTION_GUARD)
 #   pre_tool_use_prose_command_substitution_guard.sh (OMN-18750, BASH_GUARD)
+#   pre_tool_use_omni_home_path_guard.sh            (OMN-18607, BASH_GUARD)
+#
+# OMN-18607 joined the list after the seven. It also carries its own
+# registration, on the Write/Edit matcher this entrypoint does not see, because
+# a doubled path reaches the filesystem through a Write as readily as through a
+# mkdir. On a Bash call it costs nothing it did not already cost: its
+# pre-filter is a case statement on the payload, and a payload that never says
+# omni_home never reaches its decision core.
 #
 # Why. Each was its own registered hook: seven bash processes per Bash tool
 # call, and each guard whose pre-filter matched started its own Python
@@ -69,6 +77,7 @@ _OBG_GUARDS=(
     "${_OBG_SCRIPTS}/pre_tool_use_shared_tree_git_guard.sh"
     "${_OBG_SCRIPTS}/pre_tool_use_pr_body_stamp_guard.sh"
     "${_OBG_SCRIPTS}/pre_tool_use_prose_command_substitution_guard.sh"
+    "${_OBG_SCRIPTS}/pre_tool_use_omni_home_path_guard.sh"
 )
 
 # The payload, read without an exec. $(cat) strips trailing newlines; so does this.

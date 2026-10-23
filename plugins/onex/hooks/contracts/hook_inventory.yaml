@@ -1033,6 +1033,50 @@ expected_hooks:
           - "missing_actor_line"
         stdout_absent: []
 
+  - script: "pre_tool_use_omni_home_path_guard.sh"
+    event: "PreToolUse"
+    matcher: "^(Write|Edit|MultiEdit|NotebookEdit)$"
+    order: 10
+    ticket: "OMN-18607"
+    owner: "omniclaude hooks lane"
+    purpose: >
+      Refuses a Write, Edit, MultiEdit or NotebookEdit whose target path
+      resolves inside $OMNI_HOME/omni_home, the doubled registry root. $OMNI_HOME
+      IS the omni_home repo root on this fleet; the old CLAUDE.md:169 said to run
+      from $OMNI_HOME/omni_home and a lane that followed it created a stray
+      untracked directory two lanes then wrote scratch output into for three
+      weeks (2026-08-19 and 2026-09-16, ROLLING_WORK_LEDGER.md:3695). Nothing
+      git-tracked it, so no repo-scoped gate could see it. The check is anchored
+      at the resolved $OMNI_HOME, never a substring match, so a real path that
+      merely carries the characters (a worktree for a ticket named omni_home) is
+      admitted. The same script is sourced by pre_tool_use_bash_guards.sh for the
+      Bash command line, where it starts no process of its own.
+    enforcement: true
+    on_failure: "block"
+    # No lite-mode early exit on purpose: in lite mode (a non-OmniNode install)
+    # OMNI_HOME is unset, and with no root to anchor to the decision core admits
+    # everything. The guard costs a case statement there, not a decision.
+    lite_mode_exit: false
+    mask:
+      gate_call: "BASH_GUARD"
+      bit_defined: true
+    canary:
+      kind: "block"
+      stdin:
+        tool_name: "Write"
+        tool_input:
+          file_path: "{repo_root}/omni_home/.claude_scratch/canary.md"
+          content: "canary"
+      env:
+        OMNI_HOME: "{repo_root}"
+      fixtures: {}
+      expect:
+        exit_code: 2
+        stdout_contains:
+          - '"decision": "block"'
+          - "doubles the repo root"
+        stdout_absent: []
+
   - script: "post-tool-use-quality.sh"
     event: "PostToolUse"
     matcher: "Skill"
