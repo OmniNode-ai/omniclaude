@@ -114,39 +114,24 @@ if [[ "$TOOL_NAME" != "Bash" ]]; then
     exit 0
 fi
 
+# OMN-21000: a candidate interpreter must import the decision core; a bare
+# PLUGIN_PYTHON_BIN without omniclaude used to win and every call ended "could not evaluate".
+_GUARD_PY_TRIED=""
 _resolve_python() {
-    if [[ -n "${PLUGIN_PYTHON_BIN:-}" && -x "${PLUGIN_PYTHON_BIN}" ]]; then
-        echo "${PLUGIN_PYTHON_BIN}"
-        return 0
-    fi
-    if [[ -n "${CLAUDE_PLUGIN_DATA:-}" && -x "${CLAUDE_PLUGIN_DATA}/.venv/bin/python3" ]]; then
-        echo "${CLAUDE_PLUGIN_DATA}/.venv/bin/python3"
-        return 0
-    fi
-    local repo_venv
-    repo_venv="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)/.venv/bin/python3"
-    if [[ -x "$repo_venv" ]]; then
-        echo "$repo_venv"
-        return 0
-    fi
-    local brew_py
-    for brew_py in /opt/homebrew/bin/python3.13 /usr/local/bin/python3.13; do  # public-skill-ok: canonical brew interpreter path, CLAUDE.md rule 11 precedent
-        if [[ -x "$brew_py" ]]; then
-            echo "$brew_py"
-            return 0
-        fi
+    local c
+    for c in "${PLUGIN_PYTHON_BIN:-}" "${CLAUDE_PLUGIN_DATA:+${CLAUDE_PLUGIN_DATA}/.venv/bin/python3}" \
+        "$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)/.venv/bin/python3" "${OMNI_HOME:+${OMNI_HOME}/omniclaude/.venv/bin/python3}" \
+        /opt/homebrew/bin/python3.13 /usr/local/bin/python3.13 "$(command -v python3 || true)"; do  # public-skill-ok: canonical brew interpreter path, CLAUDE.md rule 11 precedent
+        [[ -n "$c" && -x "$c" ]] || continue
+        # Collection only records argv; replay consumes the shared result. The
+        # shared runner imports the core and reports any import error fail-closed.
+        { [[ "${ONEX_BASH_GUARDS_PHASE:-}" == collect || "${ONEX_BASH_GUARDS_PHASE:-}" == replay ]] || (unset PYTHONPATH; "$c" -c "import ${GUARD_MODULE}") >/dev/null 2>&1; } && { GUARD_PYTHON="$c"; return 0; }
+        _GUARD_PY_TRIED="${_GUARD_PY_TRIED:+$_GUARD_PY_TRIED, }$c"
     done
-    if command -v python3 >/dev/null 2>&1; then
-        command -v python3
-        return 0
-    fi
     return 1
 }
-
-if ! GUARD_PYTHON="$(_resolve_python)"; then
-    _block "no python interpreter" \
-        "BLOCKED: no Python interpreter could be resolved to run the OMN-18798 shared-tree git admission gate, so this command cannot be checked. Repair the plugin install, or disable the guard deliberately: onex hooks disable SCOPE_GATE"
-fi
+_resolve_python || _block "no python interpreter" \
+    "BLOCKED: no Python interpreter on this host imports ${GUARD_MODULE}, so the OMN-18798 shared-tree git admission gate cannot check this command (failed the import: ${_GUARD_PY_TRIED:-none found}). Repair the plugin install so PLUGIN_PYTHON_BIN, CLAUDE_PLUGIN_DATA/.venv or the omniclaude venv imports it, or disable the guard deliberately: onex hooks disable SCOPE_GATE"
 
 # OMN-20118: the decision core runs through onex_guard_core, which runs it in its
 # own interpreter when this script runs on its own, and in the one shared

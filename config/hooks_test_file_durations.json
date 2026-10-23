@@ -47,6 +47,7 @@
   "tests/hooks/test_dod_round_trip.py": 0.43,
   "tests/hooks/test_done_flip_guard.py": 0.14,
   "tests/hooks/test_done_flip_guard_false_positives.py": 0.11,
+  "tests/hooks/test_done_flip_guard_lane_readers.py": 0.19,
   "tests/hooks/test_done_flip_guard_local_pr_state.py": 2.4,
   "tests/hooks/test_done_flip_guard_repo_evidence.py": 0.33,
   "tests/hooks/test_done_flip_guard_requires_bound_receipt.py": 1.36,
