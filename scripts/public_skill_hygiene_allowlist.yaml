@@ -21,6 +21,16 @@ person_names:
   - Brett
 
 entries:
+  # The one value in this policy file that this gate would otherwise flag IS the
+  # directory name the OMN-18607 doubled-registry-root refusal matches: a guard
+  # cannot refuse a path it may not name. The code derives the name from here and
+  # never spells it, so this is the only place it appears.
+  - path_glob: "src/omniclaude/nodes/node_git_effect/git_admission_policy.json"
+    reason: >-
+      functional admission vocabulary: the segment IS what the OMN-18607
+      doubled-registry-root refusal matches, so removing the literal from the
+      policy would defeat the guard.
+
   # Golden-path replay fixtures cite real ticket IDs as part of the recorded
   # fixture data. Genericizing them requires a fixture re-record (each
   # fixture's ticket_id is load-bearing for the replay) -- deferred to a

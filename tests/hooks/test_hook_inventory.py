@@ -405,8 +405,6 @@ def test_deregistering_a_hook_reports_only_it_and_later_order_dependents(
         victim,
         "pre_tool_use_skill_started.sh",
         "pre_tool_use_actor_line_guard.sh",
-        # OMN-18607: the doubled-registry-root guard, declared after it.
-        "pre_tool_use_omni_home_path_guard.sh",
         # OMN-19513: the all-hooks capture observer is PreToolUse's last group.
         "claude_hook_capture.sh",
     ]
@@ -557,9 +555,7 @@ def test_every_declared_pretooluse_enforcement_hook_fails_closed() -> None:
     guards = [
         h for h in inventory.expected if h.enforcement and h.event == "PreToolUse"
     ]
-    # OMN-18607 added the eighth: the doubled-registry-root guard on the
-    # Write/Edit matcher. Positive control: the set is not empty.
-    assert len(guards) == 8
+    assert len(guards) == 7  # positive control: the set is not empty
     assert {h.on_failure for h in guards} == {"block"}
     assert {h.on_failure for h in inventory.expected if not h.enforcement} == {"open"}
 

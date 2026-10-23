@@ -362,6 +362,9 @@ class Policy:
     fetch_lane_envs: tuple[str, ...] = ()
     fetch_lane_path_markers: tuple[str, ...] = ()
     fetch_allow_env: tuple[tuple[str, str], ...] = ()
+    # The doubled registry-root arm (OMN-18607). See _doubled_root_refusal.
+    doubled_root_ticket: str = ""
+    doubled_root_segments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -460,6 +463,8 @@ def load_policy(path: Path | None = None) -> Policy:
         fetch_lane_envs=tuple(_str_list(raw, "fetch_lane_envs")),
         fetch_lane_path_markers=tuple(_str_list(raw, "fetch_lane_path_markers")),
         fetch_allow_env=_str_pairs(raw, "fetch_allow_env"),
+        doubled_root_ticket=_require_str(raw, "doubled_root_ticket"),
+        doubled_root_segments=tuple(_str_list(raw, "doubled_root_segments")),
     )
 
 
@@ -1852,6 +1857,73 @@ def _plainly_names_refused_verb(command: str, policy: Policy) -> bool:
     )
 
 
+#: Words in a command that could be a path. Deliberately generous: every
+#: candidate is anchored at the registry root afterwards, so a word that is not
+#: a path under it costs nothing.
+_PATH_WORD: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_${}~./@+=:,-]+")
+
+
+def _doubled_root_refusal(
+    command: str,
+    policy: Policy,
+    cwd: Path,
+    registry_root: Path | None,
+) -> str | None:
+    """Why this command's path is refused as doubled onto the root, or None.
+
+    The registry root IS the repository's own root on this fleet. The old
+    `CLAUDE.md:169` said to run from a copy of the repo nested one segment
+    inside it; a lane that followed it created a stray untracked directory
+    there, and two lanes wrote scratch output into it over three weeks before
+    anyone noticed (2026-08-19 and 2026-09-16,
+    ``docs/tracking/ROLLING_WORK_LEDGER.md:3695``). The directory was never
+    git-added, so no repo-scoped CI gate could see it, and removing the wrong
+    instruction does not stop the next lane typing the segment from stale
+    memory or a stale doc.
+
+    ANCHORED at the resolved root, never a substring match: a path that merely
+    carries the same characters elsewhere -- a worktree for a ticket named
+    after the repository -- is a real place and is admitted. With no root
+    resolved there is nothing to anchor to and nothing is refused.
+    """
+    if registry_root is None or not policy.doubled_root_segments:
+        return None
+    root = os.path.normpath(str(registry_root))
+    roots = {root, os.path.realpath(root)}
+    doubled = {
+        os.path.join(base, segment)
+        for base in roots
+        for segment in policy.doubled_root_segments
+    }
+    for word in _PATH_WORD.findall(command):
+        expanded = word.strip("'\"")
+        for spelling in ("${OMNI_HOME}", "$OMNI_HOME"):
+            expanded = expanded.replace(spelling, root)
+        if expanded.startswith("~"):
+            expanded = os.path.expanduser(expanded)
+        if expanded.startswith("/"):
+            resolved = os.path.normpath(expanded)
+        else:
+            resolved = os.path.normpath(os.path.join(str(cwd), expanded))
+        for target in doubled:
+            if resolved != target and not resolved.startswith(target + os.sep):
+                continue
+            corrected = os.path.normpath(
+                os.path.join(root, os.path.relpath(resolved, target))
+            )
+            return (
+                f"the path {resolved} doubles the repository root. $OMNI_HOME is "
+                f"already the {os.path.basename(target)} repo root, so drop the "
+                f"extra {os.path.basename(target)}/ segment: the path meant here "
+                f"is {corrected}. $OMNI_HOME={root}. A doubled path is not a "
+                "worktree and nothing git-tracks it -- two lanes wrote scratch "
+                "output into one for three weeks before anyone noticed, on "
+                "2026-08-19 and 2026-09-16, and the stale instruction that "
+                "produced it is gone while the typo is not"
+            )
+    return None
+
+
 def _peel_grouping(segment: list[str]) -> tuple[list[str], int, int]:
     """Strip subshell and brace grouping from one segment (OMN-19852).
 
@@ -2363,6 +2435,17 @@ def evaluate_bash_command(
         return Decision(
             blocked=False,
             notes=("untokenisable command naming no refused git verb",),
+        )
+
+    doubled = _doubled_root_refusal(command, policy, cwd, registry_root)
+    if doubled is not None:
+        return Decision(
+            blocked=True,
+            reason=(
+                f"BLOCKED: {doubled} ({policy.doubled_root_ticket}, "
+                f"{policy.rule}). To disable this guard: "
+                f"onex hooks disable {GATE_BIT_NAME}"
+            ),
         )
 
     scope = shadow(os.environ, shadowed_names(segments))

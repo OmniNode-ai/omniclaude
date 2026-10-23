@@ -303,6 +303,10 @@
         "OMNI_HOME",
         "ONEX_REGISTRY_ROOT"
     ],
+    "doubled_root_ticket": "OMN-18607",
+    "doubled_root_segments": [
+        "omni_home"
+    ],
     "registry_root_markers": [
         "docs/tracking/ROLLING_WORK_LEDGER.md",
         ".kb-doc-gate.yaml"
