@@ -9,10 +9,13 @@ summary: >-
   OMNICLAUDE_POSTCOMPACT_RESTORE (keys 22-40), their distribution manifest entries and their two
   canonical-file-shape baseline rows, plus the advisory-allowlist and test references to pre-compact.sh.
   Neither script was registered in hooks.json and both toggles defaulted off, so no installed behaviour changes.
-  This slice covers AC3, AC4 and AC5. AC1 and AC2 (a lab-host /compact installing the package, and the native
+  This slice covers AC3 and AC4. AC1 and AC2 (a lab-host /compact installing the package, and the native
   fallback with one failure line) are not covered here: they need the session.compact binding row in the
   omnimarket adapter contract, the render template's session.compact support, the runtime wiring of the pack
-  build port and a lab-host /compact, none of which this slice contains.
+  build port and a lab-host /compact, none of which this slice contains. AC5 (the auto trigger is not bound)
+  is not declared here either: nothing on dev binds any trigger, so a check for it passes at the merge base as
+  well as at the head and cannot be controlled; it belongs to the binding slice, whose manual-trigger row is the
+  change an auto-trigger check can fail without. The unbound dod-omn21116-ac5-auto-unbound item still runs it.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -24,8 +27,6 @@ requirements:
         statement: "AC3: `git grep -n -e _COMPACT_CTX -e pre-compact -e OMNICLAUDE_POSTCOMPACT_RESTORE` returns nothing outside CHANGELOG, and `bash -n user-prompt-submit.sh` passes -- falsifier: a match or a syntax error."
       - id: "AC4"
         statement: "AC4: baseline count drops by exactly the deleted files -- falsifier: unchanged or off."
-      - id: "AC5"
-        statement: "AC5: the `auto` trigger is not bound -- falsifier: a `client_bindings` row or an installed registration for `auto`."
 evidence_requirements:
   - kind: "tests"
     description: "The hook error-visibility, baseline and inventory tests pass with the pair deleted"
@@ -46,7 +47,7 @@ dod_evidence:
     checks:
       - check_type: "command"
         check_value: >-
-          test "$(git grep -n -e _COMPACT_CTX -e pre-compact -e OMNICLAUDE_POSTCOMPACT_RESTORE -- . ':!CHANGELOG.md')"
+          test "$(git grep -n -e _COMPACT_CTX -e pre-compact -e OMNICLAUDE_POSTCOMPACT_RESTORE -- . ':!CHANGELOG.md' ':!contracts/OMN-21116.yaml')"
           = 'plugins/onex/hooks/lib/hook_inventory.py:691:    "pre-compact": "PreCompact",'
           && bash -n plugins/onex/hooks/scripts/user-prompt-submit.sh
     binds_ac: ["AC3"]
@@ -66,14 +67,15 @@ dod_evidence:
   - id: "dod-omn21116-ac5-auto-unbound"
     description: >-
       AC5: no registration in hooks.json runs the binding adapter, so no trigger (auto included) is bound from
-      this repository, and the hook-inventory client_bindings tests pass.
+      this repository, and the hook-inventory client_bindings tests pass. Unbound: this holds at the merge base
+      too (nothing on dev binds a trigger), so it has no failing control, and AC5 is not declared by this slice.
     source: "manual"
     checks:
       - check_type: "command"
         check_value: "! grep -q 'onex-claude-code-hook' plugins/onex/hooks/hooks.json"
       - check_type: "test_passes"
         check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov"
-    binds_ac: ["AC5"]
+    binds_ac: []
   - id: "dod-omn21116-error-visibility"
     description: "The error-guard and error-visibility tests no longer expect pre-compact.sh and pass."
     source: "manual"
