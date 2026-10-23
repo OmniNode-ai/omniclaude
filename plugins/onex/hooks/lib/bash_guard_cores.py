@@ -18,8 +18,8 @@ and the same environment (the request carries the complete environment the
 guard would have started it with), its stdout and stderr captured the way the
 guard captured them. Between cores the process state is restored and every
 module the core imported from the hook lib directory is dropped, so no core
-sees another's module state. An exception is what the interpreter would have
-done with it: a traceback on stderr and exit status 1.
+sees another's module state. An exception produces a one-line summary then
+the traceback on stderr and exit status 1.
 
 Usage::
 
@@ -77,11 +77,7 @@ def parse_request(raw: bytes) -> Request:
         if sep:
             env[name] = value
     return Request(
-        stderr_mode=stderr_mode,
-        cwd=cwd,
-        stdin=stdin_text if have_stdin == "1" else None,
-        argv=argv,
-        env=env,
+        stderr_mode, cwd, stdin_text if have_stdin == "1" else None, argv, env
     )
 
 
@@ -110,24 +106,17 @@ def run_core(request: Request) -> tuple[int, str]:
     is_module = request.argv[1] == "-m"
     script = request.argv[2] if is_module else request.argv[1]
     args_start = 3 if is_module else 2
-    out = io.StringIO()
-    err = io.StringIO()
-    saved_env = dict(os.environ)
-    saved_cwd = os.getcwd()
-    saved_argv = sys.argv
-    saved_path = list(sys.path)
+    rc, out, err = 0, io.StringIO(), io.StringIO()
+    saved_env, saved_cwd, saved_argv = dict(os.environ), os.getcwd(), sys.argv
+    saved_path, saved_modules = list(sys.path), set(sys.modules)
     saved_streams = (sys.stdin, sys.stdout, sys.stderr)
-    saved_modules = set(sys.modules)
-    rc = 0
     try:
         os.environ.clear()
         os.environ.update(request.env)
         os.chdir(request.cwd)
         sys.argv = [script, *request.argv[args_start:]]
         sys.path[0:0] = [str(Path(script).resolve().parent)]
-        sys.stdin = io.StringIO(request.stdin or "")
-        sys.stdout = out
-        sys.stderr = err
+        sys.stdin, sys.stdout, sys.stderr = io.StringIO(request.stdin or ""), out, err
         if not is_module and not Path(script).is_file():
             print(f"{request.argv[0]}: can't open file {script!r}", file=err)
             rc = 2
@@ -140,7 +129,19 @@ def run_core(request: Request) -> tuple[int, str]:
                     runpy.run_path(script, run_name="__main__")
             except SystemExit as exc:
                 rc = _exit_status(exc.code, err)
-            except BaseException:  # noqa: BLE001 -- what the interpreter would do
+            except BaseException as exc:  # noqa: BLE001 -- what the interpreter would do
+                detail = " ".join("".join(traceback.format_exception_only(exc)).split())
+                print(
+                    f"guard core cannot be imported: {detail} "
+                    f"(interpreter {sys.executable}; the plugin install or "
+                    "PLUGIN_PYTHON_BIN/CLAUDE_PLUGIN_DATA/.venv/OMNI_HOME venv "
+                    "must import it)"
+                    if is_module
+                    and isinstance(exc, ImportError)
+                    and script not in sys.modules
+                    else f"guard core crashed: {detail} (core {script})",
+                    file=err,
+                )
                 traceback.print_exc(file=err)
                 rc = 1
     except OSError as exc:  # the working directory is gone, and so on
@@ -148,8 +149,7 @@ def run_core(request: Request) -> tuple[int, str]:
         rc = 1
     finally:
         sys.stdin, sys.stdout, sys.stderr = saved_streams
-        sys.argv = saved_argv
-        sys.path[:] = saved_path
+        sys.argv, sys.path[:] = saved_argv, saved_path
         for name in set(sys.modules) - saved_modules:
             if _in_lib(sys.modules.get(name)):
                 sys.modules.pop(name, None)
