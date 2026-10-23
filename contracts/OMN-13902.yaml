@@ -113,7 +113,7 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py -q --no-cov
-  - id: dod-omniclaude-sibling-refresh-holds-refused-release-pins
+  - id: dod-omniclaude-sibling-refresh-holds-refused-pins
     source: manual
     binds_ac:
       - AC7
