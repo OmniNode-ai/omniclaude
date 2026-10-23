@@ -296,6 +296,18 @@ _WRAPPERS: Final[frozenset[str]] = frozenset(
     {"sudo", "env", "command", "time", "nohup", "nice", "doas"}
 )
 
+#: Shell reserved words that may stand in front of a simple command, so the
+#: command's own first word is not its program (OMN-18927). `do` and `{` were
+#: already peeled for a loop body (OMN-19380); the rest head a condition
+#: (`if`, `elif`, `while`, `until`), a branch body (`then`, `else`) or negate
+#: the command that follows (`!`). Left in place a segment's program reads as
+#: the keyword, `_parse_git` returns None, and the git call inside a compound
+#: command is never judged at all -- `if true; then git reset --hard
+#: origin/main; fi` was admitted in the shared registry clone.
+_LEADING_KEYWORDS: Final[frozenset[str]] = frozenset(
+    {"{", "!", "do", "then", "else", "elif", "if", "while", "until"}
+)
+
 _ASSIGNMENT: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 #: git global flags that consume the NEXT token as a value, distinct from
@@ -1852,8 +1864,11 @@ def _peel_grouping(segment: list[str]) -> tuple[list[str], int, int]:
     opened = 0
     while tokens:
         head = tokens[0]
-        if head in {"{", "do"}:
+        if head in _LEADING_KEYWORDS:
             # OMN-19380: a loop body begins with do before its first command.
+            # OMN-18927: so does every other reserved word that may precede a
+            # simple command, and a segment still wearing one is read as a
+            # command named `then` rather than as the git call it carries.
             tokens = tokens[1:]
         elif head.startswith("(") and not head.startswith("$("):
             opened += 1
