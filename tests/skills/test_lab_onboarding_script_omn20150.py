@@ -2758,6 +2758,8 @@ def test_recommended_order_with_none_listed_keeps_the_preferred_families(
 
 def test_recommended_order_holds_no_model_id_in_the_script() -> None:
     """The order is read from the catalogue; neither file names a model."""
+    reader = _functions("recommended_order")
+    assert "default_models:" in reader and "$CATALOGUE_REL" in reader
     for text in (SCRIPT.read_text(), HANDLER.read_text()):
         assert not re.search(r"qwen|gemma|nemotron|gpt-4|gemini-[0-9]", text)
 
