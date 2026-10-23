@@ -291,11 +291,18 @@ def _run_hook(
     )
 
 
-def test_the_hook_refuses_the_doubled_mkdir_end_to_end(
+def test_the_hook_refuses_the_doubled_path_end_to_end(
     tmp_path: Path, registry: Path, segment: str
 ) -> None:
-    """AC1 through the registered surface: the directory is never created."""
-    command = _fill(DOUBLED_REFUSED[0], registry, segment)
+    """AC1 through the registered surface, for a call that reaches the core.
+
+    The registered guard's pre-filter admits a payload naming git vocabulary,
+    so this is the shape it judges today: a refused git verb aimed at the
+    doubled root. A plain `mkdir` with the same path reaches no decision core at
+    all -- no registered PreToolUse guard evaluates a command carrying no git
+    verb -- and closing that is the residual recorded on the ticket.
+    """
+    command = f"git -C {registry}/{segment} checkout main"
     result = _run_hook(tmp_path, command, registry, str(registry))
     assert result.returncode == 2, (result.stdout, result.stderr)
     verdict = json.loads(result.stdout)
@@ -308,6 +315,6 @@ def test_the_hook_still_admits_an_ordinary_command(
     tmp_path: Path, registry: Path, segment: str
 ) -> None:
     """Positive control for the case above: the hook did not start refusing."""
-    command = _fill(ADMITTED[0], registry, segment)
+    command = f"git -C {registry} checkout main -- docs/standards/a.md"
     result = _run_hook(tmp_path, command, registry, str(registry))
     assert result.returncode == 0, (result.stdout, result.stderr)

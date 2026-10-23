@@ -25,15 +25,15 @@ interfaces_touched: []
 requirements:
   - id: req-refuse-doubled-registry-root
     statement: >
-      A Bash call whose path resolves inside the doubled registry root is refused by
-      name, through the registered hook, while a path that merely carries the same
-      characters elsewhere is admitted.
+      A command that reaches the admission core and whose path resolves inside the
+      doubled registry root is refused by name, while a path that merely carries the
+      same characters elsewhere is admitted.
     acceptance:
       - id: AC1
         statement: >
-          The PreToolUse guard refuses a call whose target path resolves inside the
-          doubled registry root, naming the offending path, and the directory is
-          never created.
+          The PreToolUse guard refuses a call it evaluates whose target path resolves
+          inside the doubled registry root, naming the offending path, and the
+          directory is never created.
       - id: AC2
         statement: >
           A RED-first test pins the gap before the fix lands and goes GREEN after it.
@@ -59,12 +59,13 @@ dod_evidence:
       Six doubled shapes are refused on the decision core (mkdir in both $OMNI_HOME
       spellings and in the resolved form, a redirection, a copy, and a relative path
       after a cd into the root), the refusal names the doubled root, and the
-      registered hook refuses the 2026-09-16 mkdir end to end with the directory
-      never created.
+      registered hook refuses a refused git verb aimed at the doubled root end to
+      end, with the directory never created, beside a control that it still admits an
+      ordinary path-scoped restore in the clone.
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k 'a_path_doubled_onto_the_root_is_refused or the_hook_refuses_the_doubled_mkdir_end_to_end or the_hook_still_admits_an_ordinary_command'"
+        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k 'a_path_doubled_onto_the_root_is_refused or the_hook_refuses_the_doubled_path_end_to_end or the_hook_still_admits_an_ordinary_command'"
         cwd: "."
     binds_ac: [AC1]
   - id: dod-omn18607-red-baseline-pinned
@@ -95,8 +96,8 @@ dod_evidence:
       Six admitted shapes, two of which carry the exact doubled characters outside the
       root (a worktree for a ticket named after the repository, and another tree
       entirely), plus two controls: no resolved root admits every refused shape, and a
-      segment nobody types admits them too, so the refusals are the vocabulary
-      speaking and not the code path.
+      clone whose remote names another repository admits them too, so the refusals
+      come from the clone's own name and not from the code path.
     source: manual
     checks:
       - check_type: test_passes

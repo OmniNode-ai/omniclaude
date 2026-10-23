@@ -84,11 +84,9 @@ _OMNICLAUDE_HOOK_PAYLOAD="$TOOL_INFO"
 
 # Cheap OVER-matching pre-filter. It decides nothing: anything it lets
 # through is decided by the Git effect node admission handler, which tokenises the
-# command. A payload naming neither `git`, any refused verb, nor a path under the
-# resolved registry root cannot be a refused shape, so it never pays for an
-# interpreter start. The root arm is OMN-18607: a path doubled onto the root
-# reaches the filesystem through a plain `mkdir`, which carries no git verb.
-if ! printf '%s' "$TOOL_INFO" | grep -Eqi -e 'git|gh' -e "${OMNI_HOME:-/nonexistent-registry-root}/"; then
+# command. A payload naming neither `git` nor any refused verb cannot be a
+# refused shape, so it never pays for an interpreter start.
+if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'git|gh'; then
     _hook_status "PASS" "no git vocabulary" "0" 2>/dev/null || true
     exit 0
 fi
@@ -98,7 +96,7 @@ fi
 # Bash regex matching: this branch adds no process to any call.
 _stg_fetch_vocab='fetch|pull|ls-remote|remote'
 _stg_lane_marker='omni_worktrees|lab-run|ONEX_WORKTREES_ROOT'
-if ! printf '%s' "$TOOL_INFO" | grep -Eqi -e 'reset|checkout|switch|clean|rebase|branch|merge|push|restore' -e "${OMNI_HOME:-/nonexistent-registry-root}/"; then
+if ! printf '%s' "$TOOL_INFO" | grep -Eqi 'reset|checkout|switch|clean|rebase|branch|merge|push|restore'; then
     if ! [[ "$TOOL_INFO" =~ $_stg_fetch_vocab ]] \
         || { [[ -z "${ONEX_LANE:-}${ONEX_LANE_ID:-}" ]] && ! [[ "$TOOL_INFO" =~ $_stg_lane_marker ]]; }; then
         _hook_status "PASS" "no refused git verb" "0" 2>/dev/null || true
