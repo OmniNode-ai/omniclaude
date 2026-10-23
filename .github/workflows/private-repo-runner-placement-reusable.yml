@@ -35,6 +35,17 @@
 # placement, and a hosted literal fallback is a finding even while its
 # variable is set.
 #
+# WHAT FAILS A RUN. Every branch that runs workflows is still judged, but a run
+# fails only for the checked-out tree (the pull request's merge of head onto
+# base, or the pushed branch) and for a finding on the pull request's own head
+# branch. A finding on any other judged branch prints as a ::notice:: naming
+# the branch, file and line, and fails the run of its own branch instead.
+# The reusable cannot carry a push trigger, so the caller widens its own, to
+# make a push to those branches judge its own tree and show the pusher the red:
+#   on:
+#     push:
+#       branches: [main, dev, 'hotfix/**', 'm[0-9]*/**', 'mvp*/**']
+#
 # Usage in caller repos:
 #   jobs:
 #     private-repo-runner-placement:
@@ -94,6 +105,8 @@ jobs:
       # jobs while this gate reported its repository green from `dev`. The gate
       # reads the other branches from refs/remotes/origin/*, one commit deep,
       # and refuses when they are absent -- a checkout alone holds one tree.
+      # Other judged branches produce notices; only the PR's own head and base
+      # (and a pushed branch) fail the run.
       - name: Fetch every branch tip
         run: git fetch --no-tags --depth=1 origin '+refs/heads/*:refs/remotes/origin/*'
 
@@ -166,13 +179,15 @@ jobs:
           # merge checkout supersedes its old tip) or, on a push, the pushed
           # branch. Passed through env, never interpolated into the script.
           EVENT_BRANCH: ${{ github.base_ref || github.ref_name }}
+          # Never match a fork's branch name against this repository's branches.
+          HEAD_BRANCH: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref || '' }}
         run: |
           set -euo pipefail
           args=(--repo-root . --repo "${GITHUB_REPOSITORY}")
           # Not an input: enumeration is how the gate sees a branch its caller
           # file never reached, and an input that could turn it off would be a
           # bypass by another name.
-          args+=(--every-workflow-branch --event-branch "${EVENT_BRANCH}")
+          args+=(--every-workflow-branch --event-branch "${EVENT_BRANCH}" --head-branch "${HEAD_BRANCH}")
           if [ "${{ inputs.report_reusable_calls }}" = "true" ]; then
             args+=(--report-reusable-calls)
           fi

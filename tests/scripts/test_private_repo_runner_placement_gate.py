@@ -26,6 +26,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import sys
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -1398,6 +1399,7 @@ def _run_every_branch(
     tmp_path: Path,
     event_branch: str,
     branches: list[str],
+    head_branch: str = "",
 ) -> int:
     vars_file = tmp_path / "vars.json"
     vars_file.write_text(json.dumps(dict(SEAM_VARIABLES)), encoding="utf-8")
@@ -1416,13 +1418,15 @@ def _run_every_branch(
         "--event-branch",
         event_branch,
     ]
+    if head_branch:
+        argv.extend(["--head-branch", head_branch])
     return _fixture_call(lambda: module.main(argv))
 
 
-def test_positive_control_a_stale_main_fails_the_gate_run_from_dev(
+def test_positive_control_a_stale_main_is_a_notice_from_dev(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The miss itself: judged from `dev`, the stale `main` must go red.
+    """The miss itself: judged from `dev`, the stale `main` is a notice.
 
     Every hosted job of that `main` is named, against the branch it lives on,
     so the finding says where to make the change.
@@ -1434,10 +1438,102 @@ def test_positive_control_a_stale_main_fails_the_gate_run_from_dev(
         {"dev": {"ci.yml": FLEET_CI}, "main": {"ci.yml": STALE_MAIN_CI}},
     )
     work = _checkout(tmp_path, origin, "dev")
-    assert _run_every_branch(module, work, tmp_path, "dev", ["dev", "main"]) == 1
-    err = capsys.readouterr().err
+    assert _run_every_branch(module, work, tmp_path, "dev", ["dev", "main"]) == 0
+    captured = capsys.readouterr()
+    assert "::error::" not in captured.err
     for job in STALE_MAIN_HOSTED_JOBS:
-        assert f"main:ci.yml::{job}\n" in err, job
+        assert re.search(
+            rf"::notice title=Placement on another judged branch::branch main "
+            rf"file ci.yml line [1-9][0-9]* job {re.escape(job)} resolves to ",
+            captured.out,
+        ), job
+
+
+def test_partition_findings_blocks_checkout_head_and_event_branch() -> None:
+    module = _module()
+    findings = [
+        module.Finding(
+            "ci.yml",
+            "build",
+            "ubuntu-latest",
+            "ubuntu-latest",
+            "hosted",
+            "",
+            on_branch=branch,
+        )
+        for branch in ("", "feature/x", "hotfix/old", "dev")
+    ]
+    blocking, advisory = module.partition_findings(findings, {"feature/x", "dev"})
+    assert blocking == [findings[0], findings[1], findings[3]]
+    assert advisory == [findings[2]]
+
+
+@pytest.mark.parametrize(
+    ("event_branch", "head_branch", "stale_branch", "expected"),
+    [
+        ("dev", "feature/x", "hotfix/old", 0),
+        ("dev", "main", "main", 1),
+        ("dev", "feature/x", "dev", 1),
+        ("hotfix/old", "", "hotfix/old", 1),
+        ("hotfix/old", "", "main", 0),
+    ],
+    ids=[
+        "clean-pr-head",
+        "stale-pr-head",
+        "stale-pr-base-checkout",
+        "stale-hotfix-push",
+        "clean-hotfix-push",
+    ],
+)
+def test_only_the_prs_own_branches_or_pushed_tree_block(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    event_branch: str,
+    head_branch: str,
+    stale_branch: str,
+    expected: int,
+) -> None:
+    module = _module()
+    branches = ["dev", "main", "feature/x", "hotfix/old"]
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {
+            branch: {"ci.yml": STALE_MAIN_CI if branch == stale_branch else FLEET_CI}
+            for branch in branches
+        },
+    )
+    work = _checkout(tmp_path, origin, event_branch)
+    assert (
+        _run_every_branch(module, work, tmp_path, event_branch, branches, head_branch)
+        == expected
+    )
+    captured = capsys.readouterr()
+    if expected:
+        prefix = "main:" if stale_branch == "main" else ""
+        for job in STALE_MAIN_HOSTED_JOBS:
+            assert f"{prefix}ci.yml::{job}\n" in captured.err
+    else:
+        assert (
+            f"::notice title=Placement on another judged branch::branch {stale_branch} "
+            in captured.out
+        )
+        assert "::error::" not in captured.err
+
+
+@pytest.mark.parametrize(
+    ("text", "job", "expected"),
+    [
+        ("jobs:\n  build:\n    runs-on: ubuntu-latest\n", "build", 3),
+        ("jobs:\n  call:\n    uses: ./workflow.yml\n", "call", 3),
+        ("jobs:\n  build: {}\n", "build", 2),
+        ("jobs: {}\n", "missing", 0),
+    ],
+)
+def test_branch_finding_line_uses_the_placement_or_job_key(
+    text: str, job: str, expected: int
+) -> None:
+    assert _module()._job_line(text, job) == expected
 
 
 def test_the_same_tree_passes_when_only_the_checkout_is_judged(
@@ -1515,7 +1611,20 @@ def test_a_branch_named_by_a_push_filter_glob_is_judged(
         },
     )
     work = _checkout(tmp_path, origin, "dev")
-    assert _run_every_branch(module, work, tmp_path, "dev", ["dev", "hotfix/old"]) == 1
+    assert _run_every_branch(module, work, tmp_path, "dev", ["dev", "hotfix/old"]) == 0
+    captured = capsys.readouterr()
+    assert "judged: branch hotfix/old" in captured.out
+    assert (
+        "::notice title=Placement on another judged branch::branch hotfix/old"
+        in captured.out
+    )
+    assert "::error::" not in captured.err
+    assert (
+        _run_every_branch(
+            module, work, tmp_path, "dev", ["dev", "hotfix/old"], "hotfix/old"
+        )
+        == 1
+    )
     assert "hotfix/old:ci.yml::gates\n" in capsys.readouterr().err
 
 
@@ -2187,6 +2296,8 @@ def _every_branch_eligible(
         "--every-workflow-branch",
         "--event-branch",
         "dev",
+        "--head-branch",
+        "main",
         "--hosted-rulings",
         str(rulings),
         "--ledger",

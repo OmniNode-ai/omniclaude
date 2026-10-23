@@ -20,6 +20,9 @@ whatever the repository's own variable scopes currently hold, and that
 resolution is the placement. So an expression is RESOLVED here against live
 variables rather than skipped.
 
+Every workflow branch is still judged; only findings on the checkout or the
+pull request's own head and base block this run. Other branches produce notices.
+
 THE VISIBILITY IS RESOLVED LIVE. The rule is about private repositories, and a
 hardcoded list of which repositories those are goes stale the first time
 somebody flips one. Visibility comes from the GitHub API for the repository
@@ -244,6 +247,8 @@ class Finding:
     # finding is about, so the report says WHERE to make the change -- which is
     # not the file the finding is reported against.
     via: str = ""
+    on_branch: str = ""
+    line: int = 0
 
 
 @dataclass(frozen=True)
@@ -1879,6 +1884,41 @@ def _job_source(text: str, job_id: str) -> str:
     return "\n".join(lines[max(0, start - 1) : end])
 
 
+def _job_line(text: str, job_id: str) -> int:
+    """Locate the placement field, falling back to the job key."""
+    document = yaml.compose(text)
+    if not isinstance(document, yaml.MappingNode):
+        return 0
+    for key, jobs in document.value:
+        if key.value != "jobs" or not isinstance(jobs, yaml.MappingNode):
+            continue
+        for job_key, job in jobs.value:
+            if job_key.value != job_id:
+                continue
+            if isinstance(job, yaml.MappingNode):
+                for field, _value in job.value:
+                    if field.value in ("runs-on", "uses"):
+                        return field.start_mark.line + 1
+            return job_key.start_mark.line + 1
+    return 0
+
+
+def partition_findings(
+    findings: list[Finding], blocking_branches: set[str]
+) -> tuple[list[Finding], list[Finding]]:
+    """The checkout and the event's own head and base block the run."""
+    blocking: list[Finding] = []
+    advisory: list[Finding] = []
+    for finding in findings:
+        target = (
+            blocking
+            if not finding.on_branch or finding.on_branch in blocking_branches
+            else advisory
+        )
+        target.append(finding)
+    return blocking, advisory
+
+
 def _offending_placements(
     branches: list[Branch],
     contexts: tuple[EventContext, ...],
@@ -2621,7 +2661,12 @@ def scan_every_workflow_branch(
             f"{len(branch_findings)} hosted placement(s)"
         )
         findings.extend(
-            replace(finding, workflow=f"{branch}:{finding.workflow}")
+            replace(
+                finding,
+                workflow=f"{branch}:{finding.workflow}",
+                on_branch=branch,
+                line=_job_line(texts[finding.workflow], finding.job),
+            )
             for finding in branch_findings
         )
     return findings
@@ -2733,6 +2778,15 @@ def main(argv: list[str] | None = None) -> int:
             "explicit trigger filter names), read from refs/remotes/origin/*. "
             "A branch the caller file never reached is otherwise never judged "
             "(OMN-18431). The reusable workflow always passes it."
+        ),
+    )
+    parser.add_argument(
+        "--head-branch",
+        default="",
+        help=(
+            "the pull request's own head branch when it lives in this repository; "
+            "empty on a push, merge-group event or fork pull request. Only "
+            "meaningful with --every-workflow-branch."
         ),
     )
     parser.add_argument(
@@ -2950,6 +3004,22 @@ def main(argv: list[str] | None = None) -> int:
     # only in one workflow's own comment, seen by nobody.
     for line in latent:
         print(line)
+
+    blocking_branches = {b for b in (args.head_branch, args.event_branch) if b}
+    findings, advisory = partition_findings(findings, blocking_branches)
+    for finding in advisory:
+        workflow = finding.workflow.removeprefix(f"{finding.on_branch}:")
+        print(
+            "::notice title=Placement on another judged branch::"
+            f"branch {finding.on_branch} file {workflow} line {finding.line} "
+            f"job {finding.job} resolves to {finding.resolved} [{finding.why}]"
+        )
+    if advisory:
+        print(
+            f"NOTE: {len(advisory)} hosted placement(s) on other judged branches "
+            "are notices here; each fails the run of its own branch (a push to "
+            "it, or a pull request from or into it)."
+        )
 
     if not findings:
         ruled = (

@@ -116,6 +116,13 @@ def test_the_gate_judges_every_branch_that_runs_workflows() -> None:
         "fetching every head it refuses, and a checkout alone holds one tree"
     )
     assert "--every-workflow-branch" in runs
+    assert "--head-branch" in runs
+    gate = next(step for step in steps if step.get("name") == "Run the placement gate")
+    assert gate["env"]["HEAD_BRANCH"] == (
+        "${{ github.event.pull_request.head.repo.full_name == github.repository "
+        "&& github.head_ref || '' }}"
+    )
+    assert "'hotfix/**', 'm[0-9]*/**', 'mvp*/**'" in body
     assert "--event-branch" in runs
     assert "github.base_ref || github.ref_name" in body, (
         "the event's own branch is the pull request's BASE (whose tree the "
