@@ -152,7 +152,6 @@ EXPECTED_HOOKS=(
     "pre-tool-use-quality.sh"
     "session-end.sh"
     "stop.sh"
-    "pre-compact.sh"
     "post-tool-use-quality.sh"
     "post-tool-delegation-counter.sh"
     "post-skill-delegation-enforcer.sh"

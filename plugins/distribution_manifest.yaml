@@ -1510,22 +1510,6 @@ components:
   path: plugins/onex/hooks/scripts/pre-commit-no-inprocess-fallback.sh
   backing_nodes: []
   rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
-- id: hooks/scripts/pre-compact-probe.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/pre-compact-probe.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/pre-compact.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/pre-compact.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/pre-tool-use-quality.sh
   kind: hook
   exposure: beta

@@ -266,7 +266,7 @@ _try_inline_venv_repair() {
 # Rationale: running hooks against the wrong Python produces non-reproducible bugs
 # that are far worse than a visible, actionable error. See OMN-2051.
 #
-# OMN-3725: Advisory hooks (session-end, stop, pre-compact, post-tool-use-quality)
+# OMN-3725: Advisory hooks (session-end, stop, post-tool-use-quality)
 # exit 0 gracefully when Python is missing. Critical hooks still hard-fail.
 # The advisory allowlist is checked via BASH_SOURCE[1] (the sourcing script)
 # to prevent env-var-only spoofing of OMNICLAUDE_HOOK_CRITICALITY.
@@ -280,7 +280,7 @@ if [[ -z "${PYTHON_CMD}" ]]; then
     _hook_base="$(basename "${BASH_SOURCE[1]:-}" 2>/dev/null || echo "")"
     _advisory_ok=false
     case "$_hook_base" in
-        session-end.sh|stop.sh|pre-compact.sh|post-tool-use-quality.sh) _advisory_ok=true ;;
+        session-end.sh|stop.sh|post-tool-use-quality.sh) _advisory_ok=true ;;
         # OMN-16162: SessionStart/SessionEnd bus-mirror hooks are best-effort
         # direct-dispatch hand-offs -- a missing Python interpreter must
         # degrade gracefully, not hard-fail the session.

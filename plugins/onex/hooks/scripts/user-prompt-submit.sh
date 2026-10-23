@@ -855,40 +855,6 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/extraction_event_emit
     fi
 fi
 
-# ── Post-compact context re-injection ────────────────────────────────────────
-# If a pre-compact.sh snapshot exists for this session, prepend it to AGENT_CONTEXT
-# and consume the file (one-shot). Written by the PreCompact hook before /compact runs.
-# SESSION_ID is already parsed above — do not re-read stdin.
-#
-# Toggle gate: OMNICLAUDE_POSTCOMPACT_RESTORE (default OFF)
-# When disabled (default), post-compact restore is skipped entirely.
-_COMPACT_CTX_FILE="/tmp/omniclaude-compact-ctx-${SESSION_ID}"
-
-_COMPACT_CTX_CONSUME=false
-if [[ "${OMNICLAUDE_POSTCOMPACT_RESTORE:-0}" != "1" ]]; then
-    log "Post-compact restore disabled (OMNICLAUDE_POSTCOMPACT_RESTORE=${OMNICLAUDE_POSTCOMPACT_RESTORE:-0})"
-elif [[ -n "$SESSION_ID" && -f "$_COMPACT_CTX_FILE" ]]; then
-    _COMPACT_CTX=$(cat "$_COMPACT_CTX_FILE" 2>/dev/null) || true
-    if [[ -n "$_COMPACT_CTX" ]]; then
-        if [[ -n "$AGENT_CONTEXT" ]]; then
-            AGENT_CONTEXT="${_COMPACT_CTX}
-
----
-
-${AGENT_CONTEXT}"
-        else
-            AGENT_CONTEXT="$_COMPACT_CTX"
-        fi
-        # Mark for deferred deletion — file is consumed only after final jq output succeeds
-        _COMPACT_CTX_CONSUME=true
-        log "Post-compact context injected (${#_COMPACT_CTX} bytes)"
-    else
-        # Empty file or read failure — leave for next prompt to retry
-        log "Post-compact snapshot empty or unreadable — leaving for retry: $_COMPACT_CTX_FILE"
-    fi
-fi
-# ─────────────────────────────────────────────────────────────────────────────
-
 # Prepend first-prompt ticket context to AGENT_CONTEXT when present (OMN-3216).
 # Wrapped in trust="external" boundary markers (OMN-6371) since ticket content
 # originates from Linear and may contain untrusted user input.
@@ -907,12 +873,9 @@ ${AGENT_CONTEXT}"
 fi
 
 # Final Output via jq to ensure JSON integrity
-# Consume the post-compact snapshot file only after jq succeeds (fail-safe semantics).
-if printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \
+if ! printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \
     '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
      .hookSpecificOutput.additionalContext = $ctx' 2>>"$LOG_FILE"; then
-    [[ "$_COMPACT_CTX_CONSUME" == "true" ]] && rm -f "$_COMPACT_CTX_FILE" || true
-else
     log "ERROR: Final jq output failed, passing through raw input"
     printf %s "$INPUT"
 fi
