@@ -1,0 +1,102 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18927
+title: "shared-tree git guard blocks the sanctioned merge when a second statement follows in the same Bash call"
+summary: >
+  The reported false BLOCK (the sanctioned publish-loop merge refused whenever a
+  second, unrelated statement shared its Bash call) no longer reproduces: OMN-17427
+  replaced shlex with the shared tokenizer, which ends a command at a newline. The
+  same isolation defect was still live in the opposite direction, as a false ALLOW.
+  A reserved word standing in front of a simple command stayed in the segment, so
+  the segment's program read as `then` rather than `git`, `_parse_git` returned None,
+  and a git call inside a compound command was never judged at all -- measured on dev
+  43a2b2b6, `if true; then git reset --hard origin/main; fi` was ADMITTED in the
+  registry fixture while the same reset alone was refused. `_peel_grouping` now peels
+  every reserved word that may precede a simple command, not only the `do` and `{` of
+  OMN-19380, and the publish-loop and refused-verb shapes are pinned in both
+  directions.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-segment-token-isolation
+    statement: >
+      A git invocation sharing a Bash call with other statements is judged on its own
+      tokens: the sanctioned publish-loop merge stays allowed, and a refused verb
+      carried by a compound command stays refused.
+    acceptance:
+      - id: AC1
+        statement: >
+          `git merge --no-edit origin/main` followed by a second, unrelated statement
+          in the same command string is allowed on `main`, matching the
+          single-statement case.
+      - id: AC2
+        statement: >
+          The heredoc shape of the sibling false-block is pinned where it stands, with
+          the untokenisable refusal kept as its control.
+      - id: AC3
+        statement: >
+          The merge sub-command's own token set is isolated from any other segment in a
+          multi-statement command, asserted on the segmenter directly.
+      - id: AC4
+        statement: >
+          The existing shared-tree guard suite stays green and the guard is never
+          disabled to ship this.
+evidence_requirements:
+  - kind: tests
+    description: "Shared-tree git guard suite green, including the OMN-18927 isolation cases"
+    command: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn18927-merge-read-multi-statement
+    description: >
+      The publish-loop merge is allowed on `main` in eight multi-statement shapes, and
+      refused in every one of them off `main` -- the half that proves the merge segment
+      is read rather than skipped. The keyword-wrapped shapes were admitted off `main`
+      before this change.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov -k 'multi_statement_publish_loop_merge_is_allowed_on_main or multi_statement_publish_loop_merge_is_refused_off_main'"
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac: [AC1]
+  - id: dod-omn18927-heredoc-body-pinned
+    description: >
+      A heredoc body carrying git-verb text is data, not a command line; a genuinely
+      untokenisable command naming a refused verb is still refused; a real refused verb
+      sharing the command string with such a body is still read and refused.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov -k heredoc_body_naming_a_refused_verb_is_data_not_a_command"
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac: [AC2]
+  - id: dod-omn18927-segment-tokens-isolated
+    description: >
+      Read off the segmenter: segment N's invocation carries none of segment N+1's
+      words, and a segment headed by a reserved word still yields the git invocation it
+      carries. Seven keyword-wrapped refused verbs are refused, with a no-op policy
+      control proving the refusals are the policy speaking.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov -k 'segment_operands_never_carry_another_segments_words or refused_verb_behind_a_shell_keyword_is_still_refused or keyword_wrapped_refusals_are_the_policy_speaking'"
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac: [AC3]
+  - id: dod-omn18927-existing-suite-green
+    description: >
+      The pre-existing refusal and allowance corpus of the guard suite -- the policy
+      vocabulary, the wrapper's refusals in the registry clone, the sanctioned shapes it
+      still admits and the no-op-policy control that proves the zero -- run beside this
+      ticket's own control, and green. A bound check has a 30s ceiling
+      (DOD_VERIFY_CHECK_TIMEOUT_S, default 30) and the whole 311-case file takes about
+      60s, so the file in full is AC4's other falsifier: it runs in this PR's Hook
+      System Tests job, which is required for merge.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov -k 'no_op_policy or shell_wrapper_refuses_in_registry_clone or shell_wrapper_allows_sanctioned or keyword_wrapped_refusals_are_the_policy_speaking or refused_verb_behind_a_shell_keyword or policy_loads_and_declares'"
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac: [AC4]
