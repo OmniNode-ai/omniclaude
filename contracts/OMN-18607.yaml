@@ -1,0 +1,153 @@
+schema_version: "1.0.0"
+ticket_id: OMN-18607
+title: "PreToolUse guard does not refuse a path doubled onto the registry root"
+summary: >
+  $OMNI_HOME IS the registry repository's own root on this fleet. The old
+  $OMNI_HOME/CLAUDE.md:169 said to run from a copy of the repo nested one segment
+  inside it; a lane that followed it created a stray untracked directory there and
+  two lanes wrote scratch output into it over three weeks before anyone noticed, a
+  second lane hitting the identical doubling on 2026-09-16. Nothing git-tracked the
+  directory, so no repo-scoped CI gate could see it, and removing the wrong
+  instruction does not stop the next lane typing the segment from stale memory.
+  The refusal is a new arm of the Git effect node's admission handler, keyed on new
+  policy vocabulary (doubled_root_ticket, doubled_root_segments) in
+  git_admission_policy.json, and it is reached through the already-registered
+  shared-tree guard: no new hook script and no new plugin file, per the operator
+  ruling of 2026-10-01, and no suppression anywhere in the diff. That guard's
+  pre-filter now also admits a payload naming a path under the resolved registry
+  root, because a doubled path reaches the filesystem through a plain mkdir, which
+  carries no git verb. The check is ANCHORED at the resolved root, never a substring
+  match, and the refusal names the offending path, the root and the corrected
+  spelling. The segment is spelled once, in the policy; the code derives it.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-refuse-doubled-registry-root
+    statement: >
+      A command that reaches the admission core and whose path resolves inside the
+      doubled registry root is refused by name, while a path that merely carries the
+      same characters elsewhere is admitted.
+    acceptance:
+      - id: AC1
+        statement: >
+          The PreToolUse guard refuses a call it evaluates whose target path resolves
+          inside the doubled registry root, naming the offending path, and the
+          directory is never created.
+      - id: AC2
+        statement: >
+          A RED-first test pins the gap before the fix lands and goes GREEN after it.
+      - id: AC3
+        statement: >
+          The refusal names $OMNI_HOME directly and states the correction rather than
+          a generic "path refused" message.
+      - id: AC4
+        statement: >
+          The check is anchored to the resolved root, so the same characters outside
+          it are accepted while the doubled path anchored at it is refused.
+evidence_requirements:
+  - kind: tests
+    description: "The doubled-root arm's own suite, and the shared-tree guard suite it joins"
+    command: "uv run pytest tests/hooks/test_doubled_root_path_guard.py tests/hooks/test_shared_tree_git_guard.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn18607-doubled-path-refused
+    description: >
+      Six doubled shapes are refused on the decision core (mkdir in both $OMNI_HOME
+      spellings and in the resolved form, a redirection, a copy, and a relative path
+      after a cd into the root), the refusal names the doubled root, and the
+      registered hook refuses a refused git verb aimed at the doubled root end to
+      end, with the directory never created, beside a control that it still admits an
+      ordinary path-scoped restore in the clone.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k 'a_path_doubled_onto_the_root_is_refused or the_hook_refuses_the_doubled_path_end_to_end or the_hook_still_admits_an_ordinary_command'"
+        cwd: "."
+    binds_ac: [AC1]
+  - id: dod-omn18607-red-baseline-pinned
+    description: >
+      The gap is closed rather than described: the policy declares the vocabulary the
+      refusal is keyed on, with this ticket's id travelling beside it. At the merge
+      base the policy carries no such field, the loader raises PolicyError on the
+      contract's own expectation, and the whole file is red.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k the_policy_declares_the_arm"
+        cwd: "."
+    binds_ac: [AC2]
+  - id: dod-omn18607-refusal-text
+    description: >
+      The refusal names $OMNI_HOME, its value, the corrected path spelled out, the
+      ticket and the disable command, so a lane hitting it does not re-derive the fix
+      from CLAUDE.md.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k the_refusal_names_the_root_and_the_correction"
+        cwd: "."
+    binds_ac: [AC3]
+  - id: dod-omn18607-anchored-not-substring
+    description: >
+      Six admitted shapes, two of which carry the exact doubled characters outside the
+      root (a worktree for a ticket named after the repository, and another tree
+      entirely), plus two controls: no resolved root admits every refused shape, and a
+      clone whose remote names another repository admits them too, so the refusals
+      come from the clone's own name and not from the code path. The check also runs
+      the refusal of the doubled path anchored at the root, the other half of AC4,
+      so it fails at the merge base where nothing is refused.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k 'a_path_doubled_onto_the_root_is_refused or a_path_that_is_not_anchored_at_the_root_is_admitted or no_resolved_root_means_no_anchor_and_no_refusal or a_clone_whose_name_differs_admits_every_doubled_path'"
+        cwd: "."
+    binds_ac: [AC4]
+  - id: dod-omn18607-deploy-container-admission
+    description: >
+      A hosted runner starts a fresh Python container with this checkout's source
+      and locked dependencies mounted read-only. Without network or fleet access,
+      the running admission handler refuses a path doubled onto a temporary git
+      registry root, names the correction, and admits an ordinary path. A missing
+      doubled-root arm fails the refusal assertion.
+    source: manual
+    checks:
+      - check_type: command
+        cwd: "."
+        check_value: |
+          set -eu;
+          runtime_env="$(mktemp)";
+          trap 'rm -f "$runtime_env"' EXIT;
+          uv run python -c 'import sys, sysconfig; print(f"{sys.version_info.major}.{sys.version_info.minor}", sysconfig.get_path("purelib"))' > "$runtime_env";
+          read -r python_minor site_packages < "$runtime_env";
+          docker run --rm --network none --interactive \
+            --mount "type=bind,src=$PWD/src,dst=/runtime,readonly" \
+            --mount "type=bind,src=$site_packages,dst=/deps,readonly" \
+            --env PYTHONPATH=/runtime:/deps --env PYTHONDONTWRITEBYTECODE=1 \
+            "python:${python_minor}-bookworm" python - <<'PROBE'
+          import subprocess
+          import tempfile
+          from pathlib import Path
+          from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (
+              evaluate_bash_command,
+              load_policy,
+          )
+
+          policy = load_policy(Path("/runtime/omniclaude/nodes/node_git_effect/git_admission_policy.json"))
+          with tempfile.TemporaryDirectory() as temporary:
+              root = Path(temporary) / "registry_clone"
+              subprocess.run(["git", "init", "-q", str(root)], check=True)
+              subprocess.run(["git", "-C", str(root), "remote", "add", "origin", "https://example.invalid/acme/registry_clone.git"], check=True)
+              refused = evaluate_bash_command(f"mkdir -p {root}/registry_clone/reports", policy, cwd=root, registry_root=root)
+              assert refused.blocked, refused
+              assert str(root / "registry_clone") in refused.reason, refused.reason
+              assert str(root / "reports") in refused.reason, refused.reason
+              assert "$OMNI_HOME" in refused.reason, refused.reason
+              admitted = evaluate_bash_command(f"mkdir -p {root}/reports", policy, cwd=root, registry_root=root)
+              assert not admitted.blocked, admitted
+          print("Container admission probe passed: doubled path refused; ordinary path admitted")
+          PROBE
+    binds_ac: [AC1, AC3, AC4]
