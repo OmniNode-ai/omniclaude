@@ -97,11 +97,13 @@ dod_evidence:
       root (a worktree for a ticket named after the repository, and another tree
       entirely), plus two controls: no resolved root admits every refused shape, and a
       clone whose remote names another repository admits them too, so the refusals
-      come from the clone's own name and not from the code path.
+      come from the clone's own name and not from the code path. The check also runs
+      the refusal of the doubled path anchored at the root, the other half of AC4,
+      so it fails at the merge base where nothing is refused.
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k 'a_path_that_is_not_anchored_at_the_root_is_admitted or no_resolved_root_means_no_anchor_and_no_refusal or a_clone_whose_name_differs_admits_every_doubled_path'"
+        check_value: "uv run pytest tests/hooks/test_doubled_root_path_guard.py -q --no-cov -k 'a_path_doubled_onto_the_root_is_refused or a_path_that_is_not_anchored_at_the_root_is_admitted or no_resolved_root_means_no_anchor_and_no_refusal or a_clone_whose_name_differs_admits_every_doubled_path'"
         cwd: "."
     binds_ac: [AC4]
   - id: dod-omn18607-deploy-container-admission
