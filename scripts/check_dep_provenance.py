@@ -61,6 +61,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from omniclaude.handlers.handler_dev_merge_tag import is_dev_merge_tag
+
 # ---------------------------------------------------------------------------
 # First-party PyPI-published deps that must be resolved from PyPI, never git.
 # Names are stored in canonical hyphen form; underscore spellings are
@@ -102,8 +104,9 @@ _RAW_OVERRIDE_OK_RE = re.compile(r"#\s*raw-override-ok:\s*(\S+)")
 # names, so the pin is content-addressed. Exactly that shape is not an override:
 # the sibling's own OmniNode-ai repository, a `tag` key and no rev or branch, and
 # a name that is a dev merge tag. A rev, a branch, a release tag or a fork stays
-# forbidden.
-_DEV_MERGE_TAG_RE = re.compile(r"^dev-[0-9]{14}-[0-9a-f]{12}$")
+# forbidden. The tag rule itself is the one definition in
+# src/omniclaude/handlers/handler_dev_merge_tag.py (OMN-19972), so the gate runs
+# with PYTHONPATH=src.
 
 
 def _sibling_repo_url(pkg: str) -> str:
@@ -119,7 +122,7 @@ def _is_dev_merge_tag_pin(pkg: str, attrs: dict[str, object]) -> bool:
     return (
         attrs.get("git") == _sibling_repo_url(pkg)
         and isinstance(tag, str)
-        and _DEV_MERGE_TAG_RE.fullmatch(tag) is not None
+        and is_dev_merge_tag(tag)
     )
 
 
