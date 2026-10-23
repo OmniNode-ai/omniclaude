@@ -1507,6 +1507,7 @@ def _run_hook(
     omni_home_dir: str | None = None,
     mask: str | None = None,
     extra_env: dict[str, str] | None = None,
+    hook_script: Path = HOOK_SCRIPT,
 ) -> subprocess.CompletedProcess[str]:
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
@@ -1538,7 +1539,7 @@ def _run_hook(
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
-        ["bash", str(HOOK_SCRIPT)],
+        ["bash", str(hook_script)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -1788,3 +1789,37 @@ def test_host_where_no_interpreter_imports_the_core_is_refused_by_name(
     assert result.returncode == 2, (result.stdout, result.stderr)
     assert "imports omniclaude.nodes.node_git_effect" in result.stdout
     assert str(fake) in result.stdout
+
+
+def test_registered_entrypoint_reports_missing_core_before_traceback(
+    tmp_path: Path, registry: Path
+) -> None:
+    # Keep the plugin away from any repo venv, as on a host with no install.
+    plugin = tmp_path / "plugin" / "plugins" / "onex"
+    shutil.copytree(HOOKS_DIR, plugin / "hooks")
+    python = tmp_path / "python-without-site-packages"
+    python.write_text(f'#!/bin/sh\nexec "{sys.executable}" -S "$@"\n')
+    python.chmod(0o755)
+    result = _run_hook(
+        tmp_path,
+        "git switch -c x",
+        cwd=registry,
+        omni_home_dir=str(registry),
+        extra_env={
+            "PATH": "/usr/bin:/bin",
+            "CLAUDE_PLUGIN_ROOT": str(plugin),
+            "PLUGIN_PYTHON_BIN": str(python),
+        },
+        hook_script=plugin / "hooks/scripts/pre_tool_use_bash_guards.sh",
+    )
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    verdict = json.loads(result.stdout)
+    assert verdict["decision"] == "block"
+    reason = verdict["reason"]
+    assert "could not evaluate" in reason
+    assert "No module named 'omniclaude'" in reason
+    detail = reason.split("Detail: ", 1)[1][:400]
+    assert detail.startswith("guard core cannot be imported: ModuleNotFoundError:")
+    assert "Traceback" not in detail or detail.index("No module named") < detail.index(
+        "Traceback"
+    )
