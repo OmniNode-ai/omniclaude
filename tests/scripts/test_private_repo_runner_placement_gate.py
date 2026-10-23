@@ -2332,10 +2332,10 @@ def test_nested_selector_with_no_default_keeps_the_chain_after_it(
 
 # OMN-21348, operator ruling 2026-10-23: a pull request cannot change another
 # branch, so on a pull_request event another branch's hosted placement is a
-# warning and only the checkout's own tree decides the verdict. In
-# omninode_infra a pull request into main failed on dev's findings and one into
-# dev failed on main's, so neither repair could merge first. Push and schedule
-# runs still fail on any branch's finding.
+# warning and only the checkout's own tree decides the verdict. In a private
+# infrastructure repository a pull request into main failed on dev's findings
+# and one into dev failed on main's, so neither repair could merge first. Push
+# and schedule runs still fail on any branch's finding.
 
 
 def _run_every_branch_mode(
