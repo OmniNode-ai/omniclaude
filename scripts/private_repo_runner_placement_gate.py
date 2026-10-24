@@ -2654,6 +2654,19 @@ def write_snapshot(slug: str, path: Path) -> None:
     scratch.replace(path)
 
 
+def _print_findings(findings: list[Finding]) -> None:
+    for finding in findings:
+        via = f"\n    via:      {finding.via}" if finding.via else ""
+        print(
+            f"  {finding.workflow}::{finding.job}{via}\n"
+            f"    runs-on:  {finding.runs_on}\n"
+            f"    arm:      {finding.branch}\n"
+            f"    events:   {finding.events}\n"
+            f"    resolves: {finding.resolved}   [{finding.why}]",
+            file=sys.stderr,
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", default=".", type=Path)
@@ -2742,6 +2755,18 @@ def main(argv: list[str] | None = None) -> int:
             "the branch whose tree is checked out (the pull request's base, or "
             "the pushed branch). Its remote tip is superseded by the checkout "
             "and is not judged a second time."
+        ),
+    )
+    parser.add_argument(
+        "--other-branches",
+        choices=("fail", "warn"),
+        default="fail",
+        help=(
+            "what another branch's hosted placement does to the verdict. "
+            "'fail' (the default, and every push or schedule run) fails the "
+            "run. 'warn' (a pull_request run, which cannot change another "
+            "branch) prints each one as a warning and lets only the checkout's "
+            "own tree decide (OMN-21348)."
         ),
     )
     parser.add_argument(
@@ -2899,8 +2924,9 @@ def main(argv: list[str] | None = None) -> int:
             accepted,
         )
         judged: list[str] = []
+        elsewhere: list[Finding] = []
         if args.every_workflow_branch:
-            findings.extend(
+            elsewhere.extend(
                 scan_every_workflow_branch(
                     Path(args.repo_root),
                     args.repo,
@@ -2926,6 +2952,21 @@ def main(argv: list[str] | None = None) -> int:
     except GateError as error:
         print(f"::error::{error}", file=sys.stderr)
         return 2
+
+    # OMN-21348, operator ruling 2026-10-23: a pull request cannot change
+    # another branch, so failing it on that branch's tree deadlocks repairs
+    # (a pull request into main waited on dev, and one into dev on main).
+    if args.other_branches == "warn" and elsewhere:
+        print(
+            f"::warning::{len(elsewhere)} hosted placement(s) on other branches. "
+            "They do not fail this pull request, which cannot change them; a "
+            "push or scheduled run of this gate still fails on them, and each "
+            "is fixed by a pull request into its own branch:",
+            file=sys.stderr,
+        )
+        _print_findings(elsewhere)
+    else:
+        findings.extend(elsewhere)
 
     if args.report_reusable_calls:
         for note in notes:
@@ -2971,16 +3012,7 @@ def main(argv: list[str] | None = None) -> int:
         "the workflow declares:",
         file=sys.stderr,
     )
-    for finding in findings:
-        via = f"\n    via:      {finding.via}" if finding.via else ""
-        print(
-            f"  {finding.workflow}::{finding.job}{via}\n"
-            f"    runs-on:  {finding.runs_on}\n"
-            f"    arm:      {finding.branch}\n"
-            f"    events:   {finding.events}\n"
-            f"    resolves: {finding.resolved}   [{finding.why}]",
-            file=sys.stderr,
-        )
+    _print_findings(findings)
     print(
         "\nPlacement is read per TRIGGER EVENT: the `events:` line names the "
         "events that actually reach the offending arm, including fork events. "

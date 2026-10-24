@@ -1,0 +1,53 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21348
+title: "The runner-placement gate fails a pull request on another branch's tree, so main and dev repairs block each other"
+summary: >
+  private_repo_runner_placement_gate.py judges every other branch that runs
+  workflows, and failed the run on any of their hosted placements. A pull request
+  cannot change another branch, so in a private infrastructure repository a pull
+  request into main failed on dev's findings and one into dev failed on main's,
+  and neither repair could merge first. A new --other-branches option takes fail (the default) or
+  warn. With warn, another branch's hosted placements are printed as one warning
+  and only the checkout's own tree decides the verdict. The reusable passes warn
+  for pull_request and merge_group events and fail for push and schedule runs,
+  derived from the event and never an input. Operator ruling 2026-10-23.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21348-pr-warns
+    statement: On a pull request, another branch's hosted placement warns and only the checkout's tree decides.
+    acceptance:
+      - id: AC1
+        statement: "AC1: on a pull_request event the gate exits 0 when only another branch has hosted placements, prints each of them as a warning, and still exits 1 when the checkout has one"
+  - id: req-omn21348-push-fails
+    statement: Push and schedule runs still fail on another branch's hosted placement.
+    acceptance:
+      - id: AC2
+        statement: "AC2: on push and schedule events another branch's hosted placement still fails the run, and the reusable passes the warning mode only for pull_request events"
+evidence_requirements:
+  - kind: tests
+    description: "Placement gate tests pass"
+    command: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21348-ac1-pr-warns
+    description: 'Against fixture origins, a dev checkout on the fleet with a stale main exits 0 under --other-branches warn and prints a ::warning:: naming each of main''s hosted jobs; a stale dev checkout with a clean main still exits 1. Fails at the merge base, which has no --other-branches option.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -k other_branches_warn"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21348-ac2-push-fails
+    description: 'Under --other-branches fail a clean checkout with a stale main exits 1, and the reusable sets OTHER_BRANCHES to warn only for pull_request and merge_group events and passes it to the gate. Fails at the merge base, which has neither the option nor the variable.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -k 'other_branches_fail_mode or other_branches_reusable'"
+        cwd: "${OMNI_HOME}/omniclaude"
