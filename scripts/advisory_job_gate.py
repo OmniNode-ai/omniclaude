@@ -440,12 +440,21 @@ def workflow_paths(repo_root: Path) -> list[Path]:
 # --------------------------------------------------------------------------
 
 
+_UMBRELLA_CONSTANTS = ("EXPECTED_EXTERNAL_CONTEXTS", "EXTERNAL_SKIPPABLE_CONTEXTS")
+
+
 def expected_external_contexts(repo_root: Path) -> tuple[list[str], str]:
     """The CI-summary umbrella constant, parsed statically.
 
     On omnibase_infra and omnimarket the umbrella IS the enforcement surface --
     a context missing from that tuple is silently unenforced with no
     branch-protection signal that it is missing (CLAUDE.md, deploy-gate table).
+
+    `EXTERNAL_SKIPPABLE_CONTEXTS` is the same surface for a path-relevant
+    context: the summary requires its check-run and accepts `skipped` only
+    when none of the mapped paths changed. Its KEYS are enforced contexts;
+    reading the tuple alone reported the seven k8s-validate jobs of a private
+    infrastructure repository unenforced (OMN-21353).
     """
     path = repo_root / "scripts" / "ci" / "ci_summary_gate.py"
     if not path.is_file():
@@ -454,6 +463,7 @@ def expected_external_contexts(repo_root: Path) -> tuple[list[str], str]:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except SyntaxError as error:
         raise _fail(f"{path}: unparseable ({error})")
+    found: dict[str, list[str]] = {}
     for node in ast.walk(tree):
         # BOTH assignment shapes. omnibase_infra spells it
         # `EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (...)`, an AnnAssign,
@@ -470,17 +480,26 @@ def expected_external_contexts(repo_root: Path) -> tuple[list[str], str]:
             value_node = node.value
         else:
             continue
-        if "EXPECTED_EXTERNAL_CONTEXTS" not in names or value_node is None:
+        name = next((n for n in names if n in _UMBRELLA_CONSTANTS), None)
+        if name is None or value_node is None or name in found:
             continue
         try:
             value = ast.literal_eval(value_node)
         except ValueError as error:
-            raise _fail(
-                f"{path}: EXPECTED_EXTERNAL_CONTEXTS is not a literal ({error})"
-            )
-        contexts = [str(item) for item in value]
-        return contexts, f"{len(contexts)} from EXPECTED_EXTERNAL_CONTEXTS"
-    return [], "EXPECTED_EXTERNAL_CONTEXTS absent from ci_summary_gate.py"
+            raise _fail(f"{path}: {name} is not a literal ({error})")
+        # A dict's iteration is its keys: the contexts, not their path sets.
+        found[name] = [str(item) for item in value]
+    if not found:
+        return [], "EXPECTED_EXTERNAL_CONTEXTS absent from ci_summary_gate.py"
+    contexts = [
+        context for name in _UMBRELLA_CONSTANTS for context in found.get(name, [])
+    ]
+    source = " + ".join(
+        f"{len(found[name])} from {name}"
+        for name in _UMBRELLA_CONSTANTS
+        if name in found
+    )
+    return contexts, source
 
 
 def _gh(args: list[str]) -> str:

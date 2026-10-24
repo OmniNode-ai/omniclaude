@@ -563,6 +563,55 @@ jobs:
             == 0
         )
 
+    @pytest.mark.parametrize(
+        "constant",
+        [
+            'EXTERNAL_SKIPPABLE_CONTEXTS = {"fresh-deploy-fitness": ("k8s/",)}\n',
+            "EXTERNAL_SKIPPABLE_CONTEXTS: dict[str, tuple[str, ...]] = {\n"
+            '    "fresh-deploy-fitness": ("k8s/",),\n}\n',
+        ],
+        ids=["assign", "annassign"],
+    )
+    def test_the_same_job_in_external_skippable_contexts_passes(
+        self, tmp_path: Path, constant: str
+    ) -> None:
+        """OMN-21353: CI Summary also enforces the keys of its path-relevant
+        constant, so a job named there is enforced."""
+        root = _repo(tmp_path, {"fresh-deploy-fitness.yml": self.FITNESS})
+        (root / "scripts" / "ci").mkdir(parents=True)
+        (root / "scripts" / "ci" / "ci_summary_gate.py").write_text(
+            'EXPECTED_EXTERNAL_CONTEXTS = ("deploy-gate / deploy-gate",)\n' + constant,
+            encoding="utf-8",
+        )
+        assert (
+            _run(
+                root,
+                baseline=_baseline(tmp_path, EMPTY_BASELINE),
+                contexts=_contexts(tmp_path, []),
+            )
+            == 0
+        )
+
+    def test_a_job_outside_both_skippable_and_expected_contexts_still_fails(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """OMN-21353 positive control: reading the skippable keys covers only
+        the contexts it names."""
+        root = _repo(tmp_path, {"fresh-deploy-fitness.yml": self.FITNESS})
+        (root / "scripts" / "ci").mkdir(parents=True)
+        (root / "scripts" / "ci" / "ci_summary_gate.py").write_text(
+            'EXPECTED_EXTERNAL_CONTEXTS = ("deploy-gate / deploy-gate",)\n'
+            'EXTERNAL_SKIPPABLE_CONTEXTS = {"Validate YAML Syntax": ("k8s/",)}\n',
+            encoding="utf-8",
+        )
+        code = _run(
+            root,
+            baseline=_baseline(tmp_path, EMPTY_BASELINE),
+            contexts=_contexts(tmp_path, []),
+        )
+        assert code == 1
+        assert "UNENFORCED_VERIFICATION_JOB" in capsys.readouterr().out
+
     def test_an_annotated_verification_job_passes(self, tmp_path: Path) -> None:
         text = self.FITNESS.replace(
             "  fresh-deploy-fitness:\n",
