@@ -1,0 +1,38 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-9050
+title: "The dev-head monitor reads omnimarket's shared ci_bus_lanes.py after the lock refresh removed publish_occ_autobind_command.py"
+summary: >
+  The lock refresh in omniclaude#2966 moved the omnimarket pin to 88fae96eb1cd, past
+  omnimarket#4151, which deleted scripts/publish_occ_autobind_command.py. The
+  "Record red dev heads" job in auto-merge-stale-poller.yml loaded that file from its
+  sparse checkout of omnimarket at the locked sha and failed with FileNotFoundError on
+  every run, turning dev red. The job now fetches and loads scripts/ci_bus_lanes.py at
+  the same locked sha and calls its public load_lane_overlay, resolve_lane_broker and
+  resolve_lane_security.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn9050-dev-head-monitor
+    statement: The dev-head monitor job loads only an omnimarket file its sparse checkout fetches at the locked sha.
+    acceptance:
+      - id: AC4
+        statement: "AC4: the Record red dev heads job fetches scripts/ci_bus_lanes.py, loads it, and calls no private helper of the removed publish_occ_autobind_command.py -- falsifier: uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q -k shared_lane_module fails"
+evidence_requirements:
+  - kind: tests
+    description: "Dev-head monitor tests pass"
+    command: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn9050-ac4-dev-head-monitor
+    description: "The monitor job's omnimarket sparse checkout is scripts/ci_bus_lanes.py, the run loads that path, and no policy._ call remains. Fails at the merge base, which fetched publish_occ_autobind_command.py."
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov -k shared_lane_module"
+        cwd: "${OMNI_HOME}/omniclaude"

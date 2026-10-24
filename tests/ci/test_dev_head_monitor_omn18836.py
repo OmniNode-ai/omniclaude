@@ -477,6 +477,23 @@ def test_dev_lane_table_is_read_from_the_ci_overlay_not_omnimarket() -> None:
     assert ".monitor-bus/config/ci_bus_lanes.yaml" not in runs
 
 
+def test_ci_bus_policy_is_omnimarkets_shared_lane_module() -> None:
+    """OMN-9050: omnimarket#4151 removed publish_occ_autobind_command.py, and the
+    lock refresh that pulled it in left this job loading a file that no longer
+    exists. The job reads the public helpers of scripts/ci_bus_lanes.py, and the
+    file it loads is one its own sparse checkout fetches."""
+    steps = _host_workflow()["jobs"]["dev-head-red-alert"]["steps"]
+    omnimarket = next(
+        step for step in steps if step.get("with", {}).get("path") == ".monitor-bus"
+    )
+    sparse = omnimarket["with"]["sparse-checkout"].split()
+    assert sparse == ["scripts/ci_bus_lanes.py"]
+    runs = "\n".join(step.get("run", "") for step in steps)
+    assert 'Path(".monitor-bus/scripts/ci_bus_lanes.py")' in runs
+    assert "publish_occ_autobind_command" not in runs
+    assert "policy._" not in runs
+
+
 @pytest.mark.parametrize("sha", ["b" * 40, "dev"])
 def test_ci_bus_checkout_uses_a_full_locked_sha(
     sha: str,
