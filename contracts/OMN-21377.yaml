@@ -1,0 +1,64 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21377
+title: "The shipped delegation-routing overlay declares no registered-BYOK tier, so a key-only install has no unpinned route and every bare onex delegate is refused"
+summary: >
+  A developer install had no delegation routing overlay, so the overlay was empty
+  and declared no registered-key tier. registered_byok_routes() returned nothing,
+  the cheapest-first ladder opened on a rung carrying the platform's key, and an
+  unpinned onex delegate on a machine with keys and no local model could be
+  refused. lab-onboarding.sh now writes the overlay (one registered-key tier,
+  right after a local model), binds DELEGATION_ROUTING_OVERLAY_PATH in the shell
+  profile and in its own run, and redoes phase 2 on a machine that lacks it.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21377-key-route
+    statement: A registered provider key is a route with no local model on the machine.
+    acceptance:
+      - id: AC1
+        statement: "AC1: on a machine with one registered provider key and no local model, `registered_byok_routes()` returns at least one route and a bare `onex delegate` answers on that key"
+  - id: req-omn21377-key-first
+    statement: The ladder opens on the customer's key before any platform-keyed cloud rung.
+    acceptance:
+      - id: AC2
+        statement: "AC2: the cheapest-first ladder prefers a registered customer BYOK route over any house-credential cloud rung"
+  - id: req-omn21377-walk
+    statement: The pinned onboarding walk completes with providers only.
+    acceptance:
+      - id: AC3
+        statement: "AC3: the pinned walk of OMN-21261 reaches phase 6 with providers only and no Ollama"
+evidence_requirements:
+  - kind: tests
+    description: "Onboarding BYOK-tier tests pass"
+    command: "uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21377-ac1-key-is-a-route
+    description: 'The overlay the script writes, bound as the script binds it, gives a machine holding one Gemini key and no local model a registered-key tier; registered_byok_routes() returns byok-gemini. Fails at the merge base, which has no overlay writer.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov -k registered_key_is_a_route"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21377-ac2-key-before-house
+    description: 'With the overlay bound, the unpinned initial rung for document work is byok-gemini on the registered-key tier with a tenant credential reference, not a house-keyed cloud rung. Without it the same call opens on a house-keyed rung.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov -k ladder_opens_on_the_key"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21377-ac3-walk-wiring
+    description: 'The walk-side wiring: the profile exports the overlay path, the phase-2 rerun check requires the overlay, an inherited overlay is unset, and a developer-written overlay is kept. The clean-VM walk itself runs on the host that holds the VM and is recorded on the ticket.'
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov -k 'profile_and_the_rerun or developer_overlay'"
+        cwd: "${OMNI_HOME}/omniclaude"

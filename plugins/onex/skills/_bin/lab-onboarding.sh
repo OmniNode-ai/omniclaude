@@ -119,7 +119,7 @@ fi
 INHERITED_ENV=""
 for _v in $(compgen -e); do
   case "$_v" in
-    OMNI_HOME|OMNIBASE_*|ONEX_*|BIFROST_*|KAFKA_*|DELEGATION_ROUTING_TIERS_PATH|POSTGRES_PASSWORD|VALKEY_PASSWORD|PYTHONPATH)
+    OMNI_HOME|OMNIBASE_*|ONEX_*|BIFROST_*|KAFKA_*|DELEGATION_ROUTING_TIERS_PATH|DELEGATION_ROUTING_OVERLAY_PATH|POSTGRES_PASSWORD|VALKEY_PASSWORD|PYTHONPATH)
       INHERITED_ENV="${INHERITED_ENV}${INHERITED_ENV:+ }$_v"; unset "$_v" ;;
   esac
 done
@@ -944,6 +944,13 @@ phase1() {
 # ===========================================================================
 PROFILE_BEGIN="# >>> omninode onboarding >>>"
 PROFILE_END="# <<< omninode onboarding <<<"
+# The delegation routing overlay this setup declares. Its one entry is the tier
+# your own provider keys answer on, right after a local model and before every
+# platform rung. Unbound, the overlay is empty: a registered key then joins no
+# tier, and a delegation with no pin can be refused on a machine that holds only
+# keys. It names no model, key or address; the keys come from `onex secret set`.
+ROUTING_OVERLAY_FILE="$HOME/.omninode/delegation/routing_overlay.yaml"
+ROUTING_OVERLAY_MARK="# Written by omninode-dev-setup: the tier your own keys answer on."
 
 write_profile_block() { # file
   local f="$1" tmp
@@ -954,6 +961,7 @@ write_profile_block() { # file
     printf '%s\n' "$PROFILE_BEGIN"
     printf 'export OMNIBASE_PATH="%s"\n' "$WORKSPACE"
     printf 'export ONEX_WORKSPACE_CONFIG_ROOT="%s"\n' "$WORKSPACE_CONFIG_ROOT"
+    printf 'export DELEGATION_ROUTING_OVERLAY_PATH="%s"\n' "$ROUTING_OVERLAY_FILE"
     # shellcheck disable=SC2016  # written literally; expands in the user's shell
     printf 'eval "$(%s shellenv)"\n' "$(brew_bin)"
     # shellcheck disable=SC2016
@@ -961,6 +969,25 @@ write_profile_block() { # file
     printf '%s\n' "$PROFILE_END"
   } >>"$tmp"
   cat "$tmp" >"$f" && rm -f "$tmp"
+}
+
+# A file this setup did not write is the developer's own: it is left alone, named,
+# and still bound.
+write_routing_overlay() {
+  local f="$ROUTING_OVERLAY_FILE"
+  if [ -f "$f" ] && ! head -n 1 "$f" | grep -qxF "$ROUTING_OVERLAY_MARK"; then
+    say "  $f is your own; it is left as it is and used."
+    return 0
+  fi
+  mkdir -p "$(dirname "$f")" || return 1
+  cat >"$f" <<YAML
+$ROUTING_OVERLAY_MARK
+schema_version: delegation_routing_overlay.v1
+registered_byok_tier:
+  name: registered_keys
+  after_tier: local
+  cost_per_1k_tokens: 0.0
+YAML
 }
 
 # A workspace this setup created carries this marker, written before its first
@@ -1188,6 +1215,7 @@ workspace_runtime_config_anchored() {
 bind_workspace_env() {
   export OMNIBASE_PATH="$WORKSPACE"
   export ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
+  export DELEGATION_ROUTING_OVERLAY_PATH="$ROUTING_OVERLAY_FILE"
 }
 
 workspace_runtime_config_present() {
@@ -1206,7 +1234,9 @@ phase2_verified() {
   workspace_runtime_config_present || return 1
   workspace_runtime_config_anchored || return 1
   [ -f "$WORKSPACE_MARKER" ] || return 1
+  [ -f "$ROUTING_OVERLAY_FILE" ] || return 1
   grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null || return 1
+  grep -qF "DELEGATION_ROUTING_OVERLAY_PATH" "$HOME/.zshrc" 2>/dev/null || return 1
   # A V1 block still exports OMNI_HOME: redo the phase so the block is rewritten.
   ! profile_block_names_legacy_home "$HOME/.zshrc" && ! profile_block_names_legacy_home "$HOME/.bash_profile"
 }
@@ -1220,7 +1250,7 @@ profile_block_names_legacy_home() { # file
 phase2() {
   phase_start 2 "Workspace ($WORKSPACE)" "2-5 minutes"
   if is_done 2 && phase2_verified; then phase_pass "already in place"; return; fi
-  is_done 2 && rerun_note 2 "the workspace no longer checks out (every clone at its anchored commit, the pins file, the runtime config and the profile block)"
+  is_done 2 && rerun_note 2 "the workspace no longer checks out (every clone at its anchored commit, the pins file, the runtime config, the routing overlay and the profile block)"
   refuse_foreign_workspace
   mkdir -p "$WORKSPACE" || { FAILED_STEP="create $WORKSPACE"; phase_fail "choose another directory with --workspace"; }
   [ -f "$WORKSPACE_MARKER" ] || printf 'This workspace was created by omninode-dev-setup.\n' >"$WORKSPACE_MARKER" ||
@@ -1288,6 +1318,9 @@ phase2() {
   step "commit the workspace runtime config" commit_workspace_runtime_config ||
     phase_fail "see the log; $WORKSPACE_CONFIG_ROOT must be a git repository holding the config"
   say "  Workspace transport declared in $WORKSPACE_RUNTIME_CONFIG_REL (in-memory: everything runs on this Mac)."
+  write_routing_overlay ||
+    { FAILED_STEP="declare the routing overlay"
+      phase_fail "could not write $ROUTING_OVERLAY_FILE; check the directory is writable"; }
   write_profile_block "$HOME/.zshrc"
   case "${SHELL:-}" in */bash) write_profile_block "$HOME/.bash_profile" ;; esac
   bind_workspace_env
