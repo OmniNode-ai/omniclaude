@@ -1,0 +1,51 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21353
+title: "The advisory-job gate reads only EXPECTED_EXTERNAL_CONTEXTS, so a job CI Summary enforces through EXTERNAL_SKIPPABLE_CONTEXTS is reported unenforced"
+summary: >
+  Since the per-job census (OMN-18796) advisory_job_gate.py judges each job by its
+  own context, and read the CI-summary umbrella from EXPECTED_EXTERNAL_CONTEXTS
+  only. CI Summary also enforces the keys of EXTERNAL_SKIPPABLE_CONTEXTS: path-relevant
+  contexts that must produce a check-run and may be skipped only when none of their
+  paths changed. In a private infrastructure repository seven k8s-validate jobs are
+  enforced there, so moving the caller's pin past the per-job census failed on them.
+  The gate now reads the keys of both constants, in either assignment spelling.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21353-skippable
+    statement: A job enforced through EXTERNAL_SKIPPABLE_CONTEXTS reads as enforced.
+    acceptance:
+      - id: AC1
+        statement: "AC1: a job whose context is a key of EXTERNAL_SKIPPABLE_CONTEXTS reads as enforced, in both the AnnAssign and the plain Assign spelling"
+  - id: req-omn21353-still-refuses
+    statement: A job named in neither constant is still refused.
+    acceptance:
+      - id: AC2
+        statement: "AC2: a job whose context is in neither constant nor the required contexts is still an UNENFORCED_VERIFICATION_JOB finding"
+evidence_requirements:
+  - kind: tests
+    description: "Advisory-job gate tests pass"
+    command: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21353-ac1-skippable-enforced
+    description: 'A fresh-deploy-fitness job named only as a key of EXTERNAL_SKIPPABLE_CONTEXTS passes, spelled as a plain Assign and as an AnnAssign. Fails at the merge base, which reads only EXPECTED_EXTERNAL_CONTEXTS.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k skippable_contexts_passes"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21353-ac2-still-refuses
+    description: 'With both constants present and the job in neither, the gate still exits 1 with UNENFORCED_VERIFICATION_JOB; run together with the AC1 cases, so the selection fails at the merge base.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_advisory_job_gate.py -q --no-cov -k skippable"
+        cwd: "${OMNI_HOME}/omniclaude"
