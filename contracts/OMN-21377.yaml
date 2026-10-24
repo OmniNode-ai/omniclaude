@@ -62,3 +62,14 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov -k 'profile_and_the_rerun or developer_overlay'"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21377-deploy-probe
+    description: "Deploy probe. Read the onboarding bootstrap handler from GitHub at the checked-out commit and require the routing overlay writer in it, with the AC1 test. It fails at the merge base, where the handler has no write_routing_overlay."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov -k registered_key_is_a_route"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"write_routing_overlay() {\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
