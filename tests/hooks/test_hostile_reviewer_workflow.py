@@ -12,8 +12,8 @@ Asserts that ``.github/workflows/hostile-reviewer.yml`` is wired correctly:
 - Defines a ``hostile-review-gate`` job that depends on ``hostile-review``
   and exits non-zero when the review job reports ``failure``.
 - Posts a PR summary comment via ``actions/github-script``.
-- Does NOT require ``ANTHROPIC_API_KEY`` in any step's env block (regression
-  guard for OMN-7467).
+- Carries neither ``ANTHROPIC_API_KEY`` nor ``REVIEW_ANTHROPIC_API_KEY`` in any
+  env block (OMN-7467 guard, strengthened by OMN-21350).
 
 Wires the OMN-8524 implementation behind a permanent test so future edits to
 the workflow cannot silently regress the gate semantics.
@@ -920,14 +920,10 @@ def test_gate_job_depends_on_review_and_fails_on_failure(
     )
 
 
-def test_no_anthropic_api_key_required(workflow: dict[object, object]) -> None:
-    """The Claude API key names are exported to exactly one step, from one named secret.
-
-    The OMN-7467 guard keeps Claude Code on OAuth: no job-level or workflow-level
-    env, and no step other than the review step, may carry either name. The one
-    sanctioned carrier (OMN-20910) is the review step, whose Claude API voters
-    read it, and its value is the HOSTILE_REVIEW_ANTHROPIC_API_KEY Actions secret.
-    """
+def _anthropic_api_key_carriers(
+    workflow: dict[object, object],
+) -> list[tuple[str, str, object]]:
+    """Collect Claude API key env names at workflow, job and step scope."""
     names = ("ANTHROPIC_API_KEY", "REVIEW_ANTHROPIC_API_KEY")
     carriers: list[tuple[str, str, object]] = []
     envs: list[tuple[str, object]] = [("<workflow>", workflow.get("env"))]
@@ -942,9 +938,29 @@ def test_no_anthropic_api_key_required(workflow: dict[object, object]) -> None:
     for where, env in envs:
         if isinstance(env, dict):
             carriers.extend((where, n, env[n]) for n in names if n in env)
-    secret = "${{ secrets.HOSTILE_REVIEW_ANTHROPIC_API_KEY }}"
-    assert carriers == [
-        ("hostile-review:Run adversarial review", n, secret) for n in names
+    return carriers
+
+
+def test_no_anthropic_api_key_required(workflow: dict[object, object]) -> None:
+    """The OMN-7467 guard keeps Claude Code on OAuth.
+
+    Since OMN-21350, not even the review step carries either Claude API key name.
+    No workflow, job or step env may carry them.
+    """
+    carriers = _anthropic_api_key_carriers(workflow)
+    assert carriers == []
+
+
+@pytest.mark.parametrize("name", ["ANTHROPIC_API_KEY", "REVIEW_ANTHROPIC_API_KEY"])
+def test_anthropic_api_key_carriers_detects_a_planted_step_env(name: str) -> None:
+    """Positive control: the same collector detects either name in a step env."""
+    planted: dict[object, object] = {
+        "jobs": {
+            "review": {"steps": [{"name": "Planted key", "env": {name: "planted"}}]}
+        }
+    }
+    assert _anthropic_api_key_carriers(planted) == [
+        ("review:Planted key", name, "planted")
     ]
 
 
@@ -1245,10 +1261,10 @@ def test_voter_model_from_overlay_ratchet_is_wired_as_ci_step_and_hook() -> None
     assert any(_THIS_TEST in str(hook.get("entry", "")) for hook in hooks)
 
 
-def test_review_step_exports_the_claude_api_key_under_the_voter_env_names(
+def test_review_step_exports_no_claude_api_key_under_the_voter_env_names(
     workflow: dict[object, object],
 ) -> None:
-    """OMN-20910: omniintelligence's Anthropic voter reads ANTHROPIC_API_KEY by default."""
+    """OMN-21350: the review step and job carry no Claude API key env names."""
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
     review_job = jobs["hostile-review"]
@@ -1256,14 +1272,15 @@ def test_review_step_exports_the_claude_api_key_under_the_voter_env_names(
     step = _named_step(workflow, "Run adversarial review")
     env = step["env"]
     assert isinstance(env, dict)
-    secret = "${{ secrets.HOSTILE_REVIEW_ANTHROPIC_API_KEY }}"
-    assert env["ANTHROPIC_API_KEY"] == secret
-    assert env["REVIEW_ANTHROPIC_API_KEY"] == secret
+    assert "ANTHROPIC_API_KEY" not in env
+    assert "REVIEW_ANTHROPIC_API_KEY" not in env
     job_env = review_job["env"]
     assert isinstance(job_env, dict)
-    assert (
-        "ANTHROPIC_API_KEY" not in job_env and "REVIEW_ANTHROPIC_API_KEY" not in job_env
-    ), "the key belongs to the review step only, not every step of the job"
+    assert "ANTHROPIC_API_KEY" not in job_env
+    assert "REVIEW_ANTHROPIC_API_KEY" not in job_env
+    assert "HOSTILE_REVIEW_ANTHROPIC_API_KEY" not in WORKFLOW_PATH.read_text(
+        encoding="utf-8"
+    )
 
 
 _GIT_STUB = """#!/usr/bin/env bash

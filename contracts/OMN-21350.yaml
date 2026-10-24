@@ -1,0 +1,40 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21350
+title: The Sonnet review voter reaches the Claude API through the dogfood tenant review gateway, with no provider key in any workflow
+summary: omniclaude's hostile-reviewer.yml no longer passes the org Actions secret HOSTILE_REVIEW_ANTHROPIC_API_KEY to the review step, and a ratchet scans every workflow and composite action for provider key secret references. This PR carries the AC2 part for omniclaude; AC1 and AC3 are other lanes' work and are not bound here.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-no-provider-key-in-workflows
+    statement: No review workflow in omniclaude references a provider key secret.
+    acceptance:
+      - id: AC2
+        statement: 'AC2 (omniclaude part): no workflow in omniclaude references a provider key secret -- falsifier: uv run pytest tests/unit -k no_provider_key_in_workflows, seeded with a planted reference as positive control'
+evidence_requirements:
+  - kind: tests
+    description: The ratchet finds no provider key secret in any workflow and finds the planted reference in its positive control.
+    command: uv run pytest tests/unit/test_no_provider_key_in_workflows_omn20974.py -q -n 0 --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-no-provider-key-in-workflows-ac2
+    description: The ratchet scans .github/workflows and the composite actions, finds no provider key secret reference, and its planted-reference test shows the detector would flag one.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/test_no_provider_key_in_workflows_omn20974.py -q -n 0 --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC2
+  - id: dod-review-step-carries-no-key-ac2
+    description: The review step of hostile-reviewer.yml exports neither ANTHROPIC_API_KEY nor REVIEW_ANTHROPIC_API_KEY and the workflow names no HOSTILE_REVIEW_ANTHROPIC_API_KEY.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -n 0 --no-cov -k 'no_anthropic_api_key or voter_env_name'
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC2

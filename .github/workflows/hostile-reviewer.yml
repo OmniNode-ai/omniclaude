@@ -509,16 +509,6 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-          # OMN-20910: the Claude API voters' key. omniintelligence's
-          # adapter_ai_reviewer reads the variable the overlay voter names in
-          # api_key_env, and only when none is named `ANTHROPIC_API_KEY`
-          # (src/omniintelligence/review_pairing/adapters/adapter_ai_reviewer.py at the
-          # newest dev tag); its tests declare `REVIEW_ANTHROPIC_API_KEY` for the
-          # overlay voters. The overlay is private, so the secret is exported under
-          # both names. An unset secret is an empty string and changes nothing
-          # until a voter names it.
-          ANTHROPIC_API_KEY: ${{ secrets.HOSTILE_REVIEW_ANTHROPIC_API_KEY }}
-          REVIEW_ANTHROPIC_API_KEY: ${{ secrets.HOSTILE_REVIEW_ANTHROPIC_API_KEY }}
           # OMN-20910: no voter endpoint is set here. Every voter, its endpoint,
           # model, sampling and focus come from REVIEW_VOTERS_OVERLAY (job env).
         working-directory: ../omniintelligence
@@ -655,8 +645,6 @@ jobs:
           for name in (
               "LOCAL_LLM_SHARED_SECRET",
               "LLM_ENDPOINT_CIDR_ALLOWLIST",
-              "ANTHROPIC_API_KEY",
-              "REVIEW_ANTHROPIC_API_KEY",
           ):
               value = os.environ.get(name)
               if value and len(value) >= 8:
