@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """OMN-21377: onboarding declares the tier a developer's own provider keys answer on.
 
@@ -7,7 +7,7 @@ declared no registered-key tier. ``registered_byok_routes()`` returned nothing, 
 cheapest-first ladder opened on a rung carrying the platform's key, and an
 unpinned ``onex delegate`` on a machine with keys and no local model was refused.
 
-The setup now writes the overlay and binds ``DELEGATION_ROUTING_OVERLAY_PATH`` in
+The setup's bootstrap handler now writes the overlay, and the script binds ``DELEGATION_ROUTING_OVERLAY_PATH`` in
 the shell profile and in its own run. These tests write the overlay with the
 script's own function, then read it with the installed routing code.
 """
@@ -29,12 +29,20 @@ SCRIPT = (
     / "_bin"
     / "lab-onboarding.sh"
 )
+HANDLER = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "omniclaude"
+    / "nodes"
+    / "node_skill_omninode_dev_setup_orchestrator"
+    / "handler_onboarding_preflight.sh"
+)
 _FAKE_KEY = "sk-test-" + "k" * 40
 
 
 def _functions(*names: str) -> str:
     out, keep = [], False
-    for line in SCRIPT.read_text().splitlines():
+    for line in (SCRIPT.read_text() + HANDLER.read_text()).splitlines():
         if any(line.startswith(f"{n}() {{") for n in names):
             keep = True
         if keep:
@@ -46,7 +54,7 @@ def _functions(*names: str) -> str:
 
 def _declarations(prefix: str) -> str:
     return "\n".join(
-        line for line in SCRIPT.read_text().splitlines() if line.startswith(prefix)
+        line for line in HANDLER.read_text().splitlines() if line.startswith(prefix)
     )
 
 
@@ -154,9 +162,10 @@ def test_a_developer_overlay_is_left_alone(tmp_path: Path) -> None:
 def test_the_profile_and_the_rerun_check_name_the_overlay() -> None:
     text = SCRIPT.read_text()
     assert (
-        "printf 'export DELEGATION_ROUTING_OVERLAY_PATH=\"%s\"\\n' "
-        '"$ROUTING_OVERLAY_FILE"' in text
+        'export DELEGATION_ROUTING_OVERLAY_PATH="%s"\\n\' "$WORKSPACE_CONFIG_ROOT" "$ROUTING_OVERLAY_FILE"'
+        in text
     )
-    assert '[ -f "$ROUTING_OVERLAY_FILE" ] || return 1' in text
+    assert "routing_overlay_in_place || return 1" in text
+    assert "write_workspace_runtime_config && write_routing_overlay ||" in text
     # An overlay inherited from another setup must not route this run.
     assert "|DELEGATION_ROUTING_OVERLAY_PATH|" in text

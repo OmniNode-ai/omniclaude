@@ -695,7 +695,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="74a9:107a:e1b2:63f8:616d:13ca:8b1a:8bc5:0336:cc50:924c:9b3f:6538:4a9d:5de9:1bc8" root candidate \
+  local digest="3978:63fc:a74a:14dd:47de:a7bb:f730:d9dc:9a39:309d:3ce1:92eb:8d56:1240:9e75:36a9" root candidate \
     download_digest="7f96:7d1b:ba3c:aae3:d4ed:d234:a933:964d:b5bf:2f75:5ae9:23b4:e9ca:939c:8387:3cba"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -944,13 +944,6 @@ phase1() {
 # ===========================================================================
 PROFILE_BEGIN="# >>> omninode onboarding >>>"
 PROFILE_END="# <<< omninode onboarding <<<"
-# The delegation routing overlay this setup declares. Its one entry is the tier
-# your own provider keys answer on, right after a local model and before every
-# platform rung. Unbound, the overlay is empty: a registered key then joins no
-# tier, and a delegation with no pin can be refused on a machine that holds only
-# keys. It names no model, key or address; the keys come from `onex secret set`.
-ROUTING_OVERLAY_FILE="$HOME/.omninode/delegation/routing_overlay.yaml"
-ROUTING_OVERLAY_MARK="# Written by omninode-dev-setup: the tier your own keys answer on."
 
 write_profile_block() { # file
   local f="$1" tmp
@@ -960,8 +953,8 @@ write_profile_block() { # file
   {
     printf '%s\n' "$PROFILE_BEGIN"
     printf 'export OMNIBASE_PATH="%s"\n' "$WORKSPACE"
-    printf 'export ONEX_WORKSPACE_CONFIG_ROOT="%s"\n' "$WORKSPACE_CONFIG_ROOT"
-    printf 'export DELEGATION_ROUTING_OVERLAY_PATH="%s"\n' "$ROUTING_OVERLAY_FILE"
+    # The routing overlay the handler writes (write_routing_overlay) is bound here too.
+    printf 'export ONEX_WORKSPACE_CONFIG_ROOT="%s"\nexport DELEGATION_ROUTING_OVERLAY_PATH="%s"\n' "$WORKSPACE_CONFIG_ROOT" "$ROUTING_OVERLAY_FILE"
     # shellcheck disable=SC2016  # written literally; expands in the user's shell
     printf 'eval "$(%s shellenv)"\n' "$(brew_bin)"
     # shellcheck disable=SC2016
@@ -969,25 +962,6 @@ write_profile_block() { # file
     printf '%s\n' "$PROFILE_END"
   } >>"$tmp"
   cat "$tmp" >"$f" && rm -f "$tmp"
-}
-
-# A file this setup did not write is the developer's own: it is left alone, named,
-# and still bound.
-write_routing_overlay() {
-  local f="$ROUTING_OVERLAY_FILE"
-  if [ -f "$f" ] && ! head -n 1 "$f" | grep -qxF "$ROUTING_OVERLAY_MARK"; then
-    say "  $f is your own; it is left as it is and used."
-    return 0
-  fi
-  mkdir -p "$(dirname "$f")" || return 1
-  cat >"$f" <<YAML
-$ROUTING_OVERLAY_MARK
-schema_version: delegation_routing_overlay.v1
-registered_byok_tier:
-  name: registered_keys
-  after_tier: local
-  cost_per_1k_tokens: 0.0
-YAML
 }
 
 # A workspace this setup created carries this marker, written before its first
@@ -1213,9 +1187,9 @@ workspace_runtime_config_anchored() {
 # Bound for every run, not inside phase 2 alone: a resumed run skips phase 2,
 # and its later phases must still run against this workspace.
 bind_workspace_env() {
-  export OMNIBASE_PATH="$WORKSPACE"
-  export ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
-  export DELEGATION_ROUTING_OVERLAY_PATH="$ROUTING_OVERLAY_FILE"
+  export OMNIBASE_PATH="$WORKSPACE" ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
+  # A bound overlay that does not exist refuses every delegation, so only a written one is bound.
+  [ ! -f "${ROUTING_OVERLAY_FILE:-}" ] || export DELEGATION_ROUTING_OVERLAY_PATH="$ROUTING_OVERLAY_FILE"
 }
 
 workspace_runtime_config_present() {
@@ -1233,10 +1207,8 @@ phase2_verified() {
   done
   workspace_runtime_config_present || return 1
   workspace_runtime_config_anchored || return 1
-  [ -f "$WORKSPACE_MARKER" ] || return 1
-  [ -f "$ROUTING_OVERLAY_FILE" ] || return 1
+  [ -f "$WORKSPACE_MARKER" ] && routing_overlay_in_place || return 1
   grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null || return 1
-  grep -qF "DELEGATION_ROUTING_OVERLAY_PATH" "$HOME/.zshrc" 2>/dev/null || return 1
   # A V1 block still exports OMNI_HOME: redo the phase so the block is rewritten.
   ! profile_block_names_legacy_home "$HOME/.zshrc" && ! profile_block_names_legacy_home "$HOME/.bash_profile"
 }
@@ -1312,15 +1284,13 @@ phase2() {
     fi
   done
   say "  Anchor: omnibase_infra ${INFRA_ANCHOR:0:12}; no proven pin, taken at the anchor's time: ${default_repos:-none}"
-  write_workspace_runtime_config ||
-    { FAILED_STEP="declare the workspace runtime config"
-      phase_fail "could not write $WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL; check the directory is writable"; }
+  # write_routing_overlay (the handler) declares the tier your own keys answer on.
+  write_workspace_runtime_config && write_routing_overlay ||
+    { FAILED_STEP="declare the workspace runtime config and routing overlay"
+      phase_fail "could not write $WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL or $ROUTING_OVERLAY_FILE; check the directories are writable"; }
   step "commit the workspace runtime config" commit_workspace_runtime_config ||
     phase_fail "see the log; $WORKSPACE_CONFIG_ROOT must be a git repository holding the config"
   say "  Workspace transport declared in $WORKSPACE_RUNTIME_CONFIG_REL (in-memory: everything runs on this Mac)."
-  write_routing_overlay ||
-    { FAILED_STEP="declare the routing overlay"
-      phase_fail "could not write $ROUTING_OVERLAY_FILE; check the directory is writable"; }
   write_profile_block "$HOME/.zshrc"
   case "${SHELL:-}" in */bash) write_profile_block "$HOME/.bash_profile" ;; esac
   bind_workspace_env
