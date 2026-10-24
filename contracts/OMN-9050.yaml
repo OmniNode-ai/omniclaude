@@ -1,0 +1,67 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-9050
+title: "The dev-head monitor reads omnimarket's shared ci_bus_lanes.py after the lock refresh removed publish_occ_autobind_command.py; omniclaude pins omnibase_core by full sha in check-handshake"
+summary: >
+  The lock refresh in omniclaude#2966 moved the omnimarket pin to 88fae96eb1cd, past
+  omnimarket#4151, which deleted scripts/publish_occ_autobind_command.py. The
+  "Record red dev heads" job in auto-merge-stale-poller.yml loaded that file from its
+  sparse checkout of omnimarket at the locked sha and failed with FileNotFoundError on
+  every run, turning dev red. The job now fetches and loads scripts/ci_bus_lanes.py at
+  the same locked sha and calls its public load_lane_overlay, resolve_lane_broker and
+  resolve_lane_security. The omnibase_core handshake pin criteria are bound as they
+  stand in this repository; omniclaude has no type-sync-check.yml.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn9050-handshake-pin
+    statement: check-handshake.yml checks out omnibase_core at the full commit sha its auto-bump comment names.
+    acceptance:
+      - id: AC1
+        statement: "AC1: check-handshake.yml checks out omnibase_core at the full sha the auto-bump comment names -- falsifier: the ref is not 40 hex characters or does not start with the comment's short sha"
+  - id: req-omn9050-type-sync-pin
+    statement: A type-sync-check workflow, where one exists, pins omnibase_core at the same sha as check-handshake.
+    acceptance:
+      - id: AC2
+        statement: "AC2: .github/workflows/type-sync-check.yml is absent or checks out omnibase_core at the check-handshake sha -- falsifier: the file exists and names a different ref"
+  - id: req-omn9050-dev-head-monitor
+    statement: The dev-head monitor job loads only an omnimarket file its sparse checkout fetches at the locked sha.
+    acceptance:
+      - id: AC4
+        statement: "AC4: the Record red dev heads job fetches scripts/ci_bus_lanes.py, loads it, and calls no private helper of the removed publish_occ_autobind_command.py -- falsifier: uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q -k shared_lane_module fails"
+evidence_requirements:
+  - kind: tests
+    description: "Dev-head monitor tests pass"
+    command: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn9050-ac1-handshake-pin
+    description: "check-handshake.yml's omnibase_core ref is a full sha starting with the short sha its auto-bump comment names."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: >-
+          python3 -c "import re,sys;t=open('.github/workflows/check-handshake.yml').read();m=re.search(r'Auto-bumped by omnibase_core publish-downstream-pin-bump.yml to ([0-9a-f]{12})\.\s*\n\s*ref: ([0-9a-f]{40})',t);sys.exit(0 if m and m.group(2).startswith(m.group(1)) else 1)"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn9050-ac2-type-sync-pin
+    description: "type-sync-check.yml is absent, or every ref it names equals check-handshake's omnibase_core ref."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: command
+        check_value: >-
+          python3 -c "import re,sys,pathlib;h=re.search(r'ref: ([0-9a-f]{40})',pathlib.Path('.github/workflows/check-handshake.yml').read_text()).group(1);p=pathlib.Path('.github/workflows/type-sync-check.yml');sys.exit(0 if not p.exists() or set(re.findall(r'ref: ([0-9a-f]{40})',p.read_text()))<={h} else 1)"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn9050-ac4-dev-head-monitor
+    description: "The monitor job's omnimarket sparse checkout is scripts/ci_bus_lanes.py, the run loads that path, and no policy._ call remains. Fails at the merge base, which fetched publish_occ_autobind_command.py."
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov -k shared_lane_module"
+        cwd: "${OMNI_HOME}/omniclaude"
