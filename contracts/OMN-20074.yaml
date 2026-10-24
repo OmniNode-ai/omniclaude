@@ -129,6 +129,13 @@ requirements:
       - id: "AC18"
         statement: |-
           AC18: a commit on no origin branch is refused naming the clone remedy, Actions reads neither the published snapshot nor a clone, and the CI step and the paired hook collect the test file -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py -q --no-cov -k "no_origin_branch or inside_github_actions or collect_this_file" fails at the merge base
+  - id: "req-omn20074-prrp-tag-pin-clone"
+    statement: |-
+      The private-repo-runner-placement hook must answer a called workflow pinned to a tag present in a local clone's refs/tags at its resolved commit, with the same origin and publication checks as a full commit sha, and never answer a branch pin locally.
+    acceptance:
+      - id: "AC20"
+        statement: |-
+          AC20: a called workflow pinned to a tag is read at its resolved commit from a clone of the called repository whose origin branches hold it, the resolved sha is printed without a live commit read, and a hosted runs-on there is still exit 1; an absent tag, a tag on no origin branch, a branch named like the pin and a run inside Actions are still exit 2 -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py -q --no-cov -k "tag" fails at the merge base
 evidence_requirements:
   - kind: "tests"
     description: "The caller pins the fleet's receipt-gate reusable and a verifier that reads the contract-home marker."
@@ -318,3 +325,11 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC17", "AC18"]
+  - id: dod-omn20074-prrp-tag-pin-clone
+    description: "The placement hook reads a tag pin at its resolved commit from a published local clone, prints that sha without a live read, and keeps the hosted finding and local-source refusals."
+    source: manual
+    checks:
+      - check_type: "test_passes"
+        check_value: 'uv run pytest tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py -q --no-cov -k "tag"'
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC20"]

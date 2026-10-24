@@ -13,11 +13,12 @@ as a subprocess) under a stub ``gh`` that refuses every read, with ``HOME`` and
 
 * AC1: the snapshot the publisher puts at ``~/.omninode/prrp/`` answers when no
   path is configured, and a stale one there is still exit 2;
-* AC2: a called workflow pinned to a full sha is read from a clone of the
-  called repository holding that commit on an origin branch, and a hosted
-  placement there is still a finding;
+* AC2: a called workflow pinned to a full sha or a tag present in the clone's
+  refs/tags is read from a clone of the called repository holding that commit
+  on an origin branch, and a hosted placement there is still a finding;
 * AC3: a commit on no origin branch, a clone of another repository, a mutable
-  ref and a run inside GitHub Actions answer nothing locally: exit 2.
+  branch ref, an absent tag and a run inside GitHub Actions answer nothing
+  locally: exit 2.
 
 The test ids carry the names the contract's falsifiers select with ``-k``.
 """
@@ -104,6 +105,7 @@ def _called_clone(
     *,
     origin: str = CALLED,
     published: bool = True,
+    tag: str | None = None,
 ) -> str:
     """A clone of the called repository under `root`; returns the pinned sha."""
     clone = root / CALLED.split("/", 1)[1]
@@ -114,6 +116,8 @@ def _called_clone(
     _git(clone, "add", REUSABLE)
     _git(clone, "commit", "-q", "-m", "reusable")
     sha = _git(clone, "rev-parse", "HEAD")
+    if tag is not None:
+        _git(clone, "tag", tag, sha)
     if published:
         _git(clone, "update-ref", "refs/remotes/origin/dev", sha)
     # The working tree moves on, so a read of the working file is not the pin.
@@ -267,6 +271,29 @@ def test_local_clone_hosted_called_workflow_still_refused(tmp_path: Path) -> Non
     assert "ubuntu-latest" in result.stderr
 
 
+def test_local_clone_answers_a_tag_pinned_called_workflow(tmp_path: Path) -> None:
+    _published_snapshot(tmp_path / "home")
+    tag = "dev-20261024032229-7063070cf578"
+    sha = _called_clone(tmp_path / "registry", FLEET_JOB, tag=tag)
+    result = _run_hook(tmp_path, _caller(tmp_path, tag))
+    assert result.returncode == 0, result.stderr
+    assert "read from the local clone" in result.stderr
+    assert f"at its pinned commit {sha}" in result.stderr
+    calls = (tmp_path / "gh-calls.log").read_text(encoding="utf-8")
+    assert f"repos/{CALLED}/commits/{tag}" not in calls
+
+
+def test_local_clone_tag_pin_hosted_still_refused(tmp_path: Path) -> None:
+    """The tag's commit is judged, not the clone's working tree (which is fleet)."""
+    _published_snapshot(tmp_path / "home")
+    tag = "dev-20261024032229-7063070cf578"
+    sha = _called_clone(tmp_path / "registry", HOSTED_JOB, tag=tag)
+    result = _run_hook(tmp_path, _caller(tmp_path, tag))
+    assert result.returncode == 1, result.stderr
+    assert "ubuntu-latest" in result.stderr
+    assert f"(ref {tag} -> {sha})" in result.stderr
+
+
 # --- AC3 ---------------------------------------------------------------------
 
 
@@ -296,6 +323,39 @@ def test_local_clone_refuses_a_mutable_ref(tmp_path: Path) -> None:
     _published_snapshot(tmp_path / "home")
     _called_clone(tmp_path / "registry", FLEET_JOB)
     _assert_not_run(_run_hook(tmp_path, _caller(tmp_path, "dev")))
+
+
+def test_local_clone_refuses_a_tag_absent_from_the_clone(tmp_path: Path) -> None:
+    _published_snapshot(tmp_path / "home")
+    _called_clone(tmp_path / "registry", FLEET_JOB)
+    _assert_not_run(
+        _run_hook(tmp_path, _caller(tmp_path, "dev-20261024032229-7063070cf578"))
+    )
+
+
+def test_local_clone_refuses_a_tag_on_no_origin_branch(tmp_path: Path) -> None:
+    _published_snapshot(tmp_path / "home")
+    tag = "dev-20261024032229-7063070cf578"
+    _called_clone(tmp_path / "registry", FLEET_JOB, published=False, tag=tag)
+    _assert_not_run(_run_hook(tmp_path, _caller(tmp_path, tag)))
+
+
+def test_local_clone_refuses_a_branch_named_like_the_tag_pin(tmp_path: Path) -> None:
+    _published_snapshot(tmp_path / "home")
+    pin = "dev-20261024032229-7063070cf578"
+    root = tmp_path / "registry"
+    sha = _called_clone(root, FLEET_JOB)
+    clone = root / CALLED.split("/", 1)[1]
+    _git(clone, "update-ref", f"refs/heads/{pin}", sha)
+    _git(clone, "update-ref", f"refs/remotes/origin/{pin}", sha)
+    _assert_not_run(_run_hook(tmp_path, _caller(tmp_path, pin)))
+
+
+def test_local_clone_tag_pin_never_read_inside_github_actions(tmp_path: Path) -> None:
+    _published_snapshot(tmp_path / "home")
+    tag = "dev-20261024032229-7063070cf578"
+    _called_clone(tmp_path / "registry", FLEET_JOB, tag=tag)
+    _assert_not_run(_run_hook(tmp_path, _caller(tmp_path, tag), actions=True))
 
 
 def test_local_clone_is_never_read_inside_github_actions(
