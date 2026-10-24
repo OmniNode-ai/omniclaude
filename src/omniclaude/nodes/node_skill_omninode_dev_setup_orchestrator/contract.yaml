@@ -126,7 +126,7 @@ metadata:
   bootstrap_handler:
     language: bash
     source: handler_onboarding_preflight.sh
-    sha256_fingerprint: "74a9:107a:e1b2:63f8:616d:13ca:8b1a:8bc5:0336:cc50:924c:9b3f:6538:4a9d:5de9:1bc8"
+    sha256_fingerprint: "3978:63fc:a74a:14dd:47de:a7bb:f730:d9dc:9a39:309d:3ce1:92eb:8d56:1240:9e75:36a9"
     loading: source_after_sha256_verification
     entrypoints:
       - resume_banner

@@ -1250,3 +1250,35 @@ clone_at_anchor() { # repo
   want="$(anchored_commit "$1")" && [ -n "$want" ] || return 1
   [ "$(git -C "$WORKSPACE/$1" rev-parse HEAD)" = "$want" ]
 }
+
+# The delegation routing overlay this setup declares. Its one entry is the tier
+# your own provider keys answer on, right after a local model and before every
+# platform rung. Unbound, the overlay is empty: a registered key then joins no
+# tier, and a delegation with no pin can be refused on a machine that holds only
+# keys. It names no model, key or address; the keys come from `onex secret set`.
+# A file this setup did not write is the developer's own: kept, named, still bound.
+ROUTING_OVERLAY_FILE="$HOME/.omninode/delegation/routing_overlay.yaml"
+ROUTING_OVERLAY_MARK="# Written by omninode-dev-setup: the tier your own keys answer on."
+
+write_routing_overlay() {
+  local f="$ROUTING_OVERLAY_FILE"
+  if [ -f "$f" ] && ! head -n 1 "$f" | grep -qxF "$ROUTING_OVERLAY_MARK"; then
+    say "  $f is your own; it is left as it is and used."
+    return 0
+  fi
+  mkdir -p "$(dirname "$f")" || return 1
+  cat >"$f" <<YAML
+$ROUTING_OVERLAY_MARK
+schema_version: delegation_routing_overlay.v1
+registered_byok_tier:
+  name: registered_keys
+  after_tier: local
+  cost_per_1k_tokens: 0.0
+YAML
+}
+
+# Phase 2 is redone on a machine set up before the overlay existed.
+routing_overlay_in_place() {
+  [ -f "$ROUTING_OVERLAY_FILE" ] &&
+    grep -qF "DELEGATION_ROUTING_OVERLAY_PATH" "$HOME/.zshrc" 2>/dev/null
+}

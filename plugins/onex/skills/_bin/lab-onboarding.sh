@@ -119,7 +119,7 @@ fi
 INHERITED_ENV=""
 for _v in $(compgen -e); do
   case "$_v" in
-    OMNI_HOME|OMNIBASE_*|ONEX_*|BIFROST_*|KAFKA_*|DELEGATION_ROUTING_TIERS_PATH|POSTGRES_PASSWORD|VALKEY_PASSWORD|PYTHONPATH)
+    OMNI_HOME|OMNIBASE_*|ONEX_*|BIFROST_*|KAFKA_*|DELEGATION_ROUTING_TIERS_PATH|DELEGATION_ROUTING_OVERLAY_PATH|POSTGRES_PASSWORD|VALKEY_PASSWORD|PYTHONPATH)
       INHERITED_ENV="${INHERITED_ENV}${INHERITED_ENV:+ }$_v"; unset "$_v" ;;
   esac
 done
@@ -695,7 +695,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="74a9:107a:e1b2:63f8:616d:13ca:8b1a:8bc5:0336:cc50:924c:9b3f:6538:4a9d:5de9:1bc8" root candidate \
+  local digest="3978:63fc:a74a:14dd:47de:a7bb:f730:d9dc:9a39:309d:3ce1:92eb:8d56:1240:9e75:36a9" root candidate \
     download_digest="7f96:7d1b:ba3c:aae3:d4ed:d234:a933:964d:b5bf:2f75:5ae9:23b4:e9ca:939c:8387:3cba"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -953,7 +953,8 @@ write_profile_block() { # file
   {
     printf '%s\n' "$PROFILE_BEGIN"
     printf 'export OMNIBASE_PATH="%s"\n' "$WORKSPACE"
-    printf 'export ONEX_WORKSPACE_CONFIG_ROOT="%s"\n' "$WORKSPACE_CONFIG_ROOT"
+    # The routing overlay the handler writes (write_routing_overlay) is bound here too.
+    printf 'export ONEX_WORKSPACE_CONFIG_ROOT="%s"\nexport DELEGATION_ROUTING_OVERLAY_PATH="%s"\n' "$WORKSPACE_CONFIG_ROOT" "$ROUTING_OVERLAY_FILE"
     # shellcheck disable=SC2016  # written literally; expands in the user's shell
     printf 'eval "$(%s shellenv)"\n' "$(brew_bin)"
     # shellcheck disable=SC2016
@@ -1186,8 +1187,9 @@ workspace_runtime_config_anchored() {
 # Bound for every run, not inside phase 2 alone: a resumed run skips phase 2,
 # and its later phases must still run against this workspace.
 bind_workspace_env() {
-  export OMNIBASE_PATH="$WORKSPACE"
-  export ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
+  export OMNIBASE_PATH="$WORKSPACE" ONEX_WORKSPACE_CONFIG_ROOT="$WORKSPACE_CONFIG_ROOT"
+  # A bound overlay that does not exist refuses every delegation, so only a written one is bound.
+  [ ! -f "${ROUTING_OVERLAY_FILE:-}" ] || export DELEGATION_ROUTING_OVERLAY_PATH="$ROUTING_OVERLAY_FILE"
 }
 
 workspace_runtime_config_present() {
@@ -1205,7 +1207,7 @@ phase2_verified() {
   done
   workspace_runtime_config_present || return 1
   workspace_runtime_config_anchored || return 1
-  [ -f "$WORKSPACE_MARKER" ] || return 1
+  [ -f "$WORKSPACE_MARKER" ] && routing_overlay_in_place || return 1
   grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null || return 1
   # A V1 block still exports OMNI_HOME: redo the phase so the block is rewritten.
   ! profile_block_names_legacy_home "$HOME/.zshrc" && ! profile_block_names_legacy_home "$HOME/.bash_profile"
@@ -1220,7 +1222,7 @@ profile_block_names_legacy_home() { # file
 phase2() {
   phase_start 2 "Workspace ($WORKSPACE)" "2-5 minutes"
   if is_done 2 && phase2_verified; then phase_pass "already in place"; return; fi
-  is_done 2 && rerun_note 2 "the workspace no longer checks out (every clone at its anchored commit, the pins file, the runtime config and the profile block)"
+  is_done 2 && rerun_note 2 "the workspace no longer checks out (every clone at its anchored commit, the pins file, the runtime config, the routing overlay and the profile block)"
   refuse_foreign_workspace
   mkdir -p "$WORKSPACE" || { FAILED_STEP="create $WORKSPACE"; phase_fail "choose another directory with --workspace"; }
   [ -f "$WORKSPACE_MARKER" ] || printf 'This workspace was created by omninode-dev-setup.\n' >"$WORKSPACE_MARKER" ||
@@ -1282,9 +1284,10 @@ phase2() {
     fi
   done
   say "  Anchor: omnibase_infra ${INFRA_ANCHOR:0:12}; no proven pin, taken at the anchor's time: ${default_repos:-none}"
-  write_workspace_runtime_config ||
-    { FAILED_STEP="declare the workspace runtime config"
-      phase_fail "could not write $WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL; check the directory is writable"; }
+  # write_routing_overlay (the handler) declares the tier your own keys answer on.
+  write_workspace_runtime_config && write_routing_overlay ||
+    { FAILED_STEP="declare the workspace runtime config and routing overlay"
+      phase_fail "could not write $WORKSPACE_CONFIG_ROOT/$WORKSPACE_RUNTIME_CONFIG_REL or $ROUTING_OVERLAY_FILE; check the directories are writable"; }
   step "commit the workspace runtime config" commit_workspace_runtime_config ||
     phase_fail "see the log; $WORKSPACE_CONFIG_ROOT must be a git repository holding the config"
   say "  Workspace transport declared in $WORKSPACE_RUNTIME_CONFIG_REL (in-memory: everything runs on this Mac)."
