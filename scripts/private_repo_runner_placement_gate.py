@@ -142,14 +142,15 @@ variable set, the publisher's own destination on this host,
 lane needs no exported environment; every refusal above applies to it unchanged.
 The file format is that publisher's contract, so it stays schema 1.
 
-A CALLED WORKFLOW PINNED TO A SHA IS READ FROM A LOCAL CLONE WHEN THE LIVE READ
-FAILS (OMN-20074). A `uses:` job is judged by its called workflow's runs-on, and a
-lane cannot fetch it. Outside Actions, a pin to a full commit sha is answered from
-a clone of the called repository under `$OMNI_HOME` or beside this repository's
-canonical clone, when its origin names that repository and one of its origin
-branches holds the commit: a sha names one tree, so the bytes are the ones the
-contents API serves. A branch or tag pin, a commit nobody pushed and a clone of
-another repository answer nothing, and the refusal says so.
+A CALLED WORKFLOW PINNED TO A SHA OR TAG IS READ FROM A LOCAL CLONE WHEN THE LIVE
+READ FAILS (OMN-20074). A `uses:` job is judged by its called workflow's runs-on,
+and a lane cannot fetch it. Outside Actions, a full commit sha or a tag present
+in the clone's refs/tags is answered from a clone of the called repository under
+`$OMNI_HOME` or beside this repository's canonical clone, when its origin names
+that repository and one of its origin branches holds the resolved commit: a sha
+names one tree, so the bytes are the ones the contents API serves. A branch pin,
+an absent tag, a commit nobody pushed and a clone of another repository answer
+nothing, and the refusal says so.
 A hosted value inside a fresh snapshot is judged exactly like a live one. Inside
 GitHub Actions the flag and the variable are refused: hosted CI is the enforced
 merge gate and resolves live. Use the environment variable, not hook `args`, so the
@@ -200,10 +201,9 @@ USES_CROSS_REPO = re.compile(
 )
 USES_LOCAL = re.compile(r"^\./(?P<path>\.github/workflows/.+)$")
 
-# A ref that names an immutable commit. Used to decide whether the commit a
-# mutable ref resolved to is worth printing, and whether a local clone may
-# answer for a called workflow whose live read failed (only an immutable pin
-# has one answer) -- never to refuse a ref.
+# A full sha that names an immutable commit. Used to decide whether the commit
+# a mutable ref resolved to is worth printing. A local clone may answer a failed
+# live read for a full sha or a tag present in refs/tags, never a branch pin.
 SHA_REF = re.compile(r"^[0-9a-f]{40}$")
 
 # GitHub evaluates at most four levels of nested reusable workflows. Past that
@@ -1183,15 +1183,16 @@ class CalledWorkflows:
     this change exists to remove.
 
     OUTSIDE GitHub Actions a failed live read of a workflow pinned to a full
-    commit sha is answered from a local clone of the called repository
+    commit sha or a tag present in the clone's refs/tags is answered locally
     (OMN-20074): a lane's GitHub reads are refused, and every reusable an
-    omninode repository calls is pinned to a sha its canonical clone already
-    holds. A sha names one tree, so `git cat-file` of `<sha>:<path>` is the
-    same bytes the contents API returns for it. The clone must be the called
+    omninode repository calls is pinned to a sha or tag its canonical clone
+    already holds. A tag is resolved only in refs/tags to a commit. A sha names
+    one tree, so `git cat-file` of `<sha>:<path>` is the same bytes the contents
+    API returns for it. The clone must be the called
     repository (its origin names the slug) and the commit must be on one of
     its origin branches, so a commit nobody pushed answers nothing. A mutable
-    ref (a branch or a tag) is never answered locally, and Actions never reads
-    a clone: hosted CI resolves live.
+    branch ref is never answered locally, and Actions never reads a clone:
+    hosted CI resolves live.
     """
 
     def __init__(
@@ -1211,29 +1212,41 @@ class CalledWorkflows:
             self._clone_roots = local_clone_roots(self._repo_root)
         return self._clone_roots
 
-    def _from_clone(self, slug: str, path: str, ref: str) -> tuple[str, Path] | None:
-        """The called workflow at an immutable pin, from a clone of `slug`."""
-        if not SHA_REF.match(ref):
-            return None
+    def _from_clone(
+        self, slug: str, path: str, ref: str
+    ) -> tuple[str, Path, str] | None:
+        """The workflow and resolved commit at a full sha or tag, never a branch."""
         name = slug.split("/", 1)[1]
         for root in self._roots():
             clone = root / name
             if not (clone / ".git").exists() or not _origin_is(clone, slug):
                 continue
+            commit = ref
+            if not SHA_REF.match(ref):
+                resolved = _run_git_in_clone(
+                    clone,
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    f"refs/tags/{ref}^{{commit}}",
+                )
+                if resolved.returncode != 0:
+                    continue
+                commit = resolved.stdout.decode("utf-8", "replace").strip()
             published = _run_git_in_clone(
                 clone,
                 "for-each-ref",
                 "--count=1",
                 "--format=%(refname)",
                 "--contains",
-                ref,
+                commit,
                 "refs/remotes/origin",
             )
             if published.returncode != 0 or not published.stdout.strip():
                 continue
-            blob = _run_git_in_clone(clone, "cat-file", "blob", f"{ref}:{path}")
+            blob = _run_git_in_clone(clone, "cat-file", "blob", f"{commit}:{path}")
             if blob.returncode == 0:
-                return blob.stdout.decode("utf-8", "replace"), clone
+                return blob.stdout.decode("utf-8", "replace"), clone, commit
         return None
 
     @staticmethod
@@ -1317,14 +1330,15 @@ class CalledWorkflows:
             live = result.stderr.strip()[:200]
             cloned = self._from_clone(slug, path, ref)
             if cloned is not None:
-                text, clone = cloned
+                text, clone, commit = cloned
                 print(
                     f"NOTE: called workflow {uses} read from the local clone "
-                    f"{clone} at its pinned commit because the live read "
+                    f"{clone} at its pinned commit {commit} because the live read "
                     f"failed ({live}).",
                     file=sys.stderr,
                 )
                 self._cache[uses] = text
+                self._commits[uses] = commit
                 return text
             where = ", ".join(str(root) for root in self._roots()) or "(none)"
             raise GateError(
@@ -1335,10 +1349,12 @@ class CalledWorkflows:
                 "has not judged the job -- and this repository's required "
                 "checks may be the jobs in question. Supply a credential with "
                 "cross-repository read as ACTIONS_VARIABLES_TOKEN. Outside "
-                "Actions a workflow pinned to a full commit sha is also read "
+                "Actions a workflow pinned to a full commit sha or a tag "
+                "present in the clone's refs/tags is also read "
                 f"from a clone of {slug} under {where} whose origin branches "
                 "hold that commit; fetch the clone, or set OMNI_HOME to the "
-                "directory holding it. THE GATE DID NOT RUN."
+                "directory holding it. A branch pin is never answered locally. "
+                "THE GATE DID NOT RUN."
             )
         self._cache[uses] = result.stdout
         return self._cache[uses]
@@ -2122,9 +2138,9 @@ def _placements(
             "the same name. THE GATE DID NOT RUN."
         )
 
+    jobs = _called_jobs(uses, called.source(uses))
     commit = called.commit(uses)
     pin = f" (ref {ref} -> {commit})" if commit else ""
-    jobs = _called_jobs(uses, called.source(uses))
 
     offenders: list[tuple[str, Placement, str]] = []
     for job_id, definition in jobs.items():
