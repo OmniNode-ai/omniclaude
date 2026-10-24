@@ -73,3 +73,11 @@ dod_evidence:
       - check_type: command
         check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"write_routing_overlay() {\" > /dev/null'"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21377-ac3-downloaded-copy-writes-overlay
+    description: "A downloaded script runs the handler at the commit its raw URL names. That handler defines write_routing_overlay and routing_overlay_in_place, with the bytes download_digest checks, so phase 2 of a downloaded copy declares the registered-key tier. Fails at the merge base, whose download URL names ad32c82a, a handler without them."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_overlay_download_omn21377.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
