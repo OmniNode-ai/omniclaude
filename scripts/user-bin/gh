@@ -5,6 +5,9 @@
 # ONEX_GH_USER_SHIM (OMN-19479) -- a `gh` shim installed ahead of the real
 # binary on this host's PATH (scripts/user-bin/install-gh-shim.sh).
 #
+# CI pass-through (OMN-19856): a CI job is not a lane. When GITHUB_ACTIONS is
+# exactly true, exec the real gh unchanged before any guard, cache or log.
+#
 # Why: the Claude Code harness looks up the current branch's PR link with
 # `gh pr view [<branch>] --json url` every few seconds per session, and every
 # lookup spends the operator's shared GitHub quota (2026-09-24 plan M4: at
@@ -135,6 +138,10 @@ done
 if [ -z "$real" ]; then
   echo "gh shim (OMN-19479): no real gh found on PATH after $self" >&2
   exit 127
+fi
+
+if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+  exec "$real" "$@"
 fi
 
 # --- read-routing defaults (OMN-19852) -----------------------------------------

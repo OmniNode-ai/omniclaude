@@ -486,6 +486,58 @@ def test_passthrough_argv_output_and_exit_code(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["pr", "view", "7", "--json", "body", "-q", ".body"],
+        ["pr", "view", "--json", "url"],
+    ],
+)
+@pytest.mark.parametrize("exit_code", [0, 3])
+def test_ci_passthrough_preserves_argv_output_and_exit_without_logs_or_cache(
+    env: dict[str, str], tmp_path: Path, argv: list[str], exit_code: int
+) -> None:
+    e = dict(env)
+    e.pop("ONEX_PR_WATCHER")
+    calls_log = tmp_path / "gh-calls.log"
+    state_dir = tmp_path / "state"
+    e.update(
+        {
+            "GITHUB_ACTIONS": "true",
+            "ONEX_GH_CALLS_LOG": str(calls_log),
+            "ONEX_STATE_DIR": str(state_dir),
+            "FAKE_GH_RC": str(exit_code),
+            "FAKE_GH_STDERR": "stderr from CI\n",
+        }
+    )
+    for output in ("body\nwith spaces", "changed output\n"):
+        r = _run(e, *argv, extra={"FAKE_GH_STDOUT": output})
+        assert r.returncode == exit_code, r.stderr
+        assert r.stdout == output
+        assert r.stderr == "stderr from CI\n"
+        assert "REFUSED" not in r.stdout + r.stderr
+    assert _calls(e) == [argv, argv]
+    assert not calls_log.exists()
+    assert not state_dir.exists()
+    assert not Path(e["XDG_CACHE_HOME"]).exists()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("github_actions", [None, "false", "1", "TRUE"])
+def test_ci_passthrough_requires_exact_true(
+    env: dict[str, str], github_actions: str | None
+) -> None:
+    e = dict(env)
+    e.pop("ONEX_PR_WATCHER")
+    if github_actions is not None:
+        e["GITHUB_ACTIONS"] = github_actions
+    r = _run(e, "pr", "view", "7", "--json", "body", "-q", ".body")
+    assert r.returncode == 1
+    assert "REFUSED (OMN-19856)" in r.stderr
+    assert _calls(e) == []
+
+
+@pytest.mark.unit
 def test_passthrough_stdin(env: dict[str, str], tmp_path: Path) -> None:
     sink = tmp_path / "stdin.txt"
     r = _run(
@@ -561,6 +613,147 @@ def test_passthrough_no_real_gh_is_a_loud_127(
 
 
 # --- installer ----------------------------------------------------------------
+
+
+def _install_default(
+    env: dict[str, str], *args: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["/bin/bash", str(INSTALLER), *args],
+        cwd=env["REPO"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("directory_source", ["home", "xdg", "lane"])
+def test_installer_default_dir_is_lanes_only(
+    env: dict[str, str], tmp_path: Path, directory_source: str
+) -> None:
+    e = dict(env)
+    e["PATH"] = f"{tmp_path / 'realbin'}:/usr/bin:/bin"
+    destination = Path(e["HOME"]) / ".local/share/omni/lane-bin"
+    if directory_source in ("xdg", "lane"):
+        e["XDG_DATA_HOME"] = str(tmp_path / "xdg data")
+        destination = Path(e["XDG_DATA_HOME"]) / "omni/lane-bin"
+    if directory_source == "lane":
+        e["ONEX_LANE_BIN_DIR"] = str(tmp_path / "lane bin")
+        destination = Path(e["ONEX_LANE_BIN_DIR"])
+    r = _install_default(e)
+    assert r.returncode == 0, r.stderr
+    assert os.access(destination / "gh", os.X_OK)
+    assert (destination / "gh").read_bytes() == SHIM.read_bytes()
+    assert (destination / "gh_route.py").read_bytes() == (
+        SHIM.parent / "gh_route.py"
+    ).read_bytes()
+    assert not (Path(e["HOME"]) / ".local/bin/gh").exists()
+    checked = _install_default(e, "--check")
+    assert checked.returncode == 0, checked.stderr
+    assert "CHECK:" in checked.stdout
+    assert "identical to source" in checked.stdout
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("legacy_is_shim", [True, False])
+def test_installer_retires_legacy_shim(
+    env: dict[str, str], tmp_path: Path, legacy_is_shim: bool
+) -> None:
+    e = dict(env)
+    legacy_dir = Path(e["HOME"]) / ".local/bin"
+    legacy_dir.mkdir(parents=True)
+    legacy_gh = legacy_dir / "gh"
+    original = SHIM.read_text() if legacy_is_shim else "#!/bin/bash\necho mine\n"
+    _write_exec(legacy_gh, original)
+    legacy_router = legacy_dir / "gh_route.py"
+    legacy_router.write_text("legacy router\n")
+    real_dir = tmp_path / "realbin"
+    e["PATH"] = f"{legacy_dir}:{real_dir}:/usr/bin:/bin"
+    r = _install_default(e)
+    assert r.returncode == 0, r.stderr
+    assert (Path(e["HOME"]) / ".local/share/omni/lane-bin/gh").exists()
+    if legacy_is_shim:
+        assert not legacy_gh.exists()
+        assert not legacy_router.exists()
+        retirement_lines = [line for line in r.stdout.splitlines() if "retired" in line]
+        assert len(retirement_lines) == 1
+        assert str(legacy_gh) in retirement_lines[0]
+        assert str(legacy_router) in retirement_lines[0]
+        ci_path = f"{legacy_dir}:{real_dir}"
+        assert shutil.which("gh", path=ci_path) == str(real_dir / "gh")
+        e.pop("ONEX_PR_WATCHER")
+        body = _run(e, "pr", "view", "7", "--json", "body", "-q", ".body")
+        assert body.returncode == 0, body.stderr
+        assert _calls(e) == [["pr", "view", "7", "--json", "body", "-q", ".body"]]
+    else:
+        assert legacy_gh.read_text() == original
+        assert legacy_router.read_text() == "legacy router\n"
+        assert "retired" not in r.stdout
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("installed", [False, True])
+def test_installer_default_dir_check_reports_legacy_without_changing_files(
+    env: dict[str, str], tmp_path: Path, installed: bool
+) -> None:
+    e = dict(env)
+    e["PATH"] = f"{tmp_path / 'realbin'}:/usr/bin:/bin"
+    destination = Path(e["HOME"]) / ".local/share/omni/lane-bin"
+    if installed:
+        assert _install_default(e).returncode == 0
+    legacy_dir = Path(e["HOME"]) / ".local/bin"
+    legacy_dir.mkdir(parents=True)
+    shutil.copy(SHIM, legacy_dir / "gh")
+    (legacy_dir / "gh_route.py").write_text("legacy router\n")
+    before = {p: p.read_bytes() for p in Path(e["HOME"]).rglob("*") if p.is_file()}
+    r = _install_default(e, "--check")
+    assert r.returncode == 0, r.stderr
+    assert any(
+        "CHECK:" in line and "legacy" in line and str(legacy_dir / "gh") in line
+        for line in r.stdout.splitlines()
+    )
+    after = {p: p.read_bytes() for p in Path(e["HOME"]).rglob("*") if p.is_file()}
+    assert before == after
+    assert destination.exists() == installed
+
+
+@pytest.mark.unit
+def test_installer_default_dir_refuses_foreign_gh(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    e = dict(env)
+    e["PATH"] = f"{tmp_path / 'realbin'}:/usr/bin:/bin"
+    destination = Path(e["HOME"]) / ".local/share/omni/lane-bin"
+    destination.mkdir(parents=True)
+    original = "#!/bin/bash\necho mine\n"
+    _write_exec(destination / "gh", original)
+    r = _install_default(e)
+    assert r.returncode == 3, r.stderr
+    assert "REFUSED" in r.stderr
+    assert (destination / "gh").read_text() == original
+    assert not (destination / "gh_route.py").exists()
+
+
+@pytest.mark.unit
+def test_installer_default_dir_requires_a_real_gh(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    e = dict(env)
+    # Never /usr/bin:/bin: GitHub-hosted Ubuntu runners ship a real gh there.
+    tools = _coreutils_dir_without_gh(tmp_path)
+    for tool in ("dirname", "tr", "mkdir", "cp", "mv", "rm", "chmod", "cmp", "which"):
+        found = shutil.which(tool)
+        assert found, f"{tool} not found on PATH; needed by the installer"
+        (tools / tool).symlink_to(found)
+    e["PATH"] = f"{SHIM.parent}:{tools}"
+    # The source shim on PATH must not count as a real gh.
+    r = _install_default(e)
+    assert r.returncode == 2, r.stderr
+    assert "no real gh on PATH" in r.stderr
+    assert not (Path(e["HOME"]) / ".local/share/omni/lane-bin").exists()
 
 
 def _install(

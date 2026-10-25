@@ -1828,6 +1828,51 @@ def test_registered_entrypoint_reports_missing_core_before_traceback(
     )
 
 
+def test_registered_entrypoint_runs_the_core_under_the_declared_venv_when_plugin_python_bin_cannot_import(
+    tmp_path: Path, registry: Path
+) -> None:
+    plugin = tmp_path / "plugin" / "plugins" / "onex"
+    shutil.copytree(HOOKS_DIR, plugin / "hooks")
+    # OMN-19998: h105's PLUGIN_PYTHON_BIN is a system python with no omniclaude,
+    # while the plugin's declared venv (CLAUDE_PLUGIN_DATA/.venv) imports it.
+    python = tmp_path / "python-without-site-packages"
+    python.write_text(f'#!/bin/sh\nexec "{sys.executable}" -S "$@"\n')
+    python.chmod(0o755)
+    data = tmp_path / "plugin-data"
+    (data / ".venv" / "bin").mkdir(parents=True)
+    (data / ".venv" / "bin" / "python3").symlink_to(sys.executable)
+    # A venv is its pyvenv.cfg and site-packages, not the binary: reuse this one's.
+    (data / ".venv" / "pyvenv.cfg").write_text(
+        f"home = {Path(sys.base_prefix) / 'bin'}\ninclude-system-site-packages = false\n"
+    )
+    (data / ".venv" / "lib").symlink_to(Path(sys.prefix) / "lib")
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "CLAUDE_PLUGIN_ROOT": str(plugin),
+        "PLUGIN_PYTHON_BIN": str(python),
+    }
+    for declared_venv in (True, False):
+        result = _run_hook(
+            tmp_path,
+            "git branch --list",
+            cwd=registry,
+            omni_home_dir=str(registry),
+            extra_env={**env, "CLAUDE_PLUGIN_DATA": str(data)}
+            if declared_venv
+            else env,
+            hook_script=plugin / "hooks/scripts/pre_tool_use_bash_guards.sh",
+        )
+        if declared_venv:
+            assert result.returncode == 0, (result.stdout, result.stderr)
+            assert "could not evaluate" not in result.stdout + result.stderr
+            assert "No module named" not in result.stdout + result.stderr
+        else:
+            assert result.returncode == 2, (result.stdout, result.stderr)
+            reason = json.loads(result.stdout)["reason"]
+            assert "No module named 'omniclaude'" in reason
+            assert "declared interpreters tried" in reason
+
+
 # ---------------------------------------------------------------------------
 # OMN-18927: one segment's tokens are its own.
 #
