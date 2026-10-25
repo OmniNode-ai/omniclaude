@@ -1,0 +1,46 @@
+schema_version: 1.0.0
+ticket_id: OMN-20266
+title: PR stamp guard imports on a bare hook interpreter
+summary: The shared tokenizer is resolved from the source checkout or registry clone without installing into the
+  hook interpreter. AC4 covers this repair. The ticket's pool-parity criteria (AC1-AC3) and their tests ship in the
+  lab-pool repository, not here; this repository's contract binds only AC4.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn20266-bare-hook
+  statement: The stamp guard can evaluate edits on a bare hook interpreter from both an installed plugin and a source
+    checkout.
+  acceptance:
+  - id: AC4
+    statement: 'AC4: with site packages disabled, the guard imports its shared tokenizer from the declared source
+      tree, and the existing stamp-preservation decisions remain enforced -- falsifier: uv run pytest tests/hooks/test_pr_body_stamp_guard_bare_interpreter_omn_20266.py
+      tests/hooks/test_pr_body_stamp_guard.py -q fails without the source resolver'
+evidence_requirements:
+- kind: tests
+  description: Bare-interpreter imports and existing stamp-preservation refusals.
+  command: uv run pytest tests/hooks/test_pr_body_stamp_guard_bare_interpreter_omn_20266.py tests/hooks/test_pr_body_stamp_guard.py
+    -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn20266-bare-hook
+  description: Both bare-interpreter layouts import and existing stamp refusal tests pass.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_pr_body_stamp_guard_bare_interpreter_omn_20266.py tests/hooks/test_pr_body_stamp_guard.py
+      -q
+  binds_ac:
+  - AC4
+- id: dod-omn20266-deploy-source
+  description: Hosted-runner source probe refuses a published PR head without the new source resolver; no lab SSH
+    or local registry is required.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/hooks/lib/pr_body_stamp_guard.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"_SOURCE_ROOTS =\" > /dev/null && gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/hooks/lib/pr_body_stamp_guard.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"handler_shell_words.py\" > /dev/null'"
+  binds_ac:
+  - AC4

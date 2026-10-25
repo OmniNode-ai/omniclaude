@@ -63,6 +63,7 @@ from collections.abc import (
 )
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
 from omniclaude.nodes.node_git_effect.handlers.handler_shell_heredoc import HereDoc
@@ -1410,3 +1411,60 @@ def _printf(fmt: str, args: list[str]) -> str:
             i += 1
         if not remaining or not consumed:
             return "".join(out)
+
+
+class StampPolicy(Protocol):
+    @property
+    def stamp_line(self) -> re.Pattern[str]: ...
+
+
+_FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+
+
+def strip_noncanonical_regions(pr_body: str) -> str:
+    """Blank out body regions that cannot carry a *canonical* stamp.
+
+    Mirror of ``validator_receipt_gate.strip_noncanonical_regions``
+    (OMN-14682). Excluded lines become empty lines rather than disappearing, so
+    line positions survive and the MULTILINE anchors behave identically for
+    every surviving canonical line. An unterminated opening fence blanks
+    everything to end-of-body.
+
+    Idempotent: re-stripping an already-stripped body is a no-op.
+    """
+    out: list[str] = []
+    in_fence = False
+    fence_marker = ""
+    for line in pr_body.splitlines():
+        fence = _FENCE_LINE_RE.match(line)
+        if fence is not None:
+            marker = fence.group(1)
+            marker_char = marker[0]
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker
+            elif marker_char == fence_marker[0] and len(marker) >= len(fence_marker):
+                in_fence = False
+                fence_marker = ""
+            out.append("")
+            continue
+        if in_fence:
+            out.append("")
+            continue
+        if line.lstrip().startswith(">"):
+            out.append("")
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def stamp_lines(body: str, policy: StampPolicy) -> list[str]:
+    """Every canonical stamp line in ``body``, verbatim and in order.
+
+    Returned verbatim because the refusal has to print what would have been
+    lost, and a normalised rendering is not a paste.
+    """
+    stripped = strip_noncanonical_regions(body)
+    return [
+        match.group(0).rstrip("\r") for match in policy.stamp_line.finditer(stripped)
+    ]

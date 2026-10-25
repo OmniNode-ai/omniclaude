@@ -155,9 +155,21 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-_HOOKS_LIB = Path(__file__).parent
+# The hook may run on a bare interpreter. Its shared tokenizer is stdlib-only:
+# use this checkout's source, or the registry clone for an installed plugin.
+_HOOKS_LIB = Path(__file__).resolve().parent
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
+_SOURCE_ROOTS = [_HOOKS_LIB.parents[3] / "src"]
+if os.environ.get("OMNI_HOME"):
+    _SOURCE_ROOTS.append(Path(os.environ["OMNI_HOME"]) / "omniclaude" / "src")
+for _src in _SOURCE_ROOTS:
+    if (
+        _src / "omniclaude/nodes/node_git_effect/handlers/handler_shell_words.py"
+    ).is_file():
+        if str(_src) not in sys.path:
+            sys.path.append(str(_src))
+        break
 
 from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # noqa: E402
     CommandResolver,
@@ -171,6 +183,8 @@ from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # n
     _Untokenisable,
     shadow,
     shadowed_names,
+    stamp_lines,
+    strip_noncanonical_regions,
 )
 
 __all__ = [
@@ -198,9 +212,6 @@ _DEFAULT_POLICY = (
     Path(__file__).resolve().parents[1] / "config" / ("pr_body_stamp_policy.json")
 )
 
-#: Mirror of ``validator_receipt_gate``'s fence pattern (OMN-14682). Copied rather than imported because
-#: this module must run under any resolved interpreter with no project path.
-_FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 
 _FLAG_NAMES = {
     "IGNORECASE": re.IGNORECASE,
@@ -438,55 +449,6 @@ def load_policy(path: Path | None = None) -> Policy:
 # ---------------------------------------------------------------------------
 # Stamp extraction
 # ---------------------------------------------------------------------------
-
-
-def strip_noncanonical_regions(pr_body: str) -> str:
-    """Blank out body regions that cannot carry a *canonical* stamp.
-
-    Mirror of ``validator_receipt_gate.strip_noncanonical_regions``
-    (OMN-14682). Excluded lines become empty lines rather than disappearing, so
-    line positions survive and the MULTILINE anchors behave identically for
-    every surviving canonical line. An unterminated opening fence blanks
-    everything to end-of-body.
-
-    Idempotent: re-stripping an already-stripped body is a no-op.
-    """
-    out: list[str] = []
-    in_fence = False
-    fence_marker = ""
-    for line in pr_body.splitlines():
-        fence = _FENCE_LINE_RE.match(line)
-        if fence is not None:
-            marker = fence.group(1)
-            marker_char = marker[0]
-            if not in_fence:
-                in_fence = True
-                fence_marker = marker
-            elif marker_char == fence_marker[0] and len(marker) >= len(fence_marker):
-                in_fence = False
-                fence_marker = ""
-            out.append("")
-            continue
-        if in_fence:
-            out.append("")
-            continue
-        if line.lstrip().startswith(">"):
-            out.append("")
-            continue
-        out.append(line)
-    return "\n".join(out)
-
-
-def stamp_lines(body: str, policy: Policy) -> list[str]:
-    """Every canonical stamp line in ``body``, verbatim and in order.
-
-    Returned verbatim because the refusal has to print what would have been
-    lost, and a normalised rendering is not a paste.
-    """
-    stripped = strip_noncanonical_regions(body)
-    return [
-        match.group(0).rstrip("\r") for match in policy.stamp_line.finditer(stripped)
-    ]
 
 
 # ---------------------------------------------------------------------------

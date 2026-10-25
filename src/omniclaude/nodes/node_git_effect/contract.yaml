@@ -42,7 +42,8 @@ description: >
   Handles branch management, commits, pushes, pull request lifecycle,
   merge operations (direct and merge-queue), tag management, and label
   management with pluggable backends. Every PR body created via this node
-  contains a mandatory ticket stamp block.
+  contains a mandatory ticket stamp block. Shared PR admission helpers extract
+  canonical evidence stamps while excluding fenced and quoted body regions.
   Push and merge re-read ledger RULING rows appended after the lane CLAIM,
   refusing until exact ledger ACKs cite each surfaced row (OMN-18645).
 
