@@ -41,8 +41,6 @@ dod_evidence:
   source: manual
   checks:
   - check_type: command
-    check_value: 'gh api -H ''Accept: application/vnd.github.raw+json'' "repos/${REPO}/contents/plugins/onex/hooks/lib/pr_body_stamp_guard.py?ref=$(gh
-      api repos/${REPO}/pulls/${PR_NUMBER} --jq .head.sha)" | python3 -c ''import sys; s=sys.stdin.read(); assert
-      "_SOURCE_ROOTS =" in s and "handler_shell_words.py" in s'''
+    check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/hooks/lib/pr_body_stamp_guard.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"_SOURCE_ROOTS =\" > /dev/null && gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/hooks/lib/pr_body_stamp_guard.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"handler_shell_words.py\" > /dev/null'"
   binds_ac:
   - AC4
