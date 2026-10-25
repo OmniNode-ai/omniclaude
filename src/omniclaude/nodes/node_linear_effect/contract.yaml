@@ -184,6 +184,14 @@ handler_routing:
         module: omniclaude.nodes.node_linear_effect.handlers.handler_local_pr_state
         name: HandlerLocalPrState
       output_events: [ModelLocalPrStateResult]
+    - operation: ticket_done_receipt_policy
+      handler:
+        module: omniclaude.nodes.node_linear_effect.handlers.handler_done_receipt_policy
+        name: run_hook
+    - operation: ticket_closeout_instruction_audit
+      handler:
+        module: omniclaude.nodes.node_linear_effect.handlers.handler_done_closeout_instructions
+        name: findings
   default_backend: linear_api
   backends:
     - backend: linear_api
