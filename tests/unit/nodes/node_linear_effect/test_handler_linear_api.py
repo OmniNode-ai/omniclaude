@@ -255,6 +255,7 @@ def _clone(
     path.write_text(contract)
     _git(clone, "add", ".")
     _git(clone, "commit", "-q", "-m", "merge")
+    _git(clone, "update-ref", "refs/remotes/origin/dev", "HEAD")
     return clone, _git(clone, "rev-parse", "HEAD")
 
 
@@ -547,3 +548,20 @@ def test_scm_subprocess_reads_its_target_instead_of_the_inherited_worktree(
     assert result == {"sha": expected}
     assert os.environ["GIT_DIR"] == str(foreign / ".git")
     assert os.environ["GIT_WORK_TREE"] == str(foreign)
+
+
+def test_real_guard_refuses_receipt_stale_against_current_origin_dev(
+    tmp_path: Path,
+) -> None:
+    handler, linear = _lane_handler(tmp_path, _contract("AC1", "AC2"))
+    clone = tmp_path / "omnimarket"
+    path = clone / "contracts" / f"{_TICKET}.yaml"
+    path.write_text(path.read_text() + "# changed after the passing receipt\n")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "-q", "-m", "later contract revision")
+    _git(clone, "update-ref", "refs/remotes/origin/dev", "HEAD")
+    result = _run(handler, _request(apply=True))
+    assert result.status is LinearResultStatus.FAILED
+    assert "stale_contract" in result.error
+    assert "origin/dev" in result.error
+    assert "[x]" not in linear.issue["description"]

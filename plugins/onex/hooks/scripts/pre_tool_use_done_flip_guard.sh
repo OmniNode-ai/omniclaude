@@ -22,56 +22,31 @@
 #   2 — block the tool call (JSON decision on stderr)
 
 set -eo pipefail
-
-# OMN-19381: named so its refusal row names it. This guard does not source
-# error-guard.sh (its EXIT trap would rewrite this guard's bare `exit 2`), so it
-# sources the refusal seam on its own, after common.sh.
-_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
-
-# OMN-20109: this script's directory, resolved once without a dirname exec.
-_ONEX_HOOK_SELF_DIR="${BASH_SOURCE[0]%/*}"; [[ "${BASH_SOURCE[0]}" == */* ]] || _ONEX_HOOK_SELF_DIR=.; [[ -n "$_ONEX_HOOK_SELF_DIR" ]] || _ONEX_HOOK_SELF_DIR=/
-_SCRIPT_DIR="$(cd "${_ONEX_HOOK_SELF_DIR}" && pwd)"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
-LIB_PY="${PLUGIN_ROOT}/hooks/lib/done_flip_guard.py"
-unset _SCRIPT_DIR
-
-_done_flip_refuse() {
-    # $1: reason. Refuse the Linear write, loudly, in the hook's JSON shape.
-    printf '{"decision": "block", "reason": "[OMN-20368 done-flip bound-receipt gate] %s"}\n' "$1" >&2
-    exit 2
+_DONE_FLIP_DECIDED=0
+_done_flip_exit() {
+    local status=$?
+    if [[ "$_DONE_FLIP_DECIDED" -eq 0 && "$status" -ne 2 ]]; then
+        printf '{"decision":"block","reason":"[OMN-20368] guard_error: hook exited %s before a decision"}\n' "$status" >&2
+        exit 2
+    fi
 }
-
-# The payload is read once, so the refusal recorder can read the lane from it
-# and the decision core gets the same bytes on its stdin (OMN-19381).
+trap _done_flip_exit EXIT
+_OMNICLAUDE_HOOK_NAME="${BASH_SOURCE[0]##*/}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${BASH_SOURCE[0]%/*}/../.." && pwd)}"
+LIB_PY="${PLUGIN_ROOT}/hooks/lib/done_flip_guard.py"
 _OMNICLAUDE_HOOK_PAYLOAD="$(cat)"
-
-# common.sh provides PYTHON_CMD resolution. A failure to source it is a
-# refusal, not an allow: without an interpreter nothing can be decided.
-# shellcheck source=/dev/null
-source "${PLUGIN_ROOT}/hooks/scripts/common.sh" \
-    || _done_flip_refuse "guard_error: common.sh could not be sourced, so no interpreter is resolved"
-# OMN-19381: hook_record_refusal, without error-guard.sh's EXIT trap.
-# shellcheck source=../lib/hook_refusal.sh
+source "${PLUGIN_ROOT}/hooks/scripts/common.sh" || exit 1
 source "${PLUGIN_ROOT}/hooks/lib/hook_refusal.sh" 2>/dev/null || true
-
-[[ -f "$LIB_PY" ]] || _done_flip_refuse "guard_error: decision library ${LIB_PY} is missing"
-
-PYTHON_BIN="${PYTHON_CMD:-}"
-[[ -n "$PYTHON_BIN" ]] || _done_flip_refuse "guard_error: no Python interpreter resolved for the guard"
-
+[[ -f "$LIB_PY" && -n "${PYTHON_CMD:-}" ]] || exit 1
 set +e
-REFUSAL_OUTPUT=$("$PYTHON_BIN" "$LIB_PY" < <(printf '%s\n' "$_OMNICLAUDE_HOOK_PAYLOAD") 2>&1)
+REFUSAL_OUTPUT=$("$PYTHON_CMD" "$LIB_PY" < <(printf '%s\n' "$_OMNICLAUDE_HOOK_PAYLOAD") 2>&1)
 rc=$?
 set -e
 [[ -z "$REFUSAL_OUTPUT" ]] || printf '%s\n' "$REFUSAL_OUTPUT" >&2
-if [[ "$rc" -eq 0 ]]; then
-    exit 0
-fi
 if [[ "$rc" -eq 2 ]]; then
-    # OMN-18946: see hook_record_refusal in error-guard.sh.
     REFUSAL_DETAIL=$(printf '%s' "$REFUSAL_OUTPUT" | hook_refusal_detail)
     hook_record_refusal "done flip refused without a bound dod receipt" "$REFUSAL_DETAIL" 2>/dev/null || true
-    exit 2
 fi
-# Any other exit is the guard failing to decide. That refuses (OMN-20368).
-_done_flip_refuse "guard_error: done_flip_guard.py exited ${rc} without a decision"
+[[ "$rc" -eq 0 ]] || exit "$rc"
+_DONE_FLIP_DECIDED=1
+exit 0

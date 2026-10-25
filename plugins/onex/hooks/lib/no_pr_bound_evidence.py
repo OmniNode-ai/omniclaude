@@ -5,7 +5,8 @@
 
 A merged product PR must carry ``contracts/<TICKET>.yaml`` binding every
 labelled acceptance criterion and a green ``repo-evidence / dod-verify`` check
-on the head verifying the same contract that merged. Of several merged PRs
+on the head verifying the same contract that merged and remains on origin/dev.
+Raw contract SHA-256 hashes bind the receipt to that revision. Of several merged PRs
 carrying a repository's contract, the newest merged one decides. Missing repo
 evidence is reported as NOT_ENGAGED; the Done guard refuses it.
 
@@ -18,10 +19,14 @@ from __future__ import annotations
 
 import base64
 import binascii
+import importlib
+import importlib.util
 import re
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -208,31 +213,8 @@ def _retired_pairs(contract: dict[str, Any]) -> set[tuple[str, str]]:
 
 
 def evidence_items(contract: dict[str, Any]) -> list[EvidenceItem]:
-    """Every ``dod_evidence`` item with its live ``binds_ac`` labels."""
-    retired = _retired_pairs(contract)
-    out: list[EvidenceItem] = []
-    for item in _items(contract):
-        item_id = item.get("id")
-        if not isinstance(item_id, str) or not item_id.strip():
-            continue
-        raw_binds = item.get("binds_ac") or []
-        binds = (
-            {
-                label
-                for label in (canonical_ac_label(str(x)) for x in raw_binds)
-                if label and (item_id, label) not in retired
-            }
-            if isinstance(raw_binds, list)
-            else set()
-        )
-        checks = item.get("checks") or []
-        check_types = {
-            str(c.get("check_type"))
-            for c in (checks if isinstance(checks, list) else [])
-            if isinstance(c, dict) and isinstance(c.get("check_type"), str)
-        }
-        out.append(EvidenceItem(item_id, frozenset(binds), frozenset(check_types)))
-    return out
+    """Delegate criterion-binding interpretation to the node's receipt policy."""
+    return _receipt_handler().evidence_items(contract, sys.modules[__name__])
 
 
 # --------------------------------------------------------------------------- #
@@ -242,6 +224,7 @@ def evidence_items(contract: dict[str, Any]) -> list[EvidenceItem]:
 REPO_EVIDENCE_CHECK_NAME = "repo-evidence / dod-verify"
 REPO_EVIDENCE_APP_SLUG = "github-actions"
 CONTRACT_DIR = "contracts"
+CURRENT_CONTRACT_REF = "origin/dev"
 
 
 class RepoEvidenceOutcome(StrEnum):
@@ -254,6 +237,10 @@ class RepoEvidenceOutcome(StrEnum):
 class RepoEvidenceVerdict:
     outcome: RepoEvidenceOutcome
     detail: str
+    # Nonempty only after checking the receipt against the current contract.
+    # Older node packages' docs-only verdicts leave this empty and cannot
+    # authorize a new plugin's Done write during release adoption.
+    verified_contract_hashes: tuple[tuple[str, str], ...] = ()
 
     @property
     def engaged(self) -> bool:
@@ -281,6 +268,9 @@ CheckRunReader = Callable[[str, str], list[dict[str, Any]] | None]
 
 def gh_read_contract(repo: str, ref: str, ticket_id: str) -> ContractRead:
     """Read the product contract at a fixed commit via GitHub REST."""
+    # REST branch names do not include the local remote's name.
+    if ref == CURRENT_CONTRACT_REF:
+        ref = "dev"
     data, error = _gh_api_json(
         f"repos/{repo}/contents/{CONTRACT_DIR}/{ticket_id}.yaml?ref={quote(ref, safe='')}",
         15,
@@ -322,42 +312,31 @@ def gh_read_check_runs(repo: str, sha: str) -> list[dict[str, Any]] | None:
     return runs
 
 
-def _parse_contract(
-    read: ContractRead, ticket_id: str, source: str
-) -> dict[str, Any] | RepoEvidenceVerdict:
-    """Parse a contract, refusing unavailable YAML support or invalid data."""
-    if read.status is not ContractReadStatus.FOUND:
-        return RepoEvidenceVerdict(
-            RepoEvidenceOutcome.REFUSED,
-            f"{source}: contracts/{ticket_id}.yaml is {read.status}"
-            f" ({read.error or 'contract absent'}); restore readable evidence.",
-        )
-    try:
-        import yaml
-    except ImportError:
-        return RepoEvidenceVerdict(
-            RepoEvidenceOutcome.REFUSED,
-            f"{source}: PyYAML is unavailable; install it to read the contract.",
-        )
-    try:
-        contract = yaml.safe_load(read.text)
-    except yaml.YAMLError as exc:
-        return RepoEvidenceVerdict(
-            RepoEvidenceOutcome.REFUSED,
-            f"{source}: contracts/{ticket_id}.yaml is invalid YAML ({exc}); fix it.",
-        )
-    if not isinstance(contract, dict):
-        return RepoEvidenceVerdict(
-            RepoEvidenceOutcome.REFUSED,
-            f"{source}: contracts/{ticket_id}.yaml must be a mapping; fix it.",
-        )
-    if "ticket_id" in contract and contract["ticket_id"] != ticket_id:
-        return RepoEvidenceVerdict(
-            RepoEvidenceOutcome.REFUSED,
-            f"{source}: contract names ticket_id {contract['ticket_id']!r}, "
-            f"not {ticket_id}; correct the ticket binding.",
-        )
-    return contract
+def _receipt_handler() -> Any:
+    """Load the released node handler from a source plugin or its installed package."""
+    source = (
+        Path(__file__).resolve().parents[4]
+        / "src/omniclaude/nodes/node_linear_effect/handlers/handler_done_receipt_policy.py"
+    )
+    if source.is_file():
+        name = "omniclaude_done_receipt_policy"
+        if name not in sys.modules:
+            spec = importlib.util.spec_from_file_location(name, source)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"cannot load receipt handler at {source}")
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+            spec.loader.exec_module(module)
+        return sys.modules[name]
+    return importlib.import_module(
+        "omniclaude.nodes.node_linear_effect.handlers.handler_done_receipt_policy"
+    )
+
+
+def _parse_contract(read: ContractRead, ticket_id: str, source: str) -> Any:
+    return _receipt_handler().parse_contract(
+        read, ticket_id, source, sys.modules[__name__]
+    )
 
 
 def evaluate_repo_evidence(
@@ -380,7 +359,7 @@ def evaluate_repo_evidence(
             "no merged product PR to read repo evidence from",
         )
 
-    contracts: list[tuple[PRStatus, dict[str, Any]]] = []
+    contracts: list[tuple[PRStatus, dict[str, Any], str]] = []
     for (repo, number), pr in candidates.items():
         assert repo is not None
         read = read_contract(repo, pr.merge_commit_sha, ticket_id)
@@ -391,7 +370,7 @@ def evaluate_repo_evidence(
         )
         if isinstance(contract, RepoEvidenceVerdict):
             return contract
-        contracts.append((pr, contract))
+        contracts.append((pr, contract, read.text))
     if not contracts:
         return RepoEvidenceVerdict(
             RepoEvidenceOutcome.NOT_ENGAGED,
@@ -401,20 +380,20 @@ def evaluate_repo_evidence(
     # of the same repository re-verifies everything an earlier one did: only the
     # newest decides there. A PR with no merge time is never proven superseded.
     newest: dict[str, str] = {}
-    for pr, _contract in contracts:
+    for pr, _contract, _text in contracts:
         assert pr.ref.repo is not None
         repo = pr.ref.repo
         if pr.merged_at:
             newest[repo] = max(newest.get(repo, ""), pr.merged_at)
     contracts = [
-        (pr, contract)
-        for pr, contract in contracts
+        (pr, contract, text)
+        for pr, contract, text in contracts
         if not pr.merged_at or pr.merged_at == newest[pr.ref.repo or ""]
     ]
 
-    engaged: list[tuple[PRStatus, dict[str, Any], list[dict[str, Any]]]] = []
+    engaged: list[tuple[PRStatus, dict[str, Any], str, list[dict[str, Any]]]] = []
     skipped: list[str] = []
-    for pr, contract in contracts:
+    for pr, contract, text in contracts:
         assert pr.ref.repo is not None
         repo = pr.ref.repo
         source = f"{repo}#{pr.ref.number}"
@@ -438,13 +417,14 @@ def evaluate_repo_evidence(
                 f"{REPO_EVIDENCE_CHECK_NAME} run on head {pr.head_sha[:12]}"
             )
             continue
-        engaged.append((pr, contract, kept))
+        engaged.append((pr, contract, text, kept))
     if not engaged:
         return RepoEvidenceVerdict(RepoEvidenceOutcome.NOT_ENGAGED, "; ".join(skipped))
 
     bindings: dict[str, list[str]] = {}
     sources: list[str] = []
-    for pr, contract, kept in engaged:
+    contract_hashes: list[tuple[str, str]] = []
+    for pr, contract, merged_text, kept in engaged:
         assert pr.ref.repo is not None
         repo = pr.ref.repo
         source = f"{repo}#{pr.ref.number}"
@@ -460,9 +440,8 @@ def evaluate_repo_evidence(
                 f"has status={newest.get('status')} and "
                 f"conclusion={newest.get('conclusion')}; obtain a completed success.",
             )
-        head_contract = _parse_contract(
-            read_contract(repo, pr.head_sha, ticket_id), ticket_id, context
-        )
+        head_read = read_contract(repo, pr.head_sha, ticket_id)
+        head_contract = _parse_contract(head_read, ticket_id, context)
         if isinstance(head_contract, RepoEvidenceVerdict):
             return head_contract
         if head_contract != contract:
@@ -472,6 +451,22 @@ def evaluate_repo_evidence(
                 "commit: the check run does not cover what merged; verify the "
                 "merged contract in a new PR.",
             )
+        current_read = read_contract(repo, CURRENT_CONTRACT_REF, ticket_id)
+        current_contract = _parse_contract(
+            current_read, ticket_id, f"{repo} at {CURRENT_CONTRACT_REF}"
+        )
+        if isinstance(current_contract, RepoEvidenceVerdict):
+            return current_contract
+        current_hash, error = _receipt_handler().check_contract_revision(
+            head_read.text,
+            merged_text,
+            current_read.text,
+            context,
+            CURRENT_CONTRACT_REF,
+        )
+        if error:
+            return RepoEvidenceVerdict(RepoEvidenceOutcome.REFUSED, error)
+        contract_hashes.append((repo, current_hash))
         for item in evidence_items(contract):
             for label in item.binds:
                 bindings.setdefault(label, []).append(f"{item.item_id} ({source})")
@@ -517,11 +512,13 @@ def evaluate_repo_evidence(
         + ", ".join(
             f"{label}<-{sorted(bindings[label])[0]}" for label in sorted(labels)
         ),
+        verified_contract_hashes=tuple(sorted(set(contract_hashes))),
     )
 
 
 __all__ = [
     "CONTRACT_DIR",
+    "CURRENT_CONTRACT_REF",
     "REPO_EVIDENCE_APP_SLUG",
     "REPO_EVIDENCE_CHECK_NAME",
     "CheckRunReader",

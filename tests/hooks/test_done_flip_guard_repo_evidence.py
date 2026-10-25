@@ -102,7 +102,11 @@ def _probe(
         contract = _contract("AC1", "AC2")
 
     def contract_reader(repo: str, ref: str, ticket_id: str) -> Any:
-        assert repo == _REPO and ref in (_MERGE, _HEAD) and ticket_id == _TICKET
+        assert (
+            repo == _REPO
+            and ref in (_MERGE, _HEAD, "origin/dev")
+            and ticket_id == _TICKET
+        )
         return repo_evidence.ContractRead(
             repo_evidence.ContractReadStatus.FOUND, text=contract
         )
@@ -477,6 +481,7 @@ def _two_pr_probe(
         _OLD_HEAD: old_contract or _contract("AC1", "AC2"),
         _MERGE: new_contract or _contract("AC1", "AC2"),
         _HEAD: new_contract or _contract("AC1", "AC2"),
+        "origin/dev": new_contract or _contract("AC1", "AC2"),
     }
 
     def contract_reader(repo: str, ref: str, ticket_id: str) -> Any:
@@ -617,7 +622,9 @@ def test_unavailable_repo_evidence_refuses_done(outcome: Any) -> None:
 
 def test_passed_repo_verdict_uses_repo_bound_allow_reason() -> None:
     verdict = repo_evidence.RepoEvidenceVerdict(
-        repo_evidence.RepoEvidenceOutcome.PASSED, "verified"
+        repo_evidence.RepoEvidenceOutcome.PASSED,
+        "verified",
+        verified_contract_hashes=(("test/repo", "a" * 64),),
     )
     decision = _done(lambda *_args: verdict)
     assert decision.allowed

@@ -90,7 +90,9 @@ def _no_repo_probe(_ticket_id: str, _descriptions: list[str], _prs: list[Any]) -
 
 def _repo_pass_probe(_ticket_id: str, _descriptions: list[str], _prs: list[Any]) -> Any:
     return nbe.RepoEvidenceVerdict(
-        nbe.RepoEvidenceOutcome.PASSED, "repo-bound: AC1<-dod-001"
+        nbe.RepoEvidenceOutcome.PASSED,
+        "repo-bound: AC1<-dod-001",
+        verified_contract_hashes=(("test/repo", "a" * 64),),
     )
 
 

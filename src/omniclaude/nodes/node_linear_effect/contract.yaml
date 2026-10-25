@@ -68,6 +68,16 @@ capabilities:
   - name: linear.ticketing.ticket_tick_acceptance
     description: Tick the acceptance boxes a contract-bound check covers, and optionally set Done, through the Done-flip guard's repo-evidence bar (OMN-17427)
 
+  - name: linear.ticketing.done_receipt_policy
+    description: >
+      handler_done_receipt_policy owns contract parsing, current-revision hashes,
+      criterion bindings and fail-closed hook execution for the plugin entrypoint.
+
+  - name: linear.ticketing.closeout_instruction_audit
+    description: >
+      handler_done_closeout_instructions audits skill and workflow roots for
+      retired closeout instructions and refuses unreadable audit roots.
+
 # IO operations
 io_operations:
   - operation: ticket_get
@@ -185,6 +195,10 @@ handler_routing:
 # Invariants
 invariants:
   - no_linear_client_outside_handler: true
+  - done_requires_current_bound_pass_receipt: true
+  - acceptance_tick_requires_current_bound_pass_receipt: true
+  - done_guard_error_refuses: true
+  - closeout_instructions_require_bound_receipts: true
 
 # Error handling
 error_handling:
