@@ -140,6 +140,7 @@
   "tests/hooks/test_post_tool_use_secret_redact_guard.py": 0.55,
   "tests/hooks/test_post_tool_use_trajectory.py": 0.14,
   "tests/hooks/test_pr_body_stamp_guard.py": 2.41,
+  "tests/hooks/test_pr_body_stamp_guard_bare_interpreter_omn_20266.py": 0.17,
   "tests/hooks/test_pr_body_stamp_guard_parse_omn_19019.py": 0.84,
   "tests/hooks/test_pr_body_stamp_guard_rebind_omn_18853.py": 0.14,
   "tests/hooks/test_pr_close_preconditions.py": 3.29,

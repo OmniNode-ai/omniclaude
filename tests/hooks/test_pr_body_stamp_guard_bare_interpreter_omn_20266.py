@@ -17,12 +17,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GUARD_PY = REPO_ROOT / "plugins" / "onex" / "hooks" / "lib" / "pr_body_stamp_guard.py"
 
 
+@pytest.mark.parametrize("installed", [True, False])
 def test_guard_imports_without_installed_omniclaude_via_registry(
     tmp_path: Path,
+    installed: bool,
 ) -> None:
     # An installed plugin copy has no src/ beside it: the registry clone is the source.
     copy = tmp_path / "plugin" / "plugins" / "onex" / "hooks" / "lib"
@@ -41,9 +45,16 @@ def test_guard_imports_without_installed_omniclaude_via_registry(
     home.mkdir()
     (home / "omniclaude").symlink_to(REPO_ROOT)
     env = {k: v for k, v in os.environ.items() if k not in {"PYTHONPATH"}}
-    env["OMNI_HOME"] = str(home)
+    if installed:
+        env["OMNI_HOME"] = str(home)
+    else:
+        env.pop("OMNI_HOME", None)
     result = subprocess.run(
-        [sys.executable, "-S", str(copy / "pr_body_stamp_guard.py")],
+        [
+            sys.executable,
+            "-S",
+            str(copy / "pr_body_stamp_guard.py" if installed else GUARD_PY),
+        ],
         input=json.dumps(
             {"tool_name": "Bash", "tool_input": {"command": "ls"}, "cwd": "/tmp"}
         ),

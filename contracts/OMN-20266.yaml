@@ -1,0 +1,90 @@
+schema_version: 1.0.0
+ticket_id: OMN-20266
+title: PR stamp guard imports on a bare hook interpreter
+summary: The shared tokenizer is resolved from the source checkout or registry clone without installing into the
+  hook interpreter. Original ticket AC1-AC3 are preserved and remain unproven by this repository's guard tests;
+  their pool-suite falsifiers are retained rather than replaced by unrelated passing tests. AC4 covers this repair.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn20266-pool-parity
+  statement: Original ticket criteria, unchanged; this guard repair does not establish full-ticket completion.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: A committed per-host parity probe reports, for each pool host, the required canonical clones
+      present at origin tip, the dispatch venv''s omnimarket revision against the launching host''s, gh auth status,
+      and pytest importable, as one typed record per host -- falsifier: uv run pytest -k lab_host_parity_probe on
+      a fixture host missing one clone, asserting a parity-failed record naming it'
+  - id: AC2
+    statement: 'AC2: Placement refuses (or skips with the reason recorded) a host whose latest parity record fails
+      for anything the unit''s declared needs name, instead of placing the unit -- falsifier: uv run pytest -k placement_skips_parity_failed_host'
+  - id: AC3
+    statement: 'AC3: The probe runs on the pool''s existing schedule and its failures appear in queue-status as
+      a DEGRADED line naming the host and the missing item -- falsifier: a queue-status run against a recorded parity
+      failure prints that line'
+- id: req-omn20266-bare-hook
+  statement: The stamp guard can evaluate edits on a bare hook interpreter from both an installed plugin and a source
+    checkout.
+  acceptance:
+  - id: AC4
+    statement: 'AC4: with site packages disabled, the guard imports its shared tokenizer from the declared source
+      tree, and the existing stamp-preservation decisions remain enforced -- falsifier: uv run pytest tests/hooks/test_pr_body_stamp_guard_bare_interpreter_omn_20266.py
+      tests/hooks/test_pr_body_stamp_guard.py -q fails without the source resolver'
+evidence_requirements:
+- kind: tests
+  description: Bare-interpreter imports and existing stamp-preservation refusals.
+  command: uv run pytest tests/hooks/test_pr_body_stamp_guard_bare_interpreter_omn_20266.py tests/hooks/test_pr_body_stamp_guard.py
+    -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn20266-ac1
+  description: Original AC1 requires its pool implementation suite. These tests are not shipped by this guard-only
+    repository change; no passing claim is made here.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/test_lab_host_parity.py -k lab_host_parity_probe -q
+  binds_ac:
+  - AC1
+- id: dod-omn20266-ac2
+  description: Original AC2 requires its pool implementation suite. These tests are not shipped by this guard-only
+    repository change; no passing claim is made here.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/test_lab_host_parity.py -k placement_skips_parity_failed_host -q
+  binds_ac:
+  - AC2
+- id: dod-omn20266-ac3
+  description: Original AC3 requires its pool implementation suite. These tests are not shipped by this guard-only
+    repository change; no passing claim is made here.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest plugins/omni/skills/queue-status/tests/test_queue_status.py -k parity -q
+  binds_ac:
+  - AC3
+- id: dod-omn20266-bare-hook
+  description: Both bare-interpreter layouts import and existing stamp refusal tests pass.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_pr_body_stamp_guard_bare_interpreter_omn_20266.py tests/hooks/test_pr_body_stamp_guard.py
+      -q
+  binds_ac:
+  - AC4
+- id: dod-omn20266-deploy-source
+  description: Hosted-runner source probe refuses a published PR head without the new source resolver; no lab SSH
+    or local registry is required.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: 'gh api -H ''Accept: application/vnd.github.raw+json'' "repos/${REPO}/contents/plugins/onex/hooks/lib/pr_body_stamp_guard.py?ref=$(gh
+      api repos/${REPO}/pulls/${PR_NUMBER} --jq .head.sha)" | python3 -c ''import sys; s=sys.stdin.read(); assert
+      "_SOURCE_ROOTS =" in s and "handler_shell_words.py" in s'''
+  binds_ac:
+  - AC4
