@@ -742,7 +742,13 @@ def test_installer_default_dir_requires_a_real_gh(
     env: dict[str, str], tmp_path: Path
 ) -> None:
     e = dict(env)
-    e["PATH"] = f"{SHIM.parent}:/usr/bin:/bin"
+    # Never /usr/bin:/bin: GitHub-hosted Ubuntu runners ship a real gh there.
+    tools = _coreutils_dir_without_gh(tmp_path)
+    for tool in ("dirname", "tr", "mkdir", "cp", "mv", "rm", "chmod", "cmp", "which"):
+        found = shutil.which(tool)
+        assert found, f"{tool} not found on PATH; needed by the installer"
+        (tools / tool).symlink_to(found)
+    e["PATH"] = f"{SHIM.parent}:{tools}"
     # The source shim on PATH must not count as a real gh.
     r = _install_default(e)
     assert r.returncode == 2, r.stderr

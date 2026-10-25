@@ -1,49 +1,79 @@
----
-schema_version: "1.0.0"
+schema_version: 1.0.0
 ticket_id: OMN-19856
-title: "The lanes' gh shim must not run in CI jobs: lanes-only install directory and a GITHUB_ACTIONS pass-through"
-summary: >
-  astral-sh/setup-uv adds $HOME/.local/bin to a CI job's PATH, and the gh user shim was installed there, so the
-  NUC runners (h203-light-1..7) ran it inside GitHub Actions jobs and its PR-state read guard refused the
-  pull-request body read of omninode_infra's deploy-gate job. The installer now defaults to a lanes-only directory
-  (${ONEX_LANE_BIN_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/omni/lane-bin}) and retires the legacy
-  $HOME/.local/bin copy, and the shim execs the real gh unchanged when GITHUB_ACTIONS=true. No guard is
-  weakened for lanes.
+title: 'The lanes'' gh shim must not run in CI jobs: lanes-only install directory and a GITHUB_ACTIONS pass-through'
+summary: 'astral-sh/setup-uv adds $HOME/.local/bin to a CI job''s PATH, and the gh user shim was installed there, so the NUC
+  runners (h203-light-1..7) ran it inside GitHub Actions jobs and its PR-state read guard refused the pull-request body read
+  of a downstream deploy-gate job. The installer now defaults to a lanes-only directory (${ONEX_LANE_BIN_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/omni/lane-bin})
+  and retires the legacy $HOME/.local/bin copy, and the shim execs the real gh unchanged when GITHUB_ACTIONS=true. No guard
+  is weakened for lanes.
+
+  '
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 evidence_requirements:
-  - kind: tests
-    description: "the gh shim, installer, read-routing, usage-log and merge-queue-guard suites pass"
-    command: "python -m pytest tests/scripts/test_gh_user_shim.py tests/scripts/test_gh_shim_read_routing.py tests/scripts/test_gh_usage_log.py tests/scripts/test_gh_merge_queue_guard.py -q -p no:cacheprovider"
+- kind: tests
+  description: the gh shim, installer, read-routing, usage-log and merge-queue-guard suites pass
+  command: python -m pytest tests/scripts/test_gh_user_shim.py tests/scripts/test_gh_shim_read_routing.py tests/scripts/test_gh_usage_log.py
+    tests/scripts/test_gh_merge_queue_guard.py -q -p no:cacheprovider
 emergency_bypass:
   enabled: false
-  justification: ""
-  follow_up_ticket_id: ""
+  justification: ''
+  follow_up_ticket_id: ''
 dod_evidence:
-  - id: dod-ci-passthrough-when-github-actions-true
-    description: "With GITHUB_ACTIONS=true the shim execs the real gh with argv, stdout, stderr and exit code unchanged and writes no usage log or cache; the same pull-request body read without it is still refused (OMN-19856 guard), and the values false, 1 and TRUE do not pass through."
-    source: manual
-    checks:
-      - check_type: command
-        check_value: "python -m pytest tests/scripts/test_gh_user_shim.py -k ci_passthrough -q -p no:cacheprovider"
-  - id: dod-installer-default-dir-is-lanes-only
-    description: "The installer with no --bin-dir installs gh and gh_route.py under ONEX_LANE_BIN_DIR, else XDG_DATA_HOME/omni/lane-bin, else $HOME/.local/share/omni/lane-bin, needs no PATH ordering for that directory, still refuses a foreign gh (exit 3) and a host with no real gh (exit 2), and an explicit --bin-dir keeps its old PATH checks."
-    source: manual
-    checks:
-      - check_type: command
-        check_value: "python -m pytest tests/scripts/test_gh_user_shim.py tests/scripts/test_gh_shim_read_routing.py -k 'installer or install' -q -p no:cacheprovider"
-  - id: dod-installer-retires-legacy-local-bin-shim
-    description: "A default install removes a legacy shim copy and its gh_route.py from $HOME/.local/bin, so a CI-like PATH that holds that directory resolves the real gh; a foreign gh there is left alone; --check reports the legacy copy and changes no file."
-    source: manual
-    checks:
-      - check_type: command
-        check_value: "python -m pytest tests/scripts/test_gh_user_shim.py -k 'retires_legacy or reports_legacy' -q -p no:cacheprovider"
-  - id: dod-deploy-check-hosted-runner
-    description: "Deploy check, runnable on a hosted runner (bash, python3 and a fake gh only, no network): the shim and installer suites above pass; the shim is a bash script with no runtime service to deploy, so the host deploy is the adopt-merged gh-shim target running the installer, recorded in the companion omniclaude-internal change."
-    source: manual
-    checks:
-      - check_type: command
-        check_value: "bash -n scripts/user-bin/gh"
-      - check_type: command
-        check_value: "bash -n scripts/user-bin/install-gh-shim.sh"
+- id: dod-ci-passthrough-when-github-actions-true
+  description: With GITHUB_ACTIONS=true the shim execs the real gh with argv, stdout, stderr and exit code unchanged and writes
+    no usage log or cache; the same pull-request body read without it is still refused (OMN-19856 guard), and the values false,
+    1 and TRUE do not pass through.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: python -m pytest tests/scripts/test_gh_user_shim.py -k ci_passthrough -q -p no:cacheprovider
+  binds_ac:
+  - AC1
+- id: dod-installer-default-dir-is-lanes-only
+  description: The installer with no --bin-dir installs gh and gh_route.py under ONEX_LANE_BIN_DIR, else XDG_DATA_HOME/omni/lane-bin,
+    else $HOME/.local/share/omni/lane-bin, needs no PATH ordering for that directory, still refuses a foreign gh (exit 3)
+    and a host with no real gh (exit 2), and an explicit --bin-dir keeps its old PATH checks.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: python -m pytest tests/scripts/test_gh_user_shim.py tests/scripts/test_gh_shim_read_routing.py -k 'installer
+      or install' -q -p no:cacheprovider
+  binds_ac:
+  - AC2
+- id: dod-installer-retires-legacy-local-bin-shim
+  description: A default install removes a legacy shim copy and its gh_route.py from $HOME/.local/bin, so a CI-like PATH that
+    holds that directory resolves the real gh; a foreign gh there is left alone; --check reports the legacy copy and changes
+    no file.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: python -m pytest tests/scripts/test_gh_user_shim.py -k 'retires_legacy or reports_legacy' -q -p no:cacheprovider
+  binds_ac:
+  - AC3
+- id: dod-deploy-check-hosted-runner
+  description: 'Deploy check runnable on a hosted runner using local fake binaries: installation and CI passthrough behave
+    as specified. No host deployment is claimed.'
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: python -m pytest tests/scripts/test_gh_user_shim.py -k 'ci_passthrough or default_dir or retires_legacy'
+      -q -p no:cacheprovider
+  - check_type: command
+    check_value: bash -n scripts/user-bin/gh
+  - check_type: command
+    check_value: bash -n scripts/user-bin/install-gh-shim.sh
+requirements:
+- id: req-ci-isolation
+  statement: The gh shim stays isolated to lanes and preserves ordinary CI execution.
+  acceptance:
+  - id: AC1
+    statement: CI passthrough requires GITHUB_ACTIONS=true exactly and preserves argv, output and exit status without cache
+      or usage logs; other values retain the PR-state guard.
+  - id: AC2
+    statement: The installer defaults to the lanes-only directory, requires a real gh, refuses a foreign executable and retains
+      PATH ordering checks for explicit --bin-dir.
+  - id: AC3
+    statement: Default installation retires only a legacy shim and router, preserves foreign gh executables and leaves files
+      unchanged under --check.
