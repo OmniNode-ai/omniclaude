@@ -47,6 +47,11 @@ requirements:
     acceptance:
       - id: "AC7"
         statement: "AC7: the train picks the newest green dev tag newer than the pin, skips red and unread tags, moves every member in one plan, writes nothing on a dry run and refuses a member with no clone; the workflow runs the train before uv lock, honours dry_run and reuses one branch -- falsifier: uv run pytest tests/scripts/test_dev_tag_train_omn19998.py tests/workflows/test_sibling_pin_train_omn19998.py -q fails at the merge base"
+  - id: "req-omn19998-guard-core-declared-venv"
+    statement: "The Bash guard runner runs a decision core it cannot import under its own interpreter through the plugin's declared venvs (CLAUDE_PLUGIN_DATA/.venv, then the OMNI_HOME omniclaude venv), and refuses with the interpreters it tried when none can import it."
+    acceptance:
+      - id: "AC8"
+        statement: "AC8: run_core and the registered pre_tool_use_bash_guards.sh entrypoint run the core under CLAUDE_PLUGIN_DATA/.venv when PLUGIN_PYTHON_BIN cannot import it, and without a declared venv fail with 'guard core cannot be imported' and 'declared interpreters tried' -- falsifier: uv run pytest tests/hooks/test_git_admission_runtime.py tests/hooks/test_shared_tree_git_guard.py -q -k \"runs_missing_core_under_declared_venv or runs_the_core_under_the_declared_venv\" fails at the merge base, where no declared venv is tried"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -124,3 +129,11 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_dev_tag_train_omn19998.py tests/workflows/test_sibling_pin_train_omn19998.py tests/workflows/test_sibling_lock_refresh_syncs_capture_mirror.py -q"
     binds_ac:
       - "AC7"
+  - id: "dod-omn19998-guard-core-declared-venv"
+    description: "The guard runner falls back to the declared plugin venv for an unimportable core, at the adapter and at the registered entrypoint; at the merge base both tests fail."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_git_admission_runtime.py tests/hooks/test_shared_tree_git_guard.py -q -k \"runs_missing_core_under_declared_venv or runs_the_core_under_the_declared_venv\""
+    binds_ac:
+      - "AC8"

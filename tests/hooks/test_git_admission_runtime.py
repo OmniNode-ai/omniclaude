@@ -117,7 +117,7 @@ def test_batched_adapter_reports_missing_core_before_traceback(
     )
     assert len(first) < 300
     assert f"(interpreter {sys.executable};" in first
-    assert "PLUGIN_PYTHON_BIN/CLAUDE_PLUGIN_DATA/.venv/OMNI_HOME" in first
+    assert "PLUGIN_PYTHON_BIN,CLAUDE_PLUGIN_DATA/.venv,OMNI_HOME" in first
     assert rest.startswith("Traceback (most recent call last):\n")
     assert rest.rstrip().endswith(
         "ModuleNotFoundError: No module named 'onex_no_such_core_module'"

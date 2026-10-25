@@ -166,7 +166,7 @@ def run_core(request: Request) -> tuple[int, str]:
                     print(
                         f"guard core cannot be imported: {detail} "
                         f"(interpreter {sys.executable}; "
-                        "PLUGIN_PYTHON_BIN/CLAUDE_PLUGIN_DATA/.venv/OMNI_HOME venv "
+                        "PLUGIN_PYTHON_BIN,CLAUDE_PLUGIN_DATA/.venv,OMNI_HOME venv "
                         f"must import it; declared interpreters tried: {', '.join(tried) or 'none'})"
                         if missing
                         else f"guard core crashed: {detail} (core {script})",
