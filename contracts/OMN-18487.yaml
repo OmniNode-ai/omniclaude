@@ -1,0 +1,153 @@
+schema_version: 1.0.0
+ticket_id: OMN-18487
+title: Inflow is bounded by measured closure, enforced at admission
+summary: Replace the lane daily cap with a trailing measured-closure allowance and explicit AC4 exception.
+  Guard/model/publisher are implemented here; external sweep wiring and the later 28-day outcome remain
+  pending.
+is_seam_ticket: true
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-inflow-measured-closure
+  statement: Admission is funded by measured governed closure, with a declared delta and recorded measurement-unavailable
+    decisions.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: The sweep writes a budget file carrying the trailing created count, closed count
+      and the window, and the file is refused by its own model when any field is absent -- falsifier:
+      a unit test constructing the record without the window raises'
+  - id: AC2
+    statement: 'AC2: With a budget file showing a ratio above the threshold, an unbound create is refused
+      and a gate-bound create is admitted -- falsifier: two guard tests sharing one over-threshold fixture
+      file'
+  - id: AC3
+    statement: 'AC3: With a budget file showing a ratio under the threshold, the unbound create is admitted
+      -- falsifier: the same test against an under-threshold fixture'
+  - id: AC4
+    statement: 'AC4: A missing, unreadable or stale budget file admits the create and records the reason
+      in the guard''s decision output -- falsifier: three tests, one per condition, each asserting admission
+      and a non-empty recorded reason'
+  - id: AC5
+    statement: 'AC5: The trailing created-to-done ratio is under 1.2 to 1 over a 28-day window after the
+      rule is live -- falsifier: the same paginated Linear enumeration used for the plan''s baseline,
+      re-run on the later window'
+evidence_requirements:
+- kind: tests
+  description: Offline budget validation, exhaustive pagination, guard subprocess admission and concurrent
+    spending.
+  command: uv run pytest tests/hooks/test_ticket_creation_guard.py tests/hooks/test_ticket_creation_guard_lane_intake.py
+    tests/hooks/test_ticket_inflow_budget.py tests/hooks/test_ticket_creation_guard_defect_diagnosis.py
+    -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-inflow-budget-publisher
+  description: The validated measurement writer and fully paginated publisher pass synthetic created/completed
+    populations. Existing omnibase_infra autoclose-sweep integration remains pending outside this repository;
+    this local test does not claim that caller is wired.
+  source: manual
+  status: verified
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_ticket_inflow_budget.py -q --no-cov
+- id: dod-inflow-ac1-sweep-integration
+  description: 'PENDING: the existing evidence-autoclose sweep must invoke the publisher and deliver the
+    declared budget path to the admission host. This lane may only change omniclaude. Model missing-window
+    validation is covered by dod-inflow-budget-publisher; AC1 is not claimed complete.'
+  source: linear
+  linear_dod_text: 'AC1: The sweep writes a budget file carrying the trailing created count, closed count
+    and the window, and the file is refused by its own model when any field is absent -- falsifier: a
+    unit test constructing the record without the window raises'
+  status: pending
+  execution_scope: local_done_gate
+  binds_ac:
+  - AC1
+  checks: []
+- id: dod-inflow-ac2
+  description: 'Two guard subprocess tests use the same over-threshold fixture file: an unbound lane-intake
+    create is refused and a declared Gate-bound create is admitted when closure capacity remains.'
+  source: linear
+  linear_dod_text: 'AC2: With a budget file showing a ratio above the threshold, an unbound create is
+    refused and a gate-bound create is admitted -- falsifier: two guard tests sharing one over-threshold
+    fixture file'
+  status: verified
+  binds_ac:
+  - AC2
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k over_threshold
+- id: dod-inflow-ac3
+  description: The same unbound lane-intake payload is admitted against an under-threshold measurement;
+    full guard binding and criterion checks are retained.
+  source: linear
+  linear_dod_text: 'AC3: With a budget file showing a ratio under the threshold, the unbound create is
+    admitted -- falsifier: the same test against an under-threshold fixture'
+  status: verified
+  binds_ac:
+  - AC3
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k under_threshold
+- id: dod-inflow-ac4
+  description: Missing, unreadable and stale budget files each admit with a machine-readable reason also
+    recorded in the admission journal; this exception does not waive the existing full guard binding checks.
+  source: linear
+  linear_dod_text: 'AC4: A missing, unreadable or stale budget file admits the create and records the
+    reason in the guard''s decision output -- falsifier: three tests, one per condition, each asserting
+    admission and a non-empty recorded reason'
+  status: verified
+  binds_ac:
+  - AC4
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k "missing_unreadable_stale
+      or exception_does_not_weaken"
+- id: dod-inflow-ac5-live-window
+  description: 'PENDING: only a later fully paginated Linear enumeration, taken after 28 days of live
+    enforcement, can settle this metric. No synthetic unit test or pre-rollout measurement is claimed
+    as AC5 evidence. Preserve the baseline method: createdAt and completedAt, completed state only, exhaust
+    hasNextPage=false.'
+  source: linear
+  linear_dod_text: 'AC5: The trailing created-to-done ratio is under 1.2 to 1 over a 28-day window after
+    the rule is live -- falsifier: the same paginated Linear enumeration used for the plan''s baseline,
+    re-run on the later window'
+  status: pending
+  execution_scope: local_done_gate
+  binds_ac:
+  - AC5
+  checks: []
+- id: dod-inflow-closure-capacity
+  description: A planned child passes the old flat daily cap when closures fund it, but fails below that
+    cap when closures are spent. Yesterday still spends the trailing allowance; concurrent processes cannot
+    spend the last local admission twice.
+  source: manual
+  status: verified
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k "planned_child
+      or yesterday or concurrent or snapshot_covered or new_closures"
+- id: dod-deploy-inflow-admission
+  description: Hosted runner exercises actual guard subprocesses with temporary HOME/state and synthetic
+    measurement files. The planned-child case fails the former daily cap. No Linear credentials, broker,
+    private source clones or live services are required.
+  source: manual
+  status: verified
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py tests/hooks/test_ticket_inflow_budget.py
+      -q --no-cov
+- id: dod-deploy-inflow-distribution
+  description: Hosted runner reads the pushed hook handler from the public plugin distribution at the
+    checked-out revision and refuses the former untyped admission field. Paired subprocess tests above
+    prove behavior. Pending until the launcher commits and pushes this revision; this does not claim
+    the external sweep is wired or an installed plugin has been updated.
+  source: manual
+  status: pending
+  checks:
+  - check_type: command
+    check_value: >-
+      bash -o pipefail -c 'gh api -H "Accept: application/vnd.github.raw"
+      "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/handlers/handler_lane_intake.py?ref=$(git rev-parse HEAD)"
+      | grep -F "budget: ModelTicketInflowBudget | None = None" > /dev/null'

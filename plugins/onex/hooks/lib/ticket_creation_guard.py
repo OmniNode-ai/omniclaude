@@ -1358,12 +1358,7 @@ def criterion_lines(description: str) -> dict[str, str]:
 
 
 def _handler(name: str) -> Any:
-    """Load a stdlib-only handler from ``src/omniclaude/handlers`` by path.
-
-    The canonical-file-shape ratchet lets this baselined script only shrink, so
-    new behaviour (OMN-17942 lane intake) and the description-patch logic live
-    in handlers; the hook's bare interpreter has no ``omniclaude`` package.
-    """
+    """Load a stdlib-only handler by path for the hook's bare interpreter."""
     path = (
         Path(__file__).resolve().parents[4] / "src/omniclaude/handlers" / f"{name}.py"
     )
@@ -2172,7 +2167,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-record",
         action="store_true",
-        help="do not spend the day's intake budget (a dry run)",
+        help="do not record an intake admission (a dry run)",
     )
     args = parser.parse_args(argv)
 
@@ -2227,6 +2222,9 @@ def main(argv: list[str] | None = None) -> int:
             args.policy or DEFAULT_POLICY_PATH,
             datetime.now(UTC),
             force=args.node or args.lane_intake,
+            binding=lambda body: (
+                _binding_kind(body, policy) or _declares_epic(body, policy)
+            ),
         )
         if admission is not None:
             findings += [Finding(**f) for f in intake.findings(tool_input, admission)]
@@ -2234,13 +2232,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write("--lane-intake needs a create: a tool_input with no id\n")
         return 1
     if findings:
-        # Nothing is written to stderr on this path. The shell wrapper captures
-        # stdout and stderr TOGETHER and then reads `.reason` out of the result
-        # with jq, so a diagnostic line here would not be a diagnostic -- it
-        # would corrupt the refusal into the wrapper's generic fallback text and
-        # throw away every finding this function just computed.
-        # OMN-19381: the wrapper records this stable code, rather than guessing
-        # a create-admission cause from the rendered update diagnostic.
+        # Keep refusal stdout machine-readable for the shell wrapper.
         reason_code = (
             "issue-update-" + findings[0].code.replace("_", "-")
             if is_update
@@ -2249,12 +2241,8 @@ def main(argv: list[str] | None = None) -> int:
         return _block(
             render_block_reason(findings, policy, update=is_update), reason_code
         )
-    if admission is not None and not args.no_record:
-        try:
-            intake.record(admission, str(tool_input.get("title", "")))
-        except OSError as exc:
-            sys.stderr.write(f"could not record the intake admission: {exc}\n")
-            return 1
+    if admission is not None and intake.complete(admission, tool_input, args.no_record):
+        return 1
     if body_lookup is None:
         sys.stderr.write(
             "[ticket_creation_guard] no LINEAR_API_KEY in the environment or "

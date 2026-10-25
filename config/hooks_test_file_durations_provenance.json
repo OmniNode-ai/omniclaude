@@ -10,8 +10,18 @@
     {"run_id": 39058030745, "head_sha": "b717276a", "event": "push", "attempt": 1}
   ],
   "recorded_on": "2026-10-17",
-  "file_count": 206,
+  "file_count": 213,
   "suite_test_seconds": "573 to 833 across the four runs, 718 in the mean record",
   "planner": "the 'Plan this shard's hooks test files (OMN-19681)' step of the hooks-tests job in .github/workflows/ci.yml",
-  "refresh": "gh run download <run-id> -p 'hooks-test-results-*' -D <dir>; sum each junit testcase's time by its test file (the classname's module path, tests.hooks.test_x.TestY -> tests/hooks/test_x.py), average over runs and write {file: seconds} to config/hooks_test_file_durations.json"
+  "refresh": "gh run download <run-id> -p 'hooks-test-results-*' -D <dir>; sum each junit testcase's time by its test file (the classname's module path, tests.hooks.test_x.TestY -> tests/hooks/test_x.py), average over runs and write {file: seconds} to config/hooks_test_file_durations.json",
+  "local_additions": [
+    {
+      "ticket": "OMN-18487",
+      "recorded_on": "2026-10-25",
+      "file": "tests/hooks/test_ticket_inflow_budget.py",
+      "seconds": 0.031,
+      "basis": "sum of testcase time in local h200 junit report",
+      "command": "uv run pytest tests/hooks/test_ticket_inflow_budget.py -q --no-cov --junitxml=budget-junit.xml"
+    }
+  ]
 }

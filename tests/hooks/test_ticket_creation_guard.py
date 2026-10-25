@@ -1836,9 +1836,10 @@ def test_the_criterion_vocabulary_has_not_drifted_from_its_source() -> None:
         pytest.skip(f"{source_path} is absent from the clone")
     source = source_path.read_text(encoding="utf-8")
     policy_raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
-    for symbol, key in (
-        ("_STATE_MARKER_RE", "state_criterion_markers"),
-        ("_BEHAVIOUR_MARKER_RE", "behaviour_criterion_markers"),
+    for symbol, key in zip(
+        classifier["symbols"],
+        ("state_criterion_markers", "behaviour_criterion_markers"),
+        strict=True,
     ):
         assert _verbose_alternatives(source, symbol) == policy_raw[key], (
             f"{key} has drifted from {classifier['repo']} {symbol}. Bump the "

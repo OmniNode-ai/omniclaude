@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Lane intake: label, first-line stamp, lane identity and a daily budget (OMN-17942).
+"""Lane intake: label, first-line stamp, lane identity and a closure-funded allowance (OMN-18487).
 
 Every Linear item a lane opens is written through the operator's one existing
 Linear key, so its author field reads as the operator's own. These tests run
@@ -19,11 +19,12 @@ import json
 import os
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
 
 import pytest
+
+from omniclaude.handlers.handler_lane_intake import load_policy
 
 pytestmark = pytest.mark.unit
 
@@ -32,12 +33,10 @@ _GUARD_PY = _REPO_ROOT / "plugins/onex/hooks/lib/ticket_creation_guard.py"
 _POLICY_JSON = _REPO_ROOT / "plugins/onex/hooks/config/ticket_creation_policy.json"
 _HANDLER_PY = _REPO_ROOT / "src/omniclaude/handlers/handler_lane_intake.py"
 
-_INTAKE: dict[str, Any] = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))[
-    "lane_intake"
-]
-_LABEL: str = _INTAKE["label"]
-_STAMP_PREFIX: str = _INTAKE["stamp_prefix"]
-_BUDGET: int = _INTAKE["daily_budget"]
+_INTAKE = load_policy(_POLICY_JSON)
+_LABEL: str = _INTAKE.label
+_STAMP_PREFIX: str = _INTAKE.stamp_prefix
+_BUDGET = 3  # A fixture measurement, never an allowance from policy.
 
 _BODY = (
     "Gate: OMN-16729 AC-5\n"
@@ -51,8 +50,8 @@ def _stamped(lane: str, body: str = _BODY) -> str:
     return f"{_STAMP_PREFIX} {lane}\n\n{body}"
 
 
-def _create(**overrides: Any) -> dict[str, Any]:
-    payload: dict[str, Any] = {
+def _create(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
         "team": "Omninode",
         "title": "Refuse a Linear create with no binding",
         "parentId": "OMN-16729",
@@ -64,11 +63,39 @@ def _create(**overrides: Any) -> dict[str, Any]:
 
 def _ledger(state: Path) -> Path:
     today = datetime.now(UTC).strftime("%Y-%m-%d")
-    return state / _INTAKE["state_subdir"] / f"{today}.jsonl"
+    return state / _INTAKE.state_subdir / f"{today}.jsonl"
+
+
+def _budget(
+    tmp_path: Path,
+    *,
+    created: int = 0,
+    closed: int = _BUDGET,
+    lane_created: int = 0,
+    age: int = 1,
+) -> Path:
+    end = datetime.now(UTC) - timedelta(seconds=age)
+    path = tmp_path / "state" / _INTAKE.budget_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "created_count": created,
+                "closed_count": closed,
+                "lane_created_count": lane_created,
+                "window": {
+                    "start": (end - timedelta(days=_INTAKE.window_days)).isoformat(),
+                    "end": end.isoformat(),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def _run(
-    tool_input: dict[str, Any],
+    tool_input: dict[str, object],
     tmp_path: Path,
     *,
     lane: str | None = None,
@@ -76,7 +103,7 @@ def _run(
     state: bool = True,
     flags: tuple[str, ...] = (),
     extra_env: dict[str, str] | None = None,
-    extra_payload: dict[str, Any] | None = None,
+    extra_payload: dict[str, object] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
@@ -86,7 +113,7 @@ def _run(
     if lane is not None:
         env["ONEX_LANE"] = lane
     env.update(extra_env or {})
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "tool_name": "mcp__linear-server__save_issue",
         "tool_input": tool_input,
     }
@@ -190,9 +217,12 @@ def test_a_subagent_that_declares_its_lane_is_admitted(tmp_path: Path) -> None:
     _admitted(_run(ok, tmp_path, lane="lane-x", agent_id="a1b2c3"))
 
 
-def test_the_daily_budget_refuses_past_it_with_a_clear_message(tmp_path: Path) -> None:
+def test_measured_closure_refuses_at_capacity_with_a_clear_message(
+    tmp_path: Path,
+) -> None:
+    _budget(tmp_path)
     ledger = _ledger(tmp_path / "state")
-    ledger.parent.mkdir(parents=True)
+    ledger.parent.mkdir(parents=True, exist_ok=True)
     ledger.write_text(
         "".join('{"lane": "earlier"}\n' for _ in range(_BUDGET)), encoding="utf-8"
     )
@@ -201,13 +231,14 @@ def test_the_daily_budget_refuses_past_it_with_a_clear_message(tmp_path: Path) -
     assert result.returncode == 3
     reason = _reason(result)
     assert "lane_intake_budget" in reason
-    assert f"daily budget is {_BUDGET}" in reason
+    assert f"allowance is {_BUDGET} governed closures" in reason
     assert len(ledger.read_text(encoding="utf-8").splitlines()) == _BUDGET
 
 
 def test_the_budget_admits_up_to_it_and_refuses_the_next(tmp_path: Path) -> None:
+    _budget(tmp_path)
     ledger = _ledger(tmp_path / "state")
-    ledger.parent.mkdir(parents=True)
+    ledger.parent.mkdir(parents=True, exist_ok=True)
     ledger.write_text(
         "".join('{"lane": "earlier"}\n' for _ in range(_BUDGET - 1)),
         encoding="utf-8",
@@ -218,9 +249,12 @@ def test_the_budget_admits_up_to_it_and_refuses_the_next(tmp_path: Path) -> None
     assert _run(ok, tmp_path, lane="lane-x").returncode == 3
 
 
-def test_yesterdays_admissions_do_not_spend_todays_budget(tmp_path: Path) -> None:
-    old = tmp_path / "state" / _INTAKE["state_subdir"] / "2020-01-01.jsonl"
-    old.parent.mkdir(parents=True)
+def test_admissions_outside_the_trailing_window_do_not_spend_capacity(
+    tmp_path: Path,
+) -> None:
+    _budget(tmp_path)
+    old = tmp_path / "state" / _INTAKE.state_subdir / "2020-01-01.jsonl"
+    old.parent.mkdir(parents=True, exist_ok=True)
     old.write_text("".join('{"lane": "old"}\n' for _ in range(_BUDGET)), "utf-8")
     ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
     _admitted(_run(ok, tmp_path, lane="lane-x"))
@@ -287,11 +321,23 @@ def test_lane_intake_mode_fails_closed_on_a_payload_it_cannot_judge(
 def test_the_shipped_policy_carries_the_lane_intake_vocabulary() -> None:
     assert _LABEL == "lane-created"
     assert _STAMP_PREFIX == "created-by-lane:"
-    assert isinstance(_BUDGET, int) and _BUDGET >= 1
+    assert "daily_budget" not in _INTAKE
+    assert _INTAKE.window_days == 28
+    assert _INTAKE.delta == 0
 
 
 @pytest.mark.parametrize(
-    "key", ["label", "stamp_prefix", "daily_budget", "state_subdir"]
+    "key",
+    [
+        "label",
+        "stamp_prefix",
+        "budget_path",
+        "window_days",
+        "max_age_seconds",
+        "delta",
+        "ratio_threshold",
+        "state_subdir",
+    ],
 )
 def test_a_policy_missing_a_lane_intake_key_refuses_rather_than_defaulting(
     key: str, tmp_path: Path
@@ -344,7 +390,7 @@ def _workflow_subagent(
     *,
     sidecar_lane: str | None = "lane-w",
     ledger_rows: tuple[str, ...] = (),
-) -> tuple[dict[str, str], dict[str, Any]]:
+) -> tuple[dict[str, str], dict[str, object]]:
     """The hook env and payload extras of a Mac workflow subagent.
 
     The harness writes ``agent-<id>.meta.json`` under the PARENT session's
@@ -455,3 +501,201 @@ def test_a_declared_lane_still_wins_over_the_sidecar(key: str, tmp_path: Path) -
     _admitted(_run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra))
     row = json.loads(_ledger(tmp_path / "state").read_text("utf-8").splitlines()[0])
     assert (row["lane"], row["lane_source"]) == ("lane-remote", "env")
+
+
+def test_planned_child_admitted_past_old_flat_cap_when_closures_allow(
+    tmp_path: Path,
+) -> None:
+    """Today's old cap refused the 31st planned child despite closure capacity."""
+    _budget(tmp_path, created=200, closed=100, lane_created=30)
+    before_snapshot = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
+    _ledger(tmp_path / "state").write_text(
+        "".join(
+            json.dumps({"at": before_snapshot, "lane": "earlier"}) + "\n"
+            for _ in range(30)
+        )
+    )
+    ok = _create(description=_stamped("lane-plan"), labels=[_LABEL])
+    _admitted(_run(ok, tmp_path, lane="lane-plan"))
+
+
+def test_planned_child_refused_below_old_flat_cap_when_closures_spent(
+    tmp_path: Path,
+) -> None:
+    _budget(tmp_path, created=1, closed=1, lane_created=1)
+    ok = _create(description=_stamped("lane-plan"), labels=[_LABEL])
+    result = _run(ok, tmp_path, lane="lane-plan")
+    assert result.returncode == 3
+    assert "lane_intake_budget" in _reason(result)
+
+
+def test_yesterday_spends_the_same_trailing_allowance(tmp_path: Path) -> None:
+    _budget(tmp_path, closed=1)
+    yesterday = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%d")
+    path = _ledger(tmp_path / "state").with_name(f"{yesterday}.jsonl")
+    path.write_text('{"lane": "earlier"}\n', encoding="utf-8")
+    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    result = _run(ok, tmp_path, lane="lane-x")
+    assert result.returncode == 3
+    assert "lane_intake_budget" in _reason(result)
+
+
+@pytest.fixture(scope="module")
+def over_threshold_budget(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return _budget(tmp_path_factory.mktemp("over-threshold"), created=200, closed=100)
+
+
+def _unbound() -> dict[str, object]:
+    return _create(description=_stamped("lane-x", "No gate declared."), labels=[_LABEL])
+
+
+def test_over_threshold_unbound_create_refused(
+    over_threshold_budget: Path, tmp_path: Path
+) -> None:
+    result = _run(
+        _unbound(),
+        over_threshold_budget.parents[3],
+        lane="lane-x",
+        flags=("--lane-intake",),
+    )
+    assert result.returncode == 3
+    assert "inflow_ratio" in _reason(result)
+
+
+def test_over_threshold_bound_create_admitted(
+    over_threshold_budget: Path, tmp_path: Path
+) -> None:
+    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    _admitted(
+        _run(
+            ok,
+            over_threshold_budget.parents[3],
+            lane="lane-x",
+            flags=("--lane-intake",),
+        )
+    )
+
+
+def test_under_threshold_unbound_create_admitted(tmp_path: Path) -> None:
+    _budget(tmp_path, created=10, closed=100)
+    _admitted(_run(_unbound(), tmp_path, lane="lane-x", flags=("--lane-intake",)))
+
+
+@pytest.mark.parametrize("condition", ["missing", "unreadable", "stale"])
+def test_missing_unreadable_stale_budget_admits_and_records_reason(
+    condition: str, tmp_path: Path
+) -> None:
+    if condition == "unreadable":
+        path = _budget(tmp_path)
+        path.unlink()
+        path.mkdir()  # An OS read failure even when tests run as root.
+    elif condition == "stale":
+        _budget(tmp_path, age=_INTAKE.max_age_seconds + 1)
+    result = _run(_unbound(), tmp_path, lane="lane-x", flags=("--lane-intake",))
+    _admitted(result)
+    decision = json.loads(result.stdout)
+    assert decision["decision"] == "allow"
+    assert condition in decision["reason"]
+    row = json.loads(_ledger(tmp_path / "state").read_text().splitlines()[0])
+    assert row["budget_reason"] == decision["reason"]
+
+
+def test_budget_exception_does_not_weaken_existing_binding_check(
+    tmp_path: Path,
+) -> None:
+    result = _run(_unbound(), tmp_path, lane="lane-x")
+    assert result.returncode == 3
+    assert "missing_gate_line" in _reason(result)
+
+
+def test_new_closures_move_allowance_without_a_policy_edit(tmp_path: Path) -> None:
+    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    _budget(tmp_path, created=1, closed=1, lane_created=1)
+    assert _run(ok, tmp_path, lane="lane-x").returncode == 3
+    _budget(tmp_path, created=1, closed=2, lane_created=1)
+    _admitted(_run(ok, tmp_path, lane="lane-x"))
+    assert _run(ok, tmp_path, lane="lane-x").returncode == 3
+
+
+def test_concurrent_creates_cannot_spend_the_last_closure_twice(tmp_path: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    _budget(tmp_path, closed=1)
+    (tmp_path / "home").mkdir()
+    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda _: _run(ok, tmp_path, lane="lane-x"), range(4)))
+    assert sum(result.returncode == 0 for result in results) == 1
+    assert len(_ledger(tmp_path / "state").read_text().splitlines()) == 1
+    assert all(result.returncode in (0, 1, 3) for result in results)
+
+
+def test_snapshot_covered_admissions_are_not_counted_twice(tmp_path: Path) -> None:
+    _budget(tmp_path, created=10, closed=11, lane_created=10)
+    before_snapshot = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
+    _ledger(tmp_path / "state").write_text(
+        "".join(
+            json.dumps({"at": before_snapshot, "lane": "earlier"}) + "\n"
+            for _ in range(10)
+        )
+    )
+    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    _admitted(_run(ok, tmp_path, lane="lane-x"))
+    assert _run(ok, tmp_path, lane="lane-x").returncode == 3
+
+
+def test_malformed_journal_cannot_erase_consumed_allowance(tmp_path: Path) -> None:
+    _budget(tmp_path, closed=100)
+    _ledger(tmp_path / "state").write_text("not-json\n")
+    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    result = _run(ok, tmp_path, lane="lane-x")
+    assert result.returncode == 3
+    assert "trailing intake journal could not be read" in _reason(result)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("window_days", 0),
+        ("window_days", True),
+        ("delta", -1),
+        ("max_age_seconds", 0),
+        ("ratio_threshold", 0),
+        ("ratio_threshold", True),
+        ("budget_path", "../escape.json"),
+        ("state_subdir", "/tmp/escape"),
+    ],
+)
+def test_malformed_policy_refuses_instead_of_defaulting(
+    key: str, value: object, tmp_path: Path
+) -> None:
+    raw = json.loads(_POLICY_JSON.read_text())
+    raw["lane_intake"][key] = value
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(raw))
+    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    assert (
+        _run(ok, tmp_path, lane="lane-x", flags=("--policy", str(path))).returncode == 1
+    )
+
+
+def test_declared_delta_is_added_to_measured_closures(tmp_path: Path) -> None:
+    _budget(tmp_path, closed=0)
+    raw = json.loads(_POLICY_JSON.read_text())
+    raw["lane_intake"]["delta"] = 2
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(raw))
+    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    for _ in range(2):
+        _admitted(_run(ok, tmp_path, lane="lane-x", flags=("--policy", str(policy))))
+    result = _run(ok, tmp_path, lane="lane-x", flags=("--policy", str(policy)))
+    assert result.returncode == 3
+    assert "0 governed closures + declared delta 2" in _reason(result)
+
+
+def test_zero_closures_and_zero_delta_fund_no_admissions(tmp_path: Path) -> None:
+    _budget(tmp_path, closed=0)
+    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    result = _run(ok, tmp_path, lane="lane-x")
+    assert result.returncode == 3
+    assert "lane_intake_budget" in _reason(result)

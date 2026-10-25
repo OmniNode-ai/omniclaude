@@ -14,8 +14,8 @@ stays, so the item itself carries the fact:
   holds an open CLAIM on the rolling work ledger;
 * rule 12 -- it carries the lane-intake label (``lane_intake.label``);
 * rule 13 -- its description's first line is ``<stamp_prefix> <lane>``;
-* rule 14 -- no more than ``lane_intake.daily_budget`` such items are admitted
-  per UTC day, counted in a per-day ledger under ``ONEX_STATE_DIR``.
+* rule 14 -- trailing admissions cannot exceed measured governed closures plus
+  the declared delta. Per-day journal files retain the trailing window.
 
 The vocabulary and the budget are ``ticket_creation_policy.json``'s
 ``lane_intake`` object; this module spells none of them.
@@ -30,15 +30,20 @@ are handed; the filesystem is touched only by :func:`begin` and :func:`record`.
 
 from __future__ import annotations
 
+import fcntl
 import importlib
 import importlib.util
 import json
 import os
-from collections.abc import Mapping
+import sys
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, Protocol, cast
+
+if TYPE_CHECKING:
+    from omniclaude.models.model_ticket_inflow_budget import ModelTicketInflowBudget
 
 #: The launcher's declarations of a lane's identity, most specific first -- the
 #: ``ONEX_LANE`` operand ``hook_lane_attribution`` resolves from; the
@@ -68,15 +73,19 @@ class LaneIntakePolicy(NamedTuple):
 
     label: str
     stamp_prefix: str
-    daily_budget: int
     state_subdir: str
+    budget_path: str
+    window_days: int
+    max_age_seconds: int
+    delta: int
+    ratio_threshold: float
 
 
 class LaneAdmission(NamedTuple):
-    """One create made from a lane or node context, and today's intake so far.
+    """One create made from a lane or node context, and the trailing intake so far.
 
     ``lane`` is the declared identity, ``""`` when the context carries none.
-    ``intake_count`` is ``None`` when the per-day ledger could not be read,
+    ``intake_count`` is ``None`` when the trailing journal could not be read,
     which refuses: an unmeasurable budget is not a budget.
     """
 
@@ -90,6 +99,9 @@ class LaneAdmission(NamedTuple):
     #: The lane a subagent's sidecar named, kept when no open CLAIM confirmed
     #: it, so the refusal can say which CLAIM is missing.
     unclaimed_sidecar_lane: str = ""
+    budget: ModelTicketInflowBudget | None = None
+    budget_reason: str = ""
+    bound: bool = False
 
 
 def load_policy(policy_path: Path) -> LaneIntakePolicy:
@@ -101,16 +113,67 @@ def load_policy(policy_path: Path) -> LaneIntakePolicy:
     """
     try:
         raw = json.loads(policy_path.read_text(encoding="utf-8"))["lane_intake"]
-        budget = raw["daily_budget"]
-        texts = [raw[k] for k in ("label", "stamp_prefix", "state_subdir")]
+        texts = [
+            raw[k] for k in ("label", "stamp_prefix", "state_subdir", "budget_path")
+        ]
+        numbers = [raw[k] for k in ("window_days", "max_age_seconds", "delta")]
+        threshold = raw["ratio_threshold"]
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise ValueError(f"{policy_path}: no usable 'lane_intake' object ({exc})")
-    if isinstance(budget, bool) or not isinstance(budget, int) or budget < 1:
-        raise ValueError(f"{policy_path}: lane_intake.daily_budget must be >= 1")
+        raise ValueError(
+            f"{policy_path}: no usable 'lane_intake' object ({exc})"
+        ) from exc
     if not all(isinstance(t, str) and t.strip() for t in texts):
         raise ValueError(f"{policy_path}: lane_intake strings must be non-blank")
-    label, prefix, subdir = (t.strip() for t in texts)
-    return LaneIntakePolicy(label, prefix, budget, subdir)
+    if any(type(n) is not int or n < 0 for n in numbers) or 0 in numbers[:2]:
+        raise ValueError(
+            f"{policy_path}: window/age must be positive integers; delta >= 0"
+        )
+    if type(threshold) not in (int, float) or not 0 < threshold < float("inf"):
+        raise ValueError(f"{policy_path}: ratio_threshold must be finite and positive")
+    label, prefix, subdir, budget_path = (t.strip() for t in texts)
+    for name in (subdir, budget_path):
+        if Path(name).is_absolute() or ".." in Path(name).parts:
+            raise ValueError(
+                f"{policy_path}: intake paths must stay within ONEX_STATE_DIR"
+            )
+    return LaneIntakePolicy(
+        label,
+        prefix,
+        subdir,
+        budget_path,
+        numbers[0],
+        numbers[1],
+        numbers[2],
+        float(threshold),
+    )
+
+
+class ProtocolTicketInflowAdmission(Protocol):
+    """The stdlib-only admission reader loaded by the bare hook interpreter."""
+
+    def read_budget(
+        self, policy: LaneIntakePolicy, state: Path | None, now: datetime
+    ) -> tuple[ModelTicketInflowBudget | None, str]: ...
+
+    def window_count(
+        self, ledger: Path | None, budget: ModelTicketInflowBudget | None, at: str
+    ) -> int | None: ...
+
+    def capacity_finding(
+        self, admission: LaneAdmission, count: int | None
+    ) -> dict[str, str] | None: ...
+
+
+def _inflow() -> ProtocolTicketInflowAdmission:
+    path = Path(__file__).with_name("handler_ticket_inflow_admission.py")
+    spec = importlib.util.spec_from_file_location(
+        "handler_ticket_inflow_admission", path
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"inflow handler not loadable: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return cast("ProtocolTicketInflowAdmission", module)
 
 
 def ledger_path(
@@ -121,19 +184,6 @@ def ledger_path(
     if not state_dir or not Path(state_dir).is_absolute():
         return None
     return Path(state_dir) / policy.state_subdir / f"{today}.jsonl"
-
-
-def read_intake_count(ledger: Path | None) -> int | None:
-    """Items already admitted today. A missing file is zero; unreadable is ``None``."""
-    if ledger is None:
-        return None
-    try:
-        text = ledger.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return 0
-    except OSError:
-        return None
-    return sum(1 for line in text.splitlines() if line.strip())
 
 
 def _refusal_lane_module() -> ModuleType | None:
@@ -211,6 +261,7 @@ def begin(
     now: datetime,
     *,
     force: bool = False,
+    binding: Callable[[str], object] | None = None,
 ) -> LaneAdmission | None:
     """``None`` for a person's interactive session; an admission for a lane or node.
 
@@ -246,14 +297,26 @@ def begin(
         unclaimed = "" if lane else named
     policy = load_policy(policy_path)
     ledger = ledger_path(environ, policy, now.strftime("%Y-%m-%d"))
+    inflow = _inflow()
+    budget, reason = inflow.read_budget(
+        policy, Path(environ["ONEX_STATE_DIR"].strip()) if ledger else None, now
+    )
+    at = now.isoformat()
+    tool_input = payload.get("tool_input")
+    body = (
+        str(tool_input.get("description", "")) if isinstance(tool_input, dict) else ""
+    )
     return LaneAdmission(
         policy,
         lane,
-        read_intake_count(ledger),
+        inflow.window_count(ledger, budget, at),
         ledger,
-        now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        at,
         source,
         unclaimed,
+        budget,
+        reason,
+        bool(binding(body)) if binding else False,
     )
 
 
@@ -273,7 +336,7 @@ def _label_names(tool_input: Mapping[str, object]) -> set[str]:
 
 
 def findings(
-    tool_input: Mapping[str, object], admission: LaneAdmission
+    tool_input: Mapping[str, object], admission: LaneAdmission, *, bound: bool = False
 ) -> list[dict[str, str]]:
     """Rules 11-14 for one create, as ``{code, field, reason, fix}`` dicts."""
     policy, lane = admission.policy, admission.lane
@@ -338,62 +401,73 @@ def findings(
                 ),
             }
         )
-    if admission.intake_count is None:
+    capacity = _inflow().capacity_finding(admission, admission.intake_count)
+    if capacity:
+        out.append(capacity)
+    budget = admission.budget
+    if (
+        budget is not None
+        and budget.created_count > budget.closed_count * policy.ratio_threshold
+        and not admission.bound
+    ):
         out.append(
             {
-                "code": "unevaluable",
-                "field": "lane_intake",
-                "reason": (
-                    "the per-day intake ledger could not be read (ONEX_STATE_DIR "
-                    "unset, relative or unreadable), so the daily budget cannot "
-                    "be measured"
-                ),
-                "fix": "set ONEX_STATE_DIR to an absolute, readable state directory",
-            }
-        )
-    elif admission.intake_count >= policy.daily_budget:
-        out.append(
-            {
-                "code": "lane_intake_budget",
-                "field": "lane_intake",
-                "reason": (
-                    f"{admission.intake_count} lane- or node-created items were "
-                    f"already admitted today (UTC); the daily budget is "
-                    f"{policy.daily_budget}, set in ticket_creation_policy.json"
-                ),
-                "fix": (
-                    "do not open this item today: comment on an existing ticket, "
-                    "or leave it for tomorrow's budget. Raising the budget is the "
-                    "operator's edit to lane_intake.daily_budget"
-                ),
+                "code": "inflow_ratio",
+                "field": "description",
+                "reason": f"trailing created={budget.created_count}, closed={budget.closed_count} exceeds ratio threshold {policy.ratio_threshold}",
+                "fix": "bind this create to a declared Gate, or wait for measured closure to restore the ratio",
             }
         )
     return out
 
 
 def record(admission: LaneAdmission, title: str) -> None:
-    """Append one admission to today's ledger. ``O_APPEND`` keeps lines whole.
+    """Serialize the final capacity check and append under a window-wide lock.
 
-    The check-then-append pair is not atomic across processes, so lanes
-    admitted in the same instant can overshoot the budget by the number of
-    racers: a bounded overshoot of a rate limit, not a bypass.
+    Rechecking under the lock prevents concurrent hook processes from spending
+    the same last admission. All UTC days share the same lock.
     """
     if admission.ledger is None:
         raise OSError("no intake ledger path resolves")
     admission.ledger.parent.mkdir(parents=True, exist_ok=True)
-    line = json.dumps(
-        {
-            "at": admission.at,
-            "lane": admission.lane,
-            "lane_source": admission.lane_source,
-            "title": title[:200],
-        }
-    )
-    fd = os.open(admission.ledger, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+    with (admission.ledger.parent / ".admission.lock").open("a") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        inflow = _inflow()
+        count = inflow.window_count(admission.ledger, admission.budget, admission.at)
+        failure = inflow.capacity_finding(admission, count)
+        if failure:
+            raise OSError(failure["reason"])
+        line = json.dumps(
+            {
+                "at": admission.at,
+                "lane": admission.lane,
+                "lane_source": admission.lane_source,
+                "title": title[:200],
+                "budget_reason": admission.budget_reason,
+            }
+        )
+        fd = os.open(admission.ledger, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            os.write(fd, (line + "\n").encode("utf-8"))
+        finally:
+            os.close(fd)
+
+
+def complete(
+    admission: LaneAdmission, tool_input: Mapping[str, object], no_record: bool
+) -> int:
+    """Record a successful admission and render its measurement exception, if any."""
     try:
-        os.write(fd, (line + "\n").encode("utf-8"))
-    finally:
-        os.close(fd)
+        if not no_record:
+            record(admission, str(tool_input.get("title", "")))
+    except OSError as exc:
+        sys.stderr.write(f"could not record the intake admission: {exc}\n")
+        return 1
+    if admission.budget_reason:
+        sys.stdout.write(
+            json.dumps({"decision": "allow", "reason": admission.budget_reason}) + "\n"
+        )
+    return 0
 
 
 __all__ = [
@@ -402,10 +476,10 @@ __all__ = [
     "LaneAdmission",
     "LaneIntakePolicy",
     "begin",
+    "complete",
     "findings",
     "ledger_path",
     "load_policy",
-    "read_intake_count",
     "record",
     "stamp_line",
     "subagent_lane",
