@@ -250,6 +250,11 @@ class LaneRepoEvidence:
         for clone in clones:
             if self._has_commit(clone, ref):
                 return self._show(clone, ref, path)
+        if ref == ev.CURRENT_CONTRACT_REF:
+            return ev.ContractRead(
+                ev.ContractReadStatus.ERROR,
+                error=f"current contract ref {ref} is unreadable in canonical clones",
+            )
         # A second registered clone may hold the merge even when the first
         # has not synced it yet. The unchanged head proof needs that merge.
         merge = self._merge_of_head.get((repo, ref))

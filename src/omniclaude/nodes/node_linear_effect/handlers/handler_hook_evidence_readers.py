@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""The Done-flip hook's evidence readers: no ``gh``, plus the docs-only verdict (OMN-20368).
+"""The Done-flip hook's evidence readers: no ``gh`` (OMN-20368).
 
 Before this the MCP hook (``done_flip_guard.main``) ran ``decide`` with its
 default readers, and every one of them read GitHub through ``gh api``: the
@@ -12,13 +12,9 @@ path's (:class:`LaneRepoEvidence`), with the local PR read first so an open
 or closed PR the watcher holds costs no bus call.
 
 :meth:`HookEvidenceReaders.repo_evidence` is the guard's one sufficient bar,
-for a tick and for Done alike. It returns the contract verdict unchanged
-unless no merged PR carries a contract (NOT_ENGAGED); only then is the
-docs-only verdict consulted (operator RULING 2026-10-14T03:57:46Z item 4:
-docs PRs skip the lab proof and heavy gates). That passes only when every
-merged PR the ticket cites changed documentation files alone, none carries the
-ticket's contract, and at least one merge commit's subject names the ticket.
-Anything unreadable refuses.
+for a tick and for Done alike. It returns the contract verdict unchanged.
+Documentation-only changes may skip runtime lab proof, but still need bound
+acceptance evidence. A merged docs PR is never a substitute for that receipt.
 """
 
 from __future__ import annotations
@@ -131,8 +127,7 @@ class HookEvidenceReaders:
         descriptions: list[str],
         merged: Sequence[_PRStatusLike],
     ) -> _VerdictLike:
-        """The contract verdict, or the docs-only verdict when no contract engaged."""
-        outcome = self._lib.RepoEvidenceOutcome
+        """The bound contract verdict, including for documentation tickets."""
         verdict: _VerdictLike = self._lib.evaluate_repo_evidence(
             ticket_id,
             descriptions,
@@ -140,17 +135,15 @@ class HookEvidenceReaders:
             read_contract=self._evidence.read_contract,
             read_check_runs=self._evidence.read_check_runs,
         )
-        if verdict.outcome is not outcome.NOT_ENGAGED:
-            return verdict
-        docs = self.docs_evidence(ticket_id, merged)
-        if docs.outcome is outcome.PASSED:
-            return docs
-        return self._verdict(verdict.outcome, f"{verdict.detail}; {docs.detail}")
+        if verdict.outcome is self._lib.RepoEvidenceOutcome.NOT_ENGAGED:
+            docs = self.docs_evidence(ticket_id, merged)
+            return self._verdict(verdict.outcome, f"{verdict.detail}; {docs.detail}")
+        return verdict
 
     def docs_evidence(
         self, ticket_id: str, merged: Sequence[_PRStatusLike]
     ) -> _VerdictLike:
-        """PASSED only for a ticket whose whole merged work is documentation."""
+        """Docs diagnostics only: documentation does not discharge a criterion."""
         outcome = self._lib.RepoEvidenceOutcome
         found = self._lib.ContractReadStatus
 
@@ -206,7 +199,10 @@ class HookEvidenceReaders:
                 outcome.NOT_ENGAGED,
                 f"no merged documentation PR names {ticket_id} in its merge subject",
             )
-        return self._verdict(outcome.PASSED, "docs-only: " + ", ".join(citing))
+        return self._verdict(
+            outcome.NOT_ENGAGED,
+            "docs-only: " + ", ".join(citing) + "; no bound PASS receipt",
+        )
 
 
 @functools.cache

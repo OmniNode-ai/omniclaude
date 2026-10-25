@@ -181,14 +181,15 @@ Two kill-switch spellings exist in the codebase — they are **not** interchange
 - `OMNICLAUDE_HOOKS_DISABLED=1` (trailing D) — honored by most other standalone hook wrappers (ci-reminder, ruff, cost-accounting, trajectory, scope-gate, ...).
 
 **Neither env switch covers the currently-registered security-carve-out guards**: the
-worktree guard is gated only by the `ONEX_HOOKS_MASK` `WORKTREE_GUARD` bit; the done-flip,
+worktree guard is gated only by the `ONEX_HOOKS_MASK` `WORKTREE_GUARD` bit;
 both secret-leak guards (SubagentStop + the OMN-16277 PostToolUse Bash-output guard), and
 the report-contract guard short-circuit only on lite mode / non-OmniNode repo (or, for the
 PostToolUse guard, lite mode only — it is deliberately applicable to every repo, not gated
 by `is_omninode_repo`, since a credential can leak in any tool's output). None of the
 security-class guards participate in `ONEX_HOOKS_MASK` at all — a stale saved mask literal
 must never silently disable a leak-prevention control. Read the specific script's header
-before assuming a switch applies. Task()-spawned sub-agents are independently exempt from
+before assuming a switch applies. The Done-flip guard always runs, regardless of cwd,
+lite mode or hooks mask, and blocks on its own errors (OMN-20368). Task()-spawned sub-agents are independently exempt from
 delegation thresholds via per-session markers under `$ONEX_STATE_DIR/hooks/subagent-sessions/`
 (written by `subagent-start.sh`).
 

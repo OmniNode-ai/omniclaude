@@ -116,6 +116,15 @@ Circuit breaker halts after 3 consecutive phase failures → FAILED state.
 
 Display final pipeline state: phase reached, PR URL, any errors, cycle counts.
 
+**Linear closeout.** Hand the ticket to the evidence closer. It may
+write Done only with a PASS receipt binding every acceptance criterion through
+`binds_ac` in the product repository's `contracts/<ticket>.yaml`. The verified
+contract hash must match the current entry on `origin/dev`. Acceptance boxes
+may be ticked only under the same evidence. A missing, stale, failed or skipped
+receipt leaves the ticket open and names the missing binding. This also applies
+to documentation-only tickets. Ship guard changes through a plugin release and
+normal adoption before relying on the installed hook.
+
 ## Phases
 
 | Phase | FSM State | Description |
