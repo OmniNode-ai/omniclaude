@@ -845,6 +845,26 @@ repos:
         require_serial: true
         stages: [pre-commit]
 
+      # OMN-19998: the local twin of the exported `public-repo-hygiene` hook in
+      # .pre-commit-hooks.yaml (same script and arguments) and of the CI context
+      # `public-repo-hygiene / public-repo-hygiene`.
+      # Without it, .public-repo-hygiene.yaml's enforced classes first ran in CI
+      # (omniclaude#2977, omniclaude#2978). It reads the private vocabulary from
+      # OMNI_HYGIENE_VOCAB_PATH and fails closed without it;
+      # the whole-tree scan takes ~8 s.
+      # With nothing staged (the Pre-commit Suite's `--all-files` run in CI) there
+      # are no added lines, so the gate's verdict is a pass whatever the
+      # vocabulary holds; that case alone exits 0 without one. The vocabulary-backed
+      # CI run is `public-repo-hygiene / public-repo-hygiene`.
+      - id: public-repo-hygiene
+        name: Public-repo hygiene gate, enforced classes on added lines (OMN-18014, OMN-19998)
+        entry: bash -c 'if [ -z "${OMNI_HYGIENE_VOCAB_PATH:-}" ] && git diff --cached --quiet; then exit 0; fi; exec python3 scripts/public_repo_hygiene_gate.py --repo-root . --diff-staged'
+        language: system
+        always_run: true
+        pass_filenames: false
+        require_serial: true
+        stages: [pre-commit]
+
       # OMN-13051 (retro D-5): plan hard fields — P0/P1 items with runtime-dep
       # keywords need a precondition-probe: annotation; deliverable sections
       # with file paths need an ## Artifact Manifest section; each manifest

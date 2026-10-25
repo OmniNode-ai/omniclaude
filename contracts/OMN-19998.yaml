@@ -52,6 +52,11 @@ requirements:
     acceptance:
       - id: "AC8"
         statement: "AC8: run_core and the registered pre_tool_use_bash_guards.sh entrypoint run the core under CLAUDE_PLUGIN_DATA/.venv when PLUGIN_PYTHON_BIN cannot import it, and without a declared venv fail with 'guard core cannot be imported' and 'declared interpreters tried' -- falsifier: uv run pytest tests/hooks/test_git_admission_runtime.py tests/hooks/test_shared_tree_git_guard.py -q -k \"runs_missing_core_under_declared_venv or runs_the_core_under_the_declared_venv\" fails at the merge base, where no declared venv is tried"
+  - id: "req-omn19998-local-public-repo-hygiene"
+    statement: "omniclaude runs the exported public-repo-hygiene command locally before commit, with the repository policy deciding the enforced classes and scope as in CI."
+    acceptance:
+      - id: "AC8"
+        statement: "AC8: exactly one local public-repo-hygiene hook runs the exported command without narrowing its trigger or overriding the repository's enforced classes and added-lines scope, and the caller uses the reusable workflow in this checkout -- falsifier: uv run pytest tests/scripts/test_public_repo_hygiene_local_hook_omn19998.py -q fails at the merge base, where no local public-repo-hygiene hook is declared"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -135,5 +140,13 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_git_admission_runtime.py tests/hooks/test_shared_tree_git_guard.py -q -k \"runs_missing_core_under_declared_venv or runs_the_core_under_the_declared_venv\""
+    binds_ac:
+      - "AC8"
+  - id: "dod-omn19998-local-public-repo-hygiene"
+    description: "The local public-repo-hygiene wiring tests verify the exported command, unrestricted trigger, repository policy and caller workflow."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_local_hook_omn19998.py -q"
     binds_ac:
       - "AC8"
