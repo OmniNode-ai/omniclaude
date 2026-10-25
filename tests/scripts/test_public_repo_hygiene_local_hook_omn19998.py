@@ -41,10 +41,27 @@ def _local_hooks() -> list[dict[str, Any]]:
     ]
 
 
+def _gate_command(entry: str) -> str:
+    """The gate command the local entry execs, after its empty-index guard."""
+    script = shlex.split(entry)[2]
+    return script.split("exec python3 ", 1)[1]
+
+
 def test_local_hook_runs_the_exported_hooks_command() -> None:
     local = _local_hooks()
     assert len(local) == 1, "exactly one local public-repo-hygiene hook is declared"
-    assert local[0]["entry"].replace("python3 ", "", 1) == _exported_hook()["entry"]
+    assert _gate_command(local[0]["entry"]) == _exported_hook()["entry"]
+
+
+def test_local_hook_skips_only_an_empty_index_without_a_vocabulary() -> None:
+    entry = _local_hooks()[0]["entry"]
+    assert entry.startswith("bash -c ")
+    script = shlex.split(entry)[2]
+    guard, _, rest = script.partition("; then exit 0; fi; ")
+    assert guard == (
+        'if [ -z "${OMNI_HYGIENE_VOCAB_PATH:-}" ] && git diff --cached --quiet'
+    )
+    assert rest.startswith("exec python3 scripts/public_repo_hygiene_gate.py ")
 
 
 def test_local_hook_is_not_narrowed() -> None:
@@ -58,7 +75,8 @@ def test_local_hook_is_not_narrowed() -> None:
 
 def test_local_hook_leaves_the_verdict_to_repository_policy() -> None:
     arguments = {
-        arg.split("=", 1)[0] for arg in shlex.split(_local_hooks()[0]["entry"])
+        arg.split("=", 1)[0]
+        for arg in shlex.split(_gate_command(_local_hooks()[0]["entry"]))
     }
     assert "--mode" not in arguments
     assert "--only-classes" not in arguments
