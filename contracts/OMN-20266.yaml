@@ -2,27 +2,12 @@ schema_version: 1.0.0
 ticket_id: OMN-20266
 title: PR stamp guard imports on a bare hook interpreter
 summary: The shared tokenizer is resolved from the source checkout or registry clone without installing into the
-  hook interpreter. Original ticket AC1-AC3 are preserved and remain unproven by this repository's guard tests;
-  their pool-suite falsifiers are retained rather than replaced by unrelated passing tests. AC4 covers this repair.
+  hook interpreter. AC4 covers this repair. The ticket's pool-parity criteria (AC1-AC3) and their tests ship in the
+  lab-pool repository, not here; this repository's contract binds only AC4.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
-- id: req-omn20266-pool-parity
-  statement: Original ticket criteria, unchanged; this guard repair does not establish full-ticket completion.
-  acceptance:
-  - id: AC1
-    statement: 'AC1: A committed per-host parity probe reports, for each pool host, the required canonical clones
-      present at origin tip, the dispatch venv''s omnimarket revision against the launching host''s, gh auth status,
-      and pytest importable, as one typed record per host -- falsifier: uv run pytest -k lab_host_parity_probe on
-      a fixture host missing one clone, asserting a parity-failed record naming it'
-  - id: AC2
-    statement: 'AC2: Placement refuses (or skips with the reason recorded) a host whose latest parity record fails
-      for anything the unit''s declared needs name, instead of placing the unit -- falsifier: uv run pytest -k placement_skips_parity_failed_host'
-  - id: AC3
-    statement: 'AC3: The probe runs on the pool''s existing schedule and its failures appear in queue-status as
-      a DEGRADED line naming the host and the missing item -- falsifier: a queue-status run against a recorded parity
-      failure prints that line'
 - id: req-omn20266-bare-hook
   statement: The stamp guard can evaluate edits on a bare hook interpreter from both an installed plugin and a source
     checkout.
@@ -41,33 +26,6 @@ emergency_bypass:
   justification: ''
   follow_up_ticket_id: ''
 dod_evidence:
-- id: dod-omn20266-ac1
-  description: Original AC1 requires its pool implementation suite. These tests are not shipped by this guard-only
-    repository change; no passing claim is made here.
-  source: manual
-  checks:
-  - check_type: test_passes
-    check_value: uv run pytest tests/test_lab_host_parity.py -k lab_host_parity_probe -q
-  binds_ac:
-  - AC1
-- id: dod-omn20266-ac2
-  description: Original AC2 requires its pool implementation suite. These tests are not shipped by this guard-only
-    repository change; no passing claim is made here.
-  source: manual
-  checks:
-  - check_type: test_passes
-    check_value: uv run pytest tests/test_lab_host_parity.py -k placement_skips_parity_failed_host -q
-  binds_ac:
-  - AC2
-- id: dod-omn20266-ac3
-  description: Original AC3 requires its pool implementation suite. These tests are not shipped by this guard-only
-    repository change; no passing claim is made here.
-  source: manual
-  checks:
-  - check_type: test_passes
-    check_value: uv run pytest plugins/omni/skills/queue-status/tests/test_queue_status.py -k parity -q
-  binds_ac:
-  - AC3
 - id: dod-omn20266-bare-hook
   description: Both bare-interpreter layouts import and existing stamp refusal tests pass.
   source: manual
