@@ -2,35 +2,36 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Run the Bash guards' decision cores in ONE interpreter (OMN-20118).
+"""Run the Bash guards' decision cores in ONE interpreter (OMN-20118)."""
 
-``pre_tool_use_bash_guards.sh`` is the one registered PreToolUse entrypoint
-for the seven Bash guards. Its first pass sources every guard script in its own
-subshell; a guard that needs its Python decision core writes a request (see
-``lib/bash_guard_core.sh``) instead of starting an interpreter. This module is
-the second pass: it runs every request, each decision core as a function call
-in this one process, and hands each result back for the third pass, in which
-the guard script's own post-processing turns it into its allow or its refusal.
-
-Each core runs as its script did when it had its own interpreter: as
-``__main__``, with the same argv, the same stdin, the same working directory
-and the same environment (the request carries the complete environment the
-guard would have started it with), its stdout and stderr captured the way the
-guard captured them. Between cores the process state is restored and every
-module the core imported from the hook lib directory is dropped, so no core
-sees another's module state. An exception produces a one-line summary then
-the traceback on stderr and exit status 1.
-
-Usage::
-
-    bash_guard_cores.py REQUEST_PREFIX SLOT [SLOT...]
-
-reads ``REQUEST_PREFIX.SLOT.req`` for each slot (and deletes it, with any
-``REQUEST_PREFIX.SLOT.cmd`` file the guard handed its core), and writes
-``SLOT NUL RC NUL OUTPUT NUL`` per slot to file descriptor 3.
-
-Stdlib only, like every module on the hook fast path.
-"""
+# ``pre_tool_use_bash_guards.sh`` is the one registered PreToolUse entrypoint
+# for the seven Bash guards. Its first pass sources every guard script in its own
+# subshell; a guard that needs its Python decision core writes a request (see
+# ``lib/bash_guard_core.sh``) instead of starting an interpreter. This module is
+# the second pass: it runs every request, each decision core as a function call
+# in this one process, and hands each result back for the third pass, in which
+# the guard script's own post-processing turns it into its allow or its refusal.
+#
+# Each core runs as its script did when it had its own interpreter: as
+# ``__main__``, with the same argv, the same stdin, the same working directory
+# and the same environment (the request carries the complete environment the
+# guard would have started it with), its stdout and stderr captured the way the
+# guard captured them. Between cores the process state is restored and every
+# module the core imported from the hook lib directory is dropped, so no core
+# sees another's module state. An exception produces a one-line summary then
+# the traceback on stderr and exit status 1.
+#
+# OMN-19998: a module core this interpreter cannot import (PLUGIN_PYTHON_BIN set
+# to a system python without the package, as on h105) runs in a subprocess under
+# the first of the plugin's declared venvs that imports it; only that branch
+# starts a process. With none, the summary names the interpreters tried.
+#
+# Usage: ``bash_guard_cores.py REQUEST_PREFIX SLOT [SLOT...]`` reads
+# ``REQUEST_PREFIX.SLOT.req`` for each slot (and deletes it, with any
+# ``REQUEST_PREFIX.SLOT.cmd`` file the guard handed its core), and writes
+# ``SLOT NUL RC NUL OUTPUT NUL`` per slot to file descriptor 3.
+#
+# Stdlib only, like every module on the hook fast path.
 
 from __future__ import annotations
 
@@ -39,10 +40,13 @@ import importlib
 import io
 import os
 import runpy
+import subprocess
 import sys
 import traceback
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
+from subprocess import CompletedProcess
 
 _LIB_DIR = Path(__file__).resolve().parent
 _MAGIC = "onex-bash-guard-request-v1"
@@ -51,7 +55,7 @@ RESULT_FD = 3
 
 @dataclass(frozen=True)
 class Request:
-    """One decision core invocation, as the guard script would have made it."""
+    # One decision core invocation, as the guard script would have made it.
 
     stderr_mode: str
     cwd: str
@@ -71,18 +75,13 @@ def parse_request(raw: bytes) -> Request:
     argv = tuple(fields[6 : 6 + argc])
     if len(argv) != argc or argc < 2:
         raise ValueError("truncated bash guard request")
-    env: dict[str, str] = {}
-    for entry in fields[6 + argc :]:
-        name, sep, value = entry.partition("=")
-        if sep:
-            env[name] = value
-    return Request(
-        stderr_mode, cwd, stdin_text if have_stdin == "1" else None, argv, env
-    )
+    env = dict(entry.split("=", 1) for entry in fields[6 + argc :] if "=" in entry)
+    stdin = stdin_text if have_stdin == "1" else None
+    return Request(stderr_mode, cwd, stdin, argv, env)
 
 
 def _exit_status(code: object, err: io.StringIO) -> int:
-    """``SystemExit.code`` as the exit status the interpreter would report."""
+    # SystemExit.code as the exit status the interpreter would report.
     if code is None:
         return 0
     if isinstance(code, int):
@@ -93,16 +92,40 @@ def _exit_status(code: object, err: io.StringIO) -> int:
 
 def _in_lib(module: object) -> bool:
     path = getattr(module, "__file__", None)
-    if not path:
-        return False
     try:
-        return Path(path).resolve().parent == _LIB_DIR
+        return bool(path) and Path(path).resolve().parent == _LIB_DIR
     except OSError:
         return False
 
 
+def _declared_core(
+    request: Request, script: str, tried: list[str]
+) -> CompletedProcess[str] | None:
+    # Probe only declared venvs, without inheriting a source-tree PYTHONPATH. Compare
+    # literal paths: a venv's python resolves to the base binary it was built on.
+    env = {k: v for k, v in request.env.items() if k != "PYTHONPATH"}
+    run = partial(subprocess.run, env=env, cwd=request.cwd, capture_output=True)
+    seen = {os.path.abspath(sys.executable)}
+    for base, suffix in (
+        (env.get("CLAUDE_PLUGIN_DATA"), ".venv/bin/python3"),
+        (_LIB_DIR.parents[3], ".venv/bin/python3"),
+        (env.get("OMNI_HOME"), "omniclaude/.venv/bin/python3"),
+    ):
+        candidate = str(Path(base) / suffix) if base else ""
+        if not Path(candidate).is_file() or not os.access(candidate, os.X_OK):
+            continue
+        if os.path.abspath(candidate) in seen:
+            continue
+        seen.add(os.path.abspath(candidate))
+        tried.append(candidate)
+        if run([candidate, "-c", f"import {script}"]).returncode == 0:
+            argv = [candidate, "-m", script, *request.argv[3:]]
+            return run(argv, input=request.stdin or "", text=True)
+    return None
+
+
 def run_core(request: Request) -> tuple[int, str]:
-    """Run one decision core in this process; return (exit status, output)."""
+    # Run one decision core; return (exit status, output).
     is_module = request.argv[1] == "-m"
     script = request.argv[2] if is_module else request.argv[1]
     args_start = 3 if is_module else 2
@@ -131,19 +154,26 @@ def run_core(request: Request) -> tuple[int, str]:
                 rc = _exit_status(exc.code, err)
             except BaseException as exc:  # noqa: BLE001 -- what the interpreter would do
                 detail = " ".join("".join(traceback.format_exception_only(exc)).split())
-                print(
-                    f"guard core cannot be imported: {detail} "
-                    f"(interpreter {sys.executable}; the plugin install or "
-                    "PLUGIN_PYTHON_BIN/CLAUDE_PLUGIN_DATA/.venv/OMNI_HOME venv "
-                    "must import it)"
-                    if is_module
-                    and isinstance(exc, ImportError)
-                    and script not in sys.modules
-                    else f"guard core crashed: {detail} (core {script})",
-                    file=err,
-                )
-                traceback.print_exc(file=err)
-                rc = 1
+                missing = is_module and isinstance(exc, ImportError)
+                missing = missing and script not in sys.modules
+                tried: list[str] = []
+                fallback = _declared_core(request, script, tried) if missing else None
+                if fallback is not None:
+                    rc = fallback.returncode
+                    out.write(fallback.stdout)
+                    err.write(fallback.stderr)
+                else:
+                    print(
+                        f"guard core cannot be imported: {detail} "
+                        f"(interpreter {sys.executable}; the plugin install or "
+                        "PLUGIN_PYTHON_BIN/CLAUDE_PLUGIN_DATA/.venv/OMNI_HOME venv "
+                        f"must import it; declared interpreters tried: {', '.join(tried) or 'none'})"
+                        if missing
+                        else f"guard core crashed: {detail} (core {script})",
+                        file=err,
+                    )
+                    traceback.print_exc(file=err)
+                    rc = 1
     except OSError as exc:  # the working directory is gone, and so on
         print(f"bash_guards: cannot run {script}: {exc}", file=err)
         rc = 1
@@ -174,9 +204,8 @@ def run_core(request: Request) -> tuple[int, str]:
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if len(args) < 2:
-        print(
-            "usage: bash_guard_cores.py REQUEST_PREFIX SLOT [SLOT...]", file=sys.stderr
-        )
+        usage = "usage: bash_guard_cores.py REQUEST_PREFIX SLOT [SLOT...]"
+        print(usage, file=sys.stderr)
         return 64
     prefix, slots = args[0], args[1:]
     results = os.fdopen(RESULT_FD, "wb", closefd=False)

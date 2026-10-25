@@ -124,6 +124,55 @@ def test_batched_adapter_reports_missing_core_before_traceback(
     )
 
 
+@pytest.mark.parametrize("declared_venv", [True, False])
+def test_batched_adapter_runs_missing_core_under_declared_venv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, declared_venv: bool
+):
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).resolve().parents[2] / "plugins/onex/hooks/lib")
+    )
+    import bash_guard_cores
+
+    fakecore = tmp_path / "fakecore"
+    fakecore.mkdir()
+    (fakecore / "onex_fake_core_mod.py").write_text(
+        'def main(argv):\n    print("FALLBACK-RAN", argv); return 0\n'
+        'if __name__ == "__main__":\n'
+        "    import sys\n    sys.exit(main(sys.argv[1:]))\n"
+    )
+    data = tmp_path / "plugin-data"
+    python = data / ".venv/bin/python3"
+    python.parent.mkdir(parents=True)
+    python.write_text(
+        f'#!/bin/sh\nPYTHONPATH="{fakecore}" exec "{sys.executable}" "$@"\n'
+    )
+    python.chmod(0o755)
+    env = {**os.environ, "OMNI_HOME": str(tmp_path), "PYTHONPATH": str(fakecore)}
+    env.pop("CLAUDE_PLUGIN_DATA", None)
+    if declared_venv:
+        env["CLAUDE_PLUGIN_DATA"] = str(data)
+    assert "onex_fake_core_mod" not in sys.modules
+    rc, output = bash_guard_cores.run_core(
+        bash_guard_cores.Request(
+            stderr_mode="merge",
+            cwd=str(tmp_path),
+            stdin="{}",
+            argv=(sys.executable, "-m", "onex_fake_core_mod", "x"),
+            env=env,
+        )
+    )
+    if declared_venv:
+        assert rc == 0, output
+        assert "FALLBACK-RAN ['x']" in output
+        assert "guard core cannot be imported" not in output
+    else:
+        assert rc == 1
+        assert output.splitlines()[0].startswith(
+            "guard core cannot be imported: ModuleNotFoundError:"
+        )
+        assert "declared interpreters tried:" in output.splitlines()[0]
+
+
 @pytest.mark.parametrize(
     ("exception", "message", "summary"),
     [
