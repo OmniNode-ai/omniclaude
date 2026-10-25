@@ -47,6 +47,11 @@ requirements:
     acceptance:
       - id: "AC7"
         statement: "AC7: the train picks the newest green dev tag newer than the pin, skips red and unread tags, moves every member in one plan, writes nothing on a dry run and refuses a member with no clone; the workflow runs the train before uv lock, honours dry_run and reuses one branch -- falsifier: uv run pytest tests/scripts/test_dev_tag_train_omn19998.py tests/workflows/test_sibling_pin_train_omn19998.py -q fails at the merge base"
+  - id: "req-omn19998-local-public-repo-hygiene"
+    statement: "omniclaude runs the exported public-repo-hygiene command locally before commit, with the repository policy deciding the enforced classes and scope as in CI."
+    acceptance:
+      - id: "AC8"
+        statement: "AC8: exactly one local public-repo-hygiene hook runs the exported command without narrowing its trigger or overriding the repository's enforced classes and added-lines scope, and the caller uses the reusable workflow in this checkout -- falsifier: uv run pytest tests/scripts/test_public_repo_hygiene_local_hook_omn19998.py -q fails at the merge base, where no local public-repo-hygiene hook is declared"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -124,3 +129,11 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_dev_tag_train_omn19998.py tests/workflows/test_sibling_pin_train_omn19998.py tests/workflows/test_sibling_lock_refresh_syncs_capture_mirror.py -q"
     binds_ac:
       - "AC7"
+  - id: "dod-omn19998-local-public-repo-hygiene"
+    description: "The local public-repo-hygiene wiring tests verify the exported command, unrestricted trigger, repository policy and caller workflow."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_local_hook_omn19998.py -q"
+    binds_ac:
+      - "AC8"
