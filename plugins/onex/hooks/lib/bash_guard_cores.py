@@ -24,7 +24,7 @@
 # OMN-19998: a module core this interpreter cannot import (PLUGIN_PYTHON_BIN set
 # to a system python without the package, as on h105) runs in a subprocess under
 # the first of the plugin's declared venvs that imports it; only that branch
-# starts a process. With none, the summary names the interpreters tried.
+# starts a process. With none, the summary names the declared venvs tried.
 #
 # Usage: ``bash_guard_cores.py REQUEST_PREFIX SLOT [SLOT...]`` reads
 # ``REQUEST_PREFIX.SLOT.req`` for each slot (and deletes it, with any
@@ -106,10 +106,10 @@ def _declared_core(
     env = {k: v for k, v in request.env.items() if k != "PYTHONPATH"}
     run = partial(subprocess.run, env=env, cwd=request.cwd, capture_output=True)
     seen = {os.path.abspath(sys.executable)}
-    for base, suffix in (
-        (env.get("CLAUDE_PLUGIN_DATA"), ".venv/bin/python3"),
-        (_LIB_DIR.parents[3], ".venv/bin/python3"),
-        (env.get("OMNI_HOME"), "omniclaude/.venv/bin/python3"),
+    for label, base, suffix in (
+        ("CLAUDE_PLUGIN_DATA", env.get("CLAUDE_PLUGIN_DATA"), ".venv/bin/python3"),
+        ("repo", _LIB_DIR.parents[3], ".venv/bin/python3"),
+        ("OMNI_HOME", env.get("OMNI_HOME"), "omniclaude/.venv/bin/python3"),
     ):
         candidate = str(Path(base) / suffix) if base else ""
         if not Path(candidate).is_file() or not os.access(candidate, os.X_OK):
@@ -117,7 +117,7 @@ def _declared_core(
         if os.path.abspath(candidate) in seen:
             continue
         seen.add(os.path.abspath(candidate))
-        tried.append(candidate)
+        tried.append(label)
         if run([candidate, "-c", f"import {script}"]).returncode == 0:
             argv = [candidate, "-m", script, *request.argv[3:]]
             return run(argv, input=request.stdin or "", text=True)
@@ -165,7 +165,7 @@ def run_core(request: Request) -> tuple[int, str]:
                 else:
                     print(
                         f"guard core cannot be imported: {detail} "
-                        f"(interpreter {sys.executable}; the plugin install or "
+                        f"(interpreter {sys.executable}; "
                         "PLUGIN_PYTHON_BIN/CLAUDE_PLUGIN_DATA/.venv/OMNI_HOME venv "
                         f"must import it; declared interpreters tried: {', '.join(tried) or 'none'})"
                         if missing
