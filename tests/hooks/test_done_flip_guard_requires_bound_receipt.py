@@ -372,6 +372,7 @@ def _receipt_probe(
     current: str | None = None,
     current_status: Any = None,
     runs: list[dict[str, Any]] | None = None,
+    reads: list[str] | None = None,
 ) -> Any:
     contract = (
         "ticket_id: "
@@ -387,6 +388,8 @@ def _receipt_probe(
         contract = f"ticket_id: {_TICKET}\ndod_evidence: []\n"
 
     def read_contract(_repo: str, ref: str, _ticket: str) -> Any:
+        if reads is not None:
+            reads.append(ref)
         if ref == "origin/dev":
             return nbe.ContractRead(
                 current_status or nbe.ContractReadStatus.FOUND,
@@ -468,6 +471,13 @@ def test_stale_receipt_with_unreadable_current_contract_refuses(status: Any) -> 
 def test_bound_pass_current_receipt_allows_every_criterion(tick: bool) -> None:
     decision = _receipt_decision(_receipt_probe(), tick=tick)
     assert decision.allowed, decision.reason
+
+
+def test_bound_pass_allow_is_checked_against_current_origin_dev_contract() -> None:
+    reads: list[str] = []
+    decision = _receipt_decision(_receipt_probe(reads=reads))
+    assert decision.allowed, decision.reason
+    assert "origin/dev" in reads, reads
 
 
 def test_bound_pass_partial_binding_still_refuses() -> None:
