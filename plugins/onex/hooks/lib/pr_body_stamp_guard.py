@@ -155,9 +155,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+# OMN-20266: the hook's interpreter may have no omniclaude install (a bare PLUGIN_PYTHON_BIN on a lab host).
+# The tokenizer is standard-library only, so a source tree is enough: this checkout's src, else the registry clone's.
+# OMN-20266: the hook's interpreter may have no omniclaude install (a bare PLUGIN_PYTHON_BIN on a lab host).
+# The tokenizer is standard-library only, so the registry clone's source tree is enough.
 _HOOKS_LIB = Path(__file__).parent
-if str(_HOOKS_LIB) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_LIB))
+_SRC = Path(os.environ.get("OMNI_HOME", "/")) / "omniclaude" / "src"
+sys.path[:] = [str(_HOOKS_LIB), *sys.path, str(_SRC)]
 
 from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # noqa: E402
     CommandResolver,
