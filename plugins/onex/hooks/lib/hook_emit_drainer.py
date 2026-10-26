@@ -861,12 +861,10 @@ def drain_once(
     anything: the broker is answering and is refusing this one. It is
     dead-lettered and the drain continues.
 
-    Before this, one ungranted event class stopped the edge permanently.
-    ``drain_once`` halted on it every cycle, the handler quarantined its
-    downstream spool copy and still reported ``published=False``, and nothing
-    upstream ever acked the journal record. On 2026-09-21 four such records
-    held roughly four thousand authorized ones for 105 minutes, the fourth
-    outage of that exact shape.
+    Before this, one ungranted event class stopped the edge permanently:
+    ``drain_once`` halted on it every cycle and nothing acked the journal
+    record. On 2026-09-21 four such records held roughly four thousand
+    authorized ones for 105 minutes, the fourth outage of that exact shape.
 
     ``failure_counts`` is owned by the caller so the count survives across
     cycles; a per-call map would reset every 30 seconds and never reach any
@@ -943,6 +941,15 @@ def drain_once(
         # A record further back has not been given the chance to fail on its
         # own merits -- it has only been waiting -- so its count means nothing.
         proven_by = refused.get(entry.record.event_type)
+        # OMN-21279: a record of a class this process has already proven
+        # refused, found past the head, no longer ends the batch. Ending it cost
+        # a 30s backoff per record: on h105, 1,039 prompt.submitted among 12,567
+        # queued was about nine hours. It stays journalled, so nothing is moved
+        # or dropped here. Reaching it means the records ahead of it published,
+        # which is progress run() owes no backoff for, and once they are acked
+        # it is the head, where the probe below sets it aside.
+        if index > 0 and proven_by is not None:
+            continue
         if index == 0 and (proven_by is not None or failures >= quarantine_after):
             probe = _broker_answers_behind_the_head(pending, emitter)
             if probe is not None:
