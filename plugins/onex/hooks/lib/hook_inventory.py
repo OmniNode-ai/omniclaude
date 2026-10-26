@@ -308,7 +308,7 @@ def _require_bool(mapping: dict[str, Any], key: str, where: str) -> bool:
 
 def _require_int(mapping: dict[str, Any], key: str, where: str) -> int:
     value = _require(mapping, key, where)
-    if isinstance(value, bool) or not isinstance(value, int):
+    if not isinstance(value, int) or isinstance(value, bool):
         raise HookInventoryError(f"{where}: {key!r} must be an integer")
     return value
 
@@ -668,29 +668,24 @@ _REFUSAL_PATTERNS: Final = (
     re.compile(r'"continue"\s*:\s*false'),
 )
 
-#: Filename prefixes that declare which harness event a script is shaped for.
-#: The repository writes them with underscores and with hyphens, so both are
-#: listed rather than normalised — a normaliser would also fold names that are
-#: not event prefixes at all.
+#: Exact event prefixes, with both supported filename spellings generated
+#: from each canonical underscore form. This preserves the existing key set;
+#: arbitrary filenames are never normalised into event prefixes.
 HOOK_EVENT_NAME_PREFIXES: Final[dict[str, str]] = {
-    "pre_tool_use": "PreToolUse",
-    "pre-tool-use": "PreToolUse",
-    "post_tool_use": "PostToolUse",
-    "post-tool-use": "PostToolUse",
-    "user_prompt_submit": "UserPromptSubmit",
-    "user-prompt-submit": "UserPromptSubmit",
-    "user_prompt": "UserPromptSubmit",
-    "user-prompt": "UserPromptSubmit",
-    "session_start": "SessionStart",
-    "session-start": "SessionStart",
-    "session_end": "SessionEnd",
-    "session-end": "SessionEnd",
-    "subagent_stop": "SubagentStop",
-    "subagent-stop": "SubagentStop",
-    "pre_compact": "PreCompact",
-    "pre-compact": "PreCompact",
-    "notification": "Notification",
-    "stop": "Stop",
+    spelling: event
+    for prefix, event in (
+        ("pre_tool_use", "PreToolUse"),
+        ("post_tool_use", "PostToolUse"),
+        ("user_prompt_submit", "UserPromptSubmit"),
+        ("user_prompt", "UserPromptSubmit"),
+        ("session_start", "SessionStart"),
+        ("session_end", "SessionEnd"),
+        ("subagent_stop", "SubagentStop"),
+        ("pre_compact", "PreCompact"),
+        ("notification", "Notification"),
+        ("stop", "Stop"),
+    )
+    for spelling in (prefix, prefix.replace("_", "-"))
 }
 
 

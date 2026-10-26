@@ -143,6 +143,17 @@ def _registered_scripts(root: Path) -> set[str]:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("separator", ["_", "-"])
+def test_compaction_gate_keeps_both_filename_spellings(
+    tree: Path, separator: str
+) -> None:
+    name = separator.join(("pre", "compact", "omn21116", "guard")) + ".sh"
+    _add_script(tree, name, "#!/usr/bin/env bash\nexit 2\n")
+    assert _LIB.event_for_script_name(name) == "PreCompact"
+    assert name in _subjects(tree, _KIND)
+    assert _LIB.event_for_script_name("pre--compact_guard.sh") is None
+
+
 def test_a_gate_shaped_script_declared_nowhere_is_reported_by_name(
     tree: Path,
 ) -> None:
