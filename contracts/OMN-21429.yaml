@@ -1,0 +1,37 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21429
+title: "Queue, dispatch and run claims on the generic service"
+summary: >-
+  The omniclaude half of AC3 of slice 6 of the OMN-21279 runtime cluster and
+  generic lease plan: the pre-existing-fix lock
+  (plugins/onex/hooks/lib/preexisting_fix_lock.py, inventory row E2, no
+  non-test importer) is deleted with its unit test and its line in the
+  canonical-file-shape baseline. The omnimarket half of AC3 (the
+  session-bootstrap dispatch lease) is a separate omnimarket change. AC1 and
+  AC2 are not bound here.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21429-ac3-preexisting-fix-lock-deleted
+    statement: "The pre-existing-fix lock (E2) is deleted."
+    acceptance:
+      - id: AC3
+        statement: "AC3: the pre-existing-fix lock (E2) and the session-bootstrap dispatch lease are deleted -- falsifier: either file exists on the integration branch"
+evidence_requirements:
+  - kind: tests
+    description: "No tracked file names preexisting_fix_lock."
+    command: "test -z \"$(git grep -l preexisting_fix_lock -- ':!contracts/')\""
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21429-ac3-preexisting-fix-lock-deleted
+    description: "The pre-existing-fix lock module and its test are absent from the tree, and no tracked file outside contracts/ names the module. Fails at the merge base, which holds both files."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: command
+        check_value: "test ! -e plugins/onex/hooks/lib/preexisting_fix_lock.py && test -z \"$(git grep -l preexisting_fix_lock -- ':!contracts/')\""
