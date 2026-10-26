@@ -685,24 +685,87 @@ def test_health_refused_event_types_invalid_or_absent_defaults_to_empty(
     assert health.read_status(path) == status
 
 
-def test_proven_refused_non_head_record_is_not_dead_lettered(jdir: Path) -> None:
-    for event_type in ("ok", "X", "ok"):
+def _seed_types(jdir: Path, event_types: tuple[str, ...]) -> list[journal.JournalEntry]:
+    for event_type in event_types:
         journal.append(jdir, event_type=event_type, payload={}, correlation_id=None)
+    return journal.list_pending(jdir)
+
+
+def test_proven_refused_past_the_head_does_not_end_the_batch(jdir: Path) -> None:
+    # OMN-21279: h105's journal interleaves one refused prompt.submitted with
+    # authorized records. Ending the batch on each one cost a 30s backoff per
+    # record, about nine hours for the 1,039 queued. A class already proven
+    # refused is passed over, left journalled, and the batch goes on.
+    pending = _seed_types(jdir, ("ok", "X", "ok", "X", "ok"))
     emitter = RefusingEmitter("X")
-    counts = {
-        journal.list_pending(jdir)[
-            1
-        ].path.name: drainer.DEFAULT_QUARANTINE_AFTER_FAILURES
-    }
     result = drainer.drain_once(
-        jdir,
-        emitter,
-        failure_counts=counts,
-        refused_event_types={"X": "proving-record.json"},
+        jdir, emitter, refused_event_types={"X": "proving-record.json"}
+    )
+    assert result == (3, 0, 0)
+    assert emitter.published == [
+        entry.record.event_id for entry in pending if entry.record.event_type == "ok"
+    ]
+    assert [entry.record.event_id for entry in journal.list_pending(jdir)] == [
+        entry.record.event_id for entry in pending if entry.record.event_type == "X"
+    ]
+    assert not list((jdir / "quarantine").glob("*.json"))
+
+
+def test_proven_refused_passed_over_records_are_dead_lettered_as_heads(
+    jdir: Path,
+) -> None:
+    pending = _seed_types(jdir, ("ok", "X", "ok", "X"))
+    refused = {"X": "proving-record.json"}
+    emitter = RefusingEmitter("X")
+    drainer.drain_once(jdir, emitter, refused_event_types=refused)
+    for _ in range(2):
+        journal.append(jdir, event_type="ok", payload={}, correlation_id=None)
+        published, _failed, dead_lettered = drainer.drain_once(
+            jdir, emitter, refused_event_types=refused
+        )
+        assert (published, dead_lettered) == (1, 1)
+    assert journal.list_pending(jdir) == []
+    for entry in pending:
+        if entry.record.event_type == "X":
+            assert (jdir / "quarantine" / entry.path.name).exists()
+            assert (jdir / "quarantine" / f"{entry.path.stem}.reason.json").exists()
+
+
+def test_proven_refused_past_the_head_with_a_dead_broker_moves_nothing(
+    jdir: Path,
+) -> None:
+    class DiesAfterOne:
+        def __init__(self) -> None:
+            self.published: list[str] = []
+
+        def publish(self, record: journal.JournalRecord) -> bool:
+            if self.published or record.event_type == "X":
+                return False
+            self.published.append(record.event_id)
+            return True
+
+    pending = _seed_types(jdir, ("ok", "X", "ok"))
+    result = drainer.drain_once(
+        jdir, DiesAfterOne(), refused_event_types={"X": "proving-record.json"}
     )
     assert result == (1, 2, 0)
-    assert len(journal.list_pending(jdir)) == 2
+    assert all(entry.path.exists() for entry in pending[1:])
     assert not list((jdir / "quarantine").glob("*.json"))
+
+
+def test_one_cycle_publishes_a_whole_batch_around_a_refused_class(jdir: Path) -> None:
+    types = tuple("X" if i % 5 == 4 else "ok" for i in range(200))
+    _seed_types(jdir, types)
+    result = drainer.drain_once(
+        jdir,
+        RefusingEmitter("X"),
+        batch_limit=200,
+        refused_event_types={"X": "proving-record.json"},
+    )
+    # failed is 0: the 40 refused records stay journalled, but the cycle made
+    # progress and run() backs off only when failed and nothing moved.
+    assert result == (160, 0, 0)
+    assert len(journal.list_pending(jdir)) == 40
 
 
 def test_proven_refused_lone_head_still_needs_a_probe(jdir: Path) -> None:
