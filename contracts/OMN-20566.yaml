@@ -50,11 +50,11 @@ dod_evidence:
   source: manual
   checks:
   - check_type: test_passes
-    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py::test_node_matches_golden -q -k "no_utcnow or no_hardcoded_ip or no_direct_kafka_producer"
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k "test_node_matches_golden and (no_utcnow or no_hardcoded_ip or no_direct_kafka_producer)"
   - check_type: test_passes
-    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py::test_node_matches_golden -q -k "no_raw_sqlite3 or no_env_fallbacks"
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k "test_node_matches_golden and (no_raw_sqlite3 or no_env_fallbacks)"
   - check_type: test_passes
-    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py::test_node_matches_golden -q -k "enum_governance or local_paths"
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k "test_node_matches_golden and (enum_governance or local_paths)"
   - check_type: test_passes
     check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k "not test_node_matches_golden"
   binds_ac:
