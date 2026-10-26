@@ -85,8 +85,8 @@
 - id: deployment-config
   name: Deployment configuration stays out of shipped repositories (OMN-20923)
   description: >
-    Refuses deployment or lab configuration a commit adds to a shipped
-    repository: a lane-overlay file (anything under lane-overlays/, any
+    Refuses deployment or lab configuration in the whole tracked tree of a
+    shipped repository: a lane-overlay file (anything under lane-overlays/, any
     *.bifrost.yaml that is not a *.example file) or a configuration value
     naming a private host (an RFC 1918 or CGNAT host address, a private network
     narrower than /16, a tailnet name); in a workflow file also any line,
@@ -97,8 +97,11 @@
     set it also refuses a lab host nickname in a workflow file; our model ids
     are checked in CI, which holds the private model vocabulary. The same check
     is the required CI context public-repo-hygiene / deployment-config.
+    Consumers with a measured committed baseline pass args: [--ratchet]; its
+    entries may only shrink and pre-commit scans index blobs, including the
+    baseline, so unstaged repairs cannot hide a staged deployment fact.
   language: script
-  entry: scripts/public_repo_hygiene_gate.py --repo-root . --only-classes deployment-config --mode enforce --enforce-scope added-lines --diff-staged
+  entry: scripts/public_repo_hygiene_gate.py --repo-root . --only-classes deployment-config --mode enforce --enforce-scope whole-tree --diff-staged
   pass_filenames: false
   always_run: true
   stages: [pre-commit, pre-merge-commit]

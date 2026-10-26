@@ -247,9 +247,13 @@ def test_the_model_rule_is_case_insensitive(tmp_path: Path) -> None:
     assert _scan(WF, "# EXAMPLE-VOTER-A\n", tmp_path, with_vocab=True) == [1]
 
 
-def test_the_vocabulary_rules_do_not_read_other_files(tmp_path: Path) -> None:
+def test_host_vocabulary_reads_configuration_values(tmp_path: Path) -> None:
     text = "name: example-voter-a on labbox-3\n"
-    assert _scan("config/x.yaml", text, tmp_path, with_vocab=True) == []
+    assert _scan("config/x.yaml", text, tmp_path, with_vocab=True) == [1]
+    assert (
+        _scan("config/x.yaml", "model: example-voter-a", tmp_path, with_vocab=True)
+        == []
+    )
 
 
 def test_a_vocabulary_finding_does_not_quote_its_line(tmp_path: Path) -> None:

@@ -1343,6 +1343,12 @@ class TestExternalContextCompleteness:
             for head in payload["pull_requests"].values()
             for row in head["check_runs_all"]
         }
+        # OMN-20923: this producer postdates the September measurement. Keep
+        # the old sweep corpus intact and add exact-head watcher observations.
+        hygiene = json.loads(
+            (FIXTURES_DIR / "omn20923_hygiene_check_runs.json").read_text()
+        )
+        captured.update(row["name"] for row in hygiene["check_runs_all"])
         producers = set()
         for path in (REPO_ROOT / ".github/workflows").glob("*.yml"):
             workflow = yaml.safe_load(path.read_text())
