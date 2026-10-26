@@ -23,7 +23,7 @@ requirements:
   - id: AC2
     statement: 'AC2: before each switch a parity test in omniclaude shows the replaced script and the core node give
       the same exit code and finding set over omniclaude''s own tree and the fixtures -- falsifier: uv run pytest
-      tests -k node_parity -q fails'
+      tests/scripts/validator_parity_omn20566/test_node_parity.py -k node_parity -q fails'
   - id: AC3
     statement: 'AC3: the omnibase_core hook rev pinned for these hooks equals the omnibase_core version locked in
       uv.lock -- falsifier: python3 scripts/validation/validate_precommit_pin_parity.py exits non-zero'
@@ -31,7 +31,7 @@ evidence_requirements:
 - kind: tests
   description: Node-versus-golden parity over the fixture corpus and the tracked tree, the pin test and the
     replaced-script test.
-  command: uv run pytest tests -k node_parity -q
+  command: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -k node_parity -q
 emergency_bypass:
   enabled: false
   justification: ''
@@ -46,11 +46,17 @@ dod_evidence:
   binds_ac:
   - AC1
 - id: dod-omn20566-node-parity
-  description: The node_parity selection collects and passes the parity suite.
+  description: Direct module collection runs the complete parity suite in four disjoint groups within the per-check budget.
   source: manual
   checks:
   - check_type: test_passes
-    check_value: uv run pytest tests -k node_parity -q
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py::test_node_matches_golden -q -k "no_utcnow or no_hardcoded_ip or no_direct_kafka_producer"
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py::test_node_matches_golden -q -k "no_raw_sqlite3 or no_env_fallbacks"
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py::test_node_matches_golden -q -k "enum_governance or local_paths"
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k "not test_node_matches_golden"
   binds_ac:
   - AC2
 - id: dod-omn20566-pin-parity
