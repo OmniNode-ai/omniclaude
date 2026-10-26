@@ -1,0 +1,50 @@
+schema_version: 1.0.0
+ticket_id: OMN-21279
+title: The hook drainer passes over a proven-refused record past the head instead of ending the batch
+summary: The hook-emit drainer ended a batch on each record of an event class already proven refused and backed
+  off 30 s per record. It now passes over such a record, leaves it journalled, and the batch goes on; once the
+  records ahead of it are acked it is the head, where the existing probe moves it to quarantine with its reason
+  file. Nothing is dropped and no ACL or credential changes. The ticket's Linear criteria AC1 and AC2 concern
+  omnibase_infra's runtime image and layering check and ship in that repository, not here; this repository's
+  contract binds only AC3, a criterion for this repair that the Linear ticket does not list.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn21279-drainer-pass-over
+  statement: A batch with records of a refused event class publishes its authorized records in one cycle, and the
+    refused records are dead-lettered with their reason once they reach the head.
+  acceptance:
+  - id: AC3
+    statement: 'AC3: drain_once publishes the authorized records around a record of a proven-refused class in one
+      cycle, returns failed=0 so run() owes no backoff, leaves the refused records journalled, and moves each to
+      quarantine with its .reason.json when it becomes the head -- falsifier: uv run pytest
+      tests/unit/hooks/test_hook_emit_drainer.py -q -k "proven_refused or whole_batch" fails at the merge base'
+evidence_requirements:
+- kind: tests
+  description: Past-the-head pass-over, dead-lettering of passed-over records as heads, the dead-broker case and the
+    200-record batch.
+  command: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn21279-drainer-pass-over
+  description: The drainer tests pass at the head; at the merge base the past-the-head, dead-broker and
+    whole-batch tests fail.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q
+  binds_ac:
+  - AC3
+- id: dod-omn21279-deploy-source
+  description: Hosted-runner source probe refuses a published PR head whose drainer lacks the pass-over; no lab SSH
+    or local registry is required.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/hooks/lib/hook_emit_drainer.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"if index > 0 and proven_by is not None:\" > /dev/null'"
+  binds_ac:
+  - AC3
