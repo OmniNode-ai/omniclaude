@@ -147,3 +147,6 @@ dod_evidence:
     status: verified
     execution_scope: local_done_gate
     binds_ac: [AC5]
+    checks:
+      - check_type: command
+        check_value: "git diff --quiet origin/dev...HEAD -- docs"
