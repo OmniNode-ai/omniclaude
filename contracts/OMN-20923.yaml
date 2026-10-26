@@ -1,82 +1,88 @@
-schema_version: "1.0.0"
-ticket_id: "OMN-20923"
-title: "The public-repo hygiene gate refuses deployment and lab configuration in shipped repositories (deployment-config class)"
-summary: "Operator RULING 2026-10-10T21:57:38Z, amended 2026-10-10T22:07:49Z ('This should be in ci.'). A new never-exemptable deployment-config class of scripts/public_repo_hygiene_gate.py refuses a lane-overlay file and a configuration value naming a private host, by shape, with no vocabulary, so it runs on a fork. It runs as its own job, public-repo-hygiene / deployment-config, in the reusable workflow (no secrets) and as the exported deployment-config pre-commit hook, enforcing on added lines."
+schema_version: 1.0.0
+ticket_id: OMN-20923
+title: Whole-tree deployment and lab configuration validator with a shrink-only residue baseline
+summary: The canonical deployment-config gate classifies configuration kinds and private endpoint shapes, scans
+  the complete index in pre-commit and complete tracked tree in CI, and refuses new hashed file/finding identities.
+  Baseline edits are compared with the trusted base and must remove cleaned findings. Reusable CI, exported hooks,
+  the rollout audit and adoption generator share this mechanism. Consumer rollout proposals are prepared separately;
+  these tests prove the mechanism and do not certify an unlanded fleet rollout.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
-  - id: "req-deployment-config-class"
-    statement: "A change that adds deployment or lab configuration to a shipped repository fails the gate; a neutral default and an unrelated change pass."
-    acceptance:
-      - id: "AC1"
-        statement: "AC1: a change that adds a file under a lane-overlays path, or any config file carrying an internal address or a lab endpoint, fails the gate on added lines -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py -k overlay_with_lab_values asserts exit 1 on a fixture that adds such a file"
-      - id: "AC2"
-        statement: "AC2: an unrelated change, and a file carrying the neutral public default, pass the gate -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py -k neutral_default_passes asserts exit 0"
-  - id: "req-private-ci-overlay"
-    statement: "The roster comes only from the private CI overlay named by an org variable; with none configured the gate fails closed naming the cause."
-    acceptance:
-      - id: "AC3"
-        statement: "AC3: REVIEW_VOTERS_OVERLAY points at the CI overlay outside the workspace, the repository comes from OMNI_CI_OVERLAY_REPO, an unset variable fails with 'no review voters configured', and a named one resolves -- falsifier: env -u PYTHONPATH uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
-  - id: "req-workflow-files-read-in-full"
-    statement: "A workflow file is read in full by the deployment-config class, comments included: a pull request that adds a private address, a hostname in a private DNS zone, one of our lab host nicknames or one of our model ids to a workflow file fails the gate on added lines, and the vocabulary halves fail closed when the private files are absent."
-    acceptance:
-      - id: "AC4"
-        statement: "AC4: a workflow line naming a private address or a private-zone hostname fails the gate on added lines, comment lines included, while the container and cluster names every runner resolves and a non-workflow comment do not -- falsifier: pytest tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -k 'private_host_is_found_comments_included or generic_names or non_workflow' asserts the lines are found and not found respectively"
-      - id: "AC5"
-        statement: "AC5: with the private vocabulary, a workflow line naming a lab host nickname or one of our model ids fails the gate on added lines without quoting the line, a model vocabulary that is absent or malformed is exit 2, and the token-holding job runs this half and refuses when a private file is absent -- falsifier: pytest tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -k 'model_id or nickname or model_vocabulary or token_job or refusal_branch or explicit_vocabulary or does_not_quote or lab_comment' asserts exit 1, exit 2 and the step's refusal"
+- id: req-deployment-config-and-ratchet
+  statement: Shipped repositories carry neutral defaults; deployment and lab facts are supplied externally. Existing
+    residue is measured per repository and can only shrink; no gate exception is widened.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: a change that adds a file under a lane-overlays path, or any config file carrying an internal
+      address or a lab endpoint, fails the gate on added lines -- falsifier: pytest tests/scripts/test_public_repo_hygiene_gate.py
+      -k overlay_with_lab_values asserts exit 1 on a fixture that adds such a file'
+  - id: AC2
+    statement: 'AC2: an unrelated change, and a file carrying the neutral public default, pass the gate -- falsifier:
+      pytest tests/scripts/test_public_repo_hygiene_gate.py -k neutral_default_passes asserts exit 0'
+  - id: AC3
+    statement: 'AC3: the new class is a required check and a pre-commit hook in every shipped repository, with no
+      suppression other than the onex-allow-internal-ip annotation -- falsifier: python3 scripts/audit_public_repo_hygiene_rollout.py
+      lists the class as required in every shipped repository'
+  - id: AC4
+    statement: 'AC4: the committed lab overlay (dev.bifrost.yaml) and the review-voter list are out of omnibase_infra,
+      and the gate run over omnibase_infra at head exits 0 -- falsifier: python3 scripts/public_repo_hygiene_gate.py
+      --repo-root omnibase_infra exits 0 and git ls-files finds no lane-overlays file'
 evidence_requirements:
-  - kind: "tests"
-    description: "The workflow-file tests pass at the head; the PR body records the same file run against the gate at origin/dev (45 failed, 1 passed)."
-    command: "uv run pytest tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -q"
-  - kind: "tests"
-    description: "The deployment-config tests pass at the head."
-    command: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py tests/scripts/test_deployment_config_class_omn20923.py -q -k 'overlay_with_lab_values or neutral_default_passes or deployment_config or 4817 or bifrost or private_host'"
-  - kind: "tests"
-    description: "The workflow tests pass at the head."
-    command: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
+- kind: tests
+  description: Whole-file validator, whole-tree/index ratchet, rollout and workflow regressions.
+  command: uv run pytest tests/scripts/test_public_repo_hygiene_gate.py tests/scripts/test_deployment_config_class_omn20923.py
+    tests/scripts/test_deployment_config_workflow_shapes_omn20923.py tests/scripts/test_deployment_config_ratchet_omn20923.py
+    tests/scripts/test_audit_public_repo_hygiene_rollout.py tests/scripts/test_adopt_public_repo_hygiene_gate.py
+    tests/workflows/test_public_repo_hygiene_workflows.py -q --no-cov
 emergency_bypass:
   enabled: false
-  justification: ""
-  follow_up_ticket_id: ""
+  justification: ''
+  follow_up_ticket_id: ''
 dod_evidence:
-  - id: "dod-omn20923-ac1-overlay-refused"
-    description: "An added lane-overlay file or lab address in a config file fails the gate on added lines."
-    source: "manual"
-    checks:
-      - check_type: "test_passes"
-        check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py -q -k overlay_with_lab_values"
-        cwd: "${OMNI_HOME}/omniclaude"
-    binds_ac: ["AC1"]
-  - id: "dod-omn20923-ac2-neutral-default-passes"
-    description: "A neutral example overlay and an unrelated change pass."
-    source: "manual"
-    checks:
-      - check_type: "test_passes"
-        check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_gate.py -q -k neutral_default_passes"
-        cwd: "${OMNI_HOME}/omniclaude"
-    binds_ac: ["AC2"]
-  - id: "dod-omn20923-ac3-private-ci-overlay"
-    description: "The roster is read from the private CI overlay; a fork with none gets the neutral default."
-    source: "manual"
-    checks:
-      - check_type: "test_passes"
-        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q -k 'neutral_default or resolves_the_named or org_variable or outside_the_workspace'"
-        cwd: "${OMNI_HOME}/omniclaude"
-    binds_ac: ["AC3"]
-  - id: "dod-omn20923-ac4-workflow-comments-read"
-    description: "A private address or private-zone hostname in a workflow comment fails on added lines; generic names pass."
-    source: "manual"
-    checks:
-      - check_type: "test_passes"
-        check_value: "uv run pytest tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -q -k 'private_host_is_found_comments_included or generic_names or non_workflow'"
-        cwd: "${OMNI_HOME}/omniclaude"
-    binds_ac: ["AC4"]
-  - id: "dod-omn20923-ac5-workflow-vocabulary-half"
-    description: "Lab host nicknames and our model ids in a workflow fail on added lines, quietly, and the private files fail closed."
-    source: "manual"
-    checks:
-      - check_type: "test_passes"
-        check_value: "uv run pytest tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -q -k 'model_id or nickname or model_vocabulary or token_job or refusal_branch or explicit_vocabulary or does_not_quote or lab_comment'"
-        cwd: "${OMNI_HOME}/omniclaude"
-    binds_ac: ["AC5"]
+- id: dod-omn20923-ac1
+  description: Configuration kinds and endpoint shapes fail, including unchanged offending lines and baseline growth,
+    swaps, renames and index masking.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/test_public_repo_hygiene_gate.py tests/scripts/test_deployment_config_ratchet_omn20923.py
+      -q --no-cov -k "overlay_with_lab_values or lab_configuration_kinds or deployment_kinds or baseline or whole_tree
+      or new_file or replacing_value or cli"
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC1
+- id: dod-omn20923-ac2
+  description: Neutral defaults and unrelated changes pass; cleanup shrinks the baseline and reintroduction fails.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/test_public_repo_hygiene_gate.py tests/scripts/test_deployment_config_ratchet_omn20923.py
+      -q --no-cov -k "neutral_default_passes or unrelated or unchanged or cleanup"
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC2
+- id: dod-omn20923-ac3
+  description: The audit refuses missing required contexts or narrowed hooks; the adopter updates CI Summary and
+    both pinned surfaces without changing exception declarations. Fleet adoption itself remains a separate rollout
+    obligation.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/test_audit_public_repo_hygiene_rollout.py tests/scripts/test_adopt_public_repo_hygiene_gate.py
+      tests/workflows/test_public_repo_hygiene_workflows.py -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC3
+- id: dod-omn20923-ac4
+  description: Synthetic adoption and cleanup execute the gate at head with exit 0. Actual infra path removal and
+    its head verdict remain pending consumer rollout; this item does not certify that unlanded repository change.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/test_deployment_config_ratchet_omn20923.py -q --no-cov -k "first_adoption_accepts
+      or cleanup_shrinks or removal_and_baseline_shrink"
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC4

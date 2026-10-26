@@ -62,6 +62,14 @@ on:
         type: string
         required: false
         default: report
+      deployment_config_ratchet:
+        description: >-
+          Enforce the whole-tree deployment-config baseline. The baseline is
+          committed in .public-repo-hygiene.yaml;
+          edits may only shrink relative to the trusted base. No secrets needed.
+        type: boolean
+        required: false
+        default: false
       validator_ref:
         description: >-
           Optional full 40-hex omniclaude commit SHA used to fetch the validator
@@ -441,9 +449,9 @@ jobs:
   # vocabulary and uses NO secret: it runs on a fork pull request, where the
   # job above has no token and fails closed. Surfaced in the caller as
   # `public-repo-hygiene / deployment-config`, a required context on every
-  # shipped repository. It enforces on what the pull request ADDS; the residue
-  # already on `dev` is reported on every run and moved out by its own pull
-  # requests.
+  # shipped repository. This job enforces the whole tree. Repositories adopting
+  # the ratchet commit a measured baseline, which can only shrink; unbaselined
+  # files and findings fail even when their lines were not touched by the PR.
   deployment-config:
     name: deployment-config
     # OMNI_RUNNER_SELECTOR_V1 - the same fork test as the job above.
@@ -537,21 +545,20 @@ jobs:
                 && '.omniclaude-deployment-config/scripts/public_repo_hygiene_gate.py'
                 || 'scripts/public_repo_hygiene_gate.py' }}
           DIFF_BASE: ${{ steps.diff-base.outputs.sha }}
+          RATCHET: ${{ inputs.deployment_config_ratchet }}
         run: |
           set -euo pipefail
           if [ ! -f "${SCRIPT_PATH}" ]; then
-            echo "::error::gate not found at ${SCRIPT_PATH}; pin the caller's" \
-                 "'uses:' to an omniclaude commit that carries the" \
-                 "deployment-config class. THE GATE DID NOT RUN."
+            echo "::error::deployment-config gate missing. THE GATE DID NOT RUN."
             exit 1
           fi
-          # A pull request is refused for the deployment configuration it
-          # ADDS. Any other event has no base and gets the whole-tree verdict.
-          if [ -n "${DIFF_BASE}" ]; then
-            python3 "${SCRIPT_PATH}" --repo-root . \
-              --only-classes deployment-config --mode enforce \
-              --enforce-scope added-lines --diff-base "${DIFF_BASE}"
-          else
-            python3 "${SCRIPT_PATH}" --repo-root . \
-              --only-classes deployment-config --mode enforce
+          # Every tracked file is scanned, independent of which lines changed.
+          args=(--repo-root . --only-classes deployment-config --mode enforce
+                --enforce-scope whole-tree)
+          if [ "${RATCHET}" = "true" ]; then
+            args+=(--ratchet)
           fi
+          if [ -n "${DIFF_BASE}" ]; then
+            args+=(--diff-base "${DIFF_BASE}")
+          fi
+          python3 "${SCRIPT_PATH}" "${args[@]}"

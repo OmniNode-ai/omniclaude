@@ -838,7 +838,8 @@ repos:
       # no OMNI_HOME, and it runs on a fork.
       - id: deployment-config
         name: Deployment configuration stays out of shipped repositories (OMN-20923, OMN-20940)
-        entry: python3 scripts/public_repo_hygiene_gate.py --repo-root . --only-classes deployment-config --mode enforce --enforce-scope added-lines --diff-staged
+        entry: python3 scripts/public_repo_hygiene_gate.py --repo-root . --only-classes deployment-config --mode enforce --enforce-scope whole-tree --diff-staged
+        args: [--ratchet]
         language: system
         always_run: true
         pass_filenames: false

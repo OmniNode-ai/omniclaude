@@ -219,6 +219,10 @@ EXIT_PENDING = 2
 # enforced through CI Summary. "Hostile Review Gate" remains
 # intentionally absent for the reason below.
 EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
+    # OMN-20923: presence and success are required by the existing CI Summary.
+    # A missing or skipped whole-tree deployment ratchet cannot read green.
+    "public-repo-hygiene / public-repo-hygiene",
+    "public-repo-hygiene / deployment-config",
     "repo-evidence / dod-verify",  # call-repo-evidence-gate.yml (PR target only)
     # OMN-20074: removing the nested preflight also retires its indirect
     # enforcement of these verdicts. Assert their actual check contexts here.

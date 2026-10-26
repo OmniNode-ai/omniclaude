@@ -30,7 +30,7 @@ name: Public Repo Hygiene
 
 on:
   pull_request:
-    branches: [dev]
+    branches: [dev, main]
 
 # OMN-19644: cancel only superseded pull request runs.
 concurrency:
@@ -43,4 +43,5 @@ jobs:
     uses: ./.github/workflows/public-repo-hygiene-reusable.yml
     with:
       mode: report
+      deployment_config_ratchet: true
     secrets: inherit

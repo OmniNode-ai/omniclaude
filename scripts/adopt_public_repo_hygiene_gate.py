@@ -41,6 +41,8 @@ today ship with no gate, no LICENSE and no SECURITY.md, which is what
 from __future__ import annotations
 
 import argparse
+import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -205,6 +207,165 @@ jobs:
 """
 
 
+def render_ratchet_rollout(root: Path, pin: str, baseline: str) -> dict[str, str]:
+    """Prepare adoption changes without changing any gate exception/declaration.
+
+    The measured candidate baseline is still checked against the trusted base
+    by CI. Supplying one here grants no permission to increase it.
+    """
+    if not re.fullmatch(r"[a-f0-9]{40}", pin):
+        raise AdoptionError("ratchet rollout requires an immutable 40-hex gate pin")
+    try:
+        from scripts.public_repo_hygiene_gate import (
+            ConfigError,
+            load_deployment_baseline,
+            render_deployment_declaration,
+        )
+    except ModuleNotFoundError:
+        from public_repo_hygiene_gate import (
+            ConfigError,
+            load_deployment_baseline,
+            render_deployment_declaration,
+        )
+    try:
+        load_deployment_baseline(baseline)
+    except ConfigError as exc:
+        raise AdoptionError(str(exc)) from exc
+    workflow = (root / WORKFLOW_PATH).read_text()
+    workflow, count = re.subn(
+        r"(OmniNode-ai/omniclaude/\.github/workflows/public-repo-hygiene-reusable\.yml@)[a-f0-9]{40}",
+        lambda match: match[1] + pin,
+        workflow,
+    )
+    if count != 1:
+        raise AdoptionError("expected exactly one pinned reusable hygiene caller")
+    if re.search(r"^\s+deployment_config_ratchet:", workflow, re.M):
+        workflow = re.sub(
+            r"(?m)^(\s+)deployment_config_ratchet:.*$",
+            r"\1deployment_config_ratchet: true",
+            workflow,
+        )
+    else:
+        workflow, count = re.subn(
+            r"(?m)^(\s+)mode: (?:report|enforce)\s*$",
+            r"\g<0>\n\1deployment_config_ratchet: true",
+            workflow,
+        )
+        if count != 1:
+            raise AdoptionError("expected one mode declaration in the reusable caller")
+    precommit = (root / ".pre-commit-config.yaml").read_text()
+    lines = precommit.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        match = re.match(r"^(\s*)- id: deployment-config\s*$", line)
+        if match:
+            repo_starts = [
+                i for i in range(index) if re.match(r"^\s*- repo:", lines[i])
+            ]
+            if (
+                not repo_starts
+                or "https://github.com/OmniNode-ai/omniclaude"
+                not in lines[repo_starts[-1]]
+            ):
+                raise AdoptionError(
+                    "deployment-config must come from the canonical gate repository"
+                )
+            revision_lines = [
+                i
+                for i in range(repo_starts[-1] + 1, index)
+                if re.match(r"^\s+rev:", lines[i])
+            ]
+            if len(revision_lines) != 1:
+                raise AdoptionError(
+                    "expected one immutable deployment-config hook revision"
+                )
+            revision = revision_lines[0]
+            lines[revision], count = re.subn(
+                r"(rev: )[a-f0-9]{40}", lambda match: match[1] + pin, lines[revision]
+            )
+            if count != 1:
+                raise AdoptionError("deployment-config hook revision must be immutable")
+            indent = len(match[1])
+            end = index + 1
+            while end < len(lines):
+                next_line = lines[end]
+                if next_line.strip() and not next_line.lstrip().startswith("#"):
+                    if len(next_line) - len(next_line.lstrip()) <= indent:
+                        break
+                end += 1
+            body = lines[index + 1 : end]
+            # Keep unrelated hook settings and comments, while replacing scope.
+            keys = {"args", "pass_filenames", "always_run"}
+            body = [
+                entry
+                for entry in body
+                if not any(re.match(rf"^\s+{key}:", entry) for key in keys)
+            ]
+            scope = " " * (indent + 2)
+            body.extend(
+                [
+                    f"{scope}args: [--ratchet]\n",
+                    f"{scope}pass_filenames: false\n",
+                    f"{scope}always_run: true\n",
+                ]
+            )
+            lines[index + 1 : end] = body
+            break
+    else:
+        raise AdoptionError("deployment-config hook is absent; adopt the class first")
+    files = {
+        WORKFLOW_PATH: workflow,
+        ".pre-commit-config.yaml": "".join(lines),
+        ".public-repo-hygiene.yaml": render_deployment_declaration(
+            (root / CONFIG_BASENAME).read_text(), load_deployment_baseline(baseline)
+        ),
+    }
+    summary_path = "scripts/ci/ci_summary_gate.py"
+    summary = root / summary_path
+    if summary.is_file():
+        text = summary.read_text()
+        for statement in ast.parse(text).body:
+            targets = (
+                statement.targets
+                if isinstance(statement, ast.Assign)
+                else (
+                    [statement.target] if isinstance(statement, ast.AnnAssign) else []
+                )
+            )
+            if any(
+                isinstance(target, ast.Name)
+                and target.id == "EXPECTED_EXTERNAL_CONTEXTS"
+                for target in targets
+            ):
+                contexts = ast.literal_eval(statement.value)
+                required = (
+                    "public-repo-hygiene / public-repo-hygiene",
+                    "public-repo-hygiene / deployment-config",
+                )
+                missing = [context for context in required if context not in contexts]
+                if missing:
+                    # Insert at the tuple's closing delimiter, preserving its comments.
+                    value = statement.value
+                    assert (
+                        value is not None
+                        and value.end_lineno is not None
+                        and value.end_col_offset is not None
+                    )
+                    source_lines = text.splitlines(keepends=True)
+                    row = value.end_lineno - 1
+                    column = value.end_col_offset - 1
+                    source_lines[row] = (
+                        source_lines[row][:column]
+                        + "".join(f'    "{context}",\n' for context in missing)
+                        + source_lines[row][column:]
+                    )
+                    text = "".join(source_lines)
+                files[summary_path] = text
+                break
+        else:
+            raise AdoptionError("CI Summary has no external-context registration")
+    return files
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--repo", required=True)
@@ -214,7 +375,37 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pin", required=True, help="immutable omniclaude SHA")
     parser.add_argument("--out-dir", type=Path, default=None)
     parser.add_argument("--print", dest="print_only", action="store_true")
+    parser.add_argument(
+        "--ratchet-rollout-root",
+        type=Path,
+        help="prepare whole-tree rollout files from an existing checkout without changing its exception declaration",
+    )
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        help="measured candidate baseline for --ratchet-rollout-root",
+    )
     args = parser.parse_args(argv)
+
+    if args.ratchet_rollout_root is not None:
+        try:
+            if args.baseline is None:
+                raise AdoptionError("ratchet rollout requires --baseline")
+            files = render_ratchet_rollout(
+                args.ratchet_rollout_root, args.pin, args.baseline.read_text()
+            )
+            for relative, content in files.items():
+                if args.print_only or args.out_dir is None:
+                    print(f"=== {relative} ===\n{content}")
+                else:
+                    target = args.out_dir / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(content)
+                    print(f"wrote {target}")
+        except (AdoptionError, OSError, ValueError) as exc:
+            print(f"::error::{exc}", file=sys.stderr)
+            return 1
+        return 0
 
     try:
         ref = args.ref

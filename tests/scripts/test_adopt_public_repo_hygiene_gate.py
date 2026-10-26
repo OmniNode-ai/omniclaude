@@ -240,3 +240,65 @@ def test_seeding_dot_github_does_not_bless_a_withheld_entry(
     a junk directory, which is the failure this script exists to prevent.
     """
     assert not (set(adopt_mod.ALWAYS_SEED) & adopt_mod.NEVER_SEED)
+
+
+def test_ratchet_rollout_preserves_exceptions_and_updates_both_surfaces(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path
+    workflow = root / adopt_mod.WORKFLOW_PATH
+    workflow.parent.mkdir(parents=True)
+    old_pin = "1" * 40
+    pin = "2" * 40
+    workflow.write_text(
+        f"jobs:\n  public-repo-hygiene:\n    uses: OmniNode-ai/omniclaude/.github/workflows/public-repo-hygiene-reusable.yml@{old_pin}\n    with:\n      mode: report\n    secrets: inherit\n"
+    )
+    (root / ".pre-commit-config.yaml").write_text(
+        f"repos:\n  - repo: https://github.com/OmniNode-ai/omniclaude\n    rev: {old_pin}\n    hooks:\n      - id: public-repo-hygiene\n        args: [--staged]\n      - id: deployment-config\n        args: [--staged]\n        pass_filenames: true\n        always_run: false\n"
+    )
+    summary = root / "scripts/ci/ci_summary_gate.py"
+    summary.parent.mkdir(parents=True)
+    summary.write_text('EXPECTED_EXTERNAL_CONTEXTS = (\n    "existing",\n)\n')
+    declaration = root / ".public-repo-hygiene.yaml"
+    declaration.write_text(
+        "mode: report\nenforce_scope: added-lines\nscan_excludes: []\n"
+    )
+    baseline = '{"version": 1, "file_count": 0, "finding_count": 0, "files": {}}'
+    hooks = root / ".pre-commit-config.yaml"
+    hooks.write_text(
+        hooks.read_text().replace(
+            "repos:\n",
+            f"repos:\n  - repo: https://github.com/OmniNode-ai/omniclaude\n    rev: {'3' * 40}\n    hooks:\n      - id: unrelated-hook\n",
+            1,
+        )
+    )
+    files = adopt_mod.render_ratchet_rollout(root, pin, baseline)
+    assert f"rev: {'3' * 40}" in files[".pre-commit-config.yaml"]
+    assert files[adopt_mod.CONFIG_BASENAME].startswith(declaration.read_text())
+    assert "deployment_residue:" in files[adopt_mod.CONFIG_BASENAME]
+    assert (
+        declaration.read_text()
+        == "mode: report\nenforce_scope: added-lines\nscan_excludes: []\n"
+    )
+    assert f"@{pin}" in files[adopt_mod.WORKFLOW_PATH]
+    assert "deployment_config_ratchet: true" in files[adopt_mod.WORKFLOW_PATH]
+    assert f"rev: {pin}" in files[".pre-commit-config.yaml"]
+    block = files[".pre-commit-config.yaml"].split("- id: deployment-config", 1)[1]
+    assert "--staged" not in block
+    assert "args: [--ratchet]" in block
+    assert "always_run: true" in block
+    assert "pass_filenames: false" in block
+    assert (
+        "public-repo-hygiene / deployment-config"
+        in files["scripts/ci/ci_summary_gate.py"]
+    )
+    assert (
+        "public-repo-hygiene / public-repo-hygiene"
+        in files["scripts/ci/ci_summary_gate.py"]
+    )
+    assert "existing" in files["scripts/ci/ci_summary_gate.py"]
+
+
+def test_ratchet_rollout_refuses_a_mutable_pin(tmp_path: Path) -> None:
+    with pytest.raises(adopt_mod.AdoptionError, match="immutable"):
+        adopt_mod.render_ratchet_rollout(tmp_path, "dev", "{}")

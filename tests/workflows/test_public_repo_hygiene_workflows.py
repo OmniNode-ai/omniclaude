@@ -159,3 +159,30 @@ def test_public_repo_hygiene_hook_runs_on_every_commit_with_the_staged_diff() ->
     assert hook["always_run"] is True
     assert "files" not in hook
     assert hook["pass_filenames"] is False
+
+
+def test_deployment_ratchet_is_required_by_ci_summary() -> None:
+    from scripts.ci.ci_summary_gate import EXPECTED_EXTERNAL_CONTEXTS
+
+    assert "public-repo-hygiene / deployment-config" in EXPECTED_EXTERNAL_CONTEXTS
+    assert "public-repo-hygiene / public-repo-hygiene" in EXPECTED_EXTERNAL_CONTEXTS
+
+
+def test_deployment_ci_and_hook_enforce_whole_tree_ratchet() -> None:
+    workflow = _workflow(REUSABLE)
+    step = _step(REUSABLE, "deployment-config", "Run the deployment-config class")
+    assert "--enforce-scope whole-tree" in step["run"]
+    assert "--ratchet" in step["run"]
+    assert "--enforce-scope added-lines" not in step["run"]
+    caller = _workflow(CALLER)["jobs"]["public-repo-hygiene"]
+    assert caller["with"]["deployment_config_ratchet"] is True
+    config = REPO_ROOT / ".pre-commit-config.yaml"
+    hooks = [
+        hook for repo in _workflow(config)["repos"] for hook in repo.get("hooks", [])
+    ]
+    hook = next(hook for hook in hooks if hook["id"] == "deployment-config")
+    assert "--enforce-scope whole-tree --diff-staged" in hook["entry"]
+    assert hook["args"] == ["--ratchet"]
+    assert hook["always_run"] is True
+    assert hook["pass_filenames"] is False
+    assert (REPO_ROOT / ".public-repo-hygiene.yaml").is_file()
