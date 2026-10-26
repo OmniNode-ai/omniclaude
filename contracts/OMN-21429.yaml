@@ -21,17 +21,17 @@ requirements:
         statement: "AC3: the pre-existing-fix lock (E2) and the session-bootstrap dispatch lease are deleted -- falsifier: either file exists on the integration branch"
 evidence_requirements:
   - kind: tests
-    description: "No tracked file names preexisting_fix_lock."
-    command: "test -z \"$(git grep -l preexisting_fix_lock -- ':!contracts/')\""
+    description: "The E2 lock and its old test are absent, with no tracked references outside contracts/."
+    command: "python3 -m unittest discover -s tests/unit/hooks/lib -p test_e2_lock_retirement_omn21429.py -v"
 emergency_bypass:
   enabled: false
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn21429-ac3-preexisting-fix-lock-deleted
-    description: "The pre-existing-fix lock module and its test are absent from the tree, and no tracked file outside contracts/ names the module. Fails at the merge base, which holds both files."
+    description: "The regression tests assert that the pre-existing-fix lock module and its old test are absent from the tree, and no tracked file outside contracts/ names the module. Fails at the merge base, which holds both files."
     source: manual
     binds_ac: [AC3]
     checks:
-      - check_type: command
-        check_value: "test ! -e plugins/onex/hooks/lib/preexisting_fix_lock.py && test -z \"$(git grep -l preexisting_fix_lock -- ':!contracts/')\""
+      - check_type: test_passes
+        check_value: "python3 -m unittest discover -s tests/unit/hooks/lib -p test_e2_lock_retirement_omn21429.py -v"
