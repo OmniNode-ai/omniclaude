@@ -6,11 +6,20 @@ summary: The hook-emit drainer ended a batch on each record of an event class al
   records ahead of it are acked it is the head, where the existing probe moves it to quarantine with its reason
   file. Nothing is dropped and no ACL or credential changes. The ticket's Linear criteria AC1 and AC2 concern
   omnibase_infra's runtime image and layering check and ship in that repository, not here; this repository's
-  contract binds only AC3, a criterion for this repair that the Linear ticket does not list.
+  contract retains AC3, a criterion for this repair that the Linear ticket does not list. AC1 and AC2
+  below preserve the supplied Linear criteria as outstanding external evidence requirements; this branch
+  refresh does not implement or verify either criterion and must not authorize closing that ticket.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
+- id: req-omn21279-infra-layering
+  statement: The supplied ticket's runtime layering work belongs to omnibase_infra and remains externally verified.
+  acceptance:
+  - id: AC1
+    statement: 'the layering check refuses omnimarket named in Dockerfile.runtime, any CI install step or any test fixture of omnibase_infra -- falsifier: pytest of the layering check over fixture Dockerfile and workflow lines'
+  - id: AC2
+    statement: 'Dockerfile.runtime installs no omnimarket and the runtime still boots -- falsifier: the runtime-boot-smoke job on the PR head, plus the layering pytest over the real file'
 - id: req-omn21279-drainer-pass-over
   statement: A batch with records of a refused event class publishes its authorized records in one cycle, and the
     refused records are dead-lettered with their reason once they reach the head.
@@ -30,6 +39,30 @@ emergency_bypass:
   justification: ''
   follow_up_ticket_id: ''
 dod_evidence:
+- id: dod-omn21279-ac1-external-layering
+  description: >-
+    Outstanding external evidence, not run or satisfied by this omniclaude branch refresh.
+    Run the omnibase_infra contract's negative controls and real-tree layering tests in that repository;
+    omniclaude's CI cannot substitute its own green checks for this criterion.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run --frozen pytest tests/ci/test_no_omnimarket_dependency_omn19998.py -q -n 0 --no-cov -p no:randomly
+    cwd: "${OMNI_HOME}/omnibase_infra"
+  binds_ac:
+  - AC1
+- id: dod-omn21279-ac2-external-runtime-boot
+  description: >-
+    Outstanding external evidence, not run or satisfied by this omniclaude branch refresh.
+    The real Dockerfile layering test and runtime-boot-smoke check must both pass at the same
+    omnibase_infra PR head. A passing static test alone is insufficient boot evidence.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run --frozen pytest tests/ci/test_no_omnimarket_dependency_omn19998.py -q -n 0 --no-cov -p no:randomly -k runtime_dockerfile_names_no_omnimarket
+    cwd: "${OMNI_HOME}/omnibase_infra"
+  binds_ac:
+  - AC2
 - id: dod-omn21279-drainer-pass-over
   description: The drainer tests pass at the head; at the merge base the past-the-head, dead-broker and
     whole-batch tests fail.

@@ -1,94 +1,97 @@
 ---
 schema_version: "1.0.0"
 ticket_id: OMN-20368
-title: "/onex:dod_verify names the execution audience its node requires"
+title: "Require fresh bound PASS evidence for every Done write and acceptance tick"
 summary: >
-  OMN-20368 makes the /onex:dod_verify skill command carry the required
-  --execution-audience flag, introduced by PR 2542. The in-repo contract exists
-  because validate-pr-contracts reads contracts/ in this repository.
+  The Done-flip guard keeps the lane-safe PR, contract and check-run readers
+  shipped in omniclaude#2939. Every acceptance criterion needs a passing
+  repo-evidence / dod-verify receipt on the verified contract, whose SHA-256
+  must match the entry on origin/dev. Documentation-only merges do not exempt
+  a ticket. Guard failures refuse independently of cwd, mode and hooks mask.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
-  - id: req-omn20368-done-flip-local-pr-state
-    statement: The Done-flip guard reads PR merge state from local surfaces, never from gh.
+  - id: req-omn20368-bound-receipt-only
+    statement: Done writes and acceptance ticks require current criterion-bound evidence.
     acceptance:
       - id: AC1
-        statement: 'AC1: a PR proven merged by the PR watcher state or the canonical clone passes with no gh on PATH, and an unmerged PR still refuses naming it -- falsifier: pytest tests/hooks/test_done_flip_guard_local_pr_state.py fails before this change and passes after it'
-  - id: req-omn20368-done-flip-lane-readers
-    statement: The Done-flip hook uses the handler readers for both criterion ticks and Done decisions, including documentation-only evidence.
-    acceptance:
+        statement: A contract binding no acceptance criterion refuses Done even with merged PRs.
       - id: AC2
-        statement: 'AC2: the hook passes the handler PR-state and product-contract readers to decide(), ticks and Done share the contract verdict, and missing or refused evidence still refuses without a gh read'
+        statement: Ticked boxes without a bound PASS receipt refuse Done and acceptance ticks.
       - id: AC3
-        statement: 'AC3: a ticket without a product contract may tick criteria and reach Done only when every cited PR is merged and documentation-only, a merge subject names the ticket, and all acceptance criteria are ticked for Done'
+        statement: A receipt whose contract hash differs from origin/dev is stale and refused.
+      - id: AC4
+        statement: A fresh PASS receipt bound to every acceptance criterion allows Done.
+      - id: AC5
+        statement: Guard errors refuse and the hook runs regardless of cwd, lite mode or hooks mask.
+      - id: AC6
+        statement: Skills and workflow briefs do not instruct closing on ticked boxes and a comment.
 evidence_requirements:
   - kind: tests
-    description: "The skill documents the execution audience flag"
-    command: "uv run pytest tests/skills/test_dod_verify_names_execution_audience.py -q"
-  - kind: tests
-    description: "The Done-flip guard reads PR merge state from the PR watcher and the canonical clone, never gh"
-    command: "uv run pytest tests/hooks/test_done_flip_guard_local_pr_state.py -q"
+    description: Each acceptance criterion has a focused regression or instruction audit.
+    command: uv run pytest tests/hooks/test_done_flip_guard_requires_bound_receipt.py tests/scripts/test_done_closeout_instructions.py -q --no-cov
 emergency_bypass:
   enabled: false
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
-  - id: dod-audience-tests-pass
-    description: >
-      The execution audience test suite passes against the skill files.
+  - id: dod-omn20368-no-acceptance-checks
+    description: Merged and green PRs without criterion bindings refuse, including docs-only merges.
     source: manual
-    status: verified
-    checks:
-      - check_type: command
-        check_value: "uv run pytest tests/skills/test_dod_verify_names_execution_audience.py -q"
-  - id: dod-done-flip-local-pr-state
-    description: >
-      The Done-flip guard proves a PR merged from the PR watcher state or the
-      canonical clone's base branch (a squash commit whose subject ends (#N)),
-      with no gh on PATH, and still refuses an unmerged PR naming it.
-    source: manual
-    status: verified
     binds_ac: [AC1]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_done_flip_guard_local_pr_state.py -q --no-cov"
+        check_value: uv run pytest plugins/onex/hooks/tests/test_done_flip_guard_requires_bound_receipt.py -k no_acceptance_checks -q --no-cov
         cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-omn20368-deploy-local-pr-state-handler
-    description: A hosted runner starts an isolated Python runtime container with the changed handler mounted and verifies it defines HandlerLocalPrState and never runs gh. No fleet service or private endpoint is required.
-    source: manual
-    checks:
-      - check_type: command
-        check_value: >-
-          env docker run --rm --network none
-          --mount "type=bind,src=${OMNI_HOME}/omniclaude/src,dst=/runtime,readonly"
-          python:3.13-slim python -c
-          'import ast; src = open("/runtime/omniclaude/nodes/node_linear_effect/handlers/handler_local_pr_state.py").read(); tree = ast.parse(src); assert "HandlerLocalPrState" in {n.name for n in tree.body if isinstance(n, ast.ClassDef)}; assert not [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and n.value == "gh"]'
-        cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-omn20368-done-flip-lane-readers
-    description: >
-      The Done-flip hook hands decide() the node_linear_effect handler's
-      HookEvidenceReaders (PR watcher and canonical clone first, then the onex
-      scm read node through LaneRepoEvidence), so no PR-state, contract or
-      check-run read goes through gh; the tick rule and the Done rule share the
-      product-repository verdict; and a documentation-only ticket closes on a
-      merged docs-only PR that names it and carries no contract, and on nothing
-      weaker.
-    source: manual
-    binds_ac: [AC2, AC3]
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_done_flip_guard_lane_readers.py -q --no-cov"
-        cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-omn20368-deploy-hook-evidence-readers
-    description: A hosted runner starts an isolated Python container with the changed handler and hook library mounted and verifies the handler defines HookEvidenceReaders with the docs-only verdict, the hook wires it, and neither file names gh. No fleet service or private endpoint is required.
+  - id: dod-omn20368-ticked
+    description: Both Done and acceptance edits refuse without receipts, including cancellation and criterion-dropping updates.
     source: manual
     binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest plugins/onex/hooks/tests/test_done_flip_guard_requires_bound_receipt.py -k ticked -q --no-cov
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20368-stale
+    description: Missing, unreadable or changed origin/dev contract entries cannot reuse an old green receipt; the hash includes comments.
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest plugins/onex/hooks/tests/test_done_flip_guard_requires_bound_receipt.py -k stale -q --no-cov
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20368-bound-pass
+    description: Fresh complete bindings permit both Done and ticks; a partial binding remains refused.
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest plugins/onex/hooks/tests/test_done_flip_guard_requires_bound_receipt.py -k bound_pass -q --no-cov
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20368-fail-closed
+    description: Library errors, malformed payloads, early helper exits, non-repository cwd, lite mode and masked hooks all refuse without evidence.
+    source: manual
+    binds_ac: [AC5]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest plugins/onex/hooks/tests/test_done_flip_guard_requires_bound_receipt.py -k fail_closed -q --no-cov
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20368-closeout-instructions
+    description: Shipped skill instructions and the audit reject the retired comment-based closeout recipe; missing audit roots fail.
+    source: manual
+    binds_ac: [AC6]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_done_closeout_instructions.py -q --no-cov
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20368-deploy-hook-refusal
+    description: A hosted runner mounts the source read-only into an isolated Python container and executes the real hook from a scratch cwd. Both full mode and lite mode with mask zero must exit 2 naming the missing binds_ac receipt. No service credentials, fleet endpoint or Linear mutation is used.
+    source: manual
+    binds_ac: [AC5]
     checks:
       - check_type: command
         check_value: >-
           env docker run --rm --network none
           --mount "type=bind,src=${OMNI_HOME}/omniclaude,dst=/repo,readonly"
-          python:3.13-slim python -c
-          'import ast; h = ast.parse(open("/repo/src/omniclaude/nodes/node_linear_effect/handlers/handler_hook_evidence_readers.py").read()); g = open("/repo/plugins/onex/hooks/lib/done_flip_guard.py").read(); c = {n.name: n for n in h.body if isinstance(n, ast.ClassDef)}; assert {"repo_evidence", "docs_evidence", "pr_status"} <= {f.name for f in c["HookEvidenceReaders"].body if isinstance(f, ast.FunctionDef)}; assert "hook_evidence_readers()" in g and "decide(call, **_lane_readers())" in g; assert not [n for t in (h, ast.parse(g)) for n in ast.walk(t) if isinstance(n, ast.Constant) and n.value == "gh"]'
+          python:3.13-slim python /repo/tests/hooks/probe_done_flip_guard.py
         cwd: "${OMNI_HOME}/omniclaude"

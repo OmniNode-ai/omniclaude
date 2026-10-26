@@ -61,7 +61,9 @@ def _no_repo_probe(*_args: Any) -> Any:
 
 def _pass_probe(*_args: Any) -> Any:
     return nbe.RepoEvidenceVerdict(
-        nbe.RepoEvidenceOutcome.PASSED, "repo-bound: AC1<-dod-001"
+        nbe.RepoEvidenceOutcome.PASSED,
+        "repo-bound: AC1<-dod-001",
+        verified_contract_hashes=(("test/repo", "a" * 64),),
     )
 
 

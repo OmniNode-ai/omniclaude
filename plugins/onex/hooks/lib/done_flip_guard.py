@@ -6,17 +6,15 @@
 
 Done, or an edit ticking an acceptance box, needs repo evidence: a merged PR's
 ``contracts/<TICKET>.yaml`` binding every labelled criterion and a green
-``repo-evidence / dod-verify`` run on the contract that merged (or, for a
-docs-only ticket, its merged docs PR). Cited PRs merged, no box unchecked.
+``repo-evidence / dod-verify`` run whose contract hash still matches origin/dev.
+This includes docs-only tickets. Cited PRs merged, no box unchecked.
 The hook's readers read no GitHub through gh (OMN-20368). Exit 0 allows; 2 blocks.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import re
-import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -37,6 +35,7 @@ from linear_done_verify import (
 from no_pr_bound_evidence import (
     RepoEvidenceOutcome,
     RepoEvidenceVerdict,
+    _receipt_handler,
     evaluate_repo_evidence,
 )
 
@@ -74,7 +73,9 @@ class Decision:
 
 
 def _default_linear_fetcher(ticket_id: str) -> dict[str, Any] | None:
-    """The issue dict via ``_fetch_linear_issue``; ``{}`` with no key, None on failure."""
+    """The issue dict via ``_fetch_linear_issue``; None without a key or on failure."""
+    if not os.environ.get("LINEAR_API_KEY"):
+        return None
     from linear_done_verify import _fetch_linear_issue
 
     result = _fetch_linear_issue(ticket_id)
@@ -218,9 +219,9 @@ def decide(
     if tool_name not in _LINEAR_TOOLS:
         return Decision(True, "not_linear_tool")
 
-    params = call.get("tool_input") or {}
+    params = call.get("tool_input")
     if not isinstance(params, dict):
-        return Decision(True, "no_tool_input")
+        return _refuse("guard_error: Linear tool_input must be a JSON object")
 
     ticket_id = str(params.get("id") or params.get("issueId") or "")
     state_value = str(params.get("state") or params.get("status") or "").strip()
@@ -235,8 +236,6 @@ def decide(
             "name (Done, In Progress, ...)."
         )
 
-    if is_cancel_state(state_value):
-        return Decision(True, "carve_out:cancel_state")
     is_done = is_done_state(state_value)
 
     # ---- the live description, read once ---------------------------------
@@ -303,6 +302,7 @@ def decide(
         if (
             repo_verdict is not None
             and repo_verdict.outcome is RepoEvidenceOutcome.PASSED
+            and getattr(repo_verdict, "verified_contract_hashes", ())
         ):
             return None
         detail = (
@@ -310,6 +310,11 @@ def decide(
             if repo_verdict is not None
             else "repo evidence verdict unavailable"
         )
+        if (
+            repo_verdict is not None
+            and repo_verdict.outcome is RepoEvidenceOutcome.PASSED
+        ):
+            detail += "; PASS verdict has no verified current contract hash"
         return _repo_evidence_refusal(ticket_id, detail, why=why)
 
     # ---- the description this call would leave behind ----------------------
@@ -354,7 +359,7 @@ def decide(
                 )
             preview = "; ".join(t[:120] for t in ticked[:3])
             refused = _bar(
-                [new_description],
+                [d for d in (current_description, new_description) if d],
                 why=(
                     f"this edit ticks {len(ticked)} acceptance box(es) ({preview}) "
                     "and no passing repo evidence covers the criteria"
@@ -369,6 +374,8 @@ def decide(
                 )
 
     if not is_done:
+        if is_cancel_state(state_value):
+            return Decision(True, "carve_out:cancel_state")
         return Decision(True, "not_done_state")
 
     # ---- Done transition -------------------------------------------------
@@ -452,19 +459,15 @@ def decide(
 # ---------------------------------------------------------------------------
 
 
-def _load_stdin_call() -> dict[str, Any]:
-    try:
-        parsed = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
 def _lane_readers() -> dict[str, Callable[..., Any]]:
     """``decide``'s readers from the node_linear_effect handler, imported on first use."""
 
     def reader(name: str, before: Callable[..., Any]) -> Callable[..., Any]:
         def read(*args: Any) -> Any:
+            # With no merged PR there can be no repository receipt. Diagnose
+            # the missing binding without needing the optional node package.
+            if name == "repo_evidence" and not args[2]:
+                return before(*args)
             os.environ.setdefault("ONEX_PLUGIN_HOOK_LIB", os.path.dirname(__file__))
             from omniclaude.nodes.node_linear_effect.handlers import (
                 handler_lane_repo_evidence as handler,
@@ -484,35 +487,8 @@ def _lane_readers() -> dict[str, Callable[..., Any]]:
 
 
 def main() -> int:
-    """Read a PreToolUse call on stdin; exit 0 or 2. Fail CLOSED (OMN-20368)."""
-    call = _load_stdin_call()
-    try:
-        decision = decide(call, **_lane_readers())
-    except (
-        ArithmeticError,
-        AttributeError,
-        ImportError,
-        LookupError,
-        OSError,
-        RuntimeError,
-        TypeError,
-        ValueError,
-        subprocess.SubprocessError,
-    ) as exc:
-        decision = Decision(
-            False,
-            f"guard_error: the done-flip guard could not decide "
-            f"({type(exc).__name__}: {exc}). Refusing the Linear write rather "
-            "than letting it through unchecked (OMN-20368).",
-        )
-    if decision.allowed:
-        return 0
-    payload = {
-        "decision": "block",
-        "reason": f"[OMN-20368 done-flip repo-evidence gate] {decision.reason}",
-    }
-    sys.stderr.write(json.dumps(payload) + "\n")
-    return 2
+    """Delegate payload parsing and fail-closed execution to the receipt handler."""
+    return _receipt_handler().run_hook(decide, _lane_readers())
 
 
 if __name__ == "__main__":

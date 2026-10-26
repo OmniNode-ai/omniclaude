@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Repo-evidence gating for ticks, exemptions and fail-closed hooks [OMN-20368].
+"""AC1--AC5: current criterion-bound receipts are the only path to Done.
 
 A merged PR, checked boxes, deploy readback and labels cannot substitute for
-repo evidence. Keep these controls after retiring the receipt-specific tests.
+repo evidence, including a verified hash matching the current contract.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-_PLUGIN_ROOT = Path(__file__).parent.parent.parent / "plugins" / "onex"
+_PLUGIN_ROOT = Path(__file__).resolve().parents[2] / "plugins" / "onex"
 _LIB_DIR = _PLUGIN_ROOT / "hooks" / "lib"
 _SCRIPT = _PLUGIN_ROOT / "hooks" / "scripts" / "pre_tool_use_done_flip_guard.sh"
 
@@ -229,7 +229,9 @@ def test_ticked_box_edit_with_repo_evidence_is_allowed() -> None:
     d = guard.decide(
         call,
         repo_evidence_probe=lambda _t, _d, _prs: nbe.RepoEvidenceVerdict(
-            nbe.RepoEvidenceOutcome.PASSED, "repo-bound: AC1, AC2"
+            nbe.RepoEvidenceOutcome.PASSED,
+            "repo-bound: AC1, AC2",
+            verified_contract_hashes=(("test/repo", "a" * 64),),
         ),
         linear_fetcher=_live(_UNTICKED_DESCRIPTION),
         pr_fetcher=_merged,
@@ -257,7 +259,9 @@ def test_repo_pass_open_cited_pr_still_blocks() -> None:
     d = guard.decide(
         _done(_TICKED_DESCRIPTION),
         repo_evidence_probe=lambda _t, _d, _prs: nbe.RepoEvidenceVerdict(
-            nbe.RepoEvidenceOutcome.PASSED, "repo-bound"
+            nbe.RepoEvidenceOutcome.PASSED,
+            "repo-bound",
+            verified_contract_hashes=(("test/repo", "a" * 64),),
         ),
         pr_fetcher=lambda ref: ldv.PRStatus(ref=ref, state="OPEN", merge_state="CLEAN"),
     )
@@ -359,3 +363,255 @@ def test_fail_closed_hook_refuses_when_its_library_is_missing(tmp_path: Path) ->
     result = _run_hook(_done(), tmp_path, root, {})
     assert result.returncode == 2, (result.stdout, result.stderr)
     assert "guard_error" in result.stderr
+
+
+# AC1--AC4 exercise the real repository receipt evaluator, not a canned verdict.
+def _receipt_probe(
+    *,
+    bindings: tuple[str, ...] = ("AC1", "AC2"),
+    current: str | None = None,
+    current_status: Any = None,
+    runs: list[dict[str, Any]] | None = None,
+    reads: list[str] | None = None,
+) -> Any:
+    contract = (
+        "ticket_id: "
+        + _TICKET
+        + "\ndod_evidence:\n"
+        + "".join(
+            f"  - id: proof-{label}\n    binds_ac: [{label}]\n"
+            "    checks:\n      - check_type: test_passes\n        check_value: pytest\n"
+            for label in bindings
+        )
+    )
+    if not bindings:
+        contract = f"ticket_id: {_TICKET}\ndod_evidence: []\n"
+
+    def read_contract(_repo: str, ref: str, _ticket: str) -> Any:
+        if reads is not None:
+            reads.append(ref)
+        if ref == "origin/dev":
+            return nbe.ContractRead(
+                current_status or nbe.ContractReadStatus.FOUND,
+                text=contract if current is None else current,
+            )
+        return nbe.ContractRead(nbe.ContractReadStatus.FOUND, text=contract)
+
+    def probe(ticket: str, descriptions: list[str], prs: list[Any]) -> Any:
+        return nbe.evaluate_repo_evidence(
+            ticket,
+            descriptions,
+            prs,
+            read_contract=read_contract,
+            read_check_runs=lambda _repo, _sha: (
+                runs
+                if runs is not None
+                else [
+                    {
+                        "id": 10,
+                        "name": nbe.REPO_EVIDENCE_CHECK_NAME,
+                        "app": {"slug": "github-actions"},
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                ]
+            ),
+        )
+
+    return probe
+
+
+def _receipt_decision(probe: Any, *, tick: bool = False) -> Any:
+    def merged(ref: Any) -> Any:
+        return ldv.PRStatus(
+            ref=ref,
+            state="MERGED",
+            merge_state="CLEAN",
+            head_sha="a" * 40,
+            merge_commit_sha="b" * 40,
+        )
+
+    call = _done(_TICKED_DESCRIPTION)
+    if tick:
+        call["tool_input"].pop("state")
+    return guard.decide(
+        call,
+        repo_evidence_probe=probe,
+        pr_fetcher=merged,
+        linear_fetcher=_live(_UNTICKED_DESCRIPTION if tick else _TICKED_DESCRIPTION),
+    )
+
+
+def test_no_acceptance_checks_merged_green_pr_without_bindings_refuses() -> None:
+    decision = _receipt_decision(_receipt_probe(bindings=()))
+    assert not decision.allowed
+    assert "no_bound_dod_receipt" in decision.reason
+    assert "AC1" in decision.reason and "AC2" in decision.reason
+
+
+@pytest.mark.parametrize("tick", [False, True], ids=["done", "ticked"])
+def test_stale_receipt_against_current_origin_dev_refuses(tick: bool) -> None:
+    current = f"ticket_id: {_TICKET}\ndod_evidence: []\n"
+    decision = _receipt_decision(_receipt_probe(current=current), tick=tick)
+    assert not decision.allowed, decision.reason
+    assert "stale_contract" in decision.reason
+    assert "origin/dev" in decision.reason
+
+
+@pytest.mark.parametrize(
+    "status", [nbe.ContractReadStatus.ABSENT, nbe.ContractReadStatus.ERROR]
+)
+def test_stale_receipt_with_unreadable_current_contract_refuses(status: Any) -> None:
+    decision = _receipt_decision(_receipt_probe(current_status=status))
+    assert not decision.allowed, decision.reason
+    assert "origin/dev" in decision.reason
+
+
+@pytest.mark.parametrize("tick", [False, True], ids=["done", "ticked"])
+def test_bound_pass_current_receipt_allows_every_criterion(tick: bool) -> None:
+    decision = _receipt_decision(_receipt_probe(), tick=tick)
+    assert decision.allowed, decision.reason
+
+
+def test_bound_pass_allow_is_checked_against_current_origin_dev_contract() -> None:
+    reads: list[str] = []
+    decision = _receipt_decision(_receipt_probe(reads=reads))
+    assert decision.allowed, decision.reason
+    assert "origin/dev" in reads, reads
+
+
+def test_bound_pass_partial_binding_still_refuses() -> None:
+    decision = _receipt_decision(_receipt_probe(bindings=("AC1",)))
+    assert not decision.allowed
+    assert "AC2" in decision.reason
+
+
+@pytest.mark.parametrize("raw", ['{"tool_name":', "[]", "null"])
+def test_fail_closed_unreadable_payload_refuses(
+    raw: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(raw))
+    assert guard.main() == 2
+    assert "guard_error" in capsys.readouterr().err
+
+
+def test_no_acceptance_checks_docs_merge_is_not_a_receipt() -> None:
+    from unittest.mock import Mock
+
+    from omniclaude.nodes.node_linear_effect.handlers.handler_hook_evidence_readers import (
+        HookEvidenceReaders,
+    )
+
+    evidence = Mock()
+    evidence.read_contract.return_value = nbe.ContractRead(
+        nbe.ContractReadStatus.ABSENT
+    )
+    readers = HookEvidenceReaders(
+        evidence,
+        read_merge_commit=lambda _repo, _sha: (f"docs({_TICKET})", ["README.md"]),
+    )
+    decision = _receipt_decision(readers.repo_evidence)
+    assert not decision.allowed, decision.reason
+    assert "no_bound_dod_receipt" in decision.reason
+
+
+def test_ticked_box_edit_cannot_bypass_receipt_by_canceling() -> None:
+    call = _done(_TICKED_DESCRIPTION)
+    call["tool_input"]["state"] = "Canceled"
+    decision = guard.decide(
+        call,
+        repo_evidence_probe=_receipt_probe(bindings=()),
+        pr_fetcher=_merged,
+        linear_fetcher=_live(_UNTICKED_DESCRIPTION),
+    )
+    assert not decision.allowed
+    assert "ac_tick_without_receipt" in decision.reason
+
+
+@pytest.mark.parametrize("exit_code", [0, 1, 7])
+def test_fail_closed_hook_common_cannot_exit_before_decision(
+    tmp_path: Path, exit_code: int
+) -> None:
+    root = tmp_path / "plugin"
+    scripts = root / "hooks" / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / _SCRIPT.name).write_text(_SCRIPT.read_text())
+    (scripts / "common.sh").write_text(f"exit {exit_code}\n")
+    result = _run_hook(_done(), tmp_path, root, {})
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert "guard_error" in result.stderr
+
+
+def test_ticked_update_cannot_drop_an_unbound_live_criterion() -> None:
+    live = _UNTICKED_DESCRIPTION.replace(
+        "\nImplemented in", "\n- [ ] AC3: a third live criterion\n\nImplemented in"
+    )
+    call = _done(_TICKED_DESCRIPTION)
+    call["tool_input"].pop("state")
+    decision = guard.decide(
+        call,
+        repo_evidence_probe=_receipt_probe(),
+        pr_fetcher=lambda ref: ldv.PRStatus(
+            ref=ref,
+            state="MERGED",
+            merge_state="CLEAN",
+            head_sha="a" * 40,
+            merge_commit_sha="b" * 40,
+        ),
+        linear_fetcher=_live(live),
+    )
+    assert not decision.allowed
+    assert "AC3" in decision.reason
+
+
+def test_stale_contract_hash_includes_comments() -> None:
+    def probe(ticket: str, descriptions: list[str], prs: list[Any]) -> Any:
+        contract = (
+            f"ticket_id: {ticket}\ndod_evidence:\n- id: both\n  binds_ac: [AC1, AC2]\n"
+        )
+        return nbe.evaluate_repo_evidence(
+            ticket,
+            descriptions,
+            prs,
+            read_contract=lambda _repo, ref, _ticket: nbe.ContractRead(
+                nbe.ContractReadStatus.FOUND,
+                text=contract + ("# new revision\n" if ref == "origin/dev" else ""),
+            ),
+            read_check_runs=lambda _repo, _sha: [
+                {
+                    "id": 1,
+                    "name": nbe.REPO_EVIDENCE_CHECK_NAME,
+                    "app": {"slug": "github-actions"},
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+            ],
+        )
+
+    decision = _receipt_decision(probe)
+    assert not decision.allowed
+    assert "stale_contract" in decision.reason
+
+
+@pytest.mark.parametrize("params", [[], "invalid", None])
+def test_fail_closed_malformed_linear_tool_input(params: Any) -> None:
+    decision = guard.decide(
+        {"tool_name": "mcp__linear-server__save_issue", "tool_input": params}
+    )
+    assert not decision.allowed
+    assert "guard_error" in decision.reason
+
+
+def test_no_acceptance_checks_older_handler_docs_pass_cannot_bypass_new_plugin() -> (
+    None
+):
+    decision = guard.decide(
+        _done(_TICKED_DESCRIPTION),
+        linear_fetcher=_live(_TICKED_DESCRIPTION),
+        pr_fetcher=_merged,
+        repo_evidence_probe=lambda *_args: nbe.RepoEvidenceVerdict(
+            nbe.RepoEvidenceOutcome.PASSED, "docs-only: a merged README"
+        ),
+    )
+    assert not decision.allowed
+    assert "current contract hash" in decision.reason

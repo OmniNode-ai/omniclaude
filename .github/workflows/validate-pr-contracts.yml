@@ -12,6 +12,9 @@ name: Validate PR Contracts
 on:
   pull_request:
     branches: [main, dev, develop]
+    # The validator reads ticket ids from the live PR body, so a body edit
+    # must re-run it; without `edited` a red from an old body never clears.
+    types: [opened, edited, synchronize, reopened]
 
 concurrency:
   group: validate-pr-contracts-${{ github.ref }}

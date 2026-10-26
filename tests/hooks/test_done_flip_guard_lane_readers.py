@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""The Done-flip hook reads no GitHub through gh, and admits docs-only tickets [OMN-20368].
+"""The Done-flip hook reads no GitHub through gh, and always requires receipts [OMN-20368].
 
 Three defects found by the 2026-10-22 sprint triage dry runs:
 
@@ -14,9 +14,8 @@ Three defects found by the 2026-10-22 sprint triage dry runs:
   (one ``_bar``), so a contract that lives in the product repository admits a
   tick (covered by test_done_flip_guard_repo_evidence.py; pinned here for the
   lane readers);
-* a documentation ticket had no path: a merged docs-only PR that names the
-  ticket, with no contract, is now its evidence (RULING 2026-10-14T03:57:46Z
-  item 4), and nothing else is.
+* documentation tickets need bound receipts too. A docs-only merge may skip
+  runtime lab proof, but never the acceptance evidence required for Done.
 """
 
 from __future__ import annotations
@@ -200,8 +199,8 @@ def test_main_hands_decide_the_handler_readers(
 
     monkeypatch.setattr(handler, "hook_evidence_readers", _Recorder)
     assert seen["pr_fetcher"]("ref") == "pr_status"
-    assert seen["repo_evidence_probe"]("t", [], []) == "repo_evidence"
-    assert calls == [("pr_status", ("ref",)), ("repo_evidence", ("t", [], []))]
+    assert seen["repo_evidence_probe"]("t", [], ["merged"]) == "repo_evidence"
+    assert calls == [("pr_status", ("ref",)), ("repo_evidence", ("t", [], ["merged"]))]
 
 
 def test_a_hook_venv_older_than_the_plugin_keeps_the_old_readers(
@@ -320,24 +319,28 @@ def _docs_readers(merge_commit: tuple[str, list[str]] | None) -> Any:
 @pytest.mark.parametrize(
     "paths", [["docs/metric_dictionary.md"], ["beta/a.md", "README.rst", "x/y.txt"]]
 )
-def test_docs_only_ticket_closes_on_its_merged_docs_pr(paths: list[str]) -> None:
+def test_docs_only_ticket_without_bound_receipt_refuses(paths: list[str]) -> None:
     readers = _docs_readers((f"docs({_TICKET}): metric dictionary (#1415)", paths))
     decision = _decide(readers, _call(_DOCS_DESCRIPTION), _DOCS_DESCRIPTION)
-    assert decision.allowed, decision.reason
+    assert not decision.allowed
+    assert "no_bound_dod_receipt" in decision.reason
     verdict = readers.repo_evidence(_TICKET, [_DOCS_DESCRIPTION], [_merged_docs()])
-    assert verdict.outcome is nbe.RepoEvidenceOutcome.PASSED
-    assert verdict.detail.startswith("docs-only: OmniNode-ai/docs_repo#1415")
+    assert verdict.outcome is nbe.RepoEvidenceOutcome.NOT_ENGAGED
+    assert "docs-only: OmniNode-ai/docs_repo#1415" in verdict.detail
+    assert "no bound PASS receipt" in verdict.detail
 
 
 def _merged_docs() -> Any:
     return _status(ldv.PRRef(1415, _DOCS_REPO), merge_commit_sha=_MERGE)
 
 
-def test_docs_only_ticket_may_tick_its_boxes() -> None:
+def test_docs_only_ticket_cannot_tick_its_boxes_without_receipt() -> None:
     readers = _docs_readers((f"docs({_TICKET}): metric dictionary (#1415)", ["a.md"]))
     unticked = _DOCS_DESCRIPTION.replace("[x]", "[ ]")
     tick = _call(_DOCS_DESCRIPTION, state="In Progress")
-    assert _decide(readers, tick, unticked).allowed
+    decision = _decide(readers, tick, unticked)
+    assert not decision.allowed
+    assert "ac_tick_without_receipt" in decision.reason
 
 
 def test_docs_path_refuses_a_merge_that_changed_code() -> None:
