@@ -57,6 +57,11 @@ requirements:
     acceptance:
       - id: "AC8"
         statement: "AC8: exactly one local public-repo-hygiene hook runs the exported command without narrowing its trigger or overriding the repository's enforced classes and added-lines scope, and the caller uses the reusable workflow in this checkout -- falsifier: uv run pytest tests/scripts/test_public_repo_hygiene_local_hook_omn19998.py -q fails at the merge base, where no local public-repo-hygiene hook is declared"
+  - id: "req-omn19998-hostile-reviewer-lan-runners"
+    statement: "The Hostile Reviewer fallback requires arch-amd64 to stay on LAN runners that can reach its review voters and exclude h203-light runners."
+    acceptance:
+      - id: "AC9"
+        statement: "AC9: the hostile-review job's dedicated runner fallback requires self-hosted, omnibase-ci and arch-amd64, excluding h203-light runners that cannot reach the review voters -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q fails at the merge base, where the fallback lacks arch-amd64"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -150,3 +155,11 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_public_repo_hygiene_local_hook_omn19998.py -q"
     binds_ac:
       - "AC8"
+  - id: "dod-omn19998-hostile-reviewer-lan-runners"
+    description: "The Hostile Reviewer runner placement tests require arch-amd64 in the fallback, excluding h203-light runners that cannot reach the review voters."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q"
+    binds_ac:
+      - "AC9"

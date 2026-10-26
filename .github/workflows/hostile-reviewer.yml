@@ -131,12 +131,21 @@ jobs:
     # carve-out shape the OCC publishers use for the tailnet-only broker
     # (OMN-16691).
     #
-    # HOW: the literal `["self-hosted","omnibase-ci"]` fallback IS the operating
+    # HOW: the literal `["self-hosted","omnibase-ci","arch-amd64"]` fallback IS the operating
     # value. `OMNI_HOSTILE_REVIEW_RUNS_ON_JSON` is deliberately left UNSET at org
     # and repo scope — setting it is an operator kill switch that must cite a
     # reachability proof for whatever class it names, never a side effect of a
     # seam migration. Nothing here writes any Actions variable (rule 14,
     # single-owner).
+    #
+    # OMN-19998: port omnibase_infra#5330 (OMN-17292). omnibase-ci is no longer
+    # LAN-only: h203-light runners joined on 2026-10-24 and cannot reach the
+    # review voters (omniclaude job 121330631666 on h203-light-2; job
+    # 121302780144 on h203-light-4). The LAN amd64 action pools in
+    # omnibase_infra's docker-compose.runners.yml and
+    # docker-compose.runners-omnipc2-ci-runner.yml carry arch-amd64; h203 does
+    # not, so requiring it keeps this job on the LAN fleet. If an off-LAN
+    # runner ever gains arch-amd64, this pin needs a dedicated LAN label instead.
     #
     # FORK ISOLATION IS UNTOUCHED AND COMES FIRST (OMN-16683/16684). Untrusted
     # fork code never reaches the LAN-attached fleet at any idle level. It keeps
@@ -147,7 +156,7 @@ jobs:
         (github.event_name == 'pull_request' &&
          github.event.pull_request.head.repo.full_name != github.repository)
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_HOSTILE_REVIEW_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+        || fromJSON(vars.OMNI_HOSTILE_REVIEW_RUNS_ON_JSON || '["self-hosted","omnibase-ci","arch-amd64"]')
       }}
     # OMN-19998: sized for the voters' worst case, which the CI overlay sets,
     # not this file. 20 minutes held the roster pinned on 2026-10-11 (one
