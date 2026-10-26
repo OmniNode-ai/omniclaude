@@ -35,22 +35,6 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
-  - id: "dod-omn21116-ac1-lab-install-pending"
-    description: >-
-      AC1 remains unproven by this slice: a lab /compact must install the package and
-      the projection must report installed with the boundary uuid. No receipt is claimed.
-    source: "manual"
-    execution_scope: "local_done_gate"
-    status: "pending"
-    checks: []
-  - id: "dod-omn21116-ac2-lab-fallback-pending"
-    description: >-
-      AC2 remains unproven by this slice: adapter absence or an unreachable dev lane must
-      complete natively by the deadline with one failure line. No receipt is claimed.
-    source: "manual"
-    execution_scope: "local_done_gate"
-    status: "pending"
-    checks: []
   - id: "dod-omn21116-ac3-grep-closure"
     description: >-
       AC3: no retired reference anywhere outside CHANGELOG.md, including this contract,
