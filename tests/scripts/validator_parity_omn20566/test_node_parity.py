@@ -1,13 +1,14 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Regression tests for the core check nodes that replaced five omniclaude scripts (OMN-20566).
+"""Regression tests for the core check nodes that replaced omniclaude's validator scripts (OMN-20566).
 
 Each node is run as the hook runs it (the module, the files pre-commit's ``files:`` and
 ``exclude:`` select, handed over by name) over a fixture corpus, and its verdict must equal
 the golden file. The goldens were captured from the deleted scripts
 (``scripts/validation/validate_no_utcnow.py``, ``validate_no_hardcoded_ip.py``,
 ``validate_no_direct_kafka_producer.py``, ``validate_no_raw_sqlite3.py``,
-``validate_enum_governance.py`` and ``scripts/validate_no_env_fallbacks.py``) in the
+``validate_enum_governance.py``, ``scripts/validate_no_env_fallbacks.py`` and the
+``scripts/check_local_paths.py`` / ``check_local_paths_wrapper.sh`` pair) in the
 commits before they were removed, where the
 same corpus was also run through script and node side by side and compared. A change that
 loses a finding the scripts reported fails here.
@@ -28,11 +29,14 @@ from tests.scripts.validator_parity_omn20566.corpus import CORPUS
 from tests.scripts.validator_parity_omn20566.harness import (
     REPO_ROOT,
     Verdict,
+    core_hook_revs,
     hook_args,
     hook_scope,
     load_golden,
+    locked_core_version,
     materialise,
     run_node,
+    text_only,
 )
 
 pytestmark = pytest.mark.unit
@@ -42,6 +46,8 @@ class Rule(NamedTuple):
     hook_id: str
     node_module: str
     passes_filenames: bool = True
+    # The core hook declares ``types: [text]``: pre-commit hands it text files only.
+    text_files_only: bool = False
 
 
 RULES: dict[str, Rule] = {
@@ -71,7 +77,31 @@ RULES: dict[str, Rule] = {
         "omnibase_core.validation.checker_enum_governance",
         passes_filenames=False,
     ),
+    # Core's pre-node validator, the module the deleted wrapper ran. ``check-local-paths``
+    # is the hook id the validator-requirements handshake names; core's compute node
+    # (LOCAL_PATHS_COMPUTE_NODE below) is held to the same goldens.
+    "local_paths": Rule(
+        "check-local-paths",
+        "omnibase_core.validation.validator_local_paths",
+        text_files_only=True,
+    ),
 }
+
+LOCAL_PATHS_COMPUTE_NODE = (
+    "omnibase_core.nodes.node_local_paths_check_compute.runtime_local_paths_check"
+)
+
+# The scripts this suite's nodes replaced. None may be invoked again (AC1).
+REPLACED_SCRIPTS: tuple[str, ...] = (
+    "validate_no_utcnow.py",
+    "validate_no_hardcoded_ip.py",
+    "validate_no_direct_kafka_producer.py",
+    "validate_no_raw_sqlite3.py",
+    "validate_no_env_fallbacks.py",
+    "validate_enum_governance.py",
+    "check_local_paths.py",
+    "check_local_paths_wrapper.sh",
+)
 
 
 @pytest.fixture
@@ -98,6 +128,8 @@ def _node_verdict(tmp_path: Path, rule: Rule, files: Mapping[str, str]) -> Verdi
     if not rule.passes_filenames:
         return run_node(tmp_path, rule.node_module, hook_args(rule.hook_id))
     scoped = hook_scope(rule.hook_id, files)
+    if rule.text_files_only:
+        scoped = text_only(tmp_path, scoped)
     if not scoped:
         # pre-commit does not invoke a hook that matches no file.
         return Verdict(0, ())
@@ -171,6 +203,8 @@ def test_real_tree_is_clean(rule_name: str) -> None:
     rule = RULES[rule_name]
     if rule.passes_filenames:
         scoped = hook_scope(rule.hook_id, _tracked_files())
+        if rule.text_files_only:
+            scoped = text_only(REPO_ROOT, scoped)
         assert scoped, f"{rule.hook_id} scope matched no tracked file"
     else:
         scoped = hook_args(rule.hook_id)
@@ -178,3 +212,34 @@ def test_real_tree_is_clean(rule_name: str) -> None:
     verdict = run_node(REPO_ROOT, rule.node_module, scoped)
 
     assert verdict == Verdict(0, ()), f"{rule.hook_id} flags the tree: {verdict}"
+
+
+@pytest.mark.parametrize("case_name", sorted(CORPUS["local_paths"]))
+def test_local_paths_compute_node_matches_golden(
+    case_name: str, tmp_path: Path
+) -> None:
+    """Core's compute node gives the deleted wrapper's verdict too, so the hook can move to it."""
+    files = dict(CORPUS["local_paths"][case_name])
+    materialise(tmp_path, files)
+    rule = RULES["local_paths"]._replace(node_module=LOCAL_PATHS_COMPUTE_NODE)
+
+    assert _node_verdict(tmp_path, rule, files) == load_golden("local_paths")[case_name]
+
+
+def test_core_node_hooks_pin_the_locked_core_version() -> None:
+    """The core hooks run the omnibase-core version uv.lock resolves (AC3, plan fact 43)."""
+    hook_ids = {rule.hook_id for rule in RULES.values()}
+    revs = core_hook_revs(hook_ids)
+
+    assert set(revs) == hook_ids
+    assert revs == dict.fromkeys(hook_ids, f"v{locked_core_version()}")
+
+
+@pytest.mark.parametrize(
+    "config", [".pre-commit-config.yaml", ".github/workflows/ci.yml"]
+)
+def test_replaced_scripts_are_not_invoked(config: str) -> None:
+    """Pre-commit and CI run the core hooks, never a script they replaced (AC1)."""
+    text = (REPO_ROOT / config).read_text(encoding="utf-8")
+
+    assert [name for name in REPLACED_SCRIPTS if name in text] == []

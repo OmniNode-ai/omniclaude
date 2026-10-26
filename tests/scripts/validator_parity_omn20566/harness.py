@@ -17,11 +17,13 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import NamedTuple
 
 import yaml
+from identify.identify import tags_from_path
 
 from tests.scripts.validator_parity_omn20566.corpus import FIXTURE_TOKENS
 
@@ -117,6 +119,36 @@ def hook_scope(hook_id: str, rels: Iterable[str]) -> list[str]:
         for rel in rels
         if include.search(rel) and not (exclude and exclude.search(rel))
     )
+
+
+def text_only(root: Path, rels: Iterable[str]) -> list[str]:
+    """The paths a ``types: [text]`` hook is handed: pre-commit's own file classifier."""
+    return sorted(rel for rel in rels if "text" in tags_from_path(str(root / rel)))
+
+
+def locked_core_version() -> str:
+    """The omnibase-core version this repository's ``uv.lock`` resolves."""
+    lock = tomllib.loads((REPO_ROOT / "uv.lock").read_text(encoding="utf-8"))
+    versions = [
+        package["version"]
+        for package in lock["package"]
+        if package["name"] == "omnibase-core"
+    ]
+    assert len(versions) == 1, f"uv.lock resolves omnibase-core {versions}"
+    return str(versions[0])
+
+
+def core_hook_revs(hook_ids: Iterable[str]) -> dict[str, str]:
+    """The ``rev:`` each named core hook is pinned at in ``.pre-commit-config.yaml``."""
+    wanted = set(hook_ids)
+    config = yaml.safe_load((REPO_ROOT / ".pre-commit-config.yaml").read_text())
+    return {
+        hook["id"]: str(repo["rev"])
+        for repo in config["repos"]
+        if repo.get("repo") == CORE_REPO
+        for hook in repo["hooks"]
+        if hook["id"] in wanted
+    }
 
 
 def hook_args(hook_id: str) -> list[str]:
