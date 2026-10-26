@@ -118,35 +118,44 @@ dod_evidence:
     description: >
       AC-2 remains enforced: policy vocabulary is JSON and malformed policy
       refuses. The classifier drift check follows its recorded import into
-      core; the historical provenance and marker arrays are unchanged.
+      core; the historical provenance and marker arrays are unchanged. Run
+      these invariants alongside the new parent-session admission through
+      both the core and registered hook, which fails at the merge base.
     source: manual
     binds_ac: [AC2]
     checks:
       - check_type: command
-        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard.py -q --no-cov -k 'policy or vocabulary'"
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard.py tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'policy or vocabulary or session_helper_uses_parent_claim'"
   - id: dod-original-ac3-hook-inventory
-    description: AC-3 registration and typed inventory owner, ticket, mask and canary remain covered.
+    description: >
+      AC-3 registration and typed inventory owner, ticket, mask and canary
+      remain covered. The registered hook must also admit and record the
+      delegated create, a behavior its merge-base implementation refuses.
     source: manual
     binds_ac: [AC3]
     checks:
       - check_type: command
-        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard.py -q --no-cov -k 'registered_and_executable or typed_inventory or inventory_contract'"
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard.py tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'registered_and_executable or typed_inventory or inventory_contract or session_helper_uses_parent_claim'"
   - id: dod-original-ac4-registered-refusal
-    description: AC-4 the registered shell hook still refuses an unbound create end to end.
+    description: >
+      AC-4 the registered shell hook still refuses an unbound create end to
+      end, alongside an admitted delegated create and its parent binding,
+      label, project and stamp refusals. The merge base fails the delegated
+      admission and cannot distinguish its other refusal reasons.
     source: manual
     binds_ac: [AC4]
     checks:
       - check_type: command
-        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard.py -q --no-cov -k registered_hook_blocks_a_create_with_no_binding"
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard.py tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'registered_hook_blocks_a_create_with_no_binding or session_helper_uses_parent_claim or session_helper_keeps_other_create_rules or session_helper_cannot_stamp'"
   - id: dod-original-ac5-shipped-documentation
     description: >
-      AC-5 records previously completed documentation work. This implementation
-      changes no documentation. Its historical evidence was read locally;
-      it is manual evidence, not an executable hosted check.
+      AC-5 ships the delegated-create authority and audit fields in
+      CLAUDE.md. Hosted verification checks those
+      instructions and exercises the documented admission and refusal paths.
+      The merge base has neither these instructions nor parent admission.
     source: manual
     status: verified
-    execution_scope: local_done_gate
     binds_ac: [AC5]
     checks:
       - check_type: command
-        check_value: "git diff --quiet origin/dev...HEAD -- docs"
+        check_value: "grep -Fq 'parent-session+claim' CLAUDE.md && grep -Fq 'OMNI_LANE_LIVENESS_STATE_DIR' CLAUDE.md && uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'session_helper or headless_session_cannot or node_cannot_borrow'"

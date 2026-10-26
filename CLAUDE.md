@@ -46,6 +46,41 @@ All other hook scripts (`plugins/onex/hooks/scripts/`) and handler modules
 (`plugins/onex/hooks/lib/`) remain on disk; re-registration is a pure config change.
 Verify live: `jq '.hooks' plugins/onex/hooks/hooks.json`.
 
+### Ticket creation by an in-session helper
+
+A helper can submit its owning session's prepared Linear create while that
+session's registered lane holds an open CLAIM. The harness must supply the
+helper's `agent_id`, its sidecar identity and the exact parent `session_id`.
+The description stamp does not establish authority.
+
+The guard resolves identity in this order:
+
+1. A declared `ONEX_LANE` or `ONEX_REMOTE_LANE` names the lane.
+2. Otherwise, a helper's harness sidecar names a lane with its own open CLAIM.
+3. Otherwise, an interactive session helper can use its exact parent session's
+   registered lane, provided that lane holds an open CLAIM.
+
+The parent registry is `lane-liveness-sessions.json` under
+`OMNI_LANE_LIVENESS_STATE_DIR`, then `OMNI_SESSION_START_STATE_DIR`, then
+`~/.local/state/omni/session-start`. An unreadable or malformed registry, an
+unrelated session binding, a missing sidecar or a missing or closed parent CLAIM
+cannot authorize the helper. Headless entrypoints and node callers cannot
+borrow parent authority.
+
+The create still needs the intake label, a first-line stamp naming the resolved
+lane, an available daily budget, a parent and a Gate binding. A create that sets
+a project is refused. A stamp naming another claimed lane is also refused.
+
+An admitted parent-authorized create records `lane`, `helper`,
+`parent_session_id` and `lane_source: parent-session+claim` in the intake row.
+A refused create spends no intake budget.
+
+Run the documented paths through the real guard and the registered shell hook:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'session_helper or headless_session_cannot or node_cannot_borrow'
+```
+
 ### Background-agent model guard (OMN-17499)
 
 **The rule: every background agent names its own model.** A `Workflow` dispatch is refused
