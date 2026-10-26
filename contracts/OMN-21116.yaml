@@ -1,83 +1,88 @@
 ---
 schema_version: "1.0.0"
 ticket_id: "OMN-21116"
-title: "TA.15 compaction binding (manual trigger) and deletion of the pre-compact pair: the deletion slice"
+title: "TA.15 compaction cleanup: close all retired hook references"
 summary: >-
-  Slice 1 of plan task TA.15. Deletes the dark pre-compact pair: plugins/onex/hooks/scripts/pre-compact.sh,
-  pre-compact-probe.sh, the post-compact restore lifecycle in user-prompt-submit.sh (_COMPACT_CTX_FILE,
-  _COMPACT_CTX_CONSUME and the deferred rm), the config.yaml toggles OMNICLAUDE_PRECOMPACT_SNAPSHOT and
-  OMNICLAUDE_POSTCOMPACT_RESTORE (keys 22-40), their distribution manifest entries and their two
-  canonical-file-shape baseline rows, plus the advisory-allowlist and test references to pre-compact.sh.
-  Neither script was registered in hooks.json and both toggles defaulted off, so no installed behaviour changes.
-  This slice covers AC3 and AC4. AC1 and AC2 (a lab-host /compact installing the package, and the native
-  fallback with one failure line) are not covered here: they need the session.compact binding row in the
-  omnimarket adapter contract, the render template's session.compact support, the runtime wiring of the pack
-  build port and a lab-host /compact, none of which this slice contains. AC5 (the auto trigger is not bound)
-  is not declared here either: nothing on dev binds any trigger, so a check for it passes at the merge base as
-  well as at the head and cannot be controlled; it belongs to the binding slice, whose manual-trigger row is the
-  change an auto-trigger check can fail without. The unbound dod-omn21116-ac5-auto-unbound item still runs it.
+  Complete the deletion slice by removing stale contract prose and its grep exceptions.
+  Preserve both inventory filename spellings through exact prefix generation. The retired
+  scripts, restore lifecycle, configuration keys, manifest entries and two baseline rows
+  were removed previously. AC3 now checks the whole tree except CHANGELOG.md, including
+  this contract; AC4 preserves the 957-to-955 deletion result, with three unrelated rows
+  subsequently removed on dev (current total 952). AC5 checks that the installed
+  adapter's compaction rows select only manual and the repository installs no adapter hook.
+  AC1 and AC2 require lab session installation/projection and failure-path evidence; this
+  reference cleanup does not claim them. The locked adapter already declares a manual row.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
-  - id: "req-omn21116-delete-pre-compact-pair"
-    statement: "The pre-compact pair and its restore lifecycle are deleted with every reference."
+  - id: "req-omn21116-retired-hook-closure"
+    statement: "The retired snapshot pair and restore lifecycle have no remaining references."
     acceptance:
+      # YAML escapes preserve the exact decoded ticket criterion without a self-match.
       - id: "AC3"
-        statement: "AC3: `git grep -n -e _COMPACT_CTX -e pre-compact -e OMNICLAUDE_POSTCOMPACT_RESTORE` returns nothing outside CHANGELOG, and `bash -n user-prompt-submit.sh` passes -- falsifier: a match or a syntax error."
+        statement: "AC3: `git grep -n -e \u005fCOMPACT_CTX -e pre\u002dcompact -e OMNICLAUDE_POSTCOMPACT_\u0052ESTORE` returns nothing outside CHANGELOG, and `bash -n user-prompt-submit.sh` passes -- falsifier: a match or a syntax error."
       - id: "AC4"
         statement: "AC4: baseline count drops by exactly the deleted files -- falsifier: unchanged or off."
+      - id: "AC5"
+        statement: "AC5: the `auto` trigger is not bound -- falsifier: a `client_bindings` row or an installed registration for `auto`."
 evidence_requirements:
   - kind: "tests"
-    description: "The hook error-visibility, baseline and inventory tests pass with the pair deleted"
-    command: "uv run pytest tests/hooks/test_hook_error_visibility.py tests/hooks/test_hooks_baseline_omn_13244.py tests/hooks/test_hook_inventory.py tests/hooks/test_hook_inventory_undeclared_gate.py -q --no-cov"
+    description: "The closure, hook error-visibility, baseline and inventory tests pass"
+    command: "uv run pytest tests/contracts/test_omn21116_retired_hook_closure.py tests/hooks/test_hook_error_visibility.py tests/hooks/test_hooks_baseline_omn_13244.py tests/hooks/test_hook_inventory.py tests/hooks/test_hook_inventory_undeclared_gate.py tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  - id: "dod-omn21116-ac1-lab-install-pending"
+    description: >-
+      AC1 remains unproven by this slice: a lab /compact must install the package and
+      the projection must report installed with the boundary uuid. No receipt is claimed.
+    source: "manual"
+    execution_scope: "local_done_gate"
+    status: "pending"
+    checks: []
+  - id: "dod-omn21116-ac2-lab-fallback-pending"
+    description: >-
+      AC2 remains unproven by this slice: adapter absence or an unreachable dev lane must
+      complete natively by the deadline with one failure line. No receipt is claimed.
+    source: "manual"
+    execution_scope: "local_done_gate"
+    status: "pending"
+    checks: []
   - id: "dod-omn21116-ac3-grep-closure"
     description: >-
-      AC3: the restore lifecycle and the pair leave no reference. The one remaining match is the generic
-      filename-prefix table HOOK_EVENT_NAME_PREFIXES in plugins/onex/hooks/lib/hook_inventory.py ("pre-compact"
-      maps a hyphen-named script to PreCompact); it names no deleted file and is kept because removing it would
-      narrow the undeclared-gate scan. The check asserts that line is the only match, and that user-prompt-submit.sh
-      parses. It fails at the merge base, where pre-compact.sh and the restore lifecycle still match.
+      AC3: no retired reference anywhere outside CHANGELOG.md, including this contract,
+      and the prompt-submit script parses. Grep errors fail as well as matches.
     source: "manual"
     checks:
       - check_type: "command"
-        check_value: >-
-          test "$(git grep -n -e _COMPACT_CTX -e pre-compact -e OMNICLAUDE_POSTCOMPACT_RESTORE -- . ':!CHANGELOG.md' ':!contracts/OMN-21116.yaml')"
-          = 'plugins/onex/hooks/lib/hook_inventory.py:691:    "pre-compact": "PreCompact",'
-          && bash -n plugins/onex/hooks/scripts/user-prompt-submit.sh
+        check_value: "git grep -n -e \u005fCOMPACT_CTX -e pre\u002dcompact -e OMNICLAUDE_POSTCOMPACT_\u0052ESTORE -- . ':!CHANGELOG.md'; result=$?; test \"$result\" -eq 1 && bash -n plugins/onex/hooks/scripts/user-prompt-submit.sh"
     binds_ac: ["AC3"]
   - id: "dod-omn21116-ac4-baseline"
     description: >-
-      AC4: the canonical-file-shape baseline loses exactly the two rows of the two deleted files (957 to 955
-      lines in this PR's diff) and gains none; the deleted files are absent and the baseline names neither.
+      AC4: the prior deletion removed exactly two of 957 baseline rows, leaving 955.
+      OMN-21429 then removed one unrelated row and OMN-20566 removed two, leaving 952.
+      Both retired scripts and their manifest and baseline entries remain absent.
     source: "manual"
     checks:
-      - check_type: "command"
-        check_value: >-
-          test ! -e plugins/onex/hooks/scripts/pre-compact.sh
-          && test ! -e plugins/onex/hooks/scripts/pre-compact-probe.sh
-          && ! grep -q 'pre-compact' .onex_ratchets/canonical_file_shape_baseline.txt
-          && ! grep -q 'pre-compact' plugins/distribution_manifest.yaml
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/contracts/test_omn21116_retired_hook_closure.py -q --no-cov -k baseline"
     binds_ac: ["AC4"]
   - id: "dod-omn21116-ac5-auto-unbound"
     description: >-
-      AC5: no registration in hooks.json runs the binding adapter, so no trigger (auto included) is bound from
-      this repository, and the hook-inventory client_bindings tests pass. Unbound: this holds at the merge base
-      too (nothing on dev binds a trigger), so it has no failing control, and AC5 is not declared by this slice.
+      AC5: installed adapter compaction rows select manual only, no auto binding row is
+      declared, and hooks.json installs no binding adapter. The negative control feeds
+      an auto registration to the real inventory checker and requires its refusal.
+      Lab settings and installed module records require a separate host read.
     source: "manual"
     checks:
-      - check_type: "command"
-        check_value: "! grep -q 'onex-claude-code-hook' plugins/onex/hooks/hooks.json"
       - check_type: "test_passes"
-        check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov"
-    binds_ac: []
+        check_value: "uv run pytest tests/contracts/test_omn21116_retired_hook_closure.py tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov"
+    binds_ac: ["AC5"]
   - id: "dod-omn21116-error-visibility"
-    description: "The error-guard and error-visibility tests no longer expect pre-compact.sh and pass."
+    description: "The error-guard and error-visibility tests pass with the retired pair absent."
     source: "manual"
     checks:
       - check_type: "test_passes"
