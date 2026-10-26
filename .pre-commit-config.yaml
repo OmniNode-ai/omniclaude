@@ -328,7 +328,7 @@ repos:
   # markers too, with the same spelling. CI runs these same hook ids with
   # `pre-commit run <id> --all-files` (ci.yml, the arch-* jobs).
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: v0.47.34
+    rev: v0.47.56
     hooks:
       - id: check-no-utcnow
         files: ^src/.*\.py$
@@ -348,6 +348,12 @@ repos:
         args: [src/omniclaude/]
         stages: [pre-push]
         always_run: true
+      # Core's local-paths validator, the module the old wrapper script ran
+      # (omnibase_core.validation.validator_local_paths). check-local-paths is the hook id
+      # the validator-requirements handshake names; the parity suite also holds core's
+      # node_local_paths_check_compute to the same goldens. The wrapper's exclude is kept.
+      - id: check-local-paths
+        exclude: '\.secrets\.baseline$|^docs/.*|^tests/fixtures/.*|^tests/.*/fixtures/.*'
 
   # Fast Python formatting and linting (staged files only)
   # Order: format -> fix -> check (matches CI behavior)
@@ -732,14 +738,6 @@ repos:
         language: system
         pass_filenames: false
         files: '^(scripts/lane_identity\.py|scripts/hooks/prepare-commit-msg-lane|tests/scripts/conftest\.py|tests/scripts/test_lane_identity\.py|tests/scripts/test_lane_identity_canonical_bake\.py)$'
-        stages: [pre-commit]
-      - id: check-local-paths
-        name: check for local path references
-        entry: bash scripts/check_local_paths_wrapper.sh
-        language: system
-        types: [text]
-        exclude: '\.secrets\.baseline$|^docs/.*|^tests/fixtures/.*|^tests/.*/fixtures/.*'
-        pass_filenames: true
         stages: [pre-commit]
 
       # OMN-9039: block cross-repo @main refs in self-gating workflows to
