@@ -59,7 +59,7 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "hostile-reviewer.yml"
 CARVEOUT_VAR = "OMNI_HOSTILE_REVIEW_RUNS_ON_JSON"
 SHARED_SEAM_VAR = "OMNI_TRUSTED_CI_RUNS_ON_JSON"
 PUBLIC_VAR = "OMNI_PUBLIC_PR_RUNS_ON_JSON"
-FLEET_LITERAL = '\'["self-hosted","omnibase-ci"]\''
+FLEET_LITERAL = '\'["self-hosted","omnibase-ci","arch-amd64"]\''
 
 REVIEW_JOB = "hostile-review"
 REVIEW_STEP = "Run adversarial review"
@@ -126,6 +126,19 @@ def test_fleet_literal_is_the_operating_value() -> None:
     assert FLEET_LITERAL in runs_on, (
         f"`{REVIEW_JOB}` must carry the literal {FLEET_LITERAL} fallback -- with "
         "the dedicated variable unset it is the value that selects the runner"
+    )
+
+
+def test_reviewer_fallback_requires_arch_amd64_to_exclude_h203_light() -> None:
+    """OMN-19998: h203-light shares the CI labels but cannot reach the voters."""
+    runs_on = _job(REVIEW_JOB)["runs-on"]
+    fallback = re.search(rf"vars\.{CARVEOUT_VAR}\s*\|\|\s*'([^']+)'", runs_on)
+    assert fallback is not None, "the reviewer must declare its fleet fallback"
+    labels = json.loads(fallback.group(1))
+    assert "arch-amd64" in labels, "the fallback must require the LAN fleet label"
+    h203_light_labels = {"self-hosted", "omnibase-ci"}
+    assert not set(labels).issubset(h203_light_labels), (
+        "h203-light runners lack arch-amd64 and must not take the review job"
     )
 
 

@@ -119,7 +119,7 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
     # and cannot see a label written straight into a workflow file.
     assert (
         "vars.OMNI_HOSTILE_REVIEW_RUNS_ON_JSON || "
-        """'["self-hosted","omnibase-ci"]'""" in runs_on
+        """'["self-hosted","omnibase-ci","arch-amd64"]'""" in runs_on
     ), (
         "same-repo review runs must resolve to the self-hosted omnibase-ci "
         "labels so the LAN-only voter endpoints are reachable, through the "
@@ -152,7 +152,7 @@ def test_same_repo_dev_prs_do_not_use_public_runner_branch(
     # OMN-18415: dedicated variable, fleet literal as the operating fallback.
     assert (
         "vars.OMNI_HOSTILE_REVIEW_RUNS_ON_JSON || "
-        """'["self-hosted","omnibase-ci"]'""" in runs_on
+        """'["self-hosted","omnibase-ci","arch-amd64"]'""" in runs_on
     )
 
 
