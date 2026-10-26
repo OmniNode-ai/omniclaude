@@ -11,7 +11,8 @@ stays, so the item itself carries the fact:
   the launcher's ``ONEX_LANE``/``ONEX_REMOTE_LANE``, or, for a workflow
   subagent that cannot set its harness environment, the lane the harness's
   ``agent-<agent id>.meta.json`` sidecar names, accepted only while that lane
-  holds an open CLAIM on the rolling work ledger;
+  holds an open CLAIM on the rolling work ledger; an in-session helper may
+  instead use its parent session's registered lane and open CLAIM;
 * rule 12 -- it carries the lane-intake label (``lane_intake.label``);
 * rule 13 -- its description's first line is ``<stamp_prefix> <lane>``;
 * rule 14 -- no more than ``lane_intake.daily_budget`` such items are admitted
@@ -50,6 +51,7 @@ _HEADLESS_ENTRYPOINT_PREFIX = "sdk-"
 #: workflow subagent's harness sidecar confirmed by its open ledger CLAIM.
 LANE_SOURCE_ENV = "env"
 LANE_SOURCE_SIDECAR_CLAIM = "sidecar+claim"
+LANE_SOURCE_PARENT_SESSION_CLAIM = "parent-session+claim"
 #: The repository root, from ``src/omniclaude/handlers/<this file>``.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 #: The stdlib-only readers this module reuses rather than re-implements: the
@@ -85,11 +87,13 @@ class LaneAdmission(NamedTuple):
     intake_count: int | None
     ledger: Path | None
     at: str
-    #: :data:`LANE_SOURCE_ENV`, :data:`LANE_SOURCE_SIDECAR_CLAIM` or ``""``.
+    #: Environment, sidecar+claim, parent-session+claim, or unresolved (empty).
     lane_source: str = ""
     #: The lane a subagent's sidecar named, kept when no open CLAIM confirmed
     #: it, so the refusal can say which CLAIM is missing.
     unclaimed_sidecar_lane: str = ""
+    helper: str = ""
+    parent_session_id: str = ""
 
 
 def load_policy(policy_path: Path) -> LaneIntakePolicy:
@@ -157,30 +161,59 @@ def _refusal_lane_module() -> ModuleType | None:
     return module
 
 
+def _parent_session_lane(session_id: str, environ: Mapping[str, str]) -> str:
+    """Read the exact session binding written by session-start's registry.
+
+    No newest-session or stamp fallback: neither proves who owns this helper.
+    The two overrides and default match ``loops_check.liveness_state_dir``.
+    """
+    directory = (
+        environ.get("OMNI_LANE_LIVENESS_STATE_DIR", "").strip()
+        or environ.get("OMNI_SESSION_START_STATE_DIR", "").strip()
+    )
+    root = (
+        Path(directory)
+        if directory
+        else Path.home() / ".local/state/omni/session-start"
+    )
+    try:
+        registry = json.loads((root / "lane-liveness-sessions.json").read_text("utf-8"))
+        entry = registry.get(session_id) if isinstance(registry, dict) else None
+        lane = entry.get("lane") if isinstance(entry, dict) else None
+    except (OSError, ValueError):
+        return ""
+    return lane.strip() if isinstance(lane, str) else ""
+
+
 def subagent_lane(
-    payload: Mapping[str, object], environ: Mapping[str, str]
-) -> tuple[str, str]:
-    """``(lane, sidecar_lane)`` for a workflow subagent's create.
+    payload: Mapping[str, object],
+    environ: Mapping[str, str],
+    *,
+    allow_parent: bool = True,
+) -> tuple[str, str, str, str]:
+    """``(lane, sidecar_lane, source, parent_session_id)`` for a helper.
 
     A workflow subagent cannot set ``ONEX_LANE`` in the Claude Code process
     environment the hook reads, so its identity comes from two facts it did
     not assert in the call itself: the harness's ``agent-<agent id>.meta.json``
     sidecar, found from the payload's ``agent_id`` and transcript path, names
     the lane it was dispatched as; and the rolling work ledger holds an open
-    CLAIM for exactly that lane. ``lane`` is that name when both agree and
-    ``""`` otherwise; ``sidecar_lane`` is the sidecar's name whatever the
-    ledger says, so a refusal can name the CLAIM that is missing. Never raises.
+    CLAIM for exactly that lane. Otherwise an interactive session's helper
+    may use the lane registered to its parent session, with that lane's open
+    CLAIM. The hook's ``session_id`` names that parent harness session; the
+    helper has its own ``agent_id``. The stamp never participates in identity
+    resolution. Never raises.
     """
     agent_id = payload.get("agent_id")
     if not isinstance(agent_id, str) or not agent_id.strip():
-        return "", ""
+        return "", "", "", ""
     reader = _refusal_lane_module()
     if reader is None:
-        return "", ""
+        return "", "", "", ""
     try:
         attribution = importlib.import_module("hook_lane_attribution")
     except ImportError:
-        return "", ""
+        return "", "", "", ""
     session = payload.get("session_id")
     session_id = session.strip() if isinstance(session, str) else ""
     named = ""
@@ -196,12 +229,16 @@ def subagent_lane(
         if named:
             break
     if not named:
-        return "", ""
+        return "", "", "", ""
     # An unreadable ledger reads as no open CLAIM, which confirms nothing.
     claims = reader.open_claims(environ)
     if any(claim.get("lane") == named for claim in claims):
-        return named, named
-    return "", named
+        return named, named, LANE_SOURCE_SIDECAR_CLAIM, ""
+    if allow_parent and session_id:
+        parent_lane = _parent_session_lane(session_id, environ)
+        if parent_lane and any(claim.get("lane") == parent_lane for claim in claims):
+            return parent_lane, named, LANE_SOURCE_PARENT_SESSION_CLAIM, session_id
+    return "", named, "", ""
 
 
 def begin(
@@ -221,7 +258,8 @@ def begin(
 
     The declared environment names the lane first, unchanged for the
     remote-lane runner. A subagent with no declaration is named by
-    :func:`subagent_lane` (sidecar plus open CLAIM) or by nothing.
+    :func:`subagent_lane` (sidecar or registered parent plus open CLAIM).
+    Headless and node contexts cannot borrow a parent session's authority.
     """
     lane = next(
         (environ[k].strip() for k in _LANE_ENV_KEYS if environ.get(k, "").strip()), ""
@@ -240,9 +278,17 @@ def begin(
     if not in_lane:
         return None
     unclaimed = ""
+    helper = parent_session_id = ""
     if not lane and is_subagent:
-        lane, named = subagent_lane(payload, environ)
-        source = LANE_SOURCE_SIDECAR_CLAIM if lane else ""
+        lane, named, source, parent_session_id = subagent_lane(
+            payload,
+            environ,
+            allow_parent=not force
+            and not environ.get("CLAUDE_CODE_ENTRYPOINT", "").startswith(
+                _HEADLESS_ENTRYPOINT_PREFIX
+            ),
+        )
+        helper = named
         unclaimed = "" if lane else named
     policy = load_policy(policy_path)
     ledger = ledger_path(environ, policy, now.strftime("%Y-%m-%d"))
@@ -254,6 +300,8 @@ def begin(
         now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         source,
         unclaimed,
+        helper,
+        parent_session_id,
     )
 
 
@@ -302,8 +350,9 @@ def findings(
                     if unclaimed
                     else "run the lane with its identity declared "
                     "(ONEX_LANE=<lane>); a workflow subagent is named by its "
-                    "harness sidecar while its own CLAIM is open on the rolling "
-                    "work ledger; a calling node passes its own name as the lane"
+                    "harness sidecar while its own or its registered parent "
+                    "session's CLAIM is open on the rolling work ledger; "
+                    "a calling node passes its own name as the lane"
                 ),
             }
         )
@@ -386,6 +435,8 @@ def record(admission: LaneAdmission, title: str) -> None:
             "at": admission.at,
             "lane": admission.lane,
             "lane_source": admission.lane_source,
+            "helper": admission.helper,
+            "parent_session_id": admission.parent_session_id,
             "title": title[:200],
         }
     )
@@ -398,6 +449,7 @@ def record(admission: LaneAdmission, title: str) -> None:
 
 __all__ = [
     "LANE_SOURCE_ENV",
+    "LANE_SOURCE_PARENT_SESSION_CLAIM",
     "LANE_SOURCE_SIDECAR_CLAIM",
     "LaneAdmission",
     "LaneIntakePolicy",

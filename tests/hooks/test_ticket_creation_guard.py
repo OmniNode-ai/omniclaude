@@ -29,6 +29,7 @@ about 1500 times in a fortnight.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import inspect
 import json
@@ -1835,10 +1836,39 @@ def test_the_criterion_vocabulary_has_not_drifted_from_its_source() -> None:
     if not source_path.is_file():
         pytest.skip(f"{source_path} is absent from the clone")
     source = source_path.read_text(encoding="utf-8")
+    symbols = classifier["symbols"]
+    if all(
+        f"{symbol}: re.Pattern[str] = re.compile(" not in source for symbol in symbols
+    ):
+        # The live classifier moved to core. Follow the import the original
+        # source now uses, preserving the historical transcription pin and
+        # comparing the same marker arrays against their current owner.
+        imports = [
+            node
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.ImportFrom)
+            and any(
+                alias.name == "criterion_is_state_shaped"
+                and alias.asname == "_criterion_is_state_shaped"
+                for alias in node.names
+            )
+        ]
+        assert len(imports) == 1, "classifier must have one recorded owner"
+        module = imports[0].module
+        assert module is not None
+        owner = _sibling_clone(module.split(".", 1)[0])
+        assert owner is not None, f"no clone for classifier owner {module}"
+        source = (
+            (owner / "src" / Path(*module.split(".")))
+            .with_suffix(".py")
+            .read_text("utf-8")
+        )
+        symbols = [symbol.removeprefix("_") for symbol in symbols]
     policy_raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
-    for symbol, key in (
-        ("_STATE_MARKER_RE", "state_criterion_markers"),
-        ("_BEHAVIOUR_MARKER_RE", "behaviour_criterion_markers"),
+    for symbol, key in zip(
+        symbols,
+        ("state_criterion_markers", "behaviour_criterion_markers"),
+        strict=True,
     ):
         assert _verbose_alternatives(source, symbol) == policy_raw[key], (
             f"{key} has drifted from {classifier['repo']} {symbol}. Bump the "
