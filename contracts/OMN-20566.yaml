@@ -75,7 +75,7 @@ dod_evidence:
   source: manual
   checks:
   - check_type: command
-    check_value: "bash -o pipefail -c 'cfg=$(gh api \"repos/OmniNode-ai/omniclaude/contents/.pre-commit-config.yaml?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d) && ! grep -F check_local_paths_wrapper.sh <<<\"$cfg\" && grep -F \"rev: v0.47.56\" <<<\"$cfg\" > /dev/null'"
+    check_value: "bash -o pipefail -c 'cfg=$(gh api \"repos/OmniNode-ai/omniclaude/contents/.pre-commit-config.yaml?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d) && ! grep -F check_local_paths_wrapper.sh <<<\"$cfg\" && grep -F \"rev: v0.47.57\" <<<\"$cfg\" > /dev/null'"
   binds_ac:
   - AC1
   - AC3
