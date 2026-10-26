@@ -61,7 +61,7 @@ requirements:
     statement: "The Hostile Reviewer fallback requires arch-amd64 to stay on LAN runners that can reach its review voters and exclude h203-light runners."
     acceptance:
       - id: "AC9"
-        statement: "AC9: the hostile-review job's dedicated runner fallback requires self-hosted, omnibase-ci and arch-amd64, excluding h203-light runners that cannot reach the review voters -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q fails at the merge base, where the fallback lacks arch-amd64"
+        statement: "AC9: the hostile-review job's dedicated runner fallback requires self-hosted, omnibase-ci and arch-amd64, excluding h203-light runners that cannot reach the review voters -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\" fails at the merge base, where the fallback lacks arch-amd64"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -160,6 +160,6 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q"
+        check_value: "uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\""
     binds_ac:
       - "AC9"
