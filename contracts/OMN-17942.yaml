@@ -26,7 +26,7 @@ evidence_requirements:
     command: "uv run pytest tests/hooks/test_ticket_creation_guard.py -q --no-cov -k 'residual_title or unfalsified or sets_a_project or admits_a_fully_falsified'"
   - kind: tests
     description: "Lane-intake rules (label, first-line stamp, lane identity, daily budget) hold, each refusal beside an admitted control"
-    command: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'budget or unmarked or lane_intake_mode or node_mode'"
+    command: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'budget or unmarked or lane_intake_mode or node_mode or session_helper_uses_parent_claim'"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -51,7 +51,7 @@ dod_evidence:
     status: verified
     checks:
       - check_type: command
-        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'budget or unmarked or lane_intake_mode or node_mode'"
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'budget or unmarked or lane_intake_mode or node_mode or session_helper_uses_parent_claim'"
     binds_ac:
       - AC1
   - id: dod-subagent-lane-identity
