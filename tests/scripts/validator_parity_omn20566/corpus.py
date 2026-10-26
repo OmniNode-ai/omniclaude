@@ -36,11 +36,16 @@ FIXTURE_TOKENS: dict[str, str] = {
     "IPTOK_172_C": "172." + "15.0.1",
     "IPTOK_172_D": "172." + "32.0.1",
     "IPTOK_172_E": "172." + "20.1.1",
+    "PATHTOK_MAC_HOME": "/" + "Users/alice/",
+    "PATHTOK_LINUX_HOME": "/" + "home/alice/",
+    "PATHTOK_VOLUME": "/" + "Volumes/USB1/",
+    "PATHTOK_WIN_HOME": "C:" + "\\Users\\",
     "MARKTOK_DI_OK": "# di" + "-ok",
     "MARKTOK_FALLBACK_OK": "# fallback" + "-ok",
     "MARKTOK_CLOUD_BUS_OK": "# cloud-bus" + "-ok",
     "MARKTOK_IP_OK": "# onex" + "-allow-internal-ip",
     "MARKTOK_ENUM_OK": "# enum" + "-ok: fixture",
+    "MARKTOK_LOCAL_PATH_OK": "# local-path" + "-ok",
 }
 
 _CLEAN_PY = "def now() -> int:\n    return 1\n"
@@ -418,6 +423,56 @@ ENUM_GOVERNANCE: dict[str, Case] = {
     },
 }
 
+# local_paths
+# Fixtures cover path matches, comment suppression, and hook exclusions.
+LOCAL_PATHS: dict[str, Case] = {
+    "clean": {
+        "src/pkg/clean.py": 'x = 1\npath = "data/file.txt"\n',
+    },
+    "mac_home_py": {
+        "src/pkg/a.py": 'x = "PATHTOK_MAC_HOMEproj/x"\n',
+    },
+    "linux_home_yaml": {
+        "config/a.yaml": "root: PATHTOK_LINUX_HOMEcode\n",
+    },
+    "volume_md": {
+        "README.md": "Project notes\nsee PATHTOK_VOLUMEdata\n",
+    },
+    "windows_path_sh": {
+        "scripts/a.sh": "cp x PATHTOK_WIN_HOMEbob\n",
+    },
+    "suppressed_by_comment_marker": {
+        "src/pkg/a.py": 'x = "PATHTOK_MAC_HOMEproj"  MARKTOK_LOCAL_PATH_OK\n',
+    },
+    "marker_in_string_does_not_suppress": {
+        "src/pkg/a.py": 'x = "PATHTOK_MAC_HOMEproj local-path' + '-ok"\n',
+    },
+    "marker_on_other_line_does_not_suppress": {
+        "src/pkg/a.py": 'MARKTOK_LOCAL_PATH_OK\nx = "PATHTOK_MAC_HOMEproj"\n',
+    },
+    "several_per_file": {
+        "src/pkg/a.py": 'x = "PATHTOK_LINUX_HOMEcode"\ny = 1\nz = "PATHTOK_VOLUMEdata"\n',
+    },
+    "several_files": {
+        "src/pkg/a.py": 'x = 1\ny = "PATHTOK_MAC_HOMEproj"\n',
+        "notes/b.md": "see PATHTOK_WIN_HOMEbob\n",
+        "src/pkg/ok.py": _CLEAN_PY,
+    },
+    "docs_and_fixtures_are_excluded": {
+        "docs/a.md": "see PATHTOK_MAC_HOMEproj\n",
+        "tests/fixtures/a.py": 'x = "PATHTOK_MAC_HOMEproj"\n',
+        "tests/unit/fixtures/b.py": 'x = "PATHTOK_LINUX_HOMEcode"\n',
+        "src/pkg/ok.py": _CLEAN_PY,
+    },
+    "secrets_baseline_is_excluded": {
+        ".secrets.baseline": '{"path": "PATHTOK_MAC_HOMEproj"}\n',
+        "src/pkg/ok.py": _CLEAN_PY,
+    },
+    "path_without_trailing_segment_is_fine": {
+        "src/pkg/a.py": 'x = "/" + "Users"\ny = "/home"\n',
+    },
+}
+
 CORPUS: dict[str, dict[str, Case]] = {
     "no_utcnow": UTCNOW,
     "no_hardcoded_ip": HARDCODED_IP,
@@ -425,4 +480,5 @@ CORPUS: dict[str, dict[str, Case]] = {
     "no_raw_sqlite3": RAW_SQLITE3,
     "no_env_fallbacks": ENV_FALLBACKS,
     "enum_governance": ENUM_GOVERNANCE,
+    "local_paths": LOCAL_PATHS,
 }

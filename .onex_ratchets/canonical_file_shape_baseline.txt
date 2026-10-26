@@ -488,8 +488,6 @@ scripts/check_daemon_venv_skew.py
 scripts/check_dep_provenance.py
 scripts/check_hook_event_names.sh
 scripts/check_infra_coupling.py
-scripts/check_local_paths.py
-scripts/check_local_paths_wrapper.sh
 scripts/check_migration_freeze.sh
 scripts/check_no_cloud_bus_wrapper.sh
 scripts/check_omnimarket_dispatch_drift.py

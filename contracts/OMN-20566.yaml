@@ -1,0 +1,81 @@
+schema_version: 1.0.0
+ticket_id: OMN-20566
+title: 'omniclaude: replace its validator scripts with the omnibase_core check nodes, starting with the six already
+  built and never wired'
+summary: The second omniclaude batch of plan Phase 5. The check_local_paths wrapper pair is deleted and pre-commit
+  runs omnibase_core's own check-local-paths hook, the module the wrapper ran, after a verdict-parity corpus and
+  goldens captured from the wrapper; core's node_local_paths_check_compute is held to the same goldens. The core
+  check-node hooks move from v0.47.34 to v0.47.56, the omnibase-core version uv.lock resolves. The parity module is
+  renamed test_node_parity.py so the AC2 selector collects it, and two tests pin AC1 and AC3. Rows 6, 7 and 9 to 12
+  of the plan's omniclaude table are not switched by this change.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn20566-core-hooks
+  statement: omniclaude runs the omnibase_core hooks in place of the scripts they replaced, at the locked core
+    version, with a verdict-parity test per switched row.
+  acceptance:
+  - id: AC1
+    statement: "AC1: omniclaude's pre-commit and CI run the omnibase_core hook for each first-batch row and no longer
+      invoke the replaced script -- falsifier: grep -n 'validate_no_utcnow.py' .pre-commit-config.yaml
+      .github/workflows/ci.yml returns a hit after the batch, or the same grep for any other replaced script"
+  - id: AC2
+    statement: 'AC2: before each switch a parity test in omniclaude shows the replaced script and the core node give
+      the same exit code and finding set over omniclaude''s own tree and the fixtures -- falsifier: uv run pytest
+      tests/scripts/validator_parity_omn20566/test_node_parity.py -k node_parity -q fails'
+  - id: AC3
+    statement: 'AC3: the omnibase_core hook rev pinned for these hooks equals the omnibase_core version locked in
+      uv.lock -- falsifier: python3 scripts/validation/validate_precommit_pin_parity.py exits non-zero'
+evidence_requirements:
+- kind: tests
+  description: Node-versus-golden parity over the fixture corpus and the tracked tree, the pin test and the
+    replaced-script test.
+  command: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -k node_parity -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn20566-replaced-scripts-gone
+  description: No replaced script is named in the pre-commit config or ci.yml.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k replaced_scripts_are_not_invoked
+  binds_ac:
+  - AC1
+- id: dod-omn20566-node-parity
+  description: Direct module collection runs the complete parity suite in four disjoint groups within the per-check budget.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k "test_node_matches_golden and (no_utcnow or no_hardcoded_ip or no_direct_kafka_producer)"
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k "test_node_matches_golden and (no_raw_sqlite3 or no_env_fallbacks)"
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k "test_node_matches_golden and (enum_governance or local_paths)"
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k "not test_node_matches_golden"
+  binds_ac:
+  - AC2
+- id: dod-omn20566-pin-parity
+  description: The pin-parity meta-gate exits 0 and the core check-node hooks pin the uv.lock core version.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: python3 scripts/validation/validate_precommit_pin_parity.py
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k pin_the_locked_core_version
+  binds_ac:
+  - AC3
+- id: dod-omn20566-deploy-source
+  description: Hosted-runner source probe of the published head's pre-commit config; no lab SSH or local registry is
+    required.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: "bash -o pipefail -c 'cfg=$(gh api \"repos/OmniNode-ai/omniclaude/contents/.pre-commit-config.yaml?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d) && ! grep -F check_local_paths_wrapper.sh <<<\"$cfg\" && grep -F \"rev: v0.47.57\" <<<\"$cfg\" > /dev/null'"
+  binds_ac:
+  - AC1
+  - AC3

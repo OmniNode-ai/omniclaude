@@ -1,0 +1,102 @@
+{
+  "clean": {
+    "exit": 0,
+    "findings": []
+  },
+  "docs_and_fixtures_are_excluded": {
+    "exit": 0,
+    "findings": []
+  },
+  "linux_home_yaml": {
+    "exit": 1,
+    "findings": [
+      [
+        "config/a.yaml",
+        1
+      ]
+    ]
+  },
+  "mac_home_py": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ]
+    ]
+  },
+  "marker_in_string_does_not_suppress": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ]
+    ]
+  },
+  "marker_on_other_line_does_not_suppress": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        2
+      ]
+    ]
+  },
+  "path_without_trailing_segment_is_fine": {
+    "exit": 0,
+    "findings": []
+  },
+  "secrets_baseline_is_excluded": {
+    "exit": 0,
+    "findings": []
+  },
+  "several_files": {
+    "exit": 1,
+    "findings": [
+      [
+        "notes/b.md",
+        1
+      ],
+      [
+        "src/pkg/a.py",
+        2
+      ]
+    ]
+  },
+  "several_per_file": {
+    "exit": 1,
+    "findings": [
+      [
+        "src/pkg/a.py",
+        1
+      ],
+      [
+        "src/pkg/a.py",
+        3
+      ]
+    ]
+  },
+  "suppressed_by_comment_marker": {
+    "exit": 0,
+    "findings": []
+  },
+  "volume_md": {
+    "exit": 1,
+    "findings": [
+      [
+        "README.md",
+        2
+      ]
+    ]
+  },
+  "windows_path_sh": {
+    "exit": 1,
+    "findings": [
+      [
+        "scripts/a.sh",
+        1
+      ]
+    ]
+  }
+}
