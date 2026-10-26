@@ -77,6 +77,7 @@ def _run(
     flags: tuple[str, ...] = (),
     extra_env: dict[str, str] | None = None,
     extra_payload: dict[str, Any] | None = None,
+    hook: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
@@ -86,6 +87,17 @@ def _run(
     if lane is not None:
         env["ONEX_LANE"] = lane
     env.update(extra_env or {})
+    command = [sys.executable, str(_GUARD_PY), *flags]
+    if hook:
+        env.update(
+            CLAUDE_PLUGIN_ROOT=str(_GUARD_PY.parents[2]),
+            CLAUDE_PROJECT_DIR=str(_REPO_ROOT),
+            OMNICLAUDE_MODE="full",
+        )
+        command = [
+            "bash",
+            str(_GUARD_PY.parents[1] / "scripts/pre_tool_use_ticket_creation_gate.sh"),
+        ]
     payload: dict[str, Any] = {
         "tool_name": "mcp__linear-server__save_issue",
         "tool_input": tool_input,
@@ -94,7 +106,7 @@ def _run(
         payload["agent_id"] = agent_id
     payload.update(extra_payload or {})
     return subprocess.run(
-        [sys.executable, str(_GUARD_PY), *flags],
+        command,
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -455,3 +467,175 @@ def test_a_declared_lane_still_wins_over_the_sidecar(key: str, tmp_path: Path) -
     _admitted(_run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra))
     row = json.loads(_ledger(tmp_path / "state").read_text("utf-8").splitlines()[0])
     assert (row["lane"], row["lane_source"]) == ("lane-remote", "env")
+
+
+def _session_helper(
+    tmp_path: Path, *, claims: tuple[str, ...] = ()
+) -> tuple[dict[str, str], dict[str, Any]]:
+    env, payload = _workflow_subagent(
+        tmp_path, sidecar_lane="mint-13", ledger_rows=claims
+    )
+    registry = tmp_path / "session-start"
+    registry.mkdir()
+    (registry / "lane-liveness-sessions.json").write_text(
+        json.dumps({_SESSION: {"lane": "orchestrator-31d9"}}), encoding="utf-8"
+    )
+    env["OMNI_LANE_LIVENESS_STATE_DIR"] = str(registry)
+    return env, payload
+
+
+@pytest.mark.parametrize("hook", [False, True], ids=["core", "registered-hook"])
+def test_session_helper_uses_parent_claim_and_records_both_identities(
+    tmp_path: Path,
+    hook: bool,
+) -> None:
+    env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
+    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    _admitted(
+        _run(
+            ok,
+            tmp_path,
+            agent_id=_AGENT,
+            extra_env=env,
+            extra_payload=payload,
+            hook=hook,
+        )
+    )
+    rows = _ledger(tmp_path / "state").read_text("utf-8").splitlines()
+    assert len(rows) == 1
+    row = json.loads(rows[0])
+    assert row["lane"] == "orchestrator-31d9"
+    assert row["helper"] == "mint-13"
+    assert row["parent_session_id"] == _SESSION
+    assert row["lane_source"] == "parent-session+claim"
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        (),
+        (_claim("another-session"),),
+        (_claim("orchestrator-31d9"), _terminal("orchestrator-31d9")),
+    ],
+)
+def test_session_helper_without_parent_claim_is_refused(
+    tmp_path: Path, claims: tuple[str, ...]
+) -> None:
+    env, payload = _session_helper(tmp_path, claims=claims)
+    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload)
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+    assert not _ledger(tmp_path / "state").exists()
+
+
+def test_session_helper_cannot_stamp_another_claimed_lane(tmp_path: Path) -> None:
+    env, payload = _session_helper(
+        tmp_path, claims=(_claim("orchestrator-31d9"), _claim("another-session"))
+    )
+    wrong = _create(description=_stamped("another-session"), labels=[_LABEL])
+    result = _run(
+        wrong, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload
+    )
+    assert result.returncode == 3
+    assert "lane_stamp_missing" in _reason(result)
+    assert "lane_identity_missing" not in _reason(result)
+    assert not _ledger(tmp_path / "state").exists()
+
+
+def test_headless_session_cannot_borrow_parent_claim(tmp_path: Path) -> None:
+    env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
+    env["CLAUDE_CODE_ENTRYPOINT"] = "sdk-cli"
+    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload)
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+    assert not _ledger(tmp_path / "state").exists()
+
+
+@pytest.mark.parametrize(
+    "registry",
+    [
+        "{",
+        "[]",
+        "null",
+        '{"other-session": {"lane": "orchestrator-31d9"}}',
+        json.dumps({_SESSION: {"lane": None}}),
+    ],
+)
+def test_session_helper_registry_fails_closed(tmp_path: Path, registry: str) -> None:
+    env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
+    (
+        Path(env["OMNI_LANE_LIVENESS_STATE_DIR"]) / "lane-liveness-sessions.json"
+    ).write_text(registry, encoding="utf-8")
+    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload)
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+    assert not _ledger(tmp_path / "state").exists()
+
+
+@pytest.mark.parametrize("override", [None, "OMNI_SESSION_START_STATE_DIR"])
+def test_session_helper_reads_session_start_registry_location(
+    tmp_path: Path, override: str | None
+) -> None:
+    env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
+    directory = env.pop("OMNI_LANE_LIVENESS_STATE_DIR")
+    if override:
+        env[override] = directory
+    else:
+        target = tmp_path / "home/.local/state/omni/session-start"
+        target.parent.mkdir(parents=True)
+        Path(directory).rename(target)
+    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    _admitted(_run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload))
+
+
+def test_session_helper_still_needs_harness_sidecar(tmp_path: Path) -> None:
+    env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
+    for path in (tmp_path / "projects").rglob("*.meta.json"):
+        path.unlink()
+    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload)
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_node_cannot_borrow_parent_session_claim(tmp_path: Path) -> None:
+    env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
+    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    result = _run(
+        ok,
+        tmp_path,
+        agent_id=_AGENT,
+        extra_env=env,
+        extra_payload=payload,
+        flags=("--node",),
+    )
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+@pytest.mark.parametrize(
+    ("override", "code"),
+    [
+        ({"labels": []}, "lane_label_missing"),
+        ({"project": "A project"}, "project_set"),
+        ({"parentId": None}, "missing_parent"),
+        (
+            {"description": _stamped("orchestrator-31d9", "No binding")},
+            "missing_gate_line",
+        ),
+    ],
+)
+def test_session_helper_keeps_other_create_rules(
+    tmp_path: Path, override: dict[str, Any], code: str
+) -> None:
+    env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
+    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    ok.update(override)
+    result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload)
+    assert result.returncode == 3
+    assert code in _reason(result)
+    assert "lane_identity_missing" not in _reason(result)
+    assert not _ledger(tmp_path / "state").exists()
