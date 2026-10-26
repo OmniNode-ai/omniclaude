@@ -16,6 +16,7 @@ depend on live org state.
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import subprocess
@@ -69,8 +70,29 @@ def _base_responses(**overrides: _Proc) -> dict[str, _Proc]:
         "/branches ": _Proc(0, "dev\n"),
         "/pulls": _Proc(0, ""),
         "contents/.github/workflows/public-repo-hygiene.yml": _Proc(0, "x"),
-        "contents/.public-repo-hygiene.yaml": _Proc(0, "x"),
-        "required_status_checks": _Proc(0, json.dumps([audit_mod.GATE_CONTEXT])),
+        "required_status_checks": _Proc(
+            0, json.dumps([audit_mod.GATE_CONTEXT, audit_mod.DEPLOYMENT_CONTEXT])
+        ),
+        "contents/.pre-commit-config.yaml": _Proc(
+            0,
+            base64.b64encode(
+                b"- id: deployment-config\n  always_run: true\n  pass_filenames: false\n  args: [--ratchet]\n"
+            ).decode(),
+        ),
+        "contents/.public-repo-hygiene.yaml": _Proc(
+            0,
+            base64.b64encode(
+                json.dumps(
+                    {"version": 1, "file_count": 0, "finding_count": 0, "files": {}}
+                ).encode()
+            ).decode(),
+        ),
+        "contents/scripts/ci/ci_summary_gate.py": _Proc(
+            0,
+            base64.b64encode(
+                f"EXPECTED_EXTERNAL_CONTEXTS = ({audit_mod.GATE_CONTEXT!r}, {audit_mod.DEPLOYMENT_CONTEXT!r})\n".encode()
+            ).decode(),
+        ),
     }
     responses.update(overrides)
     return responses
@@ -117,7 +139,11 @@ def test_missing_repo_config_is_reported(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_removed_required_check_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     findings = _run_audit(
         monkeypatch,
-        _base_responses(required_status_checks=_Proc(0, json.dumps(["ci"]))),
+        _base_responses(
+            required_status_checks=_Proc(
+                0, json.dumps(["ci", audit_mod.DEPLOYMENT_CONTEXT])
+            )
+        ),
     )
     assert [f.kind for f in findings] == ["required-check-missing"]
 
@@ -209,7 +235,7 @@ def test_non_404_content_error_raises_rather_than_reading_as_absent(
         audit_mod.audit(check_required=False)
 
 
-def test_umbrella_repos_are_exempt_from_the_required_check_class(
+def test_umbrella_repos_require_both_contexts_through_ci_summary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Two repos gate behind a single CI-summary umbrella rather than through
@@ -223,7 +249,13 @@ def test_umbrella_repos_are_exempt_from_the_required_check_class(
                 "orgs/OmniNode-ai/repos": _Proc(
                     0, json.dumps({"name": repo, "default_branch": "dev"}) + "\n"
                 ),
-                "required_status_checks": _Proc(0, json.dumps(["ci"])),
+                "required_status_checks": _Proc(0, json.dumps(["CI Summary"])),
+                "contents/.github/workflows/public-repo-hygiene.yml": _Proc(
+                    0,
+                    base64.b64encode(
+                        b"jobs:\n  public-repo-hygiene:\n    with:\n      deployment_config_ratchet: true\n"
+                    ).decode(),
+                ),
             }
         )
         findings = _run_audit(monkeypatch, responses)
@@ -372,3 +404,58 @@ def test_self_test_never_targets_a_live_repositorys_rollout_state() -> None:
         "that is what went stale when omnibot adopted the gate. Use a "
         "synthetic sentinel path instead."
     )
+
+
+def test_deployment_context_is_required_in_addition_to_general_hygiene(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = _base_responses(
+        required_status_checks=_Proc(0, json.dumps([audit_mod.GATE_CONTEXT]))
+    )
+    findings = _run_audit(monkeypatch, responses)
+    assert any(
+        f.kind == "required-check-missing" and "deployment-config" in f.detail
+        for f in findings
+    )
+
+
+def test_deployment_hook_cannot_be_missing_or_narrowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import base64
+
+    for content, kind in (
+        ("repos: []", "deployment-hook-missing"),
+        (
+            "- id: deployment-config\n  args: [--staged]\n  always_run: false\n",
+            "deployment-hook-narrowed",
+        ),
+    ):
+        responses = _base_responses(
+            **{
+                "contents/.pre-commit-config.yaml": _Proc(
+                    0, base64.b64encode(content.encode()).decode()
+                )
+            }
+        )
+        assert any(f.kind == kind for f in _run_audit(monkeypatch, responses))
+
+
+def test_umbrella_registration_is_not_satisfied_by_a_comment() -> None:
+    text = '# "public-repo-hygiene / deployment-config"\nEXPECTED_EXTERNAL_CONTEXTS = ("other",)\n'
+    assert audit_mod.DEPLOYMENT_CONTEXT not in audit_mod.umbrella_contexts(text)
+
+
+def test_local_deployment_rollout_checks_baseline_and_whole_tree_hook(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "- id: deployment-config\n  args: [--ratchet]\n  always_run: true\n  pass_filenames: false\n"
+    )
+    findings = audit_mod.deployment_wiring_findings(
+        "omnimarket",
+        lambda path: (
+            (tmp_path / path).read_text() if (tmp_path / path).is_file() else None
+        ),
+    )
+    assert any(f.kind == "deployment-baseline-missing" for f in findings)

@@ -1,0 +1,28 @@
+{
+  "_provenance": {
+    "ticket": "OMN-20923",
+    "source": "PR watcher snapshot; historical exact-head check rows, no GitHub read",
+    "snapshot_tick": "2026-10-25T14:53:34Z",
+    "ci_read_at": "2026-10-25T14:39:33Z",
+    "pr": "omniclaude#2979"
+  },
+  "head_sha": "3b612e892803b6204699221a0ca1a5129acf881a",
+  "check_runs_all": [
+    {
+      "id": 121195142538,
+      "name": "public-repo-hygiene / deployment-config",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-25T14:24:20Z",
+      "completed_at": "2026-10-25T14:24:28Z"
+    },
+    {
+      "id": 121195142743,
+      "name": "public-repo-hygiene / public-repo-hygiene",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-25T14:24:19Z",
+      "completed_at": "2026-10-25T14:24:51Z"
+    }
+  ]
+}

@@ -51,21 +51,29 @@ lack the gate, so a clean run is a real clean run.
 from __future__ import annotations
 
 import argparse
+import ast
+import base64
 import json
+import re
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 OWNER = "OmniNode-ai"
 GATE_WORKFLOW = ".github/workflows/public-repo-hygiene.yml"
 GATE_CONTEXT = "public-repo-hygiene / public-repo-hygiene"
 CONFIG_FILE = ".public-repo-hygiene.yaml"
+DEPLOYMENT_CONTEXT = "public-repo-hygiene / deployment-config"
+DEPLOYMENT_BASELINE = ".public-repo-hygiene.yaml"
+RATCHET_REPOS = frozenset({"omnimarket", "omnibase_infra", "omniclaude"})
 
 # Repos that gate behind a single CI-summary umbrella rather than through
 # required_status_checks. Documented in the workspace registry's own notes on
 # deploy-gate: "required" means "can block a merge", not "present in
 # required_status_checks".
-UMBRELLA_REPOS = frozenset({"omnibase_infra", "omnimarket"})
+UMBRELLA_REPOS = frozenset({"omnibase_infra", "omnimarket", "omniclaude"})
 
 
 class AuditError(Exception):
@@ -136,6 +144,216 @@ def _file_exists(repo: str, path: str, ref: str) -> bool:
     if "404" in proc.stderr or "Not Found" in proc.stderr:
         return False
     raise AuditError(f"could not read {repo}/{path}@{ref}: {proc.stderr.strip()}")
+
+
+def _file_text(repo: str, path: str, ref: str) -> str | None:
+    proc = subprocess.run(
+        [
+            "gh",
+            "api",
+            f"repos/{OWNER}/{repo}/contents/{path}?ref={ref}",
+            "--jq",
+            ".content",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode:
+        if "404" in proc.stderr or "Not Found" in proc.stderr:
+            return None
+        raise AuditError(f"could not read {repo}/{path}@{ref}: {proc.stderr.strip()}")
+    try:
+        return base64.b64decode("".join(proc.stdout.split()), validate=True).decode(
+            "utf-8"
+        )
+    except (ValueError, UnicodeError) as exc:
+        raise AuditError(f"malformed content for {repo}/{path}@{ref}") from exc
+
+
+def umbrella_contexts(text: str) -> tuple[str, ...]:
+    """Read the actual CI Summary constant, never a comment containing a name."""
+    try:
+        tree = ast.parse(text)
+        for statement in tree.body:
+            targets = (
+                statement.targets
+                if isinstance(statement, ast.Assign)
+                else (
+                    [statement.target] if isinstance(statement, ast.AnnAssign) else []
+                )
+            )
+            if any(
+                isinstance(t, ast.Name) and t.id == "EXPECTED_EXTERNAL_CONTEXTS"
+                for t in targets
+            ):
+                value = ast.literal_eval(statement.value)
+                if isinstance(value, (tuple, list)) and all(
+                    isinstance(x, str) for x in value
+                ):
+                    return tuple(value)
+    except (SyntaxError, ValueError, TypeError) as exc:
+        raise AuditError("unreadable CI Summary external-context registration") from exc
+    raise AuditError("CI Summary has no literal EXPECTED_EXTERNAL_CONTEXTS")
+
+
+def deployment_wiring_findings(
+    repo: str, read: Callable[[str], str | None]
+) -> list[Finding]:
+    findings: list[Finding] = []
+    text = read(".pre-commit-config.yaml") or ""
+    # Isolate the hook block using its YAML indentation, without a YAML dependency.
+    lines = text.splitlines()
+    block: list[str] | None = None
+    for index, line in enumerate(lines):
+        match = re.match(r"^(\s*)- id: deployment-config\s*$", line)
+        if match:
+            indent = len(match[1])
+            block = []
+            for following in lines[index + 1 :]:
+                if following.strip() and not following.lstrip().startswith("#"):
+                    if len(following) - len(following.lstrip()) <= indent:
+                        break
+                block.append(following)
+            break
+    if block is None:
+        findings.append(
+            Finding(
+                repo,
+                "deployment-hook-missing",
+                "pre-commit has no deployment-config hook",
+            )
+        )
+        hook = ""
+    else:
+        hook = "\n".join(line for line in block if not line.lstrip().startswith("#"))
+        if (
+            "--staged" in hook
+            or re.search(
+                r"\b(?:always_run:\s*false|pass_filenames:\s*true|files:|exclude:)",
+                hook,
+            )
+            or ("stages:" in hook and "pre-commit" not in hook)
+        ):
+            findings.append(
+                Finding(
+                    repo,
+                    "deployment-hook-narrowed",
+                    "deployment-config must scan the whole index on every commit",
+                )
+            )
+    if repo in RATCHET_REPOS:
+        workflow = read(GATE_WORKFLOW) or ""
+        if "--ratchet" not in hook or not re.search(
+            r"^\s+deployment_config_ratchet:\s*true\s*$", workflow, re.M
+        ):
+            findings.append(
+                Finding(
+                    repo,
+                    "deployment-ratchet-missing",
+                    "whole-tree ratchet must run in both CI and pre-commit",
+                )
+            )
+        baseline = read(DEPLOYMENT_BASELINE)
+        if baseline is None or (
+            not baseline.lstrip().startswith("{")
+            and not re.search(r"^deployment_residue:", baseline, re.M)
+        ):
+            findings.append(
+                Finding(
+                    repo,
+                    "deployment-baseline-missing",
+                    f"no committed {DEPLOYMENT_BASELINE}",
+                )
+            )
+        else:
+            # Import the canonical schema validator; malformed baselines are audit errors.
+            if __package__:
+                from .public_repo_hygiene_gate import (
+                    ConfigError,
+                    load_deployment_baseline,
+                )
+            else:
+                # Direct file imports (including the standalone script).
+                import importlib.util
+
+                spec = importlib.util.spec_from_file_location(
+                    "audit_hygiene_schema",
+                    Path(__file__).with_name("public_repo_hygiene_gate.py"),
+                )
+                assert spec is not None and spec.loader is not None
+                schema = importlib.util.module_from_spec(spec)
+                sys.modules[spec.name] = schema
+                spec.loader.exec_module(schema)
+                ConfigError = schema.ConfigError
+                load_deployment_baseline = schema.load_deployment_baseline
+            try:
+                load_deployment_baseline(baseline)
+            except ConfigError as exc:
+                raise AuditError(f"{repo}: {exc}") from exc
+    return findings
+
+
+def _required_findings(
+    repo: str,
+    branch: str,
+    contexts: list[str] | None,
+    read: Callable[[str], str | None],
+) -> list[Finding]:
+    if contexts is None:
+        return [
+            Finding(
+                repo, "branch-unprotected", f"{branch} carries no branch protection"
+            )
+        ]
+    required = (GATE_CONTEXT, DEPLOYMENT_CONTEXT)
+    if repo in UMBRELLA_REPOS:
+        if "CI Summary" not in contexts:
+            return [
+                Finding(
+                    repo,
+                    "required-check-missing",
+                    f"CI Summary is not required on {branch}",
+                )
+            ]
+        source = read("scripts/ci/ci_summary_gate.py")
+        if source is None:
+            raise AuditError(f"{repo}: CI Summary implementation missing")
+        contexts = list(umbrella_contexts(source))
+    return [
+        Finding(
+            repo, "required-check-missing", f"'{context}' is not required on {branch}"
+        )
+        for context in required
+        if context not in contexts
+    ]
+
+
+def audit_local(workspace_root: Path, required_contexts_file: Path) -> list[Finding]:
+    """Audit supplied local checkouts against exported watcher settings, offline."""
+    data = json.loads(required_contexts_file.read_text())
+    if not isinstance(data, dict) or not data:
+        raise AuditError(
+            "required-context inventory must be a nonempty repository mapping"
+        )
+    findings: list[Finding] = []
+    for repo, record in data.items():
+        if not isinstance(record, dict) or not isinstance(record.get("contexts"), list):
+            raise AuditError(f"{repo}: required contexts unreadable-from-snapshot")
+        root = workspace_root / repo
+
+        def read(path: str, root: Path = root) -> str | None:
+            target = root / path
+            return target.read_text() if target.is_file() else None
+
+        findings.extend(deployment_wiring_findings(repo, read))
+        findings.extend(
+            _required_findings(
+                repo, record.get("branch", "dev"), record["contexts"], read
+            )
+        )
+        print(f"{repo}: audited deployment-config required check and pre-commit")
+    return findings
 
 
 def _required_contexts(repo: str, branch: str) -> list[str] | None:
@@ -220,24 +438,14 @@ def audit(check_required: bool) -> list[Finding]:
                 )
             )
 
-        if check_required and name not in UMBRELLA_REPOS:
-            contexts = _required_contexts(name, branch)
-            if contexts is None:
-                findings.append(
-                    Finding(
-                        name,
-                        "branch-unprotected",
-                        f"{branch} carries no branch protection",
-                    )
-                )
-            elif GATE_CONTEXT not in contexts:
-                findings.append(
-                    Finding(
-                        name,
-                        "required-check-missing",
-                        f"'{GATE_CONTEXT}' is not in required_status_checks on {branch}",
-                    )
-                )
+        def read(path: str, name: str = name, branch: str = branch) -> str | None:
+            return _file_text(name, path, branch)
+
+        findings.extend(deployment_wiring_findings(name, read))
+        if check_required:
+            findings.extend(
+                _required_findings(name, branch, _required_contexts(name, branch), read)
+            )
 
         stranded = _branches_without_a_pr(name, branch)
         if stranded:
@@ -299,14 +507,23 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--workspace-root", type=Path)
+    parser.add_argument("--required-contexts-file", type=Path)
     args = parser.parse_args(argv)
 
     try:
         if args.self_test:
             self_test()
             return 0
-        findings = audit(check_required=not args.skip_required_check)
-    except AuditError as exc:
+        if args.workspace_root is not None:
+            if args.required_contexts_file is None or args.skip_required_check:
+                raise AuditError(
+                    "offline audit requires exported required contexts and cannot skip them"
+                )
+            findings = audit_local(args.workspace_root, args.required_contexts_file)
+        else:
+            findings = audit(check_required=not args.skip_required_check)
+    except (AuditError, OSError, ValueError) as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 2
 

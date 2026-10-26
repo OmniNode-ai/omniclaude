@@ -144,13 +144,26 @@ to read a private file; the run says so. The CI job that holds the token runs
 them. A finding from a vocabulary rule never echoes its line: the line names
 the private value.
 
-It runs only as its own targeted check, ``--only-classes deployment-config``,
-never mixed with the vocabulary classes, and a repo config cannot list it in
-``enforce_classes`` (a class the full run does not evaluate would read as
-enforced while enforcing nothing). ``--enforce-scope added-lines`` with a diff
-source fails only what a change adds (a new overlay file, an added line), so a
-pull request is refused for adding deployment configuration while the
-residue it did not add is reported and moved out by its own pull requests.
+It runs as its own targeted check, ``--only-classes deployment-config``.
+The required shape job and exported hook enforce the whole tree. Older callers
+requesting ``added-lines`` now classify the entire files touched by their diff,
+so an unchanged offending value in a changed configuration file is refused.
+
+``--ratchet`` enforces the complete tracked tree (or complete index with
+``--diff-staged``) against the committed
+``.public-repo-hygiene.yaml``. The baseline hashes
+paths and finding identities; it publishes no endpoint or instance name.
+Every finding and file must already be present in the baseline, and baseline
+edits may only shrink relative to the trusted merge base, HEAD, and each merge
+parent as appropriate. A first adoption is checked against the base tree's
+actual findings. Cleanup must remove the corresponding baseline entries, so
+unused budget cannot permit reintroduction. No suppression or repository
+exception is consulted by this ratchet. It also counts lab facts in source
+and install scripts outside test, fixture and documentation trees.
+
+To measure a candidate, run the same class with
+``--write-deployment-baseline`` in report mode. This only writes a candidate;
+it grants no exception to CI's comparison with the trusted base.
 
 Bare ``OMN-<digits>`` ticket ids are **not** a class. Operator ruling P3,
 2026-09-06: internal ticket ids in public source are an accepted convention.
@@ -268,10 +281,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import subprocess
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -351,26 +366,27 @@ ONLY_CLASSES_SELECTABLE: frozenset[str] = SELECTABLE_CLASSES | {DEPLOYMENT_CONFI
 #: A deployment overlay by path: a ``lane-overlays/`` directory, a
 #: ``*.bifrost.yaml``.
 DEPLOYMENT_OVERLAY_PATH_RE = re.compile(
-    r"(?:^|/)lane-overlays/|\.bifrost\.ya?ml$", re.IGNORECASE
+    r"(?:^|/)(?:lane-overlays|overlays)/|\.(?:bifrost|overlay)\.ya?ml$", re.IGNORECASE
 )
 #: An example file: ``x.example``, ``x.example.yaml``. Exempt from the path
 #: half only; its content is still read, because an example carrying our lab
 #: address is our lab address.
 DEPLOYMENT_EXAMPLE_RE = re.compile(r"\.example(?:\.[A-Za-z0-9]+)?$", re.IGNORECASE)
 #: Where the content half does not look: tests, fixtures and docs, and the
-#: root record trees (ticket contracts with their evidence, drift receipts,
-#: evidence, migration receipts), which record what ran rather than configure
-#: what runs. All of them are still read by the other classes. A node's own
-#: ``contracts/`` directory under ``src/`` is configuration and is read.
+#: root drift/evidence record trees, which record what ran rather than configure
+#: what runs. All of them are still read by the other classes. Root ticket
+#: contracts and node contracts are configuration and are read.
 DEPLOYMENT_CONFIG_EXEMPT_RE = re.compile(
     r"(?:^|/)(?:tests?|fixtures?|testdata|docs?)/|(?:^|/)test_[^/]*$"
     r"|(?:^|/)conftest\.py$|\.md$|\.rst$"
-    r"|^(?:contracts|drift|evidence)/|(?:^|/)_ledger/receipts/",
+    r"|^(?:drift|evidence)/|(?:^|/)_ledger/receipts/",
     re.IGNORECASE,
 )
 #: A configuration file, by suffix or by name.
 DEPLOYMENT_CONFIG_SUFFIXES: frozenset[str] = frozenset(
     {
+        ".sh",
+        ".bash",
         ".yaml",
         ".yml",
         ".json",
@@ -407,6 +423,12 @@ DEPLOYMENT_PRIVATE_ADDRESS_RE = re.compile(
 #: A network no wider than this prefix names no host of anyone's lab (a
 #: compose bridge network, a whole RFC 1918 block): not a finding.
 DEPLOYMENT_GENERIC_NETWORK_MAX_PREFIX = 16
+# Shapes, never a list of deployment facts; available on forks as well.
+DEPLOYMENT_LAB_NAME_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:h[0-9]{3}|dev-[0-9]{3})(?![A-Za-z0-9_])",
+    re.IGNORECASE,
+)
+DEPLOYMENT_BASELINE_PATH = ".public-repo-hygiene.yaml"
 _DEPLOYMENT_COMMENT_PREFIXES = ("#", ";", "//", "<!--", "*")
 #: A workflow file: read line by line INCLUDING comments (see the module
 #: docstring).
@@ -789,6 +811,7 @@ class Finding:
     line_no: int
     class_name: str
     snippet: str
+    evidence_digest: str = ""
 
     @property
     def blocking(self) -> bool:
@@ -2007,9 +2030,13 @@ def scan_deployment_config(
     them, a lab host nickname or one of our model ids.
     """
     findings: list[Finding] = []
-    if DEPLOYMENT_OVERLAY_PATH_RE.search(rel_path) and not DEPLOYMENT_EXAMPLE_RE.search(
-        rel_path
-    ):
+    if (
+        DEPLOYMENT_OVERLAY_PATH_RE.search(rel_path)
+        or (
+            _is_deployment_config_file(rel_path)
+            and DEPLOYMENT_LAB_NAME_RE.search(rel_path)
+        )
+    ) and not DEPLOYMENT_EXAMPLE_RE.search(rel_path):
         findings.append(
             Finding(
                 rel_path,
@@ -2027,9 +2054,19 @@ def scan_deployment_config(
             text = line.strip()
             if not text:
                 continue
-            if _names_private_host(text) or _names_private_zone(text):
+            if (
+                _names_private_host(text)
+                or _names_private_zone(text)
+                or DEPLOYMENT_LAB_NAME_RE.search(text)
+            ):
                 findings.append(
-                    Finding(rel_path, line_no, DEPLOYMENT_CONFIG_CLASS, text[:200])
+                    Finding(
+                        rel_path,
+                        line_no,
+                        DEPLOYMENT_CONFIG_CLASS,
+                        "a workflow line naming a private endpoint (line withheld)",
+                        hashlib.sha256(text.encode()).hexdigest(),
+                    )
                 )
                 continue
             if vocab is not None:
@@ -2043,6 +2080,7 @@ def scan_deployment_config(
                             DEPLOYMENT_CONFIG_CLASS,
                             "a workflow line naming a lab host (private vocabulary; "
                             "line withheld)",
+                            hashlib.sha256(text.encode()).hexdigest(),
                         )
                     )
                 elif vocab.model_pattern is not None and vocab.model_pattern.search(
@@ -2055,15 +2093,340 @@ def scan_deployment_config(
                             DEPLOYMENT_CONFIG_CLASS,
                             "a workflow line naming one of our model ids (private "
                             "vocabulary; line withheld)",
+                            hashlib.sha256(text.encode()).hexdigest(),
                         )
                     )
             continue
         value = _deployment_value_text(line)
-        if value and _names_private_host(value):
+        if value and (
+            _names_private_host(value)
+            or _names_private_zone(value)
+            or DEPLOYMENT_LAB_NAME_RE.search(value)
+            or (
+                vocab is not None
+                and vocab.host_pattern is not None
+                and vocab.host_pattern.search(value)
+            )
+        ):
             findings.append(
-                Finding(rel_path, line_no, DEPLOYMENT_CONFIG_CLASS, line.strip()[:200])
+                Finding(
+                    rel_path,
+                    line_no,
+                    DEPLOYMENT_CONFIG_CLASS,
+                    "a configuration value naming a private endpoint (line withheld)",
+                    hashlib.sha256(value.encode()).hexdigest(),
+                )
             )
     return findings
+
+
+def _deployment_digest(text: str) -> str:
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    return "-".join(digest[i : i + 8] for i in range(0, len(digest), 8))
+
+
+def deployment_baseline(findings: list[Finding]) -> dict:
+    """Value-free, line-number-independent multiset of whole-tree findings.
+
+    Hash paths too: an instance-specific filename is itself a deployment fact.
+    Per-file fingerprints prevent trading an old endpoint for a new endpoint
+    while keeping the same total. Duplicate findings remain counted.
+    """
+    files: dict[str, dict[str, int]] = {}
+    for finding in findings:
+        path_key = _deployment_digest(finding.path)
+        identity = (
+            finding.class_name,
+            "path" if finding.line_no == 0 else "content",
+            finding.evidence_digest or finding.snippet,
+        )
+        key = _deployment_digest(json.dumps(identity))
+        counts = files.setdefault(path_key, {})
+        counts[key] = counts.get(key, 0) + 1
+    return {
+        "version": 1,
+        "file_count": len(files),
+        "finding_count": len(findings),
+        "files": files,
+    }
+
+
+def load_deployment_baseline(text: str) -> dict:
+    """Strictly validate all counts; missing/malformed data never means zero."""
+    if not text.lstrip().startswith("{"):
+        declaration = parse_restricted_yaml(text, DEPLOYMENT_BASELINE_PATH)
+        text = declaration.get("deployment_residue")
+        if not isinstance(text, str):
+            raise ConfigError(
+                "missing deployment-config baseline in hygiene declaration"
+            )
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError) as exc:
+        raise ConfigError("invalid deployment-config baseline JSON") from exc
+    if not isinstance(data, dict) or set(data) != {
+        "version",
+        "file_count",
+        "finding_count",
+        "files",
+    }:
+        raise ConfigError("deployment-config baseline has invalid fields")
+    if type(data["version"]) is not int or data["version"] != 1:
+        raise ConfigError("unsupported deployment-config baseline version")
+    files = data["files"]
+    if not isinstance(files, dict):
+        raise ConfigError("deployment-config baseline files must be a mapping")
+    total = 0
+    for path_key, counts in files.items():
+        if not re.fullmatch(r"(?:[a-f0-9]{8}-){7}[a-f0-9]{8}", path_key):
+            raise ConfigError("deployment-config baseline path must be a digest")
+        if not isinstance(counts, dict) or not counts:
+            raise ConfigError("deployment-config baseline findings must be nonempty")
+        for key, count in counts.items():
+            if (
+                not re.fullmatch(r"(?:[a-f0-9]{8}-){7}[a-f0-9]{8}", key)
+                or type(count) is not int
+                or count < 1
+            ):
+                raise ConfigError(
+                    "deployment-config baseline has invalid finding counts"
+                )
+            total += count
+    if (
+        type(data["file_count"]) is not int
+        or data["file_count"] != len(files)
+        or type(data["finding_count"]) is not int
+        or data["finding_count"] != total
+    ):
+        raise ConfigError("deployment-config baseline totals disagree with findings")
+    return data
+
+
+def render_deployment_declaration(text: str, baseline: dict) -> str:
+    """Persist measured residue in the existing declaration, without exceptions."""
+    lines = [
+        line for line in text.splitlines() if not line.startswith("deployment_residue:")
+    ]
+    payload = json.dumps(baseline, sort_keys=True, separators=(",", ":"))
+    return "\n".join(lines).rstrip() + "\n\ndeployment_residue: '" + payload + "'\n"
+
+
+def _baseline_subset(candidate: dict, trusted: dict) -> bool:
+    return all(
+        count <= trusted["files"].get(path, {}).get(key, 0)
+        for path, counts in candidate["files"].items()
+        for key, count in counts.items()
+    )
+
+
+def deployment_ratchet_failures(
+    findings: list[Finding], candidate: dict, trusted: dict
+) -> list[Finding]:
+    """The candidate baseline may only shrink relative to the trusted base."""
+    candidate = load_deployment_baseline(json.dumps(candidate))
+    trusted = load_deployment_baseline(json.dumps(trusted))
+    if not _baseline_subset(candidate, trusted):
+        raise ConfigError(
+            "deployment-config baseline may only shrink; new files or findings refused"
+        )
+    remaining = {path: Counter(counts) for path, counts in candidate["files"].items()}
+    failing: list[Finding] = []
+    for finding in findings:
+        entry = deployment_baseline([finding])["files"]
+        path, counts = next(iter(entry.items()))
+        key = next(iter(counts))
+        if remaining.get(path, {}).get(key, 0):
+            remaining[path][key] -= 1
+        else:
+            failing.append(finding)
+    if not failing and deployment_baseline(findings) != candidate:
+        raise ConfigError(
+            "deployment-config baseline contains removed findings; regenerate it to shrink"
+        )
+    return failing
+
+
+def scan_deployment_residue(path: str, lines: list[str]) -> list[Finding]:
+    """Whole-tree lab residue, including source and install-script literals.
+
+    Configuration kinds are classified first. The content ratchet also reads
+    source outside test/fixture/documentation trees, including comments: a lab
+    fact in code is still shipped. No private vocabulary is needed on forks.
+    """
+    findings = scan_deployment_config(path, lines)
+    if re.search(r"(?:^|/)(?:tests?|fixtures?|testdata|docs?)/", path, re.IGNORECASE):
+        return findings
+    seen = {f.line_no for f in findings}
+    for number, line in enumerate(lines, 1):
+        text = line.strip()
+        if number not in seen and (
+            _names_private_host(text)
+            or _names_private_zone(text)
+            or DEPLOYMENT_LAB_NAME_RE.search(text)
+        ):
+            findings.append(
+                Finding(
+                    path,
+                    number,
+                    DEPLOYMENT_CONFIG_CLASS,
+                    "a shipped line naming a private endpoint (line withheld)",
+                    hashlib.sha256(text.encode()).hexdigest(),
+                )
+            )
+    return findings
+
+
+def _deployment_blobs(repo_root: Path, paths: list[str], ref: str) -> dict[str, bytes]:
+    """Read an entire index/tree with one Git process, using NUL input paths."""
+    specs = [f"{ref}:{path}" for path in paths]
+    proc = subprocess.run(
+        ["git", "-C", str(repo_root), "cat-file", "--batch", "-z"],
+        input=("\0".join(specs) + "\0").encode(),
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode:
+        raise ConfigError("cannot read deployment ratchet Git blobs")
+    result: dict[str, bytes] = {}
+    offset = 0
+    for path in paths:
+        end = proc.stdout.find(b"\n", offset)
+        fields = proc.stdout[offset:end].split()
+        if end < 0 or len(fields) != 3 or fields[1] != b"blob":
+            raise ConfigError("deployment ratchet encountered a missing/unmerged blob")
+        try:
+            size = int(fields[2])
+        except ValueError as exc:
+            raise ConfigError("invalid Git blob size in deployment ratchet") from exc
+        offset = end + 1
+        result[path] = proc.stdout[offset : offset + size]
+        offset += size
+        if len(result[path]) != size or proc.stdout[offset : offset + 1] != b"\n":
+            raise ConfigError("truncated Git blob in deployment ratchet")
+        offset += 1
+    if offset != len(proc.stdout):
+        raise ConfigError("unexpected Git blob output in deployment ratchet")
+    return result
+
+
+def _deployment_tree_findings(repo_root: Path, ref: str | None) -> list[Finding]:
+    """Read blobs from a committed tree or the index, never unstaged repairs.
+
+    ``ref=None`` scans the working tree. ``ref=''`` scans the complete index.
+    Gitlinks are outside this repository's shipped tree. Symlinks are scanned
+    as link text rather than followed. Git errors and unreadable configuration
+    fail closed; binary product assets are irrelevant.
+    """
+    if ref:
+        records = _git(repo_root, "ls-tree", "-r", "-z", ref).split("\0")
+    else:
+        records = _git(repo_root, "ls-files", "--stage", "-z").split("\0")
+    paths: list[str] = []
+    for record in filter(None, records):
+        metadata, path = record.split("\t", 1)
+        fields = metadata.split()
+        if not ref and fields[2] != "0":
+            raise ConfigError("deployment ratchet refuses an unmerged index")
+        # A gitlink is another repository, not a file shipped in this tree.
+        if fields[0] != "160000":
+            paths.append(path)
+    paths.sort()
+    text_paths = [p for p in paths if Path(p).suffix.lower() not in BINARY_SUFFIXES]
+    blobs = (
+        _deployment_blobs(repo_root, text_paths, ref)
+        if ref is not None and text_paths
+        else {}
+    )
+    findings: list[Finding] = []
+    for path in paths:
+        if Path(path).suffix.lower() in BINARY_SUFFIXES:
+            findings.extend(scan_deployment_config(path, []))
+            continue
+        try:
+            if ref is None:
+                full = repo_root / path
+                blob = (
+                    str(full.readlink()).encode()
+                    if full.is_symlink()
+                    else full.read_bytes()
+                )
+            else:
+                blob = blobs[path]
+            lines = blob.decode("utf-8").splitlines()
+        except UnicodeError as exc:
+            if _is_deployment_config_file(path):
+                raise ConfigError(
+                    "cannot decode tracked deployment configuration"
+                ) from exc
+            findings.extend(scan_deployment_config(path, []))
+            continue
+        except OSError as exc:
+            raise ConfigError(
+                "cannot read tracked file for deployment ratchet"
+            ) from exc
+        findings.extend(scan_deployment_residue(path, lines))
+    return findings
+
+
+def _baseline_at_ref(repo_root: Path, ref: str) -> dict | None:
+    """An absent baseline is distinct from an unreadable Git ref/blob."""
+    paths = _git(repo_root, "ls-tree", "-r", "--name-only", "-z", ref).split("\0")
+    if DEPLOYMENT_BASELINE_PATH not in paths:
+        return None
+    text = _git(repo_root, "show", f"{ref}:{DEPLOYMENT_BASELINE_PATH}")
+    if not text.lstrip().startswith("{") and not re.search(
+        r"^deployment_residue:", text, re.M
+    ):
+        return None
+    return load_deployment_baseline(text)
+
+
+def _run_deployment_ratchet(
+    args: argparse.Namespace, repo_root: Path
+) -> tuple[int, list[Finding], list[Finding]]:
+    if args.staged or args.enforce_scope == ADDED_LINES_SCOPE or args.mode != "enforce":
+        raise ConfigError("--ratchet requires mode enforce and the whole tracked tree")
+    if args.diff_staged:
+        # Validate the index baseline against HEAD and every merge parent.
+        candidate = load_deployment_baseline(
+            _git(repo_root, "show", f":{DEPLOYMENT_BASELINE_PATH}")
+        )
+        parents = [_git(repo_root, "rev-parse", "HEAD").strip()]
+        merge_head = Path(
+            _git(repo_root, "rev-parse", "--git-path", "MERGE_HEAD").strip()
+        )
+        if not merge_head.is_absolute():
+            merge_head = repo_root / merge_head
+        if merge_head.is_file():
+            parents.extend(merge_head.read_text().splitlines())
+        ref: str | None = ""
+    else:
+        path = repo_root / DEPLOYMENT_BASELINE_PATH
+        if not path.is_file():
+            raise ConfigError(
+                f"missing deployment-config baseline: {DEPLOYMENT_BASELINE_PATH}"
+            )
+        candidate = load_deployment_baseline(path.read_text(encoding="utf-8"))
+        parents = [
+            _git(repo_root, "merge-base", args.diff_base, "HEAD").strip()
+            if args.diff_base
+            else _git(repo_root, "rev-parse", "HEAD^1").strip()
+        ]
+        ref = None
+    findings = _deployment_tree_findings(repo_root, ref)
+    failing: list[Finding] = []
+    for parent in parents:
+        trusted = _baseline_at_ref(repo_root, parent)
+        if trusted is None:
+            # First adoption cannot grandfather violations introduced by the PR.
+            trusted = deployment_baseline(_deployment_tree_findings(repo_root, parent))
+        failing = deployment_ratchet_failures(findings, candidate, trusted)
+    print(
+        f"  deployment-config ratchet: {len(findings)} findings in "
+        f"{len({f.path for f in findings})} files; baseline "
+        f"{candidate['finding_count']} findings in {candidate['file_count']} files"
+    )
+    return (1 if failing else 0), findings, failing
 
 
 def run_deployment_config(
@@ -2074,12 +2437,13 @@ def run_deployment_config(
     enforce_scope: str,
     added_lines: AddedLines | None,
     vocab: DeploymentVocabulary | None = None,
+    index_only: bool = False,
 ) -> tuple[int, list[Finding], list[Finding]]:
     """The targeted deployment-config run: no repo config, and a vocabulary
     only when the caller holds one (``vocab``).
 
     Returns ``(exit_code, findings, failing)``. In ``enforce`` mode every
-    finding fails, or, under ``added-lines``, every finding the change adds.
+    finding fails, or, under ``added-lines``, every finding in a changed file.
     ``added-lines`` with no diff source is refused rather than enforcing
     nothing or the whole residue.
     """
@@ -2090,13 +2454,36 @@ def run_deployment_config(
         )
     paths = only_paths if only_paths is not None else tracked_files(repo_root)
     findings: list[Finding] = []
-    for rel_path in sorted(paths):
-        lines = _read_lines(repo_root / rel_path) or []
+    candidates = sorted(
+        path
+        for path in paths
+        if _is_deployment_config_file(path) or DEPLOYMENT_OVERLAY_PATH_RE.search(path)
+    )
+    blobs = (
+        _deployment_blobs(repo_root, candidates, "")
+        if index_only and candidates
+        else {}
+    )
+    for rel_path in candidates:
+        if index_only:
+            try:
+                lines = blobs[rel_path].decode("utf-8").splitlines()
+            except UnicodeError as exc:
+                if _is_deployment_config_file(rel_path):
+                    raise ConfigError(
+                        "cannot decode indexed deployment configuration"
+                    ) from exc
+                lines = []
+        else:
+            lines = _read_lines(repo_root / rel_path) or []
         findings.extend(scan_deployment_config(rel_path, lines, vocab))
     if mode != "enforce":
         failing: list[Finding] = []
     elif enforce_scope == ADDED_LINES_SCOPE and added_lines is not None:
-        failing = [f for f in findings if added_lines.covers(f)]
+        changed = (
+            set(added_lines.lines) | added_lines.whole_files | added_lines.added_files
+        )
+        failing = [f for f in findings if f.path in changed]
     else:
         failing = list(findings)
     return (1 if failing else 0), findings, failing
@@ -2328,6 +2715,28 @@ def _main_deployment_config(args: argparse.Namespace, repo_root: Path) -> int:
             added_lines = added_lines_from_base(repo_root, args.diff_base)
         elif args.diff_staged:
             added_lines = added_lines_staged(repo_root)
+        if args.write_deployment_baseline:
+            if args.ratchet or args.staged or args.mode != "report":
+                raise ConfigError(
+                    "--write-deployment-baseline is a whole-tree report operation"
+                )
+            findings = _deployment_tree_findings(
+                repo_root, "" if args.diff_staged else None
+            )
+            path = repo_root / DEPLOYMENT_BASELINE_PATH
+            path.parent.mkdir(parents=True, exist_ok=True)
+            previous = path.read_text() if path.is_file() else ""
+            path.write_text(
+                render_deployment_declaration(previous, deployment_baseline(findings))
+            )
+            print(
+                f"candidate baseline written: {len(findings)} findings; not an enforcement verdict"
+            )
+            return 0
+        if args.ratchet:
+            exit_code, findings, failing = _run_deployment_ratchet(args, repo_root)
+            _print_report(failing, [], args.mode)
+            return exit_code
         vocab_path, model_vocab_path = _deployment_vocabulary_paths(args)
         deployment_vocab = build_deployment_vocabulary(vocab_path, model_vocab_path)
         exit_code, findings, failing = run_deployment_config(
@@ -2337,8 +2746,9 @@ def _main_deployment_config(args: argparse.Namespace, repo_root: Path) -> int:
             enforce_scope=scope,
             added_lines=added_lines,
             vocab=deployment_vocab,
+            index_only=args.diff_staged,
         )
-    except ConfigError as exc:
+    except (ConfigError, OSError, UnicodeError) as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 2
     except subprocess.CalledProcessError as exc:
@@ -2474,6 +2884,16 @@ def main(argv: list[str] | None = None) -> int:
             "their scope is the repo config's."
         ),
     )
+    parser.add_argument(
+        "--ratchet",
+        action="store_true",
+        help="deployment-config: enforce whole-tree residue against the committed shrink-only baseline",
+    )
+    parser.add_argument(
+        "--write-deployment-baseline",
+        action="store_true",
+        help="deployment-config report: write a candidate baseline; CI still verifies it against the trusted base",
+    )
     parser.add_argument("--owner", default="OmniNode-ai")
     parser.add_argument("paths", nargs="*")
     args = parser.parse_args(argv)
@@ -2505,6 +2925,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
         return _main_deployment_config(args, repo_root)
+    if args.ratchet or args.write_deployment_baseline:
+        print(
+            "::error::deployment baseline options require --only-classes deployment-config",
+            file=sys.stderr,
+        )
+        return 2
     if args.enforce_scope is not None:
         print(
             f"::error::--enforce-scope applies to --only-classes "

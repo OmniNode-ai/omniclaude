@@ -235,6 +235,7 @@ def test_a_staged_overlay_is_refused_by_the_pre_commit_form(tmp_path: Path) -> N
     ("rel", "line"),
     [
         ("config/x.yaml", f"endpoint: http://{LAN_HOST}:8000"),
+        ("contracts/OMN-1.yaml", f"evidence: ran against {LAN_HOST}"),
         ("config/x.json", f'{{"bootstrap": "{TEN_HOST}:9092"}}'),
         ("config/hosts.tsv", f"h1\t{TAILNET}\t24"),
         (".github/workflows/ci.yml", f'  CIDR: "{LAN_NET}"'),
@@ -260,7 +261,6 @@ def test_a_private_host_in_a_configuration_value_is_found(rel: str, line: str) -
         ("src/pkg/module.py", f'HOST = "{LAN_HOST}"'),
         ("tests/fixtures/x.yaml", f"host: {LAN_HOST}"),
         ("docs/x.yaml", f"host: {LAN_HOST}"),
-        ("contracts/OMN-1.yaml", f"evidence: ran against {LAN_HOST}"),
         ("drift/dod_receipts/OMN-1/x/command.yaml", f"cmd: ssh {LAN_HOST}"),
     ],
 )
@@ -352,7 +352,8 @@ def test_the_reusable_runs_the_class_as_its_own_job_without_secrets() -> None:
     assert "secrets." not in block
     assert "--only-classes deployment-config" in block
     assert "--mode enforce" in block
-    assert "--enforce-scope added-lines" in block
+    assert "--enforce-scope whole-tree" in block
+    assert "--ratchet" in block
     assert '--diff-base "${DIFF_BASE}"' in block
 
 
@@ -363,4 +364,4 @@ def test_the_pre_commit_hook_is_exported() -> None:
     entry = next(line for line in block.splitlines() if line.startswith("  entry:"))
     assert "--only-classes deployment-config" in entry
     assert "--mode enforce" in entry
-    assert "--enforce-scope added-lines --diff-staged" in entry
+    assert "--enforce-scope whole-tree --diff-staged" in entry
