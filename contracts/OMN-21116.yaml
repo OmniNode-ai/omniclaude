@@ -8,8 +8,10 @@ summary: >-
   scripts, restore lifecycle, configuration keys, manifest entries and two baseline rows
   were removed previously. AC3 now checks the whole tree except CHANGELOG.md, including
   this contract; AC4 preserves the 957-to-955 deletion result, with three unrelated rows
-  subsequently removed on dev (current total 952). AC5 checks that the installed
-  adapter's compaction rows select only manual and the repository installs no adapter hook.
+  subsequently removed on dev (current total 952). Its original evidence item is inherited
+  unchanged from the deletion slice; the additional baseline regression still runs. AC5
+  checks that the installed adapter's compaction rows select only manual and the repository
+  installs no adapter hook.
   AC1 and AC2 require lab session installation/projection and failure-path evidence; this
   reference cleanup does not claim them. The locked adapter already declares a manual row.
 is_seam_ticket: false
@@ -46,13 +48,12 @@ dod_evidence:
     binds_ac: ["AC3"]
   - id: "dod-omn21116-ac4-baseline"
     description: >-
-      AC4: the prior deletion removed exactly two of 957 baseline rows, leaving 955.
-      OMN-21429 then removed one unrelated row and OMN-20566 removed two, leaving 952.
-      Both retired scripts and their manifest and baseline entries remain absent.
+      AC4: the canonical-file-shape baseline loses exactly the two rows of the two deleted files (957 to 955
+      lines in this PR's diff) and gains none; the deleted files are absent and the baseline names neither.
     source: "manual"
     checks:
-      - check_type: "test_passes"
-        check_value: "uv run pytest tests/contracts/test_omn21116_retired_hook_closure.py -q --no-cov -k baseline"
+      - check_type: "command"
+        check_value: "test ! -e plugins/onex/hooks/scripts/pre\u002dcompact.sh && test ! -e plugins/onex/hooks/scripts/pre\u002dcompact-probe.sh && ! grep -q 'pre\u002dcompact' .onex_ratchets/canonical_file_shape_baseline.txt && ! grep -q 'pre\u002dcompact' plugins/distribution_manifest.yaml"
     binds_ac: ["AC4"]
   - id: "dod-omn21116-ac5-auto-unbound"
     description: >-
@@ -71,3 +72,11 @@ dod_evidence:
     checks:
       - check_type: "test_passes"
         check_value: "uv run pytest tests/hooks/test_hook_error_visibility.py tests/hooks/test_hooks_baseline_omn_13244.py -q --no-cov"
+  - id: "dod-omn21116-baseline-regression"
+    description: >-
+      The baseline count remains 952 after the two retired rows and three unrelated rows
+      were removed. This regression supplements the inherited AC4 deletion evidence.
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/contracts/test_omn21116_retired_hook_closure.py -q --no-cov -k baseline"
