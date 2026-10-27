@@ -337,3 +337,20 @@ def test_other_settings_hooks_are_preserved_and_ignored(tmp_path):
     before = record.read_bytes()
     assert _lib().client_binding_findings(contract, (record,)) == ()
     assert record.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"bindings": "delegation", "events": []},
+        {"bindings": ["delegation"], "events": ["tool.call"]},
+        {"hooks": {"tool.call": "delegation"}},
+        {"hooks": {"tool.call": [{"hooks": [{"command": ["onex-claude-code-hook"]}]}]}},
+    ],
+)
+def test_malformed_artifact_shapes_fail_closed(tmp_path, body):
+    lib = _lib()
+    contract = _contract(tmp_path, [ROW])
+    record = _record(tmp_path, **body)
+    with pytest.raises(lib.HookInventoryError):
+        lib.client_binding_findings(contract, (record,))

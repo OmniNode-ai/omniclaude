@@ -13,7 +13,7 @@ import json
 import shlex
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Final
+from typing import Final, cast
 
 ADAPTER_NODE_PACKAGE: Final = "omnimarket.nodes.node_claude_code_hook_adapter_effect"
 ADAPTER_CONTRACT_REL: Final = "node_claude_code_hook_adapter_effect/contract.yaml"
@@ -38,15 +38,39 @@ def resolve_adapter_contract() -> Path | None:
     return contract if contract.is_file() else None
 
 
-def declared_client_bindings(contract: Path | None) -> tuple[dict[str, Any], ...]:
+def _object(value: object) -> dict[str, object]:
+    if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
+        raise ValueError("binding inventory requires objects with string keys")
+    return cast("dict[str, object]", value)
+
+
+def _array(value: object) -> list[object]:
+    if not isinstance(value, list):
+        raise ValueError("binding inventory requires an array")
+    return cast("list[object]", value)
+
+
+def _text(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("binding inventory requires a string")
+    return value
+
+
+def _matcher(row: dict[str, object], key: str) -> str | None:
+    value = row.get(key)
+    return None if value is None else _text(value)
+
+
+def declared_client_bindings(contract: Path | None) -> tuple[dict[str, object], ...]:
     """The rows of ``client_bindings.claude_code.bindings`` in the adapter contract."""
     import yaml  # local: the rest of this module is stdlib-only at import time
 
     if contract is None or not contract.is_file():
         return ()
-    raw = yaml.safe_load(contract.read_text(encoding="utf-8")) or {}
-    rows = ((raw.get("client_bindings") or {}).get("claude_code") or {}).get("bindings")
-    return tuple(rows or ())
+    raw = _object(yaml.safe_load(contract.read_text(encoding="utf-8")))
+    clients = _object(raw.get("client_bindings", {}))
+    section = _object(clients.get("claude_code", {}))
+    return tuple(_object(row) for row in _array(section.get("bindings", [])))
 
 
 def _binding_command_name(command: str) -> tuple[str | None, bool]:
@@ -63,33 +87,34 @@ def _binding_command_name(command: str) -> tuple[str | None, bool]:
 
 
 def _installed_binding_rows(
-    artifact: dict[str, Any],
+    artifact: dict[str, object],
 ) -> tuple[tuple[tuple[str, str, str | None], ...], tuple[str, ...]]:
     """Preserve each binding's event and matcher in both supported artifact formats.
 
     The install effect writes parallel bindings/events arrays in render order. User
     settings attach the binding command directly to its event/matcher registration.
     """
-    names = artifact.get("bindings") or ()
-    events = artifact.get("events") or ()
+    names = [_text(name) for name in _array(artifact.get("bindings", []))]
+    events = [_object(event) for event in _array(artifact.get("events", []))]
     if len(names) != len(events):
         raise ValueError("installed binding names and events differ in length")
     rows = [
-        (name, event["event"], event.get("matcher"))
+        (name, _text(event["event"]), _matcher(event, "matcher"))
         for name, event in zip(names, events, strict=True)
     ]
     malformed: list[str] = []
-    hooks = artifact.get("hooks")
-    if isinstance(hooks, dict):
-        for event, entries in hooks.items():
-            for entry in entries:
-                for hook in entry.get("hooks", ()):
-                    command = str(hook.get("command", ""))
-                    name, invalid = _binding_command_name(command)
-                    if invalid:
-                        malformed.append(command)
-                    elif name is not None:
-                        rows.append((name, event, entry.get("matcher")))
+    hooks = _object(artifact.get("hooks", {}))
+    for event, entries in hooks.items():
+        for raw_entry in _array(entries):
+            entry = _object(raw_entry)
+            for raw_hook in _array(entry.get("hooks", [])):
+                hook = _object(raw_hook)
+                command = _text(hook.get("command", ""))
+                name, invalid = _binding_command_name(command)
+                if invalid:
+                    malformed.append(command)
+                elif name is not None:
+                    rows.append((name, event, _matcher(entry, "matcher")))
     return tuple(rows), tuple(malformed)
 
 
@@ -104,7 +129,7 @@ def client_binding_findings[T](
     rows = declared_client_bindings(contract)
     seen: set[str] = set()
     for row in rows:
-        name = str(row.get("name", ""))
+        name = _text(row.get("name", ""))
         if not name or not row.get("hook_event"):
             findings.append(
                 finding_factory(
@@ -123,14 +148,19 @@ def client_binding_findings[T](
                 )
             )
         seen.add(name)
-    declared_events = {(str(r.get("hook_event")), r.get("matcher_tool")) for r in rows}
+    declared_events = {
+        (_text(r.get("hook_event", "")), _matcher(r, "matcher_tool")) for r in rows
+    }
     declared_by_name = {
-        str(row.get("name")): (str(row.get("hook_event")), row.get("matcher_tool"))
+        _text(row.get("name", "")): (
+            _text(row.get("hook_event", "")),
+            _matcher(row, "matcher_tool"),
+        )
         for row in rows
     }
     for artifact_path in installed_artifacts:
         installed, malformed = _installed_binding_rows(
-            json.loads(artifact_path.read_text(encoding="utf-8"))
+            _object(json.loads(artifact_path.read_text(encoding="utf-8")))
         )
         for command in malformed:
             findings.append(
