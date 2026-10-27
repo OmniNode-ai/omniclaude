@@ -46,7 +46,7 @@ dod_evidence:
   source: manual
   checks:
   - check_type: command
-    check_value: uv run python -m omniclaude.nodes.node_linear_effect.handlers.handler_compaction_epic_completion
+    check_value: uv run python -m omniclaude.handlers.handler_compaction_epic_completion
       --epic OMN-21090 --title-prefix T0.
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
@@ -58,7 +58,7 @@ dod_evidence:
   source: manual
   checks:
   - check_type: command
-    check_value: uv run python -m omniclaude.nodes.node_linear_effect.handlers.handler_compaction_epic_completion
+    check_value: uv run python -m omniclaude.handlers.handler_compaction_epic_completion
       --epic OMN-21090 --title-prefix TA.
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
@@ -70,7 +70,7 @@ dod_evidence:
   source: manual
   checks:
   - check_type: command
-    check_value: uv run python -m omniclaude.nodes.node_linear_effect.handlers.handler_compaction_epic_completion
+    check_value: uv run python -m omniclaude.handlers.handler_compaction_epic_completion
       --epic OMN-21090 --title-prefix TB.
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
@@ -82,7 +82,7 @@ dod_evidence:
   source: manual
   checks:
   - check_type: command
-    check_value: uv run python -m omniclaude.nodes.node_linear_effect.handlers.handler_compaction_epic_completion
+    check_value: uv run python -m omniclaude.handlers.handler_compaction_epic_completion
       --epic OMN-21090 --title-prefix TC.
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:
@@ -94,7 +94,7 @@ dod_evidence:
   source: manual
   checks:
   - check_type: command
-    check_value: uv run python -m omniclaude.nodes.node_linear_effect.handlers.handler_compaction_epic_completion
+    check_value: uv run python -m omniclaude.handlers.handler_compaction_epic_completion
       --epic OMN-21090 --title-prefix TE.
     cwd: ${OMNI_HOME}/omniclaude
   binds_ac:

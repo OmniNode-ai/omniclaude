@@ -6,9 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from omniclaude.nodes.node_linear_effect.handlers import (
-    handler_compaction_epic_completion as probe,
-)
+from omniclaude.handlers import handler_compaction_epic_completion as probe
 
 pytestmark = pytest.mark.unit
 
