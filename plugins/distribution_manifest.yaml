@@ -525,6 +525,54 @@ components:
   backing_nodes:
   - node_integration_sweep_orchestrator
   rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: lean_andon_stop
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_andon_stop/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (prose stand-in for a lean practice, no runtime dependency); delete when the mechanical nodes it names land.
+- id: lean_experiment_first
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_experiment_first/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (prose stand-in for a lean practice, no runtime dependency); delete when the mechanical nodes it names land.
+- id: lean_five_whys
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_five_whys/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (prose stand-in for a lean practice, no runtime dependency); delete when the mechanical nodes it names land.
+- id: lean_go_and_see
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_go_and_see/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (prose stand-in for a lean practice, no runtime dependency); delete when the mechanical nodes it names land.
+- id: lean_poka_yoke
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_poka_yoke/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (prose stand-in for a lean practice, no runtime dependency); delete when the mechanical nodes it names land.
+- id: lean_wip_pull
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_wip_pull/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (prose stand-in for a lean practice, no runtime dependency); delete when the mechanical nodes it names land.
 - id: omninode_dev_setup
   kind: skill
   exposure: hidden
