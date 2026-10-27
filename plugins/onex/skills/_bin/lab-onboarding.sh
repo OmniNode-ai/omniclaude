@@ -695,7 +695,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="3978:63fc:a74a:14dd:47de:a7bb:f730:d9dc:9a39:309d:3ce1:92eb:8d56:1240:9e75:36a9" root candidate \
+  local digest="cacf:495c:bd01:600e:2255:73b3:0ff5:00da:930b:46f4:5427:f628:4880:9eb5:7809:0620" root candidate \
     download_digest="3978:63fc:a74a:14dd:47de:a7bb:f730:d9dc:9a39:309d:3ce1:92eb:8d56:1240:9e75:36a9"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -1933,7 +1933,7 @@ main() {
   say "  2. Open Claude Code (run 'claude') and sign in with your Anthropic account the first"
   say "     time it asks. /onex:delegate is installed$([ "$DEVELOPER" -eq 1 ] && echo ', with every other onex skill')."
   notify "Onboarding complete" "Every phase passed"
-  printf 'result=COMPLETE\n' >>"$STATUS"
+  printf 'result=COMPLETE\n' >>"$STATUS"; ! declare -F finish_sound >/dev/null || finish_sound
 }
 
 main

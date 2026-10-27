@@ -1,0 +1,47 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21309
+title: "Onboarding runs the finish step on macOS, including over ssh"
+summary: >
+  The omnibase installer runs the finish step; the developer onboarding script
+  (lab-onboarding.sh) did not, so the onboarding walk, which runs on a VM over
+  ssh, never reached it. The setup handler now carries finish_sound, and the
+  script calls it once after a completed run. It runs on macOS only, needs no
+  terminal, never prompts, never fails the run, and fetches its recorded clips
+  from omnibase at a pinned commit checked by sha256.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21309-onboarding-finish
+    statement: A completed onboarding run on macOS runs the finish step, over ssh and with no terminal too.
+    acceptance:
+      - id: AC6
+        statement: "AC6: a completed lab-onboarding.sh run on macOS invokes the finish step once, over ssh with no terminal, without prompting, and skips it on a non-macOS host"
+evidence_requirements:
+  - kind: tests
+    description: "Onboarding finish-step tests pass"
+    command: "uv run pytest tests/skills/test_lab_onboarding_finish_sound_omn21309.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21309-ac6-onboarding-finish-step
+    description: "The setup handler's finish_sound, run with stub players over ssh and no terminal, plays one joined clip with the account's first name, plays it without a name when none is found and never prompts, and does nothing off macOS; main calls it after result=COMPLETE. Fails at the merge base, which has no finish_sound."
+    source: manual
+    binds_ac: [AC6]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_finish_sound_omn21309.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21309-deploy-probe
+    description: "Deploy probe. Read the setup handler from GitHub at the checked-out commit and require finish_sound in it, with the AC6 test. It fails at the merge base, where the handler has no finish_sound."
+    source: manual
+    binds_ac: [AC6]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_finish_sound_omn21309.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"finish_sound() {\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
