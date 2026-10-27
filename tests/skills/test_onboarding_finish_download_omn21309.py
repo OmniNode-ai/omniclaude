@@ -10,11 +10,13 @@ carries finish_sound, a downloaded copy (the VM walk) never runs the finish step
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import subprocess
 from pathlib import Path
 
 import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import scrub_git_location_env
 
 pytestmark = pytest.mark.unit
 
@@ -28,7 +30,10 @@ HANDLER_REL = (
 
 def _git(*args: str) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
-        ["git", "-C", str(REPO), *args], capture_output=True, check=False
+        ["git", "-C", str(REPO), *args],
+        capture_output=True,
+        check=False,
+        env=scrub_git_location_env(os.environ),
     )
 
 
