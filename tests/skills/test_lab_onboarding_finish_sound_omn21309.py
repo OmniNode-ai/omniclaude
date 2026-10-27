@@ -4,7 +4,7 @@
 
 The walk runs on a VM over ssh, with no terminal on stdin, so the sound must
 play there too: afplay plays on the Mac's own audio output. These tests run the
-script's own ``finish_sound`` with stub ``afplay``, ``say`` and ``id`` and with
+setup handler's own ``finish_sound`` with stub ``afplay``, ``say`` and ``id`` and with
 the clips served from a local directory, then read back what was played.
 """
 
@@ -28,11 +28,19 @@ SCRIPT = (
     / "_bin"
     / "lab-onboarding.sh"
 )
+HANDLER = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "omniclaude"
+    / "nodes"
+    / "node_skill_omninode_dev_setup_orchestrator"
+    / "handler_onboarding_preflight.sh"
+)
 
 
 def _functions(*names: str) -> str:
     out, keep = [], False
-    for line in SCRIPT.read_text().splitlines():
+    for line in (SCRIPT.read_text() + HANDLER.read_text()).splitlines():
         if any(line.startswith(f"{n}() {{") for n in names):
             keep = True
         if keep:
@@ -85,7 +93,7 @@ def _run(tmp_path: Path, *, os_name: str, fullname: str, home: str) -> list[str]
         'os_name() { echo "${ONBOARD_TEST_OS:-$(uname -s)}"; }\n'
         + "\n".join(
             line
-            for line in SCRIPT.read_text().splitlines()
+            for line in HANDLER.read_text().splitlines()
             if line.startswith("FINISH_CLIP_")
         )
         + f'\nFINISH_CLIP_BASE="file://{clips}"\nFINISH_CLIP_DIGESTS="{digests}"\n'
@@ -96,7 +104,7 @@ def _run(tmp_path: Path, *, os_name: str, fullname: str, home: str) -> list[str]
         "HOME": str(home_dir),
         "PATH": f"{bin_dir}:/usr/bin:/bin",
         "ONBOARD_TEST_OS": os_name,
-        "SSH_CONNECTION": "10.0.0.1 50000 10.0.0.2 22",
+        "SSH_CONNECTION": "203.0.113.1 50000 203.0.113.2 22",
     }
     subprocess.run(
         ["/bin/bash", "-c", snippet],

@@ -1282,3 +1282,67 @@ routing_overlay_in_place() {
   [ -f "$ROUTING_OVERLAY_FILE" ] &&
     grep -qF "DELEGATION_ROUTING_OVERLAY_PATH" "$HOME/.zshrc" 2>/dev/null
 }
+
+# The finish sound (OMN-21309): plays on every completed run on macOS, over
+# ssh too (afplay plays on the Mac's own audio output, so a VM walk hears it).
+# The recorded clips come from omnibase at a pinned commit, checked by sha256;
+# the name between them is the macOS account's first name, else the home
+# folder's name when it reads as one, else the clip plays without a name. It
+# never asks and never fails the run. ONBOARD_FINISH_SOUND=0 turns it off.
+FINISH_CLIP_BASE="https://raw.githubusercontent.com/OmniNode-ai/omnibase/e8686dabd47179bc5a9dd82a92c8e686683eec94/assets/finish"
+FINISH_CLIP_DIGESTS="welcome:099b47c4ab8513a145b567542c5f39b4e17185c4021b9c3026d98660744a0fd0 to-omninode:2173614dc1e34c37f80096f92172327be8f7afd454bcf3f3919655b327fcf2bb"
+
+finish_name_like() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    ""|admin|administrator|user|users|mac|macbook|macuser|test|guest|root|dev|developer|owner|me|home|runner|ci|build|staff|default|shared|tart|vagrant|ubuntu) return 1 ;;
+  esac
+  printf '%s' "$1" | grep -Eq "^[A-Za-z][A-Za-z'-]{1,19}$"
+}
+
+finish_sound() {
+  [ "${ONBOARD_FINISH_SOUND:-1}" = "0" ] && return 0
+  [ "$(os_name)" = "Darwin" ] || return 0
+  [ -n "$(type -P afplay)" ] || return 0
+  local work entry clip name="" parts=() sayb
+  sayb="$(type -P say)"   # the binary: say() above is this script's printer
+  work="$(mktemp -d)" || return 0
+  for entry in $FINISH_CLIP_DIGESTS; do
+    clip="${entry%%:*}"
+    curl -fsSL --retry 2 -o "$work/$clip.wav" "$FINISH_CLIP_BASE/$clip.wav" 2>/dev/null &&
+      printf '%s  %s\n' "${entry#*:}" "$work/$clip.wav" | shasum -a 256 -c - >/dev/null 2>&1 ||
+      { log "finish sound: could not fetch $clip.wav"; rm -rf "$work"; return 0; }
+  done
+  name="$(id -F 2>/dev/null | awk '{print $1}')"
+  finish_name_like "$name" || name="$(basename "$HOME")"
+  finish_name_like "$name" || name=""
+  parts=("$work/welcome.wav")
+  if [ -n "$name" ] && [ -n "$sayb" ]; then
+    name="$(printf '%s%s' "$(printf '%s' "${name:0:1}" | tr '[:lower:]' '[:upper:]')" "${name:1}")"
+    "$sayb" -v Fred --file-format=WAVE --data-format=LEI16@22050 -o "$work/name.wav" "$name" 2>/dev/null &&
+      parts+=("$work/name.wav")
+  fi
+  parts+=("$work/to-omninode.wav")
+  # One joined clip plays without the second of silence each afplay adds.
+  if python3 - "${parts[@]}" "$work/finish.wav" >/dev/null 2>&1 <<'PY2'
+import array, sys, wave
+*parts, out = sys.argv[1:]
+rate, samples = None, array.array("h")
+for i, path in enumerate(parts):
+    with wave.open(path) as w:
+        rate = rate or w.getframerate()
+        a = array.array("h", w.readframes(w.getnframes()))
+    loud = [j for j, s in enumerate(a) if abs(s) > 500] or [0, len(a) - 1]
+    pad = rate // 100
+    samples.extend(a[max(loud[0] - pad, 0): loud[-1] + pad])
+    if i < len(parts) - 1:
+        samples.extend([0] * int(rate * 0.04))
+with wave.open(out, "wb") as o:
+    o.setnchannels(1); o.setsampwidth(2); o.setframerate(rate); o.writeframes(samples.tobytes())
+PY2
+  then
+    afplay "$work/finish.wav" 2>/dev/null || true
+  else
+    for clip in "${parts[@]}"; do afplay "$clip" 2>/dev/null || true; done
+  fi
+  rm -rf "$work"
+}
