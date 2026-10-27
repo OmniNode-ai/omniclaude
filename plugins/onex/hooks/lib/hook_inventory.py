@@ -1315,122 +1315,45 @@ def check_parity(
 # section is the inventory of hooks the generated Claude Code binding installs.
 # ---------------------------------------------------------------------------
 
-ADAPTER_NODE_PACKAGE: Final = "omnimarket.nodes.node_claude_code_hook_adapter_effect"
-ADAPTER_CONTRACT_REL: Final = "node_claude_code_hook_adapter_effect/contract.yaml"
-_ADAPTER_COMMAND_PREFIX: Final = "onex-claude-code-hook --binding "
+
+def _binding_inventory_handler():
+    """Load the pure source handler without requiring the package on static CI."""
+    import importlib
+    import importlib.util
+
+    path = (
+        Path(__file__).resolve().parents[4]
+        / "src/omniclaude/handlers/handler_client_binding_inventory.py"
+    )
+    if not path.is_file():
+        return importlib.import_module(
+            "omniclaude.handlers.handler_client_binding_inventory"
+        )
+    spec = importlib.util.spec_from_file_location("_client_binding_inventory", path)
+    if spec is None or spec.loader is None:
+        raise HookInventoryError(f"cannot load binding inventory handler from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def resolve_adapter_contract() -> Path | None:
-    """The adapter node's contract.yaml in the installed omnimarket package, or None.
-
-    The node lives in omnimarket; this repository holds no copy of its inventory. A
-    package version that predates the node declares no bindings.
-    """
-    import importlib.util  # local: the rest of this module is stdlib-only at import time
-
-    try:
-        spec = importlib.util.find_spec(ADAPTER_NODE_PACKAGE)
-    except ImportError:
-        return None
-    if spec is None or not spec.submodule_search_locations:
-        return None
-    contract = Path(next(iter(spec.submodule_search_locations))) / "contract.yaml"
-    return contract if contract.is_file() else None
+    return _binding_inventory_handler().resolve_adapter_contract()
 
 
 def declared_client_bindings(contract: Path | None) -> tuple[dict[str, Any], ...]:
-    """The rows of ``client_bindings.claude_code.bindings`` in the adapter contract."""
-    import yaml  # local: the rest of this module is stdlib-only at import time
-
-    if contract is None or not contract.is_file():
-        return ()
-    raw = yaml.safe_load(contract.read_text(encoding="utf-8")) or {}
-    rows = ((raw.get("client_bindings") or {}).get("claude_code") or {}).get("bindings")
-    return tuple(rows or ())
-
-
-def _installed_binding_names(
-    artifact: dict[str, Any],
-) -> tuple[tuple[str, ...], tuple[tuple[str, str | None], ...]]:
-    """Binding names and (event, matcher) pairs an installed artifact registers.
-
-    An artifact is either the install effect's ``install_record.json`` (a render sha256,
-    the binding names and the events of the rendered module) or the user's
-    ``settings.json`` (command hooks that run ``onex-claude-code-hook --binding <name>``).
-    """
-    names: list[str] = list(artifact.get("bindings") or ())
-    events: list[tuple[str, str | None]] = [
-        (e["event"], e.get("matcher")) for e in artifact.get("events") or ()
-    ]
-    hooks = artifact.get("hooks")
-    if isinstance(hooks, dict):
-        for event, entries in hooks.items():
-            for entry in entries:
-                for hook in entry.get("hooks", ()):
-                    command = str(hook.get("command", ""))
-                    if command.startswith(_ADAPTER_COMMAND_PREFIX):
-                        names.append(
-                            command.removeprefix(_ADAPTER_COMMAND_PREFIX).strip()
-                        )
-                        events.append((event, entry.get("matcher")))
-    return tuple(names), tuple(events)
+    return _binding_inventory_handler().declared_client_bindings(contract)
 
 
 def client_binding_findings(
     contract: Path | None, installed_artifacts: tuple[Path, ...] = ()
 ) -> tuple[Finding, ...]:
-    """Contract rows are well formed; nothing installed registers what the contract does not declare."""
-    findings: list[Finding] = []
-    rows = declared_client_bindings(contract)
-    seen: set[str] = set()
-    for row in rows:
-        name = str(row.get("name", ""))
-        if not name or not row.get("hook_event"):
-            findings.append(
-                Finding(
-                    "CLIENT_BINDING_MALFORMED",
-                    name or "<unnamed>",
-                    f"a row of client_bindings.claude_code in the adapter contract ({ADAPTER_CONTRACT_REL}) "
-                    "needs a name and a hook_event.",
-                )
-            )
-        if name in seen:
-            findings.append(
-                Finding(
-                    "CLIENT_BINDING_DUPLICATE",
-                    name,
-                    f"declared twice in client_bindings.claude_code of the adapter contract ({ADAPTER_CONTRACT_REL}).",
-                )
-            )
-        seen.add(name)
-    declared_events = {(str(r.get("hook_event")), r.get("matcher_tool")) for r in rows}
-    for artifact_path in installed_artifacts:
-        names, events = _installed_binding_names(
-            json.loads(artifact_path.read_text(encoding="utf-8"))
+    try:
+        return _binding_inventory_handler().client_binding_findings(
+            contract, installed_artifacts, finding_factory=Finding
         )
-        for name in names:
-            if name not in seen:
-                findings.append(
-                    Finding(
-                        "INSTALLED_BINDING_UNDECLARED",
-                        name,
-                        f"{artifact_path} registers binding {name!r}, which "
-                        f"client_bindings.claude_code in the adapter contract ({ADAPTER_CONTRACT_REL}) does not "
-                        "declare. The installed binding is rendered from that section "
-                        "alone; re-install, or declare the row.",
-                    )
-                )
-        for event, matcher in events:
-            if (event, matcher) not in declared_events:
-                findings.append(
-                    Finding(
-                        "INSTALLED_EVENT_UNDECLARED",
-                        f"{event}{{{matcher}}}",
-                        f"{artifact_path} registers event {event!r} (matcher {matcher!r}), "
-                        f"absent from client_bindings.claude_code in the adapter contract ({ADAPTER_CONTRACT_REL}).",
-                    )
-                )
-    return tuple(findings)
+    except ValueError as exc:
+        raise HookInventoryError(str(exc)) from exc
 
 
 def mode_findings(inventory: HookInventory, mode: str | None) -> tuple[Finding, ...]:
