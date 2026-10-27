@@ -34,3 +34,14 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lab_onboarding_finish_sound_omn21309.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21309-deploy-probe
+    description: "Deploy probe. Read the setup handler from GitHub at the checked-out commit and require finish_sound in it, with the AC6 test. It fails at the merge base, where the handler has no finish_sound."
+    source: manual
+    binds_ac: [AC6]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_finish_sound_omn21309.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"finish_sound() {\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
