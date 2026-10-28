@@ -572,11 +572,9 @@ class PayloadSealRefusedError(RuntimeError):
 def payload_encryption_setting(
     contract_path: Path | None = None,
 ) -> tuple[bool, str | None]:
-    """Read the explicit setting; invalid policy refuses plaintext capture.
-
-    Load the stdlib-only setting model by file so disabled capture encryption
-    does not import the package's model initializers or cryptography.
-    """
+    """The explicit setting; an invalid policy refuses plaintext capture."""
+    # The stdlib-only setting model loads by file so a disabled setting imports neither
+    # the package's model initializers nor cryptography.
     setting_file = ("models", "model_hook_payload_encryption_setting.py")
     model = load_by_path(
         "capture_encryption_setting",
@@ -584,9 +582,13 @@ def payload_encryption_setting(
     )
     if model is None:
         raise PayloadSealRefusedError("the encryption setting model is unavailable")
+    contract = contract_path or CAPTURE_CONTRACT_YAML
+    if not contract.is_file():  # a plugin cache copy has no src tree (OMN-17427)
+        found = package_files("omniclaude", "hooks", "contracts", contract.name)
+        contract = next((p for p in found if p.is_file()), contract)
     try:
         setting = model.ModelHookPayloadEncryptionSetting.from_contract(
-            (contract_path or CAPTURE_CONTRACT_YAML).read_text(encoding="utf-8")
+            contract.read_text(encoding="utf-8")
         )
         return setting.enabled, setting.key_secret_ref
     except (OSError, UnicodeError, ValueError) as exc:
@@ -600,13 +602,11 @@ def payload_sealer(
     key_reader: Callable[[str], str | None] | None = None,
     contract_path: Path | None = None,
 ) -> Sealer | None:
-    """``None`` only when explicitly off; else a sealer holding the resolved key.
-
-    The encryption handler is imported only here, so a capture with the setting
-    off never pays for ``omniclaude``. Raises :class:`PayloadSealRefusedError`
-    when the setting is invalid, or encryption is on and the handler, secret
-    store or key is not usable: the caller journals nothing.
-    """
+    """``None`` only when explicitly off; else a sealer holding the resolved key."""
+    # The encryption handler is imported only here, so a capture with the setting off never
+    # pays for ``omniclaude``. Raises :class:`PayloadSealRefusedError` when the setting is
+    # invalid, or encryption is on and the handler, secret store or key is not usable: the
+    # caller journals nothing.
     enabled, key_ref = payload_encryption_setting(contract_path)
     if not enabled:
         return None
