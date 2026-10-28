@@ -465,7 +465,7 @@ shell_runs_workspace_onex() {
 # ---------------------------------------------------------------------------
 CATALOGUE_REL="omnimarket/src/omnimarket/configs/byok_provider_backends.v1.yaml"
 CHOSEN_GEMINI=""; CHOSEN_OPENROUTER=""; CHOSEN_OPENAI=""; CHOSEN_OLLAMA=""; REC_BASIS=""
-MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""
+MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""; MODEL_UNAVAILABLE=""; MODEL_THROTTLED=""
 
 chosen_models() { case "$1" in gemini) echo "$CHOSEN_GEMINI" ;; openrouter) echo "$CHOSEN_OPENROUTER" ;; openai) echo "$CHOSEN_OPENAI" ;; ollama) echo "$CHOSEN_OLLAMA" ;; esac; }
 set_chosen_models() { case "$1" in gemini) CHOSEN_GEMINI="$2" ;; openrouter) CHOSEN_OPENROUTER="$2" ;; openai) CHOSEN_OPENAI="$2" ;; ollama) CHOSEN_OLLAMA="$2" ;; esac; }
@@ -477,13 +477,15 @@ omnimarket_file() { # rel seam -> the file: the test seam, else the workspace cl
   else curl -fsS -m 30 "https://raw.githubusercontent.com/OmniNode-ai/omnimarket/HEAD/${1#omnimarket/}" 2>/dev/null; fi
 }
 
-# catalogue_row provider -> "url <models_url>", then "pattern <regex>" for each
+# catalogue_row provider -> "url <models_url>", "endpoint <endpoint_url>" (the chat
+# completions URL a probe posts to), then "pattern <regex>" for each
 # model_preference entry in order, from the provider's first row
 catalogue_row() {
   omnimarket_file "$CATALOGUE_REL" "${ONBOARD_TEST_CATALOGUE:-}" | awk -v want="$1" '
     /^  - provider:/ { if (seen) exit; v = $3; gsub(/["'"'"']/, "", v); row = (v == want); if (row) seen = 1; next }
     !row { next }
     /^    models_url:/ { v = $2; gsub(/["'"'"']/, "", v); print "url " v; next }
+    /^    endpoint_url:/ { v = $2; gsub(/["'"'"']/, "", v); print "endpoint " v; next }
     /^      - pattern:/ { v = $0; sub(/^      - pattern: */, "", v); gsub(/^["'"'"']|["'"'"']$/, "", v); print "pattern " v }'
 }
 
@@ -573,15 +575,72 @@ EOF
   return 0
 }
 
+# probe_model endpoint key model -> "ok", "throttled" or "no:<reason>" (OMN-21465).
+# One chat completion capped at one token on the developer's own key: a name in
+# the provider's list is not proof the key can call it (deprecated and non-chat
+# models are listed too). A 429 means the model exists and the key may call it,
+# so it is not dropped (OMN-21464). The key travels in a header read from stdin.
+probe_model() {
+  local f out code body msg
+  for f in max_completion_tokens max_tokens; do
+    body="$(printf '{"model":"%s","messages":[{"role":"user","content":"Reply with: ok"}],"%s":1}' "$3" "$f")"
+    if ! out="$(printf 'Authorization: Bearer %s\n' "$2" | curl -sS -m 20 -H @- -H 'Content-Type: application/json' -d "$body" -w '\n%{http_code}' "$1" 2>&1)"; then
+      echo "no:it did not answer ($(printf '%s\n' "$out" | tail -n 1 | sed 's/^curl: ([0-9]*) //' | cut -c1-120))"; return 0
+    fi
+    code="$(printf '%s\n' "$out" | tail -n 1)"; body="$(printf '%s\n' "$out" | sed '$d')"
+    [ "$code" = "400" ] && printf '%s' "$body" | grep -qE 'max_completion_tokens|max_tokens' && continue
+    break
+  done
+  case "$code" in
+    200) echo ok ;;
+    429) echo throttled ;;
+    *) msg="$(printf '%s' "$body" | grep -oE '"message"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed -E 's/^"message"[[:space:]]*:[[:space:]]*"(.*)"$/\1/' | cut -c1-160)"
+       echo "no:HTTP $code${msg:+: $msg}" ;;
+  esac
+}
+
+# probe_listed provider endpoint key -> MODEL_LIST and RECOMMENDED narrowed to
+# the models that answered, in their order; MODEL_UNAVAILABLE holds one
+# "model: reason" line for each that did not; MODEL_THROTTLED the ids that were
+# rate limited (kept). At most ONBOARD_PROBE_MAX models are probed (default 30),
+# so a long list costs a bounded number of one-token calls. 1 when none answered.
+probe_listed() {
+  local m r i=0 j=0 n=0 keep="" rec="" recs
+  MODEL_UNAVAILABLE=""; MODEL_THROTTLED=""
+  [ -n "$2" ] || return 0
+  recs="$(printf '%s' "$RECOMMENDED" | tr ',' ' ')"
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    i=$((i + 1)); n=$((n + 1))
+    [ "$n" -le "${ONBOARD_PROBE_MAX:-30}" ] || break
+    r="$(probe_model "$2" "$3" "$m")"
+    case "$r" in
+      ok|throttled)
+        j=$((j + 1)); keep="${keep}${keep:+
+}$m"
+        [ "$r" = "throttled" ] && MODEL_THROTTLED="${MODEL_THROTTLED}${m}
+"
+        in_list "$i" "$recs" && rec="${rec}${rec:+,}$j" ;;
+      *) MODEL_UNAVAILABLE="${MODEL_UNAVAILABLE}${m}: ${r#no:}
+" ;;
+    esac
+  done <<ENDLIST
+$MODEL_LIST
+ENDLIST
+  MODEL_LIST="$keep"; RECOMMENDED="$rec"
+  [ -n "$keep" ]
+}
+
 # key_models provider key -> MODEL_LIST and RECOMMENDED; 1 with MODEL_LIST_ERR
 # (the provider's own words when it gave any) when the list cannot be read or
 # offers nothing. The key goes to its provider alone, in a header read from
 # stdin, so it never appears in an argument.
 key_models() {
-  local p="$1" row url out code body reason ids rec
-  MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""; REC_BASIS=""
+  local p="$1" row url endpoint out code body reason ids rec
+  MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""; REC_BASIS=""; MODEL_UNAVAILABLE=""; MODEL_THROTTLED=""
   row="$(catalogue_row "$p")"
   url="$(printf '%s\n' "$row" | sed -n 's/^url //p' | head -n 1)"
+  endpoint="$(printf '%s\n' "$row" | sed -n 's/^endpoint //p' | head -n 1)"
   if [ -z "$url" ]; then
     MODEL_LIST_ERR="onex's provider catalogue, which names where its model list is, could not be read"
     return 1
@@ -609,6 +668,13 @@ key_models() {
   rec="$(recommended_order "$p" | grep -xF "$ids")"
   if [ -n "$rec" ]; then list_in_order "$ids" "$rec"; REC_BASIS="$(recommended_basis)"
   else list_recommended_first "$ids" "$(printf '%s\n' "$row" | sed -n 's/^pattern //p')"; fi
+  # OMN-21465: only models that answered a one-token call on this key are
+  # offered or recommended; the rest are listed as unavailable with the
+  # provider's reason. A provider with none left is unusable here, at the menu.
+  if ! probe_listed "$p" "$endpoint" "$2"; then
+    MODEL_LIST_ERR="none of the $(printf '%s\n' "$MODEL_UNAVAILABLE" | grep -c .) models it lists answered a test call on your key ($(printf '%s' "$MODEL_UNAVAILABLE" | head -n 1 | cut -c1-200))"
+    return 1
+  fi
 }
 
 # ram_gb [model] -> "port chat_path model download_gb": the first `models` entry
@@ -674,7 +740,7 @@ parse_ordered_choice() {
 # choose_models provider -> its chosen models from MODEL_LIST, in the order
 # given, by number; an empty or out-of-range answer asks again
 choose_models() {
-  local p="$1" label a n i=0 m nums picked="" what
+  local p="$1" label a n i=0 m nums picked="" what busy
   label="$(provider_label "$p")"
   n="$(printf '%s\n' "$MODEL_LIST" | grep -c .)"
   case "$p" in
@@ -687,13 +753,21 @@ choose_models() {
   say ""
   while IFS= read -r m; do
     i=$((i + 1))
-    if in_list "$i" "$(printf '%s' "$RECOMMENDED" | tr ',' ' ')"; then say "    $(printf '%2d' "$i")) $m  (recommended)"
-    else say "    $(printf '%2d' "$i")) $m"; fi
+    busy=""; printf '%s\n' "$MODEL_THROTTLED" | grep -qxF "$m" && busy="  (busy just now, HTTP 429)"
+    if in_list "$i" "$(printf '%s' "$RECOMMENDED" | tr ',' ' ')"; then say "    $(printf '%2d' "$i")) $m  (recommended)$busy"
+    else say "    $(printf '%2d' "$i")) $m$busy"; fi
   done <<EOF
 $MODEL_LIST
 EOF
+  if [ -n "$MODEL_UNAVAILABLE" ]; then
+    say ""
+    say "  Not offered, your key could not call these:"
+    while IFS= read -r m; do [ -n "$m" ] && say "    ✗ $m"; done <<ENDBAD
+$MODEL_UNAVAILABLE
+ENDBAD
+  fi
   say ""
-  if [ -n "$REC_BASIS" ]; then
+  if [ -n "$REC_BASIS" ] && [ -n "$RECOMMENDED" ]; then
     # OMN-21209: the routing contract's order, and the record it rests on.
     say "  Recommended, in this order: $RECOMMENDED (the routing contract's order for this key; it rests on $REC_BASIS)."
   elif [ -n "$RECOMMENDED" ]; then
