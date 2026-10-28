@@ -1,0 +1,73 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21466
+title: "Phase 6 reads Terminal.app's session banner instead of the shell's onex path, so a correct install fails verify"
+summary: >
+  Phase 6 asked a new interactive shell for `whence -p onex` and took the first
+  line of its stdout. Terminal.app's session-restore banner is printed first, so
+  a correct install failed. The setup handler now has the shell print each answer
+  behind a marker and reads only that line, and the failure message quotes what
+  the shell returned.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21466-read-answer
+    statement: The phase 6 onex check reads the shell's answer and not a banner.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the check reads the shell's answer and not any banner the shell prints, so it passes on a machine where a login shell resolves onex to the workspace wrapper"
+  - id: req-omn21466-still-fails
+    statement: The check still fails for an alias, a function or an onex outside the workspace.
+    acceptance:
+      - id: AC2
+        statement: "AC2: the check still fails when onex is an alias, a function, or a path outside the workspace"
+  - id: req-omn21466-quotes
+    statement: The failure message quotes what the shell returned.
+    acceptance:
+      - id: AC3
+        statement: "AC3: the failure message quotes what the shell actually returned, so a future mis-parse is visible rather than silent"
+evidence_requirements:
+  - kind: tests
+    description: "Banner-tolerant onex check tests pass"
+    command: "uv run pytest tests/skills/test_onboarding_shell_onex_banner_omn21466.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21466-ac1-banner-ignored
+    description: 'A stubbed user shell prints a Restored session line before the wrapper path; the check passes. Fails at the merge base, which takes the first line.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_shell_onex_banner_omn21466.py -q --no-cov -k banner_before_the_wrapper"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21466-ac2-still-fails
+    description: 'With the banner present, an alias, a function and a path outside the workspace each still fail the check.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_shell_onex_banner_omn21466.py -q --no-cov -k 'alias_or_function or outside_the_workspace'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21466-ac3-message-quotes-shell
+    description: 'The failure message quotes the captured value (the alias kind, the foreign path).'
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_shell_onex_banner_omn21466.py -q --no-cov -k 'alias_or_function or outside_the_workspace'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21466-deploy-probe
+    description: "Deploy probe. Read the setup handler from GitHub at the checked-out commit and require shell_onex_answer in it, with the AC1 test. It fails at the merge base, where the handler has no shell_onex_answer."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_shell_onex_banner_omn21466.py -q --no-cov -k banner_before_the_wrapper"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"shell_onex_answer() {\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
