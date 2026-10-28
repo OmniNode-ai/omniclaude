@@ -1364,7 +1364,7 @@ def _handler(name: str) -> Any:
     # carries no ``src`` tree (OMN-17427): the installed package is found, not imported.
     package = importlib.util.find_spec("omniclaude")
     roots = [Path(__file__).resolve().parents[4] / "src/omniclaude"]
-    roots += [Path(p) for p in (package.submodule_search_locations if package else ())]
+    roots += map(Path, (package and package.submodule_search_locations) or ())
     rel = Path("handlers") / f"{name}.py"
     path = next((r / rel for r in roots if (r / rel).is_file()), roots[0] / rel)
     spec = importlib.util.spec_from_file_location(name, path)
