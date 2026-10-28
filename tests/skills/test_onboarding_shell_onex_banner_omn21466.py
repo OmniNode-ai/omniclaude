@@ -37,7 +37,9 @@ eval "$2"
 """
 
 
-def _check(tmp_path: Path, kind: str, path: str, banner: bool = True) -> tuple[int, str]:
+def _check(
+    tmp_path: Path, kind: str, path: str, banner: bool = True
+) -> tuple[int, str]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     stub = bin_dir / "zsh"
@@ -47,7 +49,7 @@ def _check(tmp_path: Path, kind: str, path: str, banner: bool = True) -> tuple[i
     funcs = subprocess.run(
         [
             "awk",
-            '/^user_shell\\(\\) \\{/ {on=1} /^masked\\(\\)/ {on=0} on {print}',
+            "/^user_shell\\(\\) \\{/ {on=1} /^masked\\(\\)/ {on=0} on {print}",
             str(HANDLER),
         ],
         capture_output=True,
@@ -57,7 +59,7 @@ def _check(tmp_path: Path, kind: str, path: str, banner: bool = True) -> tuple[i
     check_fn = subprocess.run(
         [
             "awk",
-            '/^shell_runs_workspace_onex\\(\\) \\{/ {on=1} on {print} on && /^\\}/ {exit}',
+            "/^shell_runs_workspace_onex\\(\\) \\{/ {on=1} on {print} on && /^\\}/ {exit}",
             str(HANDLER),
         ],
         capture_output=True,
