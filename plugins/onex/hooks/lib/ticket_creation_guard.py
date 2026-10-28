@@ -1358,15 +1358,15 @@ def criterion_lines(description: str) -> dict[str, str]:
 
 
 def _handler(name: str) -> Any:
-    """Load a stdlib-only handler from ``src/omniclaude/handlers`` by path.
-
-    The canonical-file-shape ratchet lets this baselined script only shrink, so
-    new behaviour (OMN-17942 lane intake) and the description-patch logic live
-    in handlers; the hook's bare interpreter has no ``omniclaude`` package.
-    """
-    path = (
-        Path(__file__).resolve().parents[4] / "src/omniclaude/handlers" / f"{name}.py"
-    )
+    """Load a stdlib-only handler by path: this checkout's ``src``, else the package's."""
+    # The ratchet lets this baselined script only shrink, so new behaviour (OMN-17942 lane
+    # intake) and the description-patch logic live in handlers. A plugin cache copy
+    # carries no ``src`` tree (OMN-17427): the installed package is found, not imported.
+    package = importlib.util.find_spec("omniclaude")
+    roots = [Path(__file__).resolve().parents[4] / "src/omniclaude"]
+    roots += map(Path, (package and package.submodule_search_locations) or ())
+    rel = Path("handlers") / f"{name}.py"
+    path = next((r / rel for r in roots if (r / rel).is_file()), roots[0] / rel)
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"handler not loadable: {path}")

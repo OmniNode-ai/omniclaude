@@ -234,6 +234,11 @@ requirements:
     acceptance:
       - id: AC57
         statement: "pyproject.toml lists pre-commit in the dev dependency group and uv.lock records it among the omninode-claude dev dependencies -- falsifier: uv run pytest tests/ci/test_dependency_shape.py -q --no-cov -k pre_commit fails over the merge base, where neither names pre-commit"
+  - id: req-hook-libs-run-from-plugin-cache
+    statement: The ticket-creation gate and the content-capture hooks evaluate from a plugin cache copy of plugins/onex with no src tree beside it.
+    acceptance:
+      - id: AC58
+        statement: "From a copy of plugins/onex/hooks with no src above it, the capture encryption setting reads from the installed omniclaude package, the ticket gate evaluates an update and still refuses an unbound create -- falsifier: uv run pytest tests/unit/hooks/test_plugin_cache_install_omn17427.py -q --no-cov fails over the merge base, where both libs load from parents[4]/src"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1038,23 +1043,6 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_dependabot_ignores_hand_pinned_core_refs_omn17427.py -q --no-cov"
     binds_ac:
       - AC52
-  - id: dod-deploy-dependabot-skips-hand-pinned-core-refs
-    description: A hosted runner uses only Python's standard library to check that .github/dependabot.yml names each hand-pinned omnibase_core ref as an ignored dependency.
-    source: manual
-    status: verified
-    checks:
-      - check_type: command
-        check_value: |
-          python3 -c '
-          from pathlib import Path
-          text = Path(".github/dependabot.yml").read_text(encoding="utf-8")
-          assert "ignore:" in text
-          for name in ("OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml", "OmniNode-ai/omnibase_core/.github/workflows/imperative-contract-guard.yml", "OmniNode-ai/omnibase_core/.github/actions/validate-boundaries"):
-              assert "- dependency-name: \"" + name + "\"" in text, name
-          print("PASS: Dependabot ignores the three hand-pinned omnibase_core refs")
-          '
-    binds_ac:
-      - AC52
   - id: dod-coderabbit-triage-skill-removed
     description: The coderabbit_triage skill and its hook handler are removed, and the distribution manifest, plugin-compat.yaml and the file shape baseline do not name them.
     source: manual
@@ -1173,3 +1161,21 @@ dod_evidence:
         check_value: "uv run --frozen pre-commit --version"
     binds_ac:
       - AC57
+  - id: dod-hook-libs-run-from-plugin-cache
+    description: The test copies plugins/onex/hooks to a cache path with no src tree above it and runs the capture setting and the ticket gate as the hooks do.
+    source: manual
+    status: verified
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/unit/hooks/test_plugin_cache_install_omn17427.py -q --no-cov"
+    binds_ac:
+      - AC58
+  - id: dod-deploy-hook-libs-run-from-plugin-cache
+    description: A hosted runner runs the cache-copy test against the deployed hook libs, without credentials, services or network access; the merge base's libs fail it.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/unit/hooks/test_plugin_cache_install_omn17427.py -q --no-cov -k cache_copy"
+    binds_ac:
+      - AC58
