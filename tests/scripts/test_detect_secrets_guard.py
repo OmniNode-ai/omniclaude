@@ -743,3 +743,127 @@ def test_merge_keeps_only_tracked_unexcluded_untouched_entries(mod):
     assert set(merged) == {"kept.py", "rescanned.py"}
     assert merged["rescanned.py"] == scanned["results"]["rescanned.py"]
     assert merged["kept.py"] == [entry]
+
+
+# ---------------------------------------------------------------------------
+# T2.6 (OMN-21433): the pre-commit hook runs `--check`, which never writes
+# ---------------------------------------------------------------------------
+
+
+def _run_check_with_scan_result(
+    mod, repo: Path, new_baseline: dict, argv: list[str] | None = None
+) -> int:
+    """Run `main(["--check", ...])` with the scan mocked.
+
+    Unlike `_run_guard_with_scan_result`, the fake writes where the command's
+    `--baseline` argument points, because check mode must scan a scratch copy
+    and not the committed file.
+    """
+    real_run = subprocess.run
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd and cmd[0] == "detect-secrets":
+            target = Path(cmd[cmd.index("--baseline") + 1])
+            target.write_text(json.dumps(new_baseline, indent=2))
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        return real_run(cmd, *args, **kwargs)
+
+    with (
+        patch.object(mod.shutil, "which", return_value="/usr/bin/detect-secrets"),
+        patch.object(mod.subprocess, "run", side_effect=fake_run),
+    ):
+        return mod.main(["--check", *(argv or [])])
+
+
+def _seed_current_baseline(mod, repo: Path, results: dict) -> str:
+    """Commit a baseline already in canonical form; return its text."""
+    text = mod.serialize_baseline(mod.normalize_baseline({"results": results}))
+    (repo / ".secrets.baseline").write_text(text)
+    _git("add", ".secrets.baseline", cwd=repo)
+    _git("commit", "-q", "-m", "seed canonical baseline", cwd=repo)
+    return text
+
+
+def test_check_refuses_stale_baseline_and_leaves_it_untouched(
+    mod, tmp_path, monkeypatch, capsys
+):
+    """A baseline that is not what a scan would write is refused, not refreshed."""
+    known = "cafebabe" * 5
+    repo = _init_repo(tmp_path, baseline=None)
+    monkeypatch.chdir(repo)
+    committed = _seed_current_baseline(
+        mod, repo, {"app/known.py": [_finding(known, line=5)]}
+    )
+    (repo / ".secrets.baseline").write_text(committed)  # byte-identical start
+
+    # The scan now also finds a human-audited false positive that the file lacks.
+    scanned = {
+        "results": {
+            "app/known.py": [_finding(known, line=42)],
+            "app/reviewed.py": [_finding("00112233" * 5, line=7, is_secret=False)],
+        }
+    }
+    exit_code = _run_check_with_scan_result(mod, repo, scanned)
+
+    assert exit_code == 1
+    assert "stale" in capsys.readouterr().err
+    assert (repo / ".secrets.baseline").read_text() == committed
+    assert ".secrets.baseline" not in _staged_files(repo)
+
+
+def test_check_accepts_current_baseline_without_writing_or_staging(
+    mod, tmp_path, monkeypatch
+):
+    """Positive control: a line shift only, baseline already canonical, passes."""
+    known = "cafebabe" * 5
+    repo = _init_repo(tmp_path, baseline=None)
+    monkeypatch.chdir(repo)
+    committed = _seed_current_baseline(
+        mod, repo, {"app/known.py": [_finding(known, line=5)]}
+    )
+
+    scanned = {"results": {"app/known.py": [_finding(known, line=99)]}}
+    exit_code = _run_check_with_scan_result(mod, repo, scanned)
+
+    assert exit_code == 0
+    assert (repo / ".secrets.baseline").read_text() == committed
+    assert _staged_files(repo) == ""
+
+
+def test_check_still_blocks_a_new_unaudited_finding(mod, tmp_path, monkeypatch):
+    repo = _init_repo(tmp_path, baseline=None)
+    monkeypatch.chdir(repo)
+    committed = _seed_current_baseline(mod, repo, {})
+
+    scanned = {"results": {"app/leaked.py": [_finding("deadbeef" * 5, line=3)]}}
+    exit_code = _run_check_with_scan_result(mod, repo, scanned)
+
+    assert exit_code == 1
+    assert (repo / ".secrets.baseline").read_text() == committed
+    assert _staged_files(repo) == ""
+
+
+def test_check_flag_is_not_taken_for_a_file_name(mod, tmp_path, monkeypatch):
+    """`--check` selects the mode; it is never a path handed to the scan."""
+    repo = _init_repo(tmp_path, baseline=None)
+    monkeypatch.chdir(repo)
+    _seed_current_baseline(mod, repo, {})
+    seen: list[list[str]] = []
+    real_run = subprocess.run
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd and cmd[0] == "detect-secrets":
+            seen.append(list(cmd))
+            target = Path(cmd[cmd.index("--baseline") + 1])
+            target.write_text(json.dumps({"results": {}}))
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        return real_run(cmd, *args, **kwargs)
+
+    with (
+        patch.object(mod.shutil, "which", return_value="/usr/bin/detect-secrets"),
+        patch.object(mod.subprocess, "run", side_effect=fake_run),
+    ):
+        assert mod.main(["--check", "app/a.py"]) == 0
+
+    assert seen and "--check" not in seen[0]
+    assert Path(seen[0][seen[0].index("--baseline") + 1]) != Path(".secrets.baseline")

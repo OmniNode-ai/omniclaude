@@ -149,3 +149,60 @@ def test_main_returns_zero_when_no_missing(fake_repo: Path) -> None:
         patch("scripts.auto_generate_skill_nodes._REPO_ROOT", fake_repo),
     ):
         assert main() == 0
+
+
+def _tree_snapshot(root: Path) -> dict[str, bytes]:
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+@pytest.mark.unit
+def test_check_refuses_a_missing_node_and_writes_nothing(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """T2.6 (OMN-21433): `--check` names the missing node and generates nothing."""
+    _add_skill(fake_repo, "hostile-reviewer")  # no node
+    before = _tree_snapshot(fake_repo)
+
+    with (
+        patch(
+            "scripts.auto_generate_skill_nodes._SKILLS_DIR",
+            fake_repo / "plugins" / "onex" / "skills",
+        ),
+        patch(
+            "scripts.auto_generate_skill_nodes._NODES_DIR",
+            fake_repo / "src" / "omniclaude" / "nodes",
+        ),
+        patch("scripts.auto_generate_skill_nodes._REPO_ROOT", fake_repo),
+        patch("scripts.auto_generate_skill_nodes.subprocess.run") as run,
+    ):
+        assert main(["--check"]) == 1
+
+    run.assert_not_called()  # neither generate_skill_node.py nor `git add`
+    assert _tree_snapshot(fake_repo) == before
+    err = capsys.readouterr().err
+    assert "hostile-reviewer" in err
+    assert "generate_skill_node.py hostile-reviewer" in err
+
+
+@pytest.mark.unit
+def test_check_accepts_a_tree_with_every_node(fake_repo: Path) -> None:
+    """Positive control for the refusal above."""
+    _add_skill(fake_repo, "local-review")
+    _add_node(fake_repo, "local-review")
+
+    with (
+        patch(
+            "scripts.auto_generate_skill_nodes._SKILLS_DIR",
+            fake_repo / "plugins" / "onex" / "skills",
+        ),
+        patch(
+            "scripts.auto_generate_skill_nodes._NODES_DIR",
+            fake_repo / "src" / "omniclaude" / "nodes",
+        ),
+        patch("scripts.auto_generate_skill_nodes._REPO_ROOT", fake_repo),
+    ):
+        assert main(["--check"]) == 0
