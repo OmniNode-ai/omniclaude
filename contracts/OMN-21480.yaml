@@ -65,7 +65,7 @@ dod_evidence:
       - check_type: command
         check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"OMN-21480: a model that answered goes before\" > /dev/null'"
         cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-omn21480-ac3-downloaded-copy-orders-throttled-last
+  - id: dod-omn21480-ac3-downloaded-copy-order
     description: "A downloaded script sources the setup handler at the commit its raw URL names, checked against download_digest. That handler carries the throttled-last ordering, so the model order a downloaded copy (the VM walk) stores leads with a model that answered. Fails at the merge base, whose download URL names a handler without it."
     source: manual
     binds_ac: [AC3]
