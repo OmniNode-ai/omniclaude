@@ -78,16 +78,22 @@ in_user_shell() {
 }
 
 # What `onex` is to the developer's shell: alias, function, or the file it runs.
+# An interactive shell may print its own lines first (Terminal.app's "Restored
+# session:" banner), so each answer is printed behind a marker and only the line
+# that carries the marker is read (OMN-21466).
+shell_onex_answer() { # MARKER COMMAND -> the text the shell printed after MARKER=
+  in_user_shell 15 "printf '${1}=%s\\n' \"\$($2)\"" | sed -n "s/^${1}=//p" | head -n 1
+}
 shell_onex_kind() {
   case "$(user_shell)" in
-    zsh) in_user_shell 15 'whence -w onex' | sed -n 's/^onex: //p' | head -n 1 ;;
-    *) in_user_shell 15 'type -t onex' | head -n 1 ;;
+    zsh) shell_onex_answer ONEX_KIND 'whence -w onex' | sed -n 's/^onex: //p' ;;
+    *) shell_onex_answer ONEX_KIND 'type -t onex' ;;
   esac
 }
 shell_onex_path() {
   case "$(user_shell)" in
-    zsh) in_user_shell 15 'whence -p onex' | head -n 1 ;;
-    *) in_user_shell 15 'type -P onex' | head -n 1 ;;
+    zsh) shell_onex_answer ONEX_PATH 'whence -p onex' ;;
+    *) shell_onex_answer ONEX_PATH 'type -P onex' ;;
   esac
 }
 shell_onex_version() { # what `onex --version` prints in a new terminal, errors included
@@ -434,10 +440,10 @@ shell_runs_workspace_onex() {
   kind="$(shell_onex_kind)"
   case "$kind" in
     command|file) ;;
-    *) echo "in a new terminal onex is: ${kind:-not found}"; return 1 ;;
+    *) echo "in a new terminal onex is: $([ -n "$kind" ] && printf '"%s"' "$kind" || printf 'not found')"; return 1 ;;
   esac
   path="$(shell_onex_path)"
-  is_workspace_onex "$path" || { echo "a new terminal runs $path"; return 1; }
+  is_workspace_onex "$path" || { echo "a new terminal runs \"$path\""; return 1; }
 }
 
 # ---------------------------------------------------------------------------
