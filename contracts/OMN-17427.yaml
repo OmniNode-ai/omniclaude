@@ -1043,23 +1043,6 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_dependabot_ignores_hand_pinned_core_refs_omn17427.py -q --no-cov"
     binds_ac:
       - AC52
-  - id: dod-deploy-dependabot-skips-hand-pinned-core-refs
-    description: A hosted runner uses only Python's standard library to check that .github/dependabot.yml names each hand-pinned omnibase_core ref as an ignored dependency.
-    source: manual
-    status: verified
-    checks:
-      - check_type: command
-        check_value: |
-          python3 -c '
-          from pathlib import Path
-          text = Path(".github/dependabot.yml").read_text(encoding="utf-8")
-          assert "ignore:" in text
-          for name in ("OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml", "OmniNode-ai/omnibase_core/.github/workflows/imperative-contract-guard.yml", "OmniNode-ai/omnibase_core/.github/actions/validate-boundaries"):
-              assert "- dependency-name: \"" + name + "\"" in text, name
-          print("PASS: Dependabot ignores the three hand-pinned omnibase_core refs")
-          '
-    binds_ac:
-      - AC52
   - id: dod-coderabbit-triage-skill-removed
     description: The coderabbit_triage skill and its hook handler are removed, and the distribution manifest, plugin-compat.yaml and the file shape baseline do not name them.
     source: manual
