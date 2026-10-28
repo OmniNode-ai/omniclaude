@@ -82,6 +82,18 @@ source file, so it reports current positions rather than stale ones. The
 remedy path this guard's own block message instructs a human to run is
 therefore unaffected.
 
+Check-only mode (T2.6, OMN-21433)
+---------------------------------
+
+The pre-commit hook runs `--check`. It does everything above except the write
+and the `git add`: the scan runs against a scratch copy of the baseline, a new
+unaudited finding blocks exactly as before, and the canonical form the scan
+would have written is compared with the file on disk. A baseline that differs
+is refused as stale and left untouched; the author refreshes it by running the
+guard without `--check` and staging the result. A hook that rewrites a file
+during a commit leaves the commit holding bytes nobody reviewed, and a refused
+run must leave the tree byte-identical.
+
 `load_json`, `result_keys`, and `load_baseline_at_ref` are the reusable public
 API. `scripts/detect_secrets_ci_diff.py` (OMN-15072) imports them to apply the
 same audited-vs-unaudited classification against the target-branch baseline
@@ -98,9 +110,15 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 BASELINE = Path(".secrets.baseline")
+
+# Mode flag of the pre-commit hook (T2.6, OMN-21433): scan a scratch copy,
+# refuse, write nothing.
+CHECK_FLAG = "--check"
+_CHECK_EXCLUDE_PATTERN = rf"^{re.escape(str(BASELINE))}$"
 
 # Bookkeeping fields the COMMITTED baseline deliberately does not carry
 # (OMN-18521). `detect-secrets scan` always writes both. Neither is part of a
@@ -174,6 +192,26 @@ def result_keys(baseline: dict) -> set[tuple[str, str]]:
         for finding in findings:
             keys.add((filename, finding.get("hashed_secret", "")))
     return keys
+
+
+def _restore_scan_config(baseline: dict) -> None:
+    """Make a scratch-copy scan record the filters a scan of the real file does.
+
+    `filters_used` records how the scan was run: the baseline file it skips and
+    the exclude patterns. A scan of the scratch copy records the scratch path
+    and the one extra pattern `--check` adds, so both are put back before the
+    result is compared with the committed file (T2.6, OMN-21433).
+    """
+    for used in baseline.get("filters_used", []):
+        path = str(used.get("path", ""))
+        if path.endswith(".is_baseline_file"):
+            used["filename"] = str(BASELINE)
+        elif path.endswith(".should_exclude_file"):
+            used["pattern"] = [
+                pattern
+                for pattern in used.get("pattern", [])
+                if pattern != _CHECK_EXCLUDE_PATTERN
+            ]
 
 
 def normalize_baseline(baseline: dict) -> dict:
@@ -303,12 +341,37 @@ def main(argv: list[str] | None = None) -> int:
     18 s of every commit, and CI's `detect-secrets` job scans the whole tree on
     every pull request). With none, or with every tracked file, or when the
     commit touches `FULL_RESCAN_TRIGGERS`, the whole tracked set is rescanned.
+
+    `--check` (T2.6, OMN-21433) scans a scratch copy and writes nothing: it
+    refuses a new unaudited finding and a stale baseline, and never touches
+    `.secrets.baseline` or the index.
+    """
+    args = list(argv or [])
+    check = CHECK_FLAG in args
+    files_arg = [arg for arg in args if arg != CHECK_FLAG]
+    if not check:
+        return _guard(files_arg, BASELINE, check=False)
+    with tempfile.TemporaryDirectory(prefix="detect-secrets-check-") as scratch:
+        return _guard(files_arg, Path(scratch) / "baseline.json", check=True)
+
+
+def _guard(argv: list[str], work: Path, *, check: bool) -> int:
+    """Run the guard with `work` as the baseline the scan reads and writes.
+
+    `work` is `.secrets.baseline` itself, or in `check` mode a scratch copy of
+    it, so the committed file is only ever written on the non-check path.
     """
     if shutil.which("detect-secrets") is None:
         return _block("`detect-secrets` is not installed / not on PATH.")
 
     if not BASELINE.exists():
         return _block(f"{BASELINE} does not exist -- nothing to guard.")
+
+    if check:
+        try:
+            work.write_text(BASELINE.read_text())
+        except OSError as exc:
+            return _block(f"could not copy {BASELINE} to a scratch file: {exc}")
 
     old_baseline = _load_committed_baseline()
     if old_baseline is None:
@@ -327,14 +390,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     prior_baseline: dict = {}
     if incremental:
-        loaded = load_json(BASELINE.read_text(), "working-tree .secrets.baseline")
+        loaded = load_json(work.read_text(), "working-tree .secrets.baseline")
         if loaded is None:
             return _block("working-tree .secrets.baseline is unreadable or corrupt.")
         prior_baseline = loaded
 
-    scan_cmd = ["detect-secrets", "scan", "--baseline", str(BASELINE)]
+    scan_cmd = ["detect-secrets", "scan", "--baseline", str(work)]
     for pattern in EXCLUDE_PATTERNS:
         scan_cmd += ["--exclude-files", pattern]
+    if check:
+        # The scan skips the baseline it is told to update; a scratch copy has
+        # another name, so skip the real file by pattern.
+        scan_cmd += ["--exclude-files", _CHECK_EXCLUDE_PATTERN]
     if incremental:
         scan_cmd += ["--", *sorted(files)]
     scan_proc = subprocess.run(scan_cmd, capture_output=True, text=True, check=False)
@@ -345,13 +412,15 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     try:
-        new_text = BASELINE.read_text()
+        new_text = work.read_text()
     except OSError as exc:
         return _block(f"could not read regenerated {BASELINE}: {exc}")
 
     new_baseline = load_json(new_text, "regenerated .secrets.baseline")
     if new_baseline is None:
         return _block("regenerated .secrets.baseline is corrupt.")
+    if check:
+        _restore_scan_config(new_baseline)
 
     if incremental and tracked is not None:
         new_baseline["results"] = merge_incremental_results(
@@ -361,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
         # whole tree's back, so a blocked commit still leaves a complete
         # baseline for `detect-secrets audit` to work on.
         try:
-            BASELINE.write_text(serialize_baseline(new_baseline))
+            work.write_text(serialize_baseline(new_baseline))
         except OSError as exc:
             return _block(f"could not write merged {BASELINE}: {exc}")
 
@@ -410,8 +479,27 @@ def main(argv: list[str] | None = None) -> int:
     # classification above has already run. A write failure fails CLOSED --
     # staging a baseline whose on-disk form we could not control is exactly
     # the "absorbed silently" shape OMN-15068 exists to prevent.
+    canonical = serialize_baseline(normalize_baseline(new_baseline))
+    if check:
+        try:
+            current = BASELINE.read_text()
+        except OSError as exc:
+            return _block(f"could not read {BASELINE}: {exc}")
+        if current != canonical:
+            return _block(
+                f"{BASELINE} is stale: a scan would write different bytes. "
+                "Nothing was changed. Refresh it with "
+                "`python3 scripts/detect_secrets_guard.py` (no --check), "
+                f"then stage {BASELINE}."
+            )
+        print(
+            "[detect-secrets-guard] OK: no new unaudited findings; "
+            "baseline is current (check only, nothing written)."
+        )
+        return 0
+
     try:
-        BASELINE.write_text(serialize_baseline(normalize_baseline(new_baseline)))
+        work.write_text(canonical)
     except OSError as exc:
         return _block(f"could not write normalized {BASELINE}: {exc}")
 
