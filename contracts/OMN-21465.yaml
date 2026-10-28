@@ -1,0 +1,75 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21465
+title: "Onboarding offers and recommends models the developer's key cannot call: probe each model before the menu"
+summary: >
+  Onboarding checked only that a model's name appears in the provider's model
+  list, which passes for deprecated and non-chat models, so the developer picked
+  one and phase 3 failed. The setup handler now sends one one-token completion
+  per listed model on the developer's own key before the menu, offers and
+  recommends only those that answered (a 429 stays, busy is not unusable), lists
+  the rest as unavailable with the provider's reason, and reports a provider
+  whose every listed model failed as unusable at the menu.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21465-menu-probed
+    statement: The menu lists only models that answered a one-token probe on the developer's own key.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the menu lists only models that answered a one-token probe on the developer's own key, and marks the rest unavailable with the provider's reason"
+  - id: req-omn21465-recommend-probed
+    statement: A recommended order never contains a model that failed its probe.
+    acceptance:
+      - id: AC2
+        statement: "AC2: a recommended order never contains a model that failed its probe"
+  - id: req-omn21465-provider-unusable
+    statement: A provider whose every listed model fails the probe is reported unusable at the menu.
+    acceptance:
+      - id: AC3
+        statement: "AC3: a provider whose every listed model fails the probe is reported as unusable at the menu, not at phase 3"
+evidence_requirements:
+  - kind: tests
+    description: "Model probe tests pass"
+    command: "uv run pytest tests/skills/test_onboarding_model_probe_omn21465.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21465-ac1-menu-lists-only-answering-models
+    description: 'A stubbed provider lists a deprecated model and a gone model that 404 on completion and one that answers 429; the menu omits the two 404 models, marks them unavailable with the provider reason, and keeps the 429 model. Fails at the merge base, which offers every listed model.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_model_probe_omn21465.py -q --no-cov -k test_a_listed_model_that_404s_on_completion_is_not_offered"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21465-ac2-recommendation-dropped
+    description: 'The routing contract recommends gpt-4.1-nano first; it 404s, so the recommendation is dropped, the reason recorded, and Enter takes the next. Fails at the merge base, which recommends the 404 model.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_model_probe_omn21465.py -q --no-cov -k test_a_recommendation_naming_a_404_model_is_dropped_with_the_reason"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21465-ac3-provider-unusable-at-menu
+    description: 'A provider whose every listed model 404s is dropped at the menu with its reason and is no longer in MODELS, so phase 3 never sets it up. Fails at the merge base, which lists the models.'
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_model_probe_omn21465.py -q --no-cov -k test_a_provider_whose_every_model_fails_is_unusable_at_the_menu"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21465-deploy-probe
+    description: "Deploy probe. Read the setup handler from GitHub at the checked-out commit and require probe_listed in it, with the AC1 test. It fails at the merge base, where the handler has no probe_listed."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_model_probe_omn21465.py -q --no-cov -k test_a_listed_model_that_404s_on_completion_is_not_offered"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"probe_listed() {\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
