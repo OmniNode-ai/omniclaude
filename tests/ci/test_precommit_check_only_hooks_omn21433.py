@@ -79,7 +79,10 @@ def _ruff_argv(hook_id: str) -> list[str]:
     assert ruff_args[0] == "ruff", ruff_args
     binary = shutil.which("ruff")
     prefix = [binary] if binary else [sys.executable, "-m", "ruff"]
-    return [*prefix, *ruff_args[1:]]
+    # --no-cache: ruff's own cache directory is a write the hook may make, and
+    # the snapshot below compares every byte of the scratch tree.
+    subcommand, *rest = ruff_args[1:]
+    return [*prefix, subcommand, "--no-cache", *rest]
 
 
 def _snapshot(root: Path) -> dict[str, str]:
