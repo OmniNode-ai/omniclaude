@@ -32,12 +32,24 @@ HANDLER = (
 )
 KEY = "sk-proj-omn21465-test"
 SCRIPT = REPO / "plugins/onex/skills/_bin/lab-onboarding.sh"
-FUNCTIONS = (
-    "omnimarket_file catalogue_row to_ere recommended_order recommended_basis "
-    "list_in_order offered_models list_recommended_first probe_model probe_listed "
-    "key_models drop_unlisted choose_models parse_ordered_choice "
-    "comma_list set_chosen_models"
-).split()
+FUNCTIONS = [
+    "omnimarket_file",
+    "catalogue_row",
+    "to_ere",
+    "recommended_order",
+    "recommended_basis",
+    "list_in_order",
+    "offered_models",
+    "list_recommended_first",
+    "probe_model",
+    "probe_listed",
+    "key_models",
+    "drop_unlisted",
+    "choose_models",
+    "parse_ordered_choice",
+    "comma_list",
+    "set_chosen_models",
+]
 
 DEPRECATED = {
     "error": {"message": "The model `gpt-4.1-nano` has been deprecated", "code": 404}
@@ -140,8 +152,8 @@ def _run(tmp_path: Path, catalogue: Path, script: str) -> str:
         + "LOG=/dev/null; TAB=$(printf '\\t'); MODELS='openai gemini'; SKIPPED=''\n"
         "say() { printf '%s\\n' \"$*\"; }\n"
         "ram_gb() { echo 16; }\n"
-        "provider_label() { case \"$1\" in openai) echo OpenAI ;; *) echo \"$1\" ;; esac; }\n"
-        "set_result() { RESULT=\"$2\"; }\n"
+        'provider_label() { case "$1" in openai) echo OpenAI ;; *) echo "$1" ;; esac; }\n'
+        'set_result() { RESULT="$2"; }\n'
         "CHOSEN_OPENAI=''; CHOSEN_GEMINI=''; CHOSEN_OPENROUTER=''; CHOSEN_OLLAMA=''\n"
         "MODEL_LIST=''; MODEL_LIST_ERR=''; RECOMMENDED=''; REC_BASIS=''\n"
         "WORKSPACE=/nonexistent; CATALOGUE_REL=omnimarket/x.yaml\n"
@@ -186,9 +198,13 @@ def test_a_listed_model_that_404s_on_completion_is_not_offered(tmp_path: Path) -
     numbered = re.findall(r"^\s+\d+\) (\S+)", menu, re.M)
     assert numbered == ["gpt-4.1", "gpt-4o-mini"]
     assert "Not offered, your key could not call these:" in menu
-    assert "✗ gpt-4.1-nano: HTTP 404: The model `gpt-4.1-nano` has been deprecated" in menu
+    assert (
+        "✗ gpt-4.1-nano: HTTP 404: The model `gpt-4.1-nano` has been deprecated" in menu
+    )
     assert "✗ gpt-4o-2024-05-13: HTTP 404: The model does not exist" in menu
-    assert set(served["auth"]) == {f"Bearer {KEY}"}  # the probe used the developer's key
+    assert set(served["auth"]) == {
+        f"Bearer {KEY}"
+    }  # the probe used the developer's key
     assert all(b.get("max_completion_tokens") == 1 for b in served["bodies"])
 
 
@@ -222,7 +238,7 @@ def test_a_provider_whose_every_model_fails_is_unusable_at_the_menu(
     """AC3: preflight drops the provider with the reason; it is no longer in
     MODELS, so phase 3 (which loops over MODELS) never sets it up."""
     models = ["gpt-4.1-nano", "gpt-4o-2024-05-13", "o4-mini-2025-04-16"]
-    chat = {m: (404, NOT_FOUND) for m in models}
+    chat = dict.fromkeys(models, (404, NOT_FOUND))
     with _provider(models, chat) as served:
         cat = _catalogue(tmp_path, served["url"], [])
         out = _run(
@@ -233,7 +249,10 @@ def test_a_provider_whose_every_model_fails_is_unusable_at_the_menu(
             'echo "models=[$MODELS] skipped=[$SKIPPED] result=$RESULT"',
         )
     assert "OFFERED" not in out
-    assert "✗ OpenAI: none of the 3 models it lists answered a test call on your key" in out
+    assert (
+        "✗ OpenAI: none of the 3 models it lists answered a test call on your key"
+        in out
+    )
     assert "Nothing was stored for it" in out
     assert "models=[gemini] skipped=[openai] result=fail:none of the 3 models" in out
 
