@@ -696,7 +696,7 @@ YAML
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
   local digest="b885:3534:26ab:8da4:5a73:a982:4d47:9ef0:edfc:26ce:6b97:bf57:3ff1:2d4c:29df:f4e0" root candidate \
-    download_digest="cacf:495c:bd01:600e:2255:73b3:0ff5:00da:930b:46f4:5427:f628:4880:9eb5:7809:0620"
+    download_digest="b885:3534:26ab:8da4:5a73:a982:4d47:9ef0:edfc:26ce:6b97:bf57:3ff1:2d4c:29df:f4e0"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
   for candidate in "$root/$rel" "$PWD/$rel" "$WORKSPACE/omniclaude/$rel"; do
@@ -707,7 +707,7 @@ load_onboarding_preflight() {
     fi
   done
   candidate="$RUN_DIR/handler_onboarding_preflight.sh"
-  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/e3f4b271ca126db530da2dcaab92af032c95097f/$rel" ||
+  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/22f6c4821c6c430e3d8ba853f5aae44e5de6efcc/$rel" ||
      ! printf '%s  %s\n' "$download_digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
     printf 'omninode-dev-setup: cannot load the checksum-pinned onboarding preflight handler\n' >&2
     return 1

@@ -71,3 +71,11 @@ dod_evidence:
       - check_type: command
         check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"shell_onex_answer() {\" > /dev/null'"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21466-ac1-downloaded-copy-reads-answer
+    description: "A downloaded script sources the setup handler at the commit its raw URL names, checked against download_digest. That handler defines shell_onex_answer, with the bytes download_digest checks, so phase 6 of a downloaded copy (the VM walk) ignores the Terminal.app banner. Fails at the merge base, whose download URL names e3f4b271, a handler without it."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_banner_download_omn21466.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
