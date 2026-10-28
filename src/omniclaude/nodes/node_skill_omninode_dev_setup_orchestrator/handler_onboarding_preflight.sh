@@ -440,7 +440,7 @@ shell_runs_workspace_onex() {
   kind="$(shell_onex_kind)"
   case "$kind" in
     command|file) ;;
-    *) echo "in a new terminal onex is: $([ -n "$kind" ] && printf '"%s"' "$kind" || printf 'not found')"; return 1 ;;
+    *) echo "in a new terminal onex is: ${kind:-not found}"; return 1 ;;
   esac
   path="$(shell_onex_path)"
   is_workspace_onex "$path" || { echo "a new terminal runs \"$path\""; return 1; }

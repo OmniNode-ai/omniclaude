@@ -105,7 +105,7 @@ def test_alias_or_function_fails_naming_what_the_shell_said(
 ) -> None:
     rc, out = _check(tmp_path, kind, "")
     assert rc == 1
-    assert f'"{kind}"' in out
+    assert f"onex is: {kind}" in out
     assert "Restored session" not in out
 
 
