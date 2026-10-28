@@ -482,10 +482,10 @@ def _guard(argv: list[str], work: Path, *, check: bool) -> int:
     canonical = serialize_baseline(normalize_baseline(new_baseline))
     if check:
         try:
-            current = BASELINE.read_text()
+            current = BASELINE.read_bytes()  # bytes: read_text() folds CRLF to LF
         except OSError as exc:
             return _block(f"could not read {BASELINE}: {exc}")
-        if current != canonical:
+        if current != canonical.encode("utf-8"):
             return _block(
                 f"{BASELINE} is stale: a scan would write different bytes. "
                 "Nothing was changed. Refresh it with "

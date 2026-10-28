@@ -75,7 +75,9 @@ def _ruff_argv(hook_id: str) -> list[str]:
     """
     argv = _entry_argv(hook_id)
     assert argv[:2] == ["bash", UV_WRAPPER], argv
-    ruff_args = argv[2:]
+    # --frozen: `uv run` must not rewrite uv.lock while a hook is only checking.
+    assert argv[2] == "--frozen", argv
+    ruff_args = argv[3:]
     assert ruff_args[0] == "ruff", ruff_args
     binary = shutil.which("ruff")
     prefix = [binary] if binary else [sys.executable, "-m", "ruff"]
@@ -160,6 +162,9 @@ def test_ruff_check_accepts_clean_file(tmp_path: Path) -> None:
     [
         ("no_newline.txt", b"alpha\nbeta"),
         ("extra_blank.txt", b"alpha\nbeta\n\n"),
+        ("only_newline.txt", b"\n"),
+        ("crlf_extra_blank.txt", b"alpha\r\n\r\n"),
+        ("only_crlf.txt", b"\r\n"),
     ],
 )
 def test_end_of_file_check_refuses_and_leaves_file_alone(
@@ -173,7 +178,8 @@ def test_end_of_file_check_refuses_and_leaves_file_alone(
 def test_end_of_file_check_accepts_single_trailing_newline(tmp_path: Path) -> None:
     (tmp_path / "clean.txt").write_bytes(b"alpha\nbeta\n")
     (tmp_path / "empty.txt").write_bytes(b"")
-    argv = [*_entry_argv("end-of-file-fixer"), "clean.txt", "empty.txt"]
+    (tmp_path / "crlf.txt").write_bytes(b"alpha\r\nbeta\r\n")
+    argv = [*_entry_argv("end-of-file-fixer"), "clean.txt", "empty.txt", "crlf.txt"]
     _assert_accepted_and_untouched(argv, tmp_path)
 
 
@@ -247,7 +253,9 @@ def test_output_hook_does_not_select_other_paths() -> None:
 
 
 def test_auto_generate_skill_nodes_hook_runs_in_check_mode() -> None:
-    assert "--check" in _entry_argv("auto-generate-skill-nodes")
+    argv = _entry_argv("auto-generate-skill-nodes")
+    assert "--check" in argv
+    assert "--frozen" in argv, "uv run must not rewrite uv.lock"
 
 
 def test_detect_secrets_hook_runs_in_check_mode() -> None:

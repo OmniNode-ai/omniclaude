@@ -867,3 +867,19 @@ def test_check_flag_is_not_taken_for_a_file_name(mod, tmp_path, monkeypatch):
 
     assert seen and "--check" not in seen[0]
     assert Path(seen[0][seen[0].index("--baseline") + 1]) != Path(".secrets.baseline")
+
+
+def test_check_refuses_a_baseline_with_crlf_line_endings(mod, tmp_path, monkeypatch):
+    """The comparison is on bytes: a CRLF copy is not the canonical file."""
+    known = "cafebabe" * 5
+    repo = _init_repo(tmp_path, baseline=None)
+    monkeypatch.chdir(repo)
+    committed = _seed_current_baseline(
+        mod, repo, {"app/known.py": [_finding(known, line=5)]}
+    )
+    crlf = committed.replace("\n", "\r\n").encode("utf-8")
+    (repo / ".secrets.baseline").write_bytes(crlf)
+
+    scanned = {"results": {"app/known.py": [_finding(known, line=5)]}}
+    assert _run_check_with_scan_result(mod, repo, scanned) == 1
+    assert (repo / ".secrets.baseline").read_bytes() == crlf

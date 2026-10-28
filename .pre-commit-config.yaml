@@ -269,7 +269,8 @@ repos:
         entry: >-
           bash -c 'rc=0; for f in "$@"; do [ -s "$f" ] || continue;
           if [ -n "$(tail -c1 "$f")" ]; then echo "end-of-file-fixer: $f: no newline at end of file" >&2; rc=1;
-          elif [ "$(tail -c2 "$f" | od -An -tx1 | tr -d " ")" = "0a0a" ]; then echo "end-of-file-fixer: $f: more than one newline at end of file" >&2; rc=1; fi; done;
+          else h=$(tail -c4 "$f" | od -An -tx1 | tr -d " \n");
+          case "$h" in 0a|0d0a|*0a0a|*0a0d0a) echo "end-of-file-fixer: $f: blank line at end of file" >&2; rc=1;; esac; fi; done;
           [ "$rc" -eq 0 ] || echo "end-of-file-fixer: add or trim the newline by hand, then re-stage" >&2; exit "$rc"' end-of-file-fixer
         language: system
         types: [text]
@@ -958,7 +959,7 @@ repos:
 
       - id: ruff-format
         name: ruff format --check (staged files, never rewrites)
-        entry: bash scripts/uv-run-worktree-safe.sh ruff format --check --diff
+        entry: bash scripts/uv-run-worktree-safe.sh --frozen ruff format --check --diff
         language: system
         types: [python]
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
@@ -966,7 +967,7 @@ repos:
 
       - id: ruff-fix
         name: ruff check (staged files, never rewrites)
-        entry: bash scripts/uv-run-worktree-safe.sh ruff check
+        entry: bash scripts/uv-run-worktree-safe.sh --frozen ruff check
         language: system
         types: [python]
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
@@ -1459,7 +1460,7 @@ repos:
       # scaffolds the node automatically via generate_skill_node.py.
       - id: auto-generate-skill-nodes
         name: Auto-generate skill orchestrator nodes
-        entry: bash scripts/uv-run-worktree-safe.sh python scripts/auto_generate_skill_nodes.py --check
+        entry: bash scripts/uv-run-worktree-safe.sh --frozen python scripts/auto_generate_skill_nodes.py --check
         language: system
         pass_filenames: false
         stages: [pre-commit]
