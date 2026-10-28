@@ -1,0 +1,67 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21480
+title: "onex models test runs only the first stored model, so one upstream 429 marks the whole provider failed while a working model sits second in its own list"
+summary: >
+  The provider test walks the stored model order on a 429 (omnimarket PR for this
+  ticket). This PR is the onboarding side: the pre-menu probe orders a model it
+  saw throttled after the models that answered, so the order stored (and the
+  first model onex tests) is one that works, and a provider whose every model
+  is busy is kept and told so at the menu.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21480-walk-order
+    statement: A 429 on one stored model does not decide the provider's verdict, and onboarding stores a working model first.
+    acceptance:
+      - id: AC1
+        statement: "AC1: a provider test that gets an upstream 429 on one model tries the next model in the stored order, and the provider passes when any of them answers -- falsifier: uv run pytest with a stubbed delegation returning 429 for the first model and a completion for the second, asserting the provider's recorded state is passing and names the model that answered"
+      - id: AC2
+        statement: "AC2: a provider whose every stored model is throttled is recorded as throttled and not as a failed key, and its recorded reason says so -- falsifier: uv run pytest with a stubbed delegation returning 429 for every model, asserting the recorded state is not the credential-failed state and the reason names the throttle"
+      - id: AC3
+        statement: "AC3: the model order onboarding stores puts a model the pre-menu probe saw throttled after the models that answered -- falsifier: uv run pytest on the order the probe produces, with one model probing throttled and one probing ok, asserting the one that answered is first"
+evidence_requirements:
+  - kind: tests
+    description: "Throttled order tests pass"
+    command: "uv run pytest tests/skills/test_onboarding_throttled_order_omn21480.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21480-ac1
+    description: "Onboarding side of AC1 (the provider test walk itself is the omnimarket PR): with the first model probing 429 and the second ok, the stored order leads with the one that answered. Fails at the merge base, which stores the throttled model first."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_throttled_order_omn21480.py -q --no-cov -k test_ac1"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21480-ac2
+    description: "Onboarding side of AC2 (the throttled record itself is the omnimarket PR): every model probing 429 keeps the provider, in order, and the menu says the key is fine and the models are busy. Fails at the merge base, which prints no such line."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_throttled_order_omn21480.py -q --no-cov -k test_ac2"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21480-ac3
+    description: "One model probes 429 and one probes ok: the one that answered is first in the list, and Enter takes it first. Fails at the merge base, which lists the throttled model first."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_throttled_order_omn21480.py -q --no-cov -k test_ac3_a_throttled"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21480-deploy-probe
+    description: "Deploy probe. Read the setup handler from GitHub at the checked-out commit and require the throttled-last ordering comment in it, with the AC3 test. It fails at the merge base, where the handler has no OMN-21480 ordering."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_throttled_order_omn21480.py -q --no-cov -k test_ac3_a_throttled"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"OMN-21480: a model that answered goes before\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"

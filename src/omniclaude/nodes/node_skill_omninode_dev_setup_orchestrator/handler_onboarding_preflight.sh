@@ -605,7 +605,7 @@ probe_model() {
 # rate limited (kept). At most ONBOARD_PROBE_MAX models are probed (default 30),
 # so a long list costs a bounded number of one-token calls. 1 when none answered.
 probe_listed() {
-  local m r i=0 j=0 n=0 keep="" rec="" recs
+  local m r i=0 n=0 okl="" thl="" okrec="" threc="" recs j=0
   MODEL_UNAVAILABLE=""; MODEL_THROTTLED=""
   [ -n "$2" ] || return 0
   recs="$(printf '%s' "$RECOMMENDED" | tr ',' ' ')"
@@ -615,20 +615,36 @@ probe_listed() {
     [ "$n" -le "${ONBOARD_PROBE_MAX:-30}" ] || break
     r="$(probe_model "$2" "$3" "$m")"
     case "$r" in
-      ok|throttled)
-        j=$((j + 1)); keep="${keep}${keep:+
+      ok)
+        okl="${okl}${okl:+
 }$m"
-        [ "$r" = "throttled" ] && MODEL_THROTTLED="${MODEL_THROTTLED}${m}
+        in_list "$i" "$recs" && okrec="${okrec}${okrec:+
+}$m" ;;
+      throttled)
+        thl="${thl}${thl:+
+}$m"
+        MODEL_THROTTLED="${MODEL_THROTTLED}${m}
 "
-        in_list "$i" "$recs" && rec="${rec}${rec:+,}$j" ;;
+        in_list "$i" "$recs" && threc="${threc}${threc:+
+}$m" ;;
       *) MODEL_UNAVAILABLE="${MODEL_UNAVAILABLE}${m}: ${r#no:}
 " ;;
     esac
   done <<ENDLIST
 $MODEL_LIST
 ENDLIST
-  MODEL_LIST="$keep"; RECOMMENDED="$rec"
-  [ -n "$keep" ]
+  # OMN-21480: a model that answered goes before one that was throttled just
+  # now, so the order stored (and the first model onex tests) is one that works.
+  MODEL_LIST="${okl}${okl:+${thl:+
+}}${thl}"; RECOMMENDED=""
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    j=$((j + 1))
+    if printf '%s\n%s\n' "$okrec" "$threc" | grep -qxF "$m"; then RECOMMENDED="${RECOMMENDED}${RECOMMENDED:+,}$j"; fi
+  done <<ENDLIST
+$MODEL_LIST
+ENDLIST
+  [ -n "$MODEL_LIST" ]
 }
 
 # key_models provider key -> MODEL_LIST and RECOMMENDED; 1 with MODEL_LIST_ERR
@@ -765,6 +781,11 @@ EOF
     while IFS= read -r m; do [ -n "$m" ] && say "    ✗ $m"; done <<ENDBAD
 $MODEL_UNAVAILABLE
 ENDBAD
+  fi
+  if [ -n "$MODEL_THROTTLED" ] && [ "$(printf '%s' "$MODEL_THROTTLED" | grep -c .)" -eq "$n" ]; then
+    # OMN-21480: all throttled is a busy provider, not a bad key; they are kept.
+    say ""
+    say "  Every model above is busy just now (HTTP 429). Your key is fine: they are kept, and onex tests them again later."
   fi
   say ""
   if [ -n "$REC_BASIS" ] && [ -n "$RECOMMENDED" ]; then
