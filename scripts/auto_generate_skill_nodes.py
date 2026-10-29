@@ -11,8 +11,8 @@ This prevents the recurring friction of skills being committed without
 their ONEX orchestrator node (F57 — fourth occurrence as of OMN-6815).
 
 Usage:
-    python scripts/auto_generate_skill_nodes.py --check   # the pre-commit hook
-    python scripts/auto_generate_skill_nodes.py           # generate and stage
+    python -m scripts.auto_generate_skill_nodes --check   # the pre-commit hook
+    python -m scripts.auto_generate_skill_nodes           # generate and stage
 
 ``--check`` (T2.6, OMN-21499) is what the pre-commit hook runs: it names every
 skill missing its node, prints the command that generates it, and writes
@@ -30,6 +30,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scripts.generate_skill_node import is_bootstrap_skill
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -44,7 +46,12 @@ def _kebab_to_snake(kebab: str) -> str:
 
 
 def find_skills_missing_nodes() -> list[str]:
-    """Return kebab-case names of skills that have SKILL.md but no orchestrator node."""
+    """Return kebab-case names of skills that have SKILL.md but no orchestrator node.
+
+    A bootstrap skill (``bootstrap: true`` in its frontmatter) is not listed: the
+    node-home ratchet (OMN-20702) refuses a new node here, so its node is built
+    in omnimarket when its node-backed skill comes online.
+    """
     if not _SKILLS_DIR.exists():
         return []
 
@@ -53,6 +60,8 @@ def find_skills_missing_nodes() -> list[str]:
         if not skill_dir.is_dir() or skill_dir.name.startswith("_"):
             continue
         if not (skill_dir / "SKILL.md").exists():
+            continue
+        if is_bootstrap_skill(skill_dir):
             continue
 
         snake = _kebab_to_snake(skill_dir.name)

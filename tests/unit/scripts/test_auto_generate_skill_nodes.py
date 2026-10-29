@@ -206,3 +206,31 @@ def test_check_accepts_a_tree_with_every_node(fake_repo: Path) -> None:
         patch("scripts.auto_generate_skill_nodes._REPO_ROOT", fake_repo),
     ):
         assert main(["--check"]) == 0
+
+
+@pytest.mark.unit
+def test_bootstrap_skill_is_not_listed_as_missing_a_node(fake_repo: Path) -> None:
+    """A skill that declares bootstrap: true gets no generated node."""
+    _add_skill(fake_repo, "plain-skill")
+    boot = fake_repo / "plugins" / "onex" / "skills" / "boot-skill"
+    boot.mkdir(parents=True)
+    (boot / "SKILL.md").write_text(
+        "---\ndescription: Bootstrap skill\nbootstrap: true\n---\n", encoding="utf-8"
+    )
+    quoted = fake_repo / "plugins" / "onex" / "skills" / "quoted-skill"
+    quoted.mkdir(parents=True)
+    (quoted / "SKILL.md").write_text(
+        '---\ndescription: x\nbootstrap: "true"\n---\n', encoding="utf-8"
+    )
+
+    with (
+        patch(
+            "scripts.auto_generate_skill_nodes._SKILLS_DIR",
+            fake_repo / "plugins" / "onex" / "skills",
+        ),
+        patch(
+            "scripts.auto_generate_skill_nodes._NODES_DIR",
+            fake_repo / "src" / "omniclaude" / "nodes",
+        ),
+    ):
+        assert find_skills_missing_nodes() == ["plain-skill", "quoted-skill"]

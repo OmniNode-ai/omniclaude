@@ -525,6 +525,70 @@ components:
   backing_nodes:
   - node_integration_sweep_orchestrator
   rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: lean_andon_stop
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_andon_stop/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on node_andon_stop_reducer, OMN-21443.
+- id: lean_experiment_first
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_experiment_first/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on node_experiment_record_compute and node_innovation_accounting_reducer, tasks T-L7 and T-L6 of OMN-21433 (no child ticket yet).
+- id: lean_five_whys
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_five_whys/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on node_failure_record_reducer and node_five_whys_check_compute, tasks T-P2 and T-L1 of OMN-21433 (no child ticket yet).
+- id: lean_go_and_see
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_go_and_see/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on node_work_ledger_append_effect, task T-P4 of OMN-21433 (no child ticket yet).
+- id: lean_poka_yoke
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_poka_yoke/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on node_lane_brief_pr_gate_compute, OMN-21440.
+- id: lean_seam_read
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_seam_read/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on node_seam_reading_compute, OMN-21459.
+- id: lean_session_recovery
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_session_recovery/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on no node yet, to be ticketed under OMN-21433.
+- id: lean_wip_pull
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_wip_pull/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on node_wip_gate_reducer, OMN-21438.
 - id: omninode_dev_setup
   kind: skill
   exposure: hidden

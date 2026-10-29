@@ -130,6 +130,33 @@ def read_skill_frontmatter(skill_dir: Path) -> tuple[str, str]:
     return name, description
 
 
+def is_bootstrap_skill(skill_dir: Path) -> bool:
+    """Return True when the SKILL.md frontmatter declares ``bootstrap: true``.
+
+    A bootstrap skill is the hand-run form of a practice, kept until its
+    node-backed skill comes online. The node-home ratchet (OMN-20702) refuses a
+    new ONEX node directory in this repository, so no node is generated for it.
+
+    Args:
+        skill_dir: Directory containing ``SKILL.md``.
+
+    Returns:
+        True only for a literal ``bootstrap: true`` line inside the frontmatter.
+    """
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        return False
+    lines = skill_md.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != "---":
+        return False
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return False
+        if line.strip() == "bootstrap: true":
+            return True
+    return False
+
+
 def render_template(template_text: str, substitutions: dict[str, str]) -> str:
     """Apply plain string substitutions to a template.
 
@@ -429,7 +456,8 @@ def generate_node_for_skill(
 def discover_all_skills(repo_root: Path) -> list[str]:
     """Return a sorted list of all kebab-case skill names found in the skills directory.
 
-    Skips directories starting with ``_`` (lib/shared helpers).
+    Skips directories starting with ``_`` (lib/shared helpers) and bootstrap
+    skills, which carry no node here (see ``is_bootstrap_skill``).
 
     Args:
         repo_root: Absolute path to the repository root.
@@ -443,7 +471,7 @@ def discover_all_skills(repo_root: Path) -> list[str]:
     return sorted(
         d.name
         for d in skills_dir.iterdir()
-        if d.is_dir() and not d.name.startswith("_")
+        if d.is_dir() and not d.name.startswith("_") and not is_bootstrap_skill(d)
     )
 
 
