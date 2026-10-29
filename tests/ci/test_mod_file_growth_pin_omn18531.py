@@ -82,7 +82,9 @@ def _ratchet(repo: Path, rev: str, base: str) -> subprocess.CompletedProcess[str
             f"omnibase-core @ git+{CORE_URL}@{rev}",
             "python",
             "-m",
-            "omnibase_core.validators.canonical_file_shape",
+            "omnibase_core.nodes.node_canonical_file_shape_check_compute.runtime_canonical_file_shape_check",
+            "--rules",
+            "file-shape",
             "--base",
             base,
             "--head",
@@ -133,7 +135,7 @@ def test_pinned_ratchet_refuses_code_growth_in_a_baselined_mod_script(
     _git(repo, "commit", "-q", "-am", "grow")
     result = _ratchet(repo, _hook_pin(), base)
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "[mod-file-growth]" in result.stdout + result.stderr
+    assert "[baselined-file-growth]" in result.stdout + result.stderr
 
 
 def test_pinned_ratchet_accepts_comment_growth_in_a_baselined_mod_script(
