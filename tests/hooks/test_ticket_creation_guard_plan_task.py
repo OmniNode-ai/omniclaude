@@ -8,8 +8,10 @@ plan are exempt from the daily lane ticket budget; the budget stays for
 lane-invented tickets. The exemption is verified, not asserted: the create names
 a plan file and a task id, and the guard admits it only if that file is at
 ``origin/main`` of the local plan-repository clone and the id opens a
-task line in it. These tests run the real guard command against a throwaway
-clone, with no network.
+task line in it. The clone's location is private, so it comes from the
+``ticket_creation`` contract overlay through the shared overlay resolver, never
+from an environment variable. These tests run the real guard command against a
+throwaway clone and a throwaway overlay, with no network.
 
 Every refusal has a positive control: the same create with a true citation is
 admitted, so a refusal is never a guard that refuses everything.
@@ -41,7 +43,13 @@ from tests.hooks.test_ticket_creation_guard_lane_intake import (
 
 pytestmark = pytest.mark.unit
 
-_CLONE_ENV: str = _INTAKE["plan_task_exemption"]["clone_env"]
+_WHERE: dict[str, str] = _INTAKE["plan_task_exemption"]["plan_repo_overlay"]
+_OVERLAY: str = _WHERE["overlay"]
+_REPO_KEY: str = _WHERE["plan_repo_key"]
+_ROOT_KEY: str = _WHERE["workspace_root_key"]
+#: The variable a retired stopgap read the clone from. It is spelled only here,
+#: to prove nothing reads it.
+_RETIRED_ENV = "ONEX_PLAN_REPO_PATH"
 _PLAN = "beta/plans/2026-10-28-example-plan.md"
 _PLAN_TEXT = """# Example plan
 
@@ -105,8 +113,18 @@ def _cited(task: str, path: str = _PLAN, lane: str = "lane-x") -> dict[str, obje
     )
 
 
+def _overlay(root: Path, body: str) -> dict[str, str]:
+    """The environment that points the overlay resolver at a one-overlay directory."""
+    directory = root / "overlays" / _OVERLAY
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "overlay.yaml").write_text(body, encoding="utf-8")
+    return {"ONEX_SKILL_OVERLAY_ROOTS": str(root / "overlays")}
+
+
 def _env(kb: Path) -> dict[str, str]:
-    return {_CLONE_ENV: str(kb)}
+    """The overlay that locates ``kb`` relative to its parent, the workspace root."""
+    env = _overlay(kb.parent, f"{_ROOT_KEY}: WORKSPACE_ROOT\n{_REPO_KEY}: {kb.name}\n")
+    return {**env, "WORKSPACE_ROOT": str(kb.parent)}
 
 
 def _seed_spent(tmp_path: Path, count: int) -> Path:
@@ -190,15 +208,80 @@ def test_a_fake_citation_is_refused_naming_what_is_missing(
     assert _lines(ledger) == 2, "a refusal spends no budget"
 
 
-def test_a_citation_is_refused_when_no_clone_resolves(tmp_path: Path) -> None:
+def test_a_citation_is_refused_when_the_overlay_names_no_clone(
+    tmp_path: Path,
+) -> None:
+    env = _overlay(tmp_path, f"{_ROOT_KEY}: WORKSPACE_ROOT\n{_REPO_KEY}: nowhere\n")
+    env["WORKSPACE_ROOT"] = str(tmp_path)
+    result = _run(_cited("T0.1"), tmp_path, lane="lane-x", extra_env=env)
+    assert result.returncode == 3, result.stdout + result.stderr
+    reason = _reason(result)
+    assert "no plan-repository clone resolves" in reason
+    assert "is not a git work tree" in reason
+
+
+def test_a_citation_is_refused_naming_the_overlay_key_when_no_overlay_resolves(
+    tmp_path: Path, kb: Path
+) -> None:
+    """Overlay absent: refused, with the overlay and the key that would supply it."""
+    ledger = _seed_spent(tmp_path, 2)
     result = _run(
-        _cited("T0.1"),
-        tmp_path,
-        lane="lane-x",
-        extra_env={_CLONE_ENV: str(tmp_path / "nowhere")},
+        _cited("T0.1"), tmp_path, lane="lane-x", extra_env={"OMNI_HOME": str(kb.parent)}
     )
     assert result.returncode == 3, result.stdout + result.stderr
-    assert "no plan-repository clone resolves" in _reason(result)
+    reason = _reason(result)
+    assert "plan_citation_unverified" in reason
+    assert f"'{_REPO_KEY}' key of the '{_OVERLAY}' overlay" in reason
+    assert "ONEX_SKILL_OVERLAY_ROOTS: not set" in reason, "names where it looked"
+    assert _lines(ledger) == 2, "a refusal spends no budget"
+
+
+def test_the_retired_environment_variable_is_not_read(tmp_path: Path, kb: Path) -> None:
+    """A valid clone in the old variable, with no overlay, still refuses; with one, it is ignored."""
+    env = {_RETIRED_ENV: str(kb), "OMNI_HOME": str(kb.parent)}
+    refused = _run(_cited("T0.1"), tmp_path, lane="lane-x", extra_env=env)
+    assert refused.returncode == 3, refused.stdout + refused.stderr
+    assert f"'{_REPO_KEY}' key of the '{_OVERLAY}' overlay" in _reason(refused)
+    other = tmp_path / "other"
+    other.mkdir()
+    pointed_elsewhere = {
+        **_overlay(other, f"{_ROOT_KEY}: WORKSPACE_ROOT\n{_REPO_KEY}: absent\n"),
+        "WORKSPACE_ROOT": str(other),
+        _RETIRED_ENV: str(kb),
+    }
+    ignored = _run(_cited("T0.1"), tmp_path, lane="lane-x", extra_env=pointed_elsewhere)
+    assert ignored.returncode == 3, "the overlay decides; the variable cannot rescue it"
+    assert "is not a git work tree" in _reason(ignored)
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        (f"{_ROOT_KEY}: WORKSPACE_ROOT\n", f"no non-blank '{_REPO_KEY}' key"),
+        (f"{_REPO_KEY}: kb\n", f"no non-blank '{_ROOT_KEY}' key"),
+        ("- not\n- a mapping\n", "is not a mapping"),
+        (
+            f"{_ROOT_KEY}: WORKSPACE_ROOT\n{_REPO_KEY}: /an/absolute/path\n",
+            "must be relative to the workspace root",
+        ),
+        (
+            f"{_ROOT_KEY}: NO_SUCH_WORKSPACE_ROOT\n{_REPO_KEY}: kb\n",
+            "NO_SUCH_WORKSPACE_ROOT",
+        ),
+    ],
+    ids=["no-repo-key", "no-root-key", "not-a-mapping", "absolute", "root-unset"],
+)
+def test_an_overlay_missing_what_it_must_hold_is_refused_naming_it(
+    body: str, message: str, tmp_path: Path, kb: Path
+) -> None:
+    env = {**_overlay(tmp_path, body), "WORKSPACE_ROOT": str(kb.parent)}
+    result = _run(_cited("T0.1"), tmp_path, lane="lane-x", extra_env=env)
+    assert result.returncode == 3, result.stdout + result.stderr
+    reason = _reason(result)
+    assert f"'{_REPO_KEY}' key of the '{_OVERLAY}' overlay" in reason
+    assert message in reason
+    control = _run(_cited("T0.1"), tmp_path, lane="lane-x", extra_env=_env(kb))
+    _admitted(control)
 
 
 @pytest.mark.parametrize(
@@ -269,7 +352,7 @@ def test_the_shipped_exemption_carries_its_reason_and_the_rulings_stamp() -> Non
         "reason",
         "ruling_stamp",
         "ref",
-        "clone_env",
+        "plan_repo_overlay",
         "citation_line_pattern",
         "path_pattern",
         "task_line_patterns",
@@ -288,11 +371,28 @@ def test_a_policy_missing_an_exemption_key_refuses_rather_than_defaulting(
     assert result.returncode == 1, result.stdout + result.stderr
 
 
+def test_a_policy_missing_an_overlay_key_refuses_rather_than_defaulting(
+    tmp_path: Path,
+) -> None:
+    for key in _WHERE:
+        raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+        del raw["lane_intake"]["plan_task_exemption"]["plan_repo_overlay"][key]
+        broken = tmp_path / f"policy-{key}.json"
+        broken.write_text(json.dumps(raw), encoding="utf-8")
+        ok = _create(description=f"{_STAMP_PREFIX} lane-x\n\n{_BODY}", labels=[_LABEL])
+        result = _run(ok, tmp_path, lane="lane-x", flags=("--policy", str(broken)))
+        assert result.returncode == 1, (key, result.stdout + result.stderr)
+
+
 def test_the_guard_and_handlers_spell_none_of_the_exemption_vocabulary() -> None:
-    """The citation line, the ref and the clone variable are policy, not literals."""
+    """The citation line, the ref, the overlay and its keys are policy, not literals."""
     exemption = _INTAKE["plan_task_exemption"]
     handlers = _HANDLER_PY.with_name("handler_plan_task_citation.py")
     for source in (_GUARD_PY, _HANDLER_PY, handlers):
         text = source.read_text(encoding="utf-8")
-        for literal in ("Plan task:", exemption["clone_env"]):
+        # Quoted, because the guard's own policy file name contains the overlay's name.
+        quoted = (f'"{_OVERLAY}"', f"'{_OVERLAY}'")
+        for literal in ("Plan task:", _RETIRED_ENV, _REPO_KEY, _ROOT_KEY, *quoted):
             assert literal not in text, f"{literal!r} is spelled in {source.name}"
+    assert "clone_env" not in exemption, "the environment variable is retired"
+    assert _RETIRED_ENV not in _POLICY_JSON.read_text(encoding="utf-8")
