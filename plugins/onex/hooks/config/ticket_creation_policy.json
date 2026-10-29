@@ -284,6 +284,22 @@
     "  per UTC day). A lane context with no resolvable state dir is refused,",
     "  not waved through: an unmeasurable budget is not a budget.",
     "",
+    "lane_intake.plan_task_exemption -- a create that cites a task of an approved",
+    "  plan spends no budget (RULING 2026-10-29T10:59:39Z, OMN-17942: the budget",
+    "  stays for lane-invented tickets). The exemption is its own object, with its",
+    "  reason and the ruling's stamp, and is verified rather than asserted: the",
+    "  description carries one line of its own matching citation_line_pattern, naming",
+    "  a plan file (path_pattern) and a task id; the guard reads that file at",
+    "  ref in the clone ONEX_PLAN_REPO_PATH (clone_env) names, with no network call,",
+    "  and admits only if the id opens a task line (task_line_patterns). A citation",
+    "  whose clone, file or task is missing is refused with a message naming what was",
+    "  missing, and a create with no citation spends the budget as before. There is no",
+    "  wildcard and no 'exempt' marker, per the no-escape rule above. A plan-backed",
+    "  create is recorded in <day>.plan.jsonl beside the day's count file and never in",
+    "  the count file itself, so the count is unchanged by it. A task line is a",
+    "  heading, a bold token or a bold list item opening with the id; prose that names",
+    "  a task, and anything inside a fenced block, is not a task line.",
+    "",
     "OMN-17427 (closure-throughput plan, task 3). Rule 15 -- a defect-shaped",
     "create binds to a diagnosis before its criteria are admitted.",
     "",
@@ -499,6 +515,20 @@
     "label": "lane-created",
     "stamp_prefix": "created-by-lane:",
     "daily_budget": 30,
-    "state_subdir": "hooks/ticket_intake"
+    "state_subdir": "hooks/ticket_intake",
+    "plan_task_exemption": {
+      "reason": "A ticket minted from a task of an approved plan is the plan's own work, not lane-invented intake, so it does not spend lane_intake.daily_budget; the budget stays for lane-invented tickets. The exemption is verifiable: the create cites a plan file and a task id, and the guard admits it only if that file is at origin/main of the local plan-repository clone and the id opens a task line in it.",
+      "ruling_stamp": "2026-10-29T10:59:39Z",
+      "ruling": "RULING 2026-10-29T10:59:39Z lane=orchestrator-31d9 (OMN-17942, kind=process), option 1: tickets from an approved plan are exempt from the 30-a-day lane ticket budget; the budget stays for lane-invented tickets",
+      "ref": "origin/main",
+      "clone_env": "ONEX_PLAN_REPO_PATH",
+      "citation_line_pattern": "^[ \\t]*Plan task:[ \\t]*(?P<path>\\S+)(?:[ \\t]+(?P<task>\\S.*?))?[ \\t]*$",
+      "path_pattern": "^(?:[A-Za-z0-9_.-]+/)*plans/[A-Za-z0-9_.-]+\\.md$",
+      "task_line_patterns": [
+        "^[ \\t]*(?:#{1,6}[ \\t]+\\*{0,2}|(?:[-*][ \\t]+)?\\*\\*)(?P<id>Task[ \\t]+[0-9]+(?:\\.[0-9]+)*)(?=[\\s.:*)]|$)",
+        "^[ \\t]*(?:#{1,6}[ \\t]+\\*{0,2}|(?:[-*][ \\t]+)?\\*\\*)(?P<id>[A-Z]{1,3}-?[A-Z]?[0-9]+[a-z]?(?:\\.[0-9]+[a-z]?)*)(?=[\\s.:*)]|$)",
+        "(?:^|(?<=\\s))\\*\\*(?P<id>[A-Z]{1,3}-?[A-Z]?[0-9]+[a-z]?(?:\\.[0-9]+[a-z]?)*)(?=[\\s.:*)]|$)"
+      ]
+    }
   }
 }
