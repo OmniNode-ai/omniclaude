@@ -15,11 +15,14 @@ Maintenance: add a new entry whenever a new skill node is generated.  The test
 filesystem, preventing silent gaps.
 """
 
+import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from omniclaude.runtime.wiring_dispatchers import load_skill_contracts
+from scripts.generate_skill_node import is_bootstrap_skill
 
 # ---------------------------------------------------------------------------
 # Canonical skill list — PRIMARY source of truth for test_coverage audit
@@ -56,6 +59,45 @@ def _get_skills() -> set[str]:
     }
 
 
+def _frontmatter(skill_md_text: str) -> dict[str, object]:
+    """The YAML frontmatter of a SKILL.md, or an empty mapping when it has none."""
+    if not skill_md_text.startswith("---\n"):
+        return {}
+    end = skill_md_text.find("\n---", 4)
+    if end == -1:
+        return {}
+    loaded = yaml.safe_load(skill_md_text[4:end])
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _get_bootstrap_skills() -> dict[str, dict[str, object]]:
+    """Skills that declare ``bootstrap: true`` in their frontmatter, by slug.
+
+    A bootstrap skill is the hand-run form of a practice, kept until its
+    node-backed skill comes online. The node-home ratchet (OMN-20702) refuses a
+    new ONEX node directory in this repository, so a bootstrap skill carries no
+    node here; its replacing node is built in omnimarket and named in the
+    skill (``replaced_by_ticket`` and the body).
+    """
+    skills_dir = Path("plugins/onex/skills")
+    result: dict[str, dict[str, object]] = {}
+    for d in skills_dir.iterdir():
+        skill_md = d / "SKILL.md"
+        if not d.is_dir() or d.name.startswith("_") or not skill_md.exists():
+            continue
+        front = _frontmatter(skill_md.read_text(encoding="utf-8"))
+        if front.get("bootstrap") is True:
+            result[_normalize(d.name)] = front
+    return result
+
+
+def _skills_missing_nodes(
+    skills: set[str], node_skills: set[str], bootstrap_skills: set[str]
+) -> set[str]:
+    """Skills with neither a node of their own nor a declared bootstrap marker."""
+    return skills - node_skills - bootstrap_skills
+
+
 def _get_node_skills() -> set[str]:
     """Skill slugs for every real skill-orchestrator node on disk.
 
@@ -83,11 +125,83 @@ def _get_node_skills() -> set[str]:
 
 @pytest.mark.unit
 def test_all_skills_have_nodes() -> None:
-    missing = _get_skills() - _get_node_skills()
+    missing = _skills_missing_nodes(
+        _get_skills(), _get_node_skills(), set(_get_bootstrap_skills())
+    )
     assert not missing, (
         f"{len(missing)} skill(s) missing a node:\n"
         + "\n".join(f"  - {s}" for s in sorted(missing))
         + "\n\nFix: uv run python scripts/generate_skill_node.py --all"
+    )
+
+
+@pytest.mark.unit
+def test_skill_without_node_or_bootstrap_marker_is_missing() -> None:
+    """Positive control: the bootstrap marker is the only way past the node rule."""
+    skills = {"has-node", "bootstrap-one", "neither"}
+    assert _skills_missing_nodes(skills, {"has-node"}, {"bootstrap-one"}) == {"neither"}
+    assert _skills_missing_nodes(skills, {"has-node"}, set()) == {
+        "bootstrap-one",
+        "neither",
+    }
+
+
+@pytest.mark.unit
+def test_frontmatter_bootstrap_marker_must_be_boolean_true() -> None:
+    """A quoted or misspelled marker does not exempt a skill."""
+    assert _frontmatter("---\nbootstrap: true\n---\n# x\n").get("bootstrap") is True
+    assert (
+        _frontmatter('---\nbootstrap: "true"\n---\n# x\n').get("bootstrap") is not True
+    )
+    assert _frontmatter("# no frontmatter\n") == {}
+
+
+@pytest.mark.unit
+def test_bootstrap_skills_name_their_replacement() -> None:
+    """Every bootstrap skill says so, and the manifest names the ticket that replaces it.
+
+    Ticket ids are refused in published skill text (public-repo hygiene), so the
+    ticket lives in the distribution manifest entry of the skill.
+    """
+    manifest = yaml.safe_load(Path("plugins/distribution_manifest.yaml").read_text())
+    rationale_by_skill = {
+        _normalize(str(c["id"])): str(c.get("rationale", ""))
+        for c in manifest["components"]
+        if c.get("kind") == "skill"
+    }
+    problems: list[str] = []
+    for slug, front in sorted(_get_bootstrap_skills().items()):
+        description = front.get("description")
+        if not isinstance(description, str) or not description.startswith(
+            "Bootstrap skill"
+        ):
+            problems.append(f"{slug}: description must start with 'Bootstrap skill'")
+        if not re.search(r"\bOMN-\d+\b", rationale_by_skill.get(slug, "")):
+            problems.append(
+                f"{slug}: distribution_manifest.yaml rationale must name the replacing ticket"
+            )
+    assert not problems, "\n".join(problems)
+
+
+@pytest.mark.unit
+def test_generator_and_coverage_agree_on_which_skills_are_bootstrap() -> None:
+    """The node generator skips exactly the skills this test exempts."""
+    skills_dir = Path("plugins/onex/skills")
+    by_generator = {
+        _normalize(d.name)
+        for d in skills_dir.iterdir()
+        if d.is_dir() and not d.name.startswith("_") and is_bootstrap_skill(d)
+    }
+    assert by_generator == set(_get_bootstrap_skills())
+
+
+@pytest.mark.unit
+def test_bootstrap_skill_with_a_local_node_drops_the_marker() -> None:
+    """A skill that has its own node is no longer a bootstrap: remove the marker."""
+    stale = set(_get_bootstrap_skills()) & _get_node_skills()
+    assert not stale, (
+        "bootstrap skill(s) that now have a node; remove bootstrap/replaced_by_ticket:\n"
+        + "\n".join(f"  - {s}" for s in sorted(stale))
     )
 
 

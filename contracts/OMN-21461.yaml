@@ -1,0 +1,52 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21461
+title: "Eight lean practice prose skills ship in omniclaude, each with a generated skill node"
+summary: >
+  The eight lean practice skills (andon stop, WIP and pull, poka-yoke, five whys,
+  go and see, experiment first, seam read, session recovery) ship in the omniclaude
+  plugin as bootstrap skills: the hand-run form of each practice, to be replaced by
+  its node-backed skill as the real skills come online. The node-home ratchet
+  (OMN-20702) refuses a new ONEX node directory in this repository, so a bootstrap
+  skill carries no node here; its replacing node is built in omnimarket and named
+  in the skill and in the distribution manifest. The skill-to-node rule exempts
+  exactly the skills that declare bootstrap: true.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21461-skills
+    statement: The eight lean practice skills exist in the plugin as bootstrap skills with the four sections.
+    acceptance:
+      - id: AC1
+        statement: "AC1: eight skill directories exist under plugins/onex/skills (lean_andon_stop, lean_wip_pull, lean_poka_yoke, lean_five_whys, lean_go_and_see, lean_experiment_first, lean_seam_read, lean_session_recovery), each saying it is a bootstrap and naming the node that replaces it, with the four sections the ticket names -- falsifier: uv run pytest tests/skills/test_lean_bootstrap_skills_omn21461.py -q --no-cov"
+  - id: req-omn21461-node-rule
+    statement: The skill-to-node rule holds for every skill, and a bootstrap skill is the only exemption.
+    acceptance:
+      - id: AC2
+        statement: "AC2: amended from 'every skill has a generated node' because the node-home ratchet refuses a new node here: test_all_skills_have_nodes passes, a skill with neither a node nor bootstrap: true still fails it, and the node generator and the auto-generate hook skip exactly the bootstrap skills -- falsifier: uv run pytest tests/unit/nodes/test_skill_node_coverage.py tests/unit/scripts/test_auto_generate_skill_nodes.py -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "Lean bootstrap skill and skill-to-node tests pass"
+    command: "uv run pytest tests/skills/test_lean_bootstrap_skills_omn21461.py tests/unit/nodes/test_skill_node_coverage.py tests/unit/scripts/test_auto_generate_skill_nodes.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21461-ac1-skills
+    description: "The eight skills exist, each declares bootstrap: true, names its replacing node (session_recovery says none exists yet), and has the four sections. Fails at the merge base, which has none of the eight."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lean_bootstrap_skills_omn21461.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21461-ac2-node-rule
+    description: "The skill-to-node test passes with the eight bootstrap skills present, fails for a skill with neither a node nor the marker, requires each bootstrap skill's manifest entry to name its replacing ticket, and the generator and hook skip exactly the bootstrap skills. Fails at the merge base, where test_all_skills_have_nodes fails once the eight skills are added."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/nodes/test_skill_node_coverage.py tests/unit/scripts/test_auto_generate_skill_nodes.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"

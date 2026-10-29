@@ -1449,7 +1449,7 @@ repos:
       # scaffolds the node automatically via generate_skill_node.py.
       - id: auto-generate-skill-nodes
         name: Auto-generate skill orchestrator nodes
-        entry: bash scripts/uv-run-worktree-safe.sh --frozen python scripts/auto_generate_skill_nodes.py --check
+        entry: bash scripts/uv-run-worktree-safe.sh --frozen python -m scripts.auto_generate_skill_nodes --check
         language: system
         pass_filenames: false
         stages: [pre-commit]
