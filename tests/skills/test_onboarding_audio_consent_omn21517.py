@@ -94,13 +94,17 @@ def _run(
             f'while [ $# -gt 0 ]; do [ "$1" = -o ] && cp "{clips}/welcome.wav" "$2"; shift; done'
         )
     _stub(bin_dir, "say", say_body)
-    _stub(bin_dir, "id", '[ "$1" = -F ] && { echo "alice example"; exit 0; }; exec /usr/bin/id "$@"')
+    _stub(
+        bin_dir,
+        "id",
+        '[ "$1" = -F ] && { echo "alice example"; exit 0; }; exec /usr/bin/id "$@"',
+    )
     home_dir = tmp_path / "home" / "admin"
     home_dir.mkdir(parents=True)
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     snippet = (
-        f"say() {{ printf '{NOTICE}%s\\n' \"$*\" >> \"{calls}\"; }}\nlog() {{ :; }}\n"
+        f'say() {{ printf \'{NOTICE}%s\\n\' "$*" >> "{calls}"; }}\nlog() {{ :; }}\n'
         'os_name() { echo "${ONBOARD_TEST_OS:-$(uname -s)}"; }\n'
         f'RUN_DIR="{run_dir}"\nPREFLIGHT_ONLY={preflight_only}\n'
         + "\n".join(
@@ -109,7 +113,9 @@ def _run(
             if line.startswith("FINISH_CLIP_")
         )
         + f'\nFINISH_CLIP_BASE="file://{clips}"\nFINISH_CLIP_DIGESTS="{digests}"\n'
-        + _functions("finish_name_like", "finish_name", "finish_sound_consent", "finish_sound")
+        + _functions(
+            "finish_name_like", "finish_name", "finish_sound_consent", "finish_sound"
+        )
         + "\n"
         + "\n".join(steps)
         + "\n"
