@@ -4,12 +4,16 @@ ticket_id: OMN-21499
 title: "T2.6 check-only hooks: the omniclaude hooks that rewrote files refuse instead and leave the working tree byte-identical"
 summary: >
   Validators-to-core plan task T2.6, omniclaude slice (Appendix 1 rows
-  omniclaude:267, 492, 934, 942, 950, 1060, 1443). ruff format and ruff check run
-  without rewriting, the end-of-file hook checks, the AI co-author trailer is
-  refused instead of stripped, a staged output/ file is refused instead of the
-  directory being deleted, and the secrets-baseline and skill-node hooks run
-  their check-only forms. The core rule that refuses a new writing hook is a
-  separate lane in omnibase_core and is not built here.
+  omniclaude:267, 492, 934, 942, 950, 1060, 1443). The end-of-file rule, the
+  staged tmp/ rule and the AI co-author trailer rule are the omnibase_core hook
+  ids commit-hygiene and commit-hygiene-message, and check-hook-writes (the core
+  rule that refuses a hook whose entry writes) runs on this repository's hook
+  config, all pinned at the dev-merge tag dev-20261029044430-3f33be0d5364. The
+  local end-of-file-fixer and strip-ai-coauthor-trailer hooks and the tests that
+  pinned their config text are deleted. ruff format and ruff check stay local in
+  check-only form, a staged output/ file is refused by a pre-commit fail hook, and
+  the secrets-baseline and skill-node hooks run their check-only forms, because
+  core has no equivalent id for them.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -26,58 +30,50 @@ requirements:
         statement: "AC2: A canary commit with an unformatted file and an AI co-author trailer is refused and the working tree is byte-identical after the hook run -- falsifier: pytest case that hashes the tree before and after the hook run, plus pre-commit run --files on the canary commit"
 evidence_requirements:
   - kind: tests
-    description: "Check-only hook tests pass"
-    command: "uv run pytest tests/ci/test_precommit_check_only_hooks_omn21499.py tests/scripts/test_detect_secrets_guard.py tests/unit/scripts/test_auto_generate_skill_nodes.py -q --no-cov"
+    description: "Canary and check-only script tests pass"
+    command: "uv run pytest tests/ci/test_precommit_core_hooks_canary_omn21499.py tests/scripts/test_detect_secrets_guard.py tests/unit/scripts/test_auto_generate_skill_nodes.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
-  - id: dod-t26-ac1-ruff-format
-    description: "The ruff-format entry, run on a canary unformatted file, exits non-zero and the scratch tree hashes the same afterwards. Fails at the merge base, whose entry is ruff format and rewrites the file."
-    source: manual
-    binds_ac: [AC1, AC2]
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_precommit_check_only_hooks_omn21499.py -q --no-cov -k ruff_format"
-        cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-t26-ac2-trailer
-    description: "The strip-ai-coauthor-trailer entry refuses a message with the AI trailer, names it on stderr, and the message file hashes the same afterwards. Fails at the merge base, whose perl -i entry deletes the line."
-    source: manual
-    binds_ac: [AC1, AC2]
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_precommit_check_only_hooks_omn21499.py -q --no-cov -k trailer"
-        cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-t26-ac3-other-hooks
-    description: "ruff check, the end-of-file check and the output/ refusal each refuse their canary and leave the tree byte-identical, and accept a clean input. Fails at the merge base, where ruff-fix runs --fix, end-of-file-fixer is a third-party rewriter with no entry, and clean-output-directory runs rm -rf."
+  - id: dod-ac1-core-hook-writes
+    description: "The core check-hook-writes hook, run on .pre-commit-config.yaml and .pre-commit-hooks.yaml, finds no hook whose entry or args write. Fails at the merge base, where ruff-fix runs --fix, clean-output-directory runs rm -rf and strip-ai-coauthor-trailer runs perl -i."
     source: manual
     binds_ac: [AC1]
     checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_precommit_check_only_hooks_omn21499.py -q --no-cov -k 'ruff_check or end_of_file or output'"
+      - check_type: command
+        check_value: "pre-commit run check-hook-writes --files .pre-commit-config.yaml .pre-commit-hooks.yaml"
         cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-t26-ac4-script-hooks
+  - id: dod-ac1-local-hooks-deleted
+    description: "The repository holds no local definition of the end-of-file or trailer rule: neither the end-of-file-fixer id nor the strip-ai-coauthor-trailer id is defined here, and the config pinning test file is gone."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: "! git grep -n -E 'id: (end-of-file-fixer|strip-ai-coauthor-trailer)' -- .pre-commit-config.yaml && test ! -e tests/ci/test_precommit_check_only_hooks_omn21499.py"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-ac1-script-hooks
     description: "detect_secrets_guard --check refuses a stale baseline and a new unaudited finding without touching the file or the index; auto_generate_skill_nodes --check refuses a missing node without generating. Fails at the merge base, which has no --check mode."
     source: manual
     binds_ac: [AC1]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/test_detect_secrets_guard.py tests/unit/scripts/test_auto_generate_skill_nodes.py tests/ci/test_precommit_check_only_hooks_omn21499.py -q --no-cov -k 'check'"
+        check_value: "uv run pytest tests/scripts/test_detect_secrets_guard.py tests/unit/scripts/test_auto_generate_skill_nodes.py -q --no-cov -k check"
         cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-t26-ac5-no-writing-spelling
-    description: "None of the seven entries contains --fix, rm -rf, perl -i, sed -i or git add, and ruff-format carries --check. Fails at the merge base on five of the seven."
-    source: manual
-    binds_ac: [AC1]
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_precommit_check_only_hooks_omn21499.py -q --no-cov -k no_writing_spelling"
-        cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-t26-ac2-canary-commit
-    description: "A scratch git repository holding a staged unformatted canary.py and a commit message with an AI Co-Authored-By trailer: the ruff-format entry and the trailer entry both refuse, and afterwards canary.py, the index tree, the message file and git status are unchanged. Fails at the merge base, whose ruff-format entry rewrites canary.py and whose trailer entry deletes the line."
+  - id: dod-ac2-canary-commit
+    description: "A throwaway git tree with a staged file without a final newline, one with extra final newlines, a staged tmp/ file and a commit message with an AI Co-Authored-By trailer: the consumed core hooks run through pre-commit refuse all four, and afterwards every working-tree file, the index tree, git status and the message file are byte-identical. A clean tree and message pass first as the positive control. Fails at the merge base, whose config declares neither core hook."
     source: manual
     binds_ac: [AC2]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_precommit_check_only_hooks_omn21499.py -q --no-cov -k canary_commit"
+        check_value: "uv run pytest tests/ci/test_precommit_core_hooks_canary_omn21499.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-ac2-ruff-format-canary
+    description: "The ruff-format entry (ruff format --check --diff) on an unformatted file exits non-zero and leaves the file as written; ruff-format stays a local check-only hook because core has no ruff id."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: command
+        check_value: "d=$(mktemp -d) && printf 'x=1\\n' > \"$d/canary.py\" && ! bash scripts/uv-run-worktree-safe.sh --frozen ruff format --check --diff \"$d/canary.py\" && test \"$(cat \"$d/canary.py\")\" = 'x=1'"
         cwd: "${OMNI_HOME}/omniclaude"

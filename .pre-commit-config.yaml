@@ -260,22 +260,19 @@ repos:
       - id: no-bare-feature-flags
         stages: [pre-commit]
 
-  # T2.6 (OMN-21499): end-of-file-fixer rewrote files; the third-party hook has no
-  # check mode, so the same id is a local check that names the file and writes nothing.
-  - repo: local
+  # T2.6 (OMN-21499, core ids OMN-21498): the end-of-file, staged tmp/ and AI
+  # co-author trailer rules and the rule that refuses a hook whose entry writes
+  # are omnibase_core hooks, each a refusal that rewrites nothing. The ids exist
+  # only at this dev-merge tag, so they sit in their own block; no other block of
+  # this file pins a rev that carries them.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: dev-20261029044430-3f33be0d5364
     hooks:
-      - id: end-of-file-fixer
-        name: end of file check (no newline, or more than one; never rewrites)
-        entry: >-
-          bash -c 'rc=0; for f in "$@"; do [ -s "$f" ] || continue;
-          if [ -n "$(tail -c1 "$f")" ]; then echo "end-of-file-fixer: $f: no newline at end of file" >&2; rc=1;
-          else h=$(tail -c4 "$f" | od -An -tx1 | tr -d " \n");
-          case "$h" in 0a|0d0a|*0a0a|*0a0d0a) echo "end-of-file-fixer: $f: blank line at end of file" >&2; rc=1;; esac; fi; done;
-          [ "$rc" -eq 0 ] || echo "end-of-file-fixer: add or trim the newline by hand, then re-stage" >&2; exit "$rc"' end-of-file-fixer
-        language: system
-        types: [text]
+      - id: check-hook-writes
+      - id: commit-hygiene
         exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
-        stages: [pre-commit]
+      - id: commit-hygiene-message
+        stages: [commit-msg]
 
   # Fast file checks that can run in parallel
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -501,15 +498,6 @@ repos:
         name: Reject skip-deploy-gate bypass tokens in commit messages (OMN-9730)
         entry: .pre-commit-hooks/reject-deploy-gate-skip-token.sh
         language: script
-        pass_filenames: true
-        stages: [commit-msg]
-      - id: strip-ai-coauthor-trailer
-        name: Refuse AI-generated Co-Authored-By trailers in commit messages (T2.6, OMN-21499)
-        entry: >-
-          bash -c 'if grep -iEq "^co-authored-by:.*claude.*noreply@anthropic\.com" "$1"; then
-          echo "strip-ai-coauthor-trailer: the commit message carries an AI Co-Authored-By trailer; delete that line from $1 and commit again" >&2; exit 1; fi'
-          strip-ai-coauthor-trailer
-        language: system
         pass_filenames: true
         stages: [commit-msg]
       - id: ticket-refusal-reason
@@ -948,12 +936,13 @@ repos:
         files: ^(src|plugins|scripts)/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
+      # Stays local: omnibase_core's commit-hygiene refuses staged tmp/ files, not
+      # output/. A pre-commit `fail` hook is a refusal by construction (it runs
+      # no command and writes nothing); it replaces the old `rm -rf output/`.
       - id: clean-output-directory
         name: refuse staged output/ files (test artifacts, T2.6 OMN-21499)
-        entry: >-
-          bash -c 'echo "clean-output-directory: output/ holds test artifacts and must not be committed; unstage with git restore --staged:" >&2;
-          printf "  %s\n" "$@" >&2; exit 1' clean-output-directory
-        language: system
+        entry: output/ holds test artifacts and must not be committed; unstage the files listed below and keep output/ out of the index
+        language: fail
         files: '^output/'
         stages: [pre-commit]
 
