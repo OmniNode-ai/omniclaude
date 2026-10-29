@@ -204,6 +204,7 @@
   "tests/hooks/test_ticket_creation_guard.py": 5.5,
   "tests/hooks/test_ticket_creation_guard_defect_diagnosis.py": 1.38,
   "tests/hooks/test_ticket_creation_guard_lane_intake.py": 2.39,
+  "tests/hooks/test_ticket_creation_guard_plan_task.py": 9.0,
   "tests/hooks/test_topic_registry.py": 0.42,
   "tests/hooks/test_topics.py": 0.13,
   "tests/hooks/test_utilization_detector.py": 9.41,

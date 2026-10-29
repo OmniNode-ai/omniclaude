@@ -20,6 +20,11 @@ requirements:
     acceptance:
       - id: AC1
         statement: 'AC1: a lane create is refused without the label, the first-line stamp naming its lane, a declared lane identity, or when the day''s intake budget from the policy config is spent, and the same create, fixed, is admitted and counted; falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py fails at the merge base, whose policy config has no lane_intake section.'
+  - id: req-omn17942-plan-task-exemption
+    statement: A Linear create from a lane or node context that cites a task of an approved plan, confirmed at the plan file's origin/main in the local clone, spends no daily intake budget (RULING 2026-10-29T10:59:39Z); an unconfirmed citation is refused naming what is missing, and a create with no citation spends the budget.
+    acceptance:
+      - id: AC6
+        statement: 'AC6: a lane create citing a plan task that is at the plan repository origin/main is admitted past an exhausted budget with the count unchanged, a citation naming a missing task, a missing file, an unmerged branch or no clone is refused naming it, and a create with no citation still spends one; falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_plan_task.py fails at the merge base, which has no such test file and no plan_task_exemption in its policy.'
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -114,6 +119,19 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'session_helper_uses_parent_claim or session_helper_cannot_stamp'"
+  - id: dod-plan-task-exemption
+    description: >
+      A create citing a confirmed plan task is admitted without spending the
+      daily budget and leaves the count unchanged; a fake citation (missing
+      task, missing file, plan only on an unmerged branch, traversal, no
+      clone, two citations) is refused naming what is missing; a create with
+      no citation spends the budget as before. Fails at the merge base, which
+      has no exemption.
+    source: manual
+    binds_ac: [AC6]
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_plan_task.py -q --no-cov"
   - id: dod-original-ac2-json-policy
     description: >
       AC-2 remains enforced: policy vocabulary is JSON and malformed policy
