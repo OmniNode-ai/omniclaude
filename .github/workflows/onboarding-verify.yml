@@ -1,0 +1,128 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Onboarding Verify (OMN-20700 AC4). Runs the onboarding script from this tree
+# on a fresh macOS runner, to the end, so a change that breaks a new developer's
+# first delegation fails CI instead of a walker. omnibase_infra#4630 moved the
+# runtime config owner into a private sibling repository; the OMN-20224 walk had
+# passed four days earlier, nothing re-ran it, and a human walk found the break.
+#
+# What "fresh" means here:
+# - HOME is an empty directory, so no profile, gitconfig, gh login, Claude Code
+#   install or earlier onboarding state is present.
+# - The script runs under `env -i` with only the variables a login shell sets,
+#   so no GitHub token or runner variable reaches it, and the checkout keeps no
+#   credential (persist-credentials: false).
+# - No private sibling repository is checked out: the job asserts no
+#   directory named *_internal exists under the home after the run, and that
+#   no runtime-config refusal appears in the run log.
+#
+# The model is the keyless local provider (--provider local), served by
+# tests/skills/onboarding_stub_model_server.py, so phase 3's pinned and unpinned
+# delegations are real `onex delegate` calls answered on this runner. The job
+# also asserts the stub received completions.
+#
+# Hosted macOS runners have 3 CPUs and 7 GB, below the Mode 1 floor of 4 and 8.
+# The floor is preflight's business, not the regression this job catches, so the
+# job passes the script's own ONBOARD_TEST_CPUS and ONBOARD_TEST_RAM_GB seams;
+# every other reading is the runner's own.
+#
+# Triggers: a daily schedule (the class of break came from another repository),
+# pull requests that touch the onboarding script, its handler or this job, and
+# a manual dispatch.
+
+name: Onboarding Verify
+
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - plugins/onex/skills/_bin/lab-onboarding.sh
+      - src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/**
+      - tests/skills/onboarding_stub_model_server.py
+      - .github/workflows/onboarding-verify.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  fresh-mac:
+    name: Fresh Mac onboarding
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      STUB_PORT: "18080"
+      STUB_MODEL: onboarding-stub
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fresh home, no credential
+        run: |
+          WALK="$RUNNER_TEMP/walk"; echo "WALK=$WALK" >>"$GITHUB_ENV"
+          mkdir -p "$WALK/home" "$WALK/tmp" "$WALK/run"
+          if env -i HOME="$WALK/home" PATH=/usr/bin:/bin:/opt/homebrew/bin gh auth status >/dev/null 2>&1; then
+            echo "::error::a GitHub credential is visible to the fresh home"; exit 1
+          fi
+          echo "no GitHub credential visible"
+
+      - name: Start the keyless local model
+        run: |
+          nohup python3 tests/skills/onboarding_stub_model_server.py --port "$STUB_PORT" \
+            --model "$STUB_MODEL" --log "$WALK/stub-completions.jsonl" >"$WALK/stub.log" 2>&1 &
+          for _ in $(seq 1 20); do
+            curl -fsS "http://127.0.0.1:$STUB_PORT/" >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          cat "$WALK/stub.log"; exit 1
+
+      - name: Run the onboarding script to the end
+        run: |
+          set +e
+          env -i HOME="$WALK/home" USER="$USER" LOGNAME="$USER" SHELL=/bin/zsh TERM=dumb \
+            TMPDIR="$WALK/tmp/" PATH=/usr/bin:/bin:/usr/sbin:/sbin LANG=en_US.UTF-8 \
+            ONBOARD_RUN_DIR="$WALK/run" ONBOARD_TEST_NO_GUI=1 ONBOARD_NOTIFY=0 \
+            ONBOARD_TEST_CPUS=4 ONBOARD_TEST_RAM_GB=8 \
+            /bin/bash plugins/onex/skills/_bin/lab-onboarding.sh \
+              --no-containers --provider local \
+              --local-url "http://127.0.0.1:$STUB_PORT" --local-model "$STUB_MODEL" \
+              </dev/null 2>&1 | tee "$WALK/transcript.txt"
+          rc=${PIPESTATUS[0]}
+          echo "onboarding exit: $rc"
+          exit "$rc"
+
+      - name: Delegation reached the model, with no private repository
+        run: |
+          fail=0
+          grep -qx 'result=COMPLETE' "$WALK/run/status" || { echo "::error::status file has no result=COMPLETE"; fail=1; }
+          n="$(wc -l <"$WALK/stub-completions.jsonl" | tr -d ' ')"
+          echo "completions answered by the local model: $n"
+          [ "$n" -ge 1 ] || { echo "::error::no delegation reached the local model"; fail=1; }
+          found="$(find "$WALK/home" -maxdepth 4 -type d -name '*_internal' 2>/dev/null)"
+          [ -z "$found" ] || { echo "::error::a private sibling checkout exists: $found"; fail=1; }
+          if grep -hE 'ProtocolConfigurationError|Could not locate runtime config repository' \
+               "$WALK/transcript.txt" "$WALK"/run/run-*.log; then
+            echo "::error::a runtime-config refusal appears in the run"; fail=1
+          fi
+          exit "$fail"
+
+      - name: Keep the run's evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: onboarding-verify-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/walk/transcript.txt
+            ${{ runner.temp }}/walk/run/
+            ${{ runner.temp }}/walk/stub-completions.jsonl
+            ${{ runner.temp }}/walk/stub.log
+          if-no-files-found: warn
+          retention-days: 30

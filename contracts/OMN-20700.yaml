@@ -17,6 +17,13 @@ requirements:
     acceptance:
       - id: AC3
         statement: "The resolution order is stated where a reader of the onboarding will find it, naming which config owner applies to a developer install and which to a registry install -- falsifier: a grep of the onboarding documentation that returns no statement of the config owner for a developer install"
+  - id: req-omn20700-transcribed-acceptance
+    statement: The ticket's AC1 and AC4, transcribed from the ticket body. AC1 is a walk on a fresh account and is bound by no item here. AC2 is bound below but not transcribed, because its text names a private repository and this repository is public.
+    acceptance:
+      - id: AC1
+        statement: "AC1: A fresh macOS account that has never held a GitHub credential runs `lab-onboarding.sh` to completion and phase 3 answers one delegation -- falsifier: a run on a fresh account whose phase 3 reports any `onex delegate` failure, or a completion that required cloning a private repository"
+      - id: AC4
+        statement: "AC4: The automated onboarding verification runs against the current tree and passes, so this class of regression is caught by CI rather than by a walker -- falsifier: no scheduled or PR-triggered run of the OMN-20224 verification in the 7 days before this ticket closes"
 evidence_requirements:
   - kind: tests
     description: The onboarding guide carries the config owner section, in the order the resolver tries the owners.
@@ -33,3 +40,44 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_config_owner_omn20700.py -q --no-cov"
+  - id: dod-omn20700-ac2-no-sibling
+    description: >
+      The ticket's own falsifier, the infra materializer suite, passes; and the Onboarding
+      Verify job runs a workspace the onboarding built with no private sibling checkout and no
+      GitHub credential, fails on a ProtocolConfigurationError or runtime-config refusal,
+      and serves a keyless model that really answers a completion. Fails at the merge
+      base, which has no such job.
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_verify_workflow_omn20700.py -q --no-cov -k test_ac2"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/handlers/test_handler_workspace_runtime_config_materializer.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omnibase_infra"
+  - id: dod-omn20700-ac3-guide-owner
+    description: >
+      plugins/onex/ONBOARDING.md states the resolution order and the owner for a developer
+      install and for a registry install, and now says the Onboarding Verify job holds the
+      developer install to it. Fails at the merge base, whose guide does not name the job.
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_config_owner_omn20700.py tests/skills/test_onboarding_verify_workflow_omn20700.py -q --no-cov -k 'section or test_ac3'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20700-ac4-ci-run
+    description: >
+      The Onboarding Verify job is scheduled and PR-triggered and runs this tree's script on
+      macOS to its completion line; and GitHub holds a successful scheduled or PR-triggered
+      run of it created in the last 7 days. Fails at the merge base, which has no such job.
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_verify_workflow_omn20700.py -q --no-cov -k test_ac4"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'since=$(python3 -c \"import datetime as d;print((d.datetime.now(d.timezone.utc)-d.timedelta(days=7)).strftime(\\\"%Y-%m-%dT%H:%M:%SZ\\\"))\"); n=$(gh api \"repos/OmniNode-ai/omniclaude/actions/runs?status=success&per_page=100&created=>=$since\" --paginate --jq \".workflow_runs[] | select(.name == \\\"Onboarding Verify\\\" and (.event == \\\"schedule\\\" or .event == \\\"pull_request\\\")) | .id\" | wc -l); echo \"successful Onboarding Verify runs since $since: $n\"; [ \"$n\" -ge 1 ]'"
+        cwd: "${OMNI_HOME}/omniclaude"
