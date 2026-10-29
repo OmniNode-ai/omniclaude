@@ -50,4 +50,3 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/nodes/test_skill_node_coverage.py tests/unit/scripts/test_auto_generate_skill_nodes.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
----
