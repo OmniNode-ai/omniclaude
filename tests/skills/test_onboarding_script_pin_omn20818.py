@@ -242,3 +242,23 @@ def test_guide_says_every_key_and_ollama_ask_for_models_in_order() -> None:
     assert "Press Enter to\n   take the recommended order" in text
     assert "marked recommended" in text
     assert "overlay declares" not in text
+
+
+# OMN-21517 AC1: the merge commit of omniclaude#3026, the first script whose
+# download fetches the handler that asks for audio consent in phase 0. A guide
+# pinned before it hands the developer a finish step that raises the dialog
+# after the run prints Done.
+AUDIO_CONSENT_SCRIPT_COMMIT = "ee8797affce6400db65eeb24561f825688b6c554"
+
+
+def test_pin_carries_the_phase_0_audio_consent() -> None:
+    pinned = _pinned_commit()
+    _require_commit(pinned)
+    _require_commit(AUDIO_CONSENT_SCRIPT_COMMIT)
+    assert _is_ancestor(AUDIO_CONSENT_SCRIPT_COMMIT, pinned), (
+        f"ONBOARDING.md pins {pinned}, which does not contain "
+        f"{AUDIO_CONSENT_SCRIPT_COMMIT} (omniclaude#3026, OMN-21517)"
+    )
+    shown = _git("show", f"{pinned}:{SCRIPT_PATH}")
+    assert shown.returncode == 0, shown.stderr.decode(errors="replace")
+    assert b"\nfinish_sound_consent() {" in _downloaded_handler(shown.stdout)
