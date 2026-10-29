@@ -70,10 +70,10 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_precommit_core_hooks_canary_omn21499.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-ac2-ruff-format-canary
-    description: "The ruff-format entry (ruff format --check --diff) on an unformatted file exits non-zero and leaves the file as written; ruff-format stays a local check-only hook because core has no ruff id."
+    description: "The ruff-format entry (ruff format --check --diff) on an unformatted file exits non-zero and leaves the file as written; ruff-format stays a local check-only hook because core has no ruff id. Fails at the merge base, whose ruff-format entry is a bare ruff format that rewrites."
     source: manual
     binds_ac: [AC2]
     checks:
       - check_type: command
-        check_value: "d=$(mktemp -d) && printf 'x=1\\n' > \"$d/canary.py\" && ! bash scripts/uv-run-worktree-safe.sh --frozen ruff format --check --diff \"$d/canary.py\" && test \"$(cat \"$d/canary.py\")\" = 'x=1'"
+        check_value: "git grep -q -E 'entry: bash scripts/uv-run-worktree-safe.sh --frozen ruff format --check --diff$' -- .pre-commit-config.yaml && d=$(mktemp -d) && printf 'x=1\\n' > \"$d/canary.py\" && ! bash scripts/uv-run-worktree-safe.sh --frozen ruff format --check --diff \"$d/canary.py\" && test \"$(cat \"$d/canary.py\")\" = 'x=1'"
         cwd: "${OMNI_HOME}/omniclaude"
