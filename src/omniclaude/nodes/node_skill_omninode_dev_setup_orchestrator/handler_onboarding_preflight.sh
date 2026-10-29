@@ -1390,6 +1390,12 @@ routing_overlay_in_place() {
 # the name between them is the macOS account's first name, else the home
 # folder's name when it reads as one, else the clip plays without a name. It
 # never asks and never fails the run. ONBOARD_FINISH_SOUND=0 turns it off.
+#
+# OMN-21517: macOS asks for audio consent the first time a Terminal uses the
+# speech synthesis session, and it asks at the moment of the call. So phase 0
+# makes that one call (finish_sound_consent, after a notice that the dialog is
+# coming) and keeps the clip; the finish step plays recorded clips and makes no
+# synthesis call. A refused dialog costs only that clip.
 FINISH_CLIP_BASE="https://raw.githubusercontent.com/OmniNode-ai/omnibase/e8686dabd47179bc5a9dd82a92c8e686683eec94/assets/finish"
 FINISH_CLIP_DIGESTS="welcome:099b47c4ab8513a145b567542c5f39b4e17185c4021b9c3026d98660744a0fd0 to-omninode:2173614dc1e34c37f80096f92172327be8f7afd454bcf3f3919655b327fcf2bb"
 
@@ -1400,12 +1406,42 @@ finish_name_like() {
   printf '%s' "$1" | grep -Eq "^[A-Za-z][A-Za-z'-]{1,19}$"
 }
 
+# The macOS account's first name, else the home folder's name when it reads as one.
+finish_name() {
+  local name
+  name="$(id -F 2>/dev/null | awk '{print $1}')"
+  finish_name_like "$name" || name="$(basename "$HOME")"
+  finish_name_like "$name" || return 0
+  printf '%s%s' "$(printf '%s' "${name:0:1}" | tr '[:lower:]' '[:upper:]')" "${name:1}"
+}
+
+# Phase 0: the one synthesis call, so the audio consent dialog appears here,
+# among the questions, and never after the run prints Done.
+FINISH_NAME_CLIP=""
+finish_sound_consent() {
+  [ "${ONBOARD_FINISH_SOUND:-1}" = "0" ] && return 0
+  [ "${PREFLIGHT_ONLY:-0}" = "1" ] && return 0
+  [ "$(os_name)" = "Darwin" ] || return 0
+  [ -n "$(type -P afplay)" ] || return 0
+  local sayb name
+  sayb="$(type -P say)"   # the binary: say() above is this script's printer
+  [ -n "$sayb" ] || return 0
+  name="$(finish_name)"
+  [ -n "$name" ] || return 0
+  say "  macOS will ask next whether Terminal may use audio (the dialog may say microphone or speaker), for the sound at the end of this run. Allow it or not: the run carries on."
+  if "$sayb" -v Fred --file-format=WAVE --data-format=LEI16@22050 -o "$RUN_DIR/finish-name.wav" "$name" 2>/dev/null; then
+    FINISH_NAME_CLIP="$RUN_DIR/finish-name.wav"
+  else
+    log "finish sound: audio consent not given or unavailable"
+  fi
+  return 0
+}
+
 finish_sound() {
   [ "${ONBOARD_FINISH_SOUND:-1}" = "0" ] && return 0
   [ "$(os_name)" = "Darwin" ] || return 0
   [ -n "$(type -P afplay)" ] || return 0
-  local work entry clip name="" parts=() sayb
-  sayb="$(type -P say)"   # the binary: say() above is this script's printer
+  local work entry clip parts=()
   work="$(mktemp -d)" || return 0
   for entry in $FINISH_CLIP_DIGESTS; do
     clip="${entry%%:*}"
@@ -1413,14 +1449,9 @@ finish_sound() {
       printf '%s  %s\n' "${entry#*:}" "$work/$clip.wav" | shasum -a 256 -c - >/dev/null 2>&1 ||
       { log "finish sound: could not fetch $clip.wav"; rm -rf "$work"; return 0; }
   done
-  name="$(id -F 2>/dev/null | awk '{print $1}')"
-  finish_name_like "$name" || name="$(basename "$HOME")"
-  finish_name_like "$name" || name=""
   parts=("$work/welcome.wav")
-  if [ -n "$name" ] && [ -n "$sayb" ]; then
-    name="$(printf '%s%s' "$(printf '%s' "${name:0:1}" | tr '[:lower:]' '[:upper:]')" "${name:1}")"
-    "$sayb" -v Fred --file-format=WAVE --data-format=LEI16@22050 -o "$work/name.wav" "$name" 2>/dev/null &&
-      parts+=("$work/name.wav")
+  if [ -n "${FINISH_NAME_CLIP:-}" ] && [ -s "$FINISH_NAME_CLIP" ] && cp "$FINISH_NAME_CLIP" "$work/name.wav"; then
+    parts+=("$work/name.wav")
   fi
   parts+=("$work/to-omninode.wav")
   # One joined clip plays without the second of silence each afplay adds.
