@@ -126,7 +126,7 @@ metadata:
   bootstrap_handler:
     language: bash
     source: handler_onboarding_preflight.sh
-    sha256_fingerprint: "304c:58d1:70d0:0840:226a:2b74:edbc:784c:7824:ec24:601b:d5cd:3341:0be9:87cd:37fe"
+    sha256_fingerprint: "efaa:7616:4d23:dff3:bf66:a678:0690:6e66:5593:155d:bd86:b4c7:86ab:d861:244d:579a"
     loading: source_after_sha256_verification
     entrypoints:
       - resume_banner
@@ -146,6 +146,8 @@ metadata:
       - anchored_commit
       - checkout_anchored
       - clone_at_anchor
+      - retire_lab_model_overrides
+      - place_local_url_on_ladder
     description: >-
       Preflight on stock macOS Bash, before Python or ONEX is installed.
       The lab-onboarding entrypoint supplies platform probes, prompts,

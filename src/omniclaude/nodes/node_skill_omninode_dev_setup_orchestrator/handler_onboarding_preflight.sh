@@ -1478,3 +1478,60 @@ PY2
   fi
   rm -rf "$work"
 }
+
+# A lab-model overrides file an earlier version of this script wrote declares a
+# local model, and routing takes a declared local model before a registered key,
+# so the key would never be used. Moved aside (never deleted). A file the
+# developer wrote is left alone and named.
+retire_lab_model_overrides() {
+  local f="$HOME/.omninode/delegation/bifrost_overrides.yaml"
+  [ -f "$f" ] || return 0
+  if head -n 1 "$f" | grep -qE '^# Written by (lab-onboarding|omninode-dev-setup)'; then
+    mv "$f" "$f.pre-key.$STAMP"
+    say "  Moved aside the local-model routes an earlier run wrote, so your key is used."
+  else
+    say "  ⚠ $f declares a local model; it is used before your key. Remove it if you want the key used."
+  fi
+}
+
+# The pinned runtime accepts a local-url pin, but an unpinned call walks only
+# backends placed on its ladder. Declare that placement on the same entry the
+# models command wrote, keeping its endpoint and served model as the authority.
+place_local_url_on_ladder() {
+  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$HOME/$OVERRIDES_FILE_REL" <<'PYPLACE'
+from pathlib import Path
+import sys
+import yaml
+
+path = Path(sys.argv[1])
+text = path.read_text()
+data = yaml.safe_load(text)
+entry = next(b for b in data["backends"] if b.get("backend_id") == "local-url")
+if "placement" in entry:
+    sys.exit(0)
+placement = {
+    "tier": "local",
+    "fallback_for": ["local-coder", "local-heavy-reasoning"],
+    "max_context_tokens": 8192,
+}
+# Insert beside backend_id using YAML's source marks. Preserve comments and
+# every other entry; refuse an unfamiliar layout before replacing the file.
+node = yaml.compose(text)
+backends = next(value for key, value in node.value if key.value == "backends")
+item = next(item for item in backends.value
+            if any(key.value == "backend_id" and value.value == "local-url"
+                   for key, value in item.value))
+key, value = next((key, value) for key, value in item.value if key.value == "backend_id")
+lines = text.splitlines(keepends=True)
+block = yaml.safe_dump({"placement": placement}, sort_keys=False)
+lines.insert(value.end_mark.line + 1,
+             "".join(" " * key.start_mark.column + line + "\n" for line in block.splitlines()))
+written = "".join(lines)
+entry["placement"] = placement
+if yaml.safe_load(written) != data:
+    sys.exit("cannot place local-url without changing other routes; check " + str(path))
+tmp = path.with_suffix(".tmp")
+tmp.write_text(written)
+tmp.replace(path)
+PYPLACE
+}

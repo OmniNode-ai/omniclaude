@@ -695,7 +695,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="304c:58d1:70d0:0840:226a:2b74:edbc:784c:7824:ec24:601b:d5cd:3341:0be9:87cd:37fe" root candidate \
+  local digest="efaa:7616:4d23:dff3:bf66:a678:0690:6e66:5593:155d:bd86:b4c7:86ab:d861:244d:579a" root candidate \
     download_digest="6508:7499:6b9e:2a4f:c005:a9c6:5124:906f:36a8:af93:8883:6aba:d3a1:0981:69d2:c114"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -1322,21 +1322,6 @@ link_onex() {
 
 key_stored() { onex_run secret list 2>/dev/null | grep -qE "^[[:space:]]+llm\.$1\.api_key[[:space:]]"; }
 
-# A lab-model overrides file an earlier version of this script wrote declares a
-# local model, and routing takes a declared local model before a registered key,
-# so the key would never be used. Moved aside (never deleted). A file the
-# developer wrote is left alone and named.
-retire_lab_model_overrides() {
-  local f="$HOME/.omninode/delegation/bifrost_overrides.yaml"
-  [ -f "$f" ] || return 0
-  if head -n 1 "$f" | grep -qE '^# Written by (lab-onboarding|omninode-dev-setup)'; then
-    mv "$f" "$f.pre-key.$STAMP"
-    say "  Moved aside the local-model routes an earlier run wrote, so your key is used."
-  else
-    say "  ⚠ $f declares a local model; it is used before your key. Remove it if you want the key used."
-  fi
-}
-
 # receipt_field JSON KEY -> the first value of KEY anywhere in the receipt JSON
 receipt_field() { printf '%s' "$1" | jq -r --arg k "$2" '[.. | objects | .[$k]? // empty] | first // empty' 2>/dev/null; }
 
@@ -1460,6 +1445,13 @@ phase3() {
     LAST_ERR="none of your models answered its test delegation (the lines above say why)"
     phase_fail "fix what the lines above name, then run this again, or add a model later with 'onex models add <provider>'"
   fi
+
+  case "$(result_of local)" in
+    pass:*)
+      step "place the local model on the delegation ladder" place_local_url_on_ladder ||
+        phase_fail "see the log; the local model must be on the unpinned delegation ladder"
+      ;;
+  esac
 
   # One delegation with no pin: delegation chooses the model, as it will for the
   # developer's own work.
