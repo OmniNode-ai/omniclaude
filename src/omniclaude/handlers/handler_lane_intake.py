@@ -441,7 +441,11 @@ def findings(
                 "fix": (
                     "cite a task that is in a plan already at "
                     f"the plan repository {policy.plan_task.ref}, or drop "
-                    "the citation line so the create spends the daily budget"
+                    "the citation line so the create spends the daily budget; "
+                    "when the reason names the "
+                    f"'{policy.plan_task.plan_repo_key}' key of the "
+                    f"'{policy.plan_task.overlay}' overlay, supply that key in "
+                    "the overlay rather than setting an environment variable"
                 ),
             }
         )
