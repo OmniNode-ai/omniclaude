@@ -90,6 +90,7 @@ def _run(tmp_path: Path, *, os_name: str, fullname: str, home: str) -> list[str]
     home_dir.mkdir(parents=True)
     snippet = (
         "say() { printf '%s\\n' \"$*\"; }\nlog() { :; }\n"
+        f'RUN_DIR="{tmp_path}"\nPREFLIGHT_ONLY=0\n'
         'os_name() { echo "${ONBOARD_TEST_OS:-$(uname -s)}"; }\n'
         + "\n".join(
             line
@@ -97,8 +98,11 @@ def _run(tmp_path: Path, *, os_name: str, fullname: str, home: str) -> list[str]
             if line.startswith("FINISH_CLIP_")
         )
         + f'\nFINISH_CLIP_BASE="file://{clips}"\nFINISH_CLIP_DIGESTS="{digests}"\n'
-        + _functions("finish_name_like", "finish_sound")
-        + "\nfinish_sound\n"
+        + _functions(
+            "finish_name_like", "finish_name", "finish_sound_consent", "finish_sound"
+        )
+        # OMN-21517: phase 0 makes the synthesis call, then the finish step plays.
+        + "\nfinish_sound_consent\nfinish_sound\n"
     )
     env = {
         "HOME": str(home_dir),

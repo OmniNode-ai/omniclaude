@@ -1,0 +1,67 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21517
+title: "The finish step asks macOS for audio consent after the run prints Done"
+summary: >
+  The finish step made a speech synthesis call, and on a Mac whose Terminal has
+  never used audio that call raises a macOS consent dialog after the run has
+  printed Done. Phase 0 now makes the one synthesis call, after a notice that
+  the dialog is coming, and keeps the clip; the finish step plays recorded clips
+  and makes no synthesis call. A refused dialog costs only the synthesised clip.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21517-audio-consent
+    statement: The audio consent is asked for in phase 0, with a warning, and the finish step never triggers it.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the audio consent is requested during phase 0 and not by the finish step, so the finish sound plays with no dialog -- falsifier: uv run pytest asserting phase 0 makes the synthesis call and the finish step makes none that was not already made"
+      - id: AC2
+        statement: "AC2: the run prints, before that call, one line telling the developer macOS will ask and what for -- falsifier: uv run pytest asserting the phase 0 output contains the notice ahead of the call"
+      - id: AC3
+        statement: "AC3: refusing the dialog costs only the synthesised clip: the two recorded clips still play and the run still reports success -- falsifier: uv run pytest with a stubbed synthesis that fails, asserting both clips are played and the step returns success"
+evidence_requirements:
+  - kind: tests
+    description: "Audio consent tests pass"
+    command: "uv run pytest tests/skills/test_onboarding_audio_consent_omn21517.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21517-ac1
+    description: "Phase 0 calls the consent step before its questions and it makes the one synthesis call; the finish step alone makes none. Fails at the merge base, which has no phase 0 consent step and whose finish step makes the call."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_audio_consent_omn21517.py -q --no-cov -k test_ac1"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21517-ac2
+    description: "The notice is printed once, ahead of the synthesis call. Fails at the merge base, which prints no notice."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_audio_consent_omn21517.py -q --no-cov -k test_ac2"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21517-ac3
+    description: "With the synthesis failing, both recorded clips are still played and the step returns success. Fails at the merge base, which has no phase 0 notice step."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_audio_consent_omn21517.py -q --no-cov -k test_ac3"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21517-deploy-probe
+    description: "Deploy probe. Read the setup handler from GitHub at the checked-out commit and require the phase 0 consent step in it, with the AC1 test. It fails at the merge base, where the handler has no such step."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_audio_consent_omn21517.py -q --no-cov -k test_ac1"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"finish_sound_consent() {\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
