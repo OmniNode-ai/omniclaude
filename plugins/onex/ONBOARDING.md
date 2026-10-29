@@ -180,6 +180,11 @@ If none of the three exists, `onex delegate` refuses before dispatching. The mes
 `ONEX_WORKSPACE_CONFIG_ROOT` and phase 2 of this script: re-run the script so phase 2 writes
 the config, rather than pointing the variable somewhere else.
 
+CI holds this order to the developer install. The `Onboarding Verify` workflow runs this
+script every day, and on every pull request that changes it, on a fresh macOS runner with an
+empty home directory, no GitHub credential and no private sibling checkout. It fails when
+the run does not reach a delegation, or when the run's log shows a runtime-config refusal.
+
 ---
 
 ## When it is done

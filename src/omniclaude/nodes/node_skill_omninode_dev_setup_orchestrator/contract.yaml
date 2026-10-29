@@ -74,12 +74,21 @@ event_bus:
 
 # Capabilities
 capabilities:
+  - name: onboarding.model_config
+    description: Read model choices and place a local URL on the delegation ladder
+    version: 1.0.0
   - name: skill.omninode_dev_setup
     description: Dispatch omninode_dev_setup skill to polymorphic agent
     version: 1.0.0
 
 # IO operations
 io_operations:
+  - operation: model_config
+    description: Read configuration or atomically add local backend placement
+    handler_method: handle
+    input_model: omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_model_config_request.ModelOnboardingModelConfigRequest
+    output_model: omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_model_config_result.ModelOnboardingModelConfigResult
+    idempotent: true
   - operation: skill_requested
     description: Dispatch omninode_dev_setup skill invocation to polymorphic agent
     handler_method: handle_skill_requested
@@ -126,7 +135,7 @@ metadata:
   bootstrap_handler:
     language: bash
     source: handler_onboarding_preflight.sh
-    sha256_fingerprint: "304c:58d1:70d0:0840:226a:2b74:edbc:784c:7824:ec24:601b:d5cd:3341:0be9:87cd:37fe"
+    sha256_fingerprint: "de89:e6f9:e072:5242:4bee:d12c:7bce:4abc:95bb:f0b8:c13f:c4bd:c349:953f:f200:1717"
     loading: source_after_sha256_verification
     entrypoints:
       - resume_banner
@@ -146,6 +155,8 @@ metadata:
       - anchored_commit
       - checkout_anchored
       - clone_at_anchor
+      - retire_lab_model_overrides
+      - place_local_url_on_ladder
     description: >-
       Preflight on stock macOS Bash, before Python or ONEX is installed.
       The lab-onboarding entrypoint supplies platform probes, prompts,
@@ -165,5 +176,10 @@ handler_routing:
         name: "HandlerOmninodeDevSetupSkill"
         module: "omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_omninode_dev_setup_skill"
       description: "Dispatch omninode_dev_setup through the shared skill request handler"
+    - operation: "onboarding.model_config"
+      handler:
+        name: "HandlerOnboardingModelConfig"
+        module: "omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_model_config"
+      description: "Read model configuration and atomically place a registered local URL on its delegation ladder"
   execution_mode: "single"
   max_timeout_seconds: 30

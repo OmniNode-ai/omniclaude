@@ -3,11 +3,10 @@ schema_version: "1.0.0"
 ticket_id: OMN-20700
 title: "The onboarding guide names the runtime config owner for a developer install and a registry install"
 summary: >-
-  The code half of the ticket is merged in omnibase_infra: a developer workspace finds its runtime config under
-  .onex/workspace-config without the private sibling repository. This change is the documentation half, AC3 only.
-  plugins/onex/ONBOARDING.md gains a section that states the order onex delegate tries the config owners in and
-  which owner applies to a developer install and which to a registry install, and a test pins that statement.
-  AC1 needs a walk on a fresh Mac and AC4 needs a scheduled onboarding verification; neither is changed here.
+  Onboarding Verify runs the developer onboarding script on a fresh Mac on PRs and a daily schedule.
+  The runtime config owner is documented, and the local URL model is placed on the pinned runtime's
+  unpinned delegation ladder. Evidence checks run inside this repository; the fresh-account walk
+  is the Onboarding Verify workflow, whose run is a separate required check on the PR.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -17,6 +16,13 @@ requirements:
     acceptance:
       - id: AC3
         statement: "The resolution order is stated where a reader of the onboarding will find it, naming which config owner applies to a developer install and which to a registry install -- falsifier: a grep of the onboarding documentation that returns no statement of the config owner for a developer install"
+  - id: req-omn20700-transcribed-acceptance
+    statement: The ticket's AC1 and AC4, transcribed from the ticket body. AC1 is bound to the fresh-account CI walk below. AC2 is bound below but not transcribed, because its text names a private repository and this repository is public.
+    acceptance:
+      - id: AC1
+        statement: "AC1: A fresh macOS account that has never held a GitHub credential runs `lab-onboarding.sh` to completion and phase 3 answers one delegation -- falsifier: a run on a fresh account whose phase 3 reports any `onex delegate` failure, or a completion that required cloning a private repository"
+      - id: AC4
+        statement: "AC4: The automated onboarding verification runs against the current tree and passes, so this class of regression is caught by CI rather than by a walker -- falsifier: no scheduled or PR-triggered run of the OMN-20224 verification in the 7 days before this ticket closes"
 evidence_requirements:
   - kind: tests
     description: The onboarding guide carries the config owner section, in the order the resolver tries the owners.
@@ -33,3 +39,61 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_config_owner_omn20700.py -q --no-cov"
+  - id: dod-omn20700-ac2-no-sibling
+    description: >
+      The repository's workspace-config and local-model ladder tests pass; and the Onboarding
+      Verify job runs a workspace the onboarding built with no private sibling checkout and no
+      GitHub credential, fails on a ProtocolConfigurationError or runtime-config refusal,
+      and serves a keyless model that really answers a completion. Fails at the merge
+      base, which has no such job.
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_verify_workflow_omn20700.py -q --no-cov -k test_ac2"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_onboarding_local_ladder_omn20700.py -q --no-cov -k 'workspace_config_is_written or registered_local_url'"
+        cwd: "."
+  - id: dod-omn20700-ac3-guide-owner
+    description: >
+      plugins/onex/ONBOARDING.md states the resolution order and the owner for a developer
+      install and for a registry install, and now says the Onboarding Verify job holds the
+      developer install to it. Fails at the merge base, whose guide does not name the job.
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_config_owner_omn20700.py tests/skills/test_onboarding_verify_workflow_omn20700.py -q --no-cov -k 'section or test_ac3'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20700-ac4-ci-run
+    description: >
+      The Onboarding Verify job is scheduled and PR-triggered and runs this tree's script on
+      macOS to its completion line. Fails at the merge base, which has no such job.
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_verify_workflow_omn20700.py -q --no-cov -k test_ac4"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20700-ac1-fresh-account
+    description: >-
+      The fresh-home workflow runs the script through completion without a GitHub credential.
+      The local ladder regression tests exercise unpinned routing to the declared model.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_local_ladder_omn20700.py tests/skills/test_onboarding_verify_workflow_omn20700.py -q --no-cov"
+  - id: dod-omn20700-deploy-probe
+    description: >-
+      Deploy probe: read the onboarding script published at the checked-out head and require
+      the local URL placement step; the behavioral test requires the registered backend to
+      resolve on the unpinned ladder. Both fail without the placement change.
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_local_ladder_omn20700.py -q --no-cov"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/skills/_bin/lab-onboarding.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"step \\\"place the local model on the delegation ladder\\\" place_local_url_on_ladder\" > /dev/null'"
