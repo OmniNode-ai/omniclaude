@@ -184,6 +184,26 @@ repos:
   # check-hardcoded-model-config-compute block below (see the note there);
   # this block keeps check-stub-implementations only, because that
   # validator's source differs between 63635097 and the OMN-20304 commit.
+  # OMN-21526: the canonical-file-shape hook and the node-home rule group
+  # (check-node-home) run the node_canonical_file_shape_check_compute entry of the
+  # first omnibase_core dev-merge tag that carries omnibase_core#2124; the hook
+  # ids are unchanged. The findings the new rules add over the shrink-only
+  # baseline sit in .onex_ratchets/canonical_file_shape_burndown_baseline.txt,
+  # a ticketed burn-down file that only shrinks.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: dev-20261029151319-6e0a5eee541a
+    hooks:
+      # OMN-18531: this rev carries the canonical-file-shape mod-file-growth rule
+      # (ruling 2026-10-15T08:14:15Z): a baselined script under plugins/, .claude/
+      # or a hooks/ directory only shrinks. The ci.yml pins move with it.
+      - id: canonical-file-shape
+        args: [--rules, file-shape]
+      # Node-home ratchet (OMN-20702): a new ONEX node directory or onex.nodes
+      # entry point outside omnimarket is refused against the shrink-only
+      # .onex_ratchets/node_home_baseline.txt. BLOCKING, no allowlist, no
+      # suppression comment. CI twin: the Canonical File Shape job in
+      # .github/workflows/ci.yml, same omnibase_core tag.
+      - id: check-node-home
   - repo: https://github.com/OmniNode-ai/omnibase_core
     rev: d7ed23f1e89b8b6ce6079d303f8599c661c7f191 # pragma: allowlist secret
     hooks:
@@ -193,17 +213,7 @@ repos:
       # shape-gate-independence job in .github/workflows/ci.yml (CI Summary
       # GATE_JOBS + STRICT_SUCCESS_JOBS).
       - id: check-shape-gate-independence
-      # Node-home ratchet (OMN-20702): a new ONEX node directory or onex.nodes
-      # entry point outside omnimarket is refused against the shrink-only
-      # .onex_ratchets/node_home_baseline.txt. BLOCKING, no allowlist, no
-      # suppression comment. CI twin: the Canonical File Shape job in
-      # .github/workflows/ci.yml, same omnibase_core commit.
-      - id: check-node-home
       - id: check-stub-implementations
-      # OMN-18531: this rev carries the canonical-file-shape mod-file-growth rule
-      # (ruling 2026-10-15T08:14:15Z): a baselined script under plugins/, .claude/
-      # or a hooks/ directory only shrinks. The ci.yml pins move with it.
-      - id: canonical-file-shape
       # OMN-20295: direct-model-call gate, BLOCKING. A model call must sit in a
       # sanctioned delegation node package named in omnibase_core's policy.yaml.
       # Shrink-only baseline, declared here so the shape ratchet accepts it. No

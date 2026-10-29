@@ -4499,7 +4499,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      CANONICAL_FILE_SHAPE_CORE: "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@d7ed23f1e89b8b6ce6079d303f8599c661c7f191"
+      CANONICAL_FILE_SHAPE_CORE: "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261029151319-6e0a5eee541a"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -4518,7 +4518,7 @@ jobs:
           set -u
           ratchet() {
             uv run --no-project --with "$CANONICAL_FILE_SHAPE_CORE" \
-              python -m omnibase_core.validators.canonical_file_shape "$@"
+              python -m omnibase_core.nodes.node_canonical_file_shape_check_compute.runtime_canonical_file_shape_check --rules file-shape "$@"
           }
           mkdir -p bin tests
           printf '#!/bin/sh\necho planted\n' > bin/zz_canary_planted
@@ -4547,11 +4547,11 @@ jobs:
           if [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null; then
             base="$(git merge-base "$base" HEAD)"
             uv run --no-project --with "$CANONICAL_FILE_SHAPE_CORE" \
-              python -m omnibase_core.validators.canonical_file_shape --base "$base" --head HEAD
+              python -m omnibase_core.nodes.node_canonical_file_shape_check_compute.runtime_canonical_file_shape_check --rules file-shape --base "$base" --head HEAD
           else
             echo "no base revision on this event; checking the tree against the baseline only"
             uv run --no-project --with "$CANONICAL_FILE_SHAPE_CORE" \
-              python -m omnibase_core.validators.canonical_file_shape --head HEAD
+              python -m omnibase_core.nodes.node_canonical_file_shape_check_compute.runtime_canonical_file_shape_check --rules file-shape --head HEAD
           fi
 
       - name: Node-home positive control (planted node refused, clean tree accepted)
@@ -4559,7 +4559,7 @@ jobs:
           set -u
           node_home() {
             uv run --no-project --with "$CANONICAL_FILE_SHAPE_CORE" \
-              python -m omnibase_core.nodes.node_node_home_check_compute.runtime_node_home_check "$@"
+              python -m omnibase_core.nodes.node_canonical_file_shape_check_compute.runtime_canonical_file_shape_check --rules node-home "$@"
           }
           planted=src/omniclaude/nodes/node_zz_canary_planted_compute
           mkdir -p "$planted"
@@ -4586,7 +4586,7 @@ jobs:
           set -u
           node_home() {
             uv run --no-project --with "$CANONICAL_FILE_SHAPE_CORE" \
-              python -m omnibase_core.nodes.node_node_home_check_compute.runtime_node_home_check "$@"
+              python -m omnibase_core.nodes.node_canonical_file_shape_check_compute.runtime_canonical_file_shape_check --rules node-home "$@"
           }
           base="${PR_BASE:-${MQ_BASE:-${PUSH_BEFORE:-}}}"
           if [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null; then

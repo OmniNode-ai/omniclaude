@@ -27,7 +27,7 @@ ALLOWLIST_PATH = ".github/imperative-contract-allowlist.yaml"
 ALLOWLIST = ROOT / ALLOWLIST_PATH
 CORE_SHA = "70f7ceda44af968ccf26264ecd429cfd27503971"
 # OMN-18531: the canonical-file-shape hook and CI job run core at the commit carrying mod-file-growth.
-SHAPE_CORE_SHA = "d7ed23f1e89b8b6ce6079d303f8599c661c7f191"
+SHAPE_CORE_SHA = "dev-20261029151319-6e0a5eee541a"
 CORE_USES = "OmniNode-ai/omnibase_core/.github/workflows/imperative-contract-guard.yml"
 RECORDED_HANDLER_PATHS = [
     "omniclaude/nodes/node_delegation_orchestrator/handlers/handler_cross_cli_invoker.py",

@@ -34,15 +34,12 @@ CONFIG_PATH = REPO_ROOT / ".pre-commit-config.yaml"
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
 # (pre-commit hook id, pre-commit repo URL, CI git-dependency repo substring)
-# -> both sides must resolve to the identical pinned SHA.
+# -> both sides must resolve to the identical pinned SHA. OMN-21526: the
+# canonical-file-shape hook runs at an omnibase_core dev-merge tag, not a SHA, so
+# its parity with the CI job is held by tests/ci/test_mod_file_growth_pin_omn18531.py.
 PIN_PAIRS: tuple[tuple[str, str, str], ...] = (
     (
         "no-noncanonical-lifecycle-classes",
-        "https://github.com/OmniNode-ai/omnibase_core",
-        "github.com/OmniNode-ai/omnibase_core",
-    ),
-    (
-        "canonical-file-shape",
         "https://github.com/OmniNode-ai/omnibase_core",
         "github.com/OmniNode-ai/omnibase_core",
     ),

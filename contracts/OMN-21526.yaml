@@ -1,0 +1,40 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21526
+title: "omniclaude: switch to the canonical-file-shape hook with a ticketed first-install baseline and burn it down to zero"
+summary: >
+  The canonical-file-shape hook and CI job run the node_canonical_file_shape_check_compute
+  entry of omnibase_core dev-merge tag dev-20261029151319-6e0a5eee541a. The 74 findings the
+  new whole-tree rules report beyond the existing shrink-only baseline sit in
+  .onex_ratchets/canonical_file_shape_burndown_baseline.txt, whose header names this ticket.
+  The existing baseline file is unchanged. AC3 (the burn-down reaching zero on 2026-11-26)
+  is not provable at this merge, so the ticket stays open and carries no dod_evidence entry for it.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Switch and canary tests pass"
+    command: "uv run pytest tests/ci/test_canonical_file_shape_burndown_omn21526.py tests/ci/test_mod_file_growth_pin_omn18531.py tests/ci/test_node_home_activation_omn20702.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21526-ac1
+    description: "The hook runs at the omnibase_core tag and passes on the whole tree with the burn-down file holding exactly the 74 measured findings under a header naming this ticket; the existing baseline keeps its 947 entries. Fails at the merge base, which has no burn-down file and whose tree the new rules refuse."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "bash -c 'test \"$(grep -c -v \"^#\" .onex_ratchets/canonical_file_shape_burndown_baseline.txt)\" = 74 && head -1 .onex_ratchets/canonical_file_shape_burndown_baseline.txt | grep -q \"Burn-down ticket: OMN-21526\" && test \"$(grep -c -v \"^#\" .onex_ratchets/canonical_file_shape_baseline.txt)\" = 947'"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "uv run --no-project --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261029151319-6e0a5eee541a' python -m omnibase_core.nodes.node_canonical_file_shape_check_compute.runtime_canonical_file_shape_check --rules file-shape --head HEAD"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21526-ac2
+    description: "A planted unbound handler is refused with handler_outside_node and a burn-down line added for an existing refused file is refused with baseline-growth. Fails at the merge base, which has no canary test."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_canonical_file_shape_burndown_omn21526.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
