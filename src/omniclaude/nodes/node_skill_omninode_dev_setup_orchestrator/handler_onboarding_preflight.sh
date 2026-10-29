@@ -697,26 +697,11 @@ key_models() {
 # whose min_memory_gb fits this Mac, or the named model (its size when the model
 # config or the catalogue's local row lists it, else the largest listed).
 ollama_config() {
-  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$WORKSPACE/$OLLAMA_CONFIG_REL" "$1" "${2:-}" "$WORKSPACE/$CATALOGUE_REL" <<'PYCFG'
-import os
+  PYTHONPATH="${BASH_SOURCE[0]%/*}/../../..${PYTHONPATH:+:$PYTHONPATH}" "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$WORKSPACE/$OLLAMA_CONFIG_REL" "$1" "${2:-}" "$WORKSPACE/$CATALOGUE_REL" <<'PYCFG'
+from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_model_config import HandlerOnboardingModelConfig
+from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_model_config_request import ModelOnboardingModelConfigRequest
 import sys
-import yaml
-block = (yaml.safe_load(open(sys.argv[1])) or {}).get("ollama") or {}
-port, path, models = block.get("port"), block.get("chat_path"), block.get("models") or []
-if not port or not path or not models:
-    sys.exit("the model config has no complete ollama block (port, chat_path, models)")
-ram, wanted = int(sys.argv[2]), sys.argv[3]
-models = sorted(models, key=lambda m: int(m["min_memory_gb"]), reverse=True)
-# Onboarding offers the catalogue's local models (OMN-21209), so their sizes count.
-local = []
-if len(sys.argv) > 4 and os.path.isfile(sys.argv[4]):
-    local = ((yaml.safe_load(open(sys.argv[4])) or {}).get("local") or {}).get("memory_classes") or []
-if wanted:
-    size = next((m["download_gb"] for m in [*models, *local] if m["model"] == wanted), max(m["download_gb"] for m in models))
-    print(port, path, wanted, size)
-else:
-    pick = next((m for m in models if int(m["min_memory_gb"]) <= ram), models[-1])
-    print(port, path, pick["model"], pick["download_gb"])
+print(HandlerOnboardingModelConfig().handle(ModelOnboardingModelConfigRequest(operation="ollama_config", path=sys.argv[1], ram_gb=int(sys.argv[2]), model=sys.argv[3], catalogue_path=sys.argv[4] if len(sys.argv) > 4 else "")).output)
 PYCFG
 }
 
@@ -1128,15 +1113,11 @@ mark_local_url_overrides() {
 # The chat endpoint `onex models add local` declared for the server, read back
 # from the local routes, so this script never spells the server's API path.
 local_url_endpoint() {
-  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$HOME/$OVERRIDES_FILE_REL" <<'PYEP'
+  PYTHONPATH="${BASH_SOURCE[0]%/*}/../../..${PYTHONPATH:+:$PYTHONPATH}" "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$HOME/$OVERRIDES_FILE_REL" <<'PYEP'
+from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_model_config import HandlerOnboardingModelConfig
+from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_model_config_request import ModelOnboardingModelConfigRequest
 import sys
-import yaml
-data = yaml.safe_load(open(sys.argv[1])) or {}
-for backend in data.get("backends") or []:
-    if isinstance(backend, dict) and backend.get("backend_id") == "local-url":
-        print(backend["endpoint_url"])
-        sys.exit(0)
-sys.exit("no local-url backend in " + sys.argv[1])
+print(HandlerOnboardingModelConfig().handle(ModelOnboardingModelConfigRequest(operation="local_url_endpoint", path=sys.argv[1])).output)
 PYEP
 }
 
@@ -1498,40 +1479,10 @@ retire_lab_model_overrides() {
 # backends placed on its ladder. Declare that placement on the same entry the
 # models command wrote, keeping its endpoint and served model as the authority.
 place_local_url_on_ladder() {
-  "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$HOME/$OVERRIDES_FILE_REL" <<'PYPLACE'
-from pathlib import Path
+  PYTHONPATH="${BASH_SOURCE[0]%/*}/../../..${PYTHONPATH:+:$PYTHONPATH}" "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$HOME/$OVERRIDES_FILE_REL" <<'PYPLACE'
+from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_model_config import HandlerOnboardingModelConfig
+from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_model_config_request import ModelOnboardingModelConfigRequest
 import sys
-import yaml
-
-path = Path(sys.argv[1])
-text = path.read_text()
-data = yaml.safe_load(text)
-entry = next(b for b in data["backends"] if b.get("backend_id") == "local-url")
-if "placement" in entry:
-    sys.exit(0)
-placement = {
-    "tier": "local",
-    "fallback_for": ["local-coder", "local-heavy-reasoning"],
-    "max_context_tokens": 8192,
-}
-# Insert beside backend_id using YAML's source marks. Preserve comments and
-# every other entry; refuse an unfamiliar layout before replacing the file.
-node = yaml.compose(text)
-backends = next(value for key, value in node.value if key.value == "backends")
-item = next(item for item in backends.value
-            if any(key.value == "backend_id" and value.value == "local-url"
-                   for key, value in item.value))
-key, value = next((key, value) for key, value in item.value if key.value == "backend_id")
-lines = text.splitlines(keepends=True)
-block = yaml.safe_dump({"placement": placement}, sort_keys=False)
-lines.insert(value.end_mark.line + 1,
-             "".join(" " * key.start_mark.column + line + "\n" for line in block.splitlines()))
-written = "".join(lines)
-entry["placement"] = placement
-if yaml.safe_load(written) != data:
-    sys.exit("cannot place local-url without changing other routes; check " + str(path))
-tmp = path.with_suffix(".tmp")
-tmp.write_text(written)
-tmp.replace(path)
+print(HandlerOnboardingModelConfig().handle(ModelOnboardingModelConfigRequest(operation="place_local_url", path=sys.argv[1])).output)
 PYPLACE
 }
