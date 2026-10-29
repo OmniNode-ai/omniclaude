@@ -260,13 +260,24 @@ repos:
       - id: no-bare-feature-flags
         stages: [pre-commit]
 
+  # T2.6 (OMN-21499, core ids OMN-21498): the end-of-file, staged tmp/ and AI
+  # co-author trailer rules and the rule that refuses a hook whose entry writes
+  # are omnibase_core hooks, each a refusal that rewrites nothing. The ids exist
+  # only at this dev-merge tag, so they sit in their own block; no other block of
+  # this file pins a rev that carries them.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: dev-20261029044430-3f33be0d5364
+    hooks:
+      - id: check-hook-writes
+      - id: commit-hygiene
+        exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
+      - id: commit-hygiene-message
+        stages: [commit-msg]
+
   # Fast file checks that can run in parallel
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      - id: end-of-file-fixer
-        exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
-        stages: [pre-commit]
       # check-yaml removed: conflicts with agent YAML files that use custom syntax
       - id: check-added-large-files
         stages: [pre-commit]
@@ -487,12 +498,6 @@ repos:
         name: Reject skip-deploy-gate bypass tokens in commit messages (OMN-9730)
         entry: .pre-commit-hooks/reject-deploy-gate-skip-token.sh
         language: script
-        pass_filenames: true
-        stages: [commit-msg]
-      - id: strip-ai-coauthor-trailer
-        name: Strip AI-generated Co-Authored-By trailers from commit messages
-        entry: perl -i -ne 'print unless /^co-authored-by:.*claude.*noreply\@anthropic\.com/i'
-        language: system
         pass_filenames: true
         stages: [commit-msg]
       - id: ticket-refusal-reason
@@ -931,25 +936,27 @@ repos:
         files: ^(src|plugins|scripts)/.*\.py$|^\.pre-commit-config\.yaml$
         stages: [pre-commit]
 
+      # Stays local: omnibase_core's commit-hygiene refuses staged tmp/ files, not
+      # output/. A pre-commit `fail` hook is a refusal by construction (it runs
+      # no command and writes nothing); it replaces the old `rm -rf output/`.
       - id: clean-output-directory
-        name: clean output directory (prevent test artifacts)
-        entry: bash -c 'rm -rf output/ && exit 0'
-        language: system
-        pass_filenames: false
-        always_run: true
+        name: refuse staged output/ files (test artifacts, T2.6 OMN-21499)
+        entry: output/ holds test artifacts and must not be committed; unstage the files listed below and keep output/ out of the index
+        language: fail
+        files: '^output/'
         stages: [pre-commit]
 
       - id: ruff-format
-        name: ruff format (staged files)
-        entry: bash scripts/uv-run-worktree-safe.sh ruff format
+        name: ruff format --check (staged files, never rewrites)
+        entry: bash scripts/uv-run-worktree-safe.sh --frozen ruff format --check --diff
         language: system
         types: [python]
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
         stages: [pre-commit]
 
       - id: ruff-fix
-        name: ruff check --fix (staged files)
-        entry: bash scripts/uv-run-worktree-safe.sh ruff check --fix --exit-non-zero-on-fix
+        name: ruff check (staged files, never rewrites)
+        entry: bash scripts/uv-run-worktree-safe.sh --frozen ruff check
         language: system
         types: [python]
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
@@ -1059,7 +1066,7 @@ repos:
       # guard or this file. always_run keeps an empty commit on the whole-tree path.
       - id: detect-secrets-update
         name: guard .secrets.baseline (block new unaudited findings, OMN-15068)
-        entry: python3 scripts/detect_secrets_guard.py
+        entry: python3 scripts/detect_secrets_guard.py --check
         language: system
         pass_filenames: true
         require_serial: true
@@ -1442,7 +1449,7 @@ repos:
       # scaffolds the node automatically via generate_skill_node.py.
       - id: auto-generate-skill-nodes
         name: Auto-generate skill orchestrator nodes
-        entry: bash scripts/uv-run-worktree-safe.sh python scripts/auto_generate_skill_nodes.py
+        entry: bash scripts/uv-run-worktree-safe.sh --frozen python scripts/auto_generate_skill_nodes.py --check
         language: system
         pass_filenames: false
         stages: [pre-commit]

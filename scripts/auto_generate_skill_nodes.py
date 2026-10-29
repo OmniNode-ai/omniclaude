@@ -10,16 +10,22 @@ orchestrator node under ``src/omniclaude/nodes/`` and runs
 This prevents the recurring friction of skills being committed without
 their ONEX orchestrator node (F57 — fourth occurrence as of OMN-6815).
 
-Usage (pre-commit hook):
-    python scripts/auto_generate_skill_nodes.py
+Usage:
+    python scripts/auto_generate_skill_nodes.py --check   # the pre-commit hook
+    python scripts/auto_generate_skill_nodes.py           # generate and stage
+
+``--check`` (T2.6, OMN-21499) is what the pre-commit hook runs: it names every
+skill missing its node, prints the command that generates it, and writes
+nothing -- no scaffold, no ``git add``. The hook refuses; the author generates.
 
 Exit codes:
     0 — No missing nodes, or all missing nodes were generated successfully.
-    1 — Generation failed for one or more skills.
+    1 — ``--check`` found a missing node, or generation failed for a skill.
 """
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -57,10 +63,31 @@ def find_skills_missing_nodes() -> list[str]:
     return missing
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="refuse when a node is missing; generate and stage nothing",
+    )
+    args = parser.parse_args([] if argv is None else argv)
+
     missing = find_skills_missing_nodes()
     if not missing:
         return 0
+
+    if args.check:
+        print(
+            f"[auto-generate-skill-nodes] {len(missing)} skill(s) missing orchestrator nodes:",
+            file=sys.stderr,
+        )
+        for name in missing:
+            print(
+                f"  - {name}: run `uv run python scripts/generate_skill_node.py {name}`"
+                " and stage the result",
+                file=sys.stderr,
+            )
+        return 1
 
     print(
         f"[auto-generate-skill-nodes] {len(missing)} skill(s) missing orchestrator nodes:"
@@ -119,4 +146,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
