@@ -82,7 +82,7 @@ source file, so it reports current positions rather than stale ones. The
 remedy path this guard's own block message instructs a human to run is
 therefore unaffected.
 
-Check-only mode (T2.6, OMN-21433)
+Check-only mode (T2.6, OMN-21499)
 ---------------------------------
 
 The pre-commit hook runs `--check`. It does everything above except the write
@@ -115,7 +115,7 @@ from pathlib import Path
 
 BASELINE = Path(".secrets.baseline")
 
-# Mode flag of the pre-commit hook (T2.6, OMN-21433): scan a scratch copy,
+# Mode flag of the pre-commit hook (T2.6, OMN-21499): scan a scratch copy,
 # refuse, write nothing.
 CHECK_FLAG = "--check"
 _CHECK_EXCLUDE_PATTERN = rf"^{re.escape(str(BASELINE))}$"
@@ -200,7 +200,7 @@ def _restore_scan_config(baseline: dict) -> None:
     `filters_used` records how the scan was run: the baseline file it skips and
     the exclude patterns. A scan of the scratch copy records the scratch path
     and the one extra pattern `--check` adds, so both are put back before the
-    result is compared with the committed file (T2.6, OMN-21433).
+    result is compared with the committed file (T2.6, OMN-21499).
     """
     for used in baseline.get("filters_used", []):
         path = str(used.get("path", ""))
@@ -342,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
     every pull request). With none, or with every tracked file, or when the
     commit touches `FULL_RESCAN_TRIGGERS`, the whole tracked set is rescanned.
 
-    `--check` (T2.6, OMN-21433) scans a scratch copy and writes nothing: it
+    `--check` (T2.6, OMN-21499) scans a scratch copy and writes nothing: it
     refuses a new unaudited finding and a stale baseline, and never touches
     `.secrets.baseline` or the index.
     """

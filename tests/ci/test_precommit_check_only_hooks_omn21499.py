@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""T2.6 (OMN-21433): the omniclaude hooks that rewrote files are check-only.
+"""T2.6 (OMN-21499): the omniclaude hooks that rewrote files are check-only.
 
 Seven pre-commit hooks of ``.pre-commit-config.yaml`` wrote to the working tree
 (validators-to-core plan, Appendix 1 rows omniclaude:267, 492, 934, 942, 950,
@@ -247,6 +247,55 @@ def test_output_hook_does_not_select_other_paths() -> None:
     assert not re.search(hook["files"], "src/output/handler.py")
     assert not re.search(hook["files"], "docs/output.md")
     assert hook.get("always_run") is not True
+
+
+def test_canary_commit_is_refused_and_tree_and_index_are_byte_identical(
+    tmp_path: Path,
+) -> None:
+    for argv in (
+        ["git", "init"],
+        ["git", "config", "user.name", "Canary"],
+        ["git", "config", "user.email", "canary@example.com"],
+    ):
+        result = _run(argv, tmp_path)
+        assert result.returncode == 0, result.stderr
+
+    canary = tmp_path / "canary.py"
+    canary.write_text("x=1\n", encoding="utf-8")
+    result = _run(["git", "add", "canary.py"], tmp_path)
+    assert result.returncode == 0, result.stderr
+    message_path = tmp_path / ".git" / "COMMIT_EDITMSG"
+    message_path.write_text(f"fix(x): y\n\n{COAUTHOR_TRAILER}\n", encoding="utf-8")
+
+    # Git metadata can change on reads; compare only the canary, index tree,
+    # commit message, and working-tree status.
+    before_bytes = canary.read_bytes()
+    before_hash = hashlib.sha256(before_bytes).hexdigest()
+    before_message_hash = hashlib.sha256(message_path.read_bytes()).hexdigest()
+    tree = _run(["git", "write-tree"], tmp_path)
+    assert tree.returncode == 0, tree.stderr
+    before_tree = tree.stdout
+    status = _run(["git", "status", "--porcelain"], tmp_path)
+    assert status.returncode == 0, status.stderr
+    before_status = status.stdout
+
+    result = _run([*_ruff_argv("ruff-format"), "canary.py"], tmp_path)
+    assert result.returncode != 0, f"hook accepted the canary: {result.stdout}"
+    result = _run(
+        [*_entry_argv("strip-ai-coauthor-trailer"), str(message_path)], tmp_path
+    )
+    assert result.returncode != 0, f"hook accepted the canary: {result.stdout}"
+    assert "Co-Authored-By" in result.stderr, "refusal must name the trailer"
+
+    assert canary.read_bytes() == before_bytes
+    assert hashlib.sha256(canary.read_bytes()).hexdigest() == before_hash
+    tree = _run(["git", "write-tree"], tmp_path)
+    assert tree.returncode == 0, tree.stderr
+    assert tree.stdout == before_tree
+    assert hashlib.sha256(message_path.read_bytes()).hexdigest() == before_message_hash
+    status = _run(["git", "status", "--porcelain"], tmp_path)
+    assert status.returncode == 0, status.stderr
+    assert status.stdout == before_status
 
 
 # --- script-backed hooks: the config selects the check-only mode ------------

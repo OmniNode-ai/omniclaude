@@ -14,7 +14,7 @@ Usage:
     python scripts/auto_generate_skill_nodes.py --check   # the pre-commit hook
     python scripts/auto_generate_skill_nodes.py           # generate and stage
 
-``--check`` (T2.6, OMN-21433) is what the pre-commit hook runs: it names every
+``--check`` (T2.6, OMN-21499) is what the pre-commit hook runs: it names every
 skill missing its node, prints the command that generates it, and writes
 nothing -- no scaffold, no ``git add``. The hook refuses; the author generates.
 

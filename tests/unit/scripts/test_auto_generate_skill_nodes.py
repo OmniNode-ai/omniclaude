@@ -163,7 +163,7 @@ def _tree_snapshot(root: Path) -> dict[str, bytes]:
 def test_check_refuses_a_missing_node_and_writes_nothing(
     fake_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """T2.6 (OMN-21433): `--check` names the missing node and generates nothing."""
+    """T2.6 (OMN-21499): `--check` names the missing node and generates nothing."""
     _add_skill(fake_repo, "hostile-reviewer")  # no node
     before = _tree_snapshot(fake_repo)
 

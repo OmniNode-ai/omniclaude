@@ -260,7 +260,7 @@ repos:
       - id: no-bare-feature-flags
         stages: [pre-commit]
 
-  # T2.6 (OMN-21433): end-of-file-fixer rewrote files; the third-party hook has no
+  # T2.6 (OMN-21499): end-of-file-fixer rewrote files; the third-party hook has no
   # check mode, so the same id is a local check that names the file and writes nothing.
   - repo: local
     hooks:
@@ -504,7 +504,7 @@ repos:
         pass_filenames: true
         stages: [commit-msg]
       - id: strip-ai-coauthor-trailer
-        name: Refuse AI-generated Co-Authored-By trailers in commit messages (T2.6, OMN-21433)
+        name: Refuse AI-generated Co-Authored-By trailers in commit messages (T2.6, OMN-21499)
         entry: >-
           bash -c 'if grep -iEq "^co-authored-by:.*claude.*noreply@anthropic\.com" "$1"; then
           echo "strip-ai-coauthor-trailer: the commit message carries an AI Co-Authored-By trailer; delete that line from $1 and commit again" >&2; exit 1; fi'
@@ -949,7 +949,7 @@ repos:
         stages: [pre-commit]
 
       - id: clean-output-directory
-        name: refuse staged output/ files (test artifacts, T2.6 OMN-21433)
+        name: refuse staged output/ files (test artifacts, T2.6 OMN-21499)
         entry: >-
           bash -c 'echo "clean-output-directory: output/ holds test artifacts and must not be committed; unstage with git restore --staged:" >&2;
           printf "  %s\n" "$@" >&2; exit 1' clean-output-directory

@@ -746,7 +746,7 @@ def test_merge_keeps_only_tracked_unexcluded_untouched_entries(mod):
 
 
 # ---------------------------------------------------------------------------
-# T2.6 (OMN-21433): the pre-commit hook runs `--check`, which never writes
+# T2.6 (OMN-21499): the pre-commit hook runs `--check`, which never writes
 # ---------------------------------------------------------------------------
 
 
