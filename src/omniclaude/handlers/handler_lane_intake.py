@@ -46,7 +46,13 @@ from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
+
+if TYPE_CHECKING:  # the module is loaded by path at runtime, see _plan_module
+    from omniclaude.handlers.handler_plan_task_citation import (
+        PlanCitation,
+        PlanTaskExemption,
+    )
 
 #: The launcher's declarations of a lane's identity, most specific first -- the
 #: ``ONEX_LANE`` operand ``hook_lane_attribution`` resolves from; the
@@ -81,7 +87,7 @@ class LaneIntakePolicy(NamedTuple):
     daily_budget: int
     state_subdir: str
     #: ``lane_intake.plan_task_exemption``, read by ``handler_plan_task_citation``.
-    plan_task: Any
+    plan_task: PlanTaskExemption
 
 
 class LaneAdmission(NamedTuple):
@@ -106,7 +112,7 @@ class LaneAdmission(NamedTuple):
     parent_session_id: str = ""
     #: The plan task this create cites, once confirmed at the plan's ref. A
     #: plan-backed create spends no budget and is recorded apart from the count.
-    plan: Any = None
+    plan: PlanCitation | None = None
     #: What was missing when the create cites a plan task that is not confirmed.
     plan_error: str = ""
 

@@ -29,7 +29,7 @@ import re
 import subprocess
 from collections.abc import Mapping
 from pathlib import PurePosixPath
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 #: ``git show`` of one plan file is a local object read; this bounds a wedged one.
 _GIT_TIMEOUT_SECONDS = 15
@@ -56,7 +56,7 @@ class PlanCitation(NamedTuple):
     task: str
 
 
-def _text(raw: Mapping[str, Any], key: str, source: str) -> str:
+def _text(raw: Mapping[str, object], key: str, source: str) -> str:
     value = raw.get(key)
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{source}: plan_task_exemption.{key} must be non-blank text")
@@ -75,7 +75,7 @@ def _pattern(text: str, group: str | None, key: str, source: str) -> re.Pattern[
     return compiled
 
 
-def load(raw: Any, source: str) -> PlanTaskExemption:
+def load(raw: object, source: str) -> PlanTaskExemption:
     """Read the ``plan_task_exemption`` object, or raise ``ValueError``.
 
     Raised rather than defaulted: a policy that cannot be read is an unknown
