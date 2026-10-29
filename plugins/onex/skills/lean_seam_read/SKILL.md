@@ -6,6 +6,7 @@ level: basic
 debug: false
 category: process
 bootstrap: true
+skill_kind: methodology
 tags:
   - lean
   - seam

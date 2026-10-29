@@ -6,6 +6,7 @@ level: basic
 debug: false
 category: process
 bootstrap: true
+skill_kind: methodology
 tags:
   - lean
   - wip
@@ -42,7 +43,7 @@ what to pick up next.
 
 ## Steps by hand today
 
-1. **Count WIP for the repository** you would open a pull request in: open pull
+1. **Count WIP for the repository** you would open a pull request in: open pull <!-- skill-boundary-ok: hand-run practice step, not orchestration -->
    requests including drafts, not merged and not in a merge queue. Read it from the
    pull request watcher state and print both the count with drafts and without.
 2. **Compare to the limit.** Use the repository's recorded limit. If none is
