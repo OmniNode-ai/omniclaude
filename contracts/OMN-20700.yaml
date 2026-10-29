@@ -6,7 +6,7 @@ summary: >-
   Onboarding Verify runs the developer onboarding script on a fresh Mac on PRs and a daily schedule.
   The runtime config owner is documented, and the local URL model is placed on the pinned runtime's
   unpinned delegation ladder. Evidence checks run inside this repository; the fresh-account walk
-  also requires a successful hosted workflow at the checked-out head.
+  is the Onboarding Verify workflow, whose run is a separate required check on the PR.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -69,29 +69,22 @@ dod_evidence:
   - id: dod-omn20700-ac4-ci-run
     description: >
       The Onboarding Verify job is scheduled and PR-triggered and runs this tree's script on
-      macOS to its completion line; and GitHub holds a successful scheduled or PR-triggered
-      run of it created in the last 7 days. Fails at the merge base, which has no such job.
+      macOS to its completion line. Fails at the merge base, which has no such job.
     source: manual
     binds_ac: [AC4]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_verify_workflow_omn20700.py -q --no-cov -k test_ac4"
         cwd: "${OMNI_HOME}/omniclaude"
-      - check_type: command
-        check_value: "bash -o pipefail -c 'since=$(python3 -c \"import datetime as d;print((d.datetime.now(d.timezone.utc)-d.timedelta(days=7)).strftime(\\\"%Y-%m-%dT%H:%M:%SZ\\\"))\"); n=$(gh api \"repos/OmniNode-ai/omniclaude/actions/runs?status=success&per_page=100&created=>=$since\" --paginate --jq \".workflow_runs[] | select(.name == \\\"Onboarding Verify\\\" and (.event == \\\"schedule\\\" or .event == \\\"pull_request\\\")) | .id\" | wc -l); echo \"successful Onboarding Verify runs since $since: $n\"; [ \"$n\" -ge 1 ]'"
-        cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn20700-ac1-fresh-account
     description: >-
-      The fresh-home workflow runs the script through completion without a GitHub credential,
-      and a successful PR-triggered or scheduled Onboarding Verify run at this head records
-      the walk. The local ladder regression tests exercise unpinned routing to the declared model.
+      The fresh-home workflow runs the script through completion without a GitHub credential.
+      The local ladder regression tests exercise unpinned routing to the declared model.
     source: manual
     binds_ac: [AC1]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_local_ladder_omn20700.py tests/skills/test_onboarding_verify_workflow_omn20700.py -q --no-cov"
-      - check_type: command
-        check_value: "bash -o pipefail -c 'n=$(gh api \"repos/OmniNode-ai/omniclaude/actions/workflows/onboarding-verify.yml/runs?head_sha=$(git rev-parse HEAD)&status=success&per_page=100\" --jq \"[.workflow_runs[] | select(.event == \\\"pull_request\\\" or .event == \\\"schedule\\\")] | length\"); [ \"$n\" -ge 1 ]'"
   - id: dod-omn20700-deploy-probe
     description: >-
       Deploy probe: read the onboarding script published at the checked-out head and require
