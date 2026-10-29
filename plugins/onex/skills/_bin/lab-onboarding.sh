@@ -687,16 +687,13 @@ YAML
 # Prefer the checkout beside this entrypoint; downloaded copies fetch the same
 # checksum-pinned handler into the run directory. Never source unchecked bytes.
 #
-# A downloaded copy fetches the handler from a commit on dev, and checks it
-# against download_digest. A pull request that changes the handler cannot name
-# a dev commit that holds its new bytes (the merge queue squashes, so no branch
-# commit reaches dev), so for that one change the two digests differ and a
-# downloaded copy keeps the handler already on dev; the next pull request names
-# the merge commit and sets download_digest back to digest.
+# A downloaded copy fetches the handler at an immutable commit and verifies its
+# digest. The handler is committed before this entrypoint's download pin, so
+# changing the entrypoint does not change the bytes the download verifies.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
   local digest="efaa:7616:4d23:dff3:bf66:a678:0690:6e66:5593:155d:bd86:b4c7:86ab:d861:244d:579a" root candidate \
-    download_digest="6508:7499:6b9e:2a4f:c005:a9c6:5124:906f:36a8:af93:8883:6aba:d3a1:0981:69d2:c114"
+    download_digest="efaa:7616:4d23:dff3:bf66:a678:0690:6e66:5593:155d:bd86:b4c7:86ab:d861:244d:579a"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
   for candidate in "$root/$rel" "$PWD/$rel" "$WORKSPACE/omniclaude/$rel"; do
@@ -707,7 +704,7 @@ load_onboarding_preflight() {
     fi
   done
   candidate="$RUN_DIR/handler_onboarding_preflight.sh"
-  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/96420e588332238f9deb21e92bdbe554614ed19a/$rel" ||
+  if ! curl -fsSL --retry 3 -o "$candidate" "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/f643681a107f42272f374f78508eecf5225b0a2f/$rel" ||
      ! printf '%s  %s\n' "$download_digest" "$candidate" | shasum -a 256 -c - >/dev/null 2>&1; then
     printf 'omninode-dev-setup: cannot load the checksum-pinned onboarding preflight handler\n' >&2
     return 1
