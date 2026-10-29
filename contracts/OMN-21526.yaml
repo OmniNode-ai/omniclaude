@@ -12,6 +12,17 @@ summary: >
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
+requirements:
+  - id: req-switch-baseline
+    statement: The canonical-file-shape hook runs the omnibase_core node entry and the new whole-tree findings sit in a ticketed burn-down baseline.
+    acceptance:
+      - id: AC1
+        statement: "AC1: The hook passes on the whole tree with the burn-down file holding exactly the 74 measured findings under a header naming this ticket -- falsifier: a grep count of the burn-down and existing baseline files plus the core entry run over HEAD"
+  - id: req-switch-canary
+    statement: The burn-down baseline cannot grow and a planted unbound handler is refused.
+    acceptance:
+      - id: AC2
+        statement: "AC2: A planted unbound handler is refused with handler_outside_node and a burn-down line added for an existing refused file is refused with baseline-growth -- falsifier: pytest canary cases"
 evidence_requirements:
   - kind: tests
     description: "Switch and canary tests pass"
@@ -24,6 +35,7 @@ dod_evidence:
   - id: dod-omn21526-ac1
     description: "The hook runs at the omnibase_core tag and passes on the whole tree with the burn-down file holding exactly the 74 measured findings under a header naming this ticket; the existing baseline keeps its 947 entries. Fails at the merge base, which has no burn-down file and whose tree the new rules refuse."
     source: manual
+    binds_ac: [AC1]
     checks:
       - check_type: command
         check_value: "bash -c 'test \"$(grep -c -v \"^#\" .onex_ratchets/canonical_file_shape_burndown_baseline.txt)\" = 74 && head -1 .onex_ratchets/canonical_file_shape_burndown_baseline.txt | grep -q \"Burn-down ticket: OMN-21526\" && test \"$(grep -c -v \"^#\" .onex_ratchets/canonical_file_shape_baseline.txt)\" = 947'"
@@ -34,6 +46,7 @@ dod_evidence:
   - id: dod-omn21526-ac2
     description: "A planted unbound handler is refused with handler_outside_node and a burn-down line added for an existing refused file is refused with baseline-growth. Fails at the merge base, which has no canary test."
     source: manual
+    binds_ac: [AC2]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/ci/test_canonical_file_shape_burndown_omn21526.py -q --no-cov"
