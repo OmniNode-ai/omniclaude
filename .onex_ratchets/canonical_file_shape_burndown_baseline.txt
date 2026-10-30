@@ -25,7 +25,6 @@ src/omniclaude/handlers/handler_hook_payload_encryption.py
 src/omniclaude/handlers/handler_internal_sibling_pins.py
 src/omniclaude/handlers/handler_lane_intake.py
 src/omniclaude/handlers/handler_ledger_write_guard.py
-src/omniclaude/handlers/handler_plan_task_citation.py
 src/omniclaude/handlers/handler_ticket_description_patch.py
 src/omniclaude/handlers/handler_ticket_ledger_lookup.py
 src/omniclaude/nodes/node_agent_chat/handler_auto_emit.py

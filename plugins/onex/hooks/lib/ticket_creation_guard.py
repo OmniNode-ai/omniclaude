@@ -331,7 +331,6 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
@@ -2162,17 +2161,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--lane-intake",
         action="store_true",
-        help="judge only the lane-intake rules (11-14) for a create a node files",
+        help="judge only the lane-intake rules (11-13) for a create a node files",
     )
     parser.add_argument(
         "--node",
         action="store_true",
         help="the caller is a node: a lane context whatever its environment says",
-    )
-    parser.add_argument(
-        "--no-record",
-        action="store_true",
-        help="do not spend the day's intake budget (a dry run)",
     )
     args = parser.parse_args(argv)
 
@@ -2225,7 +2219,6 @@ def main(argv: list[str] | None = None) -> int:
             payload,
             os.environ,
             args.policy or DEFAULT_POLICY_PATH,
-            datetime.now(UTC),
             force=args.node or args.lane_intake,
         )
         if admission is not None:
@@ -2249,12 +2242,6 @@ def main(argv: list[str] | None = None) -> int:
         return _block(
             render_block_reason(findings, policy, update=is_update), reason_code
         )
-    if admission is not None and not args.no_record:
-        try:
-            intake.record(admission, str(tool_input.get("title", "")))
-        except OSError as exc:
-            sys.stderr.write(f"could not record the intake admission: {exc}\n")
-            return 1
     if body_lookup is None:
         sys.stderr.write(
             "[ticket_creation_guard] no LINEAR_API_KEY in the environment or "

@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Lane-intake rules of the ticket-creation guard (OMN-17942, rules 11-14).
+"""Lane-intake rules of the ticket-creation guard (OMN-17942, rules 11-13).
 
 Every Linear item a lane or a node opens is written through the operator's one
 existing Linear key, so its author field reads as the operator's own (scorecard
@@ -15,26 +15,21 @@ stays, so the item itself carries the fact:
   in-session helper may instead use its parent session's registered lane and
   open CLAIM (``handler_subagent_lane_resolve``);
 * rule 12 -- it carries the lane-intake label (``lane_intake.label``);
-* rule 13 -- its description's first line is ``<stamp_prefix> <lane>``;
-* rule 14 -- no more than ``lane_intake.daily_budget`` such items are admitted
-  per UTC day, counted in a per-day ledger under ``ONEX_STATE_DIR``;
-* rule 14a -- a create that cites a task of an approved plan is not lane-invented
-  intake and does not spend that budget (RULING 2026-10-29T10:59:39Z). The
-  citation is verified against the plan file at the plan repository's
-  ``origin/main`` by ``handler_plan_task_citation``; one that cannot be
-  confirmed is refused, naming what is missing, and a create that cites no
-  plan spends the budget as before.
+* rule 13 -- its description's first line is ``<stamp_prefix> <lane>``.
 
-The vocabulary and the budget are ``ticket_creation_policy.json``'s
-``lane_intake`` object (the plan exemption is its ``plan_task_exemption``
-member); this module spells none of them.
+No rule counts items: creating a ticket is never refused or deferred by how many were
+created (RULING 2026-10-30T00:03:58Z, which replaced the 30-a-day budget of the former
+rule 14 and its plan-task exemption with a work-in-progress limit on starting work).
+
+The vocabulary is ``ticket_creation_policy.json``'s ``lane_intake`` object; this
+module spells none of it.
 
 Lifted out of ``plugins/onex/hooks/lib/ticket_creation_guard.py`` so the guard
 script, a baselined mod file that may only shrink under the canonical-file-shape
 ratchet, can take the rules without growing. The guard loads this module by
 path and runs it under a bare interpreter with no ``omniclaude`` package, so it
 imports the standard library only. The decisions are pure functions of what they
-are handed; the filesystem is touched only by :func:`begin` and :func:`record`.
+are handed; the filesystem is touched only by :func:`begin`.
 """
 
 from __future__ import annotations
@@ -42,18 +37,10 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import json
-import os
 from collections.abc import Mapping
-from datetime import datetime
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, NamedTuple
-
-if TYPE_CHECKING:  # the module is loaded by path at runtime, see _plan_module
-    from omniclaude.handlers.handler_plan_task_citation import (
-        PlanCitation,
-        PlanTaskExemption,
-    )
+from typing import NamedTuple
 
 #: The launcher's declarations of a lane's identity, most specific first -- the
 #: ``ONEX_LANE`` operand ``hook_lane_attribution`` resolves from; the
@@ -65,7 +52,6 @@ _HEADLESS_ENTRYPOINT_PREFIX = "sdk-"
 #: subagent's sidecar, dispatch prompt or parent session confirmed by an open
 #: ledger CLAIM (``node_hook_refusal_record_effect``).
 LANE_SOURCE_ENV = "env"
-_PLAN_CITATION_PY = Path(__file__).with_name("handler_plan_task_citation.py")
 _SUBAGENT_LANE_PY = (
     Path(__file__).resolve().parents[1]
     / "nodes/node_hook_refusal_record_effect/handlers"
@@ -78,37 +64,19 @@ class LaneIntakePolicy(NamedTuple):
 
     label: str
     stamp_prefix: str
-    daily_budget: int
-    state_subdir: str
-    #: ``lane_intake.plan_task_exemption``, read by ``handler_plan_task_citation``.
-    plan_task: PlanTaskExemption
 
 
 class LaneAdmission(NamedTuple):
-    """One create made from a lane or node context, and today's intake so far.
+    """One create made from a lane or node context.
 
     ``lane`` is the declared identity, ``""`` when the context carries none.
-    ``intake_count`` is ``None`` when the per-day ledger could not be read,
-    which refuses: an unmeasurable budget is not a budget.
     """
 
     policy: LaneIntakePolicy
     lane: str
-    intake_count: int | None
-    ledger: Path | None
-    at: str
-    #: Environment, sidecar+claim, parent-session+claim, or unresolved (empty).
-    lane_source: str = ""
     #: The lane a subagent's sidecar named, kept when no open CLAIM confirmed
     #: it, so the refusal can say which CLAIM is missing.
     unclaimed_sidecar_lane: str = ""
-    helper: str = ""
-    parent_session_id: str = ""
-    #: The plan task this create cites, once confirmed at the plan's ref. A
-    #: plan-backed create spends no budget and is recorded apart from the count.
-    plan: PlanCitation | None = None
-    #: What was missing when the create cites a plan task that is not confirmed.
-    plan_error: str = ""
 
 
 def _load(name: str, path: Path) -> ModuleType:
@@ -121,11 +89,6 @@ def _load(name: str, path: Path) -> ModuleType:
     return module
 
 
-def _plan_module() -> ModuleType:
-    """The plan-citation reader."""
-    return _load("handler_plan_task_citation", _PLAN_CITATION_PY)
-
-
 def load_policy(policy_path: Path) -> LaneIntakePolicy:
     """Read ``lane_intake`` from the policy file, or raise ``ValueError``.
 
@@ -135,47 +98,19 @@ def load_policy(policy_path: Path) -> LaneIntakePolicy:
     """
     try:
         raw = json.loads(policy_path.read_text(encoding="utf-8"))["lane_intake"]
-        budget = raw["daily_budget"]
-        texts = [raw[k] for k in ("label", "stamp_prefix", "state_subdir")]
-        plan_task = _plan_module().load(raw["plan_task_exemption"], str(policy_path))
+        texts = [raw[k] for k in ("label", "stamp_prefix")]
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise ValueError(f"{policy_path}: no usable 'lane_intake' object ({exc})")
-    if isinstance(budget, bool) or not isinstance(budget, int) or budget < 1:
-        raise ValueError(f"{policy_path}: lane_intake.daily_budget must be >= 1")
     if not all(isinstance(t, str) and t.strip() for t in texts):
         raise ValueError(f"{policy_path}: lane_intake strings must be non-blank")
-    label, prefix, subdir = (t.strip() for t in texts)
-    return LaneIntakePolicy(label, prefix, budget, subdir, plan_task)
-
-
-def ledger_path(
-    environ: Mapping[str, str], policy: LaneIntakePolicy, today: str
-) -> Path | None:
-    """The per-UTC-day admission ledger, or ``None`` when no state dir resolves."""
-    state_dir = environ.get("ONEX_STATE_DIR", "").strip()
-    if not state_dir or not Path(state_dir).is_absolute():
-        return None
-    return Path(state_dir) / policy.state_subdir / f"{today}.jsonl"
-
-
-def read_intake_count(ledger: Path | None) -> int | None:
-    """Items already admitted today. A missing file is zero; unreadable is ``None``."""
-    if ledger is None:
-        return None
-    try:
-        text = ledger.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return 0
-    except OSError:
-        return None
-    return sum(1 for line in text.splitlines() if line.strip())
+    label, prefix = (t.strip() for t in texts)
+    return LaneIntakePolicy(label, prefix)
 
 
 def begin(
     payload: Mapping[str, object],
     environ: Mapping[str, str],
     policy_path: Path,
-    now: datetime,
     *,
     force: bool = False,
 ) -> LaneAdmission | None:
@@ -195,7 +130,6 @@ def begin(
     lane = next(
         (environ[k].strip() for k in _LANE_ENV_KEYS if environ.get(k, "").strip()), ""
     )
-    source = LANE_SOURCE_ENV if lane else ""
     agent_id = payload.get("agent_id")
     is_subagent = isinstance(agent_id, str) and bool(agent_id.strip())
     in_lane = (
@@ -209,9 +143,8 @@ def begin(
     if not in_lane:
         return None
     unclaimed = ""
-    helper = parent_session_id = ""
     if not lane and is_subagent:
-        lane, named, source, parent_session_id = _load(
+        lane, named, _source, _parent = _load(
             "handler_subagent_lane_resolve", _SUBAGENT_LANE_PY
         ).subagent_lane(
             payload,
@@ -221,29 +154,8 @@ def begin(
                 _HEADLESS_ENTRYPOINT_PREFIX
             ),
         )
-        helper = named
         unclaimed = "" if lane else named
-    policy = load_policy(policy_path)
-    tool_input = payload.get("tool_input")
-    plan, plan_error = _plan_module().evaluate(
-        tool_input.get("description") if isinstance(tool_input, dict) else None,
-        policy.plan_task,
-        environ,
-    )
-    ledger = ledger_path(environ, policy, now.strftime("%Y-%m-%d"))
-    return LaneAdmission(
-        policy,
-        lane,
-        read_intake_count(ledger),
-        ledger,
-        now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        source,
-        unclaimed,
-        helper,
-        parent_session_id,
-        plan if not plan_error else None,
-        plan_error,
-    )
+    return LaneAdmission(load_policy(policy_path), lane, unclaimed)
 
 
 def stamp_line(policy: LaneIntakePolicy, lane: str) -> str:
@@ -264,7 +176,7 @@ def _label_names(tool_input: Mapping[str, object]) -> set[str]:
 def findings(
     tool_input: Mapping[str, object], admission: LaneAdmission
 ) -> list[dict[str, str]]:
-    """Rules 11-14 for one create, as ``{code, field, reason, fix}`` dicts."""
+    """Rules 11-13 for one create, as ``{code, field, reason, fix}`` dicts."""
     policy, lane = admission.policy, admission.lane
     out: list[dict[str, str]] = []
     if not lane:
@@ -330,96 +242,7 @@ def findings(
                 ),
             }
         )
-    if admission.plan_error:
-        out.append(
-            {
-                "code": "plan_citation_unverified",
-                "field": "description",
-                "reason": (
-                    "this create cites a plan task to be exempt from the daily "
-                    f"budget, but {admission.plan_error}"
-                ),
-                "fix": (
-                    "cite a task that is in a plan already at "
-                    f"the plan repository {policy.plan_task.ref}, or drop "
-                    "the citation line so the create spends the daily budget; "
-                    "when the reason names the "
-                    f"'{policy.plan_task.plan_repo_key}' key of the "
-                    f"'{policy.plan_task.overlay}' overlay, supply that key in "
-                    "the overlay rather than setting an environment variable"
-                ),
-            }
-        )
-    elif admission.plan is not None:
-        # RULING 2026-10-29T10:59:39Z: a confirmed plan task spends no budget.
-        pass
-    elif admission.intake_count is None:
-        out.append(
-            {
-                "code": "unevaluable",
-                "field": "lane_intake",
-                "reason": (
-                    "the per-day intake ledger could not be read (ONEX_STATE_DIR "
-                    "unset, relative or unreadable), so the daily budget cannot "
-                    "be measured"
-                ),
-                "fix": "set ONEX_STATE_DIR to an absolute, readable state directory",
-            }
-        )
-    elif admission.intake_count >= policy.daily_budget:
-        out.append(
-            {
-                "code": "lane_intake_budget",
-                "field": "lane_intake",
-                "reason": (
-                    f"{admission.intake_count} lane- or node-created items were "
-                    f"already admitted today (UTC); the daily budget is "
-                    f"{policy.daily_budget}, set in ticket_creation_policy.json"
-                ),
-                "fix": (
-                    "do not open this item today: comment on an existing ticket, "
-                    "or leave it for tomorrow's budget. Raising the budget is the "
-                    "operator's edit to lane_intake.daily_budget"
-                ),
-            }
-        )
     return out
-
-
-def record(admission: LaneAdmission, title: str) -> None:
-    """Append one admission to today's ledger. ``O_APPEND`` keeps lines whole.
-
-    The check-then-append pair is not atomic across processes, so lanes
-    admitted in the same instant can overshoot the budget by the number of
-    racers: a bounded overshoot of a rate limit, not a bypass.
-    """
-    target = admission.ledger
-    if admission.plan is not None:
-        # Audit only, and best effort: the day's count reads ``<day>.jsonl`` and
-        # never this file, so a plan-backed create leaves the count unchanged.
-        if target is None:
-            return
-        target = target.with_name(f"{target.stem}.plan{target.suffix}")
-    if target is None:
-        raise OSError("no intake ledger path resolves")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "at": admission.at,
-        "lane": admission.lane,
-        "lane_source": admission.lane_source,
-        "helper": admission.helper,
-        "parent_session_id": admission.parent_session_id,
-        "title": title[:200],
-    }
-    if admission.plan is not None:
-        entry["plan_path"] = admission.plan.path
-        entry["plan_task"] = admission.plan.task
-    line = json.dumps(entry)
-    fd = os.open(target, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
-    try:
-        os.write(fd, (line + "\n").encode("utf-8"))
-    finally:
-        os.close(fd)
 
 
 __all__ = [
@@ -428,9 +251,6 @@ __all__ = [
     "LaneIntakePolicy",
     "begin",
     "findings",
-    "ledger_path",
     "load_policy",
-    "read_intake_count",
-    "record",
     "stamp_line",
 ]
