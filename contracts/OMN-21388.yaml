@@ -52,7 +52,7 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q --no-cov -k 'test_an_unknown_check_profile_is_refused or test_the_default_profile_is_operator or test_a_team_run_with_nothing_left_to_run_is_refused or test_an_overlay_without_profiles_reads_the_same_under_operator'"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn21388-deploy-probe
-    description: "Deploy probe. Read the runner from GitHub at the checked-out commit and require its profile selection in it, with the AC1 test. It fails at the merge base, where the runner has no profile selection."
+    description: "Deploy probe. Read the runner from GitHub at the checked-out commit and require its --profile argument in it, with the AC1 test. It fails at the merge base, where the runner has no --profile argument."
     source: manual
     binds_ac: [AC1]
     checks:
@@ -60,5 +60,5 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q --no-cov -k test_team_runs_every_check_except_the_operator_ones"
         cwd: "${OMNI_HOME}/omniclaude"
       - check_type: command
-        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/scripts/session_preflight.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"def select_checks(\" > /dev/null'"
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/scripts/session_preflight.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"choices=_PROFILES\" > /dev/null'"
         cwd: "${OMNI_HOME}/omniclaude"
