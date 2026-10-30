@@ -25,6 +25,36 @@ The command builds the payload, dispatches the node, and extracts the result
 internally. Do NOT construct a payload file, `cd` anywhere, or read any
 intermediate result file — there is no procedure to learn.
 
+## Choosing the model: `/onex:delegate models`
+
+When the arguments are `models`, or start with `models first`, the user is choosing
+which model delegation tries first, not delegating a task. Run the matching command
+below and show its output as it is. These change what delegation tries first; they
+re-run no onboarding, ask for no key and send no prompt anywhere.
+
+```bash
+onex models list
+onex models first <provider> <model>
+onex models first --clear
+```
+
+- `/onex:delegate models`: run `onex models list`. It shows each provider, whether it
+  is set up, and its models in the order they are tried. The provider whose model is
+  tried first is listed first, marked `tried first: <model>`.
+- `/onex:delegate models first <provider> <model>`: run
+  `onex models first <provider> <model>`, then `onex models list`. `<provider>` is one
+  of `gemini`, `openrouter`, `openai`, `anthropic`, `glm` or `local`, and `<model>` is
+  one of that provider's models from the list. Leaving out `<model>` keeps the
+  provider's own first model. The next delegation tries that model first, before any
+  other model or key. If it fails, the run moves on in its usual order.
+- `/onex:delegate models first --clear`: run `onex models first --clear`. Delegation
+  goes back to its usual order: local models first, then your keys.
+
+If the command refuses (a provider that is not set up, or a model not in its list),
+show its one `Error: ...` line and stop. Adding a provider is
+`onex models add <provider>`, which asks for the key at a hidden prompt, so tell the
+user to run it in their own terminal.
+
 ## Present the result
 
 Read the single JSON object on stdout. Reply with exactly two parts, in this order:
