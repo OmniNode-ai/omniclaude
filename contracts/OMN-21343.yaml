@@ -1,0 +1,68 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21343
+title: "Onboarding moves participants to a newer pinned commit without breaking an existing install"
+summary: >
+  A Mac onboarded at one INFRA_ANCHOR runs a script naming a newer one. Phase 2
+  already moves every clean clone to the new anchor's commits and stops on a dirty
+  one. Phase 4 passed a healthy running stack as "already running" whatever anchor
+  it was built at, so the stack kept serving the old anchor's code. It now records
+  the anchor it built the stack at (~/.omninode/onboarding/stack.anchor) and, when
+  the script names another, rebuilds the running stack with make up-local, which
+  recreates containers and keeps their volumes. Keys and model order
+  (~/.omninode/delegation/delegation.sqlite) and the saved choices are untouched.
+  ONBOARDING.md gains a section on choosing and publishing a new pin, what a
+  participant's re-run does, and the participant email template. The email itself
+  is sent by a person through Mailchimp, never by automation.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21343-rerun
+    statement: Re-running at a newer anchor moves every clone and the stack to it and keeps keys, model order and dashboard data.
+    acceptance:
+      - id: AC1
+        statement: "AC1: re-running the script on a machine onboarded at an older pin moves every clone to the new pin and keeps the developer's keys, model order and dashboard data"
+  - id: req-omn21343-guide
+    statement: The onboarding guide holds the procedure for choosing and publishing a new pin.
+    acceptance:
+      - id: AC2
+        statement: "AC2: the procedure for choosing and publishing a new pin is written in the onboarding guide"
+  - id: req-omn21343-email
+    statement: Participants already onboarded are told of a new pin by a Mailchimp email naming the re-run command.
+    acceptance:
+      - id: AC3
+        statement: "AC3: participants already onboarded are told of a new pin by a Mailchimp email that names the re-run command"
+evidence_requirements:
+  - kind: tests
+    description: "Onboarding re-pin and anchor tests pass"
+    command: "uv run pytest tests/skills/test_onboarding_repin_omn21343.py tests/skills/test_lab_onboarding_anchor_omn21255.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21343-ac1-rerun-fixture
+    description: 'Against fixture remotes, a Mac onboarded at anchor A (phase 2, then phase 4 bringing the stack up) re-runs phase 2 and phase 4 with a script naming anchor B: every clone is at B''s commits, detached, the workspace config names B, phase 4 runs make up-local and no volume-removing target, records B as the stack''s anchor, and the key, model-order and delegation-row store and the saved choices are byte-identical. A re-run at A rebuilds nothing. Fails at the merge base, whose phase 4 passes the old stack as already running. The clean macOS VM walk of AC1''s falsifier is separate evidence.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_repin_omn21343.py -q --no-cov -k rerun"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21343-ac2-guide
+    description: 'ONBOARDING.md has a "Moving everyone to a new pin" section naming INFRA_ANCHOR, sibling-pins.yaml, the clean macOS VM walk, the shasum -a 256 digest step, Mailchimp and the bash lab-onboarding.sh re-run. Fails at the merge base, which has no such section.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_repin_omn21343.py -q --no-cov -k guide_says"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21343-ac3-email-template
+    description: 'The guide carries the participant email template naming the new anchor, the pinned download, the sha256 check and the re-run command. This is the draft only: AC3 is met when a person has sent the Mailchimp campaign naming the new pin, which no check in this repository can read.'
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_repin_omn21343.py -q --no-cov -k guide_says"
+        cwd: "${OMNI_HOME}/omniclaude"

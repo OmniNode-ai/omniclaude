@@ -269,12 +269,86 @@ downloaded copy of the script too, because the record of completed phases lives 
 `~/.omninode/onboarding`. Preflight always runs first; on a resumed run it says which phase
 the run picks up at, reuses your earlier answers (your models, your stored keys and the
 Docker answer) and asks only whether to continue. Nothing already installed is moved to a
-different version.
+different version, unless the script you run names a newer anchor than the one you set up
+with; then the run moves you to it, as the next section describes.
 
 To force every phase to run again:
 
 ```bash
 bash lab-onboarding.sh --restart
+```
+
+---
+
+## Moving everyone to a new pin
+
+A new pin is how a fix reaches people who have already onboarded. It has two halves: a
+maintainer chooses and publishes a newer anchor, and each participant runs the newer script
+once.
+
+### Choosing the anchor (maintainer)
+
+1. Pick one omnibase_infra commit on `dev` whose CI is green, and that carries
+   `.github/sibling-pins.yaml` naming the sibling commits CI proved with it. Read its checks
+   with `gh api repos/OmniNode-ai/omnibase_infra/commits/<sha>/check-runs`, and prefer a commit
+   whose post-merge lab rebuild passed.
+2. Open one omniclaude pull request that changes only `INFRA_ANCHOR` in
+   `plugins/onex/skills/_bin/lab-onboarding.sh` to that commit's full 40-character sha.
+3. Before it merges, walk it on a clean macOS VM (Tart): onboard with the script this guide
+   currently pins (the old anchor), then run the pull request's script on the same VM (the
+   new anchor). After the second run, `onex models list` shows the same models in the same
+   order, `onex delegate "Reply with exactly one word: hello"` succeeds without asking for a
+   key, and every clone's `git rev-parse HEAD` is the new anchor's commit.
+
+### Publishing it (maintainer)
+
+4. Once the pull request merges, take its merge commit on omniclaude and the script's digest
+   there:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/OmniNode-ai/omniclaude/<merge commit>/plugins/onex/skills/_bin/lab-onboarding.sh | shasum -a 256
+   ```
+
+5. Open a second pull request that moves the [Run it](#run-it) block above to that commit and
+   digest, the same way every earlier refreeze did. The guide then pins the new script.
+6. A person sends the participant email through Mailchimp, from the template below, once the
+   second pull request has merged. Nothing sends it automatically.
+
+### What a participant's re-run does
+
+The participant downloads the new script with the three lines in the email and runs it with
+`bash lab-onboarding.sh`, with no `--restart`. On a Mac set up at an older anchor:
+
+- **Phase 2** moves every clone to the new anchor's commits. A clone holding uncommitted work
+  stops the run before anything moves, and the run prints the command that sets the clone
+  aside; nothing is lost.
+- **Phase 3** rebuilds the onex environment from the new clones and tests the models you
+  already set up. Your keys and their model order live in
+  `~/.omninode/delegation/delegation.sqlite`, outside the workspace, and are not asked for or
+  rewritten.
+- **Phase 4**, when you run the Docker stack, rebuilds it from the new clones with
+  `make up-local`. That recreates the containers and keeps their volumes, so the runs the
+  dashboard shows are still there. A stack already built at the new anchor is left as it is.
+
+### The participant email (template)
+
+```text
+Subject: OmniNode: a new onboarding pin (omnibase_infra <first 12 of the anchor>)
+
+We have published a new pin of the OmniNode developer setup. It installs omnibase_infra at
+<anchor sha>, which brings <one line on what it fixes>.
+
+On the Mac you already set up, run these three lines in Terminal:
+
+    curl -fsSL -o lab-onboarding.sh \
+      https://raw.githubusercontent.com/OmniNode-ai/omniclaude/<merge commit>/plugins/onex/skills/_bin/lab-onboarding.sh
+    echo "<sha256>  lab-onboarding.sh" | shasum -a 256 -c -
+    bash lab-onboarding.sh
+
+The second line must print lab-onboarding.sh: OK; if it prints FAILED, stop and reply
+to this email. The run keeps your keys, your model order and your dashboard history, and
+moves your clones and local stack to the new pin. It takes about as long as a resumed run,
+plus a stack rebuild if you use Docker.
 ```
 
 ---
