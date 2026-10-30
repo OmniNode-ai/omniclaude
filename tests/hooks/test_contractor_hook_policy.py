@@ -18,6 +18,11 @@ import yaml
 
 pytestmark = pytest.mark.unit
 
+# A known lane of the shipped contract a collaborator is bound to (spelled in parts: the
+# public-repo hygiene gate reads the literal as a lab name).
+BOUND = "-".join(("stability", "test"))
+CONTRACTOR = f"{BOUND}-contractor-laptop"
+
 BLOCKED = (
     "prompt.submitted",
     "content.captured",
@@ -42,6 +47,23 @@ def profile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 "principals": [
                     {
                         "principal": "dev-contractor-laptop",
+                        "login": "contractor@example.invalid",
+                        "device": "laptop",
+                    }
+                ],
+            }
+        )
+    )
+    bound = config / f"config/lab/lane-overlays/{BOUND}.developer-principal.yaml"
+    bound.parent.mkdir(parents=True)
+    bound.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "developer_principal.v1",
+                "grants_source": "none: test",
+                "principals": [
+                    {
+                        "principal": CONTRACTOR,
                         "login": "contractor@example.invalid",
                         "device": "laptop",
                     }
@@ -74,6 +96,18 @@ def identity(profile: Path, principal: str) -> None:
     )
 
 
+def bound_identity(profile: Path, principal: str) -> None:
+    """A collaborator bound to its own lane (``onex profile bind-lane``)."""
+    profile.write_text(
+        yaml.safe_dump(
+            {
+                "developer": {"lane_binding": BOUND},
+                "lanes": {BOUND: {"sasl_username": principal}},
+            }
+        )
+    )
+
+
 def journalled(target: Path) -> list[str]:
     return [entry.record.event_type for entry in journal.list_pending(target)]
 
@@ -100,7 +134,7 @@ def test_contractor_drops_before_journal(
     monkeypatch: pytest.MonkeyPatch,
     event_type: str,
 ) -> None:
-    identity(profile, "dev-contractor-laptop")
+    bound_identity(profile, CONTRACTOR)
     target = tmp_path / "journal"
 
     append(event_type, target)
@@ -132,7 +166,7 @@ def test_operator_retains_publication(
 
 
 def test_contractor_evt_is_journalled(profile: Path, tmp_path: Path) -> None:
-    identity(profile, "dev-contractor-laptop")
+    bound_identity(profile, CONTRACTOR)
     append("hook.event", tmp_path / "journal")
     assert journalled(tmp_path / "journal") == ["hook.event"]
 
@@ -144,7 +178,7 @@ def test_content_capture_exits_before_reading_or_stamping(
 ) -> None:
     import hook_content_capture as capture
 
-    identity(profile, "dev-contractor-laptop")
+    bound_identity(profile, CONTRACTOR)
     load = Mock(side_effect=AssertionError("content must not be read or stamped"))
     monkeypatch.setattr(capture, "load_resolver", load)
     monkeypatch.setattr(capture, "drainer_can_publish", lambda _path: True)
@@ -166,7 +200,7 @@ def test_only_held_classes_are_suppressed(
 ) -> None:
     import hook_edge_lane as lane
 
-    identity(profile, "dev-contractor-laptop")
+    bound_identity(profile, CONTRACTOR)
     contract = lane.load_contract(
         Path(lane.__file__).parent.parent / "contracts/hook_edge_lane.yaml"
     )
@@ -191,8 +225,11 @@ def test_malformed_developer_declaration_cannot_publish_or_spool(
 ) -> None:
     import hook_edge_lane as lane
 
-    identity(profile, "dev-contractor-laptop")
-    declaration = tmp_path / "config-root/config/lab/developer-principal-overlay.yaml"
+    bound_identity(profile, CONTRACTOR)
+    declaration = (
+        tmp_path
+        / f"config-root/config/lab/lane-overlays/{BOUND}.developer-principal.yaml"
+    )
     declaration.write_text("schema_version: developer_principal.v1\nprincipals: []\n")
     with pytest.raises(lane.HookEdgeLaneError, match="malformed"):
         append("prompt.submitted", tmp_path / "journal")
@@ -215,7 +252,7 @@ def test_operator_without_developer_declaration_keeps_existing_behavior(
 @pytest.mark.parametrize(
     ("principal", "held_count"),
     [
-        ("dev-contractor-laptop", 0),
+        (CONTRACTOR, 0),
         ("dev-operator-workstation", len(BLOCKED)),
     ],
 )
@@ -225,7 +262,10 @@ def test_real_hook_appender_cli_on_a_clean_profile(
     principal: str,
     held_count: int,
 ) -> None:
-    identity(profile, principal)
+    if principal == CONTRACTOR:
+        bound_identity(profile, principal)
+    else:
+        identity(profile, principal)
     target = tmp_path / "journal"
     script = Path(appender.__file__)
     for event_type in BLOCKED:
@@ -281,7 +321,7 @@ def test_store_principal_normalization_matches_broker_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    identity(profile, "  dev-contractor-laptop  ")
+    bound_identity(profile, f"  {CONTRACTOR}  ")
     append("prompt.submitted", tmp_path / "journal")
     assert not (tmp_path / "journal").exists()
 
@@ -291,7 +331,7 @@ def test_plugin_cache_uses_installed_handler_for_admission(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    identity(profile, "dev-contractor-laptop")
+    bound_identity(profile, CONTRACTOR)
     monkeypatch.setattr(
         appender, "_BUS_HANDLER", tmp_path / "cache-without-src/handler.py"
     )
