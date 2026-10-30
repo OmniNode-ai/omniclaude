@@ -1,6 +1,6 @@
 ---
 description: Session environment preflight — runs the declared checks and prints one line per check with its fix command, at a volume set by the session intent (quiet, normal, tick).
-version: 2.0.0
+version: 2.1.0
 user_invocable: true
 mode: full
 level: intermediate
@@ -36,11 +36,75 @@ so a check body has exactly one home and cannot drift between a script and a pro
 
 ## Run it
 
+Run this block, passing the skill's own arguments (`--intent`, `--all`, `--receipt`, `--overlay`)
+in place of `"$@"`. It first resolves the session's role, then runs the runner with the profile
+that role allows:
+
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_preflight.py" [--intent <intent>] [--all] [--receipt <path>] [--overlay <path>]
+# onex:preflight profile selection
+# The role comes from the team identity resolver (omnimarket node_team_identity_compute), never
+# from a guess here. Only a clean, successful answer naming the operator selects operator; any
+# other outcome - a member, an unknown or unauthenticated identity, a missing or failing
+# resolver, an unreadable answer - selects team. Unknown identity gets team restrictions.
+PREFLIGHT_PROFILE=team
+identity_login="$(gh api user --jq .login 2>/dev/null)" || identity_login=""
+if [ -n "$identity_login" ] && command -v onex >/dev/null 2>&1; then
+  identity_dir="$(mktemp -d)"
+  python3 -c 'import json, sys; print(json.dumps({"claims": [{"source": "github_auth", "value": sys.argv[1]}]}))' \
+    "$identity_login" > "$identity_dir/request.json"
+  if identity_receipt="$(onex node node_team_identity_compute --input "$identity_dir/request.json" \
+      --output receipt --state-root "$identity_dir/state" --timeout 60 2>/dev/null)"; then
+    PREFLIGHT_PROFILE="$(printf '%s' "$identity_receipt" | python3 -c '
+import json, sys
+try:
+    receipt = json.loads(sys.stdin.read())
+except ValueError:
+    receipt = None
+result = receipt.get("result") if isinstance(receipt, dict) else None
+operator = (
+    isinstance(result, dict)
+    and receipt.get("status") == "success"
+    and result.get("privileges") == "operator"
+    and result.get("role") == "operator"
+)
+print("operator" if operator else "team")
+' 2>/dev/null)" || PREFLIGHT_PROFILE=team
+  fi
+  rm -rf "$identity_dir"
+fi
+[ "$PREFLIGHT_PROFILE" = operator ] || PREFLIGHT_PROFILE=team
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_preflight.py" --profile "$PREFLIGHT_PROFILE" "$@"
+```
+
+The runner's own usage, for a caller that has already resolved the profile:
+
+```text
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_preflight.py" --profile <operator|team> [--intent <intent>] [--all] [--receipt <path>] [--overlay <path>]
 ```
 
 From a source checkout the same file is `plugins/onex/scripts/session_preflight.py`.
+
+## Profiles: operator and team
+
+The runner takes `--profile operator|team` (default `operator`). A check in the overlay may carry
+`profile: operator`, meaning it reads something only the operator's machine has (a local
+controller, a coordination host). Under `team` those checks do not run; every other check still
+runs and still blocks. A check with no `profile` key runs in every profile, so an overlay with no
+profile keys gives the same result under `operator` as it always has.
+
+The skill picks the profile from the team identity resolver, through `onex node
+node_team_identity_compute`, with the session's authenticated GitHub login as the claim. It runs
+`operator` only when the resolver positively matches the operator. A member, an identity the
+declaration does not name, no authenticated login, a resolver that is not installed, fails or
+answers something unreadable all run `team`, never `operator`.
+
+These are refused with exit status `2`: a check whose `profile` is anything but `operator` (any
+other value or type), an unknown `--profile`, and a `team` run whose filtered set is empty. A typo
+must never remove a blocker from a run.
+
+The receipt keeps its fields (`intent`, `verdict`, `passed`, `total`, `checks`) and adds
+`profile`, `overlay_path`, `overlay_sha256`, `included_check_ids`, `skipped_check_ids`,
+`passed_check_ids` and `failed_check_ids`, so a reader can validate what actually ran.
 
 ## What it needs
 
@@ -103,7 +167,7 @@ Exit status is the verdict, so a caller does not have to parse the text:
 | -- | -- |
 | `0` | every blocker passed. Warnings may still have been printed; they never block. |
 | `1` | at least one blocker failed. Each one printed its own fix command. |
-| `2` | the run refused: no overlay, an unreadable or malformed overlay, a check with no fix line, an unknown check kind, or `tick` with no receipt path. The reason names what to change. |
+| `2` | the run refused: no overlay, an unreadable or malformed overlay, a check with no fix line, an unknown check kind, an unknown profile on a check or on the command line, a `team` run with no check left to run, or `tick` with no receipt path. The reason names what to change. |
 
 Present the runner's own lines. Do not summarise them, re-word a fix command, or add a verdict
 banner: the line a reader has to act on is the fix command exactly as the overlay spells it.

@@ -1,0 +1,64 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21388
+title: "A team profile in the session preflight runner and the onex:preflight skill"
+summary: >
+  The session preflight runner takes --profile operator|team (default operator).
+  A check may carry profile: operator; under team those checks do not run and
+  every other check still runs and blocks. Unknown profile values on a check or
+  on the command line are refused, a team run left with no check is refused, and
+  an overlay with no profile keys gives the same result under operator as before.
+  The receipt keeps its fields and adds the profile, the overlay path and hash,
+  and the included, skipped, passed and failed check ids. The onex:preflight
+  skill resolves the session's role through omnimarket node_team_identity_compute
+  and runs operator only on a positive operator match, team otherwise.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21388-team-profile
+    statement: The runner and the onex:preflight skill run a team profile that skips operator-only checks and still blocks on shared ones, selected fail-closed from the team identity resolver.
+    acceptance:
+      - id: AC1
+        statement: "AC1: under team shared ledger, login and tool-server checks still run and block (plugin registration is G2's separate check), and the profile: operator checks do not run -- falsifier: the receipt's check list for a team run"
+      - id: AC2
+        statement: "AC2: the change is one pull request in OmniNode-ai/omniclaude and its required OmniNode-ai/omniclaude CI check-runs are green on that pull request's head -- falsifier: the check-runs API for that head commit in OmniNode-ai/omniclaude"
+evidence_requirements:
+  - kind: tests
+    description: "Runner profile and skill profile-selection tests pass"
+    command: "uv run pytest tests/scripts/test_session_preflight_runner.py tests/skills/test_preflight_skill_profile.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21388-ac1
+    description: "A team run's receipt lists the shared ledger, login and tool-server checks, which run and block, and skips the profile: operator check; a failing operator-only blocker does not block a team run but does block an operator run. Fails at the merge base, whose runner has no --profile argument."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q --no-cov -k 'test_team_runs_every_check_except_the_operator_ones or test_shared_checks_pass_under_team_without_the_operator_check or test_the_receipt_records_what_actually_ran'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21388-ac2
+    description: "The change this pull request carries is present at the checked-out head: the runner refuses unknown check profiles and empty team sets, keeps existing receipts and operator results unchanged, and the onex:preflight skill selects operator only on a positive operator match from node_team_identity_compute, team on every other outcome. Fails at the merge base, which has neither the runner profile nor the skill's selection."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_preflight_skill_profile.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q --no-cov -k 'test_an_unknown_check_profile_is_refused or test_the_default_profile_is_operator or test_a_team_run_with_nothing_left_to_run_is_refused or test_an_overlay_without_profiles_reads_the_same_under_operator'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21388-deploy-probe
+    description: "Deploy probe. Read the runner from GitHub at the checked-out commit and require its --profile argument in it, with the AC1 test. It fails at the merge base, where the runner has no --profile argument."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q --no-cov -k test_team_runs_every_check_except_the_operator_ones"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/plugins/onex/scripts/session_preflight.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"choices=_PROFILES\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
