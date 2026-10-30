@@ -2928,11 +2928,22 @@ def _mint_harness(
     mint_status: int = 0,
     no_docker: bool = False,
     source: Path | None = None,
+    built_anchor: str | None = "current",
+    clear_anchor_on_up: bool = False,
+    bad_anchor_on_up: bool = False,
+    up_status: int = 0,
 ) -> tuple[subprocess.CompletedProcess[str], list[str], list[str], str]:
     script = source or SCRIPT
     home, workspace, bin_dir = (tmp_path / n for n in ("home", "workspace", "bin"))
     for directory in (home, workspace / "omnibase_infra", bin_dir):
         directory.mkdir(parents=True)
+    anchor = "a" * 40
+    state_dir = home / ".omninode/onboarding"
+    state_dir.mkdir(parents=True)
+    if built_anchor is not None:
+        (state_dir / "stack.anchor").write_text(
+            (anchor if built_anchor == "current" else built_anchor) + "\n"
+        )
     # Run the production Python handler using phase 3's dispatch interpreter.
     # A base checkout copies its real node too; the missing new handler then
     # fails at the phase call, rather than failing this fixture's setup.
@@ -2973,6 +2984,14 @@ def _mint_harness(
         "for name, value in [('MINT_CALLS', target), ('MINT_EVENTS', target)]:\n"
         "    with Path(os.environ[name]).open('a') as out: out.write(value + '\\n')\n"
         "if target == 'check-sasl-local': sys.exit(int(os.environ['MINT_CHECK_RC']))\n"
+        "if target == 'up-local':\n"
+        "    rc = int(os.environ['MINT_UP_RC'])\n"
+        "    if rc: sys.exit(rc)\n"
+        "    anchor = Path(os.environ['STATE_DIR']) / 'stack.anchor'\n"
+        "    if os.environ['MINT_CLEAR_ANCHOR'] == '1': anchor.unlink(missing_ok=True)\n"
+        "    if os.environ['MINT_BAD_ANCHOR'] == '1':\n"
+        "        anchor.unlink(missing_ok=True)\n"
+        "        anchor.mkdir()\n"
         "if target == 'mint-local':\n"
         "    print('fixture mint result')\n"
         "    sys.exit(int(os.environ['MINT_RC']))\n"
@@ -3074,6 +3093,11 @@ RESTART=0; PREFLIGHT_ONLY=0; DEVELOPER=0; RETRIES=3
         "MINT_EVENTS": str(events),
         "MINT_RESUMED": str(int(resumed)),
         "MINT_RUNNING": str(int(running)),
+        "STATE_DIR": str(state_dir),
+        "INFRA_ANCHOR": anchor,
+        "MINT_UP_RC": str(up_status),
+        "MINT_CLEAR_ANCHOR": str(int(clear_anchor_on_up)),
+        "MINT_BAD_ANCHOR": str(int(bad_anchor_on_up)),
         "MINT_CHECK_RC": str(check_status),
         "MINT_RC": str(mint_status),
     }
@@ -3265,9 +3289,89 @@ def test_resume_mint_refuses_missing_or_invalid_health_contract(
         return copied
 
     monkeypatch.setattr(shutil, "copytree", copy_with_bad_health_contract)
-    result, calls, _, log = _mint_harness(tmp_path, resumed=True, check_status=2)
+    result, calls, _, log = _mint_harness(
+        tmp_path, resumed=True, check_status=2, clear_anchor_on_up=True
+    )
     assert result.returncode != 0, result.stdout + result.stderr
     assert calls == ["check-sasl-local", "up-local"]
     assert "health-contract" in log
+    assert (
+        tmp_path / "home/.omninode/onboarding/stack.anchor"
+    ).read_text() == "a" * 40 + "\n"
     assert "mint-local" not in calls
     assert "Traceback" not in log
+
+
+@pytest.mark.parametrize("built_anchor", [None, "b" * 40])
+def test_resume_at_missing_or_old_anchor_rebuilds_before_delegation_and_mint(
+    tmp_path: Path, built_anchor: str | None
+) -> None:
+    result, calls, events, _ = _mint_harness(
+        tmp_path, resumed=True, running=True, built_anchor=built_anchor
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls == ["local-env", "up-local", "mint-local"]
+    assert events == calls[:2] + ["health_wait", "stack_delegate", "mint-local"]
+    assert (
+        tmp_path / "home/.omninode/onboarding/stack.anchor"
+    ).read_text() == "a" * 40 + "\n"
+    assert not any("down" in call or "volume" in call for call in calls)
+
+
+@pytest.mark.parametrize("resumed", [False, True])
+def test_handler_repair_records_anchor_even_when_later_mint_fails(
+    tmp_path: Path, resumed: bool
+) -> None:
+    result, calls, _, log = _mint_harness(
+        tmp_path,
+        resumed=resumed,
+        running=True,
+        check_status=2,
+        mint_status=75,
+        clear_anchor_on_up=True,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert calls == ["check-sasl-local", "up-local", "mint-local"]
+    assert (
+        tmp_path / "home/.omninode/onboarding/stack.anchor"
+    ).read_text() == "a" * 40 + "\n"
+    assert "mint-local failed" in log
+    assert "Phase 4/6 PASSED" not in result.stdout
+
+
+@pytest.mark.parametrize("resumed", [False, True])
+def test_handler_failed_rebuild_keeps_anchor_and_never_mints(
+    tmp_path: Path, resumed: bool
+) -> None:
+    result, calls, _, log = _mint_harness(
+        tmp_path,
+        resumed=resumed,
+        running=True,
+        check_status=2,
+        up_status=124,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert calls == ["check-sasl-local", "up-local"]
+    assert (
+        tmp_path / "home/.omninode/onboarding/stack.anchor"
+    ).read_text() == "a" * 40 + "\n"
+    assert "up-local failed" in log
+    assert "Traceback" not in log
+
+
+@pytest.mark.parametrize("resumed", [False, True])
+def test_handler_anchor_write_failure_refuses_before_mint(
+    tmp_path: Path, resumed: bool
+) -> None:
+    result, calls, _, log = _mint_harness(
+        tmp_path,
+        resumed=resumed,
+        running=True,
+        check_status=2,
+        bad_anchor_on_up=True,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert calls == ["check-sasl-local", "up-local"]
+    assert "stack-anchor" in log
+    assert "Traceback" not in log
+    assert "Phase 4/6 PASSED" not in result.stdout
