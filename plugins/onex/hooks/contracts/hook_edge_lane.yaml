@@ -232,7 +232,7 @@ relay:
   container: "omninode-gateway-forwarder"
   required_network: "omnibase-infra-network"
   role: >
-    Sole process bridging a local .201 broker to the cloud MSK relay. Anything
+    Sole process bridging a local broker to the cloud MSK relay. Anything
     it cannot see on its attached lane network can never reach the cloud
     gateway, independent of every other link in the hooks->relay chain.
 
