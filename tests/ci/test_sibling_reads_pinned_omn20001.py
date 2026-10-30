@@ -42,6 +42,9 @@ _SIBLINGS = (
 _SIBLING_RE = "|".join(_SIBLINGS)
 _FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 _RELEASE_TAG = re.compile(r"^v\d+\.\d+\.\d+$")
+# A dev-merge tag (dev-<UTC YYYYMMDDHHMMSS>-<sha12>) is a fixed ref of the sibling's dev
+# branch (rulings 2026-10-16T09:35:49Z and 2026-10-29T01:50:26Z).
+_DEV_MERGE_TAG = re.compile(r"^dev-\d{14}-[0-9a-f]{12}$")
 # A ref that is resolved from this repo's own uv.lock by an earlier step.
 _LOCK_RESOLVED = re.compile(r"^\$\{\{\s*steps\.\w+_pin\.outputs\.(rev|tag)\s*\}\}$")
 _INPUT_REF = re.compile(r"^\$\{\{\s*inputs\.(?P<name>[\w-]+)\s*\}\}$")
@@ -130,8 +133,14 @@ def _input_defaults_to_sha(doc: dict[str, Any], ref: str) -> bool:
 
 def _check_uses(name: str, job_id: str, uses: str) -> list[str]:
     m = re.match(rf"OmniNode-ai/(?P<repo>{_SIBLING_RE})/[^@]+@(?P<ref>\S+)", uses)
-    if m and not _FULL_SHA.match(m.group("ref")):
-        return [f"{name}:{job_id}: uses {uses} (ref is not a full sha)"]
+    if (
+        m
+        and not _FULL_SHA.match(m.group("ref"))
+        and not _DEV_MERGE_TAG.match(m.group("ref"))
+    ):
+        return [
+            f"{name}:{job_id}: uses {uses} (ref is not a full sha or a dev-merge tag)"
+        ]
     return []
 
 
@@ -200,3 +209,14 @@ def test_registry_gate_pins_omnimarket_to_the_lock_not_a_branch() -> None:
     assert checkout["with"]["ref"] == "${{ steps.om_pin.outputs.rev }}"
     resolver = next(s for s in steps if s.get("id") == "om_pin")
     assert "uv.lock" in resolver["run"]
+
+
+def test_a_dev_merge_tag_ref_is_a_fixed_ref() -> None:
+    clean = """
+name: clean
+on: workflow_call
+jobs:
+  a:
+    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@dev-20261030152335-66d35d2283c3
+"""
+    assert _violations("clean.yml", clean) == []
