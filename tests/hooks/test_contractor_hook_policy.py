@@ -223,19 +223,16 @@ def test_malformed_developer_declaration_cannot_publish_or_spool(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import hook_edge_lane as lane
-
     bound_identity(profile, CONTRACTOR)
     declaration = (
         tmp_path
         / f"config-root/config/lab/lane-overlays/{BOUND}.developer-principal.yaml"
     )
     declaration.write_text("schema_version: developer_principal.v1\nprincipals: []\n")
-    with pytest.raises(lane.HookEdgeLaneError, match="malformed"):
-        append("prompt.submitted", tmp_path / "journal")
-    assert not (tmp_path / "journal").exists()
+    # OMN-21599: a refusal drops every class (nothing reaches any lane) and never raises.
+    append("prompt.submitted", tmp_path / "journal")
     append("tool.executed", tmp_path / "journal")
-    assert journalled(tmp_path / "journal") == ["tool.executed"]
+    assert not (tmp_path / "journal").exists()
 
 
 def test_operator_without_developer_declaration_keeps_existing_behavior(

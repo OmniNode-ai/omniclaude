@@ -36,6 +36,7 @@ this handler does not import the publisher stack.
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import json
 import os
@@ -314,10 +315,10 @@ if __name__ == "__main__":
 
 
 def developer_event_suppressed(event_type: str) -> bool:
-    """Apply the declared contractor admission policy before capture or transport.
+    """Apply the declared developer admission policy before capture or transport.
 
     Reads the facts (lanes, each lane's declared people, the developer's lane store) and hands
-    them to omnimarket's ``node_developer_lane_admission_compute``, which decides (OMN-21599).
+    them to omnimarket's ``node_developer_lane_admission_compute``. A refusal drops, never blocks.
     """
     import importlib
 
@@ -335,17 +336,8 @@ def developer_event_suppressed(event_type: str) -> bool:
     excluded = policy.get("excluded_event_classes", [])
     if not isinstance(excluded, list):
         raise lane.HookEdgeLaneError("developer excluded classes must be a list")
-    if event_type not in excluded:
-        return False
     if not set(excluded) <= set(raw["governed_event_classes"]):
         raise lane.HookEdgeLaneError("developer policy names ungoverned event classes")
-    # The handler of omnimarket's admission node: stdlib-only, so loaded by file path.
-    node_name = "node_developer_lane_admission_compute"
-    node = importlib.import_module("hook_content_capture").load_node_handler(
-        node_name, node_name, "handler_developer_lane_admission.py"
-    )
-    if node is None:
-        raise lane.HookEdgeLaneError(f"{node_name} is not in the installed omnimarket")
     template = str(policy.get("bound_lane_principal_declaration"))
     paths = {
         name: policy.get("principal_declaration")
@@ -360,13 +352,19 @@ def developer_event_suppressed(event_type: str) -> bool:
         and ".." not in Path(rel).parts
         for rel in paths.values()
     ):
-        raise lane.HookEdgeLaneError(
-            "developer principal declaration must be a relative path"
-        )
+        raise lane.HookEdgeLaneError("principal declarations must be relative paths")
+
+    def _yaml(file: Path | None) -> object:
+        try:  # Unreadable is malformed ({}), never absent and never a traceback.
+            return file and yaml.safe_load(file.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            # A YAML exception can include a source excerpt containing a value.
+            return {}
+
     env = lane.read_operator_env_file(lane.operator_env_file_path())
     lanes = {}
     for name, entry in raw["known_lanes"].items():
-        found = lane._onex_state().workspace_config_file(paths[name])
+        found = _yaml(lane._onex_state().workspace_config_file(paths[name]))
         source = entry.get("sasl_credential_source")
         prefix = entry.get("sasl_env_prefix") or ""
         lanes[name] = {
@@ -374,29 +372,31 @@ def developer_event_suppressed(event_type: str) -> bool:
             "env_principal": env.get(f"{prefix}{lane.ENV_SASL_USERNAME}")
             if source == lane.CREDENTIAL_SOURCE_OPERATOR_ENV_FILE
             else None,
-            "declaration": found and yaml.safe_load(found.read_text(encoding="utf-8")),
+            "declaration": found if isinstance(found, dict) or found is None else {},
         }
-    try:
-        store = yaml.safe_load(
-            (lane.onex_home_path() / lane.LANE_STORE_CONFIG_FILE).read_text(
-                encoding="utf-8"
-            )
-        )
-    except (OSError, yaml.YAMLError):
-        # A YAML exception can include a source excerpt containing a value.
-        store = None
-    decision = node.admit(
-        {
-            "declared_lane": raw["lane"],
-            "barred_lanes": policy.get("collaborator_barred_lanes", []),
-            "lane_store": store if isinstance(store, dict) else None,
-            "lanes": lanes,
-        }
+    store = _yaml(lane.onex_home_path() / lane.LANE_STORE_CONFIG_FILE)
+    # The handler of omnimarket's admission node: stdlib-only, so loaded by file path.
+    node_name = "node_developer_lane_admission_compute"
+    node = importlib.import_module("hook_content_capture").load_node_handler(
+        node_name, node_name, "handler_developer_lane_admission.py"
     )
-    if decision["verdict"] == node.VERDICT_REFUSED:
-        raise (
-            lane.HookEdgeLaneError
-            if decision["fault"] == node.FAULT_CONFIG
-            else lane.HookEdgeLaneCredentialError
-        )(decision["detail"])
-    return bool(decision["verdict"] == node.VERDICT_COLLABORATOR)
+    request = {
+        "declared_lane": raw["lane"],
+        "barred_lanes": policy.get("collaborator_barred_lanes", []),
+        "lane_store": store if isinstance(store, dict) else None,
+        "lanes": lanes,
+    }
+    missing = {"refusal": "admission-node-missing", "detail": f"no {node_name}"}
+    decision = node.admit(request) if node else missing
+    if decision["refusal"] is None:
+        return event_type in excluded and bool(
+            decision["verdict"] == getattr(node, "VERDICT_COLLABORATOR", None)
+        )
+    notice = policy.get("refusal_notice") or {}
+    if event_type == notice.get("event_class"):
+        fix = notice["remedies"].get(decision["refusal"], notice["default_remedy"])
+        text = str(notice["message"]).format(fix=fix, **decision)
+        out = os.environ.get("ONEX_HOOK_NOTICE_FILE") or "/dev/stdout"  # hook relays it
+        with contextlib.suppress(OSError), open(out, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"systemMessage": text}) + "\n")
+    return True
