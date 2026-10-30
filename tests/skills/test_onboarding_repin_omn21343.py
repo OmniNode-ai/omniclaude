@@ -122,6 +122,11 @@ STACK_RUNNING=0
 _PHASE4_STUBS = """
 make() { printf '%s\\n' "$*" >>"$FIXTURE_MAKE_LOG"; }
 docker() { printf 'docker %s\\n' "$*" >>"$FIXTURE_MAKE_LOG"; }
+# Shell-only anchor fixture: real handler ordering and writes are covered by T6.
+onboarding_bus_identity() {
+  [ "$1" = mint ] || make -C "$WORKSPACE/omnibase_infra" check-sasl-local || return
+  [ "$1" = secure ] || make -C "$WORKSPACE/omnibase_infra" mint-local
+}
 docker_installed() { return 0; }
 docker_ready() { return 0; }
 size_docker() { return 2; }
@@ -324,7 +329,10 @@ def test_rerun_at_the_same_anchor_rebuilds_nothing(mac: Mac) -> None:
     rerun = {"FIXTURE_DONE": "1", "FIXTURE_STACK_UP": "1"}
     assert "PASS already in place" in mac.run(mac.phase2, "A", "phase2", **rerun).stdout
     assert "PASS already running" in mac.run(mac.phase4, "A", "phase4", **rerun).stdout
-    assert mac.make_targets() == []
+    assert mac.make_targets() == [
+        f"-C {mac.workspace}/omnibase_infra check-sasl-local",
+        f"-C {mac.workspace}/omnibase_infra mint-local",
+    ]
     assert mac.heads() == mac.expected["A"]
 
 

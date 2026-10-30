@@ -1,0 +1,94 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-20825
+title: "Onboarding mints the developer's login on the local broker"
+summary: >
+  Both phase-4 paths secure an old local stack before minting its developer bus
+  login. A mint failure stops onboarding with the step, remedy and log path.
+  Without Docker, the real main orchestration finishes without minting and
+  explains in phases 3 and 6 that the in-memory bus has no broker or login to mint.
+  The preflight covers the six ports published by the local bundle.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn20825-ac1
+    statement: "AC1: the six tests of plan task T6 pass on the PR's revision and tests 1 to 5 fail on the pre-change script"
+    acceptance:
+      - id: AC1
+        statement: "AC1: the six tests of plan task T6 pass on the PR's revision and tests 1 to 5 fail on the pre-change script -- falsifier: `uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -k \"mint or resume or in_memory or ports\" -q` passes on the pre-change script"
+  - id: req-omn20825-ac2
+    statement: "AC2: for a phase-4-done healthy stack the harness records exactly the calls `check-sasl-local`, `mint-local` in that order when the check passes, and exactly `check-sasl-local`, `up-local`, `mint-local` in that order when it fails"
+    acceptance:
+      - id: AC2
+        statement: "AC2: for a phase-4-done healthy stack the harness records exactly the calls `check-sasl-local`, `mint-local` in that order when the check passes, and exactly `check-sasl-local`, `up-local`, `mint-local` in that order when it fails -- falsifier: a recorded sequence with a missing, extra or reordered call, or `up-local` after a passing check -- proved by: the harness's recorded make-target list, compared exactly in two parametrized cases (How proved below)"
+  - id: req-omn20825-ac4
+    statement: "AC4: `TOTAL_PHASES=6` is unchanged, a run that skips Docker exits 0, and its phase 3 note and phase 6 rows each contain the sentence \"no broker\" and \"no identity to mint\""
+    acceptance:
+      - id: AC4
+        statement: "AC4: `TOTAL_PHASES=6` is unchanged, a run that skips Docker exits 0, and its phase 3 note and phase 6 rows each contain the sentence \"no broker\" and \"no identity to mint\" -- falsifier: the phase count differs from 6, a no-Docker run in the stubbed harness exits non-zero, or either output lacks the sentence"
+evidence_requirements:
+  - kind: tests
+    description: "Functional onboarding mint, resume and in-memory checks pass. AC3 is unchanged regression evidence; AC5 remains an owner criterion/binding action."
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn20825-ac1-mint-paths
+    description: "Real phase functions with a recording make stub cover fresh mint ordering, resumed SASL repair, one-shot mint failure, no-Docker main completion and six ports. New cases fail on the pre-change script with these tests overlaid. The unchanged lab-isolation test is regression evidence, not a differential binding."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'mint or resume or in_memory or ports'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20825-ac2-resume-sequence
+    description: "Healthy resumed phase 4 records exactly check-sasl-local then mint-local on a passing check, or check-sasl-local then up-local then mint-local on a failing check. Both cases fail on the pre-change script, which returns early."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k resume_mint_checks_sasl"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20825-ac4-in-memory-main
+    description: "The script's real main drives real phases 3, 4 and 6 with external commands stubbed: no Docker exits zero, records COMPLETE, invokes no make target, and reports no broker and no identity to mint in both output locations. Fails on the pre-change script because both notes are absent."
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k in_memory_main_finishes"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20825-deploy-source
+    description: 'Deploy source probe, following the same-node onboarding precedent: GitHub must serve the handler,
+      CLI runtime, both typed models and node contract at the checked-out commit, and every returned blob SHA must
+      equal that commit''s blob. An API/read error, empty or mismatched SHA fails; the PR merge base baa075204 has
+      no bus-identity handler and fails. The behavioral check drives the real Python handler through the shell harness
+      for mint/resume, refusal and anchor cases. These checks prove published source and fixture behavior; they do
+      not prove installed or anchored checkout/downloaded-script delivery, or a live broker mint. The approved readiness
+      blocker remains.'
+    source: manual
+    binds_ac:
+    - AC1
+    - AC2
+    checks:
+    - check_type: command
+      check_value: bash -euo pipefail -c 'ref=$(git rev-parse HEAD); root=src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator;
+        for file in handler_onboarding_bus_identity.py runtime_onboarding_bus_identity.py models/model_onboarding_bus_identity_request.py
+        models/model_onboarding_bus_identity_result.py contract.yaml; do path="$root/$file"; expected=$(git rev-parse
+        "$ref:$path"); actual=$(gh api "repos/OmniNode-ai/omniclaude/contents/$path?ref=$ref" --jq .sha); test -n
+        "$actual"; test "$actual" = "$expected"; done'
+      cwd: ${OMNI_HOME}/omniclaude
+    - check_type: test_passes
+      check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'mint_fresh or mint_failure or in_memory_main_finishes or ports_cover'"
+      cwd: ${OMNI_HOME}/omniclaude
+    - check_type: test_passes
+      check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'resume_mint or bus_identity_missing_dependency or resume_at_missing_or_old_anchor or handler_repair_records_anchor or handler_failed_rebuild_keeps_anchor or handler_anchor_write_failure'"
+      cwd: ${OMNI_HOME}/omniclaude
+    - check_type: test_passes
+      check_value: "uv run pytest tests/skills/test_onboarding_repin_omn21343.py -q --no-cov"
+      cwd: ${OMNI_HOME}/omniclaude
+    - check_type: test_passes
+      check_value: "uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -q --no-cov -k test_phase3_builds_proven_and_stamps_only_after_its_delegation_passes"
+      cwd: ${OMNI_HOME}/omniclaude

@@ -72,8 +72,19 @@ event_bus:
     - "onex.evt.omniclaude.omninode_dev_setup-completed.v1"
     - "onex.evt.omniclaude.omninode_dev_setup-failed.v1"
 
+# Local bootstrap readiness endpoints: the same two published health ports
+# that lab-onboarding.sh stack_healthy probes before any hosted model routing.
+config:
+  onboarding_bus_identity:
+    health_urls:
+      - http://localhost:8085/health
+      - http://localhost:8086/health
+
 # Capabilities
 capabilities:
+  - name: onboarding.bus_identity
+    description: Secure the local broker and mint the developer identity during phase 4
+    version: 1.0.0
   - name: onboarding.model_config
     description: Read model choices and place a local URL on the delegation ladder
     version: 1.0.0
@@ -83,6 +94,12 @@ capabilities:
 
 # IO operations
 io_operations:
+  - operation: bus_identity
+    description: Check and repair broker security, then mint once at the selected phase boundary
+    handler_method: handle
+    input_model: omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_bus_identity_request.ModelOnboardingBusIdentityRequest
+    output_model: omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_bus_identity_result.ModelOnboardingBusIdentityResult
+    idempotent: false
   - operation: model_config
     description: Read configuration or atomically add local backend placement
     handler_method: handle
@@ -171,6 +188,11 @@ metadata:
 handler_routing:
   routing_strategy: "operation_match"
   handlers:
+    - operation: "onboarding.bus_identity"
+      handler:
+        name: "HandlerOnboardingBusIdentity"
+        module: "omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_bus_identity"
+      description: "Phase 4 security and minting through the direct dispatch-Python entrypoint"
     - operation: "skill.omninode_dev_setup"
       handler:
         name: "HandlerOmninodeDevSetupSkill"

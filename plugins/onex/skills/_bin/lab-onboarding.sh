@@ -85,7 +85,7 @@ DOCKER_CPUS=4
 HOST_RESERVE_GB=6         # Docker Desktop never leaves the host less than this
 BOOT_FREE_MEM_GB=4        # available memory required at the moment the stack boots
 BOOT_FREE_DISK_GB=15      # free disk required at the moment the stack boots
-MODE2_PORTS="5436 19092 16379 8085 8086"
+MODE2_PORTS="5436 19092 16379 8085 8086 8098"
 VM_SPEC="a macOS 14 (or newer) VM with 4 vCPU, 8 GB RAM and 40 GB disk, on a host with that much to spare (Tart or UTM on an Apple-silicon Mac, or a hosted Mac such as EC2 Mac)"
 
 REPOS="omnibase_compat omnibase_core omnibase_spi omnibase_infra omnimarket omniclaude omnidash"
@@ -288,39 +288,27 @@ last_log_lines() { tail -n 3 "$LOG" 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g' 
 
 # retry DESC CMD... : run CMD with output to the log, up to RETRIES attempts,
 # 5-10 s apart. Returns CMD's status; on failure sets FAILED_STEP/LAST_ERR.
-retry() {
-  local desc="$1"; shift
-  local n=1 rc wait
-  while :; do
-    log "\$ $desc (attempt $n/$RETRIES)"
-    "$@" >>"$LOG" 2>&1
-    rc=$?
-    [ "$rc" -eq 0 ] && return 0
-    LAST_ERR="$(last_log_lines)"
-    if [ "$n" -ge "$RETRIES" ]; then
-      FAILED_STEP="$desc"; FAILED_ATTEMPTS=$n
-      return "$rc"
-    fi
-    wait=$(( (RANDOM % 6) + 5 ))
-    say "  … $desc failed (attempt $n/$RETRIES); retrying in ${wait}s"
-    sleep "$wait"
-    n=$((n + 1))
-  done
-}
+retry() { retry_command normal "$@"; }
 
-# retry_capture DESC CMD... : like retry, but CMD's stdout is returned in
-# CAPTURED and never written to the log (it may carry a credential).
+# Capture stdout in memory only; both modes share failure and retry handling.
 CAPTURED=""
-retry_capture() {
-  local desc="$1"; shift
-  local n=1 rc wait
-  CAPTURED=""
+retry_capture() { CAPTURED=""; retry_command capture "$@"; }
+
+retry_command() {
+  local mode="$1" desc="$2"; shift 2
+  local n=1 rc wait suffix=""
+  [ "$mode" = normal ] || suffix="; output not logged"
   while :; do
-    log "\$ $desc (attempt $n/$RETRIES; output not logged)"
-    CAPTURED="$("$@" 2>>"$LOG")"
-    rc=$?
+    log "\$ $desc (attempt $n/$RETRIES$suffix)"
+    if [ "$mode" = capture ]; then
+      CAPTURED="$("$@" 2>>"$LOG")"
+      rc=$?
+    else
+      "$@" >>"$LOG" 2>&1
+      rc=$?
+    fi
     [ "$rc" -eq 0 ] && return 0
-    CAPTURED=""
+    [ "$mode" = normal ] || CAPTURED=""
     LAST_ERR="$(last_log_lines)"
     if [ "$n" -ge "$RETRIES" ]; then
       FAILED_STEP="$desc"; FAILED_ATTEMPTS=$n
@@ -333,7 +321,6 @@ retry_capture() {
   done
 }
 
-# step DESC CMD... : a local step, run once.
 step() {
   local desc="$1"; shift
   log "\$ $desc"
@@ -868,14 +855,11 @@ download() { # url dest
 }
 
 brew_install() { # formula-or-cask [--cask]
-  local b; b="$(brew_bin)"
-  if [ "${2:-}" = "--cask" ]; then
-    "$b" list --cask "$1" >/dev/null 2>&1 && return 0
-    HOMEBREW_NO_ENV_HINTS=1 "$b" install --cask "$1"
-  else
-    "$b" list --versions "$1" >/dev/null 2>&1 && return 0
-    HOMEBREW_NO_ENV_HINTS=1 "$b" install "$1"
-  fi
+  local b list_flag=--versions install_flag=""; b="$(brew_bin)"
+  [ "${2:-}" != "--cask" ] || { list_flag=--cask; install_flag=--cask; }
+  "$b" list "$list_flag" "$1" >/dev/null 2>&1 && return 0
+  # Omit the optional argument entirely for formulae, without word splitting.
+  HOMEBREW_NO_ENV_HINTS=1 "$b" install ${install_flag:+"$install_flag"} "$1"
 }
 
 uv_bin() {
@@ -1320,7 +1304,6 @@ link_onex() {
   ln -s "$wrapper" "$link"
 }
 
-key_stored() { onex_run secret list 2>/dev/null | grep -qE "^[[:space:]]+llm\.$1\.api_key[[:space:]]"; }
 
 # receipt_field JSON KEY -> the first value of KEY anywhere in the receipt JSON
 receipt_field() { printf '%s' "$1" | jq -r --arg k "$2" '[.. | objects | .[$k]? // empty] | first // empty' 2>/dev/null; }
@@ -1462,9 +1445,11 @@ phase3() {
   say "  Delegation chose $(receipt_field "$CAPTURED" model) ($(receipt_field "$CAPTURED" backend_id))."
   CAPTURED=""
   [ "$OLLAMA_HEADLESS" -eq 1 ] && say "  Ollama is running without its app here; after a restart, start it with 'ollama serve'."
+  local note=""
+  [ "$MODE2_OK" -eq 1 ] || note="; the in-memory bus has no broker and no identity to mint."
   step "stamp the proven workspace floor" stamp_proven_floor ||
     phase_fail "see the log; the proven floor could not be written from the dispatch venv"
-  phase_pass "$(count_words "$passed") of $(count_words "$MODELS $SKIPPED") models ready: $(labels "$passed")"
+  phase_pass "$(count_words "$passed") of $(count_words "$MODELS $SKIPPED") models ready: $(labels "$passed")$note"
 }
 
 # Ollama installed and started, its model downloaded and onex's local routes
@@ -1676,10 +1661,22 @@ stack_delegate() { # -> stdout: the run's JSON; it names the backend that answer
   printf '%s\n' "$out"
 }
 
+# The handler and its models come from this checkout, or the anchored workspace
+# when this entrypoint was downloaded. Phase 3 already proved the interpreter.
+onboarding_bus_identity() {
+  local script="${BASH_SOURCE[0]:-$0}"
+  PYTHONPATH="${script%/*}/../../../../src:$WORKSPACE/omniclaude/src${PYTHONPATH:+:$PYTHONPATH}" "$WORKSPACE/.onex-dispatch-venv/bin/python" -m omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.runtime_onboarding_bus_identity "$WORKSPACE" "$LOG" "$1" "$RETRIES" "$STATE_DIR" "$INFRA_ANCHOR"
+}
+
 phase4() {
   phase_start 4 "Docker (optional: the local stack, on your key)" "10-20 minutes the first time"
   if [ "$MODE2_OK" -ne 1 ]; then phase_skip "${MODE2_WHY# }"; return; fi
-  if is_done 4 && docker_ready && stack_healthy && [ "$(cat "$STATE_DIR/stack.anchor" 2>/dev/null)" = "$INFRA_ANCHOR" ]; then phase_pass "already running"; return; fi
+  if is_done 4 && docker_ready && stack_healthy && [ "$(cat "$STATE_DIR/stack.anchor" 2>/dev/null)" = "$INFRA_ANCHOR" ]; then
+    step "mint your bus identity" onboarding_bus_identity resume ||
+      phase_fail "see the log; run 'make mint-local' in omnibase_infra, then run this again"
+    phase_pass "already running"
+    return
+  fi
   is_done 4 && rerun_note 4 "Docker is not running with a healthy local stack built at this script's anchor"
 
   local host_ram mem_gb mem
@@ -1746,6 +1743,9 @@ phase4() {
     say "  Building and starting the local stack (make up-local)…"
     { retry "make up-local" nice -n 10 make -C "$WORKSPACE/omnibase_infra" up-local && mkdir -p "$STATE_DIR" && printf '%s\n' "$INFRA_ANCHOR" >"$STATE_DIR/stack.anchor"; } ||
       phase_fail "see the log; 'make status-local' from omnibase_infra shows what is not up"
+  else
+    step "secure the local broker" onboarding_bus_identity secure ||
+      phase_fail "see the log; run 'make up-local' in omnibase_infra, then run this again"
   fi
   say "  Waiting for the stack to report healthy (a cold boot takes several minutes)…"
   wait_until "the local stack to become healthy" 900 15 stack_healthy ||
@@ -1779,6 +1779,8 @@ phase4() {
          phase_fail "check that your local model (Ollama, or the server at your URL) is running and ~/.omnibase/local.bifrost.yaml names it" ;;
     esac
   fi
+  step "mint your bus identity" onboarding_bus_identity mint ||
+    phase_fail "run 'make mint-local' in omnibase_infra, then run this again"
   phase_pass "stack healthy, one delegation answered (stop it with 'make down-local' from the checkout that started it)"
 }
 
@@ -1891,7 +1893,11 @@ phase6() {
   fi
   in_list local "$(passed_models)" && check "the local model server answers at $LOCAL_URL" local_url_answers "$LOCAL_URL"
   check "the Claude Code plugin $WANT_PLUGIN installed" plugin_installed "$WANT_PLUGIN"
-  if [ "$MODE2_OK" -eq 1 ]; then check "local stack healthy" stack_healthy; fi
+  if [ "$MODE2_OK" -eq 1 ]; then
+    check "local stack healthy" stack_healthy
+  else
+    say "  The in-memory bus has no broker and no identity to mint."
+  fi
   if [ "$CHECKS_FAILED" -gt 0 ]; then
     FAILED_STEP="$CHECKS_FAILED check(s) failed"
     phase_fail "the ✘ lines above name what is wrong; fix them and run this again"
@@ -1901,19 +1907,14 @@ phase6() {
 
 # ===========================================================================
 main() {
-  local p line
+  local p line phase
   say "OmniNode developer onboarding (local runtime). Status file: $STATUS"
   [ "$RESTART" -eq 1 ] && rm -f "$DONE_FILE"
   bind_workspace_env
   phase0
   [ "$PREFLIGHT_ONLY" -eq 1 ] && { say "Preflight only: nothing was changed."; exit 0; }
   save_choices
-  phase1
-  phase2
-  phase3
-  phase4
-  phase5
-  phase6
+  for phase in 1 2 3 4 5 6; do "phase$phase"; done
   hr
   say "Done. Set up: $SELECTED."
   say "Your models:"
