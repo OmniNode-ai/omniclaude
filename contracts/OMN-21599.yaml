@@ -28,7 +28,7 @@ dod_evidence:
     source: "manual"
     checks:
       - check_type: "test_passes"
-        check_value: "uv run pytest tests/hooks/test_hook_lane_binding_omn21599.py -q -n 0 --no-cov"
+        check_value: "uv run pytest tests/hooks/test_hook_lane_binding_omn21599.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC1"]
   - id: "dod-omn21599-deploy-source-readback"
