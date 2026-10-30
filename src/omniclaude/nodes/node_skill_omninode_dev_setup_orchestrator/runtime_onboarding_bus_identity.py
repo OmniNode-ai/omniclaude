@@ -16,6 +16,8 @@ def main() -> int:
     parser.add_argument("log_path")
     parser.add_argument("mode", choices=("secure", "mint", "resume"))
     parser.add_argument("retries", type=int)
+    parser.add_argument("state_dir", nargs="?", default="")
+    parser.add_argument("infra_anchor", nargs="?", default="")
     args = parser.parse_args()
     try:
         from pydantic import ValidationError

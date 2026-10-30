@@ -39,6 +39,8 @@ class HandlerOnboardingBusIdentity:
                 for attempt in range(1, request.retries + 1):
                     rc, _ = self._make(request, "up-local", nice=True)
                     if rc == 0:
+                        if not self._record_anchor(request):
+                            return self._failure("stack-anchor", 2, attempt)
                         break
                     if rc in (124, 127) or attempt == request.retries:
                         return self._failure("up-local", rc, attempt)
@@ -55,11 +57,25 @@ class HandlerOnboardingBusIdentity:
         return ModelOnboardingBusIdentityResult(success=True)
 
     @staticmethod
+    def _record_anchor(request: ModelOnboardingBusIdentityRequest) -> bool:
+        try:
+            anchor = Path(request.state_dir) / "stack.anchor"
+            anchor.parent.mkdir(parents=True, exist_ok=True)
+            anchor.write_text(request.infra_anchor + "\n")
+            return True
+        except OSError:
+            return False
+
+    @staticmethod
     def _failure(
         target: str, rc: int, attempts: int
     ) -> ModelOnboardingBusIdentityResult:
         if target == "workspace":
             next_step = "check the selected workspace and dispatch Python installation"
+        elif target == "stack-anchor":
+            next_step = (
+                "make the onboarding state directory writable, then rerun onboarding"
+            )
         elif target == "health-contract":
             next_step = "restore the onboarding node contract health URLs, then rerun onboarding"
         else:

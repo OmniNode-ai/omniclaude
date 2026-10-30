@@ -14,6 +14,8 @@ class ModelOnboardingBusIdentityRequest(BaseModel):
 
     workspace: str = Field(min_length=1)
     log_path: str = Field(min_length=1)
+    state_dir: str = Field(min_length=1)
+    infra_anchor: str = Field(min_length=1)
     mode: Literal["secure", "mint", "resume"]
     retries: int = Field(default=3, ge=1)
     command_timeout_seconds: int = Field(default=1800, ge=1)
