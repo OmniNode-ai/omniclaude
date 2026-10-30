@@ -1,0 +1,40 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21346
+title: "A developer picks the delegation model, not just the provider, from inside Claude Code after onboarding"
+summary: >
+  The /onex:delegate skill now chooses the model as well. `/onex:delegate models`
+  runs `onex models list`. `/onex:delegate models first <provider> [<model>]`
+  runs `onex models first`, which omnimarket gained in the same ticket: the
+  chosen model is tried before every other model or key, and its provider is
+  listed first. `/onex:delegate models first --clear` goes back to the usual
+  order. Nothing re-runs onboarding, asks for a key, or adds a second customer
+  slash command. The skill test reads the commands from the skill's procedure
+  and runs them with the real onex CLI, in a scratch home holding two local
+  models.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21346-choose-first
+    statement: A developer lists their registered models and sets which one delegation tries first, from inside Claude Code, without re-running onboarding.
+    acceptance:
+      - id: AC1
+        statement: "AC1: from a Claude Code session, the developer can list their registered models and set which one delegation tries first, without re-running onboarding -- falsifier: uv run pytest on a skill test that sets the first model through the skill and asserts onex models list shows it first"
+evidence_requirements:
+  - kind: tests
+    description: "The delegate skill's model-choice commands set the first model and onex models list shows it first"
+    command: "uv run pytest plugins/onex-delegate/tests/test_choose_first_model_omn21346.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21346-ac1-skill-sets-first
+    description: 'The skill test reads the "Choosing the model" commands from the delegate skill''s prompt.md. In a scratch home with two local models (model-a first), it runs `onex models first local model-b` through the real onex CLI. Then `onex models list` (text and --json) shows Local URL first, marked tried first with model-b, and the models in the order model-b, model-a. `onex models first --clear` removes the mark. It fails at the merge base, whose skill names no such commands, and against an omnimarket without `onex models first`.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_choose_first_model_omn21346.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
