@@ -60,3 +60,27 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k in_memory_main_finishes"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn20825-deploy-source
+    description: 'Deploy source probe, following the same-node onboarding precedent: GitHub must serve the handler,
+      CLI runtime, both typed models and node contract at the checked-out commit, and every returned blob SHA must
+      equal that commit''s blob. An API/read error, empty or mismatched SHA fails; the PR merge base baa075204 has
+      no bus-identity handler and fails. The behavioral check drives the real Python handler through the shell harness
+      for mint/resume, refusal and anchor cases. These checks prove published source and fixture behavior; they do
+      not prove installed or anchored checkout/downloaded-script delivery, or a live broker mint. The approved readiness
+      blocker remains.'
+    source: manual
+    binds_ac:
+    - AC1
+    - AC2
+    checks:
+    - check_type: command
+      check_value: bash -euo pipefail -c 'ref=$(git rev-parse HEAD); root=src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator;
+        for file in handler_onboarding_bus_identity.py runtime_onboarding_bus_identity.py models/model_onboarding_bus_identity_request.py
+        models/model_onboarding_bus_identity_result.py contract.yaml; do path="$root/$file"; expected=$(git rev-parse
+        "$ref:$path"); actual=$(gh api "repos/OmniNode-ai/omniclaude/contents/$path?ref=$ref" --jq .sha); test -n
+        "$actual"; test "$actual" = "$expected"; done'
+      cwd: ${OMNI_HOME}/omniclaude
+    - check_type: test_passes
+      check_value: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_onboarding_repin_omn21343.py
+        -q --no-cov
+      cwd: ${OMNI_HOME}/omniclaude
