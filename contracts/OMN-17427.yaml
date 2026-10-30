@@ -11,6 +11,11 @@ is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
+  - id: "req-drop-ticket-budget"
+    statement: "Creating a ticket is never refused or deferred by how many were created: the lane-intake rules keep identity, label and stamp, and the daily count, its per-day file and the plan-task exemption are gone."
+    acceptance:
+      - id: "AC3003111"
+        statement: "AC3003111: the Nth lane create of a day is admitted exactly as the first, the guard takes no --no-record flag, and the shipped policy's lane_intake object holds the label and the stamp prefix only -- falsifier: tests/hooks/test_ticket_creation_guard_lane_intake.py::test_no_count_refuses_a_create fails at the merge base, whose 31st create is refused"
   - id: req-ci-summary-judges-a-concluded-job
     statement: CI Summary judges a job GitHub has concluded on its conclusion, not its lagging status.
     acceptance:
@@ -1179,3 +1184,11 @@ dod_evidence:
         check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/unit/hooks/test_plugin_cache_install_omn17427.py -q --no-cov -k cache_copy"
     binds_ac:
       - AC58
+  - id: "dod-omn17427-drop-ticket-budget"
+    description: "The 35th lane create of a day through the real guard is admitted and writes no per-day file. Fails at the merge base, which refuses past 30."
+    source: "manual"
+    binds_ac: ["AC3003111"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k test_no_count_refuses_a_create"
+        cwd: "${OMNI_HOME}/omniclaude"
