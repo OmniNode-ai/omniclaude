@@ -232,7 +232,7 @@ relay:
   container: "omninode-gateway-forwarder"
   required_network: "omnibase-infra-network"
   role: >
-    Sole process bridging a local .201 broker to the cloud MSK relay. Anything
+    Sole process bridging a local broker to the cloud MSK relay. Anything
     it cannot see on its attached lane network can never reach the cloud
     gateway, independent of every other link in the hooks->relay chain.
 
@@ -500,8 +500,20 @@ produce_grant_pending: []
 # alongside the broker overlay before enabling contractor hooks. Exact principal
 # matching keeps the operator's own developer identities unchanged. Suppression
 # happens before local-bus publish, journal, fan-out (including evt halves) or spool.
+#
+# OMN-21599: the hook reads these facts and omnimarket's
+# node_developer_lane_admission_compute decides. The selected lane is the one the
+# developer bound with `onex profile bind-lane`, else the declared `lane`; the
+# developer's principal is checked against THAT lane's own declaration, never
+# another's. Each lane's declaration is `principal_declaration` for the declared
+# lane and `bound_lane_principal_declaration` (`{lane}` filled) for any other. A
+# lane in `collaborator_barred_lanes` is one a declared collaborator never uses
+# (RULING 2026-10-30T12:43:03Z); a collaborator who selects it is refused.
 developer_event_policy:
   principal_declaration: "config/lab/developer-principal-overlay.yaml"
+  bound_lane_principal_declaration: "config/lab/lane-overlays/{lane}.developer-principal.yaml"
+  collaborator_barred_lanes:
+    - "dev"
   excluded_event_classes:
     - "prompt.submitted"
     - "content.captured"

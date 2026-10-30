@@ -88,6 +88,7 @@
   "tests/hooks/test_hook_inventory.py": 70.71,
   "tests/hooks/test_hook_inventory_client_bindings_omn18531.py": 4.81,
   "tests/hooks/test_hook_inventory_undeclared_gate.py": 69.84,
+  "tests/hooks/test_hook_lane_binding_omn21599.py": 3.0,
   "tests/hooks/test_hook_lib_imports.py": 7.04,
   "tests/hooks/test_hook_payload_single_jq_omn20114.py": 1.19,
   "tests/hooks/test_hook_policy.py": 0.54,
