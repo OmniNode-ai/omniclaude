@@ -20,6 +20,11 @@ requirements:
     acceptance:
       - id: AC1
         statement: 'AC1: a lane create is refused without the label, the first-line stamp naming its lane, or a declared lane identity, and the same create, fixed, is admitted; falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py fails at the merge base, whose policy config has no lane_intake section.'
+  - id: req-omn17942-workflow-lane-prompt-identity
+    statement: A workflow subagent lane whose harness sidecar carries only a label or the ROUTE line is named by the dispatch prompt that opens its own transcript (You are lane <lane>, parent <p>), and admitted only while that lane holds an open CLAIM on the rolling work ledger under the same parent; no CLAIM, a closed CLAIM, a CLAIM under another parent, a forged column-zero line and a prompt naming no lane are still refused lane_identity_missing.
+    acceptance:
+      - id: AC8
+        statement: 'AC8: a workflow lane whose sidecar description is a short label, the harness slug or the ROUTE line, with its open CLAIM, is admitted and a create with no CLAIM anywhere is refused naming the missing CLAIM; falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -k prompt fails at the merge base, whose lane intake reads the lane from the sidecar alone.'
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -113,6 +118,19 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k 'session_helper_uses_parent_claim or session_helper_cannot_stamp'"
+  - id: dod-workflow-lane-prompt-identity
+    description: >
+      A workflow lane named only by its dispatch prompt and an open CLAIM under
+      the same parent is admitted ; no CLAIM anywhere,
+      a closed CLAIM, another lane's CLAIM, another parent's CLAIM, a forged
+      column-zero line and a prompt that names no lane are refused
+      lane_identity_missing. Red-first: the admitted cases fail at the merge
+      base, which reads the lane from the sidecar alone.
+    source: manual
+    binds_ac: [AC8]
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov"
   - id: dod-original-ac2-json-policy
     description: >
       AC-2 remains enforced: policy vocabulary is JSON and malformed policy

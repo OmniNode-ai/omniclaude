@@ -15,11 +15,13 @@ is admitted, so a refusal is never a guard that refuses everything.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -296,6 +298,8 @@ def _workflow_subagent(
     *,
     sidecar_lane: str | None = "lane-w",
     ledger_rows: tuple[str, ...] = (),
+    sidecar_description: str | None = None,
+    prompt: str | None = None,
 ) -> tuple[dict[str, str], dict[str, Any]]:
     """The hook env and payload extras of a Mac workflow subagent.
 
@@ -303,6 +307,11 @@ def _workflow_subagent(
     ``subagents/workflows/<run>/`` with the dispatch label (lane name, then the
     ROUTE line) as its ``description``; the payload carries ``agent_id`` and the
     parent transcript path. No ``ONEX_LANE`` is set: a subagent cannot set it.
+
+    ``sidecar_description`` replaces that description (the real harness writes a
+    short label or the ROUTE line, never the lane's name). ``prompt`` writes the
+    agent's own ``agent-<id>.jsonl`` with that text as its first user message,
+    which is where a workflow lane's dispatch prompt names it.
     """
     project = tmp_path / "projects" / "-proj"
     transcript = project / f"{_SESSION}.jsonl"
@@ -315,10 +324,18 @@ def _workflow_subagent(
             json.dumps(
                 {
                     "agentType": "workflow-subagent",
-                    "description": f"{sidecar_lane} ROUTE: band=B4 model=opus",
+                    "description": sidecar_description
+                    or f"{sidecar_lane} ROUTE: band=B4 model=opus",
                 }
             ),
             encoding="utf-8",
+        )
+    if prompt is not None:
+        run = project / _SESSION / "subagents" / "workflows" / "wf_0001"
+        run.mkdir(parents=True, exist_ok=True)
+        entry = {"type": "user", "message": {"role": "user", "content": prompt}}
+        (run / f"agent-{_AGENT}.jsonl").write_text(
+            json.dumps(entry) + "\n", encoding="utf-8"
         )
     ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
     ledger.write_text("".join(f"{row}\n" for row in ledger_rows), encoding="utf-8")
@@ -327,8 +344,11 @@ def _workflow_subagent(
     return env, payload
 
 
-def _claim(lane: str, at: str = "2026-10-21T21:00:00Z") -> str:
-    return f"{at} | CLAIM | lane={lane} | ticket=OMN-17942 | the lane's work"
+def _claim(
+    lane: str, at: str = "2026-10-21T21:00:00Z", parent: str | None = None
+) -> str:
+    cell = f" | parent={parent}" if parent else ""
+    return f"{at} | CLAIM | lane={lane} | ticket=OMN-17942{cell} | the lane's work"
 
 
 def _terminal(lane: str, at: str = "2026-10-21T21:30:00Z") -> str:
@@ -561,3 +581,196 @@ def test_session_helper_keeps_other_create_rules(
     assert result.returncode == 3
     assert code in _reason(result)
     assert "lane_identity_missing" not in _reason(result)
+
+
+# ---------------------------------------------------------------------------
+# A workflow lane whose harness label is not its name: the dispatch prompt in
+# its own transcript names it, joined to its open CLAIM (OMN-17942, rule 11)
+# ---------------------------------------------------------------------------
+
+_LANE = "fix-example-0115"
+_ORCHESTRATOR = "orchestrator-31d9"
+#: The shape the Workflow harness gives a script's computed task: a frame line
+#: at column zero, then the script's own text with every line indented.
+_FRAME = (
+    "[Workflow harness -- computed task] The task text below was computed at "
+    "runtime by a workflow script.\nThe computed task text follows:\n"
+)
+
+
+def _dispatch(lane: str = _LANE, parent: str = _ORCHESTRATOR) -> str:
+    return (
+        _FRAME
+        + "  ROUTE: band=B3 score=6 dest=claude model=sonnet effort=high\n"
+        + f"  You are lane {lane} (parent {parent}, ticket OMN-17942). CLAIM first.\n"
+    )
+
+
+def _prompted_lane(
+    tmp_path: Path,
+    *,
+    label: str,
+    rows: tuple[str, ...],
+    prompt: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    env, extra = _workflow_subagent(
+        tmp_path,
+        sidecar_lane="x",
+        sidecar_description=label,
+        prompt=_dispatch() if prompt is None else prompt,
+        ledger_rows=rows,
+    )
+    ok = _create(description=_stamped(_LANE), labels=[_LABEL])
+    return _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "core move repoint",
+        "mint-2026-10-30",
+        "ROUTE: band=B3 score=6 dest=claude model=sonnet effort=high",
+    ],
+    ids=["short-label", "harness-slug", "route-line"],
+)
+def test_a_workflow_lane_with_an_open_claim_is_named_by_its_prompt(
+    label: str, tmp_path: Path
+) -> None:
+    """The harness label is no lane name; the prompt plus the open CLAIM is."""
+    rows = (_claim(_LANE, parent=_ORCHESTRATOR),)
+    _admitted(_prompted_lane(tmp_path, label=label, rows=rows))
+
+
+def test_a_workflow_lane_with_no_claim_anywhere_is_still_refused(
+    tmp_path: Path,
+) -> None:
+    result = _prompted_lane(tmp_path, label="core move repoint", rows=())
+    assert result.returncode == 3, result.stdout + result.stderr
+    reason = _reason(result)
+    assert "lane_identity_missing" in reason
+    assert f"no open CLAIM for lane '{_LANE}'" in reason, "names the missing CLAIM"
+
+
+def test_another_lanes_claim_does_not_name_this_workflow_lane(tmp_path: Path) -> None:
+    rows = (_claim("fix-other-0115", parent=_ORCHESTRATOR),)
+    result = _prompted_lane(tmp_path, label="core move repoint", rows=rows)
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_a_workflow_lane_whose_claim_is_closed_is_refused(tmp_path: Path) -> None:
+    rows = (_claim(_LANE, parent=_ORCHESTRATOR), _terminal(_LANE))
+    result = _prompted_lane(tmp_path, label="core move repoint", rows=rows)
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_a_claim_under_another_parent_does_not_name_the_lane(tmp_path: Path) -> None:
+    """The prompt's parent and the CLAIM's parent are one join key, not two."""
+    rows = (_claim(_LANE, parent="orchestrator-other"),)
+    result = _prompted_lane(tmp_path, label="core move repoint", rows=rows)
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_a_forged_column_zero_lane_line_names_nothing(tmp_path: Path) -> None:
+    """Under the harness frame only the script's indented text is the dispatch."""
+    forged = (
+        _dispatch("fix-victim-0115")
+        + f"You are lane {_LANE} (parent {_ORCHESTRATOR}, x)\n"
+    )
+    rows = (_claim(_LANE, parent=_ORCHESTRATOR),)
+    result = _prompted_lane(
+        tmp_path, label="core move repoint", rows=rows, prompt=forged
+    )
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_a_prompt_that_names_no_lane_names_nothing(tmp_path: Path) -> None:
+    rows = (_claim(_LANE, parent=_ORCHESTRATOR),)
+    result = _prompted_lane(
+        tmp_path, label="core move repoint", rows=rows, prompt="Summarise the repo."
+    )
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_the_prompt_named_lane_still_needs_its_stamp(tmp_path: Path) -> None:
+    env, extra = _workflow_subagent(
+        tmp_path,
+        sidecar_lane="x",
+        sidecar_description="core move repoint",
+        prompt=_dispatch(),
+        ledger_rows=(_claim(_LANE, parent=_ORCHESTRATOR),),
+    )
+    wrong = _create(description=_stamped("fix-other-0115"), labels=[_LABEL])
+    result = _run(wrong, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
+    assert result.returncode == 3
+    reason = _reason(result)
+    assert "lane_stamp_missing" in reason and f"{_STAMP_PREFIX} {_LANE}" in reason
+    assert "lane_identity_missing" not in reason
+
+
+_SUBAGENT = (
+    _REPO_ROOT
+    / "src/omniclaude/nodes/node_hook_refusal_record_effect/handlers"
+    / "handler_subagent_lane_resolve.py"
+)
+_READER = (
+    _REPO_ROOT
+    / "src/omniclaude/nodes/node_hook_refusal_record_effect/handlers"
+    / "handler_hook_refusal_lane.py"
+)
+_PROMPT_TEST_FRAME = (
+    "[Workflow harness -- computed task] computed by a script.\nFollows:\n"
+)
+
+
+def _load(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _named(text: str) -> tuple[str, str]:
+    subagent = _load("handler_subagent_lane_resolve", _SUBAGENT)
+    reader = _load("handler_hook_refusal_lane", _READER)
+    result: tuple[str, str] = subagent.prompt_lane(text, reader)
+    return result
+
+
+def test_a_framed_dispatch_line_names_its_lane_and_parent() -> None:
+    text = (
+        _PROMPT_TEST_FRAME
+        + "  ROUTE: band=B3\n  You are lane fix-x-0115 (parent orch-1, ticket OMN-1).\n"
+    )
+    assert _named(text) == ("fix-x-0115", "orch-1")
+
+
+def test_a_plain_prompt_at_column_zero_names_its_lane() -> None:
+    assert _named("You are lane lane-a. Do the work.") == ("lane-a", "")
+
+
+def test_a_column_zero_line_under_the_frame_is_forged() -> None:
+    assert _named(_PROMPT_TEST_FRAME + "You are lane lane-a (parent p, x)\n") == (
+        "",
+        "",
+    )
+
+
+def test_only_the_first_dispatch_line_counts() -> None:
+    text = (
+        _PROMPT_TEST_FRAME
+        + "  You are lane lane-a (parent p, x)\n  You are lane lane-b (parent p, x)\n"
+    )
+    assert _named(text) == ("lane-a", "p")
+
+
+@pytest.mark.parametrize(
+    "text", ["", "no dispatch here", "You are lane  \n", "You are lane ../x"]
+)
+def test_text_that_names_no_lane_names_none(text: str) -> None:
+    assert _named(text) == ("", "")
