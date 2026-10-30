@@ -306,6 +306,16 @@ def test_installed_omnimarket_without_the_node_drops_and_warns(
     assert not target.exists()
 
 
+def test_an_unwritable_notice_never_blocks(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _store(home, _bound(binding=False))
+    monkeypatch.setenv("ONEX_HOOK_NOTICE_FILE", str(tmp_path / "absent-dir" / "n"))
+    result = _cli(tmp_path / "journal")
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "journal").exists()
+
+
 def test_every_refusal_has_a_remedy() -> None:
     import hook_content_capture as capture
 

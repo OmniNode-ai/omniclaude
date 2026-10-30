@@ -36,10 +36,10 @@ this handler does not import the publisher stack.
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import json
 import os
-import sys
 import time
 import uuid
 from collections.abc import Mapping
@@ -303,6 +303,7 @@ def replay_journal(
 
 if __name__ == "__main__":
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(description=replay_journal.__doc__)
     parser.add_argument("--replay-journal", type=Path, required=True)
@@ -317,9 +318,7 @@ def developer_event_suppressed(event_type: str) -> bool:
     """Apply the declared developer admission policy before capture or transport.
 
     Reads the facts (lanes, each lane's declared people, the developer's lane store) and hands
-    them to omnimarket's ``node_developer_lane_admission_compute``, which decides (OMN-21599).
-    A refusal never blocks the person: every class drops (nothing reaches any lane) and the
-    contract's ``refusal_notice`` class prints one ``systemMessage`` naming the fix.
+    them to omnimarket's ``node_developer_lane_admission_compute``. A refusal drops, never blocks.
     """
     import importlib
 
@@ -353,9 +352,7 @@ def developer_event_suppressed(event_type: str) -> bool:
         and ".." not in Path(rel).parts
         for rel in paths.values()
     ):
-        raise lane.HookEdgeLaneError(
-            "developer principal declaration must be a relative path"
-        )
+        raise lane.HookEdgeLaneError("principal declarations must be relative paths")
 
     def _yaml(file: Path | None) -> object:
         try:  # Unreadable is malformed ({}), never absent and never a traceback.
@@ -399,5 +396,7 @@ def developer_event_suppressed(event_type: str) -> bool:
     if event_type == notice.get("event_class"):
         fix = notice["remedies"].get(decision["refusal"], notice["default_remedy"])
         text = str(notice["message"]).format(fix=fix, **decision)
-        sys.stdout.write(json.dumps({"systemMessage": text}) + "\n")
+        out = os.environ.get("ONEX_HOOK_NOTICE_FILE") or "/dev/stdout"  # hook relays it
+        with contextlib.suppress(OSError), open(out, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"systemMessage": text}) + "\n")
     return True
