@@ -10,12 +10,14 @@ checks the principal against that lane's list. A collaborator never uses the bar
 
 from __future__ import annotations
 
+import importlib
 import json
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
-import hook_edge_lane as lane
+import hook_edge_lane
 import hook_emit_append as appender
 import hook_emit_journal as journal
 import pytest
@@ -24,7 +26,8 @@ import yaml
 pytestmark = pytest.mark.unit
 
 _CONTRACT = (
-    Path(lane.__file__).resolve().parent.parent / "contracts/hook_edge_lane.yaml"
+    Path(hook_edge_lane.__file__).resolve().parent.parent
+    / "contracts/hook_edge_lane.yaml"
 )
 # Spelled in parts: the public-repo hygiene gate reads the literal as a lab name.
 _BOUND = "-".join(("stability", "test"))
@@ -33,6 +36,15 @@ _COLLABORATOR = f"{_BOUND}-collaborator-host"
 _DEV_COLLABORATOR = "dev-collaborator-host"
 _OPERATOR = "dev-operator-workstation"
 _HELD = "prompt.submitted"
+
+
+def _lane() -> ModuleType:
+    """The hook edge module as the handler resolves it now.
+
+    A suite that loads the module under another name replaces the entry in
+    ``sys.modules``; an exception class bound at import time would then not be the one raised.
+    """
+    return importlib.import_module("hook_edge_lane")
 
 
 def _declare(root: Path, relative: str, principal: str) -> None:
@@ -139,7 +151,9 @@ def test_bound_to_the_collaborator_lane_with_a_declared_principal_passes(
 
 def test_binding_removed_blocks(home: Path, tmp_path: Path) -> None:
     _store(home, _bound(binding=False))
-    with pytest.raises(lane.HookEdgeLaneCredentialError, match="no declared principal"):
+    with pytest.raises(
+        _lane().HookEdgeLaneCredentialError, match="no declared principal"
+    ):
         _append(tmp_path / "journal")
     assert _cli(tmp_path / "journal").returncode != 0
     assert not (tmp_path / "journal").exists()
@@ -147,14 +161,16 @@ def test_binding_removed_blocks(home: Path, tmp_path: Path) -> None:
 
 def test_principal_removed_blocks(home: Path, tmp_path: Path) -> None:
     _store(home, _bound(principal=None))
-    with pytest.raises(lane.HookEdgeLaneCredentialError, match="no declared principal"):
+    with pytest.raises(
+        _lane().HookEdgeLaneCredentialError, match="no declared principal"
+    ):
         _append(tmp_path / "journal")
     assert _cli(tmp_path / "journal").returncode != 0
 
 
 def test_collaborator_selecting_dev_is_refused(home: Path, tmp_path: Path) -> None:
     _store(home, {"lanes": {_HOME_LANE: {"sasl_username": _DEV_COLLABORATOR}}})
-    with pytest.raises(lane.HookEdgeLaneCredentialError, match="never uses lane"):
+    with pytest.raises(_lane().HookEdgeLaneCredentialError, match="never uses lane"):
         _append(tmp_path / "journal")
     assert _cli(tmp_path / "journal").returncode != 0
     # Binding the collaborator to the dev lane by name changes nothing.
@@ -165,7 +181,7 @@ def test_collaborator_selecting_dev_is_refused(home: Path, tmp_path: Path) -> No
             "lanes": {_HOME_LANE: {"sasl_username": _DEV_COLLABORATOR}},
         },
     )
-    with pytest.raises(lane.HookEdgeLaneCredentialError, match="never uses lane"):
+    with pytest.raises(_lane().HookEdgeLaneCredentialError, match="never uses lane"):
         _append(tmp_path / "journal")
 
 
@@ -188,7 +204,7 @@ def test_bound_collaborator_lane_with_no_list_installed_is_refused(
     ).unlink()
     _store(home, _bound())
     with pytest.raises(
-        lane.HookEdgeLaneCredentialError, match="no principal declaration"
+        _lane().HookEdgeLaneCredentialError, match="no principal declaration"
     ):
         _append(tmp_path / "journal")
 
@@ -197,7 +213,7 @@ def test_principal_declared_on_another_lane_is_refused(
     home: Path, tmp_path: Path
 ) -> None:
     _store(home, _bound(principal=_DEV_COLLABORATOR))
-    with pytest.raises(lane.HookEdgeLaneCredentialError, match="another lane"):
+    with pytest.raises(_lane().HookEdgeLaneCredentialError, match="another lane"):
         _append(tmp_path / "journal")
 
 
@@ -205,7 +221,7 @@ def test_binding_to_a_lane_the_contract_does_not_know_is_refused(
     home: Path, tmp_path: Path
 ) -> None:
     _store(home, {"developer": {"lane_binding": "lane-a"}})
-    with pytest.raises(lane.HookEdgeLaneError, match="does not know"):
+    with pytest.raises(_lane().HookEdgeLaneError, match="does not know"):
         _append(tmp_path / "journal")
 
 
@@ -226,8 +242,6 @@ def test_policy_names_the_barred_lane_and_the_per_lane_declaration() -> None:
 
 
 def test_node_vocabulary_is_the_lane_stores() -> None:
-    from types import ModuleType
-
     import hook_content_capture as capture
 
     node = capture.load_node_handler(
@@ -236,6 +250,7 @@ def test_node_vocabulary_is_the_lane_stores() -> None:
         "handler_developer_lane_admission.py",
     )
     assert isinstance(node, ModuleType)
+    lane = _lane()
     assert node.LANE_STORE_LANES_BLOCK == lane.LANE_STORE_LANES_BLOCK
     assert node.LANE_STORE_USERNAME_KEY == lane.LANE_STORE_USERNAME_KEY
     assert node.SOURCE_OPERATOR_ENV == lane.CREDENTIAL_SOURCE_OPERATOR_ENV_FILE
