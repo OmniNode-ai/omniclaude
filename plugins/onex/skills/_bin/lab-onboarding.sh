@@ -1445,10 +1445,10 @@ phase3() {
   say "  Delegation chose $(receipt_field "$CAPTURED" model) ($(receipt_field "$CAPTURED" backend_id))."
   CAPTURED=""
   [ "$OLLAMA_HEADLESS" -eq 1 ] && say "  Ollama is running without its app here; after a restart, start it with 'ollama serve'."
-  step "stamp the proven workspace floor" stamp_proven_floor ||
-    phase_fail "see the log; the proven floor could not be written from the dispatch venv"
   local note=""
   [ "$MODE2_OK" -eq 1 ] || note="; the in-memory bus has no broker and no identity to mint."
+  step "stamp the proven workspace floor" stamp_proven_floor ||
+    phase_fail "see the log; the proven floor could not be written from the dispatch venv"
   phase_pass "$(count_words "$passed") of $(count_words "$MODELS $SKIPPED") models ready: $(labels "$passed")$note"
 }
 

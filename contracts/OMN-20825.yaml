@@ -81,6 +81,14 @@ dod_evidence:
         "$actual"; test "$actual" = "$expected"; done'
       cwd: ${OMNI_HOME}/omniclaude
     - check_type: test_passes
-      check_value: uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py tests/skills/test_onboarding_repin_omn21343.py
-        -q --no-cov
+      check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'mint_fresh or mint_failure or in_memory_main_finishes or ports_cover'"
+      cwd: ${OMNI_HOME}/omniclaude
+    - check_type: test_passes
+      check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'resume_mint or bus_identity_missing_dependency or resume_at_missing_or_old_anchor or handler_repair_records_anchor or handler_failed_rebuild_keeps_anchor or handler_anchor_write_failure'"
+      cwd: ${OMNI_HOME}/omniclaude
+    - check_type: test_passes
+      check_value: "uv run pytest tests/skills/test_onboarding_repin_omn21343.py -q --no-cov"
+      cwd: ${OMNI_HOME}/omniclaude
+    - check_type: test_passes
+      check_value: "uv run pytest tests/skills/test_lab_onboarding_proven_set_omn20381.py -q --no-cov -k test_phase3_builds_proven_and_stamps_only_after_its_delegation_passes"
       cwd: ${OMNI_HOME}/omniclaude
