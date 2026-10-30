@@ -18,6 +18,8 @@ import os
 import pty
 import re
 import select
+import shlex
+import shutil
 import signal
 import socket
 import subprocess
@@ -494,7 +496,7 @@ def test_one_question_after_preflight_decides_docker(
         "ONBOARD_TEST_DOCKER": "running",
         "ONBOARD_TEST_CATALOGUE": _catalogue(tmp_path, _default_lists()),
     }
-    out, returncode = _drive_tty(
+    out, _returncode = _drive_tty(
         ["/bin/bash", str(phase0_only), "--provider", "gemini"],
         env,
         [
@@ -848,6 +850,9 @@ def _stored_keys(tmp_path: Path, *providers: str) -> None:
 def _functions(*names: str, source: Path | None = None) -> str:
     """The named top-level functions of ``source``, or of the script and its
     bootstrap handler, as bash source."""
+    # The public retry wrappers depend on the shared engine after consolidation.
+    if "retry" in names or "retry_capture" in names:
+        names = (*names, "retry_command")
     text = source.read_text() if source else SCRIPT.read_text() + HANDLER.read_text()
     out, keep = [], False
     for line in text.splitlines():
@@ -1628,7 +1633,9 @@ def test_phase_4_accepts_an_answer_from_any_key_that_passed_and_nothing_else() -
         'for p in $keyed; do case "$served" in "byok-$p"*) ok=1 ;; esac; done' in body
     )
     assert "phase_fail" in body.split('if [ "$ok" -eq 1 ]', 1)[1]
-    assert body.index("ensure_stack_tenant") < body.index("make up-local")
+    # Resume repair can boot before the fresh path prepares a tenant.
+    fresh = body.split("  local host_ram", 1)[1]
+    assert fresh.index("ensure_stack_tenant") < fresh.index("make up-local")
     assert 'register_key_in_stack "$p"' in body
 
 
@@ -2909,3 +2916,329 @@ def test_recommended_order_enter_takes_it_without_a_model_id(
     )
     assert "Press Enter to take the recommended order." in result.stdout
     assert f"CHOSEN={chosen}" in result.stdout, result.stdout + result.stderr
+
+
+# OMN-20825 / T6: drive the real phase functions, with only external work stubbed.
+def _mint_harness(
+    tmp_path: Path,
+    *,
+    resumed: bool = False,
+    running: bool = False,
+    check_status: int = 0,
+    mint_status: int = 0,
+    no_docker: bool = False,
+    source: Path | None = None,
+) -> tuple[subprocess.CompletedProcess[str], list[str], list[str], str]:
+    script = source or SCRIPT
+    home, workspace, bin_dir = (tmp_path / n for n in ("home", "workspace", "bin"))
+    for directory in (home, workspace / "omnibase_infra", bin_dir):
+        directory.mkdir(parents=True)
+    # Run the production Python handler using phase 3's dispatch interpreter.
+    # A base checkout copies its real node too; the missing new handler then
+    # fails at the phase call, rather than failing this fixture's setup.
+    repo = Path(__file__).resolve().parents[2]
+    package = workspace / "omniclaude/src/omniclaude"
+    package.mkdir(parents=True)
+    shutil.copy2(repo / "src/omniclaude/__init__.py", package / "__init__.py")
+    nodes = package / "nodes"
+    nodes.mkdir()
+    (nodes / "__init__.py").write_text("")
+    shutil.copytree(
+        repo / "src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator",
+        nodes / "node_skill_omninode_dev_setup_orchestrator",
+    )
+    dispatch = workspace / ".onex-dispatch-venv/bin"
+    dispatch.mkdir(parents=True)
+    # Exec the original venv entrypoint; a relocated symlink loses pyvenv.cfg.
+    dispatch_python = dispatch / "python"
+    dispatch_python.write_text(f'#!/bin/sh\nexec {shlex.quote(sys.executable)} "$@"\n')
+    dispatch_python.chmod(0o755)
+    curl = bin_dir / "curl"
+    curl.write_text("#!/bin/sh\nprintf '%s\\n' '{\"healthy\":true}'\n")
+    curl.chmod(0o755)
+    calls, events, log = (tmp_path / n for n in ("make-targets", "events", "run.log"))
+    fake = bin_dir / "make"
+    fake.write_text(
+        f"#!{sys.executable}\n"
+        "import os, sys\nfrom pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "assert args[:2] == ['-C', os.environ['WORKSPACE'] + '/omnibase_infra'], args\n"
+        "assert len(args) == 3, args\n"
+        "target = args[2]\n"
+        "if target == 'status-local':\n"
+        "    with Path(os.environ['MINT_EVENTS']).open('a') as out: out.write('health_wait\\n')\n"
+        "    print('migration-gate: healthy')\n"
+        "    sys.exit(0)\n"
+        "assert target in {'local-env', 'check-sasl-local', 'up-local', 'mint-local'}, target\n"
+        "for name, value in [('MINT_CALLS', target), ('MINT_EVENTS', target)]:\n"
+        "    with Path(os.environ[name]).open('a') as out: out.write(value + '\\n')\n"
+        "if target == 'check-sasl-local': sys.exit(int(os.environ['MINT_CHECK_RC']))\n"
+        "if target == 'mint-local':\n"
+        "    print('fixture mint result')\n"
+        "    sys.exit(int(os.environ['MINT_RC']))\n"
+    )
+    fake.chmod(0o755)
+    names = (
+        "elapsed",
+        "phase_start",
+        "phase_pass",
+        "phase_skip",
+        "phase_fail",
+        "last_log_lines",
+        "onboarding_bus_identity",
+        "step",
+        "retry",
+        "retry_capture",
+        "check",
+        "phase3",
+        "phase4",
+        "phase6",
+        "main",
+    )
+    constants = re.search(r"^TOTAL_PHASES=\d+$", script.read_text(), re.M)
+    assert constants
+    snippet = (
+        "set -uo pipefail\n"
+        + constants.group()
+        + "\n"
+        + _functions(*names, source=script)
+        + r"""
+say() { printf '%s\n' "$*"; }
+hr() { :; }
+notify() { :; }
+log() { printf '%s\n' "$*" >>"$LOG"; }
+mark_done() { :; }
+is_done() { [ "$MINT_RESUMED" = 1 ] && [ "$1" = 4 ]; }
+rerun_note() { :; }
+docker_ready() { return 0; }
+docker_installed() { return 0; }
+size_docker() { return 2; }
+wait_for_docker() { return 0; }
+compose_ok() { return 0; }
+boot_resources_ok() { return 0; }
+ram_gb() { echo 32; }
+local_stack_running() { [ "$MINT_RUNNING" = 1 ]; }
+stack_healthy() { return 0; }
+wait_until() { echo health_wait >>"$MINT_EVENTS"; return 0; }
+passed_models() { echo local; }
+uses_key() { return 1; }
+in_list() { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+point_stack_at_local_url() { :; }
+stack_delegate() { echo stack_delegate >>"$MINT_EVENTS"; echo '{}'; }
+accepted_backend() { echo local-fixture; }
+dispatch_venv_current() { return 0; }
+link_onex() { :; }
+onex_run() { echo fixture; }
+models_cmd() { return 0; }
+has_model() { return 1; }
+retire_lab_model_overrides() { :; }
+result_of() { echo pass:fixture; }
+result_line() { echo fixture; }
+record_model_status() { :; }
+place_local_url_on_ladder() { :; }
+delegate_hello() { echo '{}'; }
+receipt_field() { echo fixture; }
+stamp_proven_floor() { :; }
+count_words() { echo 1; }
+labels() { echo fixture; }
+no_shadow() { return 0; }
+shell_runs_workspace_onex() { return 0; }
+workspace_floor() { return 0; }
+sqlite_rows() { return 0; }
+local_url_answers() { return 0; }
+plugin_installed() { return 0; }
+bind_workspace_env() { :; }
+save_choices() { :; }
+phase0() { MODE2_OK=0; }
+phase1() { :; }
+phase2() { :; }
+phase5() { :; }
+MODE2_OK=1; MODE2_WHY=' Docker skipped'; STACK_RUNNING=0; STACK_TENANT_CHANGED=0
+DOCKER_MEM_GB=10; HOST_RESERVE_GB=6; DOCKER_CPUS=4
+FAILED_STEP=''; FAILED_ATTEMPTS=0; LAST_ERR=''; CHECKS_FAILED=0; CAPTURED=''
+ONEX=''; OLLAMA_HEADLESS=0; MODELS=local; SKIPPED=''; SELECTED=local
+WANT_PLUGIN=fixture; LOCAL_URL=fixture; OLLAMA_MODEL=fixture
+RESTART=0; PREFLIGHT_ONLY=0; DEVELOPER=0; RETRIES=3
+"""
+        + ("\nmain\n" if no_docker else "\nphase4\n")
+    )
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "WORKSPACE": str(workspace),
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "LOG": str(log),
+        "STATUS": str(tmp_path / "status"),
+        "DONE_FILE": str(tmp_path / "done"),
+        "MINT_CALLS": str(calls),
+        "MINT_EVENTS": str(events),
+        "MINT_RESUMED": str(int(resumed)),
+        "MINT_RUNNING": str(int(running)),
+        "MINT_CHECK_RC": str(check_status),
+        "MINT_RC": str(mint_status),
+    }
+    result = subprocess.run(
+        ["/bin/bash", "-c", snippet],
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    return (
+        result,
+        calls.read_text().splitlines() if calls.exists() else [],
+        events.read_text().splitlines() if events.exists() else [],
+        log.read_text() if log.exists() else "",
+    )
+
+
+def test_mint_fresh_phase4_runs_after_delegation_before_pass(tmp_path: Path) -> None:
+    result, calls, events, log = _mint_harness(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls == ["local-env", "up-local", "mint-local"]
+    assert events == [
+        "local-env",
+        "up-local",
+        "health_wait",
+        "stack_delegate",
+        "mint-local",
+    ]
+    assert "Phase 4/6 PASSED" in result.stdout
+    # A late call after phase_pass would wrongly leave the phase marked complete.
+    body = _function_body("phase4")
+    assert body.rindex('step "mint your bus identity"') < body.rindex("phase_pass")
+    assert "fixture mint result" in log
+    assert "fixture mint result" not in result.stdout
+
+
+@pytest.mark.parametrize("check_status", [0, 2])
+def test_resume_mint_checks_sasl_and_rebuilds_only_on_failure(
+    tmp_path: Path, check_status: int
+) -> None:
+    result, calls, events, _ = _mint_harness(
+        tmp_path, resumed=True, running=True, check_status=check_status
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected = ["check-sasl-local"]
+    if check_status:
+        expected.append("up-local")
+    expected.append("mint-local")
+    assert calls == expected
+    assert events == (
+        ["check-sasl-local", "up-local", "health_wait", "mint-local"]
+        if check_status
+        else expected
+    )
+    assert "already running" in result.stdout
+
+
+@pytest.mark.parametrize("resumed", [False, True])
+def test_mint_failure_stops_phase4_once_with_next_step_and_log(
+    tmp_path: Path, resumed: bool
+) -> None:
+    result, calls, _, _ = _mint_harness(tmp_path, resumed=resumed, mint_status=75)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert calls.count("mint-local") == 1
+    assert "Phase 4/6 FAILED" in result.stdout
+    assert "mint your bus identity (after 1 attempt(s))" in result.stdout
+    assert "Next:" in result.stdout and "make mint-local" in result.stdout
+    assert f"Log:       {tmp_path}/run.log" in result.stdout
+    assert "Phase 4/6 PASSED" not in result.stdout
+
+
+def test_in_memory_main_finishes_without_mint_and_explains_no_broker(
+    tmp_path: Path,
+) -> None:
+    result, calls, _, _ = _mint_harness(tmp_path, no_docker=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls == []
+    assert "result=COMPLETE" in (tmp_path / "status").read_text()
+    phase3 = next(
+        line for line in result.stdout.splitlines() if "Phase 3/6 PASSED" in line
+    )
+    assert "no broker" in phase3 and "no identity to mint" in phase3
+    phase6 = result.stdout.split("Phase 6/6:", 1)[1]
+    assert any(
+        "no broker" in line and "no identity to mint" in line
+        for line in phase6.splitlines()
+    )
+
+
+def test_ports_cover_the_six_local_bundle_listeners() -> None:
+    ports = re.search(r'^MODE2_PORTS="([0-9 ]+)"$', SCRIPT.read_text(), re.M)
+    assert ports
+    assert ports.group(1).split() == ["5436", "19092", "16379", "8085", "8086", "8098"]
+
+
+@pytest.mark.parametrize("check_status", [0, 2])
+def test_mint_fresh_old_stack_checks_sasl_before_delegation(
+    tmp_path: Path, check_status: int
+) -> None:
+    result, calls, events, _ = _mint_harness(
+        tmp_path, running=True, check_status=check_status
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected = ["check-sasl-local"] + (["up-local"] if check_status else [])
+    assert calls == expected + ["mint-local"]
+    assert events == expected + ["health_wait", "stack_delegate", "mint-local"]
+
+
+@pytest.mark.parametrize("mode", ["secure", "mint", "resume"])
+def test_bus_identity_missing_dependency_refuses_before_commands(
+    tmp_path: Path, mode: str
+) -> None:
+    """A broken dispatch environment reports a result, never a traceback or mint."""
+    repo = Path(__file__).resolve().parents[2]
+    workspace = tmp_path / "workspace with spaces"
+    (workspace / "omnibase_infra").mkdir(parents=True)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    marker = tmp_path / "make-called"
+    fake_make = fake_bin / "make"
+    fake_make.write_text(f"#!/bin/sh\nprintf called > {shlex.quote(str(marker))}\n")
+    fake_make.chmod(0o755)
+    log = tmp_path / "run.log"
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(repo / "src"),
+        "PYTHONNOUSERSITE": "1",
+        "PATH": f"{fake_bin}:/usr/bin:/bin",
+    }
+    # Prove the command sentinel works before asking the helper not to call it.
+    subprocess.run(["make"], env=env, check=True)
+    assert marker.read_text() == "called"
+    marker.unlink()
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-m",
+            "omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.runtime_onboarding_bus_identity",
+            str(workspace),
+            str(log),
+            mode,
+            "3",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert result.stdout == ""
+    assert "Traceback" not in result.stderr
+    assert "ModuleNotFoundError" not in result.stderr
+    assert not marker.exists(), "bootstrap failure must run no broker command"
+    lines = result.stderr.splitlines()
+    refusal = json.loads(lines[0])
+    assert refusal["success"] is False
+    assert refusal["failed_step"] == "dispatch_environment"
+    assert refusal["returncode"] == 2
+    assert refusal["attempts"] == 0
+    assert refusal["reason"] == "dispatch_environment_unavailable"
+    assert ".onex-dispatch-venv" in refusal["next_step"]
+    assert lines[1] == f"Next: {refusal['next_step']}"
+    assert lines[2] == f"Log: {log}"
