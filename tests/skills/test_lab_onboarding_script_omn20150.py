@@ -3242,3 +3242,32 @@ def test_bus_identity_missing_dependency_refuses_before_commands(
     assert ".onex-dispatch-venv" in refusal["next_step"]
     assert lines[1] == f"Next: {refusal['next_step']}"
     assert lines[2] == f"Log: {log}"
+
+
+@pytest.mark.parametrize("health_urls", [None, [], ["not a URL", "also invalid"]])
+def test_resume_mint_refuses_missing_or_invalid_health_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, health_urls: object
+) -> None:
+    import yaml
+
+    original_copy = shutil.copytree
+
+    def copy_with_bad_health_contract(*args: object, **kwargs: object) -> str:
+        copied = original_copy(*args, **kwargs)
+        destination = Path(copied)
+        if destination.name == "node_skill_omninode_dev_setup_orchestrator":
+            contract = destination / "contract.yaml"
+            document = yaml.safe_load(contract.read_text())
+            document["config"] = {
+                "onboarding_bus_identity": {"health_urls": health_urls}
+            }
+            contract.write_text(yaml.safe_dump(document))
+        return copied
+
+    monkeypatch.setattr(shutil, "copytree", copy_with_bad_health_contract)
+    result, calls, _, log = _mint_harness(tmp_path, resumed=True, check_status=2)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert calls == ["check-sasl-local", "up-local"]
+    assert "health-contract" in log
+    assert "mint-local" not in calls
+    assert "Traceback" not in log
