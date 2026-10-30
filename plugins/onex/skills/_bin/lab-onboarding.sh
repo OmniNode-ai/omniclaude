@@ -1679,8 +1679,8 @@ stack_delegate() { # -> stdout: the run's JSON; it names the backend that answer
 phase4() {
   phase_start 4 "Docker (optional: the local stack, on your key)" "10-20 minutes the first time"
   if [ "$MODE2_OK" -ne 1 ]; then phase_skip "${MODE2_WHY# }"; return; fi
-  if is_done 4 && docker_ready && stack_healthy; then phase_pass "already running"; return; fi
-  is_done 4 && rerun_note 4 "Docker is not running with a healthy local stack"
+  if is_done 4 && docker_ready && stack_healthy && [ "$(cat "$STATE_DIR/stack.anchor" 2>/dev/null)" = "$INFRA_ANCHOR" ]; then phase_pass "already running"; return; fi
+  is_done 4 && rerun_note 4 "Docker is not running with a healthy local stack built at this script's anchor"
 
   local host_ram mem_gb mem
   host_ram="$(ram_gb)"
@@ -1723,7 +1723,7 @@ phase4() {
   fi
 
   # Launching Docker restarts a stack that was already there (restart policies).
-  local_stack_running && STACK_RUNNING=1
+  STACK_RUNNING=0; local_stack_running && [ "$(cat "$STATE_DIR/stack.anchor" 2>/dev/null)" = "$INFRA_ANCHOR" ] && STACK_RUNNING=1   # a stack built at another anchor is rebuilt; volumes are kept
   if [ "$STACK_RUNNING" -eq 1 ]; then
     say "  The local stack is already there; checking it instead of rebuilding it."
   else
@@ -1744,7 +1744,7 @@ phase4() {
   fi
   if [ "$STACK_RUNNING" -eq 0 ] || [ "$STACK_TENANT_CHANGED" -eq 1 ]; then
     say "  Building and starting the local stack (make up-local)…"
-    retry "make up-local" nice -n 10 make -C "$WORKSPACE/omnibase_infra" up-local ||
+    { retry "make up-local" nice -n 10 make -C "$WORKSPACE/omnibase_infra" up-local && mkdir -p "$STATE_DIR" && printf '%s\n' "$INFRA_ANCHOR" >"$STATE_DIR/stack.anchor"; } ||
       phase_fail "see the log; 'make status-local' from omnibase_infra shows what is not up"
   fi
   say "  Waiting for the stack to report healthy (a cold boot takes several minutes)…"
