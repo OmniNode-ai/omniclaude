@@ -25,6 +25,11 @@ requirements:
     acceptance:
       - id: AC6
         statement: 'AC6: a lane create citing a plan task that is at the plan repository origin/main is admitted past an exhausted budget with the count unchanged, a citation naming a missing task, a missing file, an unmerged branch or no clone is refused naming it, and a create with no citation still spends one; falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_plan_task.py fails at the merge base, which has no such test file and no plan_task_exemption in its policy.'
+  - id: req-omn17942-workflow-lane-prompt-identity
+    statement: A workflow subagent lane whose harness sidecar carries only a label or the ROUTE line is named by the dispatch prompt that opens its own transcript (You are lane <lane>, parent <p>), and admitted only while that lane holds an open CLAIM on the rolling work ledger under the same parent; no CLAIM, a closed CLAIM, a CLAIM under another parent, a forged column-zero line and a prompt naming no lane are still refused lane_identity_missing.
+    acceptance:
+      - id: AC8
+        statement: 'AC8: a workflow lane whose sidecar description is a short label, the harness slug or the ROUTE line, with its open CLAIM, is admitted with lane_source prompt+claim and a create with no CLAIM anywhere is refused naming the missing CLAIM; falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -k prompt fails at the merge base, whose lane intake reads the lane from the sidecar alone.'
   - id: req-omn17942-plan-repo-from-overlay
     statement: The plan-task exemption locates the plan repository's clone from the ticket_creation contract overlay through the shared overlay resolver, with the policy naming the overlay and its keys; it reads no environment variable for the location and has no default path, and an absent overlay or key refuses naming the overlay key.
     acceptance:
@@ -137,6 +142,19 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_plan_task.py -q --no-cov"
+  - id: dod-workflow-lane-prompt-identity
+    description: >
+      A workflow lane named only by its dispatch prompt and an open CLAIM under
+      the same parent is admitted (lane_source prompt+claim); no CLAIM anywhere,
+      a closed CLAIM, another lane's CLAIM, another parent's CLAIM, a forged
+      column-zero line and a prompt that names no lane are refused
+      lane_identity_missing. Red-first: the admitted cases fail at the merge
+      base, which reads the lane from the sidecar alone.
+    source: manual
+    binds_ac: [AC8]
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py tests/hooks/test_prompt_lane_omn17942.py -q --no-cov"
   - id: dod-plan-repo-from-overlay
     description: >
       The clone of the plan repository is located by the ticket_creation overlay

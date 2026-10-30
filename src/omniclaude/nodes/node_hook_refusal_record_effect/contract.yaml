@@ -57,6 +57,12 @@ handler_routing:
       event_model:
         name: ModelHookRefusalRecordRequest
         module: omniclaude.nodes.node_hook_refusal_record_effect.models
+    - handler:
+        name: HandlerSubagentLaneResolve
+        module: omniclaude.nodes.node_hook_refusal_record_effect.handlers.handler_subagent_lane_resolve
+      event_model:
+        name: ModelSubagentLaneRequest
+        module: omniclaude.nodes.node_hook_refusal_record_effect.models
 
 descriptor:
   node_archetype: effect

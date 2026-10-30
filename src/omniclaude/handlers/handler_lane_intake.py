@@ -10,9 +10,10 @@ stays, so the item itself carries the fact:
 * rule 11 -- a create from a lane or node context declares its lane identity:
   the launcher's ``ONEX_LANE``/``ONEX_REMOTE_LANE``, or, for a workflow
   subagent that cannot set its harness environment, the lane the harness's
-  ``agent-<agent id>.meta.json`` sidecar names, accepted only while that lane
-  holds an open CLAIM on the rolling work ledger; an in-session helper may
-  instead use its parent session's registered lane and open CLAIM;
+  sidecar or the dispatch prompt in the agent's own transcript names, accepted
+  only while that lane holds an open CLAIM on the rolling work ledger; an
+  in-session helper may instead use its parent session's registered lane and
+  open CLAIM (``handler_subagent_lane_resolve``);
 * rule 12 -- it carries the lane-intake label (``lane_intake.label``);
 * rule 13 -- its description's first line is ``<stamp_prefix> <lane>``;
 * rule 14 -- no more than ``lane_intake.daily_budget`` such items are admitted
@@ -61,21 +62,14 @@ _LANE_ENV_KEYS = ("ONEX_LANE", "ONEX_REMOTE_LANE")
 #: ``CLAUDE_CODE_ENTRYPOINT`` prefix of a headless (``claude -p``) session.
 _HEADLESS_ENTRYPOINT_PREFIX = "sdk-"
 #: Where a lane's identity came from: the launcher's environment, or a
-#: workflow subagent's harness sidecar confirmed by its open ledger CLAIM.
+#: subagent's sidecar, dispatch prompt or parent session confirmed by an open
+#: ledger CLAIM (``node_hook_refusal_record_effect``).
 LANE_SOURCE_ENV = "env"
-LANE_SOURCE_SIDECAR_CLAIM = "sidecar+claim"
-LANE_SOURCE_PARENT_SESSION_CLAIM = "parent-session+claim"
-#: The repository root, from ``src/omniclaude/handlers/<this file>``.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-#: The stdlib-only readers this module reuses rather than re-implements: the
-#: refusal recorder's sidecar and open-CLAIM reading (OMN-19381), which sits on
-#: the hook library's ``hook_lane_attribution`` sidecar locator (OMN-18609).
-_HOOKS_LIB = _REPO_ROOT / "plugins/onex/hooks/lib"
 _PLAN_CITATION_PY = Path(__file__).with_name("handler_plan_task_citation.py")
-_REFUSAL_LANE_PY = (
-    _REPO_ROOT
-    / "src/omniclaude/nodes/node_hook_refusal_record_effect/handlers"
-    / "handler_hook_refusal_lane.py"
+_SUBAGENT_LANE_PY = (
+    Path(__file__).resolve().parents[1]
+    / "nodes/node_hook_refusal_record_effect/handlers"
+    / "handler_subagent_lane_resolve.py"
 )
 
 
@@ -117,16 +111,19 @@ class LaneAdmission(NamedTuple):
     plan_error: str = ""
 
 
-def _plan_module() -> ModuleType:
-    """The plan-citation reader, loaded by path for the reason the guard loads this module so."""
-    spec = importlib.util.spec_from_file_location(
-        "handler_plan_task_citation", _PLAN_CITATION_PY
-    )
+def _load(name: str, path: Path) -> ModuleType:
+    """A sibling handler, loaded by path for the reason the guard loads this module so."""
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise ValueError(f"plan-citation handler not loadable: {_PLAN_CITATION_PY}")
+        raise ValueError(f"{name} not loadable: {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _plan_module() -> ModuleType:
+    """The plan-citation reader."""
+    return _load("handler_plan_task_citation", _PLAN_CITATION_PY)
 
 
 def load_policy(policy_path: Path) -> LaneIntakePolicy:
@@ -174,107 +171,6 @@ def read_intake_count(ledger: Path | None) -> int | None:
     return sum(1 for line in text.splitlines() if line.strip())
 
 
-def _refusal_lane_module() -> ModuleType | None:
-    """The refusal recorder's lane reader, loaded by path, or ``None``.
-
-    Loaded by path for the reason the guard loads this module by path: the
-    hook's bare interpreter has no ``omniclaude`` package. ``None`` when it
-    cannot be loaded, which resolves no lane and so refuses.
-    """
-    try:
-        spec = importlib.util.spec_from_file_location(
-            "handler_hook_refusal_lane", _REFUSAL_LANE_PY
-        )
-        if spec is None or spec.loader is None:
-            return None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        module.use_hooks_lib(str(_HOOKS_LIB))
-    except (OSError, ImportError, SyntaxError, AttributeError):
-        return None
-    return module
-
-
-def _parent_session_lane(session_id: str, environ: Mapping[str, str]) -> str:
-    """Read the exact session binding written by session-start's registry.
-
-    No newest-session or stamp fallback: neither proves who owns this helper.
-    The two overrides and default match ``loops_check.liveness_state_dir``.
-    """
-    directory = (
-        environ.get("OMNI_LANE_LIVENESS_STATE_DIR", "").strip()
-        or environ.get("OMNI_SESSION_START_STATE_DIR", "").strip()
-    )
-    root = (
-        Path(directory)
-        if directory
-        else Path.home() / ".local/state/omni/session-start"
-    )
-    try:
-        registry = json.loads((root / "lane-liveness-sessions.json").read_text("utf-8"))
-        entry = registry.get(session_id) if isinstance(registry, dict) else None
-        lane = entry.get("lane") if isinstance(entry, dict) else None
-    except (OSError, ValueError):
-        return ""
-    return lane.strip() if isinstance(lane, str) else ""
-
-
-def subagent_lane(
-    payload: Mapping[str, object],
-    environ: Mapping[str, str],
-    *,
-    allow_parent: bool = True,
-) -> tuple[str, str, str, str]:
-    """``(lane, sidecar_lane, source, parent_session_id)`` for a helper.
-
-    A workflow subagent cannot set ``ONEX_LANE`` in the Claude Code process
-    environment the hook reads, so its identity comes from two facts it did
-    not assert in the call itself: the harness's ``agent-<agent id>.meta.json``
-    sidecar, found from the payload's ``agent_id`` and transcript path, names
-    the lane it was dispatched as; and the rolling work ledger holds an open
-    CLAIM for exactly that lane. Otherwise an interactive session's helper
-    may use the lane registered to its parent session, with that lane's open
-    CLAIM. The hook's ``session_id`` names that parent harness session; the
-    helper has its own ``agent_id``. The stamp never participates in identity
-    resolution. Never raises.
-    """
-    agent_id = payload.get("agent_id")
-    if not isinstance(agent_id, str) or not agent_id.strip():
-        return "", "", "", ""
-    reader = _refusal_lane_module()
-    if reader is None:
-        return "", "", "", ""
-    try:
-        attribution = importlib.import_module("hook_lane_attribution")
-    except ImportError:
-        return "", "", "", ""
-    session = payload.get("session_id")
-    session_id = session.strip() if isinstance(session, str) else ""
-    named = ""
-    for key in ("transcript_path", "agent_transcript_path"):
-        transcript = payload.get(key)
-        if not isinstance(transcript, str) or not transcript.strip():
-            continue
-        # Both readers never raise: an unreadable sidecar names no lane.
-        meta = attribution.read_sidecar(
-            transcript, session_id or None, agent_id.strip()
-        )
-        named = reader.lane_cell(reader.sidecar_lane(meta))
-        if named:
-            break
-    if not named:
-        return "", "", "", ""
-    # An unreadable ledger reads as no open CLAIM, which confirms nothing.
-    claims = reader.open_claims(environ)
-    if any(claim.get("lane") == named for claim in claims):
-        return named, named, LANE_SOURCE_SIDECAR_CLAIM, ""
-    if allow_parent and session_id:
-        parent_lane = _parent_session_lane(session_id, environ)
-        if parent_lane and any(claim.get("lane") == parent_lane for claim in claims):
-            return parent_lane, named, LANE_SOURCE_PARENT_SESSION_CLAIM, session_id
-    return "", named, "", ""
-
-
 def begin(
     payload: Mapping[str, object],
     environ: Mapping[str, str],
@@ -292,7 +188,8 @@ def begin(
 
     The declared environment names the lane first, unchanged for the
     remote-lane runner. A subagent with no declaration is named by
-    :func:`subagent_lane` (sidecar or registered parent plus open CLAIM).
+    ``node_hook_refusal_record_effect`` (sidecar, dispatch prompt or registered parent
+    plus open CLAIM).
     Headless and node contexts cannot borrow a parent session's authority.
     """
     lane = next(
@@ -314,7 +211,9 @@ def begin(
     unclaimed = ""
     helper = parent_session_id = ""
     if not lane and is_subagent:
-        lane, named, source, parent_session_id = subagent_lane(
+        lane, named, source, parent_session_id = _load(
+            "handler_subagent_lane_resolve", _SUBAGENT_LANE_PY
+        ).subagent_lane(
             payload,
             environ,
             allow_parent=not force
@@ -379,7 +278,8 @@ def findings(
                     "no lane identity, so the item cannot be stamped as "
                     "lane-opened and would again read as the operator's own"
                     + (
-                        f"; the harness names this subagent '{unclaimed}', but "
+                        f"; this subagent is named '{unclaimed}' by its harness "
+                        f"sidecar or dispatch prompt, but "
                         f"the rolling work ledger holds no open CLAIM for lane "
                         f"'{unclaimed}'"
                         if unclaimed
@@ -392,7 +292,8 @@ def findings(
                     if unclaimed
                     else "run the lane with its identity declared "
                     "(ONEX_LANE=<lane>); a workflow subagent is named by its "
-                    "harness sidecar while its own or its registered parent "
+                    "harness sidecar or its dispatch prompt ('You are lane "
+                    "<lane>') while its own or its registered parent "
                     "session's CLAIM is open on the rolling work ledger; "
                     "a calling node passes its own name as the lane"
                 ),
@@ -523,8 +424,6 @@ def record(admission: LaneAdmission, title: str) -> None:
 
 __all__ = [
     "LANE_SOURCE_ENV",
-    "LANE_SOURCE_PARENT_SESSION_CLAIM",
-    "LANE_SOURCE_SIDECAR_CLAIM",
     "LaneAdmission",
     "LaneIntakePolicy",
     "begin",
@@ -534,5 +433,4 @@ __all__ = [
     "read_intake_count",
     "record",
     "stamp_line",
-    "subagent_lane",
 ]
