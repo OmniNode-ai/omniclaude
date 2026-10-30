@@ -1,0 +1,44 @@
+schema_version: 1.0.0
+ticket_id: OMN-18595
+title: 'omniclaude: bump omnibase_core to 0.47.59'
+summary: Automated dependency bump of omnibase_core to 0.47.59 in uv.lock. The core check-node pre-commit hooks move
+  from v0.47.57 to v0.47.59 to stay equal to the locked version, and the local-paths parity test runs core's compute
+  node because the validator module no longer has a command line.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn18595-core-bump
+  statement: omniclaude locks omnibase_core 0.47.59 and its core check-node hooks pin the same version.
+  acceptance:
+  - id: AC1
+    statement: "AC1: the core check-node hooks pin the locked omnibase_core version -- falsifier: uv run pytest
+      tests/scripts/validator_parity_omn20566/test_node_parity.py -k pin_the_locked_core_version fails"
+  - id: AC2
+    statement: "AC2: the core local-paths node gives the golden verdicts -- falsifier: uv run pytest
+      tests/scripts/validator_parity_omn20566/test_node_parity.py -k local_paths fails"
+evidence_requirements:
+- kind: tests
+  description: Core hook pin test and local-paths parity over the fixture corpus.
+  command: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn18595-hook-pin
+  description: The core hooks pin the locked omnibase_core version.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k pin_the_locked_core_version
+  binds_ac:
+  - AC1
+- id: dod-omn18595-local-paths
+  description: The local-paths node matches the goldens.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q -k local_paths
+  binds_ac:
+  - AC2

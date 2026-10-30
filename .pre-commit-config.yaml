@@ -349,7 +349,7 @@ repos:
   # markers too, with the same spelling. CI runs these same hook ids with
   # `pre-commit run <id> --all-files` (ci.yml, the arch-* jobs).
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: v0.47.57
+    rev: v0.47.59
     hooks:
       - id: check-no-utcnow
         files: ^src/.*\.py$
@@ -369,8 +369,8 @@ repos:
         args: [src/omniclaude/]
         stages: [pre-push]
         always_run: true
-      # Core's local-paths validator, the module the old wrapper script ran
-      # (omnibase_core.validation.validator_local_paths). check-local-paths is the hook id
+      # Core's local-paths check node (the old wrapper script ran its validator module
+      # directly). check-local-paths is the hook id
       # the validator-requirements handshake names; the parity suite also holds core's
       # node_local_paths_check_compute to the same goldens. The wrapper's exclude is kept.
       - id: check-local-paths
