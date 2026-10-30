@@ -154,7 +154,7 @@ dod_evidence:
     binds_ac: [AC8]
     checks:
       - check_type: command
-        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py tests/hooks/test_prompt_lane_omn17942.py -q --no-cov"
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov"
   - id: dod-plan-repo-from-overlay
     description: >
       The clone of the plan repository is located by the ticket_creation overlay

@@ -15,12 +15,14 @@ is admitted, so a refusal is never a guard that refuses everything.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -790,3 +792,67 @@ def test_the_prompt_named_lane_still_needs_its_stamp(tmp_path: Path) -> None:
     reason = _reason(result)
     assert "lane_stamp_missing" in reason and f"{_STAMP_PREFIX} {_LANE}" in reason
     assert "lane_identity_missing" not in reason
+
+
+_SUBAGENT = (
+    _REPO_ROOT
+    / "src/omniclaude/nodes/node_hook_refusal_record_effect/handlers"
+    / "handler_subagent_lane_resolve.py"
+)
+_READER = (
+    _REPO_ROOT
+    / "src/omniclaude/nodes/node_hook_refusal_record_effect/handlers"
+    / "handler_hook_refusal_lane.py"
+)
+_PROMPT_TEST_FRAME = (
+    "[Workflow harness -- computed task] computed by a script.\nFollows:\n"
+)
+
+
+def _load(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _named(text: str) -> tuple[str, str]:
+    subagent = _load("handler_subagent_lane_resolve", _SUBAGENT)
+    reader = _load("handler_hook_refusal_lane", _READER)
+    result: tuple[str, str] = subagent.prompt_lane(text, reader)
+    return result
+
+
+def test_a_framed_dispatch_line_names_its_lane_and_parent() -> None:
+    text = (
+        _PROMPT_TEST_FRAME
+        + "  ROUTE: band=B3\n  You are lane fix-x-0115 (parent orch-1, ticket OMN-1).\n"
+    )
+    assert _named(text) == ("fix-x-0115", "orch-1")
+
+
+def test_a_plain_prompt_at_column_zero_names_its_lane() -> None:
+    assert _named("You are lane lane-a. Do the work.") == ("lane-a", "")
+
+
+def test_a_column_zero_line_under_the_frame_is_forged() -> None:
+    assert _named(_PROMPT_TEST_FRAME + "You are lane lane-a (parent p, x)\n") == (
+        "",
+        "",
+    )
+
+
+def test_only_the_first_dispatch_line_counts() -> None:
+    text = (
+        _PROMPT_TEST_FRAME
+        + "  You are lane lane-a (parent p, x)\n  You are lane lane-b (parent p, x)\n"
+    )
+    assert _named(text) == ("lane-a", "p")
+
+
+@pytest.mark.parametrize(
+    "text", ["", "no dispatch here", "You are lane  \n", "You are lane ../x"]
+)
+def test_text_that_names_no_lane_names_none(text: str) -> None:
+    assert _named(text) == ("", "")

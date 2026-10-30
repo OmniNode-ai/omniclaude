@@ -240,9 +240,10 @@ class HandlerSubagentLaneResolve:
         """The lane, the label that named it, its source and the parent session."""
         # Imported at call time: the guard loads this module by path under a
         # bare interpreter that has no pydantic and no omniclaude package.
-        models = importlib.import_module(
-            "omniclaude.nodes.node_hook_refusal_record_effect.models"
+        from omniclaude.nodes.node_hook_refusal_record_effect.models import (
+            ModelSubagentLaneResult,
         )
+
         lane, helper, source, parent = subagent_lane(
             {
                 "agent_id": request.agent_id,
@@ -253,7 +254,7 @@ class HandlerSubagentLaneResolve:
             request.environ,
             allow_parent=request.allow_parent,
         )
-        result: ModelSubagentLaneResult = models.ModelSubagentLaneResult(
+        result = ModelSubagentLaneResult(
             lane=lane, helper=helper, source=source, parent_session_id=parent
         )
         return result
