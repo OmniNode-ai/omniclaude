@@ -20,14 +20,16 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.ci.receipt_gate_pin import RECEIPT_GATE_PIN_TAG
 from tests.ci.test_repo_evidence_caller_workflow import CALLER_PATH
 
 pytestmark = pytest.mark.unit
 
-# omnibase_core#1932: the squash commit that adds VERIFIER_FLOOR to the reusable's
-# "Install the pinned verifier" step. A later pin is added here with its ancestry.
-_FLOOR_REUSABLE_SHA = "4e4f5e0404d364e296c5d37db6aa3ab9e07f8ffa"
-_ADMITTED_REUSABLE_PINS = (_FLOOR_REUSABLE_SHA,)
+# The pin descends from omnibase_core#1932, which adds VERIFIER_FLOOR to the reusable's
+# "Install the pinned verifier" step. The dev-merge tag lives in
+# tests/ci/receipt_gate_pin.py, the one constant a pin advance rewrites.
+_FLOOR_REUSABLE_TAG = RECEIPT_GATE_PIN_TAG
+_ADMITTED_REUSABLE_PINS = (_FLOOR_REUSABLE_TAG,)
 _RECEIPT_GATE = "OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml"
 
 # 0.4.303 is the first omnimarket release carrying omnimarket#3511, the refusal of
@@ -52,7 +54,9 @@ def _floor_refusals(job: dict[str, Any]) -> list[str]:
     if reusable != _RECEIPT_GATE:
         refusals.append(f"uses {reusable!r} is not the omnibase_core receipt-gate")
     if pin not in _ADMITTED_REUSABLE_PINS:
-        refusals.append(f"reusable pin {pin!r} is not at or past {_FLOOR_REUSABLE_SHA}")
+        refusals.append(
+            f"reusable pin {pin!r} is not {_FLOOR_REUSABLE_TAG}, which descends from omnibase_core#1932"
+        )
     declared = str(job.get("with", {}).get("verifier-version", ""))
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", declared):
         refusals.append(f"verifier-version {declared!r} is not a numeric version")
@@ -69,7 +73,7 @@ def test_caller_pins_the_reusable_that_carries_the_verifier_floor() -> None:
     assert reusable == _RECEIPT_GATE, "the caller must use omnibase_core's receipt-gate"
     assert pin in _ADMITTED_REUSABLE_PINS, (
         "pin the receipt-gate reusable at or past omnibase_core#1932 "
-        f"({_FLOOR_REUSABLE_SHA}); found {pin}"
+        f"({_FLOOR_REUSABLE_TAG}); found {pin}"
     )
 
 
@@ -115,7 +119,7 @@ def test_a_caller_below_the_floor_is_refused(version: str, tmp_path: Path) -> No
 
 def test_a_caller_on_another_reusable_pin_is_refused(tmp_path: Path) -> None:
     text = CALLER_PATH.read_text(encoding="utf-8")
-    planted = text.replace(_FLOOR_REUSABLE_SHA, "0" * 40)
+    planted = text.replace(_FLOOR_REUSABLE_TAG, "dev-00000000000000-000000000000")
     assert planted != text
     copy = tmp_path / "call-repo-evidence-gate.yml"
     copy.write_text(planted, encoding="utf-8")
