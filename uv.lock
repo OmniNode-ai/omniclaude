@@ -13,7 +13,7 @@ overrides = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=474ee6bf2274eebc5ec1e4436d42285ed75b356d" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0887b440ac68d3105d959d4d3af85da4be0718f9" },
 ]
 
 [[package]]
@@ -1784,7 +1784,7 @@ wheels = [
 [[package]]
 name = "omnimarket"
 version = "0.4.321"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=474ee6bf2274eebc5ec1e4436d42285ed75b356d#474ee6bf2274eebc5ec1e4436d42285ed75b356d" }
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0887b440ac68d3105d959d4d3af85da4be0718f9#0887b440ac68d3105d959d4d3af85da4be0718f9" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1914,7 +1914,7 @@ requires-dist = [
     { name = "omnibase-core", specifier = ">=0.47.0,<0.48.0" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=474ee6bf2274eebc5ec1e4436d42285ed75b356d" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?rev=0887b440ac68d3105d959d4d3af85da4be0718f9" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=921b322b8e43f695961a06a04759dc88bb3e88ff" },
     { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?rev=921b322b8e43f695961a06a04759dc88bb3e88ff" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
@@ -1982,8 +1982,8 @@ dependencies = [
 
 [[package]]
 name = "omninode-memory"
-version = "0.18.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.18.7"
+source = { git = "https://github.com/OmniNode-ai/omnimemory.git?tag=dev-20261028085302-971553debfa3#971553debfa3df9157cb62646a3ae87a7c1d9834" }
 dependencies = [
     { name = "aiohttp" },
     { name = "alembic" },
@@ -2009,10 +2009,6 @@ dependencies = [
     { name = "structlog" },
     { name = "supabase" },
     { name = "uvicorn", extra = ["standard"] },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/31/5d076f3f92e2ed68b7df4811784c5df2c45caa81ecb914555a6db88bdf7e/omninode_memory-0.18.0.tar.gz", hash = "sha256:c9484bd9f8dc8070ca791d6127015f0ecf8a2b6ecfb6fa8baada95effb4e8c6f", size = 1247372, upload-time = "2026-08-30T14:06:26.834Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/08/d7/c13f6a1afb7667a4022b3dc571471cd8cfe01e537a23680ab7c32794d99b/omninode_memory-0.18.0-py3-none-any.whl", hash = "sha256:f6d49ab241dfa5d3f3754f981e0b4d48e95ce76ced43569f249cdaf2fe1c4541", size = 659967, upload-time = "2026-08-30T14:06:25.241Z" },
 ]
 
 [[package]]
