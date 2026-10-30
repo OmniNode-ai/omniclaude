@@ -39,6 +39,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -664,3 +665,247 @@ def test_install_leaves_no_temporary_file_behind(tmp_path: Path) -> None:
 
     directory = tmp_path / "xdg" / "onex" / "overlays" / "session_preflight"
     assert sorted(child.name for child in directory.iterdir()) == ["overlay.yaml"]
+
+
+# --------------------------------------------------------------------------- #
+# Profiles [OMN-21388]
+#
+# A check may carry ``profile: operator``. Under ``--profile team`` those checks
+# do not run; every other check does, and still blocks. A check with no
+# ``profile`` key runs in every profile, so an overlay written before profiles
+# existed gives the same result under the default ``operator`` profile as it did
+# before. A value the runner does not know — on a check or on the command line —
+# is refused, because a typo that silently dropped a blocker from a run would be
+# a green preflight that checked less than it said.
+# --------------------------------------------------------------------------- #
+
+_SHARED_LEDGER = {
+    "check_id": "ledger_path",
+    "title": "The shared ledger path resolves",
+    "kind": "env_path",
+    "env": "PREFLIGHT_TEST_LEDGER_PATH",
+    "severity": "blocker",
+    "fix": "export PREFLIGHT_TEST_LEDGER_PATH=<ledger file>",
+}
+
+_SHARED_LOGIN = {
+    "check_id": "lane_login",
+    "title": "The lane login is bound",
+    "kind": "env_set",
+    "env": "PREFLIGHT_TEST_LOGIN",
+    "severity": "blocker",
+    "fix": "export PREFLIGHT_TEST_LOGIN=<login>",
+}
+
+_SHARED_TOOL_SERVER = {
+    "check_id": "tool_server",
+    "title": "The tool server answers",
+    "kind": "command",
+    "command": "command -v sh",
+    "severity": "blocker",
+    "fix": "start the tool server",
+}
+
+_OPERATOR_ONLY = {
+    "check_id": "coordination_host",
+    "title": "This machine is the coordination host",
+    "kind": "env_set",
+    "env": "PREFLIGHT_TEST_COORDINATION_HOST",
+    "severity": "blocker",
+    "fix": "export PREFLIGHT_TEST_COORDINATION_HOST=<host>",
+    "profile": "operator",
+}
+
+_LEGACY_RECEIPT_KEYS = {"intent", "verdict", "passed", "total", "checks"}
+_LEGACY_CHECK_KEYS = {"check_id", "title", "kind", "severity", "fix", "ok", "detail"}
+
+
+def _tick(
+    tmp_path: Path,
+    overlay: Path,
+    *args: str,
+    env_extra: dict[str, str] | None = None,
+    name: str = "receipt.json",
+) -> tuple[subprocess.CompletedProcess[str], dict[str, Any] | None]:
+    receipt = tmp_path / name
+    result = _run(
+        tmp_path,
+        "--intent",
+        "tick",
+        "--receipt",
+        str(receipt),
+        *args,
+        overlay=overlay,
+        env_extra=env_extra,
+    )
+    payload = json.loads(receipt.read_text()) if receipt.is_file() else None
+    return result, payload
+
+
+def test_a_check_may_carry_the_operator_profile(tmp_path: Path) -> None:
+    overlay = _overlay(
+        tmp_path, [_PASSING, {**_PASSING, "check_id": "op", "profile": "operator"}]
+    )
+    result = _run(tmp_path, overlay=overlay)
+    assert result.returncode == EXIT_OK, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "team",
+        "Operator",
+        "opertor",
+        "",
+        None,
+        1,
+        True,
+        ["operator"],
+        {"operator": True},
+    ],
+)
+def test_an_unknown_check_profile_is_refused(tmp_path: Path, value: object) -> None:
+    """No typo may remove a blocker: an unknown profile is a configuration error."""
+    overlay = _overlay(tmp_path, [_PASSING, {**_FAILING_BLOCKER, "profile": value}])
+    for args in ((), ("--profile", "team"), ("--profile", "operator")):
+        result = _run(tmp_path, *args, overlay=overlay)
+        assert result.returncode == EXIT_CONFIG, (args, result.stdout, result.stderr)
+        assert "profile" in result.stderr
+        assert "kb_path" in result.stderr
+
+
+@pytest.mark.parametrize("value", ["admin", "Operator", "TEAM", "", "member"])
+def test_an_unknown_cli_profile_is_refused(tmp_path: Path, value: str) -> None:
+    overlay = _overlay(tmp_path, [_PASSING])
+    result = _run(tmp_path, "--profile", value, overlay=overlay)
+    assert result.returncode == EXIT_CONFIG, result.stdout + result.stderr
+    assert "--profile" in result.stderr
+
+
+def test_team_runs_every_check_except_the_operator_ones(tmp_path: Path) -> None:
+    """AC1: under team the shared ledger, login and tool-server checks run and block."""
+    overlay = _overlay(
+        tmp_path, [_SHARED_LEDGER, _SHARED_LOGIN, _SHARED_TOOL_SERVER, _OPERATOR_ONLY]
+    )
+    result, payload = _tick(tmp_path, overlay, "--profile", "team")
+
+    assert result.returncode == EXIT_BLOCKED, result.stdout + result.stderr
+    assert payload is not None
+    ran = [c["check_id"] for c in payload["checks"]]
+    assert ran == ["ledger_path", "lane_login", "tool_server"]
+    assert payload["profile"] == "team"
+    assert payload["included_check_ids"] == ["ledger_path", "lane_login", "tool_server"]
+    assert payload["skipped_check_ids"] == ["coordination_host"]
+    assert payload["verdict"] == "BLOCKED"
+    assert payload["failed_check_ids"] == ["ledger_path", "lane_login"]
+    assert payload["passed_check_ids"] == ["tool_server"]
+
+
+def test_shared_checks_pass_under_team_without_the_operator_check(
+    tmp_path: Path,
+) -> None:
+    """A failing operator-only blocker cannot block a team run; shared ones decide it."""
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text("")
+    overlay = _overlay(
+        tmp_path, [_SHARED_LEDGER, _SHARED_LOGIN, _SHARED_TOOL_SERVER, _OPERATOR_ONLY]
+    )
+    env = {"PREFLIGHT_TEST_LEDGER_PATH": str(ledger), "PREFLIGHT_TEST_LOGIN": "someone"}
+
+    team, team_payload = _tick(tmp_path, overlay, "--profile", "team", env_extra=env)
+    assert team.returncode == EXIT_OK, team.stdout + team.stderr
+    assert team_payload is not None and team_payload["verdict"] == "OK"
+
+    operator, operator_payload = _tick(
+        tmp_path, overlay, "--profile", "operator", env_extra=env, name="op.json"
+    )
+    assert operator.returncode == EXIT_BLOCKED, operator.stdout + operator.stderr
+    assert operator_payload is not None
+    assert operator_payload["failed_check_ids"] == ["coordination_host"]
+    assert operator_payload["skipped_check_ids"] == []
+
+
+def test_the_default_profile_is_operator(tmp_path: Path) -> None:
+    overlay = _overlay(tmp_path, [_PASSING, _OPERATOR_ONLY])
+    result, payload = _tick(tmp_path, overlay)
+    assert result.returncode == EXIT_BLOCKED, result.stdout + result.stderr
+    assert payload is not None
+    assert payload["profile"] == "operator"
+    assert payload["included_check_ids"] == ["shell_present", "coordination_host"]
+
+
+def test_a_team_run_with_nothing_left_to_run_is_refused(tmp_path: Path) -> None:
+    """An empty team set is refused the way an empty overlay is: it checked nothing."""
+    overlay = _overlay(
+        tmp_path,
+        [_OPERATOR_ONLY, {**_PASSING, "check_id": "op2", "profile": "operator"}],
+    )
+    result = _run(tmp_path, "--profile", "team", overlay=overlay)
+    assert result.returncode == EXIT_CONFIG, result.stdout + result.stderr
+    assert "leaves no check to run under team" in result.stderr
+    operator = _run(tmp_path, "--profile", "operator", overlay=overlay)
+    assert operator.returncode == EXIT_BLOCKED, operator.stdout + operator.stderr
+    receipt_result, payload = _tick(tmp_path, overlay, "--profile", "team")
+    assert receipt_result.returncode == EXIT_CONFIG
+    assert payload is None, "a refused run writes no verdict"
+
+
+def test_an_overlay_without_profiles_reads_the_same_under_operator(
+    tmp_path: Path,
+) -> None:
+    """Existing overlays and existing receipt readers see no change."""
+    overlay = _overlay(tmp_path, [_PASSING, _FAILING_BLOCKER, _FAILING_WARNING])
+
+    bare = _run(tmp_path, "--intent", "normal", "--all", overlay=overlay)
+    flagged = _run(
+        tmp_path,
+        "--intent",
+        "normal",
+        "--all",
+        "--profile",
+        "operator",
+        overlay=overlay,
+    )
+    assert bare.returncode == flagged.returncode == EXIT_BLOCKED
+    assert bare.stdout == flagged.stdout
+    assert bare.stdout.splitlines()[0] == "preflight: 1/3 checks passed"
+
+    _, bare_payload = _tick(tmp_path, overlay, name="bare.json")
+    _, op_payload = _tick(tmp_path, overlay, "--profile", "operator", name="op.json")
+    team_result, team_payload = _tick(
+        tmp_path, overlay, "--profile", "team", name="t.json"
+    )
+    assert team_result.returncode == EXIT_BLOCKED
+    for payload in (bare_payload, op_payload, team_payload):
+        assert payload is not None
+        assert set(payload) >= _LEGACY_RECEIPT_KEYS
+        assert payload["verdict"] == "BLOCKED"
+        assert payload["passed"] == 1
+        assert payload["total"] == 3
+        for check in payload["checks"]:
+            assert set(check) == _LEGACY_CHECK_KEYS
+    assert (
+        bare_payload is not None and op_payload is not None and team_payload is not None
+    )
+    legacy = {key: bare_payload[key] for key in _LEGACY_RECEIPT_KEYS}
+    assert {key: op_payload[key] for key in _LEGACY_RECEIPT_KEYS} == legacy
+    assert {key: team_payload[key] for key in _LEGACY_RECEIPT_KEYS} == legacy
+    assert team_payload["skipped_check_ids"] == []
+
+
+def test_the_receipt_records_what_actually_ran(tmp_path: Path) -> None:
+    """Profile, overlay hash, included and skipped ids, verdict, passed and failed ids."""
+    import hashlib
+
+    overlay = _overlay(tmp_path, [_PASSING, _FAILING_BLOCKER, _OPERATOR_ONLY])
+    result, payload = _tick(tmp_path, overlay, "--profile", "team")
+    assert result.returncode == EXIT_BLOCKED, result.stdout + result.stderr
+    assert payload is not None
+    assert payload["profile"] == "team"
+    assert payload["overlay_sha256"] == hashlib.sha256(overlay.read_bytes()).hexdigest()
+    assert payload["overlay_path"] == str(overlay)
+    assert payload["included_check_ids"] == ["shell_present", "kb_path"]
+    assert payload["skipped_check_ids"] == ["coordination_host"]
+    assert payload["passed_check_ids"] == ["shell_present"]
+    assert payload["failed_check_ids"] == ["kb_path"]
+    assert payload["verdict"] == "BLOCKED"

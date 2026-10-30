@@ -33,23 +33,9 @@ nothing else. The check content — which variables, which probes, which command
 environment, and a run against an absent overlay would be a green preflight that
 checked nothing, which is worse than no preflight at all.
 
-**The overlay is discovered, not guessed** [OMN-18430]. The runner searches a
-declared, ordered list of *installation-provided locations* — every one of them
-a place an installation puts its own file, none of them content this file
-carries. In order: ``--overlay``; ``SESSION_PREFLIGHT_OVERLAY_PATH``; each root
-in ``ONEX_SKILL_OVERLAY_ROOTS``; and the conventional per-user install
-directory. The first two are explicit pointers, so one that names a file that is
-not there is a hard stop rather than a fall-through — an override that silently
-resolved to a different overlay than the one named would be the same
-silent-wrong-answer this runner refuses everywhere else. The rest fall through
-when absent, and when none of them resolves the run refuses, naming every
-location it tried **and the command that installs one**, because this runner's
-own rule is that a failure a reader cannot act on is not worth printing.
-
-``--install-overlay SOURCE`` is that command: it copies an overlay into the
-per-user directory, which is what makes the preflight reachable on a machine
-that sets nothing. It moves a file the caller already has; it never writes check
-content of its own.
+**The overlay is discovered, not guessed** [OMN-18430], in the order and with
+the refusals the preflight skill's "What it needs" section documents;
+``--install-overlay SOURCE`` puts one in the per-user directory.
 
 Overlay shape::
 
@@ -71,6 +57,7 @@ Overlay shape::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -83,10 +70,8 @@ import yaml
 from resolve_skill_overlay import (
     OVERLAY_FILENAME,
     OverlayNotResolved,
-    selector_env,
     user_overlay_root,
 )
-from resolve_skill_overlay import overlay_candidates as _shared_candidates
 from resolve_skill_overlay import resolve_overlay_path as _shared_resolve
 
 EXIT_OK = 0
@@ -100,7 +85,6 @@ EXIT_CONFIG = 2
 # same shape another. Every location it names is one an installation provides,
 # never a check.
 _SKILL = "session_preflight"
-OVERLAY_ENV = selector_env(_SKILL)
 _OVERLAY_RELATIVE = Path(_SKILL) / OVERLAY_FILENAME
 
 _INSTALL_HINT = "session_preflight.py --install-overlay <path to your overlay>"
@@ -110,6 +94,21 @@ SEVERITY_WARNING = "warning"
 _SEVERITIES = (SEVERITY_BLOCKER, SEVERITY_WARNING)
 
 _KINDS = ("env_set", "env_path", "path_exists", "command")
+
+# OMN-21388. ``--profile operator|team`` (default ``operator``) picks the checks
+# that run. A check with no ``profile`` key runs in every profile, so an overlay
+# written before profiles existed runs exactly as before under the default. A
+# check carrying ``profile: operator`` reads something only the operator's
+# machine has and runs only under ``operator``; under ``team`` every other check
+# still runs and blocks. Any other value of the key, of any type, is refused, as
+# is an unknown ``--profile``: a typo that quietly dropped a blocker would be a
+# green preflight that checked less than it said. A check never names ``team``,
+# since shared is the default and a second spelling is one more way to mistype.
+# A ``team`` run left with nothing to run is refused, as an empty overlay is.
+# The receipt keeps every field it had and adds what a reader needs to validate
+# what ran: profile, overlay path and hash, and the check ids per outcome.
+PROFILE_OPERATOR = "operator"
+_PROFILES = (PROFILE_OPERATOR, "team")
 
 _DEFAULT_COMMAND_TIMEOUT_SECONDS = 15
 
@@ -170,18 +169,8 @@ def resolve_intent(explicit: str | None) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def overlay_candidates(explicit: str | None) -> list[tuple[str, Path]]:
-    """Every location the overlay is searched for, in order, as (source, path)."""
-    return _shared_candidates(_SKILL, explicit=explicit, user_fallback=True)
-
-
 def resolve_overlay_path(explicit: str | None = None) -> Path:
-    """Return the first overlay that resolves, or refuse naming every location.
-
-    An EXPLICIT pointer that misses is a hard stop, not a fall-through. A run
-    told to use one overlay and silently given another is the silent wrong
-    answer this runner refuses in every other place it could occur.
-    """
+    """Return the first overlay that resolves, or refuse naming every location."""
     try:
         return _shared_resolve(_SKILL, explicit=explicit, user_fallback=True)
     except OverlayNotResolved as exc:
@@ -246,8 +235,8 @@ def install_overlay(source: str) -> Path:
     return destination
 
 
-def load_overlay(raw_path: str | Path | None) -> list[dict[str, Any]]:
-    """Read and validate the overlay. Every refusal names what to change."""
+def load_overlay(raw_path: str | Path | None) -> tuple[list[dict[str, Any]], str]:
+    """Validate the overlay; return its checks and the SHA-256 of its bytes."""
     if raw_path is None:
         raise ConfigError("load_overlay was given no overlay path")
     path = Path(raw_path)
@@ -255,7 +244,10 @@ def load_overlay(raw_path: str | Path | None) -> list[dict[str, Any]]:
         raise ConfigError(f"the overlay at {path} is not a readable file")
 
     try:
-        document = yaml.safe_load(path.read_text())
+        # The hash is taken over the bytes that are parsed, read once, so a
+        # receipt never names a different overlay than the one whose checks ran.
+        raw = path.read_bytes()
+        document = yaml.safe_load(raw)
     except (OSError, yaml.YAMLError) as exc:
         raise ConfigError(f"the overlay at {path} could not be read: {exc}") from exc
 
@@ -273,7 +265,7 @@ def load_overlay(raw_path: str | Path | None) -> list[dict[str, Any]]:
         if check_id in seen:
             raise ConfigError(f"the overlay at {path} declares {check_id!r} twice")
         seen.add(check_id)
-    return validated
+    return validated, hashlib.sha256(raw).hexdigest()
 
 
 def _validate_check(check: Any, index: int, path: Path) -> dict[str, Any]:
@@ -319,6 +311,13 @@ def _validate_check(check: Any, index: int, path: Path) -> dict[str, Any]:
     value = check.get(required)
     if not isinstance(value, str) or not value:
         raise ConfigError(f"{where} is kind {kind} and declares no {required}")
+
+    if check.get("profile", PROFILE_OPERATOR) != PROFILE_OPERATOR:
+        bad = check["profile"]
+        raise ConfigError(
+            f"{where} declares profile {bad!r}; a check carries profile: operator "
+            f"or no profile key, so that no typo can drop a blocker from a run"
+        )
 
     return {**check, "severity": severity}
 
@@ -473,6 +472,7 @@ def main(argv: list[str] | None = None) -> int:
             "silently replaced by the next candidate."
         ),
     )
+    parser.add_argument("--profile", choices=_PROFILES, default=PROFILE_OPERATOR)
     args = parser.parse_args(argv)
 
     if args.install_overlay:
@@ -486,7 +486,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         intent = resolve_intent(args.intent)
-        checks = load_overlay(resolve_overlay_path(args.overlay))
+        overlay_path = resolve_overlay_path(args.overlay)
+        checks, overlay_sha256 = load_overlay(overlay_path)
+        # A check runs unless it names a profile other than this run's.
+        run = [c for c in checks if c.get("profile", args.profile) == args.profile]
+        skipped = [c["check_id"] for c in checks if c not in run]
+        if not (checks := run):
+            raise ConfigError(f"{overlay_path} leaves no check to run under team")
         receipt_path = args.receipt or os.environ.get("SESSION_PREFLIGHT_RECEIPT")
         if intent == "tick" and not receipt_path:
             raise ConfigError(
@@ -528,6 +534,13 @@ def main(argv: list[str] | None = None) -> int:
                 "passed": sum(1 for r in results if r["ok"]),
                 "total": len(results),
                 "checks": results,
+                "profile": args.profile,
+                "overlay_path": str(overlay_path),
+                "overlay_sha256": overlay_sha256,
+                "included_check_ids": [r["check_id"] for r in results],
+                "skipped_check_ids": skipped,
+                "passed_check_ids": [r["check_id"] for r in results if r["ok"]],
+                "failed_check_ids": [r["check_id"] for r in results if not r["ok"]],
             },
         )
 
