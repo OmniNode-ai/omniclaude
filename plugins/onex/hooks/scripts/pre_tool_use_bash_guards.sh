@@ -134,7 +134,7 @@ if [[ $_obg_lane_read -eq 1 ]]; then
         source "${_OBG_SCRIPTS}/common.sh" >/dev/null 2>&1 || exit 1
         unset PYTHONPATH
         printf '%s\n' "$_OBG_INPUT" | "${PYTHON_CMD:-python3}" -m \
-            omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_lane_github_read_cli \
+            omniclaude.nodes.node_lane_github_read_guard_effect.runtime_lane_github_read \
             --cwd "$_OBG_CALLER_CWD" --mode "$_OBG_MODE" 2>&1
     )"
     _OBG_LANE_RC=$?
