@@ -46,3 +46,33 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/models/test_model_lib_timeouts.py -q --no-cov"
         cwd: "."
+  - id: dod-omn21729-hosted-source-deploy-readback
+    description: >-
+      Hosted-runner source publication check for the lib timeout policy and its
+      runtime consumers at the checked-out commit. Download each product file
+      from the public repository at HEAD and require byte equality with the
+      checkout. Missing publication, an HTTP failure, or pre-refactor source
+      fails. This checks published source, not running service health; the
+      behavioral timeout tests remain a separate evidence item above.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: command
+        cwd: "."
+        check_value: |
+          bash -euo pipefail -c '
+            head_sha=$(git rev-parse HEAD);
+            for path in \
+              src/omniclaude/models/model_lib_timeouts.py \
+              src/omniclaude/contracts/contract_omniclaude_lib_timeouts.yaml \
+              src/omniclaude/nodes/node_agent_inbox_effect/handler_kafka_inbox.py \
+              src/omniclaude/nodes/node_agent_inbox_effect/handler_standalone_inbox.py \
+              src/omniclaude/nodes/node_agent_inbox_effect/protocols/protocol_agent_inbox.py \
+              src/omniclaude/nodes/node_linear_effect/handlers/handler_lane_repo_evidence.py \
+              src/omniclaude/services/standalone_inbox/background_watcher.py \
+              src/omniclaude/services/standalone_inbox/inbox.py;
+            do curl --fail --silent --show-error --location --retry 3 \
+                "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$head_sha/$path" \
+                | cmp - "$path";
+            done
+          '
