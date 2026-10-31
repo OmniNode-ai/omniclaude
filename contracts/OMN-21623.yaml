@@ -17,8 +17,8 @@ requirements:
   - id: req-omn21623-runtime-timeouts
     statement: The timeouts of the trace frame assembler, replay engine, diagnostics tool, health checker and coverage scanner are read from the runtime contract and a literal no longer binds them.
     acceptance:
-      - id: BURNDOWN2
-        statement: "BURNDOWN2: ModelRuntimeTimeouts.from_contract() reads every field from the contract timeouts section, an env var overrides the inline default, a missing field or section fails to load, and each call site passes the injected value -- falsifier: uv run pytest tests/unit/models/test_model_runtime_timeouts.py -q --no-cov"
+      - id: AC2
+        statement: "AC2: ModelRuntimeTimeouts.from_contract() reads every field from the contract timeouts section, an env var overrides the inline default, a missing field or section fails to load, and each call site passes the injected value -- falsifier: uv run pytest tests/unit/models/test_model_runtime_timeouts.py -q --no-cov"
   - id: req-omn21623-selector-policy
     statement: The transition selector reads its deadlines and retry policy from its contract or an injected policy.
     acceptance:
@@ -39,7 +39,7 @@ dod_evidence:
   - id: dod-omn21623-runtime-timeouts-from-contract
     description: "The contract timeouts section, the frozen model and the five callers carry the timeouts; the new tests fail at the merge base, which has no model, and pass here."
     source: manual
-    binds_ac: [BURNDOWN2]
+    binds_ac: [AC2]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/models/test_model_runtime_timeouts.py tests/unit/trace tests/unit/lib/utils tests/skills/coverage_sweep -q --no-cov"
