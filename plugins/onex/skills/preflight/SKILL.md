@@ -99,7 +99,7 @@ From a source checkout the same file is `plugins/onex/scripts/session_preflight.
 
 ## Profiles: operator and team
 
-The runner takes `--profile operator|team` (default `operator`). A check in the overlay may carry
+The runner takes `--profile operator|team`. With no `--profile` it runs `team` inside a remote lane (`ONEX_REMOTE_LANE` set, as the lab runner exports it) and `operator` in every other session; an explicit `--profile` always wins. A check in the overlay may carry
 `profile: operator`, meaning it reads something only the operator's machine has (a local
 controller, a coordination host). Under `team` those checks do not run; every other check still
 runs and still blocks. A check with no `profile` key runs in every profile, so an overlay with no
