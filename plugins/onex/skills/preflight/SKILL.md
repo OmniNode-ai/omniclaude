@@ -43,15 +43,28 @@ that role allows:
 ```bash
 # onex:preflight profile selection
 # The role comes from the team identity resolver (omnimarket node_team_identity_compute), never
-# from a guess here. Only a clean, successful answer naming the operator selects operator; any
-# other outcome - a member, an unknown or unauthenticated identity, a missing or failing
-# resolver, an unreadable answer - selects team. Unknown identity gets team restrictions.
+# from a guess here. The identity offered to it is the declared lane identity, read by the
+# hook edge lane code (hook_edge_lane.resolve_credential_environment) from the surface the
+# hook edge contract names for the declared lane. This block makes no gh call: the lane gh
+# shim refuses `gh api user`, and it never reads the identity from a variable. Only a
+# clean, successful answer naming the operator selects operator; any other outcome - a member,
+# an unknown or unavailable identity, a missing or failing resolver, an unreadable answer -
+# selects team. Unknown identity gets team restrictions.
 PREFLIGHT_PROFILE=team
-identity_login="$(gh api user --jq .login 2>/dev/null)" || identity_login=""
-if [ -n "$identity_login" ] && command -v onex >/dev/null 2>&1; then
-  identity_dir="$(mktemp -d)"
-  python3 -c 'import json, sys; print(json.dumps({"claims": [{"source": "github_auth", "value": sys.argv[1]}]}))' \
-    "$identity_login" > "$identity_dir/request.json"
+identity_dir="$(mktemp -d)"
+if command -v onex >/dev/null 2>&1 \
+    && python3 -c '
+import json, sys
+from pathlib import Path
+hooks = Path(sys.argv[1])
+sys.path.insert(0, str(hooks / "lib"))
+import hook_edge_lane as lane
+contract = lane.load_contract(hooks / "contracts" / "hook_edge_lane.yaml")
+principal = lane.resolve_credential_environment(contract)[lane.ENV_SASL_USERNAME].strip()
+if not principal:
+    raise SystemExit(1)
+print(json.dumps({"claims": [{"source": "broker_binding", "value": principal}]}))
+' "${CLAUDE_PLUGIN_ROOT}/hooks" > "$identity_dir/request.json" 2>/dev/null; then
   if identity_receipt="$(onex node node_team_identity_compute --input "$identity_dir/request.json" \
       --output receipt --state-root "$identity_dir/state" --timeout 60 2>/dev/null)"; then
     PREFLIGHT_PROFILE="$(printf '%s' "$identity_receipt" | python3 -c '
@@ -70,8 +83,8 @@ operator = (
 print("operator" if operator else "team")
 ' 2>/dev/null)" || PREFLIGHT_PROFILE=team
   fi
-  rm -rf "$identity_dir"
 fi
+rm -rf "$identity_dir"
 [ "$PREFLIGHT_PROFILE" = operator ] || PREFLIGHT_PROFILE=team
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_preflight.py" --profile "$PREFLIGHT_PROFILE" "$@"
 ```
@@ -93,9 +106,13 @@ runs and still blocks. A check with no `profile` key runs in every profile, so a
 profile keys gives the same result under `operator` as it always has.
 
 The skill picks the profile from the team identity resolver, through `onex node
-node_team_identity_compute`, with the session's authenticated GitHub login as the claim. It runs
-`operator` only when the resolver positively matches the operator. A member, an identity the
-declaration does not name, no authenticated login, a resolver that is not installed, fails or
+node_team_identity_compute`, with the session's **declared lane identity** as the claim: the broker
+principal of the lane the hook edge contract declares, which the hook edge lane code
+(`hooks/lib/hook_edge_lane.py`) reads from the surface the contract names for that lane (the
+`~/.onex` lane store, or the operator env file). It never calls `gh`, because the lane `gh` shim refuses `gh api user`, and it never takes
+the identity from an environment variable. It runs `operator` only when the resolver positively
+matches the operator. A member, an identity the declaration does not name, no declared lane
+identity (no store, an unreadable or half-written one), a resolver that is not installed, fails or
 answers something unreadable all run `team`, never `operator`.
 
 These are refused with exit status `2`: a check whose `profile` is anything but `operator` (any
