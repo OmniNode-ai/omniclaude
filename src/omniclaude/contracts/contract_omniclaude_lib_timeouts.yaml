@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Timeout, TTL and delay values for the result cache, quirk extractor,
+# verification, standalone inbox, linear effect lane evidence, the agent router
+# and the action logger demo
+# (OMN-21729, contracts-and-DI burn-down, child of OMN-21623). Read by
+# ModelLibTimeouts; every consumer receives the value through a parameter
+# bound from this contract, so no timeout literal remains in the code.
+# NOT a node contract: node_type SERVICE is intentional, like
+# contract_omniclaude_runtime.yaml.
+
+name: "omniclaude_lib_timeouts"
+contract_name: "omniclaude_lib_timeouts"
+node_type: "SERVICE"
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+description: >
+  Timeout, TTL and delay policy for the result cache, quirk extractor,
+  verification, standalone inbox and linear effect lane evidence modules.
+
+lib:
+  # Agent router: async routing budget in milliseconds.
+  agent_router_route_timeout_ms: 5000
+  # Manual demo of the action logger (__main__ block).
+  demo_sleep_seconds: 0.05
+  # ResultCache default lifetime.
+  cache_ttl_seconds: 3600
+  # Manual demo of the result cache (__main__ block): lifetime, short lifetime
+  # and the wait that lets the short entry expire.
+  demo_ttl_seconds: 60
+  demo_ttl_short: 1
+  demo_wait_seconds: 1.5
+  # Quirk signal extractor worker shutdown wait.
+  quirk_worker_stop_seconds: 5.0
+  # Verification: local verifier model call and mechanical check subprocess.
+  local_verifier_seconds: 30.0
+  self_check_seconds: 120
+  # Standalone inbox: file and lock lifetime.
+  standalone_inbox_ttl_seconds: 7200
+  # Linear effect lane repo evidence: scm write node call and git read.
+  lane_evidence_scm_seconds: 90
+  lane_evidence_git_seconds: 30

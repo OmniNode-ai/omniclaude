@@ -80,6 +80,7 @@ from omniclaude.lib.intelligence_usage_tracker import IntelligenceUsageTracker
 from omniclaude.lib.pattern_quality_scorer import PatternQualityScorer
 from omniclaude.lib.task_classifier import TaskClassifier, TaskContext
 from omniclaude.models.model_model_routing_defaults import ModelModelRoutingDefaults
+from omniclaude.models.model_service_endpoint_defaults import ModelServiceEndpointDefaults
 
 from .intelligence_cache import IntelligenceCache
 from .intelligence_event_client import IntelligenceEventClient
@@ -573,6 +574,7 @@ class ManifestInjector:
         cache_ttl_seconds: int | None = None,
         agent_name: str | None = None,
         model_routing_defaults: ModelModelRoutingDefaults | None = None,
+        service_endpoint_defaults: ModelServiceEndpointDefaults | None = None,
     ):
         """
         Initialize manifest injector.
@@ -590,10 +592,12 @@ class ManifestInjector:
                        Falls back to AGENT_NAME environment variable if not provided
             model_routing_defaults: Default model ids for the models section
                 (default: the runtime contract model_routing overlay, read on first use)
+            service_endpoint_defaults: Default service endpoints (default: the runtime contract service_endpoints overlay)
         """
         # Initialize logger early for use throughout __init__
         self.logger = logging.getLogger(__name__)
         self._model_routing_defaults = model_routing_defaults
+        self._service_endpoint_defaults = service_endpoint_defaults
 
         self.kafka_brokers = (
             kafka_brokers or settings.get_effective_kafka_bootstrap_servers() or None
@@ -623,9 +627,7 @@ class ManifestInjector:
         # Valkey cache is checked BEFORE in-memory cache for better hit rates
         self._valkey_cache: IntelligenceCache | None = None
         if enable_cache:
-            self._valkey_cache = IntelligenceCache()
-        else:
-            self._valkey_cache = None
+            self._valkey_cache = IntelligenceCache(endpoint_defaults=service_endpoint_defaults)
 
         # Cached manifest data (for backward compatibility)
         self._manifest_data: dict[str, Any] | None = None
@@ -1365,11 +1367,9 @@ class ManifestInjector:
             # Default to GTE-Qwen2-1.5B (1536 dimensions, matches archon_vectors collection)
             model = "Alibaba-NLP/gte-Qwen2-1.5B-instruct"
 
-        # GTE-Qwen2 embedding service (OpenAI-compatible API)
-        # Default to localhost - production URLs should be set via EMBEDDING_SERVICE_URL env var
-        embedding_url = os.environ.get(
-            "EMBEDDING_SERVICE_URL", "http://localhost:8002/v1/embeddings"
-        )
+        # GTE-Qwen2 embedding service (OpenAI-compatible API); the endpoint comes from the
+        # runtime contract service_endpoints overlay (EMBEDDING_SERVICE_URL), no URL in source
+        embedding_url = (self._service_endpoint_defaults or ModelServiceEndpointDefaults.from_contract()).embedding_service_url
 
         try:
             payload = {

@@ -59,10 +59,13 @@ FINDING_KEYS = (
 # All finding fields, including details, line numbers, reachability and allowlisting.
 # OMN-21536 moved two CLI mains out of handlers/, so their two dead-handler
 # non_live_violations rows (handler_lane_github_read_cli, handler_pr_ownership_cli) left.
+# OMN-21623 moved the runtime timeouts to the contract and folded repeated subprocess
+# blocks into helpers: diagnostics.py lost one dead subprocess_network finding (3 to 2),
+# replay_engine.py lost its one (1 to 0), and the other recorded lines moved.
 # OMN-21780 removed lines from manifest_injector.py, shifting the line numbers of its
 # non_live_freestanding_violations rows; no finding was added or dropped.
 RECORDED_OCC_FINDING_DIGEST = (
-    "dd6087db58d28c227be192d92f4e42298c1bb795f687fafa3e990d19facb863f"
+    "a03b3cde2b78b4a8707d176965eebbd6ba2710f8410f78d97331250e7cea1559"
 )
 
 

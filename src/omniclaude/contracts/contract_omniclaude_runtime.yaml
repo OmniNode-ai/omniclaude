@@ -72,6 +72,32 @@ aggregator:
   finalized_session_warning_threshold: "${env.OMNICLAUDE_AGGREGATOR_FINALIZED_SESSION_WARNING_THRESHOLD:10000}"
   finalized_session_warning_interval_seconds: "${env.OMNICLAUDE_AGGREGATOR_FINALIZED_SESSION_WARNING_INTERVAL_SECONDS:3600}"
 
+timeouts:
+  # Runtime timeouts in seconds -- OMN-21623 contracts-and-DI burn-down. The trace
+  # frame assembler and replay engine, the diagnostics and health-check tools and
+  # the coverage scanner passed these as
+  # integer literals at each subprocess or HTTP call. ModelRuntimeTimeouts
+  # .from_contract() overlay-resolves each value and the callers receive the model
+  # injected; a per-lane overlay sets the env var, the inline default rides along.
+  trace_git_diff_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_GIT_DIFF_SECONDS:10}"
+  trace_git_identity_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_GIT_IDENTITY_SECONDS:5}"
+  trace_environment_hash_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_ENVIRONMENT_HASH_SECONDS:10}"
+  trace_lint_check_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_LINT_CHECK_SECONDS:15}"
+  trace_type_check_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_TYPE_CHECK_SECONDS:30}"
+  diagnostics_curl_health_seconds: "${env.OMNICLAUDE_TIMEOUT_DIAGNOSTICS_CURL_HEALTH_SECONDS:5}"
+  diagnostics_docker_seconds: "${env.OMNICLAUDE_TIMEOUT_DIAGNOSTICS_DOCKER_SECONDS:10}"
+  diagnostics_http_seconds: "${env.OMNICLAUDE_TIMEOUT_DIAGNOSTICS_HTTP_SECONDS:5}"
+  health_check_httpx_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_HTTPX_SECONDS:5}"
+  health_check_base_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_BASE_SECONDS:2}"
+  health_check_pattern_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_PATTERN_SECONDS:5}"
+  health_check_post_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_POST_SECONDS:3}"
+  replay_clone_seconds: "${env.OMNICLAUDE_TIMEOUT_REPLAY_CLONE_SECONDS:60}"
+  replay_checkout_seconds: "${env.OMNICLAUDE_TIMEOUT_REPLAY_CHECKOUT_SECONDS:30}"
+  replay_apply_seconds: "${env.OMNICLAUDE_TIMEOUT_REPLAY_APPLY_SECONDS:30}"
+  coverage_cache_ttl_seconds: "${env.OMNICLAUDE_TIMEOUT_COVERAGE_CACHE_TTL_SECONDS:3600}"
+  coverage_pytest_seconds: "${env.OMNICLAUDE_TIMEOUT_COVERAGE_PYTEST_SECONDS:300}"
+  coverage_git_log_seconds: "${env.OMNICLAUDE_TIMEOUT_COVERAGE_GIT_LOG_SECONDS:30}"
+
 model_routing:
   # Model ids omniclaude code uses by default — OMN-21780 (child of OMN-21623).
   # No model id lives in the repository: an operator overlay / the per-lane service
@@ -85,6 +111,18 @@ model_routing:
   # Quorum members the manifest lists, as a JSON array of objects with name,
   # model, provider, weight and use_case.
   intelligence_models: "${env.OMNICLAUDE_INTELLIGENCE_MODELS_JSON}"
+
+service_endpoints:
+  # Service endpoints omniclaude code falls back to — OMN-21727 (child of OMN-21623).
+  # The operator overlay / per-lane service env supplies each value through the
+  # ${env.VAR[:default]} overlay convention; ModelServiceEndpointDefaults.from_contract()
+  # resolves it.
+  # OpenAI-compatible embeddings endpoint ManifestInjector._embed_text posts to. No
+  # default lives in the repository: an unset value resolves empty.
+  embedding_service_url: "${env.EMBEDDING_SERVICE_URL}"
+  # Valkey URL IntelligenceCache uses when neither redis_url nor settings.valkey_url is
+  # given; VALKEY_PASSWORD, when set, is added as the URL's credential.
+  valkey_default_url: "${env.OMNICLAUDE_VALKEY_DEFAULT_URL:redis://onex-valkey:6379/0}"
 
 metadata:
   author: "OmniNode Team"
