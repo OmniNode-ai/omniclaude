@@ -6,17 +6,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from omnimarket.nodes.node_event_emit_effect.models.model_emit_request import (
-    ModelEmitRequest,
-)
-
 if TYPE_CHECKING:
     from omnimarket.nodes.node_event_emit_effect.handlers.handler_event_emit_effect import (
         HandlerEventEmitEffect,
     )
 
 
-__all__ = ["ModelEmitRequest", "build_event_emit"]
+__all__ = ["build_event_emit"]
 
 
 def build_event_emit() -> HandlerEventEmitEffect:

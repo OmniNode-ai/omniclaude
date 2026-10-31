@@ -14,9 +14,9 @@ requirements:
   - id: req-omn21779-handler-binding-sites
     statement: The handlers in the touched modules are built at a binding site and no call site constructs them by hand.
     acceptance:
-      - id: BURNDOWN1
+      - id: AC1
         statement: "BURNDOWN1: the contracts_and_di handler_hand_construction count over the slice paths is zero and the omniclaude src count drops from 29 to 10, no other rule's count changes -- falsifier: runtime_validator_run with ValidatorContractsAndDi over omniclaude src before and after, counts compared per rule"
-      - id: BURNDOWN2
+      - id: AC2
         statement: "BURNDOWN2: each binding site builds the handler type its call site used -- falsifier: uv run pytest tests/unit/handlers/test_container_binding_sites_omn21779.py -q --no-cov"
 evidence_requirements:
   - kind: tests
@@ -30,8 +30,26 @@ dod_evidence:
   - id: dod-omn21779-binding-sites
     description: "The binding-site tests pass and build the handler types the call sites used."
     source: manual
-    binds_ac: [BURNDOWN1, BURNDOWN2]
+    binds_ac: [AC1]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/handlers/test_container_binding_sites_omn21779.py tests/lib/models/test_intelligence_context.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn21779-handler-types
+    description: "Each binding site builds the handler type its call site used."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/handlers/test_container_binding_sites_omn21779.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn21779-hosted-binding-deploy-readback
+    description: "Hosted source publication readback of the event emit binding site at the checked-out commit; an absent factory or pre-refactor source fails. This checks published source, not a running service."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: >-
+          gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/handlers/container/container_event_emit.py?ref=$(git rev-parse HEAD)"
+          --jq '.content | gsub("\n"; "") | @base64d | contains("return HandlerEventEmitEffect()")'
+          | grep -qx true
         cwd: "."
