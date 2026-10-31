@@ -58,10 +58,10 @@ requirements:
       - id: "AC8"
         statement: "AC8: exactly one local public-repo-hygiene hook runs the exported command without narrowing its trigger or overriding the repository's enforced classes and added-lines scope, and the caller uses the reusable workflow in this checkout -- falsifier: uv run pytest tests/scripts/test_public_repo_hygiene_local_hook_omn19998.py -q fails at the merge base, where no local public-repo-hygiene hook is declared"
   - id: "req-omn19998-hostile-reviewer-lan-runners"
-    statement: "The Hostile Reviewer fallback requires arch-amd64 to stay on LAN runners that can reach its review voters and exclude h203-light runners."
+    statement: "The Hostile Reviewer fallback requires arch-amd64 to stay on LAN runners that can reach its review voters and exclude runners outside the review network."
     acceptance:
       - id: "AC9"
-        statement: "AC9: the hostile-review job's dedicated runner fallback requires self-hosted, omnibase-ci and arch-amd64, excluding h203-light runners that cannot reach the review voters -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\" fails at the merge base, where the fallback lacks arch-amd64"
+        statement: "AC9: the hostile-review job's dedicated runner fallback requires self-hosted, omnibase-ci and arch-amd64, excluding runners outside the review network that cannot reach the review voters -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\" fails at the merge base, where the fallback lacks arch-amd64"
   - id: "req-omn19998-cross-repo-ref-policy-dev-tag"
     statement: "The cross-repo reusable ref policy (OMN-18494) admits a dev-merge tag dev-<UTC YYYYMMDDHHMMSS>-<sha12> beside @main and a full sha, since the repo's ruling of 2026-10-29T01:50:26Z pins reusables to dev-merge tags, and still refuses the bare dev branch and a malformed tag."
     acceptance:
@@ -161,7 +161,7 @@ dod_evidence:
     binds_ac:
       - "AC8"
   - id: "dod-omn19998-hostile-reviewer-lan-runners"
-    description: "The Hostile Reviewer runner placement tests require arch-amd64 in the fallback, excluding h203-light runners that cannot reach the review voters."
+    description: "The Hostile Reviewer runner placement tests require arch-amd64 in the fallback, excluding runners outside the review network that cannot reach the review voters."
     source: manual
     checks:
       - check_type: test_passes
