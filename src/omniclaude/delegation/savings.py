@@ -25,6 +25,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict
 
+from omniclaude.models.model_model_routing_defaults import default_baseline_model
+
 _MANIFEST_PATH = (
     Path(__file__).parent.parent.parent.parent.parent.parent
     / "omnibase_infra"
@@ -33,8 +35,6 @@ _MANIFEST_PATH = (
     / "configs"
     / "pricing_manifest.yaml"
 )
-
-_DEFAULT_BASELINE_MODEL = "claude-opus-4-6"
 
 
 class EnumTokenProvenance(StrEnum):
@@ -79,14 +79,14 @@ class SavingsCalculator:
     def __init__(
         self,
         manifest_path: Path | None = None,
-        baseline_model: str = _DEFAULT_BASELINE_MODEL,
+        baseline_model: str | None = None,
     ) -> None:
         path = manifest_path or _MANIFEST_PATH
         with open(path) as f:
             raw = yaml.safe_load(f)
         self._manifest_version: str = raw.get("schema_version", "unknown")
         self._models: dict[str, dict[str, float]] = raw.get("models", {})
-        self._baseline_model = baseline_model
+        self._baseline_model = baseline_model or default_baseline_model()
 
     @property
     def manifest_version(self) -> str:
