@@ -215,7 +215,7 @@ class HandlerKafkaInbox:
 
     async def gc_inbox(
         self,
-        ttl_hours: int = 24,
+        ttl_hours: int,
     ) -> int:
         """No-op for Kafka tier (Kafka handles its own retention).
 
