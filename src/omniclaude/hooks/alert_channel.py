@@ -43,13 +43,13 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from omniclaude.models.model_hook_timeouts import hook_timeouts
+
 logger = logging.getLogger(__name__)
 
 # Kept in lockstep with plugins/onex/hooks/scripts/alert-channel.sh.
 _DEFAULT_FAILURE_LOG = ".omnibase/alert_delivery_failures.log"
 _DEFAULT_CACHE = ".omnibase/alert_channel_liveness.json"
-_DEFAULT_TTL_SECONDS = 3600
-_DEFAULT_TIMEOUT_SECONDS = 3.0
 
 
 class EnumChannelStatus(StrEnum):
@@ -115,19 +115,17 @@ def _cache_path() -> Path:
 
 
 def _timeout() -> float:
-    raw = os.environ.get("ONEX_ALERT_LIVENESS_TIMEOUT_SECONDS", "").strip()
     try:
-        return float(raw) if raw else _DEFAULT_TIMEOUT_SECONDS
+        return float(os.environ.get("ONEX_ALERT_LIVENESS_TIMEOUT_SECONDS", "").strip())
     except ValueError:
-        return _DEFAULT_TIMEOUT_SECONDS
+        return hook_timeouts().alert_timeout_seconds
 
 
 def _ttl() -> int:
-    raw = os.environ.get("ONEX_ALERT_LIVENESS_TTL_SECONDS", "").strip()
     try:
-        return int(raw) if raw else _DEFAULT_TTL_SECONDS
+        return int(os.environ.get("ONEX_ALERT_LIVENESS_TTL_SECONDS", "").strip())
     except ValueError:
-        return _DEFAULT_TTL_SECONDS
+        return hook_timeouts().alert_ttl_seconds
 
 
 def _post(url: str, data: bytes, headers: dict[str, str]) -> tuple[int, str]:
@@ -180,7 +178,10 @@ def _local_notify(summary: str) -> bool:
         if override:
             return (
                 subprocess.run(  # noqa: S603
-                    [override, summary], capture_output=True, timeout=15, check=False
+                    [override, summary],
+                    capture_output=True,
+                    timeout=hook_timeouts().notify_seconds,
+                    check=False,
                 ).returncode
                 == 0
             )
@@ -195,7 +196,7 @@ def _local_notify(summary: str) -> bool:
                         '"OmniClaude alerting BROKEN" sound name "Sosumi"',
                     ],
                     capture_output=True,
-                    timeout=15,
+                    timeout=hook_timeouts().notify_seconds,
                     check=False,
                 ).returncode
                 == 0
@@ -206,7 +207,7 @@ def _local_notify(summary: str) -> bool:
                 subprocess.run(  # noqa: S603
                     [notify_send, "OmniClaude alerting BROKEN", summary],
                     capture_output=True,
-                    timeout=15,
+                    timeout=hook_timeouts().notify_seconds,
                     check=False,
                 ).returncode
                 == 0

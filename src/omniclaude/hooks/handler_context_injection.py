@@ -63,6 +63,7 @@ from omniclaude.hooks.models_injection_tracking import (
     ModelInjectionRecord,
 )
 from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayload
+from omniclaude.models.model_hook_timeouts import hook_timeouts
 
 if TYPE_CHECKING:
     from omnibase_core.types.type_json import StrictJsonPrimitive  # noqa: TC004
@@ -571,7 +572,7 @@ class HandlerContextInjection:
                     self._load_learnings_from_memory_fabric(
                         repo=repo_name,
                     ),
-                    timeout=3.0,
+                    timeout=hook_timeouts().fabric_load_seconds,
                 )
                 if memory_fabric_context:
                     if context_markdown:
@@ -598,7 +599,7 @@ class HandlerContextInjection:
             try:
                 resume_context = await asyncio.wait_for(
                     self._load_resume_context(agent_id=agent_id),
-                    timeout=0.9,  # Stay within 1s context-injection budget
+                    timeout=hook_timeouts().resume_load_seconds,
                 )
                 if resume_context:
                     if context_markdown:
@@ -1039,7 +1040,7 @@ class HandlerContextInjection:
             if task_type:
                 payload["task_type"] = task_type
 
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=hook_timeouts().fabric_http) as client:
                 resp = await client.post(cfg.memory_fabric_url, json=payload)
                 resp.raise_for_status()
                 data = resp.json()
@@ -1109,9 +1110,7 @@ class HandlerContextInjection:
 
         cfg = self._config
         try:
-            async with httpx.AsyncClient(
-                timeout=0.9
-            ) as client:  # Stay within 1s context-injection budget
+            async with httpx.AsyncClient(timeout=hook_timeouts().resume_http) as client:
                 resp = await client.get(
                     cfg.session_projector_url,
                     params={"agent_id": agent_id, "limit": "1"},

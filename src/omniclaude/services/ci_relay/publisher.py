@@ -16,6 +16,7 @@ import logging
 import os
 from typing import Any  # any-ok: external API boundary
 
+from omniclaude.models.model_ci_relay_timeouts import relay_timeouts
 from omniclaude.services.ci_relay.models import PRStatusEvent
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ async def _get_producer() -> (
                 bootstrap_servers=_get_bootstrap_servers(),
                 value_serializer=lambda v: json.dumps(v).encode("utf-8"),
                 key_serializer=lambda k: k.encode("utf-8") if k else None,
-                request_timeout_ms=5000,
+                request_timeout_ms=relay_timeouts().kafka_request_ms,
                 acks="all",
             )
             await _producer.start()
@@ -88,11 +89,7 @@ async def publish_event(topic: str, event: PRStatusEvent) -> None:
     partition_key = event.repo
     value = event.model_dump(mode="json")
 
-    await producer.send_and_wait(
-        topic,
-        value=value,
-        key=partition_key,
-    )
+    await producer.send_and_wait(topic, value=value, key=partition_key)
     logger.debug(
         "Published to %s: key=%s message_id=%s",
         topic,

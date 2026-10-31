@@ -21,8 +21,8 @@ import httpx
 
 from omniclaude.hooks.lib.code_context_resolver import (
     CodeContextResolver,
-    ProtocolQdrantSearch,
 )
+from omniclaude.models.model_hook_timeouts import hook_timeouts
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class _HttpQdrantClient:
     into the hook pipeline.
     """
 
-    def __init__(self, qdrant_url: str, *, timeout: float = 1.0) -> None:
+    def __init__(self, qdrant_url: str, *, timeout: float) -> None:
         self._url = qdrant_url.rstrip("/")
         self._timeout = timeout
 
@@ -65,7 +65,7 @@ def resolve_code_context_sync(
     max_entities: int = 5,
     qdrant_url: str | None = None,
     embedding_url: str | None = None,
-    timeout_seconds: float = 1.5,
+    timeout_seconds: float = hook_timeouts().resolve_secs,
 ) -> str:
     """Resolve code context synchronously with timeout and graceful degradation.
 
@@ -114,12 +114,8 @@ async def _resolve_with_timeout(
     if not embedding_url:
         return ""
 
-    qdrant_client: ProtocolQdrantSearch = _HttpQdrantClient(
-        qdrant_url, timeout=timeout_seconds
-    )
-
     resolver = CodeContextResolver(
-        qdrant_client=qdrant_client,
+        qdrant_client=_HttpQdrantClient(qdrant_url, timeout=timeout_seconds),
         bolt_handler=None,
         embedding_url=embedding_url,
     )

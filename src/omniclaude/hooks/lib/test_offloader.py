@@ -29,6 +29,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
+from omniclaude.models.model_hook_timeouts import hook_timeouts
+
 
 class EnumOffloadTarget(StrEnum):
     gemini = "gemini"
@@ -155,11 +157,7 @@ def offload_command(command: str) -> ModelOffloadDecision:
 
     target = _find_offload_target()
 
-    # No offload target available — fall back to direct
-    if target == EnumOffloadTarget.direct:
-        return _run_direct(command, cmd_type)
-
-    # Attempt offload
+    # Attempt offload; a direct target falls back to a direct run inside
     return _run_offloaded(command, cmd_type, target)
 
 
@@ -171,7 +169,7 @@ def _run_direct(command: str, cmd_type: str) -> ModelOffloadDecision:
             shell=True,  # noqa: S602  # nosec B602 — test commands are constructed internally, not from user input
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=hook_timeouts().offload_direct_seconds,
             check=False,
         )
         summary = _summarize_test_output(result.stdout, result.returncode, cmd_type)
@@ -188,7 +186,7 @@ def _run_direct(command: str, cmd_type: str) -> ModelOffloadDecision:
             command=command,
             target=EnumOffloadTarget.direct,
             result=EnumOffloadResult.fallback_direct,
-            summary=f"[{cmd_type}] TIMEOUT after 300s",
+            summary=f"[{cmd_type}] TIMEOUT after {hook_timeouts().offload_direct_seconds:g}s",
             exit_code=124,
         )
     except (OSError, ValueError) as e:
@@ -218,7 +216,7 @@ def _run_offloaded(
                 ["gemini", prompt],
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=hook_timeouts().offload_agent_seconds,
                 check=False,
             )
         elif target == EnumOffloadTarget.codex:
@@ -226,7 +224,7 @@ def _run_offloaded(
                 ["codex", prompt],
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=hook_timeouts().offload_agent_seconds,
                 check=False,
             )
         else:

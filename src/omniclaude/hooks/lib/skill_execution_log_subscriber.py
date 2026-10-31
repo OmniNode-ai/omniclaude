@@ -43,6 +43,7 @@ from typing import Any
 from uuid import UUID
 
 from omniclaude.hooks.topics import TopicBase
+from omniclaude.models.model_hook_timeouts import hook_timeouts
 
 logger = logging.getLogger(__name__)
 
@@ -85,14 +86,14 @@ def _get_db_connection() -> Any | None:  # Why: psycopg2 connection type not in 
 
         dsn = settings.omniclaude_db_url.get_secret_value().strip()
         if dsn:
-            return psycopg2.connect(dsn, connect_timeout=5)
+            return psycopg2.connect(dsn, connect_timeout=hook_timeouts().db_secs)
         return psycopg2.connect(
             host=settings.postgres_host,
             port=settings.postgres_port,
             database=settings.postgres_database,
             user=settings.postgres_user,
             password=settings.get_effective_postgres_password(),
-            connect_timeout=5,
+            connect_timeout=hook_timeouts().db_secs,
         )
     except Exception as exc:  # noqa: BLE001 — boundary: DB connect must degrade
         logger.debug("skill-execution-log-subscriber: DB connect failed: %s", exc)
@@ -287,7 +288,7 @@ def run_subscriber(
     *,
     kafka_bootstrap_servers: str,
     group_id: str = DEFAULT_GROUP_ID,
-    poll_timeout_ms: int = 1000,
+    poll_timeout_ms: int = hook_timeouts().poll_ms,
     max_poll_records: int = 50,
     stop_event: threading.Event | None = None,
 ) -> None:
@@ -337,7 +338,6 @@ def run_subscriber(
             group_id=group_id,
             auto_offset_reset="latest",
             enable_auto_commit=True,
-            value_deserializer=None,  # Raw bytes; deserialized in process_skill_completed_event
             max_poll_records=max_poll_records,
         )
     except Exception as exc:  # noqa: BLE001 — boundary: consumer creation failure
@@ -368,7 +368,7 @@ def run_subscriber(
                 logger.warning(
                     "Kafka poll error in skill-execution-log subscriber: %s", exc
                 )
-                time.sleep(1.0)
+                time.sleep(hook_timeouts().backoff_seconds)
 
     finally:
         try:

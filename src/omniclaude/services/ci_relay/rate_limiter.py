@@ -14,6 +14,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from omniclaude.models.model_ci_relay_timeouts import relay_timeouts
+
 
 @dataclass
 class _TokenBucket:
@@ -59,7 +61,7 @@ class RateLimiter:
         *,
         repo_rate_per_minute: int = 10,
         sha_cooldown_seconds: int = 300,
-        dedupe_ttl_seconds: int = 3600,
+        dedupe_ttl_seconds: int = relay_timeouts().dedupe_ttl_seconds,
     ) -> None:
         self._repo_rate_per_minute = repo_rate_per_minute
         self._sha_cooldown_seconds = sha_cooldown_seconds
@@ -92,8 +94,7 @@ class RateLimiter:
         Returns:
             True if the request is allowed, False if rate-limited.
         """
-        bucket = self._get_repo_bucket(repo)
-        return bucket.try_consume()
+        return self._get_repo_bucket(repo).try_consume()
 
     def check_sha_notification(self, repo: str, sha: str, conclusion: str) -> bool:
         """Check if a notification for this (repo, sha) should be sent.

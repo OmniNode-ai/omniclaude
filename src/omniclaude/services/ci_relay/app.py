@@ -20,6 +20,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from omniclaude.hooks.topics import TopicBase
+from omniclaude.models.model_ci_relay_timeouts import relay_timeouts
 from omniclaude.services.ci_relay.models import CICallbackPayload, PRStatusEvent
 from omniclaude.services.ci_relay.rate_limiter import RateLimiter
 
@@ -99,7 +100,7 @@ def _resolve_pr_from_sha(repo: str, sha: str) -> int | None:
             ],
             capture_output=True,
             text=True,
-            timeout=15,
+            timeout=relay_timeouts().gh_api_seconds,
             check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -113,7 +114,6 @@ def _resolve_pr_from_sha(repo: str, sha: str) -> int | None:
 
 # In-memory PR resolution cache: (repo, sha) -> (pr_number, timestamp)
 _pr_cache: dict[tuple[str, str], tuple[int | None, float]] = {}
-_PR_CACHE_TTL = 300  # 5 minutes
 
 
 def _resolve_pr_cached(repo: str, sha: str) -> int | None:
@@ -126,7 +126,7 @@ def _resolve_pr_cached(repo: str, sha: str) -> int | None:
     cached = _pr_cache.get(cache_key)
     if cached is not None:
         pr_num, cached_at = cached
-        if now - cached_at < _PR_CACHE_TTL:
+        if now - cached_at < relay_timeouts().pr_cache_ttl:
             return pr_num
 
     pr_num = _resolve_pr_from_sha(repo, sha)

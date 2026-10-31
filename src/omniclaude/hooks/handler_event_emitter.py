@@ -69,6 +69,7 @@ from omniclaude.hooks.schemas import (
     SessionEndReason,
 )
 from omniclaude.hooks.topics import TopicBase, build_topic
+from omniclaude.models.model_hook_timeouts import hook_timeouts
 
 if TYPE_CHECKING:
     from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
@@ -399,11 +400,10 @@ class ModelPatternDiscoveredConfig(BaseModel):
 # Kafka configuration optimized for hook latency
 # These values prioritize fast failure over reliability
 #
-# DEFAULT_KAFKA_TIMEOUT_SECONDS: Short timeout for production hooks where
+# kafka_hook_timeout_seconds (timeouts contract): short timeout for production hooks where
 # latency is critical. Can be overridden via KAFKA_HOOK_TIMEOUT_SECONDS
 # environment variable for integration tests that need more time to connect
 # to remote Kafka brokers.
-DEFAULT_KAFKA_TIMEOUT_SECONDS: int = 2  # Short timeout for hooks
 DEFAULT_KAFKA_MAX_RETRY_ATTEMPTS: int = 0  # No retries (latency budget)
 DEFAULT_KAFKA_ACKS = EnumKafkaAcks.ALL
 
@@ -539,9 +539,9 @@ def create_kafka_config() -> ModelKafkaEventBusConfig:
         try:
             timeout_seconds = int(timeout_str)
         except ValueError:
-            timeout_seconds = DEFAULT_KAFKA_TIMEOUT_SECONDS
+            timeout_seconds = hook_timeouts().kafka_hook_timeout_seconds
     else:
-        timeout_seconds = DEFAULT_KAFKA_TIMEOUT_SECONDS
+        timeout_seconds = hook_timeouts().kafka_hook_timeout_seconds
 
     return ModelKafkaEventBusConfig(
         bootstrap_servers=bootstrap_servers,
@@ -554,7 +554,7 @@ def create_kafka_config() -> ModelKafkaEventBusConfig:
         # With 10s reset timeout, this prevents excessive reconnection attempts
         # while still recovering quickly from temporary network issues.
         circuit_breaker_threshold=5,
-        circuit_breaker_reset_timeout=10.0,
+        circuit_breaker_reset_timeout=hook_timeouts().kafka_circuit_breaker_reset_seconds,
         # No idempotence needed for observability events
         enable_idempotence=False,
     )

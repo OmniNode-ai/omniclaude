@@ -42,6 +42,7 @@ from types import FrameType
 from typing import Any
 
 from omniclaude.hooks.topics import TopicBase
+from omniclaude.models.model_hook_timeouts import hook_timeouts
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +306,7 @@ def run_subscriber(
     *,
     kafka_bootstrap_servers: str,
     group_id: str = "omniclaude-compliance-subscriber.v1",
-    poll_timeout_ms: int = 1000,
+    poll_timeout_ms: int = hook_timeouts().poll_ms,
     max_poll_records: int = 50,
     stop_event: threading.Event | None = None,
 ) -> None:
@@ -353,7 +354,6 @@ def run_subscriber(
             group_id=group_id,
             auto_offset_reset="latest",
             enable_auto_commit=True,
-            value_deserializer=None,  # We handle raw bytes in process_compliance_event
             max_poll_records=max_poll_records,
         )
     except Exception as exc:  # noqa: BLE001 — boundary: consumer creation failure
@@ -378,7 +378,7 @@ def run_subscriber(
             except Exception as exc:  # noqa: BLE001 — boundary: poll failure retries
                 logger.warning("Kafka poll error: %s", exc)
                 # Brief backoff before retrying
-                time.sleep(1.0)
+                time.sleep(hook_timeouts().backoff_seconds)
 
     finally:
         try:

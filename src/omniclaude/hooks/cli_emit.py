@@ -80,6 +80,7 @@ from omniclaude.hooks.spool_drain import (
     resolve_spool_dir,
 )
 from omniclaude.hooks.topics import TopicBase, build_topic
+from omniclaude.models.model_hook_timeouts import hook_timeouts
 
 # Configure logging for hook context
 logging.basicConfig(
@@ -94,8 +95,8 @@ T = TypeVar("T")
 # Constants
 # =============================================================================
 
-# Default timeout for entire emit path (in seconds)
-_DEFAULT_TIMEOUT: float = 3.0
+# The default timeout for the emit path (in seconds) is the contract's
+# cli_emit_seconds.
 
 
 def _parse_timeout() -> float:
@@ -106,26 +107,26 @@ def _parse_timeout() -> float:
     non-positive, or not set.
 
     Returns:
-        The parsed timeout value, or _DEFAULT_TIMEOUT if parsing fails.
+        The parsed timeout value, or the contract's cli_emit timeout if parsing fails.
     """
     raw = os.environ.get("KAFKA_HOOK_TIMEOUT_SECONDS", "")
     if not raw:
-        return _DEFAULT_TIMEOUT
+        return hook_timeouts().cli_emit_seconds
     try:
         value = float(raw)
         if value <= 0:
             logger.warning(
                 "invalid_timeout_non_positive",
-                extra={"value": raw, "default": _DEFAULT_TIMEOUT},
+                extra={"value": raw, "default": hook_timeouts().cli_emit_seconds},
             )
-            return _DEFAULT_TIMEOUT
+            return hook_timeouts().cli_emit_seconds
         return value
     except ValueError:
         logger.warning(
             "invalid_timeout_not_numeric",
-            extra={"value": raw, "default": _DEFAULT_TIMEOUT},
+            extra={"value": raw, "default": hook_timeouts().cli_emit_seconds},
         )
-        return _DEFAULT_TIMEOUT
+        return hook_timeouts().cli_emit_seconds
 
 
 # Hard wall-clock timeout for entire emit path (in seconds)

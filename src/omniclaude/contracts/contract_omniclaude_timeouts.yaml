@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Timeout and TTL values for the hook libraries and the CI relay (OMN-21737,
+# contracts-and-DI burn-down, child of OMN-21623). Read by ModelHookTimeouts and
+# ModelCiRelayTimeouts; every consumer receives the value through a parameter
+# bound from this contract, so no timeout literal remains in the code.
+# NOT a node contract: node_type SERVICE is intentional, like
+# contract_omniclaude_runtime.yaml.
+
+name: "omniclaude_timeouts"
+contract_name: "omniclaude_timeouts"
+node_type: "SERVICE"
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+description: >
+  Timeout, poll and TTL policy for hook libraries and the CI relay service.
+
+hooks:
+  # Alert-channel liveness probe: HTTP timeout and verdict cache lifetime.
+  alert_timeout_seconds: 3.0
+  alert_ttl_seconds: 3600
+  # Local notification subprocess (override command, osascript, notify-send).
+  notify_seconds: 15
+  # Kafka emit budgets: cli_emit default, handler_event_emitter default and
+  # circuit breaker reset. Hooks fail fast to protect the UI latency budget.
+  cli_emit_seconds: 3.0
+  kafka_hook_timeout_seconds: 2
+  kafka_circuit_breaker_reset_seconds: 10.0
+  # Context injection stays within its 1s wall-clock budget; the HTTP timeout
+  # for the resume lookup sits at the same bound.
+  fabric_load_seconds: 3.0
+  resume_load_seconds: 0.9
+  fabric_http: 5.0
+  resume_http: 0.9
+  # Code-context resolution: whole resolution.
+  resolve_secs: 1.5
+  # Kafka subscriber loops: consumer poll and back-off after a poll error.
+  poll_ms: 1000
+  backoff_seconds: 1.0
+  # Skill execution log database connect.
+  db_secs: 5
+  # Test offloader: direct run and agent (gemini or codex) summarisation.
+  offload_direct_seconds: 300
+  offload_agent_seconds: 120
+
+ci_relay:
+  gh_api_seconds: 15
+  pr_cache_ttl: 300
+  kafka_request_ms: 5000
+  dedupe_ttl_seconds: 3600
