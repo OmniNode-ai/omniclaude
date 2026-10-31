@@ -96,3 +96,19 @@ metadata:
     - runtime
     - config
     - omniclaude
+
+runtime_paths:
+  # Filesystem locations omniclaude code uses — OMN-21728 (child of OMN-21623).
+  # Code holds no path: ModelRuntimePaths.from_contract() resolves each value through
+  # the ${env.VAR:default} overlay convention, so an operator overlay / the per-lane
+  # service env supplies the location and the default rides along here.
+  hook_socket: "${env.OMNICLAUDE_HOOK_RUNTIME_SOCKET:/tmp/omniclaude-hook-runtime.sock}"
+  hook_pid: "${env.OMNICLAUDE_HOOK_RUNTIME_PID:/tmp/omniclaude-hook-runtime.pid}"
+  session_marker_dir: "${env.OMNICLAUDE_SESSION_INJECTION_MARKER_DIR:/tmp/omniclaude-sessions}"
+  usage_cache: "${env.OMNICLAUDE_USAGE_CACHE_PATH:/tmp/omniclaude-usage-cache.json}"
+  linear_relay_dedup_db: "${env.OMNICLAUDE_LINEAR_RELAY_DEDUP_DB:/tmp/linear_relay_dedup.db}"
+  opencode_db: "${env.OMNICLAUDE_OPENCODE_DB:~/.local/share/opencode/opencode.db}"
+  store_reader_home: "${env.OMNICLAUDE_STORE_READER_HOME:~/.onex}"
+  onex_state_dir: "${env.OMNICLAUDE_DEFAULT_ONEX_STATE_DIR:~/.onex_state}"
+  pattern_tracking_log_dir: "${env.OMNICLAUDE_PATTERN_TRACKING_LOG_DIR:~/Library/Logs}"
+  registry_root: "${env.OMNI_HOME}"

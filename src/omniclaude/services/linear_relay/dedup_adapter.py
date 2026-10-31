@@ -15,8 +15,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-# Default database path — can be overridden in tests
-_DEFAULT_DB_PATH = Path("/tmp/linear_relay_dedup.db")  # noqa: S108  # nosec B108
+from omniclaude.models.model_runtime_paths import runtime_paths
 
 # Entries older than this are removed on insert
 _TTL_SECONDS = 86400  # 24 hours
@@ -30,11 +29,11 @@ class DedupStore:
 
     Args:
         db_path: Path to the SQLite database file.
-            Defaults to ``/tmp/linear_relay_dedup.db``.
+            Defaults to the runtime contract's dedup database.
     """
 
     def __init__(self, db_path: Path | None = None) -> None:
-        self._db_path = db_path or _DEFAULT_DB_PATH
+        self._db_path = db_path or runtime_paths().linear_relay_dedup_db
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._init_schema()
 

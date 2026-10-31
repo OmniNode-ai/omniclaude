@@ -30,10 +30,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-logger = logging.getLogger(__name__)
+from omniclaude.models.model_runtime_paths import runtime_paths
 
-# Default path where the statusline script caches OAuth usage API responses
-DEFAULT_USAGE_CACHE_PATH = Path("/tmp/omniclaude-usage-cache.json")  # noqa: S108  # nosec B108
+logger = logging.getLogger(__name__)
 
 
 class ModelLimitStatus(BaseModel):
@@ -192,12 +191,12 @@ def read_limit_status(
         statusline_input: Optional statusline JSON input dict. If None,
             context_percent will be None.
         usage_cache_path: Path to the usage cache JSON file. Defaults to
-            ``/tmp/omniclaude-usage-cache.json``.
+            the runtime contract's ``runtime_paths.usage_cache``.
 
     Returns:
         ModelLimitStatus with all available fields populated.
     """
-    cache_path = usage_cache_path or DEFAULT_USAGE_CACHE_PATH
+    cache_path = usage_cache_path or runtime_paths().usage_cache
 
     # Parse context from statusline input
     context_pct = None
