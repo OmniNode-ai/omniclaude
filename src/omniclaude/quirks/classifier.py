@@ -39,7 +39,8 @@ from omniclaude.lib.kafka_publisher_base import (
     create_event_envelope,
     publish_to_kafka,
 )
-from omniclaude.quirks.enums import QuirkStage, QuirkType
+from omniclaude.models.model_endpoint_defaults import ModelEndpointDefaults
+from omniclaude.quirks.enums import QuirkType
 from omniclaude.quirks.models import QuirkFinding, QuirkSignal
 
 logger = logging.getLogger(__name__)
@@ -81,15 +82,6 @@ def _policy_recommendation(
     if count >= _WARN_THRESHOLD:
         return "warn"
     return "observe"
-
-
-def _stage_from_recommendation(recommendation: str) -> QuirkStage:
-    """Map a policy recommendation string to its QuirkStage."""
-    if recommendation == "block":
-        return QuirkStage.BLOCK
-    if recommendation == "warn":
-        return QuirkStage.WARN
-    return QuirkStage.OBSERVE
 
 
 # ---------------------------------------------------------------------------
@@ -312,7 +304,7 @@ class NodeQuirkClassifierCompute:
                 event_type_value=_FINDING_TOPIC.value,
                 payload=_finding_to_payload(finding),
                 correlation_id=partition_key,
-                schema_ref="registry://onex/omniclaude/quirk-finding-produced/v1",
+                schema_ref=ModelEndpointDefaults.from_contract().quirk_finding_schema_ref,
             )
             published = await self._publish_hook(
                 envelope, _FINDING_TOPIC.value, partition_key
