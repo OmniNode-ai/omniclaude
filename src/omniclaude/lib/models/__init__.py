@@ -14,13 +14,13 @@ This package contains shared data models:
 from .intelligence_context import (
     DEFAULT_NODE_TYPE_INTELLIGENCE,
     IntelligenceContext,
-    NodeTypeIntelligence,
+    ModelNodeTypeIntelligence,
     get_default_intelligence,
 )
 
 __all__ = [
     "IntelligenceContext",
-    "NodeTypeIntelligence",
+    "ModelNodeTypeIntelligence",
     "DEFAULT_NODE_TYPE_INTELLIGENCE",
     "get_default_intelligence",
 ]
