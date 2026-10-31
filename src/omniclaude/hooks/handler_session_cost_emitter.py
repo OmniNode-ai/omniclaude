@@ -20,54 +20,49 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from collections.abc import Mapping
-from pathlib import Path
 
 from omniclaude.hooks.session_cost_emitter import normalize_session_cost_payload
+from omniclaude.models.model_session_cost_emit_request import (
+    ModelSessionCostEmitRequest,
+)
+from omniclaude.models.model_session_cost_emit_result import (
+    ModelSessionCostEmitResult,
+)
 
 logger = logging.getLogger(__name__)
 
 _EVENT_TYPE = "llm.cost.completed"
 
 
-def emit_session_cost(
-    *,
-    session_end_payload: Mapping[str, object],
-    env: dict[str, str] | None = None,
-    session_id: str | None = None,
-    correlation_id: str | None = None,
-    accumulator_dir: Path = Path("/tmp"),  # noqa: S108  # nosec B108
-    plugin_root: str | None = None,
-) -> bool:
-    """Build and emit an llm.cost.completed event via node_emit_daemon.
+class HandlerSessionCostEmitter:
+    """Build and emit an llm.cost.completed event via node_emit_daemon."""
 
-    Args:
-        session_end_payload: Raw Claude Code SessionEnd JSON object.
-        env: Environment variables dict. Defaults to os.environ.
-        session_id: Session identifier. Extracted from payload when absent.
-        correlation_id: Optional correlation UUID for distributed tracing.
-        accumulator_dir: Directory containing omniclaude-session-*.json accumulators.
-        plugin_root: Path to the omniclaude plugin root for emit_client_wrapper
-            resolution. Falls back to CLAUDE_PLUGIN_ROOT env var.
+    def handle(
+        self, request: ModelSessionCostEmitRequest
+    ) -> ModelSessionCostEmitResult:
+        """Normalize the SessionEnd payload and emit it.
 
-    Returns:
-        True if the event was accepted by the daemon, False otherwise.
-        Failure is soft — callers must never raise based on this return value.
-    """
-    resolved_env = dict(env) if env is not None else dict(os.environ)
+        Failure is soft: ``emitted`` is False when there is no token data or the
+        daemon declines, and nothing is raised on that account.
+        """
+        resolved_env = (
+            dict(request.env) if request.env is not None else dict(os.environ)
+        )
 
-    payload = normalize_session_cost_payload(
-        session_end_payload=session_end_payload,
-        env=resolved_env,
-        session_id=session_id,
-        correlation_id=correlation_id,
-        accumulator_dir=accumulator_dir,
-    )
-    if payload is None:
-        logger.debug("session_cost_emit_skipped_no_tokens")
-        return False
+        payload = normalize_session_cost_payload(
+            session_end_payload=request.session_end_payload,
+            env=resolved_env,
+            session_id=request.session_id,
+            correlation_id=request.correlation_id,
+            accumulator_dir=request.accumulator_dir,
+        )
+        if payload is None:
+            logger.debug("session_cost_emit_skipped_no_tokens")
+            return ModelSessionCostEmitResult(emitted=False)
 
-    return _emit_via_daemon(payload, plugin_root=plugin_root)
+        return ModelSessionCostEmitResult(
+            emitted=_emit_via_daemon(payload, plugin_root=request.plugin_root)
+        )
 
 
 def _emit_via_daemon(
