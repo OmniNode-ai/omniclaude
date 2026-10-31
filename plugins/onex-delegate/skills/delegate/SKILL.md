@@ -1,5 +1,5 @@
 ---
-version: 3.2.0
+version: 3.3.0
 description: "Single-command delegation to a model you choose: one you run, or your own provider key. Runs `onex delegate \"<prompt>\" --json` which builds the payload, dispatches node_delegate_skill_orchestrator, and prints the typed result on stdout; the skill shows the answer, then one `Run: <correlation_id>` line. Handled inline — no subagent, no payload file, no cat of workflow_result.json."
 skill_kind: dispatch
 mode: full
@@ -42,7 +42,7 @@ internal. See `prompt.md` for the one command and how to present its output.
 
 Your context receives the typed result object; the skill replies with the answer and one
 closing line naming the run. The command is
-`onex delegate "<prompt>" --json [--task-type <type>] [--max-tokens <n>]`, run
+`onex delegate "<prompt>" --json --session-model <session-model-id> [--task-type <type>] [--max-tokens <n>]`, run
 plain, with no redirect, pipe or `&&`.
 
 | Outcome | Reply | Exit |
