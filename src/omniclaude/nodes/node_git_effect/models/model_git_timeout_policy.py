@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from omnibase_core.utils.util_safe_yaml_loader import load_yaml_mapping_no_duplicates
+import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .model_git_request import GitOperation
@@ -68,9 +68,35 @@ class ModelGitTimeoutPolicy(BaseModel):
         contract_path = (
             path if path is not None else Path(__file__).parents[1] / "contract.yaml"
         )
-        contract = load_yaml_mapping_no_duplicates(
-            contract_path.read_text(encoding="utf-8"), source=str(contract_path)
-        )
+
+        def unique_mapping(
+            loader: yaml.SafeLoader, node: yaml.MappingNode
+        ) -> dict[object, object]:
+            loader.flatten_mapping(node)
+            mapping: dict[object, object] = {}
+            for key_node, value_node in node.value:
+                key = loader.construct_object(key_node, deep=True)
+                if key in mapping:
+                    raise ValueError(
+                        f"{contract_path}: duplicate YAML mapping key {key!r} "
+                        f"at line {key_node.start_mark.line + 1}"
+                    )
+                mapping[key] = loader.construct_object(value_node, deep=True)
+            return mapping
+
+        loader = yaml.SafeLoader(contract_path.read_text(encoding="utf-8"))
+        # Override only this SafeLoader instance, preserving safe tag handling
+        # and leaving PyYAML's process-wide constructors unchanged.
+        loader.yaml_constructors = {
+            **loader.yaml_constructors,
+            yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG: unique_mapping,
+        }
+        try:
+            contract = loader.get_single_data()
+        finally:
+            loader.dispose()
+        if not isinstance(contract, dict):
+            raise ValueError(f"{contract_path}: YAML document root must be a mapping")
         error_handling = contract["error_handling"]
         if not isinstance(error_handling, dict):
             raise ValueError("error_handling must be a mapping")

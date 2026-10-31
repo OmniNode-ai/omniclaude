@@ -1,51 +1,127 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-schema_version: "1.0.0"
+schema_version: 1.0.0
 ticket_id: OMN-21737
-title: "Contracts and DI burn-down: git effect subprocess deadlines"
-summary: >-
-  This omniclaude literal_timeout slice moves every hard-coded deadline of the
-  git effect node (twelve per-operation subprocess timeouts, the git and gh
-  binary probe timeout and the admission runtime timeout) into the node
-  contract's error_handling.timeouts block, overlaid by
-  OMNICLAUDE_GIT_TIMEOUT_<OPERATION>, and injects them as a validated
-  ModelGitTimeoutPolicy. The contracts_and_di literal_timeout count over
-  src/omniclaude/nodes/node_git_effect falls from 3 to 0 and over
-  src/omniclaude from 125 to 122; no other rule's count changes.
+title: 'Contracts and DI burn-down: git effect subprocess deadlines'
+summary: This omniclaude literal_timeout slice moves every hard-coded deadline of the git effect node (twelve per-operation
+  subprocess timeouts, the git and gh binary probe timeout and the admission runtime timeout) into the node contract's error_handling.timeouts
+  block, overlaid by OMNICLAUDE_GIT_TIMEOUT_<OPERATION>, and injects them as a validated ModelGitTimeoutPolicy. The contracts_and_di
+  literal_timeout count over src/omniclaude/nodes/node_git_effect falls from 3 to 0 and over src/omniclaude from 124 to 121
+  at merge base 7a33f40924d40dcd0b2465a770540ee7036f936e; no other rule's count changes.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
-  - id: req-omn21737-git-timeouts
-    statement: The git effect subprocess backend reads every deadline from its node contract or the operator overlay through an injected policy.
-    acceptance:
-      - id: AC1
-        statement: "AC1: the contracts_and_di count for literal_timeout over the slice paths drops to zero and the repo total drops by the slice size, with no baseline entry or suppression added -- falsifier: onex run of runtime_validator_run with the contracts_and_di reference over omniclaude src before and after, counts compared per rule"
-      - id: AC2
-        statement: "AC2: every moved timeout is taken through an injected parameter bound from the node contract or overlay and none remains hard-coded in the touched code -- falsifier: uv run pytest tests/unit -q over the touched modules plus the checker re-run on the slice paths"
-      - id: AC3
-        statement: "AC3: the slice lands as one PR titled with this ticket id and carries lab proof of the tests and the checker re-run -- falsifier: uv run pytest tests/unit -q on the lab through lab-run at the PR head, receipt path in the PR body"
+- id: req-omn21737-git-timeouts
+  statement: The git effect subprocess backend reads every deadline from its node contract or the operator overlay through
+    an injected policy.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: the contracts_and_di count for literal_timeout over the slice paths drops to zero and the repo total
+      drops by the slice size, with no baseline entry or suppression added -- falsifier: onex run of runtime_validator_run
+      with the contracts_and_di reference over omniclaude src before and after, counts compared per rule'
+  - id: AC2
+    statement: 'AC2: every moved timeout is taken through an injected parameter bound from the node contract or overlay and
+      none remains hard-coded in the touched code -- falsifier: uv run pytest tests/unit -q over the touched modules plus
+      the checker re-run on the slice paths'
+  - id: AC3
+    statement: 'AC3: the slice lands as one PR titled with this ticket id and carries lab proof of the tests and the checker
+      re-run -- falsifier: uv run pytest tests/unit -q on the lab through lab-run at the PR head, receipt path in the PR body'
 evidence_requirements:
-  - kind: tests
-    description: Git effect timeout policy, handler and ruling re-read regressions
-    command: "uv run pytest tests/unit/nodes/node_git_effect tests/hooks/test_ledger_ruling_reread.py tests/hooks/test_git_admission_runtime.py -q --no-cov"
+- kind: tests
+  description: Git effect timeout policy, handler and ruling re-read regressions
+  command: uv run pytest tests/unit/nodes/node_git_effect/test_pr_failure_citation.py tests/unit/nodes/node_git_effect/test_handler_git_subprocess.py
+    tests/unit/nodes/node_git_effect/test_git_timeout_contract_loading.py tests/hooks/test_ledger_ruling_reread.py tests/hooks/test_git_admission_runtime.py
+    -q --no-cov
 emergency_bypass:
   enabled: false
-  justification: ""
-  follow_up_ticket_id: ""
+  justification: ''
+  follow_up_ticket_id: ''
 dod_evidence:
-  - id: dod-omn21737-git-timeouts
-    binds_ac: [AC2]
-    description: >-
-      Contract values reach a no-argument HandlerGitSubprocess, an overlay
-      variable replaces one operation's deadline, an injected policy's deadline
-      is the one asyncio.wait_for applies and the one the git and gh probes
-      pass to subprocess.run, and a missing or non-positive contract value or a
-      malformed overlay value fails validation. The admission runtime takes
-      the contract's admission_check deadline, an overlay value or an injected
-      one.
-    source: manual
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/unit/nodes/node_git_effect tests/hooks/test_ledger_ruling_reread.py tests/hooks/test_git_admission_runtime.py -q --no-cov"
-        cwd: "."
+- id: dod-omn21737-git-timeouts
+  binds_ac:
+  - AC2
+  description: Contract values reach a no-argument HandlerGitSubprocess, an overlay variable replaces one operation's deadline,
+    an injected policy's deadline is the one asyncio.wait_for applies and the one the git and gh probes pass to subprocess.run,
+    and a missing or non-positive contract value or a malformed overlay value fails validation. The admission runtime takes
+    the contract's admission_check deadline, an overlay value or an injected one.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/unit/nodes/node_git_effect/test_pr_failure_citation.py tests/unit/nodes/node_git_effect/test_handler_git_subprocess.py
+      tests/unit/nodes/node_git_effect/test_git_timeout_contract_loading.py tests/hooks/test_ledger_ruling_reread.py tests/hooks/test_git_admission_runtime.py
+      -q --no-cov
+    cwd: .
+- id: dod-omn21737-checker-burndown
+  binds_ac:
+  - AC1
+  description: The pinned contracts_and_di checker scans current product source. Its per-rule counts must equal the captured
+    before counts less three literal_timeout findings, and the git effect slice must have zero literal_timeout findings. The
+    lab proof captures the comparison against the merge base; no ratchet baseline changes.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: |-
+      uv run --no-project --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@c74902a388b0afac9ccde74a3ab6cf6bd59e8050' python - <<'PY'
+      from collections import Counter
+      from pathlib import Path
+      import inspect
+      import json
+      import yaml
+      from omnibase_core.validation.checker_contracts_and_di import check_contracts_and_di
+      from omnibase_core.models.contracts.subcontracts.model_validator_rule import ModelValidatorRule
+      from omnibase_core.models.validation.model_contracts_and_di_facts import ModelContractsAndDiFacts
+      rule_path = Path(inspect.getfile(check_contracts_and_di)).parent / 'contracts/contracts_and_di.validation.yaml'
+      rules = [ModelValidatorRule.model_validate(row) for row in yaml.safe_load(rule_path.read_text())['validation']['rules']]
+      facts = ModelContractsAndDiFacts(repository='omniclaude')
+      counts, slice_counts = Counter(), Counter()
+      for path in sorted(Path('src/omniclaude').rglob('*')):
+          if not path.is_file() or path.suffix not in {'.py', '.yaml', '.yml'}:
+              continue
+          issues = check_contracts_and_di(path, path.read_text(), rules, facts)
+          counts.update(issue.code for issue in issues)
+          if path.is_relative_to('src/omniclaude/nodes/node_git_effect'):
+              slice_counts.update(issue.code for issue in issues)
+      proof = json.loads(Path('contracts/OMN-21737.lab-proof.json').read_text())['contracts_and_di']
+      expected = Counter(proof['counts']['before'])
+      expected['literal_timeout'] -= 3
+      assert counts == expected, (counts, expected)
+      assert slice_counts['literal_timeout'] == 0, slice_counts
+      assert counts == Counter(proof['counts']['after'])
+      print(json.dumps({'counts': counts, 'slice_counts': slice_counts}, sort_keys=True))
+      PY
+    cwd: .
+- id: dod-omn21737-lab-proof
+  binds_ac:
+  - AC3
+  description: Read captured lab test output and verify the tested source digests against this checkout. A changed source
+    file or unsuccessful test process refuses the proof. The PR title and ticket citation remain PR metadata checks.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: |-
+      python3 - <<'PY'
+      import hashlib
+      import json
+      from pathlib import Path
+      proof = json.loads(Path('contracts/OMN-21737.lab-proof.json').read_text())
+      assert proof['ticket'] == 'OMN-21737'
+      assert proof['execution_environment'] == 'lab'
+      assert proof['exit_code'] == 0
+      assert 'passed' in proof['stdout']
+      assert proof['duration_ms'] > 0
+      for name, digest in proof['source_sha256_bytes'].items():
+          assert list(hashlib.sha256(Path(name).read_bytes()).digest()) == digest, name
+      print(proof['stdout'])
+      PY
+    cwd: .
+- id: dod-omn21737-hosted-source-deploy-readback
+  description: Hosted source deployment readback at the checked-out commit. The published timeout policy must carry the instance-local
+    duplicate-rejecting safe YAML loader. Pre-fix published source fails. This reads published product source and does not
+    assert a running-service deployment.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_git_effect/models/model_git_timeout_policy.py?ref=$(git
+      rev-parse HEAD)" --jq '.content | gsub("\n"; "") | @base64d | contains("loader.yaml_constructors")' | grep -qx true
+    cwd: .
