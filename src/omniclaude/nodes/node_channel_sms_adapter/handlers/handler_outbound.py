@@ -7,6 +7,7 @@ Sends reply messages via the Twilio Messages API.
 
 Related:
     - OMN-7193: SMS/Twilio channel adapter contract package
+    - OMN-21536: handler-shape burn-down
 """
 
 from __future__ import annotations
@@ -17,6 +18,9 @@ from typing import Protocol
 
 from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
     ModelChannelReply,
+)
+from omniclaude.nodes.node_channel_sms_adapter.models.model_sms_outbound_result import (
+    ModelSmsOutboundResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,27 +38,24 @@ class TwilioMessagesApi(Protocol):
     ) -> object: ...
 
 
-async def send_sms_reply(
-    reply: ModelChannelReply,
-    *,
-    messages_api: TwilioMessagesApi,
-    from_number: str,
-) -> None:
-    """Send a reply via Twilio SMS.
+class HandlerSmsOutbound:
+    """Send a channel reply through the Twilio Messages API."""
 
-    Args:
-        reply: The channel reply to send.
-        messages_api: Twilio client.messages interface.
-        from_number: The Twilio phone number to send from.
-    """
-    logger.info(
-        "Sending SMS reply: correlation_id=%s",
-        reply.correlation_id,
-    )
+    def __init__(self, messages_api: TwilioMessagesApi, from_number: str) -> None:
+        self._messages_api = messages_api
+        self._from_number = from_number
 
-    await asyncio.to_thread(
-        messages_api.create,
-        body=reply.reply_text,
-        from_=from_number,
-        to=reply.channel_id,
-    )
+    async def handle(self, request: ModelChannelReply) -> ModelSmsOutboundResult:
+        """Send a reply via Twilio SMS."""
+        logger.info(
+            "Sending SMS reply: correlation_id=%s",
+            request.correlation_id,
+        )
+
+        await asyncio.to_thread(
+            self._messages_api.create,
+            body=request.reply_text,
+            from_=self._from_number,
+            to=request.channel_id,
+        )
+        return ModelSmsOutboundResult(delivered=True)

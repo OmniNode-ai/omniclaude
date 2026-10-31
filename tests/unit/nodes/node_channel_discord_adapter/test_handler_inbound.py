@@ -18,8 +18,16 @@ discord = pytest.importorskip("discord", reason="discord.py not installed")
 
 from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.nodes.node_channel_discord_adapter.handlers.handler_inbound import (
-    message_to_envelope,
+    HandlerDiscordInbound,
+    ModelDiscordInboundRequest,
 )
+from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
+
+
+def message_to_envelope(message: MagicMock) -> ModelChannelEnvelope | None:
+    """Run the handler on one message and return its envelope."""
+    result = HandlerDiscordInbound().handle(ModelDiscordInboundRequest(message=message))
+    return result.envelope
 
 
 def _make_discord_message(

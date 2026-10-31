@@ -5,17 +5,31 @@
 
 from __future__ import annotations
 
+from email.message import EmailMessage
 from uuid import uuid4
 
 import pytest
 
 from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.nodes.node_channel_email_adapter.handlers.handler_outbound import (
-    build_reply_message,
+    HandlerEmailOutbound,
+)
+from omniclaude.nodes.node_channel_email_adapter.models.model_email_reply_request import (
+    ModelEmailReplyRequest,
 )
 from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
     ModelChannelReply,
 )
+
+
+def build_reply_message(
+    reply: ModelChannelReply, *, from_addr: str, to_addr: str, subject: str = ""
+) -> EmailMessage:
+    """Run the handler on one reply and return the built email."""
+    request = ModelEmailReplyRequest(
+        reply=reply, from_addr=from_addr, to_addr=to_addr, subject=subject
+    )
+    return HandlerEmailOutbound().handle(request).message
 
 
 def _make_reply(**overrides: object) -> ModelChannelReply:

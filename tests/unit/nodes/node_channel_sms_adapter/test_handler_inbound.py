@@ -9,8 +9,18 @@ import pytest
 
 from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.nodes.node_channel_sms_adapter.handlers.handler_inbound import (
-    webhook_to_envelope,
+    HandlerSmsInbound,
 )
+from omniclaude.nodes.node_channel_sms_adapter.models.model_sms_webhook_request import (
+    ModelSmsWebhookRequest,
+)
+from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
+
+
+def webhook_to_envelope(payload: dict[str, str]) -> ModelChannelEnvelope | None:
+    """Run the handler on one webhook form body and return its envelope."""
+    request = ModelSmsWebhookRequest.model_validate(payload)
+    return HandlerSmsInbound().handle(request).envelope
 
 
 def _make_twilio_payload(**overrides: str) -> dict[str, str]:

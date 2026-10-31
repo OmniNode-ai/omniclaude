@@ -8,6 +8,7 @@ for publishing to the OmniClaw event bus.
 
 Related:
     - OMN-7193: SMS/Twilio channel adapter contract package
+    - OMN-21536: handler-shape burn-down
 """
 
 from __future__ import annotations
@@ -16,36 +17,40 @@ import logging
 from datetime import UTC, datetime
 
 from omniclaude.enums.enum_channel_type import EnumChannelType
+from omniclaude.nodes.node_channel_sms_adapter.models.model_sms_inbound_result import (
+    ModelSmsInboundResult,
+)
+from omniclaude.nodes.node_channel_sms_adapter.models.model_sms_webhook_request import (
+    ModelSmsWebhookRequest,
+)
 from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
 
 logger = logging.getLogger(__name__)
 
 
-def webhook_to_envelope(payload: dict[str, str]) -> ModelChannelEnvelope | None:
-    """Convert a Twilio webhook payload to a normalized channel envelope.
+class HandlerSmsInbound:
+    """Convert a Twilio webhook to a normalized channel envelope."""
 
-    Args:
-        payload: Twilio SMS webhook form data dict with keys:
-            ``From``, ``To``, ``Body``, ``MessageSid``, etc.
+    def handle(self, request: ModelSmsWebhookRequest) -> ModelSmsInboundResult:
+        """Convert the request's Twilio SMS webhook.
 
-    Returns:
-        ModelChannelEnvelope if the payload is valid, None otherwise.
-    """
-    message_sid = payload.get("MessageSid")
-    if not message_sid:
-        logger.warning("Twilio webhook missing MessageSid, skipping")
-        return None
+        Returns:
+            A result whose envelope is set if the webhook is valid, and None
+            otherwise.
+        """
+        if not request.message_sid:
+            logger.warning("Twilio webhook missing MessageSid, skipping")
+            return ModelSmsInboundResult(envelope=None)
 
-    from_number = payload.get("From", "")
-    to_number = payload.get("To", "")
-
-    return ModelChannelEnvelope(
-        channel_id=to_number,
-        channel_type=EnumChannelType.SMS,
-        sender_id=from_number,
-        sender_display_name=payload.get("FromCity") or None,
-        message_text=payload.get("Body", ""),
-        message_id=message_sid,
-        thread_id=None,  # SMS has no native threading
-        timestamp=datetime.now(tz=UTC),
-    )
+        return ModelSmsInboundResult(
+            envelope=ModelChannelEnvelope(
+                channel_id=request.to_number,
+                channel_type=EnumChannelType.SMS,
+                sender_id=request.from_number,
+                sender_display_name=request.from_city or None,
+                message_text=request.body,
+                message_id=request.message_sid,
+                thread_id=None,  # SMS has no native threading
+                timestamp=datetime.now(tz=UTC),
+            )
+        )

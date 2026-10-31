@@ -11,8 +11,20 @@ import pytest
 
 from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.nodes.node_channel_email_adapter.handlers.handler_inbound import (
-    email_to_envelope,
+    HandlerEmailInbound,
 )
+from omniclaude.nodes.node_channel_email_adapter.models.model_email_inbound_request import (
+    ModelEmailInboundRequest,
+)
+from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
+
+
+def email_to_envelope(
+    msg: EmailMessage, *, mailbox: str
+) -> ModelChannelEnvelope | None:
+    """Run the handler on one email and return its envelope."""
+    request = ModelEmailInboundRequest(message=msg, mailbox=mailbox)
+    return HandlerEmailInbound().handle(request).envelope
 
 
 def _make_email(

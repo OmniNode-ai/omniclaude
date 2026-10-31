@@ -1,0 +1,39 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21536
+title: "handler_shape burn-down in omniclaude: the channel adapter handlers become handler classes"
+summary: >
+  OMN-21536 replaced the canonical_handler_shape repository script with the handler_shape
+  checker in omnibase_core, which judges every handler class and every handler module, bound
+  or not. This change is the second omniclaude slice of the burn-down of what that checker
+  reports. The Discord, Email and SMS channel adapters held module functions in their
+  handler_inbound.py and handler_outbound.py files while their contracts already name
+  HandlerDiscordInbound, HandlerDiscordOutbound, HandlerEmailInbound, HandlerEmailOutbound,
+  HandlerSmsInbound and HandlerSmsOutbound. Each file becomes that class with a typed
+  handle(request) -> result and typed request and result models. The checker's
+  module_function_handler count over omniclaude src drops by five.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21536-omniclaude-slice2
+    statement: Every handler the Discord, Email and SMS channel adapter contracts name is a class in the module the contract names, with one typed request parameter on handle.
+    acceptance:
+      - id: AC2
+        statement: "AC2 (omniclaude slice 2): the six channel adapter handlers are classes with handle(request: ModelX) -> ModelY and the five flagged handler modules hold no public module function -- falsifier: uv run pytest tests/unit/nodes/test_channel_adapter_handler_classes_omn21536.py tests/unit/nodes/node_channel_email_adapter tests/unit/nodes/node_channel_sms_adapter tests/unit/nodes/node_channel_discord_adapter -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "The contract-to-class test and the three adapters' handler tests pass"
+    command: "uv run pytest tests/unit/nodes/test_channel_adapter_handler_classes_omn21536.py tests/unit/nodes/node_channel_email_adapter tests/unit/nodes/node_channel_sms_adapter tests/unit/nodes/node_channel_discord_adapter -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21536-ac2-channel-adapters
+    description: "Each channel adapter contract's handler names resolve to a class whose handle takes one typed request, and no public module function remains in those handler modules; the adapters' handler tests run through the classes. Fails at the merge base, where the contracts name classes the modules do not define."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/nodes/test_channel_adapter_handler_classes_omn21536.py tests/unit/nodes/node_channel_email_adapter tests/unit/nodes/node_channel_sms_adapter tests/unit/nodes/node_channel_discord_adapter -q --no-cov"
+        cwd: "."

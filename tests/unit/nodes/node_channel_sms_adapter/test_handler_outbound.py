@@ -15,7 +15,7 @@ from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply i
     ModelChannelReply,
 )
 from omniclaude.nodes.node_channel_sms_adapter.handlers.handler_outbound import (
-    send_sms_reply,
+    HandlerSmsOutbound,
 )
 
 
@@ -30,16 +30,24 @@ def _make_reply(**overrides: object) -> ModelChannelReply:
     return ModelChannelReply(**defaults)  # type: ignore[arg-type]
 
 
+async def send_sms_reply(
+    reply: ModelChannelReply, *, messages_api: MagicMock, from_number: str
+) -> bool:
+    """Run the handler on one reply and return whether it was delivered."""
+    result = await HandlerSmsOutbound(messages_api, from_number).handle(reply)
+    return result.delivered
+
+
 @pytest.mark.unit
 class TestSendSmsReply:
-    """Tests for send_sms_reply."""
+    """Tests for HandlerSmsOutbound.handle."""
 
     @pytest.mark.asyncio
     async def test_sends_sms(self) -> None:
         messages_api = MagicMock()
         reply = _make_reply()
 
-        await send_sms_reply(
+        assert await send_sms_reply(
             reply,
             messages_api=messages_api,
             from_number="+15559876543",

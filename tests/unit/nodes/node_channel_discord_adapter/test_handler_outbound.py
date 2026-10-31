@@ -18,11 +18,17 @@ discord = pytest.importorskip("discord", reason="discord.py not installed")
 
 from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.nodes.node_channel_discord_adapter.handlers.handler_outbound import (
-    send_discord_reply,
+    HandlerDiscordOutbound,
 )
 from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
     ModelChannelReply,
 )
+
+
+async def send_discord_reply(reply: ModelChannelReply, *, client: MagicMock) -> bool:
+    """Run the handler on one reply and return whether it was delivered."""
+    result = await HandlerDiscordOutbound(client).handle(reply)
+    return result.delivered
 
 
 def _make_reply(
@@ -109,5 +115,5 @@ class TestSendDiscordReply:
         non_messageable.__class__ = type("CategoryChannel", (), {})
         client.get_channel.return_value = non_messageable
 
-        # Should not raise
-        await send_discord_reply(reply, client=client)
+        # Should not raise, and reports the reply as not delivered
+        assert await send_discord_reply(reply, client=client) is False
