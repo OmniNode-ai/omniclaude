@@ -39,6 +39,7 @@ from omniclaude.lib.utils.diagnostics_endpoint_descriptor import (
     EnumDiagnosticsEndpoint,
     resolve_diagnostics_endpoint,
 )
+from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
 
 # Service URL configuration — OMN-13560 Wave-1 endpoint->overlay migration
 # (epic OMN-13556). These were previously read from scattered direct
@@ -68,8 +69,28 @@ DOCKER_CONTAINER_MEMGRAPH = "memgraph"
 DOCKER_CONTAINER_QDRANT = "qdrant"
 
 
-def check_running_services() -> dict[str, Any]:
+def _probe_service(url: str, limit: float) -> dict[str, Any]:
+    """Probe ``<url>/health`` with curl and report the service state."""
+    try:
+        result = subprocess.run(  # nosec B607 B603 - controlled curl call with hardcoded URL
+            ["curl", "-s", f"{url}/health"],
+            capture_output=True,
+            text=True,
+            timeout=limit,
+            check=False,
+        )
+    except Exception as e:
+        return {"running": False, "error": str(e), "status": "error"}
+    if result.returncode == 0:
+        return {"running": True, "details": result.stdout, "status": "healthy"}
+    return {"running": False, "error": result.stderr, "status": "stopped"}
+
+
+def check_running_services(
+    timeouts: ModelRuntimeTimeouts | None = None,
+) -> dict[str, Any]:
     """Check which required services are running"""
+    limits = timeouts or ModelRuntimeTimeouts.from_contract()
     services = {}
 
     print("🔍 Checking service status...", file=sys.stderr)
@@ -80,7 +101,7 @@ def check_running_services() -> dict[str, Any]:
             ["curl", "-s", f"{INTELLIGENCE_SERVICE_URL}/health"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=limits.diagnostics_curl_health_seconds,
             check=False,
         )
         if result.returncode == 0:
@@ -116,53 +137,10 @@ def check_running_services() -> dict[str, Any]:
             "status": "error",
         }
 
-    # Check main server (Port 8181)
-    try:
-        result = subprocess.run(  # nosec B607 B603 - controlled curl call with hardcoded URL
-            ["curl", "-s", f"{MAIN_SERVER_URL}/health"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        if result.returncode == 0:
-            services["main_server"] = {
-                "running": True,
-                "details": result.stdout,
-                "status": "healthy",
-            }
-        else:
-            services["main_server"] = {
-                "running": False,
-                "error": result.stderr,
-                "status": "stopped",
-            }
-    except Exception as e:
-        services["main_server"] = {"running": False, "error": str(e), "status": "error"}
-
-    # Check MCP server (Port 8051)
-    try:
-        result = subprocess.run(  # nosec B607 B603 - controlled curl call with hardcoded URL
-            ["curl", "-s", f"{MCP_SERVER_URL}/health"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        if result.returncode == 0:
-            services["mcp_server"] = {
-                "running": True,
-                "details": result.stdout,
-                "status": "healthy",
-            }
-        else:
-            services["mcp_server"] = {
-                "running": False,
-                "error": result.stderr,
-                "status": "stopped",
-            }
-    except Exception as e:
-        services["mcp_server"] = {"running": False, "error": str(e), "status": "error"}
+    # Check main server (Port 8181) and MCP server (Port 8051)
+    limit = limits.diagnostics_curl_health_seconds
+    services["main_server"] = _probe_service(MAIN_SERVER_URL, limit)
+    services["mcp_server"] = _probe_service(MCP_SERVER_URL, limit)
 
     # Check database connectivity (Docker)
     try:
@@ -178,7 +156,7 @@ def check_running_services() -> dict[str, Any]:
             ],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=limits.diagnostics_docker_seconds,
             check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -227,7 +205,7 @@ def check_running_services() -> dict[str, Any]:
             ],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=limits.diagnostics_docker_seconds,
             check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -276,7 +254,7 @@ def check_running_services() -> dict[str, Any]:
             ],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=limits.diagnostics_docker_seconds,
             check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -315,8 +293,11 @@ def check_running_services() -> dict[str, Any]:
     return services
 
 
-def check_network_connectivity() -> dict[str, Any]:
+def check_network_connectivity(
+    timeouts: ModelRuntimeTimeouts | None = None,
+) -> dict[str, Any]:
     """Check network connectivity to required endpoints"""
+    limits = timeouts or ModelRuntimeTimeouts.from_contract()
     endpoints = [
         ("Intelligence Service", f"{INTELLIGENCE_SERVICE_URL}/health"),
         ("Main Server", f"{MAIN_SERVER_URL}/health"),
@@ -334,7 +315,7 @@ def check_network_connectivity() -> dict[str, Any]:
     for name, url in endpoints:
         try:
             start_time = time.time()
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=limits.diagnostics_http_seconds)
             response_time = (time.time() - start_time) * 1000
 
             results[name] = {
@@ -501,8 +482,11 @@ def print_debug_status() -> None:
     print("\n" + "=" * 60, file=sys.stderr)
 
 
-def test_pattern_tracking_flow() -> dict[str, Any]:
+def test_pattern_tracking_flow(
+    timeouts: ModelRuntimeTimeouts | None = None,
+) -> dict[str, Any]:
     """Test the complete pattern tracking flow"""
+    limits = timeouts or ModelRuntimeTimeouts.from_contract()
     print("🧪 TESTING PATTERN TRACKING FLOW", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
 
@@ -515,7 +499,7 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
     try:
         from .health_checks import Phase4HealthChecker
 
-        checker = Phase4HealthChecker()
+        checker = Phase4HealthChecker(timeouts=limits)
         test_results["tests"]["import_health_checks"] = {
             "status": "success",
             "message": "Health checks imported successfully",
@@ -580,7 +564,7 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
         response = requests.post(
             f"{INTELLIGENCE_SERVICE_URL}/api/pattern-traceability/lineage/track",
             json=test_payload,
-            timeout=5,
+            timeout=limits.diagnostics_http_seconds,
         )
 
         if response.status_code in [200, 201]:
