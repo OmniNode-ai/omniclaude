@@ -102,7 +102,7 @@ class IntelligenceContext(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
 
-class NodeTypeIntelligence(BaseModel):
+class ModelNodeTypeIntelligence(BaseModel):
     """
     Node type-specific intelligence patterns.
 
@@ -133,8 +133,8 @@ class NodeTypeIntelligence(BaseModel):
 
 
 # Default intelligence for each node type
-DEFAULT_NODE_TYPE_INTELLIGENCE: dict[str, NodeTypeIntelligence] = {
-    "EFFECT": NodeTypeIntelligence(
+DEFAULT_NODE_TYPE_INTELLIGENCE: dict[str, ModelNodeTypeIntelligence] = {
+    "EFFECT": ModelNodeTypeIntelligence(
         node_type="EFFECT",
         default_patterns=[
             "Use connection pooling for database connections",
@@ -150,7 +150,7 @@ DEFAULT_NODE_TYPE_INTELLIGENCE: dict[str, NodeTypeIntelligence] = {
         common_mixins=["MixinRetry", "MixinEventBus", "MixinHealthCheck"],
         performance_baseline={"max_response_time_ms": 500, "timeout_ms": 5000},
     ),
-    "COMPUTE": NodeTypeIntelligence(
+    "COMPUTE": ModelNodeTypeIntelligence(
         node_type="COMPUTE",
         default_patterns=[
             "Ensure pure functions with no side effects",
@@ -166,7 +166,7 @@ DEFAULT_NODE_TYPE_INTELLIGENCE: dict[str, NodeTypeIntelligence] = {
         common_mixins=["MixinCaching", "MixinValidation"],
         performance_baseline={"single_operation_max_ms": 2000, "cpu_bound": True},
     ),
-    "REDUCER": NodeTypeIntelligence(
+    "REDUCER": ModelNodeTypeIntelligence(
         node_type="REDUCER",
         default_patterns=[
             "Implement state aggregation with correlation_id grouping",
@@ -185,7 +185,7 @@ DEFAULT_NODE_TYPE_INTELLIGENCE: dict[str, NodeTypeIntelligence] = {
             "max_aggregation_delay_ms": 5000,
         },
     ),
-    "ORCHESTRATOR": NodeTypeIntelligence(
+    "ORCHESTRATOR": ModelNodeTypeIntelligence(
         node_type="ORCHESTRATOR",
         default_patterns=[
             "Use lease management for distributed coordination",
