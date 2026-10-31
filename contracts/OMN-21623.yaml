@@ -1,0 +1,38 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21623
+title: "Burn down the literal_topic findings of omniclaude: demo, intelligence config, linear relay and bus audit topics come from topic manifests and the topic registry"
+summary: >
+  omnibase_core's contracts_and_di check, run read-only over omniclaude, reported literal_topic
+  findings in scripts/demo_runner.py, scripts/bus_audit.py, the demo skill topic module, the
+  intelligence configuration and the Linear relay publisher. This slice resolves the demo runner and
+  the bus audit tables through topic_registry.yaml by event type (ModelTopicRegistry), and declares
+  the demo, intelligence and relay topics in a topics.yaml manifest beside each module that reads it
+  (ModelTopicManifest). A manifest field or event type that is not declared fails to load. The bus
+  audit also stopped importing the removed routing-feedback-skipped payload (folded away by OMN-2622)
+  and its topic table now names the registry's agent-status topic. No constants module and no
+  baseline entry is added.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21623-topics-from-manifests
+    statement: The topics of the demo runner, bus audit, demo skill, intelligence configuration and Linear relay publisher are read from topic_registry.yaml or a topics.yaml manifest and no topic literal binds them in code.
+    acceptance:
+      - id: BURNDOWN-TOPICS
+        statement: "BURNDOWN-TOPICS: each changed module resolves its topics from the registry or its manifest, an undeclared event type or manifest field fails to load, and the module code holds no topic literal -- falsifier: uv run pytest tests/scripts/test_demo_runner_topics_omn21623.py tests/scripts/test_bus_audit_topics_omn21623.py tests/unit/shared/test_model_topic_manifest_omn21623.py tests/skills/test_demo_topics_manifest_omn21623.py tests/lib/config/test_intelligence_topics_manifest_omn21623.py tests/unit/services/linear_relay/test_publisher_topic_manifest_omn21623.py -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "The topic-manifest tests and the existing intelligence config, demo skill and imperative-contract digest tests pass"
+    command: "uv run pytest tests/scripts/test_demo_runner_topics_omn21623.py tests/scripts/test_bus_audit_topics_omn21623.py tests/skills/test_demo_topics_manifest_omn21623.py tests/skills/test_demo_skill.py tests/lib/config tests/unit/services/linear_relay tests/ci/test_imperative_contract_guard_caller_omn21006.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21623-topics-from-manifests
+    description: "The two topic models, the three topics.yaml manifests and the five changed modules carry the topics; the new tests fail at the merge base, which has no loaders, and pass here."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_demo_runner_topics_omn21623.py tests/scripts/test_bus_audit_topics_omn21623.py tests/skills/test_demo_topics_manifest_omn21623.py tests/skills/test_demo_skill.py tests/lib/config tests/unit/services/linear_relay tests/ci/test_imperative_contract_guard_caller_omn21006.py -q --no-cov"
+        cwd: "."

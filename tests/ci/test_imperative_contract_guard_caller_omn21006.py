@@ -59,8 +59,11 @@ FINDING_KEYS = (
 # All finding fields, including details, line numbers, reachability and allowlisting.
 # OMN-21536 moved two CLI mains out of handlers/, so their two dead-handler
 # non_live_violations rows (handler_lane_github_read_cli, handler_pr_ownership_cli) left.
+# OMN-21623 moved the code-analysis topics of intelligence_config.py into a topics.yaml
+# manifest, so its three dead hardcoded_topic rows left, and the publisher's
+# remaining finding moved from line 100 to line 99 under the manifest model.
 RECORDED_OCC_FINDING_DIGEST = (
-    "e79a39794a54133244e592b3d42f99cbe4276e2cd0cb79ab8fa618306be96325"
+    "4eba6b42c369d2d361c10df60eb6f59742404f62050c07813af318ccc6720b1b"
 )
 
 

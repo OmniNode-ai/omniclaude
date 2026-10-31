@@ -8,7 +8,7 @@
 Builds on the generic Layer 1 bus audit engine (omnibase_infra.diagnostics)
 to add OmniClaude-specific domain validation:
 
-  - Schema validation against 14 Pydantic payload models
+  - Schema validation against 13 Pydantic payload models
   - Emission presence matrix per hook lifecycle
   - Misroute detection (observability events on restricted cmd topics)
   - Verdict upgrades for core lifecycle topics
@@ -82,10 +82,10 @@ try:
         ModelHookToolExecutedPayload,
         ModelLatencyBreakdownPayload,
         ModelRoutingFeedbackPayload,
-        ModelRoutingFeedbackSkippedPayload,
         ModelSessionOutcome,
     )
     from omniclaude.hooks.topics import TopicBase
+    from omniclaude.models.model_topic_registry import ModelTopicRegistry
 except ImportError as exc:
     print(
         f"ERROR: Failed to import OmniClaude domain modules: {exc}\n"
@@ -136,22 +136,26 @@ class EnumNamingCompliance(StrEnum):
 # Fields injected by daemon that are not in payload models
 DAEMON_INJECTED_FIELDS: set[str] = {"schema_version"}
 
-# 14 topics with Pydantic models
+# Topics are never spelled here: every table below names events by their registry
+# event_type and resolves the topic through topic_registry.yaml.
+_topic = ModelTopicRegistry.default().topic
+
+# 13 topics with Pydantic models (routing-feedback-skipped.v1 was folded into
+# routing-feedback.v1 by OMN-2622 and no longer exists)
 TOPIC_SCHEMA_MAP: dict[str, type[BaseModel]] = {
-    "onex.evt.omniclaude.session-started.v1": ModelHookSessionStartedPayload,
-    "onex.evt.omniclaude.session-ended.v1": ModelHookSessionEndedPayload,
-    "onex.cmd.omniintelligence.session-outcome.v1": ModelSessionOutcome,
-    "onex.evt.omniclaude.session-outcome.v1": ModelSessionOutcome,
-    "onex.evt.omniclaude.prompt-submitted.v1": ModelHookPromptSubmittedPayload,
-    "onex.evt.omniclaude.tool-executed.v1": ModelHookToolExecutedPayload,
-    "onex.evt.omniclaude.context-injected.v1": ModelHookContextInjectedPayload,
-    "onex.evt.omniclaude.context-utilization.v1": ModelContextUtilizationPayload,
-    "onex.evt.omniclaude.agent-match.v1": ModelAgentMatchPayload,
-    "onex.evt.omniclaude.latency-breakdown.v1": ModelLatencyBreakdownPayload,
-    "onex.evt.omniclaude.manifest-injected.v1": ModelHookManifestInjectedPayload,
-    "onex.evt.omniclaude.routing-feedback.v1": ModelRoutingFeedbackPayload,
-    "onex.evt.omniclaude.routing-feedback-skipped.v1": ModelRoutingFeedbackSkippedPayload,
-    "onex.evt.agent.status.v1": ModelAgentStatusPayload,
+    _topic("session.started"): ModelHookSessionStartedPayload,
+    _topic("session.ended"): ModelHookSessionEndedPayload,
+    _topic("session.outcome.cmd"): ModelSessionOutcome,
+    _topic("session.outcome"): ModelSessionOutcome,
+    _topic("prompt.submitted"): ModelHookPromptSubmittedPayload,
+    _topic("tool.executed"): ModelHookToolExecutedPayload,
+    _topic("context.injected"): ModelHookContextInjectedPayload,
+    _topic("context.utilization"): ModelContextUtilizationPayload,
+    _topic("agent.match"): ModelAgentMatchPayload,
+    _topic("latency.breakdown"): ModelLatencyBreakdownPayload,
+    _topic("manifest.injected"): ModelHookManifestInjectedPayload,
+    _topic("routing.feedback"): ModelRoutingFeedbackPayload,
+    _topic("agent.status"): ModelAgentStatusPayload,
 }
 
 # Topics where certain required fields are legitimately missing from wire format.
@@ -160,25 +164,24 @@ TOPIC_SCHEMA_MAP: dict[str, type[BaseModel]] = {
 # These exemptions apply to ALL topics emitted through the daemon pipeline --
 # if a topic is in TOPIC_SCHEMA_MAP it should be listed here.
 FIELD_EXEMPTIONS: dict[str, set[str]] = {
-    "onex.evt.omniclaude.session-started.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.session-ended.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.prompt-submitted.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.tool-executed.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.context-injected.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.context-utilization.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.agent-match.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.latency-breakdown.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.manifest-injected.v1": {"entity_id", "causation_id"},
+    _topic("session.started"): {"entity_id", "causation_id"},
+    _topic("session.ended"): {"entity_id", "causation_id"},
+    _topic("prompt.submitted"): {"entity_id", "causation_id"},
+    _topic("tool.executed"): {"entity_id", "causation_id"},
+    _topic("context.injected"): {"entity_id", "causation_id"},
+    _topic("context.utilization"): {"entity_id", "causation_id"},
+    _topic("agent.match"): {"entity_id", "causation_id"},
+    _topic("latency.breakdown"): {"entity_id", "causation_id"},
+    _topic("manifest.injected"): {"entity_id", "causation_id"},
     # Previously missing -- same daemon pipeline, same missing fields
-    "onex.cmd.omniintelligence.session-outcome.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.session-outcome.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.routing-feedback.v1": {"entity_id", "causation_id"},
-    "onex.evt.omniclaude.routing-feedback-skipped.v1": {"entity_id", "causation_id"},
+    _topic("session.outcome.cmd"): {"entity_id", "causation_id"},
+    _topic("session.outcome"): {"entity_id", "causation_id"},
+    _topic("routing.feedback"): {"entity_id", "causation_id"},
     # agent.status.v1: also has schema_version mismatch (model expects Literal[1],
     # daemon injects "1.0.0"). This is a known daemon/model mismatch to be fixed
     # upstream. For now, exempt schema_version as a field-level exemption rather
     # than skipping all validation on this topic.
-    "onex.evt.agent.status.v1": {"entity_id", "causation_id", "schema_version"},
+    _topic("agent.status"): {"entity_id", "causation_id", "schema_version"},
 }
 
 # Topics where domain validation is skipped entirely (with reason).
@@ -197,42 +200,41 @@ LEGACY_TOPICS: set[str] = {
 }
 
 CORE_SCHEMA_TOPICS: set[str] = {
-    "onex.evt.omniclaude.session-started.v1",
-    "onex.evt.omniclaude.session-ended.v1",
-    "onex.evt.omniclaude.prompt-submitted.v1",
-    "onex.evt.omniclaude.tool-executed.v1",
+    _topic("session.started"),
+    _topic("session.ended"),
+    _topic("prompt.submitted"),
+    _topic("tool.executed"),
 }
 
 CORE_PRESENCE_TOPICS: set[str] = {
-    "onex.cmd.omniintelligence.claude-hook-event.v1",
+    _topic("claude.hook.event"),
 }
 
 DUAL_EMISSION_ALLOWLIST: set[tuple[str, str]] = {
     (
-        "onex.evt.omniclaude.prompt-submitted.v1",
-        "onex.cmd.omniintelligence.claude-hook-event.v1",
+        _topic("prompt.submitted"),
+        _topic("claude.hook.event"),
     ),
     (
-        "onex.evt.omniclaude.session-outcome.v1",
-        "onex.cmd.omniintelligence.session-outcome.v1",
+        _topic("session.outcome"),
+        _topic("session.outcome.cmd"),
     ),
 }
 
 # Hook -> expected topics (4 hooks that emit Kafka events)
 HOOK_EMISSIONS: dict[str, list[str]] = {
-    "SessionStart": ["onex.evt.omniclaude.session-started.v1"],
+    "SessionStart": [_topic("session.started")],
     "SessionEnd": [
-        "onex.evt.omniclaude.session-ended.v1",
-        "onex.cmd.omniintelligence.session-outcome.v1",
-        "onex.evt.omniclaude.session-outcome.v1",
-        "onex.evt.omniclaude.routing-feedback.v1",
-        "onex.evt.omniclaude.routing-feedback-skipped.v1",
+        _topic("session.ended"),
+        _topic("session.outcome.cmd"),
+        _topic("session.outcome"),
+        _topic("routing.feedback"),
     ],
     "UserPromptSubmit": [
-        "onex.evt.omniclaude.prompt-submitted.v1",
-        "onex.cmd.omniintelligence.claude-hook-event.v1",
+        _topic("prompt.submitted"),
+        _topic("claude.hook.event"),
     ],
-    "PostToolUse": ["onex.evt.omniclaude.tool-executed.v1"],
+    "PostToolUse": [_topic("tool.executed")],
 }
 
 
@@ -1010,7 +1012,7 @@ _SECTION_L = "\u2500"  # single horizontal
 
 def _short_topic(topic: str) -> str:
     """Extract short name from full topic for display."""
-    # e.g. "onex.evt.omniclaude.session-started.v1" -> "session-started.v1"
+    # drops the onex.<kind>.<producer> prefix: the event name and version remain
     parts = topic.split(".")
     if len(parts) >= 4:
         return ".".join(parts[3:])

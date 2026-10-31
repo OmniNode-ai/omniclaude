@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for the Linear relay service (OMN-21623).
+# Source of truth for the topic publisher.py addresses; the module reads this
+# file and holds no topic literal.
+
+publish_topics:
+  feature_dashboard_command: onex.cmd.omniclaude.feature-dashboard.v1

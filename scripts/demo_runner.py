@@ -35,6 +35,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from omniclaude.models.model_topic_registry import ModelTopicRegistry
+
 # ---------------------------------------------------------------------------
 # ANSI colour helpers
 # ---------------------------------------------------------------------------
@@ -131,19 +133,17 @@ def _check_daemon_ping() -> tuple[bool, str]:
 # Kafka helpers
 # ---------------------------------------------------------------------------
 
-# Core demo topics
-_DEMO_EVT_TOPICS = [
-    "onex.evt.omniclaude.session-started.v1",
-    "onex.evt.omniclaude.prompt-submitted.v1",
-    "onex.evt.omniclaude.tool-executed.v1",
-    "onex.evt.omniclaude.session-ended.v1",
-    "onex.evt.omniclaude.session-outcome.v1",
-]
-
-_DEMO_CMD_TOPICS = [
-    "onex.cmd.omniintelligence.claude-hook-event.v1",
-    "onex.cmd.omniintelligence.tool-content.v1",
-]
+# Core demo topics, resolved from the event_type -> topic registry
+_DEMO_EVT_TOPICS = ModelTopicRegistry.default().topics(
+    "session.started",
+    "prompt.submitted",
+    "tool.executed",
+    "session.ended",
+    "session.outcome",
+)
+_DEMO_CMD_TOPICS = ModelTopicRegistry.default().topics(
+    "claude.hook.event", "tool.content"
+)
 
 
 def _get_bootstrap() -> str:

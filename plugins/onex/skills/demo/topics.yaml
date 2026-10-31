@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: demo
+# Source of truth for the response topics the /onex:demo delegation dispatcher
+# addresses. _lib/topics.py reads this file; no topic is spelled in Python.
+
+response_topics:
+  fanout: onex.evt.omnibase-infra.demo-fanout-skill.v1
+  cost: onex.evt.omnibase-infra.demo-cost-skill.v1
+  render: onex.evt.omnibase-infra.demo-render-skill.v1

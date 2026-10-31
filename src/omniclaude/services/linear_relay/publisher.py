@@ -23,14 +23,13 @@ import logging
 import os
 from typing import Any, Protocol  # any-ok: external API boundary
 
+from omniclaude.models.model_topic_manifest import ModelTopicManifest
 from omniclaude.services.linear_relay.models import LinearEpicClosedCommand
 
 logger = logging.getLogger(__name__)
 
-# Kafka topic for feature-dashboard commands
-FEATURE_DASHBOARD_TOPIC = (
-    "onex.cmd.omniclaude.feature-dashboard.v1"  # arch-topic-naming: ignore
-)
+# Kafka topics this service publishes to, declared in topics.yaml
+_TOPICS = ModelTopicManifest.beside(__file__)
 
 
 class _KafkaProducer(Protocol):
@@ -146,7 +145,7 @@ async def publish_command(command: LinearEpicClosedCommand) -> None:
     value = command.model_dump(mode="json")
 
     await producer.send_and_wait(
-        FEATURE_DASHBOARD_TOPIC,
+        _TOPICS.get("publish_topics", "feature_dashboard_command"),
         value=value,
         key=partition_key,
     )
