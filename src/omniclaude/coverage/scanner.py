@@ -17,6 +17,7 @@ from omniclaude.coverage.models import (
     ModelCoverageGap,
     ModelCoverageScanResult,
 )
+from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +36,6 @@ DEFAULT_REPOS: list[str] = [
 # Default coverage target per repo (can be overridden)
 DEFAULT_TARGET_PCT: float = 50.0
 
-# Cache TTL in seconds (1 hour)
-CACHE_TTL_SECONDS: float = 3600.0
-
 # Days to look back for recent changes
 RECENT_CHANGE_DAYS: int = 14
 
@@ -55,12 +53,12 @@ class CoverageScanner:
         omni_home: Path,
         target_pct: float = DEFAULT_TARGET_PCT,
         cache_dir: Path | None = None,
-        cache_ttl: float = CACHE_TTL_SECONDS,
+        timeouts: ModelRuntimeTimeouts | None = None,
     ) -> None:
         self._omni_home = omni_home
         self._target_pct = target_pct
         self._cache_dir = cache_dir or (omni_home / ".onex_state" / "coverage_cache")
-        self._cache_ttl = cache_ttl
+        self._limits = timeouts or ModelRuntimeTimeouts.from_contract()
 
     def scan_repo(self, repo: str) -> ModelCoverageScanResult:
         """Scan a single repo for coverage gaps.
@@ -69,7 +67,7 @@ class CoverageScanner:
         Otherwise runs pytest --cov and parses the output.
         """
         cached = self._load_cache(repo)
-        if cached is not None and not cached.is_expired(self._cache_ttl):
+        if cached and not cached.is_expired(self._limits.coverage_cache_ttl_seconds):
             logger.info(
                 "Using cached coverage for %s (age: %.0fs)",
                 repo,
@@ -114,7 +112,7 @@ class CoverageScanner:
                 cwd=str(repo_path),
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=self._limits.coverage_pytest_seconds,
                 check=False,
             )
         except subprocess.TimeoutExpired:
@@ -285,7 +283,7 @@ class CoverageScanner:
                 cwd=str(repo_path),
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=self._limits.coverage_git_log_seconds,
                 check=False,
             )
             if result.returncode != 0:

@@ -31,6 +31,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
 from omniclaude.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
@@ -152,54 +153,55 @@ def load_frame_from_jsonl(
 # ---------------------------------------------------------------------------
 
 
-def _clone_repo_to_tempdir(repo_root: str, tmpdir: str) -> bool:
+def _git_succeeds(args: list[str], timeout: float, cwd: str | None = None) -> bool:
+    """Run ``git <args>`` and report whether it exited 0; False on a subprocess error."""
+    try:
+        return (
+            subprocess.run(
+                ["git", *args],
+                capture_output=True,
+                cwd=cwd,
+                timeout=timeout,
+                check=False,
+            ).returncode
+            == 0
+        )
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        return False
+
+
+def _clone_repo_to_tempdir(
+    repo_root: str, tmpdir: str, limits: ModelRuntimeTimeouts
+) -> bool:
     """Clone the repository into a temp directory.
 
     Args:
         repo_root: Source repository path
         tmpdir: Target temp directory
+        limits: Contract-declared timeouts
 
     Returns:
         True if clone succeeded, False otherwise
     """
-    try:
-        result = subprocess.run(
-            ["git", "clone", "--local", repo_root, tmpdir],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
-        return False
+    clone = ["clone", "--local", repo_root, tmpdir]
+    return _git_succeeds(clone, limits.replay_clone_seconds)
 
 
-def _checkout_commit(commit_sha: str, cwd: str) -> bool:
+def _checkout_commit(commit_sha: str, cwd: str, limits: ModelRuntimeTimeouts) -> bool:
     """Checkout a specific commit in the given directory.
 
     Args:
         commit_sha: Commit SHA to checkout
         cwd: Working directory (the cloned repo)
+        limits: Contract-declared timeouts
 
     Returns:
         True if checkout succeeded
     """
-    try:
-        result = subprocess.run(
-            ["git", "checkout", commit_sha],
-            capture_output=True,
-            text=True,
-            cwd=cwd,
-            timeout=30,
-            check=False,
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
-        return False
+    return _git_succeeds(["checkout", commit_sha], limits.replay_checkout_seconds, cwd)
 
 
-def _apply_patch(diff_patch: str, cwd: str) -> bool:
+def _apply_patch(diff_patch: str, cwd: str, limits: ModelRuntimeTimeouts) -> bool:
     """Apply a unified diff patch to the working directory.
 
     Writes the patch to a temp file, then applies with git apply.
@@ -207,6 +209,7 @@ def _apply_patch(diff_patch: str, cwd: str) -> bool:
     Args:
         diff_patch: Unified diff string
         cwd: Working directory (the cloned repo)
+        limits: Contract-declared timeouts
 
     Returns:
         True if patch applied successfully
@@ -214,20 +217,13 @@ def _apply_patch(diff_patch: str, cwd: str) -> bool:
     patch_path = Path(cwd) / "_replay.patch"
     try:
         patch_path.write_text(diff_patch, encoding="utf-8")
-        result = subprocess.run(
-            ["git", "apply", str(patch_path)],
-            capture_output=True,
-            text=True,
-            cwd=cwd,
-            timeout=30,
-            check=False,
+        return _git_succeeds(
+            ["apply", str(patch_path)], limits.replay_apply_seconds, cwd
         )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError):
+    except OSError:
         return False
     finally:
-        if patch_path.exists():
-            patch_path.unlink(missing_ok=True)
+        patch_path.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -299,15 +295,18 @@ class ReplayEngine:
         self,
         repo_root: str,
         checks: list[CheckSpec] | None = None,
+        timeouts: ModelRuntimeTimeouts | None = None,
     ) -> None:
         """Initialize the replay engine.
 
         Args:
             repo_root: Absolute path to the repository root (source for cloning)
-            checks: Custom check specs (defaults to DEFAULT_CHECKS from frame_assembler)
+            checks: Custom check specs (defaults to default_checks from frame_assembler)
+            timeouts: Contract-declared timeouts (resolved from the runtime contract when None)
         """
         self.repo_root = repo_root
         self.checks = checks
+        self.timeouts = timeouts or ModelRuntimeTimeouts.from_contract()
 
     def replay(  # stub-ok: fully implemented
         self,
@@ -351,7 +350,7 @@ class ReplayEngine:
         original_outcome = OutcomeStatus(original_status)
 
         # Step 1: Clone repo into tmpdir
-        if not _clone_repo_to_tempdir(self.repo_root, tmpdir):
+        if not _clone_repo_to_tempdir(self.repo_root, tmpdir, self.timeouts):
             # Can't set up workspace — treat as FAIL with env_changed reason
             return self._make_failure_result(
                 frame=frame,
@@ -362,7 +361,9 @@ class ReplayEngine:
 
         # Step 2: Checkout base commit
         base_commit = frame.workspace_ref.base_commit
-        if base_commit != "unknown" and not _checkout_commit(base_commit, tmpdir):
+        if base_commit != "unknown" and not _checkout_commit(
+            base_commit, tmpdir, self.timeouts
+        ):
             return self._make_failure_result(
                 frame=frame,
                 original_outcome=original_outcome,
@@ -371,7 +372,7 @@ class ReplayEngine:
             )
 
         # Step 3: Apply diff patch
-        if not _apply_patch(frame.delta.diff_patch, tmpdir):
+        if not _apply_patch(frame.delta.diff_patch, tmpdir, self.timeouts):
             return self._make_failure_result(
                 frame=frame,
                 original_outcome=original_outcome,
@@ -380,7 +381,7 @@ class ReplayEngine:
             )
 
         # Step 4: Run checks (all modes run checks live in the temp dir)
-        check_results = run_checks(tmpdir, self.checks)
+        check_results = run_checks(tmpdir, self.checks, self.timeouts)
 
         # FULL mode: log tool events and run checks.
         # Outcome B: TRACE-06 (OMN-2410) added replay infrastructure at the CLI/frame level
