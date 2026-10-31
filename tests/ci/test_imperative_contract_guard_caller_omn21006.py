@@ -65,7 +65,7 @@ FINDING_KEYS = (
 # OMN-21780 removed lines from manifest_injector.py, shifting the line numbers of its
 # non_live_freestanding_violations rows; no finding was added or dropped.
 RECORDED_OCC_FINDING_DIGEST = (
-    "340c81a2c738a6b0248dc5692f3baeaf279d8a04c452f6efa8c978895ca03218"
+    "a03b3cde2b78b4a8707d176965eebbd6ba2710f8410f78d97331250e7cea1559"
 )
 
 

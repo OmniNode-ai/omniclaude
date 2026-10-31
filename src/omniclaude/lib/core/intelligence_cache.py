@@ -56,7 +56,7 @@ from typing import Any
 
 # FAIL FAST: Required configuration
 from omniclaude.config import settings
-from omniclaude.models.model_endpoint_defaults import ModelEndpointDefaults
+from omniclaude.models.model_service_endpoint_defaults import ModelServiceEndpointDefaults
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ class IntelligenceCache:
         self,
         redis_url: str | None = None,
         enabled: bool = True,
+        endpoint_defaults: ModelServiceEndpointDefaults | None = None,
     ):
         """
         Initialize cache client.
@@ -75,6 +76,7 @@ class IntelligenceCache:
         Args:
             redis_url: Valkey connection URL (default: from env)
             enabled: Enable/disable caching (default: True)
+            endpoint_defaults: Fallback Valkey URL source (default: runtime contract service_endpoints overlay)
         """
         # Use Pydantic Settings for configuration
         # enable_intelligence_cache is already a bool from Pydantic settings
@@ -84,11 +86,9 @@ class IntelligenceCache:
             logger.info("Intelligence cache disabled via configuration")
             return
 
-        # Default uses Docker hostname (onex-valkey:6379); override with VALKEY_URL in .env for localhost development
+        # The fallback URL comes from the runtime contract service_endpoints overlay; override with VALKEY_URL in .env for localhost development
         # Password must be set via VALKEY_PASSWORD environment variable (no hardcoded defaults)
-        valkey_password = os.getenv("VALKEY_PASSWORD", "")
-        scheme, _, location = ModelEndpointDefaults.from_contract().valkey_default_url.partition("://")
-        default_url = f"{scheme}://:{valkey_password}@{location}" if valkey_password else f"{scheme}://{location}"
+        default_url = (endpoint_defaults or ModelServiceEndpointDefaults.from_contract()).valkey_url_with_password(os.getenv("VALKEY_PASSWORD", ""))
         self.redis_url = redis_url or settings.valkey_url or default_url
         self._client: Any | None = None  # Why: redis.asyncio.Redis — external lib, optional import
 
