@@ -2,21 +2,32 @@
 # SPDX-License-Identifier: MIT
 schema_version: "1.0.0"
 ticket_id: OMN-21623
-title: "Contracts and DI burn-down: transition selector runtime policy"
-summary: >-
-  This second omniclaude slice removes three literal timeout findings from
-  NodeTransitionSelectorEffect. Selection, HTTP and probe deadlines and retry
-  policy come from the node contract or an injected validated policy.
+title: "Burn down the contracts_and_di findings of omniclaude: trace, replay, diagnostics, health-check and coverage timeouts come from the runtime contract"
+summary: >
+  omnibase_core's contracts_and_di check, run read-only over omniclaude, reported literal_timeout
+  findings at the subprocess and HTTP calls of the trace frame assembler and replay engine, the
+  diagnostics and health-check tools and the coverage scanner. This slice declares the timeouts once
+  in the runtime contract's timeouts section, with the env overlay convention the aggregator section
+  already uses, loads them into a frozen ModelRuntimeTimeouts and injects that model into the callers.
+  A field the contract does not declare fails to load. No constants module and no baseline entry is added.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
+  - id: req-omn21623-runtime-timeouts
+    statement: The timeouts of the trace frame assembler, replay engine, diagnostics tool, health checker and coverage scanner are read from the runtime contract and a literal no longer binds them.
+    acceptance:
+      - id: AC2
+        statement: "AC2: ModelRuntimeTimeouts.from_contract() reads every field from the contract timeouts section, an env var overrides the inline default, a missing field or section fails to load, and each call site passes the injected value -- falsifier: uv run pytest tests/unit/models/test_model_runtime_timeouts.py -q --no-cov"
   - id: req-omn21623-selector-policy
     statement: The transition selector reads its deadlines and retry policy from its contract or an injected policy.
     acceptance:
       - id: AC1
         statement: "AC1 (BURNDOWN2): contract and injected policy values reach selection, HTTP, health-probe and retry boundaries, invalid values fail validation, and the node selects a bounded action over a live HTTP connection -- falsifier: uv run pytest tests/nodes/test_node_transition_selector_effect/test_unit.py -q --no-cov"
 evidence_requirements:
+  - kind: tests
+    description: "The runtime-timeouts tests and the trace, health-check and coverage tests pass"
+    command: "uv run pytest tests/unit/models/test_model_runtime_timeouts.py tests/unit/trace tests/unit/lib/utils tests/skills/coverage_sweep -q --no-cov"
   - kind: tests
     description: Selector policy, node logic and model regressions
     command: "uv run pytest tests/nodes/test_node_transition_selector_effect/test_unit.py tests/nodes/test_node_transition_selector_effect/test_node_logic.py tests/nodes/test_node_transition_selector_effect/test_models.py -q --no-cov"
@@ -25,6 +36,13 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  - id: dod-omn21623-runtime-timeouts-from-contract
+    description: "The contract timeouts section, the frozen model and the five callers carry the timeouts; the new tests fail at the merge base, which has no model, and pass here."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "bash -c 'ONEX_STATE_DIR=$(mktemp -d) uv run pytest tests/unit/models/test_model_runtime_timeouts.py -q --no-cov'"
   - id: dod-omn21623-selector-policy
     binds_ac: [AC1]
     description: >-

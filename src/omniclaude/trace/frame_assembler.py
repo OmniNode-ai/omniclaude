@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 #: Type alias for JSON-serializable tool input/output dicts.
 ToolInputDict = dict[str, object]
 
+from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
 from omniclaude.trace.change_frame import (
     ChangeFrame,
     FailureType,
@@ -94,7 +95,21 @@ def should_trace_tool(tool_name: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def run_git_diff_patch(repo_root: str) -> str:
+def _run_stdout(repo_root: str, command: list[str], timeout: float) -> str:
+    """Run ``command`` in ``repo_root`` and return its stdout; subprocess errors propagate."""
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+        timeout=timeout,
+        check=False,
+    ).stdout
+
+
+def run_git_diff_patch(
+    repo_root: str, timeouts: ModelRuntimeTimeouts | None = None
+) -> str:
     """Run git diff --patch to capture staged, unstaged, and untracked changes.
 
     Captures three categories of changes:
@@ -107,34 +122,22 @@ def run_git_diff_patch(repo_root: str) -> str:
 
     Args:
         repo_root: Absolute path to the repository root
+        timeouts: Contract-declared timeouts (resolved from the runtime contract when None)
 
     Returns:
         Unified diff string, or empty string if no changes or git fails
     """
+    limit = (timeouts or ModelRuntimeTimeouts.from_contract()).trace_git_diff_seconds
     try:
-        result = subprocess.run(
-            ["git", "diff", "HEAD", "--patch"],
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-            timeout=10,
-            check=False,
-        )
-        diff = result.stdout.strip()
+        diff = _run_stdout(repo_root, ["git", "diff", "HEAD", "--patch"], limit).strip()
         if not diff:
             # Also try staged-only diff
-            result2 = subprocess.run(
-                ["git", "diff", "--cached", "--patch"],
-                capture_output=True,
-                text=True,
-                cwd=repo_root,
-                timeout=10,
-                check=False,
-            )
-            diff = result2.stdout.strip()
+            diff = _run_stdout(
+                repo_root, ["git", "diff", "--cached", "--patch"], limit
+            ).strip()
 
         # Append no-index diffs for untracked files (not covered by git diff HEAD)
-        untracked_diff = _diff_untracked_files(repo_root)
+        untracked_diff = _diff_untracked_files(repo_root, limit)
         if untracked_diff:
             diff = (diff + "\n" + untracked_diff).strip()
 
@@ -143,7 +146,7 @@ def run_git_diff_patch(repo_root: str) -> str:
         return ""
 
 
-def _diff_untracked_files(repo_root: str) -> str:
+def _diff_untracked_files(repo_root: str, limit: float) -> str:
     """Return a unified diff for all untracked (new) files in the repository.
 
     Uses ``git ls-files --others --exclude-standard`` to enumerate untracked
@@ -153,36 +156,26 @@ def _diff_untracked_files(repo_root: str) -> str:
 
     Args:
         repo_root: Absolute path to the repository root
+        limit: Contract-declared timeout, in seconds, for each git call
 
     Returns:
         Concatenated unified diff for all untracked files, or empty string
     """
     try:
-        ls_result = subprocess.run(
-            ["git", "ls-files", "--others", "--exclude-standard"],
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-            timeout=10,
-            check=False,
+        listing = _run_stdout(
+            repo_root, ["git", "ls-files", "--others", "--exclude-standard"], limit
         )
-        untracked_files = [f for f in ls_result.stdout.splitlines() if f.strip()]
+        untracked_files = [f for f in listing.splitlines() if f.strip()]
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         return ""
 
     parts: list[str] = []
     for rel_path in untracked_files:
         try:
-            diff_result = subprocess.run(
-                ["git", "diff", "--no-index", "/dev/null", rel_path],
-                capture_output=True,
-                text=True,
-                cwd=repo_root,
-                timeout=10,
-                check=False,
-            )
             # git diff --no-index exits 1 when files differ (normal for new files)
-            chunk = diff_result.stdout.strip()
+            chunk = _run_stdout(
+                repo_root, ["git", "diff", "--no-index", "/dev/null", rel_path], limit
+            ).strip()
             if chunk:
                 parts.append(chunk)
         except (
@@ -195,64 +188,54 @@ def _diff_untracked_files(repo_root: str) -> str:
     return "\n".join(parts)
 
 
-def get_current_commit(repo_root: str) -> str:
+def get_current_commit(
+    repo_root: str, timeouts: ModelRuntimeTimeouts | None = None
+) -> str:
     """Return the current HEAD commit SHA.
 
     Returns:
         Full 40-char commit SHA, or empty string on failure
     """
+    limit = (
+        timeouts or ModelRuntimeTimeouts.from_contract()
+    ).trace_git_identity_seconds
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-            timeout=5,
-            check=False,
-        )
-        return result.stdout.strip()
+        return _run_stdout(repo_root, ["git", "rev-parse", "HEAD"], limit).strip()
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         return ""
 
 
-def get_current_branch(repo_root: str) -> str:
+def get_current_branch(
+    repo_root: str, timeouts: ModelRuntimeTimeouts | None = None
+) -> str:
     """Return the current branch name.
 
     Returns:
         Branch name, or "unknown" on failure
     """
+    limit = (
+        timeouts or ModelRuntimeTimeouts.from_contract()
+    ).trace_git_identity_seconds
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-            timeout=5,
-            check=False,
-        )
-        return result.stdout.strip() or "unknown"
+        command = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+        return _run_stdout(repo_root, command, limit).strip() or "unknown"
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         return "unknown"
 
 
-def get_repo_name(repo_root: str) -> str:
+def get_repo_name(repo_root: str, timeouts: ModelRuntimeTimeouts | None = None) -> str:
     """Return the remote origin URL as a repo identifier.
 
     Returns:
         Remote URL or local directory name as fallback
     """
+    limit = (
+        timeouts or ModelRuntimeTimeouts.from_contract()
+    ).trace_git_identity_seconds
     try:
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-            timeout=5,
-            check=False,
-        )
-        url = result.stdout.strip()
-        if url:
-            return url
+        url = _run_stdout(repo_root, ["git", "remote", "get-url", "origin"], limit)
+        if url.strip():
+            return url.strip()
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         pass
     # Fallback: use directory name
@@ -313,47 +296,51 @@ class CheckSpec:
 
     command: list[str]
     failure_type: FailureType
-    timeout: int = 30
+    timeout: float
 
 
-#: Minimum checks run for every frame
-DEFAULT_CHECKS: list[CheckSpec] = [
-    CheckSpec(
-        command=["uv", "run", "ruff", "check", "src/"],
-        failure_type=FailureType.LINT_FAIL,
-        timeout=15,
-    ),
-    CheckSpec(
-        command=["uv", "run", "mypy", "src/omniclaude/", "--no-error-summary"],
-        failure_type=FailureType.TYPE_FAIL,
-        timeout=30,
-    ),
-    CheckSpec(
-        command=["uv", "run", "pyright", "src/omniclaude/"],
-        failure_type=FailureType.TYPE_FAIL,
-        timeout=30,
-    ),
-]
+def default_checks(timeouts: ModelRuntimeTimeouts) -> list[CheckSpec]:
+    """Return the minimum checks run for every frame, with contract-declared timeouts."""
+    return [
+        CheckSpec(
+            command=["uv", "run", "ruff", "check", "src/"],
+            failure_type=FailureType.LINT_FAIL,
+            timeout=timeouts.trace_lint_check_seconds,
+        ),
+        CheckSpec(
+            command=["uv", "run", "mypy", "src/omniclaude/", "--no-error-summary"],
+            failure_type=FailureType.TYPE_FAIL,
+            timeout=timeouts.trace_type_check_seconds,
+        ),
+        CheckSpec(
+            command=["uv", "run", "pyright", "src/omniclaude/"],
+            failure_type=FailureType.TYPE_FAIL,
+            timeout=timeouts.trace_type_check_seconds,
+        ),
+    ]
 
 
 def run_checks(
     repo_root: str,
     checks: list[CheckSpec] | None = None,
+    timeouts: ModelRuntimeTimeouts | None = None,
 ) -> list[ModelCheckResult]:
     """Run quality checks and return results.
 
     Args:
         repo_root: Repository root directory
-        checks: List of check specs to run (defaults to DEFAULT_CHECKS)
+        checks: List of check specs to run (defaults to default_checks(timeouts))
+        timeouts: Contract-declared timeouts (resolved from the runtime contract when None)
 
     Returns:
         List of ModelCheckResult (one per check, all checks run regardless of failures)
     """
+    limits = timeouts or ModelRuntimeTimeouts.from_contract()
     if checks is None:
-        checks = DEFAULT_CHECKS
+        checks = default_checks(limits)
 
     results: list[ModelCheckResult] = []
-    env_hash = _compute_environment_hash(repo_root)
+    env_hash = _compute_environment_hash(repo_root, limits)
 
     for spec in checks:
         try:
@@ -399,27 +386,23 @@ def run_checks(
     return results
 
 
-def _compute_environment_hash(repo_root: str) -> str:
+def _compute_environment_hash(repo_root: str, limits: ModelRuntimeTimeouts) -> str:
     """Compute a hash of the current environment for deterministic replay.
 
     Captures package versions via pip freeze.
 
     Args:
         repo_root: Repository root (used for pip freeze context)
+        limits: Contract-declared timeouts
 
     Returns:
         SHA-256 hash of environment snapshot
     """
     try:
-        result = subprocess.run(
-            ["uv", "pip", "freeze"],
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-            timeout=10,
-            check=False,
+        command = ["uv", "pip", "freeze"]
+        return sha256_of(
+            _run_stdout(repo_root, command, limits.trace_environment_hash_seconds)
         )
-        return sha256_of(result.stdout)
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         return sha256_of("unknown-env")
 
@@ -436,6 +419,7 @@ def assemble_change_frame(
     session_context: SessionContext,
     timestamp_utc: str,
     checks: list[CheckSpec] | None = None,
+    timeouts: ModelRuntimeTimeouts | None = None,
 ) -> ChangeFrame | None:
     """Assemble a ChangeFrame after a tool call.
 
@@ -449,7 +433,8 @@ def assemble_change_frame(
         tool_output: Tool output/response string
         session_context: Session-level metadata for the frame
         timestamp_utc: ISO-8601 UTC timestamp (explicitly injected, no datetime.now())
-        checks: Check specs to run (defaults to DEFAULT_CHECKS)
+        checks: Check specs to run (defaults to default_checks(timeouts))
+        timeouts: Contract-declared timeouts (resolved from the runtime contract when None)
 
     Returns:
         Assembled and validated ChangeFrame, or None if frame should be skipped
@@ -459,9 +444,10 @@ def assemble_change_frame(
         return None
 
     repo_root = session_context.repo_root
+    limits = timeouts or ModelRuntimeTimeouts.from_contract()
 
     # 1. Capture git delta
-    diff_patch = run_git_diff_patch(repo_root)
+    diff_patch = run_git_diff_patch(repo_root, limits)
     if not diff_patch.strip():
         # Frame invariant 1: non-empty delta required
         return None
@@ -470,7 +456,7 @@ def assemble_change_frame(
     files_changed, loc_added, loc_removed = parse_diff_stats(diff_patch)
 
     # 3. Run checks (at least one required — Frame invariant 2)
-    check_results = run_checks(repo_root, checks)
+    check_results = run_checks(repo_root, checks, limits)
     if not check_results:
         # Fallback: create a synthetic "no checks ran" result
         # This prevents the frame invariant from failing due to infra issues
@@ -550,9 +536,9 @@ def assemble_change_frame(
                 ticket_id=session_context.ticket_id,
             ),
             workspace_ref=ModelWorkspaceRef(
-                repo=get_repo_name(repo_root),
-                branch=get_current_branch(repo_root),
-                base_commit=get_current_commit(repo_root) or "unknown",
+                repo=get_repo_name(repo_root, limits),
+                branch=get_current_branch(repo_root, limits),
+                base_commit=get_current_commit(repo_root, limits) or "unknown",
             ),
             delta=ModelDelta(
                 diff_patch=diff_patch,

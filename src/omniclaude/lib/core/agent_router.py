@@ -60,6 +60,7 @@ import yaml
 
 # ONEX-compliant error handling from shared module
 from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
+from omniclaude.models.model_lib_timeouts import lib_timeouts
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +80,7 @@ def _resolve_session_id_canonical() -> str:
 
 
 def _get_default_registry_path() -> str:
-    """
-    Get default agent registry path with environment variable support.
+    """Get default agent registry path with environment variable support.
 
     Priority:
     1. AGENT_REGISTRY_PATH environment variable
@@ -164,14 +164,14 @@ class AgentRouter:
     def __init__(
         self,
         registry_path: str | None = None,
-        cache_ttl: int = 3600,
+        cache_ttl: int | None = None,
     ):
         """
         Initialize enhanced router.
 
         Args:
             registry_path: Path to agent registry YAML file (uses default if None)
-            cache_ttl: Cache time-to-live in seconds (default: 1 hour)
+            cache_ttl: Cache time-to-live in seconds (default: the ResultCache default)
 
         Raises:
             FileNotFoundError: If the registry file does not exist.
@@ -623,7 +623,7 @@ class AgentRouter:
         context: dict[str, Any] | None = None,
         max_recommendations: int = 5,
         min_confidence: float = 0.6,
-        timeout_ms: int = 5000,
+        timeout_ms: int = lib_timeouts().agent_router_route_timeout_ms,
         fallback_to_local: bool = True,
     ) -> list[AgentRecommendation]:
         """
@@ -638,7 +638,7 @@ class AgentRouter:
             context: Optional execution context (domain, previous agent, etc.)
             max_recommendations: Maximum number of recommendations to return
             min_confidence: Minimum confidence threshold (0.0-1.0)
-            timeout_ms: Response timeout in milliseconds (default: 5000)
+            timeout_ms: Response timeout in milliseconds (default: the lib timeouts contract)
             fallback_to_local: If True, use local routing on failure (default: True)
 
         Returns:
