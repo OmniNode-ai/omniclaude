@@ -94,6 +94,20 @@ endpoints:
     uv: "https://raw.githubusercontent.com/astral-sh/uv/main/CHANGELOG.md"
     kafka-python: "https://raw.githubusercontent.com/dpkp/kafka-python/master/CHANGES.md"
 
+model_routing:
+  # Model ids omniclaude code uses by default — OMN-21780 (child of OMN-21623).
+  # No model id lives in the repository: an operator overlay / the per-lane service
+  # env supplies each value through the ${env.VAR} overlay convention, and
+  # ModelModelRouting.from_contract() resolves it. An unset value resolves empty.
+  savings_baseline_model: "${env.OMNICLAUDE_SAVINGS_BASELINE_MODEL}"
+  # Tier -> model map per provider, as a JSON object, used when the provider
+  # config file carries no entry for the provider.
+  gemini_tier_models: "${env.OMNICLAUDE_GEMINI_TIER_MODELS_JSON}"
+  zai_tier_models: "${env.OMNICLAUDE_ZAI_TIER_MODELS_JSON}"
+  # Quorum members the manifest lists, as a JSON array of objects with name,
+  # model, provider, weight and use_case.
+  intelligence_models: "${env.OMNICLAUDE_INTELLIGENCE_MODELS_JSON}"
+
 metadata:
   author: "OmniNode Team"
   license: "MIT"

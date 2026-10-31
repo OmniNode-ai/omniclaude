@@ -38,7 +38,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from omniclaude.quirks.controller import NodeValidatorRolloutOrchestratorOrchestrator
+from omniclaude.handlers.container import container_quirks
 from omniclaude.quirks.detectors.context import DetectionContext
 from omniclaude.quirks.detectors.registry import get_all_detectors
 from omniclaude.quirks.enums import QuirkStage, QuirkType
@@ -157,7 +157,7 @@ async def run_checks(
         0 if all checks pass (or all BLOCK-stage quirks are exempted).
         1 if any unexempted BLOCK-stage quirk was detected.
     """
-    controller = NodeValidatorRolloutOrchestratorOrchestrator(
+    controller = container_quirks.build_rollout_orchestrator(
         db_session_factory=db_session_factory,
     )
     await controller.start()
