@@ -94,6 +94,32 @@ endpoints:
     uv: "https://raw.githubusercontent.com/astral-sh/uv/main/CHANGELOG.md"
     kafka-python: "https://raw.githubusercontent.com/dpkp/kafka-python/master/CHANGES.md"
 
+timeouts:
+  # Runtime timeouts in seconds -- OMN-21623 contracts-and-DI burn-down. The trace
+  # frame assembler and replay engine, the diagnostics and health-check tools and
+  # the coverage scanner passed these as
+  # integer literals at each subprocess or HTTP call. ModelRuntimeTimeouts
+  # .from_contract() overlay-resolves each value and the callers receive the model
+  # injected; a per-lane overlay sets the env var, the inline default rides along.
+  trace_git_diff_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_GIT_DIFF_SECONDS:10}"
+  trace_git_identity_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_GIT_IDENTITY_SECONDS:5}"
+  trace_environment_hash_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_ENVIRONMENT_HASH_SECONDS:10}"
+  trace_lint_check_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_LINT_CHECK_SECONDS:15}"
+  trace_type_check_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_TYPE_CHECK_SECONDS:30}"
+  diagnostics_curl_health_seconds: "${env.OMNICLAUDE_TIMEOUT_DIAGNOSTICS_CURL_HEALTH_SECONDS:5}"
+  diagnostics_docker_seconds: "${env.OMNICLAUDE_TIMEOUT_DIAGNOSTICS_DOCKER_SECONDS:10}"
+  diagnostics_http_seconds: "${env.OMNICLAUDE_TIMEOUT_DIAGNOSTICS_HTTP_SECONDS:5}"
+  health_check_httpx_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_HTTPX_SECONDS:5}"
+  health_check_base_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_BASE_SECONDS:2}"
+  health_check_pattern_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_PATTERN_SECONDS:5}"
+  health_check_post_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_POST_SECONDS:3}"
+  replay_clone_seconds: "${env.OMNICLAUDE_TIMEOUT_REPLAY_CLONE_SECONDS:60}"
+  replay_checkout_seconds: "${env.OMNICLAUDE_TIMEOUT_REPLAY_CHECKOUT_SECONDS:30}"
+  replay_apply_seconds: "${env.OMNICLAUDE_TIMEOUT_REPLAY_APPLY_SECONDS:30}"
+  coverage_cache_ttl_seconds: "${env.OMNICLAUDE_TIMEOUT_COVERAGE_CACHE_TTL_SECONDS:3600}"
+  coverage_pytest_seconds: "${env.OMNICLAUDE_TIMEOUT_COVERAGE_PYTEST_SECONDS:300}"
+  coverage_git_log_seconds: "${env.OMNICLAUDE_TIMEOUT_COVERAGE_GIT_LOG_SECONDS:30}"
+
 model_routing:
   # Model ids omniclaude code uses by default — OMN-21780 (child of OMN-21623).
   # No model id lives in the repository: an operator overlay / the per-lane service

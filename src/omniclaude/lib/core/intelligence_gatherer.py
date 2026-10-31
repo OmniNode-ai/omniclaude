@@ -222,7 +222,7 @@ class IntelligenceGatherer:
         node_type: str,
         domain: str,
         service_name: str,
-        timeout_ms: int = 5000,
+        timeout_ms: int,
     ) -> bool:
         """
         Gather patterns via Kafka events from ONEX intelligence adapter.
