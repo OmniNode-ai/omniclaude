@@ -5,13 +5,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 from omniclaude.quirks.controller import NodeValidatorRolloutOrchestratorOrchestrator
 
 
 def build_rollout_orchestrator(
-    *, db_session_factory: Callable[..., Any] | None
+    *, db_session_factory: Callable[..., object] | None
 ) -> NodeValidatorRolloutOrchestratorOrchestrator:
     """Build the orchestrator; None keeps the in-memory stage config."""
     return NodeValidatorRolloutOrchestratorOrchestrator(

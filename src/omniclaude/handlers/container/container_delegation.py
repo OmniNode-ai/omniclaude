@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.handler_bifrost_gateway import (
     HandlerBifrostGateway,
@@ -19,6 +19,9 @@ from omnimarket.nodes.node_projection_delegation.handlers.handler_projection_del
 
 if TYPE_CHECKING:
     from omnibase_infra.mixins.mixin_llm_http_transport import MixinLlmHttpTransport
+    from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.handler_bifrost_response import (
+        ModelBifrostResponse,
+    )
     from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.model_bifrost_config import (
         ModelBifrostConfig,
     )
@@ -40,7 +43,7 @@ def build_bifrost_gateway(
     *,
     config: ModelBifrostConfig,
     inference_handler: HandlerLlmOpenaiCompatible,
-    on_routing_decision: Callable[..., Any],
+    on_routing_decision: Callable[[ModelBifrostResponse], None],
 ) -> HandlerBifrostGateway:
     """Build the Bifrost gateway from the caller's config, handler and routing hook."""
     return HandlerBifrostGateway(
