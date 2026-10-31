@@ -56,20 +56,20 @@ def _supported_event_types(path: Path) -> set[str]:
 
 def _topic_base_values(path: Path) -> dict[str, str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    manifest = yaml.safe_load(path.with_name("topics.yaml").read_text(encoding="utf-8"))
     for node in tree.body:
-        if not isinstance(node, ast.ClassDef) or node.name != "TopicBase":
-            continue
-        values: dict[str, str] = {}
-        for stmt in node.body:
-            if not isinstance(stmt, ast.Assign):
-                continue
-            if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
-                continue
-            if isinstance(stmt.value, ast.Constant) and isinstance(
-                stmt.value.value, str
-            ):
-                values[stmt.targets[0].id] = stmt.value.value
-        return values
+        if isinstance(node, ast.ClassDef) and node.name == "TopicBase":
+            values: dict[str, str] = {}
+            for stmt in node.body:
+                if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+                    continue
+                value, target = stmt.value, stmt.targets[0]
+                if isinstance(value, ast.Call):
+                    section, name = map(ast.literal_eval, value.args)
+                    value = ast.Constant(manifest[section][name])
+                if isinstance(target, ast.Name) and isinstance(value, ast.Constant):
+                    values[target.id] = str(value.value)
+            return values
     raise ValueError(f"TopicBase not found in {path}")
 
 

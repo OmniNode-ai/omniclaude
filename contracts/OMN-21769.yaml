@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21769
+title: "omniclaude contracts_and_di literal_topic burn-down, slice rf1410-c2: topics come from contracts and manifests"
+summary: >
+  omnibase_core's contracts_and_di check, run read-only over omniclaude src, reported literal_topic
+  findings at the intelligence event client, the runtime dry-run route check and the typed work-ledger
+  v2 members of TopicBase. This slice reads the client's code-analysis topics from a topics.yaml beside
+  it, the TopicBase ledger v2 members from a topics.yaml beside topics.py, and the dry-run topic from the
+  status orchestrator's node contract. No constants module, baseline entry or suppression is added.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21769-literal-topic-slice
+    statement: The slice's topics are read from a manifest or node contract and no literal names them in code.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the literal_topic count over the slice paths is zero and the repo total drops by the slice size (170 to 155 over src, 368 to 353 findings) -- falsifier: runtime_validator_run with ValidatorContractsAndDi over omniclaude src before and after"
+      - id: AC2
+        statement: "AC2: every slice topic is read from its manifest or contract and none is hard-coded in the touched code -- falsifier: uv run pytest tests/unit/shared/test_topic_slice_manifests_omn21769.py tests/unit/runtime/test_main.py tests/lib/core/test_intelligence_event_client.py -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "Slice manifests, runtime dry-run and intelligence client tests pass"
+    command: "uv run pytest tests/unit/shared/test_topic_slice_manifests_omn21769.py tests/unit/runtime/test_main.py tests/lib/core/test_intelligence_event_client.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21769-slice-topics-from-manifests
+    description: "The manifests, the contract read and the three callers carry the slice topics; the focused tests pass."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "bash -c 'ONEX_STATE_DIR=$(mktemp -d) uv run pytest tests/unit/shared/test_topic_slice_manifests_omn21769.py tests/unit/runtime/test_main.py tests/lib/core/test_intelligence_event_client.py -q --no-cov'"
+  - id: dod-omn21769-checker-count-drop
+    description: "Checker re-run over src: literal_topic 170 to 155, total 368 to 353; the slice files report zero literal_topic."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: "bash -c '! grep -rnE \"onex\\.(cmd|evt)\\.\" src/omniclaude/lib/core/intelligence_event_client.py src/omniclaude/runtime/__main__.py'"
+        cwd: "."
