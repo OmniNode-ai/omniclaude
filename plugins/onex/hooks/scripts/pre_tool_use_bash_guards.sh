@@ -101,8 +101,7 @@ while [[ "$_OBG_INPUT" == *$'\n' ]]; do _OBG_INPUT="${_OBG_INPUT%$'\n'}"; done
 # line becomes the detail).
 _obg_record_refusal() {
     # shellcheck source=../lib/hook_refusal.sh
-    ( _OMNICLAUDE_HOOK_NAME="$1"; _OMNICLAUDE_HOOK_PAYLOAD="$_OBG_INPUT"
-      source "${_OBG_LIB}/hook_refusal.sh" && hook_record_refusal "$2" "${3%%$'\n'*}" ) || true
+    _OMNICLAUDE_HOOK_NAME="$1" _OMNICLAUDE_HOOK_PAYLOAD="$_OBG_INPUT" bash -c 'source "$1/hook_refusal.sh" && hook_record_refusal "$2" "$3"' _ "$_OBG_LIB" "$2" "${3%%$'\n'*}" || true
 }
 
 # One node check: `python -m` the node's runtime module ($2) on the payload. Exit 0
