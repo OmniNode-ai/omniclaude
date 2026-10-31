@@ -96,12 +96,13 @@ while [[ "$_OBG_INPUT" == *$'\n' ]]; do _OBG_INPUT="${_OBG_INPUT%$'\n'}"; done
 # Every refusal here writes one class=refusal row through the refusal recorder
 # (OMN-21020). The node checks run ahead of the seven guards, so none of their
 # hook_record_refusal calls can see them; the recording is the recorder's seam,
-# called from a subshell so the guard name and the payload stay out of this
-# shell's scope. $1 hook name, $2 reason class, $3 the refusal's text (its first
+# called in this shell, which exits at every call site right after, so the guard
+# name and the payload it sets never reach another guard. $1 hook name, $2 reason class, $3 the refusal's text (its first
 # line becomes the detail).
 _obg_record_refusal() {
     # shellcheck source=../lib/hook_refusal.sh
-    _OMNICLAUDE_HOOK_NAME="$1" _OMNICLAUDE_HOOK_PAYLOAD="$_OBG_INPUT" bash -c 'source "$1/hook_refusal.sh" && hook_record_refusal "$2" "$3"' _ "$_OBG_LIB" "$2" "${3%%$'\n'*}" || true
+    _OMNICLAUDE_HOOK_NAME="$1"; _OMNICLAUDE_HOOK_PAYLOAD="$_OBG_INPUT"
+    source "${_OBG_LIB}/hook_refusal.sh" && hook_record_refusal "$2" "${3%%$'\n'*}" || true
 }
 
 # One node check: `python -m` the node's runtime module ($2) on the payload. Exit 0
@@ -143,8 +144,7 @@ _obg_node_check() {
     _obg_record_refusal "$1" "$4" "$why"
     jq -nc --arg r "${why}. A call it cannot judge is refused, never assumed safe. Detail: ${out:0:400}" '{"decision": "block", "reason": $r}' 2>/dev/null \
         || printf '{"decision": "block", "reason": "%s."}\n' "$why"
-    printf '%s\n' "${why}. Detail: ${out:0:400}" >&2
-    exit 2
+    printf '%s\n' "${why}. Detail: ${out:0:400}" >&2; exit 2
 }
 
 _OBG_TOOL=""
