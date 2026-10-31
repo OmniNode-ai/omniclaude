@@ -1,0 +1,44 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20557"
+title: "The savings baseline uses the developer's Claude Code session model, sent by the /onex:delegate plugin"
+summary: "The /onex:delegate skill runs onex delegate with --session-model set to the exact model ID the Claude Code session names, so the run's savings are stated against the developer's own model. It never guesses an ID, and an onex too old to know the flag is retried once without it. The onex-delegate plugin moves to 0.3.3 in plugin.json and both marketplace entries."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn20557-plugin-session-model"
+    statement: |-
+      The /onex:delegate skill's one command passes the session's own model ID with --session-model, says where the ID comes from, never guesses one, and still delegates on an onex that predates the flag.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the plugin's delegate command carries the Claude Code session's model string to onex delegate -- falsifier: uv run pytest plugins/onex-delegate/tests/test_delegate_session_model_omn20557.py -q fails 4 of 4 at origin/dev 9ee6e7f115"
+evidence_requirements:
+  - kind: "tests"
+    description: "The skill's fenced command and SKILL.md pass --session-model, the prompt names the source and the no-guess rule, and the old-onex fallback."
+    command: "uv run pytest plugins/onex-delegate/tests/test_delegate_session_model_omn20557.py plugins/onex-delegate/tests/test_delegate_run_id_surface.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn20557-plugin-passes-session-model"
+    description: "The skill's command passes the session model and stays inside the onex delegate allow rule."
+    source: "manual"
+    binds_ac: ["AC1"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_session_model_omn20557.py plugins/onex-delegate/tests/test_delegate_run_id_surface.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn20557-plugin-published-source-readback"
+    description: |-
+      Hosted-runner source-artifact readback: fetch the skill prompt at the
+      evaluated published commit and confirm its command passes the session
+      model. A missing file or flag fails the command. This checks the
+      published source artifact and does not assert an installed plugin.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: |-
+          curl --fail --silent --show-error --location --max-time 15 "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/plugins/onex-delegate/skills/delegate/prompt.md" | grep -c -- '--session-model <session-model-id>' >/dev/null
+        cwd: "."
