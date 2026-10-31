@@ -74,6 +74,8 @@ class ModelModelRoutingDefaults(BaseModel):
 
 
 def expand_overlay_value(value: str) -> str:
+    """Substitute every ``${env.VAR[:default]}`` reference in ``value`` from the process env."""
+
     def _sub(match: re.Match[str]) -> str:
         default = match.group("default")
         return os.environ.get(match.group("name"), default if default else "")

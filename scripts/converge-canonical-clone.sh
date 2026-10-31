@@ -19,11 +19,15 @@
 #   converge-canonical-clone.sh <repo-name | clone-path | .>                 # dry-run report
 #   converge-canonical-clone.sh <repo> --execute [--clean-untracked]
 #                               [--to-branch <name>]
-#                               [--ticket OMN-XXXX] [--lane <name>]
+#                               [--ticket OMN-XXXX] [--lane <name>] [--note <text>]
 #   converge-canonical-clone.sh <repo> --branch <name> [--execute]
 #                               [--ticket OMN-XXXX] [--lane <name>]
 #   converge-canonical-clone.sh <repo> --to-sha <commit> [--execute]
 #                               [--ticket OMN-XXXX] [--lane <name>]
+#
+# --note <text> (OMN-21821) is appended to the ledger row as "saved: <text>". The sync engine's
+# dirty-clone auto-converge uses it to name the rescue branch and the archive-only paths it
+# saved before this script resets the clone, so the one row says what was kept and where.
 #
 # --to-sha <commit> (OMN-20961) is the ROLLBACK: the clone is moved BACK to an
 # earlier commit of its own upstream, the same preserve-then-reset as the
@@ -149,6 +153,7 @@ while [[ $# -gt 0 ]]; do
     --to-sha) [[ $# -ge 2 ]] || refuse "--to-sha needs a value"; to_sha_opt="$2"; shift ;;
     --ticket) [[ $# -ge 2 ]] || refuse "--ticket needs a value"; ticket="$2"; shift ;;
     --lane) [[ $# -ge 2 ]] || refuse "--lane needs a value"; lane="$2"; shift ;;
+    --note) [[ $# -ge 2 ]] || refuse "--note needs a value"; note_opt="$2"; shift ;;
     -h|--help) usage; exit 0 ;;
     -*) refuse "unknown option: $1" ;;
     *) [[ -z "$target" ]] || refuse "exactly one target is accepted (got '$target' and '$1')"; target="$1" ;;
@@ -539,8 +544,7 @@ done <<< "$untracked_list"
   echo "utc=$ts"
   echo "dirty_paths=$dirty_total staged=$staged unstaged=$unstaged untracked=$untracked"
   echo "clean_untracked=$clean_untracked"
-  echo "ticket=${ticket:-none}"
-  echo "lane=$lane"
+  printf 'ticket=%s\nlane=%s\n' "${ticket:-none}" "$lane"
   for f in status.txt staged.patch unstaged.patch full-vs-HEAD.patch reflog.txt; do
     echo "sha256 $(sha256_of "$evidence/$f")  $f"
   done
@@ -604,7 +608,7 @@ if (( rollback )); then
   event="ROLLED_BACK"
   verified_note="HEAD==--to-sha, an ancestor of @{u}"
 fi
-row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | STATUS | lane=$lane | ticket=${ticket:-$repo} | event=$event | converge-canonical-clone.sh $repo ($clone): branch $branch upstream $upstream;$detached_note HEAD ${head_before:0:7} -> ${head_after:0:7}; $dirty_total dirty paths ($staged staged, $unstaged worktree-modified, $untracked untracked) preserved at $evidence (full-vs-HEAD.patch sha256 ${patch_sha:0:12}); git reset --hard $target_sha$clean_note; verified $verified_note and clean tracked tree. No secrets printed."
+row="$(date -u +%Y-%m-%dT%H:%M:%SZ) | STATUS | lane=$lane | ticket=${ticket:-$repo} | event=$event | converge-canonical-clone.sh $repo ($clone): branch $branch upstream $upstream;$detached_note HEAD ${head_before:0:7} -> ${head_after:0:7}; $dirty_total dirty paths ($staged staged, $unstaged worktree-modified, $untracked untracked) preserved at $evidence (full-vs-HEAD.patch sha256 ${patch_sha:0:12}); git reset --hard $target_sha$clean_note; verified $verified_note and clean tracked tree.${note_opt:+ saved: ${note_opt//|/;}.} No secrets printed."
 append_ledger_row "$row"
 
 cat <<EOF

@@ -112,6 +112,18 @@ model_routing:
   # model, provider, weight and use_case.
   intelligence_models: "${env.OMNICLAUDE_INTELLIGENCE_MODELS_JSON}"
 
+service_endpoints:
+  # Service endpoints omniclaude code falls back to — OMN-21727 (child of OMN-21623).
+  # The operator overlay / per-lane service env supplies each value through the
+  # ${env.VAR[:default]} overlay convention; ModelServiceEndpointDefaults.from_contract()
+  # resolves it.
+  # OpenAI-compatible embeddings endpoint ManifestInjector._embed_text posts to. No
+  # default lives in the repository: an unset value resolves empty.
+  embedding_service_url: "${env.EMBEDDING_SERVICE_URL}"
+  # Valkey URL IntelligenceCache uses when neither redis_url nor settings.valkey_url is
+  # given; VALKEY_PASSWORD, when set, is added as the URL's credential.
+  valkey_default_url: "${env.OMNICLAUDE_VALKEY_DEFAULT_URL:redis://onex-valkey:6379/0}"
+
 metadata:
   author: "OmniNode Team"
   license: "MIT"

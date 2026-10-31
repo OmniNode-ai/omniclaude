@@ -67,7 +67,7 @@ FINDING_KEYS = (
 # OMN-21728 moved literal runtime paths into the runtime contract, which shifted the
 # line numbers of the dead-handler rows it touched; no finding was added or dropped.
 RECORDED_OCC_FINDING_DIGEST = (
-    "f2be09c96bae2e508a23b676ad6f7032b5277a3d9aaa76ee9fa7ed9f7996223a"
+    "0a93571e77006f3262bcdba60b051ae4a146e97d4bfd5f2f080f08f5297e1f61"
 )
 
 
