@@ -76,10 +76,8 @@ class HandlerFileChatStore:
 
     @property
     def path(self) -> Path:
-        """Resolved path to the JSONL file (lazy to defer env var lookup)."""
-        if self._path is None:
-            self._path = _default_chat_path()
-        return self._path
+        """Resolved path to the JSONL file (resolved per call to defer env var lookup)."""
+        return self._path if self._path is not None else _default_chat_path()
 
     def append(self, message: ModelAgentChatMessage) -> None:
         """Append a single message to the JSONL file.
