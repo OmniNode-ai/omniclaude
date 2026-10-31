@@ -30,6 +30,7 @@ dod_evidence:
   - id: dod-omn21779-binding-sites
     description: "The binding-site tests pass and build the handler types the call sites used."
     source: manual
+    binds_ac: [BURNDOWN1, BURNDOWN2]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/handlers/test_container_binding_sites_omn21779.py tests/lib/models/test_intelligence_context.py -q --no-cov"
