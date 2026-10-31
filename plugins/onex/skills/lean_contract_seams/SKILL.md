@@ -61,7 +61,10 @@ Do not use it for a change inside one handler behind a seam that already connect
    walker arms it), `protocol_dependencies` for every dependency (bus, clock, store, route, model,
    host, timeout, credential) with no literal value, and `runtime_dispatch.command_topic` or
    `externally_consumed_topics` where the graph meets the world. A value the design leaves open stays
-   open in the contract and blocks evaluation; it is never guessed.
+   open in the contract and blocks evaluation; it is never guessed. Models in omnibase_core land in
+   two stages: the models pull request first, then the contracts pull request with the pin moved to
+   the dev-merge tag that carries them (a node repository admits only a released or dev-merge-tagged
+   core). Prove the contracts against the core branch locally while the models land.
 3. **Scaffold every node from its contract.** Use `onex:generate_node` for the package skeleton (it is
    scaffold-only; read its own status table first). Each handler returns a typed empty result or a
    typed INSUFFICIENT result with a reason code, and no business logic. Every dependency arrives
