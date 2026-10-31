@@ -1,0 +1,35 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21623
+title: "Burn down the contracts_and_di findings of omniclaude: trace, replay, diagnostics, health-check and coverage timeouts come from the runtime contract"
+summary: >
+  omnibase_core's contracts_and_di check, run read-only over omniclaude, reported literal_timeout
+  findings at the subprocess and HTTP calls of the trace frame assembler and replay engine, the
+  diagnostics and health-check tools and the coverage scanner. This slice declares the timeouts once
+  in the runtime contract's timeouts section, with the env overlay convention the aggregator section
+  already uses, loads them into a frozen ModelRuntimeTimeouts and injects that model into the callers.
+  A field the contract does not declare fails to load. No constants module and no baseline entry is added.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21623-runtime-timeouts
+    statement: The timeouts of the trace frame assembler, replay engine, diagnostics tool, health checker and coverage scanner are read from the runtime contract and a literal no longer binds them.
+    acceptance:
+      - id: BURNDOWN2
+        statement: "BURNDOWN2: ModelRuntimeTimeouts.from_contract() reads every field from the contract timeouts section, an env var overrides the inline default, a missing field or section fails to load, and each call site passes the injected value -- falsifier: uv run pytest tests/unit/models/test_model_runtime_timeouts.py -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "The runtime-timeouts tests and the trace, health-check and coverage tests pass"
+    command: "uv run pytest tests/unit/models/test_model_runtime_timeouts.py tests/unit/trace tests/unit/lib/utils tests/skills/coverage_sweep -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21623-runtime-timeouts-from-contract
+    description: "The contract timeouts section, the frozen model and the five callers carry the timeouts; the new tests fail at the merge base, which has no model, and pass here."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/models/test_model_runtime_timeouts.py tests/unit/trace tests/unit/lib/utils tests/skills/coverage_sweep -q --no-cov"
+        cwd: "."
