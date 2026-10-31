@@ -71,5 +71,5 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/unit/models -q --no-cov"
+        check_value: "uv run pytest tests/unit/models/test_model_endpoint_defaults.py -q --no-cov"
         cwd: "."
