@@ -110,6 +110,13 @@ _KINDS = ("env_set", "env_path", "path_exists", "command")
 PROFILE_OPERATOR = "operator"
 _PROFILES = (PROFILE_OPERATOR, "team")
 
+# OMN-21672. With no ``--profile`` the profile follows the session: a remote lane
+# (the lab runner exports ``ONEX_REMOTE_LANE`` into every lane it starts) runs
+# ``team``, since it sits on a lab host that holds none of the operator's machine
+# state, and every other session runs ``operator``. The default must not depend
+# on the command a model types, or one lane stops on a check another passes. An
+# explicit ``--profile`` always wins.
+
 _DEFAULT_COMMAND_TIMEOUT_SECONDS = 15
 
 _INTENT_SH = Path(__file__).resolve().parent.parent / "lib" / "intent.sh"
@@ -472,8 +479,10 @@ def main(argv: list[str] | None = None) -> int:
             "silently replaced by the next candidate."
         ),
     )
-    parser.add_argument("--profile", choices=_PROFILES, default=PROFILE_OPERATOR)
+    parser.add_argument("--profile", choices=_PROFILES)
     args = parser.parse_args(argv)
+    lane = os.environ.get("ONEX_REMOTE_LANE", "").strip()
+    args.profile = args.profile or ("team" if lane else PROFILE_OPERATOR)
 
     if args.install_overlay:
         try:
@@ -507,16 +516,9 @@ def main(argv: list[str] | None = None) -> int:
     results: list[dict[str, Any]] = []
     for check in checks:
         ok, detail = run_check(check)
+        keys = ("check_id", "title", "kind", "severity", "fix")
         results.append(
-            {
-                "check_id": check["check_id"],
-                "title": check["title"],
-                "kind": check["kind"],
-                "severity": check["severity"],
-                "fix": check["fix"],
-                "ok": ok,
-                "detail": "" if ok else detail,
-            }
+            {**{k: check[k] for k in keys}, "ok": ok, "detail": "" if ok else detail}
         )
 
     blocked = any(not r["ok"] and r["severity"] == SEVERITY_BLOCKER for r in results)
