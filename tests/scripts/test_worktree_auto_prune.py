@@ -18,8 +18,11 @@ No network calls, no subprocesses.
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import os
 import subprocess
+import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
@@ -373,6 +376,46 @@ class TestStateTypeToLifecycle:
     )
     def test_mapping(self, state_type: str, expected: EnumTicketLifecycle) -> None:
         assert mod._state_type_to_lifecycle(state_type) is expected
+
+
+class TestEndpointPolicyCallers:
+    def test_ticket_lookup_uses_contract_endpoint_overlay(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        endpoint = "https://tracker.example.invalid/graphql"
+        monkeypatch.setenv("LINEAR_GRAPHQL_URL", endpoint)
+        requests: list[urllib.request.Request] = []
+
+        def open_request(
+            request: urllib.request.Request, *, timeout: int
+        ) -> io.BytesIO:
+            requests.append(request)
+            assert timeout == 60
+            return io.BytesIO(
+                json.dumps(
+                    {
+                        "data": {
+                            "t0": {
+                                "identifier": "OMN-21798",
+                                "state": {"type": "completed"},
+                            }
+                        }
+                    }
+                ).encode()
+            )
+
+        monkeypatch.setattr(mod.urllib.request, "urlopen", open_request)
+
+        states = mod.resolve_ticket_states(["OMN-21798"], "test-key")
+
+        assert states == {"OMN-21798": EnumTicketLifecycle.DONE}
+        assert len(requests) == 1
+        request = requests[0]
+        assert request.full_url == endpoint
+        assert request.get_method() == "POST"
+        assert request.get_header("Authorization") == "test-key"
+        assert request.data is not None
+        assert 'issue(id: "OMN-21798")' in json.loads(request.data)["query"]
 
 
 # =============================================================================
