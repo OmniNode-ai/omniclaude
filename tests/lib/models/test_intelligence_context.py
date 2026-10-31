@@ -4,7 +4,7 @@
 
 These tests verify the Pydantic models for intelligence context:
 - IntelligenceContext: Main intelligence context model with validation
-- NodeTypeIntelligence: Node type-specific intelligence patterns
+- ModelNodeTypeIntelligence: Node type-specific intelligence patterns
 - DEFAULT_NODE_TYPE_INTELLIGENCE: Default patterns for each node type
 - get_default_intelligence(): Factory function for default contexts
 """
@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from omniclaude.lib.models.intelligence_context import (
     DEFAULT_NODE_TYPE_INTELLIGENCE,
     IntelligenceContext,
-    NodeTypeIntelligence,
+    ModelNodeTypeIntelligence,
     get_default_intelligence,
 )
 
@@ -161,49 +161,49 @@ class TestIntelligenceContextWithData:
         assert context.confidence_score == 0.8
 
 
-class TestNodeTypeIntelligenceDefaults:
-    """Tests for NodeTypeIntelligence default field values."""
+class TestModelNodeTypeIntelligenceDefaults:
+    """Tests for ModelNodeTypeIntelligence default field values."""
 
     def test_node_type_is_required(self) -> None:
         """Test that node_type is a required field."""
         with pytest.raises(ValidationError) as exc_info:
-            NodeTypeIntelligence()  # type: ignore[call-arg]
+            ModelNodeTypeIntelligence()  # type: ignore[call-arg]
 
         errors = exc_info.value.errors()
         assert any(e["loc"] == ("node_type",) for e in errors)
 
     def test_default_patterns_defaults_to_empty_list(self) -> None:
         """Test that default_patterns defaults to empty list."""
-        intel = NodeTypeIntelligence(node_type="TEST")
+        intel = ModelNodeTypeIntelligence(node_type="TEST")
         assert intel.default_patterns == []
 
     def test_typical_operations_defaults_to_empty_list(self) -> None:
         """Test that typical_operations defaults to empty list."""
-        intel = NodeTypeIntelligence(node_type="TEST")
+        intel = ModelNodeTypeIntelligence(node_type="TEST")
         assert intel.typical_operations == []
 
     def test_common_mixins_defaults_to_empty_list(self) -> None:
         """Test that common_mixins defaults to empty list."""
-        intel = NodeTypeIntelligence(node_type="TEST")
+        intel = ModelNodeTypeIntelligence(node_type="TEST")
         assert intel.common_mixins == []
 
     def test_performance_baseline_defaults_to_empty_dict(self) -> None:
         """Test that performance_baseline defaults to empty dict."""
-        intel = NodeTypeIntelligence(node_type="TEST")
+        intel = ModelNodeTypeIntelligence(node_type="TEST")
         assert intel.performance_baseline == {}
 
 
-class TestNodeTypeIntelligenceValidation:
-    """Tests for NodeTypeIntelligence validation behavior."""
+class TestModelNodeTypeIntelligenceValidation:
+    """Tests for ModelNodeTypeIntelligence validation behavior."""
 
     def test_can_create_with_node_type_only(self) -> None:
-        """Test that NodeTypeIntelligence can be created with only node_type."""
-        intel = NodeTypeIntelligence(node_type="EFFECT")
+        """Test that ModelNodeTypeIntelligence can be created with only node_type."""
+        intel = ModelNodeTypeIntelligence(node_type="EFFECT")
         assert intel.node_type == "EFFECT"
 
     def test_can_create_with_all_fields(self) -> None:
-        """Test that NodeTypeIntelligence can be created with all fields."""
-        intel = NodeTypeIntelligence(
+        """Test that ModelNodeTypeIntelligence can be created with all fields."""
+        intel = ModelNodeTypeIntelligence(
             node_type="COMPUTE",
             default_patterns=["Ensure pure functions"],
             typical_operations=["calculate", "transform"],
@@ -218,16 +218,16 @@ class TestNodeTypeIntelligenceValidation:
         assert intel.performance_baseline == {"cpu_bound": True}
 
     def test_rejects_extra_fields(self) -> None:
-        """Test that NodeTypeIntelligence rejects extra fields (extra='forbid')."""
+        """Test that ModelNodeTypeIntelligence rejects extra fields (extra='forbid')."""
         with pytest.raises(ValidationError) as exc_info:
-            NodeTypeIntelligence(node_type="TEST", extra_field="value")  # type: ignore[call-arg]
+            ModelNodeTypeIntelligence(node_type="TEST", extra_field="value")  # type: ignore[call-arg]
 
         errors = exc_info.value.errors()
         assert len(errors) == 1
         assert errors[0]["type"] == "extra_forbidden"
 
 
-class TestDefaultNodeTypeIntelligenceDict:
+class TestDefaultModelNodeTypeIntelligenceDict:
     """Tests for DEFAULT_NODE_TYPE_INTELLIGENCE dictionary."""
 
     def test_contains_effect_key(self) -> None:
@@ -251,10 +251,10 @@ class TestDefaultNodeTypeIntelligenceDict:
         assert len(DEFAULT_NODE_TYPE_INTELLIGENCE) == 4
 
     def test_all_values_are_node_type_intelligence(self) -> None:
-        """Test that all values are NodeTypeIntelligence instances."""
+        """Test that all values are ModelNodeTypeIntelligence instances."""
         for key, value in DEFAULT_NODE_TYPE_INTELLIGENCE.items():
-            assert isinstance(value, NodeTypeIntelligence), (
-                f"Key {key} is not NodeTypeIntelligence"
+            assert isinstance(value, ModelNodeTypeIntelligence), (
+                f"Key {key} is not ModelNodeTypeIntelligence"
             )
 
     def test_effect_has_appropriate_patterns(self) -> None:
@@ -391,7 +391,7 @@ class TestGetDefaultIntelligence:
         assert "default_node_type_intelligence" in result.rag_sources
 
     def test_populates_node_type_patterns_from_default_patterns(self) -> None:
-        """Test that node_type_patterns is populated from NodeTypeIntelligence.default_patterns."""
+        """Test that node_type_patterns is populated from ModelNodeTypeIntelligence.default_patterns."""
         result = get_default_intelligence("EFFECT")
 
         assert result is not None
@@ -399,7 +399,7 @@ class TestGetDefaultIntelligence:
         assert result.node_type_patterns == expected
 
     def test_populates_common_operations_from_typical_operations(self) -> None:
-        """Test that common_operations is populated from NodeTypeIntelligence.typical_operations."""
+        """Test that common_operations is populated from ModelNodeTypeIntelligence.typical_operations."""
         result = get_default_intelligence("COMPUTE")
 
         assert result is not None
@@ -407,7 +407,7 @@ class TestGetDefaultIntelligence:
         assert result.common_operations == expected
 
     def test_populates_required_mixins_from_common_mixins(self) -> None:
-        """Test that required_mixins is populated from NodeTypeIntelligence.common_mixins."""
+        """Test that required_mixins is populated from ModelNodeTypeIntelligence.common_mixins."""
         result = get_default_intelligence("REDUCER")
 
         assert result is not None
@@ -415,7 +415,7 @@ class TestGetDefaultIntelligence:
         assert result.required_mixins == expected
 
     def test_populates_performance_targets_from_performance_baseline(self) -> None:
-        """Test that performance_targets is populated from NodeTypeIntelligence.performance_baseline."""
+        """Test that performance_targets is populated from ModelNodeTypeIntelligence.performance_baseline."""
         result = get_default_intelligence("ORCHESTRATOR")
 
         assert result is not None

@@ -10,9 +10,8 @@ import json
 import sys
 from pathlib import Path
 
-from omniclaude.nodes.node_validate_skills_compute.handlers import (
-    HandlerSkillContracts,
-    HandlerSkillHygiene,
+from omniclaude.nodes.node_validate_skills_compute.container import (
+    container_validate_skills,
 )
 from omniclaude.nodes.node_validate_skills_compute.models import (
     ModelSkillValidationReport,
@@ -134,10 +133,10 @@ def main(argv: list[str] | None = None) -> int:
 
     request = ModelSkillValidationRequest(skills_root=skills_root, strict=args.strict)
     if args.operation == "hygiene":
-        result = HandlerSkillHygiene().handle(request)
+        result = container_validate_skills.build_skill_hygiene().handle(request)
         _print_hygiene_report(result, request, args.json_output)
     else:
-        result = HandlerSkillContracts().handle(request)
+        result = container_validate_skills.build_skill_contracts().handle(request)
         _print_contracts_report(result, args.json_output)
     return 1 if result.has_errors else 0
 
