@@ -47,3 +47,9 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'openai_compatible_url_models or openai_compatible_by_provider'"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21263-deploy-probe
+    description: 'Hermetic deploy probe (no live deploy: the handler is a bash script fetched by the user, omniclaude has no runtime-rebuild-trigger). The onboarding script at the PR head carries the OpenAI-compatible choice; exit status depends on the committed content, so it is red if the choice is absent.'
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "gh api 'repos/OmniNode-ai/omniclaude/contents/plugins/onex/skills/_bin/lab-onboarding.sh?ref=06982c6cb63d6fd8c5a11e6bcbc0df116ef88796' --jq .content | base64 -d | grep -q 'openai_compatible'"
