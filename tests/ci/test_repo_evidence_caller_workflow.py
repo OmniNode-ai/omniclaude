@@ -18,6 +18,7 @@ from scripts.ci.ci_summary_gate import (
     EXTERNAL_SWEEP_EXCLUSIONS,
     evaluate_external_sweep,
 )
+from tests.ci.receipt_gate_pin import RECEIPT_GATE_PIN_TAG
 
 pytestmark = pytest.mark.unit
 
@@ -27,12 +28,12 @@ CALLER_PATH = REPO_ROOT / ".github" / "workflows" / "call-repo-evidence-gate.yml
 # First release whose wheel ships node_dod_verify occ-difference, omnimarket#3277.
 _DIFFERENCE_CLASSIFIER_FLOOR = (0, 4, 294)
 
-# OMN-20074: the receipt-gate pin omnimarket's caller uses, the squash commit of
-# omnibase_core#1932 on dev. It descends from omnibase_core#1914 and #1912, whose
-# head step writes the contract-home marker the difference step needs to name a
-# contract that lives in another repository, and it adds the writer app's
-# workflow-pin (#1927) and plugin version bump (#1931) classification.
-_FLEET_RECEIPT_GATE_PIN = "4e4f5e0404d364e296c5d37db6aa3ab9e07f8ffa"
+# OMN-20074: the receipt-gate pin is an omnibase_core dev-merge tag, held in
+# tests/ci/receipt_gate_pin.py (OMN-20134). It descends from omnibase_core#1932,
+# #1914 and #1912, whose head step writes the contract-home marker the difference
+# step needs to name a contract that lives in another repository, and it adds the
+# writer app's workflow-pin (#1927) and plugin version bump (#1931) classification.
+_FLEET_RECEIPT_GATE_PIN = RECEIPT_GATE_PIN_TAG
 
 # First release whose wheel reads that marker and reports
 # contract_in_another_repo, omnimarket#3563.
@@ -72,9 +73,9 @@ def test_caller_workflow_shape() -> None:
     )
     job = data["jobs"]["repo-evidence"]
     assert re.fullmatch(
-        r"OmniNode-ai/omnibase_core/\.github/workflows/receipt-gate\.yml@[0-9a-f]{40}",
+        r"OmniNode-ai/omnibase_core/\.github/workflows/receipt-gate\.yml@dev-\d{14}-[0-9a-f]{12}",
         job["uses"],
-    ), "receipt-gate reusable must be pinned by an immutable full SHA"
+    ), "receipt-gate reusable must be pinned by an omnibase_core dev-merge tag"
     assert job["with"]["evidence-source"] == "caller", (
         "caller evidence mode is required"
     )
@@ -121,7 +122,7 @@ def test_caller_pins_the_reusable_that_classifies_a_contract_in_another_repo() -
     pin = job["uses"].rsplit("@", 1)[1]
     assert pin == _FLEET_RECEIPT_GATE_PIN, (
         f"receipt-gate must be pinned at {_FLEET_RECEIPT_GATE_PIN} "
-        f"(omnibase_core#1932, a descendant of #1914); found {pin}"
+        f"(a descendant of omnibase_core#1932 and #1914); found {pin}"
     )
     version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
     assert version >= _CONTRACT_HOME_CLASSIFIER_FLOOR, (
@@ -144,7 +145,7 @@ def test_caller_runs_the_writer_app_classifiers_of_verifier_0_4_310() -> None:
     pin = job["uses"].rsplit("@", 1)[1]
     assert pin == _FLEET_RECEIPT_GATE_PIN, (
         f"receipt-gate must be pinned at {_FLEET_RECEIPT_GATE_PIN} "
-        f"(omnibase_core#1932, the writer app classifier hand-off); found {pin}"
+        f"(a descendant of omnibase_core#1932, the writer app classifier hand-off); found {pin}"
     )
     version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
     assert version >= _WRITER_APP_CLASSIFIER_FLOOR, (

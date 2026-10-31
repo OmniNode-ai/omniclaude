@@ -16,8 +16,9 @@
 # Per-PR concurrency cancels superseded runs so the latest event gets a verdict.
 # Read-only contents and pull-requests permissions are all this caller needs;
 # checkout and verification belong to the reusable, with no caller secrets.
-# The full-SHA pin makes the reusable immutable; verifier-version pins the
-# released verifier used to read the caller's contracts.
+# The dev-merge tag of omnibase_core makes the reusable a fixed ref (the repo's
+# ruling is tags, never full commit shas); verifier-version pins the released
+# verifier used to read the caller's contracts.
 #
 # The job id is the context prefix: repo-evidence / dod-verify carries the
 # verdict, so do not add a job name.
@@ -28,19 +29,19 @@
 # context directly. Admission no longer compares against OCC. Rollback is
 # setting compare-with-occ back to "true".
 #
-# The reusable is pinned by full SHA. It must be a commit that carries the
-# shadow input and, for the S5 count, the contract-home marker of
-# omnibase_core#1912: with compare-with-occ "true" the head step names the
-# repository that holds a ticket's only other contract, and verifier 0.4.305
-# (omnimarket#3563) classifies that refusal as contract_in_another_repo instead
-# of unclassified (OMN-20074, rulings 2026-10-08T09:57:41Z and 14:59:17Z). The
-# pin is the squash commit of omnibase_core#1932 on dev, the one omnimarket's
-# caller uses. It descends from #1914 and hands a writer app diff that only
-# moves the omnibase_core checkout pin (#1927) or only bumps a .claude-plugin
-# manifest version (#1931) to the pinned verifier's classifiers, and refuses a
-# verifier-version below 0.4.303. verifier-version 0.4.310 is the first
-# omnimarket release that ships both classifiers (omnimarket#3694); it also
+# The reusable is pinned to a dev-merge tag of omnibase_core, never a full
+# commit sha. The tag is a descendant of #1932 and #1912: it carries the
+# `shadow` input, the contract-home marker (with compare-with-occ "true" the
+# head step names the repository that holds a ticket's only other contract, and
+# verifier 0.4.305 classifies that refusal as contract_in_another_repo), the
+# writer app diff hand-off (#1927, #1931), the VERIFIER_FLOOR refusal of a
+# verifier-version below 0.4.303, and the fix-parent control fallback
+# (control_uses_fix_parent). verifier-version 0.4.310 is the first omnimarket
+# release that ships both writer app classifiers (omnimarket#3694); it also
 # carries omnimarket#3751, so a contract that repeats a mapping key is refused.
+# The pin is advanced by omnimarket's node_receipt_gate_pin_advance_compute
+# (OMN-20134), which edits the uses line and RECEIPT_GATE_PIN_TAG in
+# tests/ci/receipt_gate_pin.py.
 # omniclaude does not host receipt-gate.yml.
 
 name: Repo Evidence Gate
@@ -60,7 +61,7 @@ permissions:
 
 jobs:
   repo-evidence:
-    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@4e4f5e0404d364e296c5d37db6aa3ab9e07f8ffa # OMN-20074: the squash commit of omnibase_core#1932 on dev (descends from #1914; writer app workflow-pin and plugin version bump classification, verifier floor)
+    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@dev-20261030152335-66d35d2283c3 # omnibase_core dev-merge tag; carries the fix-parent control fallback (OMN-20134)
     with:
       evidence-source: caller
       verifier-version: 0.4.310
