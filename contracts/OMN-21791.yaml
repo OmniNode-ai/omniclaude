@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21791
+title: "Contracts and DI burn-down: Linear effect endpoint, slice rf1515-c2"
+summary: >-
+  The Linear effect node's GraphQL host, path and deadline move from module
+  constants into the node contract, read through ModelLinearEndpoint or injected.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21791-linear-endpoint
+    statement: The Linear effect node reads its API host from its contract or an injected endpoint.
+    acceptance:
+      - id: AC1
+        statement: "AC1 (SLICE): contract and injected endpoint values reach the Linear connection and the contracts_and_di literal_host finding on the slice path is gone -- falsifier: uv run pytest tests/unit/nodes/node_linear_effect -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: Linear effect handler and endpoint tests
+    command: "uv run pytest tests/unit/nodes/node_linear_effect -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21791-linear-endpoint
+    binds_ac: [AC1]
+    description: >-
+      Contract endpoint block and injected endpoint reach HTTPSConnection and the
+      request path; invalid values fail validation. The read-only scan on the
+      slice path reports no literal_host.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/nodes/node_linear_effect -q --no-cov"
+        cwd: "."
