@@ -37,3 +37,10 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/nodes/test_cli_entries_not_in_handler_modules_omn21536.py tests/scripts/test_done_closeout_instructions.py tests/unit/nodes/node_lane_github_read_guard_effect -q --no-cov"
         cwd: "."
+  - id: dod-omn21536-ac1-deploy-entries-on-branch
+    description: "Deploy check: the closeout audit handler module at the checked-out head, read through the GitHub contents API, defines the HandlerDoneCloseoutInstructions class. Fails at the merge base, where that class does not exist."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: "gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_linear_effect/handlers/handler_done_closeout_instructions.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -q 'class HandlerDoneCloseoutInstructions'"
