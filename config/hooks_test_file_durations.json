@@ -38,6 +38,7 @@
   "tests/hooks/test_delegation_hook_runner.py": 2.25,
   "tests/hooks/test_delegation_hook_runner_telemetry.py": 0.07,
   "tests/hooks/test_deployed_registry_redaction_omn17201.py": 0.42,
+  "tests/hooks/test_dev_runtime_mutation_guard_hook.py": 8.0,
   "tests/hooks/test_dirty_path_restore_guard.py": 9.22,
   "tests/hooks/test_dispatch_claim_posttool.py": 0.05,
   "tests/hooks/test_dispatch_claim_pretool.py": 0.03,

@@ -94,18 +94,57 @@ while [[ "$_OBG_INPUT" == *$'\n' ]]; do _OBG_INPUT="${_OBG_INPUT%$'\n'}"; done
 # api.github.com or a /gh path starts no interpreter.
 #
 # Every refusal here writes one class=refusal row through the refusal recorder
-# (OMN-21020). The block runs ahead of the seven guards, so none of their
-# hook_record_refusal calls can see it; the recording is the recorder's seam, called
-# from a subshell so the guard name and the payload stay out of this shell's scope.
-_obg_record_lane_read_refusal() {
-    # $1 reason class, $2 the refusal's text (its first line becomes the detail).
-    (
-        _OMNICLAUDE_HOOK_NAME="pre_tool_use_lane_github_read_guard"
-        _OMNICLAUDE_HOOK_PAYLOAD="$_OBG_INPUT"
-        # shellcheck source=../lib/hook_refusal.sh
-        source "${_OBG_LIB}/hook_refusal.sh" || exit 0
-        hook_record_refusal "$1" "${2%%$'\n'*}"
-    ) || true
+# (OMN-21020). The node checks run ahead of the seven guards, so none of their
+# hook_record_refusal calls can see them; the recording is the recorder's seam,
+# called in this shell, which exits at every call site right after, so the guard
+# name and the payload it sets never reach another guard. $1 hook name, $2 reason class, $3 the refusal's text (its first
+# line becomes the detail).
+_obg_record_refusal() {
+    # shellcheck source=../lib/hook_refusal.sh
+    _OMNICLAUDE_HOOK_NAME="$1"; _OMNICLAUDE_HOOK_PAYLOAD="$_OBG_INPUT"
+    source "${_OBG_LIB}/hook_refusal.sh" && hook_record_refusal "$2" "${3%%$'\n'*}" || true
+}
+
+# One node check: `python -m` the node's runtime module ($2) on the payload. Exit 0
+# passes; exit 2 prints the node's block JSON and refuses; anything else refuses
+# fail-closed. $1 hook name, $3 the check's name for the could-not-judge text, $4
+# that refusal's class. A node refusal's class is the bypass path the node judged,
+# named by its own text.
+_obg_node_check() {
+    local out rc reason class why
+    out="$(
+        # The session mode goes to the node, which refuses nothing in lite mode (a
+        # non-OmniNode install). This entrypoint itself never exits on it.
+        _OBG_MODE="full"
+        # shellcheck source=/dev/null
+        [[ -f "${_OBG_SCRIPTS}/../../lib/mode.sh" ]] && source "${_OBG_SCRIPTS}/../../lib/mode.sh" && _OBG_MODE="$(omniclaude_mode)"
+        cd "$HOME" 2>/dev/null || cd /tmp || true
+        # shellcheck source=common.sh
+        source "${_OBG_SCRIPTS}/common.sh" >/dev/null 2>&1 || exit 1
+        unset PYTHONPATH
+        printf '%s\n' "$_OBG_INPUT" | "${PYTHON_CMD:-python3}" -m "$2" \
+            --cwd "$_OBG_CALLER_CWD" --mode "$_OBG_MODE" 2>&1
+    )"
+    rc=$?
+    [[ $rc -eq 0 ]] && return 0
+    if [[ $rc -eq 2 ]]; then
+        printf '%s\n' "$out"
+        reason="$(printf '%s\n' "$out" | jq -r '.reason // empty' 2>/dev/null || true)"
+        [[ -n "$reason" ]] && printf '%s\n' "$reason" >&2
+        case "$1:$reason" in
+            *dev_runtime*) class="dev-runtime-mutation" ;;
+            *"GitHub MCP tool"*) class="lane-github-read-mcp-tool" ;;
+            *"direct call to the GitHub API"*) class="lane-github-read-raw-api" ;;
+            *) class="lane-github-read-real-gh" ;;
+        esac
+        _obg_record_refusal "$1" "$class" "$reason"
+        exit 2
+    fi
+    why="BLOCKED: the $3 check could not judge this call (exit ${rc})"
+    _obg_record_refusal "$1" "$4" "$why"
+    jq -nc --arg r "${why}. A call it cannot judge is refused, never assumed safe. Detail: ${out:0:400}" '{"decision": "block", "reason": $r}' 2>/dev/null \
+        || printf '{"decision": "block", "reason": "%s."}\n' "$why"
+    printf '%s\n' "${why}. Detail: ${out:0:400}" >&2; exit 2
 }
 
 _OBG_TOOL=""
@@ -118,52 +157,27 @@ elif [[ "$_OBG_INPUT" =~ [Aa][Pp][Ii]\.[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm] \
         || "$_OBG_INPUT" =~ /gh([^A-Za-z0-9_.-]|$) ]]; then
     _obg_lane_read=1
 fi
+_OBG_CALLER_CWD="$PWD"
 if [[ $_obg_lane_read -eq 1 ]]; then
-    _OBG_CALLER_CWD="$PWD"
-    _OBG_LANE_OUT="$(
-        # The session mode goes to the node, which treats nobody as a lane in lite
-        # mode (a non-OmniNode install). This entrypoint itself never exits on it.
-        _OBG_MODE="full"
-        if [[ -f "${_OBG_SCRIPTS}/../../lib/mode.sh" ]]; then
-            # shellcheck source=/dev/null
-            source "${_OBG_SCRIPTS}/../../lib/mode.sh"
-            _OBG_MODE="$(omniclaude_mode)"
-        fi
-        cd "$HOME" 2>/dev/null || cd /tmp || true
-        # shellcheck source=common.sh
-        source "${_OBG_SCRIPTS}/common.sh" >/dev/null 2>&1 || exit 1
-        unset PYTHONPATH
-        printf '%s\n' "$_OBG_INPUT" | "${PYTHON_CMD:-python3}" -m \
-            omniclaude.nodes.node_lane_github_read_guard_effect.runtime_lane_github_read \
-            --cwd "$_OBG_CALLER_CWD" --mode "$_OBG_MODE" 2>&1
-    )"
-    _OBG_LANE_RC=$?
-    if [[ $_OBG_LANE_RC -eq 2 ]]; then
-        printf '%s\n' "$_OBG_LANE_OUT"
-        _OBG_LANE_REASON="$(printf '%s\n' "$_OBG_LANE_OUT" | jq -r '.reason // empty' 2>/dev/null || true)"
-        [[ -n "$_OBG_LANE_REASON" ]] && printf '%s\n' "$_OBG_LANE_REASON" >&2
-        # The reason class is the bypass path the node judged, named by its own text.
-        case "$_OBG_LANE_REASON" in
-            *"GitHub MCP tool"*) _OBG_LANE_CLASS="lane-github-read-mcp-tool" ;;
-            *"direct call to the GitHub API"*) _OBG_LANE_CLASS="lane-github-read-raw-api" ;;
-            *) _OBG_LANE_CLASS="lane-github-read-real-gh" ;;
-        esac
-        _obg_record_lane_read_refusal "$_OBG_LANE_CLASS" "$_OBG_LANE_REASON"
-        exit 2
-    fi
-    if [[ $_OBG_LANE_RC -ne 0 ]]; then
-        _OBG_LANE_WHY="${_OBG_LANE_OUT:0:400}"
-        _obg_record_lane_read_refusal "lane-github-read-check-could-not-judge" \
-            "BLOCKED: the OMN-20916 lane GitHub read check could not judge this call (exit ${_OBG_LANE_RC})"
-        jq -nc --arg r "BLOCKED: the OMN-20916 lane GitHub read check could not judge this call (exit ${_OBG_LANE_RC}). A call it cannot judge is refused, never assumed safe. Detail: ${_OBG_LANE_WHY}" \
-            '{"decision": "block", "reason": $r}' 2>/dev/null \
-            || printf '%s\n' '{"decision": "block", "reason": "BLOCKED: the OMN-20916 lane GitHub read check could not judge this call."}'
-        printf '%s\n' "BLOCKED: the OMN-20916 lane GitHub read check could not judge this call (exit ${_OBG_LANE_RC}). Detail: ${_OBG_LANE_WHY}" >&2
-        exit 2
-    fi
+    _obg_node_check pre_tool_use_lane_github_read_guard omniclaude.nodes.node_lane_github_read_guard_effect.runtime_lane_github_read \
+        "OMN-20916 lane GitHub read" lane-github-read-check-could-not-judge
 fi
 # A GitHub MCP call is not a Bash command: the seven guards below never see it.
 [[ "$_OBG_TOOL" == mcp__* ]] && exit 0
+
+# --- Dev runtime mutation check (OMN-21795) ------------------------------------
+# Operator, 2026-10-31: dev runtime containers are recreated only by a deployment
+# or under a grant. omnimarket's node_dev_runtime_mutation_guard_effect refuses a
+# docker or docker compose command that would recreate, remove, stop or restart a
+# container of a protected compose project (declared in its contract, extended by
+# its deployment overlay) unless a live grant row on the ledger names the project.
+# This block only decides, without an exec, whether the command names docker and a
+# lifecycle verb; every other command starts no interpreter. Fail-closed as above.
+_OBG_DOCKER_VERB='(^|[^A-Za-z0-9_-])(up|down|rm|restart|stop|kill|start|create|pause|unpause|rename|update|scale)([^A-Za-z0-9_-]|$)'
+if [[ "$_OBG_TOOL" == "Bash" && "$_OBG_INPUT" == *docker* && "$_OBG_INPUT" =~ $_OBG_DOCKER_VERB ]]; then
+    _obg_node_check pre_tool_use_dev_runtime_mutation_guard omnimarket.nodes.node_dev_runtime_mutation_guard_effect.runtime_dev_runtime_mutation \
+        "OMN-21795 dev runtime mutation" dev-runtime-mutation-check-could-not-judge
+fi
 
 # shellcheck source=../lib/bash_guard_core.sh
 source "${_OBG_LIB}/bash_guard_core.sh"
