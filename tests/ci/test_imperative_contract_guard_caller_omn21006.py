@@ -64,8 +64,10 @@ FINDING_KEYS = (
 # replay_engine.py lost its one (1 to 0), and the other recorded lines moved.
 # OMN-21780 removed lines from manifest_injector.py, shifting the line numbers of its
 # non_live_freestanding_violations rows; no finding was added or dropped.
+# OMN-21728 moved literal runtime paths into the runtime contract, which shifted the
+# line numbers of the dead-handler rows it touched; no finding was added or dropped.
 RECORDED_OCC_FINDING_DIGEST = (
-    "340c81a2c738a6b0248dc5692f3baeaf279d8a04c452f6efa8c978895ca03218"
+    "f2be09c96bae2e508a23b676ad6f7032b5277a3d9aaa76ee9fa7ed9f7996223a"
 )
 
 
