@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for the TopicBase enum (OMN-21769).
+# Source of truth for the typed work-ledger v2 topics (OMN-20001) that TopicBase
+# projects; topics.py reads this file for them and holds no literal for them.
+# Wire-ready names, no environment prefix (OMN-1972).
+
+work_ledger_v2:
+  ack: onex.evt.omnimarket.work-ledger-ack.v2
+  claim: onex.evt.omnimarket.work-ledger-claim.v2
+  correction: onex.evt.omnimarket.work-ledger-correction.v2
+  friction: onex.evt.omnimarket.work-ledger-friction.v2
+  hold: onex.evt.omnimarket.work-ledger-hold.v2
+  msg: onex.evt.omnimarket.work-ledger-msg.v2
+  operator_consent: onex.evt.omnimarket.work-ledger-operator-consent.v2
+  release: onex.evt.omnimarket.work-ledger-release.v2
+  ruling: onex.evt.omnimarket.work-ledger-ruling.v2
+  status: onex.evt.omnimarket.work-ledger-status.v2
+  terminal: onex.evt.omnimarket.work-ledger-terminal.v2

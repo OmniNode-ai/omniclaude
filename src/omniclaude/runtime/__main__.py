@@ -32,6 +32,8 @@ import os
 import sys
 from pathlib import Path
 
+from omniclaude.models.model_topic_manifest import ModelTopicManifest
+
 # ---------------------------------------------------------------------------
 # Dry-run validation
 # ---------------------------------------------------------------------------
@@ -130,6 +132,7 @@ def _check_route_matcher() -> tuple[bool, str]:
             ModelDispatchRoute,
         )
 
+        topic = ModelTopicManifest.topic_of(__file__, "node_skill_status_orchestrator")
         route = ModelDispatchRoute(
             route_id="dry-run-check",
             topic_pattern="onex.cmd.omniclaude.*.v1",  # arch-topic-naming: ignore
@@ -137,13 +140,11 @@ def _check_route_matcher() -> tuple[bool, str]:
             message_category=EnumMessageCategory.COMMAND,
             message_type="dry-run",
         )
-        if route.matches_topic(
-            "onex.cmd.omniclaude.status.v1"  # arch-topic-naming: ignore
-        ):
-            return True, "OK (pattern matches onex.cmd.omniclaude.status.v1)"
+        if route.matches_topic(topic):
+            return True, f"OK (pattern matches {topic})"
         return (
             False,
-            "Route matcher returned False for onex.cmd.omniclaude.status.v1",
+            f"Route matcher returned False for {topic}",
         )
     except Exception as exc:  # noqa: BLE001 — boundary: dry-run check must degrade
         return False, f"Route matcher error: {exc}"
