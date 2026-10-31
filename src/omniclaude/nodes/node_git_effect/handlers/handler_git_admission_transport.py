@@ -3,9 +3,7 @@
 
 """Transport adapter that routes the Git node's admission_check request to HandlerGitAdmission."""
 
-from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (
-    HandlerGitAdmission,
-)
+from omniclaude.nodes.node_git_effect.container import container_git_admission
 from omniclaude.nodes.node_git_effect.models import (
     GitOperation,
     GitResultStatus,
@@ -25,7 +23,9 @@ class HandlerGitAdmissionTransport:
             raise ValueError(
                 "git admission requires the admission_check operation and payload"
             )
-        admission = HandlerGitAdmission().handle(request.admission)
+        admission = container_git_admission.build_git_admission().handle(
+            request.admission
+        )
         return ModelGitResult(
             operation=request.operation.value,
             status=GitResultStatus.SUCCESS,
