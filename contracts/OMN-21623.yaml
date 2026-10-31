@@ -29,6 +29,7 @@ dod_evidence:
   - id: dod-omn21623-runtime-timeouts-from-contract
     description: "The contract timeouts section, the frozen model and the five callers carry the timeouts; the new tests fail at the merge base, which has no model, and pass here."
     source: manual
+    binds_ac: [BURNDOWN2]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/models/test_model_runtime_timeouts.py tests/unit/trace tests/unit/lib/utils tests/skills/coverage_sweep -q --no-cov"
