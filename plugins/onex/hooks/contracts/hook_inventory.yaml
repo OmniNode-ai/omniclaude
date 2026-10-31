@@ -533,7 +533,7 @@ expected_hooks:
       bit_defined: false
     canary: null
     no_canary_reason: >
-      Running it publishes a synthetic row to whichever .201 lane
+      Running it publishes a synthetic row to whichever lane
       hook_edge_lane.yaml declares (OMN-17204). A canary that writes real
       events onto the lane the observability projection reads would corrupt
       the surface it is meant to protect. It is an observer, so A17's
@@ -834,7 +834,7 @@ expected_hooks:
     canary: null
     no_canary_reason: >
       Same reason as post_tool_use_bus_mirror.sh: running it publishes a
-      synthetic session-started row to the declared .201 lane. Observer, not
+      synthetic session-started row to the declared lane. Observer, not
       an enforcement mechanism.
 
   - script: "session_start_goal_surface.sh"
@@ -953,7 +953,7 @@ expected_hooks:
       bit_defined: false
     canary: null
     no_canary_reason: >
-      Publishes a synthetic session-ended row to the declared .201 lane.
+      Publishes a synthetic session-ended row to the declared lane.
       Observer, not an enforcement mechanism.
 
   - script: "user_prompt_submit_bus_mirror.sh"
@@ -976,7 +976,7 @@ expected_hooks:
       bit_defined: false
     canary: null
     no_canary_reason: >
-      Publishes a synthetic prompt-submitted row to the declared .201 lane.
+      Publishes a synthetic prompt-submitted row to the declared lane.
       Observer, not an enforcement mechanism.
 
   - script: "pre_tool_use_skill_started.sh"
