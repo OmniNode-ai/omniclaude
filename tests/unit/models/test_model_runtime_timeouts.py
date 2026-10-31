@@ -133,7 +133,10 @@ class TestToolCallSites:
             timeouts.diagnostics_http_seconds
         }
 
-    def test_health_checker_uses_the_injected_timeouts(self) -> None:
+    def test_health_checker_uses_the_injected_timeouts(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path))
         timeouts = _distinct_timeouts()
         checker = Phase4HealthChecker(base_url="http://health.test", timeouts=timeouts)
         ok = MagicMock(
