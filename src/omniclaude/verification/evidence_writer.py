@@ -83,11 +83,9 @@ def emit_event(event: ModelEvidenceWrittenEvent) -> None:
     authoritative, Kafka is best-effort.
     """
     try:
-        from omnimarket.nodes.node_event_emit_effect.models.model_emit_request import (
-            ModelEmitRequest,
-        )
-
         from omniclaude.handlers.container import container_event_emit
+
+        emit_handler = container_event_emit.build_event_emit()
     except ImportError:
         logger.error(
             "node_event_emit_effect import failed; evidence event for "
@@ -98,8 +96,8 @@ def emit_event(event: ModelEvidenceWrittenEvent) -> None:
         return
 
     try:
-        container_event_emit.build_event_emit().handle(
-            ModelEmitRequest(
+        emit_handler.handle(
+            container_event_emit.ModelEmitRequest(
                 # NO explicit `topic` override (OMN-18627). This call site used
                 # to pass `topic=build_topic(TopicBase.EVIDENCE_WRITTEN)` while
                 # borrowing this registered class's durability tier, on the

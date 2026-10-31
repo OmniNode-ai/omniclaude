@@ -127,11 +127,9 @@ class RoutingRecorder:
         disk is authoritative, Kafka is best-effort.
         """
         try:
-            from omnimarket.nodes.node_event_emit_effect.models.model_emit_request import (
-                ModelEmitRequest,
-            )
-
             from omniclaude.handlers.container import container_event_emit
+
+            emit_handler = container_event_emit.build_event_emit()
         except ImportError:
             logger.error(
                 "node_event_emit_effect import failed; routing decision "
@@ -142,8 +140,8 @@ class RoutingRecorder:
             return
 
         try:
-            container_event_emit.build_event_emit().handle(
-                ModelEmitRequest(
+            emit_handler.handle(
+                container_event_emit.ModelEmitRequest(
                     event_type="routing.decision",
                     payload=decision.model_dump(),
                 )
