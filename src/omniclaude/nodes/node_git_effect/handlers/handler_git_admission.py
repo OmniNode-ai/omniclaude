@@ -186,6 +186,7 @@ import fcntl
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import subprocess
@@ -2716,16 +2717,31 @@ class HandlerGitAdmission:
 
 
 def dispatch(
-    request: ModelGitAdmissionRequest, state_root: Path
+    request: ModelGitAdmissionRequest,
+    state_root: Path,
+    *,
+    runtime_timeout_seconds: float | None = None,
 ) -> ModelGitAdmissionResult:
     """Use the canonical runtime and its contract-declared in-memory bus.
 
     Git index, HEAD and dirty-file reads must occur on the hook's host. A remote
     broker consumer would inspect a different filesystem. This is an explicit
     in-process deployment, never a fallback from a failed remote dispatch.
+
+    The runtime deadline is the contract's ``admission_check`` operation
+    timeout (plus overlay) unless the caller injects one (OMN-21737).
     """
     from omnibase_core.enums.enum_workflow_result import EnumWorkflowResult
     from omnibase_core.runtime.runtime_local import RuntimeLocal
+
+    from omniclaude.nodes.node_git_effect.models.model_git_timeout_policy import (
+        ModelGitTimeoutPolicy,
+    )
+
+    if runtime_timeout_seconds is None:
+        runtime_timeout_seconds = ModelGitTimeoutPolicy.from_contract(
+            env=os.environ
+        ).timeout_for(GitOperation.ADMISSION_CHECK)
 
     state_root.mkdir(parents=True, exist_ok=True)
     input_path = state_root / "input.json"
@@ -2741,7 +2757,8 @@ def dispatch(
         state_root=state_root,
         input_path=input_path,
         backend_overrides={"event_bus": "inmemory"},
-        timeout=30,
+        # RuntimeLocal takes whole seconds; never round a deadline down.
+        timeout=math.ceil(runtime_timeout_seconds),
     )
     if runtime.run() is not EnumWorkflowResult.COMPLETED:
         raise RuntimeError(
