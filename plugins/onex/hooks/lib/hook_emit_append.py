@@ -49,8 +49,12 @@ def _load_bus_handler() -> Any:
 
 
 def developer_event_suppressed(event_type: str) -> bool:
+    # OMN-21773: a work.ledger.* row is written by the ledger of record, not a developer's hook,
+    # and onex-ledger runs this under an interpreter whose omnimarket may lack the admission
+    # node. The refusal then dropped every ledger row with exit 0 and no record.
     admission = getattr(_load_bus_handler(), "developer_event_suppressed", None)
-    return bool(admission and admission(event_type))
+    ledger = journal.is_ledger_event_type(event_type)
+    return bool(admission and not ledger and admission(event_type))
 
 
 def _parse_payload(raw: str) -> dict[str, Any]:
@@ -73,8 +77,7 @@ def _deferred_by_status(event_type: str, drainer_status: str | None) -> bool:
     import hook_emit_health as health
 
     status = health.read_status(Path(drainer_status))
-    publishable = None if status is None else status.publishable_event_types
-    return publishable is None or event_type not in publishable
+    return status is None or event_type not in (status.publishable_event_types or ())
 
 
 def append_event(
