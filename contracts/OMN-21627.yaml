@@ -34,3 +34,9 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lean_contract_seams_omn21627.py tests/unit/nodes/test_skill_node_coverage.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: test_passes
+        check_value: "python3 scripts/validation/validate_skill_node_boundary.py --skills-root plugins/onex/skills --skill lean_contract_seams --strict"
+        cwd: "."
+      - check_type: test_passes
+        check_value: "bash scripts/check-skill-monorepo-refs.sh"
+        cwd: "."

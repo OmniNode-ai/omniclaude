@@ -26,7 +26,8 @@ online.
 
 **Replaced by** the node-backed contract-seams skill on `node_contract_seams_orchestrator` (not built; it
 would compose `node_generate_node_effect` for step 3, core's `node_contract_walker_check_compute` and event-chain
-walker, `node_golden_chain_sweep` and `node_seam_reading_compute` for step 5). It has no ticket of its own yet.
+walker, `node_golden_chain_sweep` and `node_seam_reading_compute` for step 5).
+Its implementation ticket has not been assigned.
 **Replace this skill with the node-backed skill when that node lands.**
 
 ## The practice
@@ -74,13 +75,15 @@ Do not use it for a change inside one handler behind a seam that already connect
    `contract.yaml`). Run it on the in-memory overlay as a unit test, then on the Redpanda overlay as an
    integration test on a lab host through `/omni:lab-run`, with no code change between the two: only
    the overlay binds a different bus.
-5. **Prove that it connects.** All three readings, each with its command and read time:
+5. **Prove that it connects.** All three readings, each with its command and read time.
+   Run the Python commands below with the interpreter from the environment where omnibase_core is
+   installed (0.47.58 or later); they need no source checkout or project-local `uv` environment.
    - the event-chain walk over the new contracts with core's `ValidatorEventChainWalker`
-     (`uv run python -m omnibase_core.nodes.node_validation_report_write_effect.runtime_validator_run
+     (`python -m omnibase_core.nodes.node_validation_report_write_effect.runtime_validator_run
      omnibase_core.validation.validator_event_chain_walker:ValidatorEventChainWalker <node dirs>`,
      merged in omnibase_core#2165, released in 0.47.58): zero unconsumed topics, zero unproduced
      topics, zero states with no exit, zero undeclared triggers. Add core's contract walker report
-     (`uv run python -m omnibase_core.nodes.node_contract_walker_check_compute.runtime_contract_walker_check`)
+     (`python -m omnibase_core.nodes.node_contract_walker_check_compute.runtime_contract_walker_check`)
      for the orchestrator graph composed with the reducer FSM: every golden path reaches a terminal
      state;
    - `onex:golden_chain_sweep` over a chain registered for the new graph, from its head topic to its
