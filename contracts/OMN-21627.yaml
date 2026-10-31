@@ -1,0 +1,42 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21627
+title: "Contracts and seams come first: the lean_contract_seams bootstrap skill"
+summary: >
+  The operator ruled (about 2026-10-31T02:25Z) that a design starts with its contracts and seams
+  and that everything connects before any handler logic, and asked whether a skill does that. None
+  did: lean_seam_read reads crossings after the fact, generate_node scaffolds one node,
+  golden_chain_sweep checks bus-to-projection chains and core's event-chain walker is a validator.
+  lean_contract_seams is the bootstrap prose skill that runs them as one contracts-first step, in
+  six ordered steps, and names the node-backed form that replaces it.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21627-skill
+    statement: lean_contract_seams exists as a bootstrap prose skill with the six steps in order and a named proof command for each reading.
+    acceptance:
+      - id: AC1
+        statement: "AC1: omniclaude plugins/onex/skills/lean_contract_seams/SKILL.md exists with bootstrap: true, a Replaced-by line, the six steps (list nodes and crossings and models, write models and contracts, scaffold, wire and boot on both overlays, prove connected, only then fill), no script beside it and no ssh -- falsifier: uv run pytest over the omniclaude onex plugin skill tests that read the lean_* skills"
+evidence_requirements:
+  - kind: tests
+    description: "The skill shape test, its planted refusal and the skill-to-node coverage test pass"
+    command: "uv run pytest tests/skills/test_lean_contract_seams_omn21627.py tests/unit/nodes/test_skill_node_coverage.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21627-ac1-skill
+    description: "The skill declares bootstrap: true, names node_contract_seams_orchestrator, carries the six steps in order and names the walker, the contract walker report, golden_chain_sweep and lean_seam_read; a planted copy without step 5 is refused; the directory holds only SKILL.md; the manifest assigns it. Fails at the merge base, which has no such skill."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lean_contract_seams_omn21627.py tests/unit/nodes/test_skill_node_coverage.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: test_passes
+        check_value: "python3 scripts/validation/validate_skill_node_boundary.py --skills-root plugins/onex/skills --skill lean_contract_seams --strict"
+        cwd: "."
+      - check_type: test_passes
+        check_value: "bash scripts/check-skill-monorepo-refs.sh"
+        cwd: "."

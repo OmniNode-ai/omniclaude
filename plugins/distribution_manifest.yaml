@@ -533,6 +533,14 @@ components:
   path: plugins/onex/skills/lean_andon_stop/SKILL.md
   backing_nodes: []
   rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on node_andon_stop_reducer, OMN-21443.
+- id: lean_contract_seams
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_contract_seams/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-21627, the hand-run form of the contracts-and-seams-first practice); replaced by its node-backed skill on node_contract_seams_orchestrator, OMN-21627.
 - id: lean_experiment_first
   kind: skill
   exposure: beta
