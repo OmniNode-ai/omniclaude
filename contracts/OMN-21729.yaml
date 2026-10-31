@@ -32,7 +32,7 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn21729-lib-timeouts-contract
-    binds_ac: [AC1, AC2]
+    binds_ac: [AC1, AC2, AC3]
     description: >-
       The contract values equal the model values, a missing or non-positive value
       fails validation, and the result cache, coverage cache entry, self check,
