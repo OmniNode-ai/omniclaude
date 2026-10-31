@@ -107,7 +107,7 @@ class ProtocolAgentInbox(Protocol):
 
     async def gc_inbox(
         self,
-        ttl_hours: int = 24,
+        ttl_hours: int,
     ) -> int:
         """Garbage collect expired messages from file-based agent inboxes.
 

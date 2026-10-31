@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""OMN-18494: a cross-repo reusable workflow is referenced at ``@main`` or at a
-full sha -- never at a moving branch name.
+"""OMN-18494: a cross-repo reusable workflow is referenced at ``@main``, at a
+full sha or at a dev-merge tag -- never at a moving branch name.
 
 THE DEFECT THIS GUARDS, observed live.
 
@@ -49,9 +49,12 @@ SCOPE, stated as what is actually checked rather than as an aspiration.
   judged here; ``test_the_same_repo_branch_is_live`` proves that exclusion
   branch is exercised by real content rather than being dead code that would
   make the cross-repo half look cleaner than it is.
-- Accepted refs: ``main``, or a full 40-character lowercase hex sha. A short
-  sha is refused -- it is not a stable identifier and GitHub resolves it by
-  prefix search.
+- Accepted refs: ``main``, a full 40-character lowercase hex sha, or a
+  dev-merge tag of the form ``dev-<UTC YYYYMMDDHHMMSS>-<sha12>``. A dev-merge
+  tag is cut once per merge to the sibling's ``dev`` and is a fixed ref, not a
+  branch name; the repo's ruling of 2026-10-29T01:50:26Z pins reusables to such
+  tags (OMN-20134). A short sha is refused -- it is not a stable identifier and
+  GitHub resolves it by prefix search -- and so is the bare branch ``dev``.
 
 A zero here is only worth something if the collector can return non-zero:
 ``test_a_branch_pinned_cross_repo_reusable_is_a_finding`` is the positive
@@ -86,6 +89,10 @@ REUSABLE_PATH_RE = re.compile(r"^\.github/workflows/[^/]+\.ya?ml$")
 
 #: A full, unambiguous commit sha. Deliberately not a short sha.
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+#: A dev-merge tag: ``dev-<UTC YYYYMMDDHHMMSS>-<sha12>``. It names one merge to
+#: the sibling's ``dev`` and does not move, unlike the branch ``dev``.
+DEV_MERGE_TAG_RE = re.compile(r"^dev-\d{14}-[0-9a-f]{12}$")
 
 #: The only branch name a cross-repo reusable may be pinned to.
 ALLOWED_BRANCH = "main"
@@ -158,11 +165,13 @@ def collect_references(workflows_dir: Path) -> tuple[list[Reference], list[Refer
 
 
 def violations(references: list[Reference]) -> list[Reference]:
-    """References whose ref is neither ``main`` nor a full sha."""
+    """References whose ref is neither ``main``, a full sha nor a dev-merge tag."""
     return [
         reference
         for reference in references
-        if reference.ref != ALLOWED_BRANCH and not FULL_SHA_RE.match(reference.ref)
+        if reference.ref != ALLOWED_BRANCH
+        and not FULL_SHA_RE.match(reference.ref)
+        and not DEV_MERGE_TAG_RE.match(reference.ref)
     ]
 
 
@@ -172,14 +181,17 @@ def _write_workflow(directory: Path, name: str, body: str) -> Path:
     return path
 
 
-def test_every_cross_repo_reusable_is_pinned_to_main_or_a_full_sha() -> None:
+def test_every_cross_repo_reusable_is_pinned_to_main_a_full_sha_or_a_dev_merge_tag() -> (
+    None
+):
     """The guard itself, over the real tree."""
     cross_repo, _ = collect_references(WORKFLOWS_DIR)
     offenders = violations(cross_repo)
 
     assert not offenders, (
-        "cross-repo reusable workflows must be referenced at @main or at a full "
-        "40-character sha, never at a moving branch name (OMN-18494):\n  "
+        "cross-repo reusable workflows must be referenced at @main, at a full "
+        "40-character sha or at a dev-merge tag, never at a moving branch name "
+        "(OMN-18494):\n  "
         + "\n  ".join(offender.describe() for offender in sorted(offenders))
     )
 
@@ -262,6 +274,33 @@ def test_main_and_a_full_sha_are_accepted(tmp_path: Path) -> None:
 
     assert len(cross_repo) == 2
     assert not violations(cross_repo)
+
+
+def test_a_dev_merge_tag_is_accepted_and_a_malformed_one_is_not(tmp_path: Path) -> None:
+    """A dev-merge tag is a fixed ref; a near-miss spelling is still a finding."""
+    _write_workflow(
+        tmp_path,
+        "tagged.yml",
+        "name: tagged\n"
+        "on: pull_request\n"
+        "jobs:\n"
+        "  by_tag:\n"
+        "    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml"
+        "@dev-20261030152335-66d35d2283c3\n"
+        "  by_short_stamp:\n"
+        "    uses: OmniNode-ai/omnibase_core/.github/workflows/x.yml"
+        "@dev-20261030-66d35d2283c3\n"
+        "  by_branch:\n"
+        "    uses: OmniNode-ai/omnibase_core/.github/workflows/y.yml@dev\n",
+    )
+
+    cross_repo, _ = collect_references(tmp_path)
+
+    assert len(cross_repo) == 3
+    assert sorted(offender.ref for offender in violations(cross_repo)) == [
+        "dev",
+        "dev-20261030-66d35d2283c3",
+    ]
 
 
 def test_a_short_sha_is_a_finding(tmp_path: Path) -> None:
