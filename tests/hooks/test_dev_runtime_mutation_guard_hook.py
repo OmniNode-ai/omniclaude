@@ -116,6 +116,16 @@ def test_ac1_live_grant_admits(tmp_path: Path) -> None:
     ],
 )
 def test_ac3_read_only_and_other_projects_pass(tmp_path: Path, command: str) -> None:
-    result = _run(command, _env(tmp_path))
+    env = _env(tmp_path)
+    result = _run(command, env)
     assert result.returncode == 0, (result.stdout, result.stderr)
     assert "OMN-21795" not in result.stdout + result.stderr
+
+    # An allow proves selectivity only when the same hook and environment still
+    # refuse a protected mutation. An absent guard must not satisfy AC3.
+    protected = _run(PLANTED_RESTART, env)
+    assert protected.returncode == 2, (protected.stdout, protected.stderr)
+    decision = json.loads(protected.stdout.strip().splitlines()[0])
+    assert decision["decision"] == "block"
+    assert decision["reason"].startswith("BLOCKED (OMN-21795)")
+    assert "grant=compose:omnibase-infra" in decision["reason"]
