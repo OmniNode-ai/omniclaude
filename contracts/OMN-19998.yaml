@@ -62,6 +62,11 @@ requirements:
     acceptance:
       - id: "AC9"
         statement: "AC9: the hostile-review job's dedicated runner fallback requires self-hosted, omnibase-ci and arch-amd64, excluding h203-light runners that cannot reach the review voters -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\" fails at the merge base, where the fallback lacks arch-amd64"
+  - id: "req-omn19998-cross-repo-ref-policy-dev-tag"
+    statement: "The cross-repo reusable ref policy (OMN-18494) admits a dev-merge tag dev-<UTC YYYYMMDDHHMMSS>-<sha12> beside @main and a full sha, since the repo's ruling of 2026-10-29T01:50:26Z pins reusables to dev-merge tags, and still refuses the bare dev branch and a malformed tag."
+    acceptance:
+      - id: "AC10"
+        statement: "AC10: tests/workflows/test_cross_repo_uses_ref_policy_omn18494.py passes with a receipt-gate.yml caller pinned at @dev-20261030152335-66d35d2283c3 and refuses @dev and a short-stamp tag -- falsifier: uv run pytest tests/workflows/test_cross_repo_uses_ref_policy_omn18494.py -q --no-cov fails at the merge base for the dev-merge-tag test, where DEV_MERGE_TAG_RE does not exist"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -163,3 +168,11 @@ dod_evidence:
         check_value: "uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\""
     binds_ac:
       - "AC9"
+  - id: "dod-omn19998-cross-repo-ref-policy-dev-tag"
+    description: "The cross-repo reusable ref policy test admits a dev-merge tag and refuses the bare dev branch and a malformed tag."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/workflows/test_cross_repo_uses_ref_policy_omn18494.py -q --no-cov"
+    binds_ac:
+      - "AC10"
