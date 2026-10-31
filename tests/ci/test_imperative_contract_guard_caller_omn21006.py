@@ -61,8 +61,10 @@ FINDING_KEYS = (
 # non_live_violations rows (handler_lane_github_read_cli, handler_pr_ownership_cli) left.
 # OMN-21780 removed lines from manifest_injector.py, shifting the line numbers of its
 # non_live_freestanding_violations rows; no finding was added or dropped.
+# OMN-21727 moved lines in manifest_injector.py, shifting the same rows again; no
+# finding was added or dropped.
 RECORDED_OCC_FINDING_DIGEST = (
-    "dd6087db58d28c227be192d92f4e42298c1bb795f687fafa3e990d19facb863f"
+    "b5b1c6f1d34ebb4100b4974500cde7448fc7b50332ac98e39abea4b0cb910392"
 )
 
 
