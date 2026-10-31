@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+# Endpoint URLs, URL prefixes and registry references that scripts and library code used to
+# hold as string literals (OMN-21798, child of OMN-21623). An entry takes the
+# ${env.VAR:default} overlay convention, so a per-lane operator overlay supplies the real
+# endpoint. They reach their callers through ModelEndpointPolicy
+# (models/model_endpoint_policy.py); a field this file does not declare fails to load.
+endpoints:
+  linear_graphql_url: "${env.LINEAR_GRAPHQL_URL:https://api.linear.app/graphql}"
+  github_web_base: "https://github.com/"
+  github_ssh_base: "ssh://git@github.com/"
+  omninode_github_org_base: "https://github.com/OmniNode-ai/"
