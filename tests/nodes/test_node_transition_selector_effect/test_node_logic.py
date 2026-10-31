@@ -385,9 +385,10 @@ class TestSelectMocked:
             os.environ, {"LLM_CODER_FAST_URL": "http://test-endpoint:8001"}
         ):
             with patch.object(node, "_call_model", new=slow_call):
-                with patch(
-                    "omniclaude.nodes.node_transition_selector_effect.node._SELECTION_TIMEOUT_SECONDS",
-                    0.01,
+                with patch.object(
+                    node,
+                    "policy",
+                    node.policy.model_copy(update={"selection_timeout_seconds": 0.01}),
                 ):
                     result = await node.select(req)
 
