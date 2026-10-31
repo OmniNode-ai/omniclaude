@@ -849,7 +849,7 @@ def test_default_profile_is_operator_when_the_lane_variable_is_blank(
     assert payload["profile"] == "operator"
 
 
-def test_an_explicit_profile_beats_the_lane_default(tmp_path: Path) -> None:
+def test_an_explicit_profile_beats_the_lane_default_profile(tmp_path: Path) -> None:
     overlay = _overlay(tmp_path, [_PASSING, _OPERATOR_ONLY])
     result, payload = _tick(
         tmp_path,
