@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -147,14 +148,44 @@ def test_dev_caller_stops_comparing_with_occ(source: str, base_text: str) -> Non
         assert_comparison_off(yaml.safe_load(CALLER.read_text(encoding="utf-8")))
 
 
+_PIN_PROSE_STARTS = (
+    "# The full-SHA pin makes the reusable immutable",
+    "# The dev-merge tag of omnibase_core makes the reusable a fixed ref",
+    "# The reusable is pinned by full SHA.",
+    "# The reusable is pinned to a dev-merge tag of omnibase_core",
+)
+_PIN_PROSE_ENDS = ("contracts.", "# omniclaude does not host receipt-gate.yml.")
+
+
 def comment_block(text: str, prefix: str) -> tuple[list[str], list[str]]:
     comments = [line for line in text.splitlines() if line.startswith("#")]
     (start,) = (index for index, line in enumerate(comments) if line.startswith(prefix))
-    end = comments.index(
-        "# The reusable is pinned by full SHA. It must be a commit that carries the"
+    end = next(
+        index
+        for index, line in enumerate(comments)
+        if line.startswith(_PIN_PROSE_STARTS[2:])
     )
     assert start < end
-    return comments[start:end], comments[:start] + comments[end:]
+    return comments[start:end], without_pin_prose(comments[:start] + comments[end:])
+
+
+def without_pin_prose(comments: list[str]) -> list[str]:
+    """Drop the comment runs that describe the reusable pin, which a pin advance rewrites."""
+    kept: list[str] = []
+    ending: str | None = None
+    for line in comments:
+        if ending is None and line.startswith(_PIN_PROSE_STARTS):
+            ending = (
+                _PIN_PROSE_ENDS[1]
+                if "reusable is pinned" in line
+                else _PIN_PROSE_ENDS[0]
+            )
+        if ending is not None:
+            if line.endswith(ending):
+                ending = None
+            continue
+        kept.append(line)
+    return kept
 
 
 def test_every_other_caller_line_matches_the_merge_base(base_text: str) -> None:
@@ -169,13 +200,12 @@ def test_every_other_caller_line_matches_the_merge_base(base_text: str) -> None:
     assert base_job["with"]["compare-with-occ"] == "true"
     assert base_job["with"]["shadow"] == "true"
     assert_comparison_off(head)
-    assert head_job["uses"] == base_job["uses"]
-    assert [line for line in text.splitlines() if line.strip().startswith("uses:")] == [
-        line for line in base_text.splitlines() if line.strip().startswith("uses:")
-    ]
+    # A pin advance (OMN-20134) moves the ref; the reusable it names stays.
+    assert head_job["uses"].split("@", 1)[0] == base_job["uses"].split("@", 1)[0]
     pin = head_job["uses"].rsplit("@", 1)[1]
-    assert len(pin) == 40 and all(char in "0123456789abcdef" for char in pin)
+    assert re.fullmatch(r"dev-\d{14}-[0-9a-f]{12}", pin)
     expected_job = deepcopy(base_job)
+    expected_job["uses"] = head_job["uses"]
     expected_job["with"]["compare-with-occ"] = "false"
     expected_job["with"]["shadow"] = "false"
     assert head_job == expected_job
