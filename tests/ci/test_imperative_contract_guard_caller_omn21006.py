@@ -62,8 +62,10 @@ FINDING_KEYS = (
 # OMN-21623 moved the runtime timeouts to the contract and folded repeated subprocess
 # blocks into helpers: diagnostics.py lost one dead subprocess_network finding (3 to 2),
 # replay_engine.py lost its one (1 to 0), and the other recorded lines moved.
+# OMN-21780 removed lines from manifest_injector.py, shifting the line numbers of its
+# non_live_freestanding_violations rows; no finding was added or dropped.
 RECORDED_OCC_FINDING_DIGEST = (
-    "9a48c99bec37d3109562e29116d3cc7b0a392f17aab3121d16efa5efcf1d9d0c"
+    "340c81a2c738a6b0248dc5692f3baeaf279d8a04c452f6efa8c978895ca03218"
 )
 
 
