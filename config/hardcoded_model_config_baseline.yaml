@@ -126,9 +126,6 @@ entries:
   - path: scripts/tests/test_intelligence_functionality.sh
     family: E-LAN
     content_sha1: c8fe78d2371528521def3ba35e8d4357c3013ef5
-  - path: src/omniclaude/delegation/savings.py
-    family: M
-    content_sha1: 08cad76ed76b6ffb53a8fe16019a70afcdc4105c
   - path: src/omniclaude/hooks/alert_channel.py
     family: E
     content_sha1: a3d1864a6af2ec5673af8c02b71284e326d46a5e
@@ -146,55 +143,16 @@ entries:
     content_sha1: cea1383d024cebfdbecafd4136be8601e41ebbe9
   - path: src/omniclaude/lib/core/manifest_injector.py
     family: M
-    content_sha1: 0c6c9a7ddb75b88f92213c5252d67861a11a7fbe
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
     content_sha1: 29d1c152c208d195550e03b16ac4a28700994556
   - path: src/omniclaude/lib/core/manifest_injector.py
     family: M
     content_sha1: 38451b1bea032b9c90e934b77dafdd4af52010b6
   - path: src/omniclaude/lib/core/manifest_injector.py
     family: M
-    content_sha1: 520e03c2f05acb76bbda00df1ebc9215714dc1bf
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
     content_sha1: 79c542162f47216c4ac08c8b8658d9e1b1447bc6
   - path: src/omniclaude/lib/core/manifest_injector.py
     family: M
-    content_sha1: 8ea6f2a6d3640ecb69a4b92e2f11c18998adcb9a
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
     content_sha1: 978517b5f139f0c2a4b8c0525ddb1f7b00107502
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
-    content_sha1: 9ae3e3c459fe6235eddb4667568eceff845db19f
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
-    content_sha1: a3d7f6a21e2258c228bf4fac4fe480c27ddfb08e
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
-    content_sha1: aaa5f1104b2bf0a90992627fa1f213590645465a
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
-    content_sha1: b68396aa4efd3781dcbe91e6ac00fa0567051606
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
-    content_sha1: b744121b691a99515519c27998f6a2e03bcd436d
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
-    content_sha1: ba1c96e8b1f951ffdd2d5529afc945961b78ebe4
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
-    content_sha1: cc0da048523cae9637dc17773ad037109942acad
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
-    content_sha1: d41aa9630faff0016cfff6a946f8c31348231e6b
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
-    content_sha1: dff5cb176e7d75d692a0dd91b6b740480e2451f0
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: M
-    content_sha1: f089176bde50ce92c045eca6bcbe37a99ceb6030
   - path: src/omniclaude/lib/core/manifest_injector.py
     family: M
     content_sha1: f31c070ae35983765f1a296db46027c6c3a3c12b
