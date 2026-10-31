@@ -40,16 +40,20 @@
 #   --no-containers      answer it no in advance
 #                        (neither: the one question is asked after preflight)
 #   --provider LIST      one or more of gemini, openrouter, openai, ollama, local,
-#                        comma-separated (default: asked up front). Gemini, OpenRouter and
-#                        OpenAI take your own key, asked for one at a time; Ollama runs a
-#                        model on this Mac, no key; local is a model server you already run
+#                        openai_compatible, comma-separated (default: asked up front). Gemini,
+#                        OpenRouter and OpenAI take your own key, asked for one at a time; Ollama
+#                        runs a model on this Mac, no key; local is a model server you already run
 #                        (LM Studio, llama.cpp, vLLM, MLX) that speaks the OpenAI API, by its
-#                        URL and model name, no key. Delegation chooses among the ones set up
+#                        URL and model name, no key; openai_compatible is any other endpoint that
+#                        speaks the OpenAI API and needs a key (vLLM or LM Studio behind auth, a
+#                        company gateway), by its URL, your key and its models. Delegation
+#                        chooses among the ones set up
 #   --ollama-model NAME  the model Ollama downloads (default: asked, from the models this Mac has
 #                        the memory for; with no terminal, the one sized to it)
 #   --local-url URL      the local model server's base URL, such as http://127.0.0.1:1234
 #                        (default: asked when local is chosen)
 #   --local-model NAME   the model that server runs, as it names it (default: asked)
+#   --compat-url URL     the OpenAI-compatible endpoint's base URL (default: asked when chosen)
 #   --workspace DIR      the workspace (default: $OMNIBASE_PATH, else ~/Code/omnibase). A directory
 #                        that already holds clones this setup did not create is refused
 #   --set-aside          answer yes in advance to setting aside what an earlier setup left
@@ -126,7 +130,7 @@ done
 unset OMNI_HOME
 RESTART=0; DEVELOPER=0
 SET_ASIDE_FLAG=0
-OLLAMA_MODEL=""; LOCAL_URL=""; LOCAL_MODEL=""
+OLLAMA_MODEL=""; LOCAL_URL=""; LOCAL_MODEL=""; COMPAT_URL=""
 
 usage() { sed -n '2,/^set -uo pipefail$/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; }
 
@@ -140,7 +144,7 @@ while [ $# -gt 0 ]; do
     --ollama-model) shift; OLLAMA_MODEL="${1:-}" ;;
     --ollama-model=*) OLLAMA_MODEL="${1#*=}" ;;
     --local-url) shift; LOCAL_URL="${1:-}" ;;
-    --local-model) shift; LOCAL_MODEL="${1:-}" ;;
+    --local-model) shift; LOCAL_MODEL="${1:-}" ;; --compat-url) shift; COMPAT_URL="${1:-}" ;;
     --workspace) shift; WORKSPACE="${1:-}"; WORKSPACE_FROM="from --workspace" ;;
     --workspace=*) WORKSPACE="${1#*=}"; WORKSPACE_FROM="from --workspace" ;;
     --restart) RESTART=1 ;; --developer) DEVELOPER=1 ;;
@@ -151,8 +155,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 for _p in $(printf '%s' "$PROVIDER" | tr ',' ' '); do
-  case "$_p" in openrouter|gemini|openai|ollama|local) ;; *)
-    printf 'omninode-dev-setup: --provider must be gemini, openrouter, openai, ollama or local (or a comma-separated list of them)\n' >&2; exit 2 ;;
+  case "$_p" in openrouter|gemini|openai|ollama|local|openai_compatible) ;; *)
+    printf 'omninode-dev-setup: --provider must be gemini, openrouter, openai, ollama, local or openai_compatible (or a comma-separated list of them)\n' >&2; exit 2 ;;
   esac
 done
 [ -n "$WORKSPACE" ] || { printf 'omninode-dev-setup: --workspace needs a directory\n' >&2; exit 2; }
@@ -513,17 +517,17 @@ ask_docker() { # note -> 0 yes, 1 no, 2 quit. Asked in the terminal; never a fla
 # exported, logged or written) until phase 3 hands it to `onex models add` on
 # stdin.
 # ---------------------------------------------------------------------------
-ALL_MODELS="gemini openrouter openai ollama local"
+ALL_MODELS="gemini openrouter openai ollama local openai_compatible"
 MODELS=""     # the chosen models, in menu order, space-separated
 SKIPPED=""    # chosen, then skipped at the key prompt
 STORED=""     # providers an earlier run already stored a key for
-KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""
+KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""; KEY_COMPAT=""
 
-pending_key() { case "$1" in gemini) printf '%s' "$KEY_GEMINI" ;; openrouter) printf '%s' "$KEY_OPENROUTER" ;; openai) printf '%s' "$KEY_OPENAI" ;; esac; }
-set_pending_key() { case "$1" in gemini) KEY_GEMINI="$2" ;; openrouter) KEY_OPENROUTER="$2" ;; openai) KEY_OPENAI="$2" ;; esac; }
-clear_keys() { KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""; }
+pending_key() { case "$1" in gemini) printf '%s' "$KEY_GEMINI" ;; openrouter) printf '%s' "$KEY_OPENROUTER" ;; openai) printf '%s' "$KEY_OPENAI" ;; openai_compatible) printf '%s' "$KEY_COMPAT" ;; esac; }
+set_pending_key() { case "$1" in gemini) KEY_GEMINI="$2" ;; openrouter) KEY_OPENROUTER="$2" ;; openai) KEY_OPENAI="$2" ;; openai_compatible) KEY_COMPAT="$2" ;; esac; }
+clear_keys() { KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""; KEY_COMPAT=""; }
 
-uses_key() { case "$1" in gemini|openrouter|openai) return 0 ;; *) return 1 ;; esac; }
+uses_key() { case "$1" in gemini|openrouter|openai|openai_compatible) return 0 ;; *) return 1 ;; esac; }
 in_list() { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; } # word list
 has_model() { in_list "$1" "$MODELS"; }
 is_stored() { in_list "$1" "$STORED"; }
@@ -537,14 +541,14 @@ provider_label() {
     gemini) echo "Gemini" ;;
     openrouter) echo "OpenRouter" ;;
     openai) echo "OpenAI" ;;
-    ollama) echo "Ollama" ;; local) echo "Local URL" ;;
+    ollama) echo "Ollama" ;; local) echo "Local URL" ;; openai_compatible) echo "OpenAI-compatible" ;;
     anthropic) echo "Anthropic (Claude)" ;;
     *) echo "$1" ;;
   esac
 }
 labels() { local p out=""; for p in $1; do out="$out, $(provider_label "$p")"; done; echo "${out#, }"; }
 a_an() { case "$1" in [AEIOUaeiou]*) echo "an" ;; *) echo "a" ;; esac; }
-key_page() { case "$1" in gemini) echo "aistudio.google.com/apikey" ;; openrouter) echo "openrouter.ai/keys" ;; openai) echo "platform.openai.com/api-keys" ;; esac; }
+key_page() { case "$1" in gemini) echo "aistudio.google.com/apikey" ;; openrouter) echo "openrouter.ai/keys" ;; openai) echo "platform.openai.com/api-keys" ;; openai_compatible) echo "the endpoint's own key page" ;; esac; }
 
 # The provider whose keys start like this one, most specific prefix first (an
 # OpenRouter or Anthropic key also starts with sk-); empty when unknown.
@@ -561,7 +565,7 @@ stored_key_providers() { # every provider an earlier run already stored a key fo
   [ -x "$HOME/.local/bin/onex" ] || return 1
   local p list found=1
   list="$(env -u PYTHONPATH "$HOME/.local/bin/onex" secret list 2>/dev/null)" || return 1
-  for p in gemini openrouter openai; do
+  for p in gemini openrouter openai openai_compatible; do
     printf '%s\n' "$list" | grep -qE "^[[:space:]]+llm\.$p\.api_key[[:space:]]" && { echo "$p"; found=0; }
   done
   return "$found"
@@ -695,7 +699,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="de89:e6f9:e072:5242:4bee:d12c:7bce:4abc:95bb:f0b8:c13f:c4bd:c349:953f:f200:1717" root candidate \
+  local digest="aa08:ce96:7bed:8784:0622:ba2c:e206:227b:0d34:ea7b:d9f8:400e:2d24:3b22:ac8a:6611" root candidate \
     download_digest="304c:58d1:70d0:0840:226a:2b74:edbc:784c:7824:ec24:601b:d5cd:3341:0be9:87cd:37fe"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -1368,9 +1372,9 @@ dispatch_venv_current() {
 # stamped, after this phase.
 models_cmd() { (cd "$HOME" && env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/onex" models "$@"); }
 
-RES_GEMINI=""; RES_OPENROUTER=""; RES_OPENAI=""; RES_OLLAMA=""; RES_LOCAL=""
-set_result() { case "$1" in gemini) RES_GEMINI="$2" ;; openrouter) RES_OPENROUTER="$2" ;; openai) RES_OPENAI="$2" ;; ollama) RES_OLLAMA="$2" ;; local) RES_LOCAL="$2" ;; esac; }
-result_of() { case "$1" in gemini) echo "$RES_GEMINI" ;; openrouter) echo "$RES_OPENROUTER" ;; openai) echo "$RES_OPENAI" ;; ollama) echo "$RES_OLLAMA" ;; local) echo "$RES_LOCAL" ;; esac; }
+RES_GEMINI=""; RES_OPENROUTER=""; RES_OPENAI=""; RES_OLLAMA=""; RES_LOCAL=""; RES_COMPAT=""
+set_result() { case "$1" in gemini) RES_GEMINI="$2" ;; openrouter) RES_OPENROUTER="$2" ;; openai) RES_OPENAI="$2" ;; ollama) RES_OLLAMA="$2" ;; local) RES_LOCAL="$2" ;; openai_compatible) RES_COMPAT="$2" ;; esac; }
+result_of() { case "$1" in gemini) echo "$RES_GEMINI" ;; openrouter) echo "$RES_OPENROUTER" ;; openai) echo "$RES_OPENAI" ;; ollama) echo "$RES_OLLAMA" ;; local) echo "$RES_LOCAL" ;; openai_compatible) echo "$RES_COMPAT" ;; esac; }
 passed_models() { local p out=""; for p in $MODELS; do case "$(result_of "$p")" in pass*) out="$out $p" ;; esac; done; echo "${out# }"; }
 
 record_model_status() { # provider
@@ -1919,7 +1923,7 @@ main() {
   say "Your models:"
   for p in $MODELS $SKIPPED; do result_line "$p" | while IFS= read -r line; do say "  $line"; done; done
   say "$(count_words "$(passed_models)") of $(count_words "$MODELS $SKIPPED") models ready. Delegation chooses among them for each task."
-  say "Add or fix one any time: onex models add <gemini|openrouter|openai|local>; see them all: onex models list"
+  say "Add or fix one any time: onex models add <gemini|openrouter|openai|local|openai_compatible>; see them all: onex models list"
   say "Next:"
   say "  1. Open a new terminal (or run 'exec zsh') so OMNIBASE_PATH and PATH take effect."
   say "  2. Open Claude Code (run 'claude') and sign in with your Anthropic account the first"

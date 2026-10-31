@@ -464,11 +464,11 @@ shell_runs_workspace_onex() {
 # the memory for, the one sized to it recommended.
 # ---------------------------------------------------------------------------
 CATALOGUE_REL="omnimarket/src/omnimarket/configs/byok_provider_backends.v1.yaml"
-CHOSEN_GEMINI=""; CHOSEN_OPENROUTER=""; CHOSEN_OPENAI=""; CHOSEN_OLLAMA=""; REC_BASIS=""
+CHOSEN_GEMINI=""; CHOSEN_OPENROUTER=""; CHOSEN_OPENAI=""; CHOSEN_OLLAMA=""; CHOSEN_COMPAT=""; REC_BASIS=""
 MODEL_LIST=""; MODEL_LIST_ERR=""; RECOMMENDED=""; MODEL_UNAVAILABLE=""; MODEL_THROTTLED=""
 
-chosen_models() { case "$1" in gemini) echo "$CHOSEN_GEMINI" ;; openrouter) echo "$CHOSEN_OPENROUTER" ;; openai) echo "$CHOSEN_OPENAI" ;; ollama) echo "$CHOSEN_OLLAMA" ;; esac; }
-set_chosen_models() { case "$1" in gemini) CHOSEN_GEMINI="$2" ;; openrouter) CHOSEN_OPENROUTER="$2" ;; openai) CHOSEN_OPENAI="$2" ;; ollama) CHOSEN_OLLAMA="$2" ;; esac; }
+chosen_models() { case "$1" in gemini) echo "$CHOSEN_GEMINI" ;; openrouter) echo "$CHOSEN_OPENROUTER" ;; openai) echo "$CHOSEN_OPENAI" ;; ollama) echo "$CHOSEN_OLLAMA" ;; openai_compatible) echo "$CHOSEN_COMPAT" ;; esac; }
+set_chosen_models() { case "$1" in gemini) CHOSEN_GEMINI="$2" ;; openrouter) CHOSEN_OPENROUTER="$2" ;; openai) CHOSEN_OPENAI="$2" ;; ollama) CHOSEN_OLLAMA="$2" ;; openai_compatible) CHOSEN_COMPAT="$2" ;; esac; }
 comma_list() { printf '%s' "$1" | sed 's/ /, /g'; }
 
 omnimarket_file() { # rel seam -> the file: the test seam, else the workspace clone, else omnimarket's default branch
@@ -657,6 +657,8 @@ key_models() {
   row="$(catalogue_row "$p")"
   url="$(printf '%s\n' "$row" | sed -n 's/^url //p' | head -n 1)"
   endpoint="$(printf '%s\n' "$row" | sed -n 's/^endpoint //p' | head -n 1)"
+  # OMN-21263: the developer's own endpoint, at the OpenAI API's paths under its URL; nothing is recommended.
+  [ "$p" = openai_compatible ] && { url="$(local_url_base "$COMPAT_URL")/v1/models"; endpoint="${url%/models}/chat/completions"; row=""; }
   if [ -z "$url" ]; then
     MODEL_LIST_ERR="onex's provider catalogue, which names where its model list is, could not be read"
     return 1
@@ -697,12 +699,18 @@ key_models() {
 # whose min_memory_gb fits this Mac, or the named model (its size when the model
 # config or the catalogue's local row lists it, else the largest listed).
 ollama_config() {
-  PYTHONPATH="${BASH_SOURCE[0]%/*}/../../..${PYTHONPATH:+:$PYTHONPATH}" "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$WORKSPACE/$OLLAMA_CONFIG_REL" "$1" "${2:-}" "$WORKSPACE/$CATALOGUE_REL" <<'PYCFG'
+  model_config ollama_config "path=$WORKSPACE/$OLLAMA_CONFIG_REL" "ram_gb=$1" "model=${2:-}" "catalogue_path=$WORKSPACE/$CATALOGUE_REL"
+}
+
+# model_config operation field=value... -> the output of node
+# HandlerOnboardingModelConfig for that request, run in the dispatch venv.
+model_config() {
+  PYTHONPATH="${BASH_SOURCE[0]%/*}/../../..${PYTHONPATH:+:$PYTHONPATH}" "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$@" <<'PYMC'
 from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_model_config import HandlerOnboardingModelConfig
 from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_model_config_request import ModelOnboardingModelConfigRequest
 import sys
-print(HandlerOnboardingModelConfig().handle(ModelOnboardingModelConfigRequest(operation="ollama_config", path=sys.argv[1], ram_gb=int(sys.argv[2]), model=sys.argv[3], catalogue_path=sys.argv[4] if len(sys.argv) > 4 else "")).output)
-PYCFG
+print(HandlerOnboardingModelConfig().handle(ModelOnboardingModelConfigRequest(operation=sys.argv[1], **dict(a.split("=", 1) for a in sys.argv[2:]))).output)
+PYMC
 }
 
 # ollama_models -> MODEL_LIST: the catalogue's local models this Mac has the
@@ -831,7 +839,7 @@ settle_models() {
       else
         ask_models
       fi
-      SKIPPED=""; for p in gemini openrouter openai ollama; do set_result "$p" ""; done
+      SKIPPED=""; for p in gemini openrouter openai ollama openai_compatible; do set_result "$p" ""; done
       ask_keys
       if has_model ollama; then ask_ollama_models; fi
       if [ -z "$MODELS" ]; then
@@ -843,8 +851,8 @@ settle_models() {
       confirm_models && break
     done
     # Keys and models for models dropped at the summary are forgotten here.
-    for p in gemini openrouter openai; do has_model "$p" || set_pending_key "$p" ""; done
-    for p in gemini openrouter openai ollama; do has_model "$p" || set_chosen_models "$p" ""; done
+    for p in gemini openrouter openai openai_compatible; do has_model "$p" || set_pending_key "$p" ""; done
+    for p in gemini openrouter openai ollama openai_compatible; do has_model "$p" || set_chosen_models "$p" ""; done
   fi
   if has_model ollama; then settle_ollama; fi
   if [ "$PROMPT_TTY" -eq 0 ] && has_model local; then settle_local_url; fi
@@ -857,7 +865,7 @@ parse_model_choice() {
   local a p i=0 picked=""
   a="$(printf '%s' "$1" | tr -d ', ')"
   [ -n "$a" ] || return 1
-  case "$a" in *[!1-5]*) return 1 ;; esac
+  case "$a" in *[!1-6]*) return 1 ;; esac
   for p in $ALL_MODELS; do
     i=$((i + 1))
     case "$a" in *"$i"*) picked="$picked $p" ;; esac
@@ -884,6 +892,7 @@ ask_models() { # -> MODELS
                   say "                   a model sized to this Mac$note" ;;
       local)      say "    $i) Local URL   a model server you already run (LM Studio, llama.cpp, vLLM, MLX)"
                   say "                   that speaks the OpenAI API: its URL and model name, no key" ;;
+      openai_compatible) say "    $i) OpenAI-compatible  any endpoint that speaks the OpenAI API with a key: its URL, key, models$note" ;;
     esac
   done
   say ""
@@ -894,7 +903,7 @@ ask_models() { # -> MODELS
     IFS= read -r a || quit_setup
     case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
     parse_model_choice "$a" && break
-    say "  Choose at least one, 1 to 5 (for example 1,3), or q to quit."
+    say "  Choose at least one, 1 to 6 (for example 1,3), or q to quit."
   done
   say ""
   say "  You chose: $(labels "$MODELS")"
@@ -913,6 +922,7 @@ ask_keys() {
   say "  and each is only ever sent to its own provider."
   for p in $keyed; do
     n=$((n + 1)); label="$(provider_label "$p")"
+    [ "$p" = openai_compatible ] && { [ -n "$COMPAT_URL" ] || say "  OpenAI-compatible endpoint: one that speaks the OpenAI API and needs a key."; ask_url COMPAT_URL "https://llm.example.com"; }
     if [ -n "$(pending_key "$p")" ]; then
       say "  $label key ($n of $total): already entered."
       continue
@@ -937,7 +947,7 @@ ask_keys() {
         say "  Skipped $label. Add it any time: onex models add $p"
         break
       fi
-      looks="$(key_looks_like "$value")"
+      looks="$([ "$p" = openai_compatible ] || key_looks_like "$value")"  # any shape for an endpoint you chose
       if [ -n "$looks" ] && [ "$looks" != "$p" ]; then
         value=""
         say "  ✗ That looks like $(a_an "$(provider_label "$looks")") $(provider_label "$looks") key, not $(a_an "$label") $label key."
@@ -1012,38 +1022,46 @@ local_url_unreachable() { # url: stop before anything installs, naming the URL
   phase_fail "start the model server at $1 (or name another with --local-url), then run this again. Nothing was installed"
 }
 
+# ask_url var example -> the named variable holds an http(s) URL that answers,
+# asked in the terminal until it does (q quits). Shared by the local model server
+# and an OpenAI-compatible endpoint (OMN-21263).
+ask_url() {
+  local a v
+  eval "v=\${$1}"
+  while :; do
+    if [ -z "$v" ]; then
+      printf '  Its URL, such as %s (q to quit): ' "$2"
+      IFS= read -r a || quit_setup
+      case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
+      v="$(printf '%s' "$a" | tr -d '[:space:]')"
+    fi
+    if ! local_url_valid "$v"; then say "  ✗ '$v' is not an http(s) URL with a host, such as $2."
+    elif local_url_answers "$v"; then break
+    else say "  ✗ Nothing answers at $v. Start the server there, or check its URL."; fi
+    v=""
+  done
+  eval "$1=\$v"
+}
+
 settle_local_url() { # preflight: the server's URL and model, never a key
   local a
   [ -n "$LOCAL_URL" ] || LOCAL_URL="$(saved_choice local_url)"
   [ -n "$LOCAL_MODEL" ] || LOCAL_MODEL="$(saved_choice local_model)"
-  while :; do
-    if [ -z "$LOCAL_URL" ]; then
-      if [ "$PROMPT_TTY" -eq 0 ]; then
-        FAILED_STEP="choose your models"
-        LAST_ERR="a local model server needs its URL, and there is no terminal to ask on"
-        phase_fail "pass --local-url URL and --local-model NAME, or run this in Terminal. Nothing was installed"
-      fi
-      say ""
-      say "  Local model server: one you already run (LM Studio, llama.cpp, vLLM, MLX) that"
-      say "  speaks the OpenAI API. No key is asked for."
-      printf '  Its URL, such as http://127.0.0.1:1234 (q to quit): '
-      IFS= read -r a || quit_setup
-      case "$a" in q|Q|quit|QUIT) quit_setup ;; esac
-      LOCAL_URL="$(printf '%s' "$a" | tr -d '[:space:]')"
-    fi
-    if ! local_url_valid "$LOCAL_URL"; then
-      say "  ✗ '$LOCAL_URL' is not an http(s) URL with a host, such as http://127.0.0.1:1234."
-      if [ "$PROMPT_TTY" -eq 0 ]; then
-        FAILED_STEP="choose your models"; LAST_ERR="'$LOCAL_URL' is not an http(s) URL"
-        phase_fail "pass --local-url with an http(s) URL such as http://127.0.0.1:1234. Nothing was installed"
-      fi
-      LOCAL_URL=""; continue
-    fi
-    local_url_answers "$LOCAL_URL" && break
+  if [ "$PROMPT_TTY" -eq 1 ]; then
+    [ -n "$LOCAL_URL" ] || { say ""; say "  Local model server: one you already run (LM Studio, llama.cpp, vLLM, MLX) that"
+      say "  speaks the OpenAI API. No key is asked for."; }
+    ask_url LOCAL_URL "http://127.0.0.1:1234"
+  elif [ -z "$LOCAL_URL" ]; then
+    FAILED_STEP="choose your models"; LAST_ERR="a local model server needs its URL, and there is no terminal to ask on"
+    phase_fail "pass --local-url URL and --local-model NAME, or run this in Terminal. Nothing was installed"
+  elif ! local_url_valid "$LOCAL_URL"; then
+    say "  ✗ '$LOCAL_URL' is not an http(s) URL with a host, such as http://127.0.0.1:1234."
+    FAILED_STEP="choose your models"; LAST_ERR="'$LOCAL_URL' is not an http(s) URL"
+    phase_fail "pass --local-url with an http(s) URL such as http://127.0.0.1:1234. Nothing was installed"
+  elif ! local_url_answers "$LOCAL_URL"; then
     say "  ✗ Nothing answers at $LOCAL_URL. Start the server there, or check its URL."
-    [ "$PROMPT_TTY" -eq 1 ] || local_url_unreachable "$LOCAL_URL"
-    LOCAL_URL=""
-  done
+    local_url_unreachable "$LOCAL_URL"
+  fi
   case "$LOCAL_MODEL" in *[[:space:]]*)
     say "  ✗ '$LOCAL_MODEL' is not a model name: a model name has no spaces."
     [ "$PROMPT_TTY" -eq 1 ] || { FAILED_STEP="choose your models"; LAST_ERR="'$LOCAL_MODEL' has a space"
@@ -1069,6 +1087,7 @@ settle_local_url() { # preflight: the server's URL and model, never a key
 # which declares it in the local routes and runs its one pinned test delegation.
 local_url_add_args() { # provider -> the add's --url and --model for the local server, else nothing
   [ "$1" = "local" ] && printf '%s\n' --url "$LOCAL_URL" --model "$LOCAL_MODEL"
+  [ "$1" = "openai_compatible" ] && printf '%s\n' --url "$COMPAT_URL"  # OMN-21263: its key goes on stdin
   return 0
 }
 # A refusal (no result) means nothing answered as a model server at the URL: the run stops.
@@ -1112,14 +1131,7 @@ mark_local_url_overrides() {
 
 # The chat endpoint `onex models add local` declared for the server, read back
 # from the local routes, so this script never spells the server's API path.
-local_url_endpoint() {
-  PYTHONPATH="${BASH_SOURCE[0]%/*}/../../..${PYTHONPATH:+:$PYTHONPATH}" "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$HOME/$OVERRIDES_FILE_REL" <<'PYEP'
-from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_model_config import HandlerOnboardingModelConfig
-from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_model_config_request import ModelOnboardingModelConfigRequest
-import sys
-print(HandlerOnboardingModelConfig().handle(ModelOnboardingModelConfigRequest(operation="local_url_endpoint", path=sys.argv[1])).output)
-PYEP
-}
+local_url_endpoint() { model_config local_url_endpoint "path=$HOME/$OVERRIDES_FILE_REL"; }
 
 # docker_url url -> the same URL as a container reaches it: this Mac's
 # loopback is host.docker.internal from inside Docker.
@@ -1478,11 +1490,4 @@ retire_lab_model_overrides() {
 # The pinned runtime accepts a local-url pin, but an unpinned call walks only
 # backends placed on its ladder. Declare that placement on the same entry the
 # models command wrote, keeping its endpoint and served model as the authority.
-place_local_url_on_ladder() {
-  PYTHONPATH="${BASH_SOURCE[0]%/*}/../../..${PYTHONPATH:+:$PYTHONPATH}" "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$HOME/$OVERRIDES_FILE_REL" <<'PYPLACE'
-from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_model_config import HandlerOnboardingModelConfig
-from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_model_config_request import ModelOnboardingModelConfigRequest
-import sys
-print(HandlerOnboardingModelConfig().handle(ModelOnboardingModelConfigRequest(operation="place_local_url", path=sys.argv[1])).output)
-PYPLACE
-}
+place_local_url_on_ladder() { model_config place_local_url "path=$HOME/$OVERRIDES_FILE_REL"; }

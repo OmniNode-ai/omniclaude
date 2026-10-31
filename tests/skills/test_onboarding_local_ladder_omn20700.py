@@ -45,9 +45,13 @@ def _place(
         venv.symlink_to(sys.prefix, target_is_directory=True)
     source = HANDLER.read_text()
     start = source.index("place_local_url_on_ladder() {")
-    end = source.index("\nPYPLACE\n}\n", start) + len("\nPYPLACE\n}\n")
+    end = source.index("\n", start) + 1
+    # The placement runs through the handler's shared model_config helper.
+    shared = source.index("model_config() {")
+    shared_end = source.index("\nPYMC\n}\n", shared) + len("\nPYMC\n}\n")
+    script = source[start:end] + source[shared:shared_end]
     done = subprocess.run(
-        ["/bin/bash", "-c", source[start:end] + "\nplace_local_url_on_ladder"],
+        ["/bin/bash", "-c", script + "\nplace_local_url_on_ladder"],
         env={
             "HOME": str(home),
             "WORKSPACE": str(tmp_path),
