@@ -191,6 +191,7 @@ class ModelConfig:
         """
         if self.endpoint is None:
             if self.provider == ModelProvider.GEMINI:
+                # The default endpoint is declared in the runtime contract.
                 self.endpoint = ModelEndpointDefaults.from_contract().gemini_api_endpoint
 
         if self.api_key is None and self.provider == ModelProvider.GEMINI:
