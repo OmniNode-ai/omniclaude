@@ -1,21 +1,22 @@
 {
-  "base_node_files": [
-    "src/omniclaude/nodes/node_linear_effect/__init__.py",
-    "src/omniclaude/nodes/node_linear_effect/contract.yaml",
-    "src/omniclaude/nodes/node_linear_effect/models/__init__.py",
-    "src/omniclaude/nodes/node_linear_effect/models/model_linear_request.py",
-    "src/omniclaude/nodes/node_linear_effect/models/model_linear_result.py",
-    "src/omniclaude/nodes/node_linear_effect/node.py",
-    "src/omniclaude/nodes/node_linear_effect/protocols/__init__.py",
-    "src/omniclaude/nodes/node_linear_effect/protocols/protocol_linear_ticketing.py"
-  ],
-  "base_ref": "9d0879d",
+  "branch_coverage_pct": 87.5,
   "contract_tests": [
-    "tests/unit/nodes/node_linear_effect/test_handler_linear_api.py"
+    "tests/unit/nodes/node_linear_effect/test_handler_linear_api.py",
+    "tests/unit/nodes/node_linear_effect/test_linear_endpoint.py",
+    "tests/unit/nodes/node_linear_effect/test_linear_transport_errors.py"
   ],
+  "coverage_command": "env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m pytest tests/unit/nodes/node_linear_effect/test_handler_linear_api.py tests/unit/nodes/node_linear_effect/test_linear_endpoint.py tests/unit/nodes/node_linear_effect/test_linear_transport_errors.py -q --cov=omniclaude.nodes.node_linear_effect.handlers.handler_linear_ticketing --cov-branch --cov-report=json --no-cov-on-fail",
+  "coverage_target": 80.0,
+  "covered_branches": 49,
   "handler_module": "omniclaude.nodes.node_linear_effect.handlers.handler_linear_ticketing",
-  "handler_module_sha256": "sha256:bfaf3382016be70100dcdf9f0e3cfa3a7cb129acd743ab3b8b63083056dc3ae8",
-  "legacy_handler": "none",
+  "handler_module_sha256": "sha256:e5213a5027783919eb8e064e3fa7b7129c87fa7b68598a93b56cc376ffa6b50a",
   "node_id": "omniclaude.nodes.node_linear_effect",
-  "receipt_schema": "adequacy_receipt.no_legacy.v1"
+  "num_branches": 56,
+  "receipt_schema": "adequacy_receipt.v1",
+  "recorded_at": "2026-10-31T17:16:35.158544+00:00",
+  "selected_input_hashes": [
+    "sha256:3c73bf25365d88252b9246ea0717ee43835701985a27c633090febbed65556e3",
+    "sha256:cbe805e805c53ed00a809c7a5b8603b504c18d7e17783ec67c21079870539165",
+    "sha256:6b79848a31e2863462ecd1162aecf14e84554e4dee57d8d28a3c92958f9fbcc2"
+  ]
 }
