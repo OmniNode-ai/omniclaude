@@ -166,6 +166,8 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\""
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_contract_omn19998_deployment_vocab.py -q"
     binds_ac:
       - "AC9"
   - id: "dod-omn19998-test-job-timeout-headroom"
