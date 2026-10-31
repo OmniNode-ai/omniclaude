@@ -17,12 +17,14 @@ from .model_closeout_instruction_audit import (
     ModelCloseoutInstructionAuditRequest,
     ModelCloseoutInstructionAuditResult,
 )
+from .model_linear_endpoint import ModelLinearEndpoint
 from .model_linear_request import LinearOperation, ModelLinearRequest
 from .model_linear_result import LinearResultStatus, ModelLinearResult
 from .model_local_pr_state import ModelLocalPrStateRequest, ModelLocalPrStateResult
 
 __all__ = [
     "LinearOperation",
+    "ModelLinearEndpoint",
     "ModelLinearRequest",
     "LinearResultStatus",
     "ModelLinearResult",
