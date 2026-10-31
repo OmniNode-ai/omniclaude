@@ -100,6 +100,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TextIO
 
+from omniclaude.nodes.node_hook_refusal_record_effect.container import container_hook
 from omniclaude.nodes.node_hook_refusal_record_effect.models import (
     DEFAULT_WINDOW_SECONDS,
     EnumHookRefusalRecordStatus,
@@ -111,7 +112,6 @@ try:
     from omnimarket.nodes.node_hook_refusal_row_compute.handlers.handler_hook_refusal_row import (
         MAX_DETAIL_CHARS,
         MAX_GUARD_CHARS,
-        HandlerHookRefusalRowCompute,
         normalise_reason,
         redact,
     )
@@ -262,7 +262,7 @@ def decide_row(
     the way every other hook reaches an omnimarket node, so a refusal does not
     pay the runtime import that ``RuntimeLocal`` would add.
     """
-    return HandlerHookRefusalRowCompute().handle(
+    return container_hook.build_row_compute().handle(
         ModelHookRefusalRowRequest(
             guard=guard,
             reason=reason,
@@ -751,7 +751,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.guard or not args.reason:
         parser.error("--guard and --reason are required for recording")
 
-    result = HandlerHookRefusalRecord().handle(
+    result = container_hook.build_record().handle(
         ModelHookRefusalRecordRequest(
             guard=args.guard,
             reason=args.reason,
