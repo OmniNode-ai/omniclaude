@@ -57,8 +57,10 @@ FINDING_KEYS = (
     "non_live_freestanding_violations",
 )
 # All finding fields, including details, line numbers, reachability and allowlisting.
+# OMN-21536 moved two CLI mains out of handlers/, so their two dead-handler
+# non_live_violations rows (handler_lane_github_read_cli, handler_pr_ownership_cli) left.
 RECORDED_OCC_FINDING_DIGEST = (
-    "dc967304fad97a8fbd0a5b4c19be43713fc2f1f4f2a70d7a1a8427813d5ab2ec"
+    "e79a39794a54133244e592b3d42f99cbe4276e2cd0cb79ab8fa618306be96325"
 )
 
 
