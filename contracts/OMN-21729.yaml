@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21729
+title: "Contracts and DI burn-down: cache, inbox, verification and lane evidence timeouts, slice rf1625-c3"
+summary: >-
+  Twenty literal timeout findings leave the result cache, agent router, action
+  logger demo, coverage cache, quirk extractor, verification, inbox and linear
+  effect lane evidence modules. Each value is declared in
+  contract_omniclaude_lib_timeouts.yaml and reaches the code through a
+  validated model, with an injectable parameter where the code already took one.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21729-timeouts-from-contract
+    statement: Lib and effect module timeouts, polls and TTLs come from the lib timeouts contract, not from literals in code.
+    acceptance:
+      - id: AC1
+        statement: "AC1 (BURNDOWN): literal_timeout over the slice paths drops to zero and the repo total falls from 326 to 306 over src, scripts and plugins, with no baseline entry or suppression -- falsifier: contracts_and_di validator over omniclaude before and after, counts compared per rule"
+      - id: AC2
+        statement: "AC2 (BURNDOWN): every moved timeout is taken through the lib timeouts contract model and none remains hard-coded in the touched code -- falsifier: uv run pytest tests/unit/models -q --no-cov plus the checker re-run on the slice paths"
+      - id: AC3
+        statement: "AC3 (BURNDOWN): the slice lands as one PR titled with this ticket id and carries lab proof of the tests and the checker re-run -- falsifier: uv run pytest tests/unit -q on the lab at the PR head, receipt path in the PR body"
+evidence_requirements:
+  - kind: tests
+    description: Lib timeouts contract and consumer regressions
+    command: "uv run pytest tests/unit/models/test_model_lib_timeouts.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21729-lib-timeouts-contract
+    binds_ac: [AC1, AC2]
+    description: >-
+      The contract values equal the model values, a missing or non-positive value
+      fails validation, and the result cache, coverage cache entry, self check,
+      standalone inbox, quirk extractor and lane evidence read their values from the
+      contract, and the coverage cache entry and agent inbox take the value from
+      their caller. The read-only validator scan over src, scripts
+      and plugins falls from 326 to 306 literal_timeout findings with every other
+      rule unchanged.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/models/test_model_lib_timeouts.py -q --no-cov"
+        cwd: "."

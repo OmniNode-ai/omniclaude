@@ -19,13 +19,12 @@ import tempfile
 import time
 from pathlib import Path
 
+from omniclaude.models.model_lib_timeouts import lib_timeouts
+
 logger = logging.getLogger(__name__)
 
 # Max concurrent background watchers
 MAX_WATCHERS = int(os.environ.get("OMNICLAUDE_MAX_WATCHERS", "5"))
-
-# TTL for inbox files and lock files (2 hours)
-INBOX_TTL_SECONDS = 7200
 
 
 def _inbox_dir() -> Path:
@@ -80,7 +79,7 @@ class BackgroundWatcher:
                 # Check if process is still alive
                 if pid and self._is_pid_alive(pid):
                     # Also check TTL to avoid counting zombie locks
-                    if now - started < INBOX_TTL_SECONDS:
+                    if now - started < lib_timeouts().standalone_inbox_ttl_seconds:
                         count += 1
                     else:
                         # Stale lock -- clean up
@@ -245,7 +244,7 @@ lock.unlink(missing_ok=True)
         for inbox_file in self.inbox_dir.glob("*.json"):
             try:
                 stat = inbox_file.stat()
-                if now - stat.st_mtime > INBOX_TTL_SECONDS:
+                if now - stat.st_mtime > lib_timeouts().standalone_inbox_ttl_seconds:
                     inbox_file.unlink(missing_ok=True)
                     removed += 1
             except OSError:
@@ -256,7 +255,7 @@ lock.unlink(missing_ok=True)
             try:
                 data = json.loads(lock_file.read_text())
                 started = data.get("started_at_epoch", 0)
-                if now - started > INBOX_TTL_SECONDS:
+                if now - started > lib_timeouts().standalone_inbox_ttl_seconds:
                     lock_file.unlink(missing_ok=True)
                     # Also clean up the script file if it exists
                     script_path = data.get("script_path")
