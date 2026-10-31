@@ -20,10 +20,10 @@ from omniclaude.hooks.session_cost_common import (
     estimate_cost_usd,
     stable_payload_hash,
 )
+from omniclaude.models.model_runtime_paths import runtime_paths
 
 EVENT_TYPE = "llm.cost.completed"
 TOOL_SOURCE = "opencode"
-DEFAULT_DB_PATH = Path("~/.local/share/opencode/opencode.db").expanduser()
 
 
 @dataclass(frozen=True)
@@ -299,7 +299,7 @@ def build_opencode_cost_payload(
 
 
 def scan_opencode_cost_payloads(
-    *, db_path: Path = DEFAULT_DB_PATH, env: Mapping[str, str] | None = None
+    *, db_path: Path, env: Mapping[str, str] | None = None
 ) -> list[dict[str, object]]:
     """Return cost payloads for all opencode sessions in ``db_path``."""
     if not db_path.is_file():
@@ -322,7 +322,7 @@ def scan_opencode_cost_payloads(
 
 def emit_opencode_cost_payloads(
     *,
-    db_path: Path = DEFAULT_DB_PATH,
+    db_path: Path,
     env: Mapping[str, str] | None = None,
     emit: Callable[[str, dict[str, object]], bool] | None = None,
 ) -> int:
@@ -341,7 +341,7 @@ def emit_opencode_cost_payloads(
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--db-path", type=Path, default=DEFAULT_DB_PATH)
+    parser.add_argument("--db-path", type=Path, default=runtime_paths().opencode_db)
     parser.add_argument(
         "--jsonl",
         action="store_true",

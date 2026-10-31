@@ -64,10 +64,12 @@ FINDING_KEYS = (
 # replay_engine.py lost its one (1 to 0), and the other recorded lines moved.
 # OMN-21780 removed lines from manifest_injector.py, shifting the line numbers of its
 # non_live_freestanding_violations rows; no finding was added or dropped.
+# OMN-21728 moved literal runtime paths into the runtime contract, which shifted the
+# line numbers of the dead-handler rows it touched; no finding was added or dropped.
 # OMN-21769 read slice topics from manifests, so one dead-module hardcoded_topic row left,
 # and one handler_history_postgres direct_db row moved one line; no finding was added.
 RECORDED_OCC_FINDING_DIGEST = (
-    "d2639d61ce9416d374d14d800d3feea7959c680d535a09c125f8d7608eb08111"
+    "c9da24e207510c2da4afc45ccdeee01d549a0c22efb2bba7a8ac25e1062874d0"
 )
 
 

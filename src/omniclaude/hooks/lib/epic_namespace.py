@@ -32,6 +32,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from omniclaude.models.model_runtime_paths import runtime_paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,7 +58,6 @@ class ModelEpicNamespaceLock(BaseModel):
 # =============================================================================
 
 _STATE_DIR_ENV = "ONEX_STATE_DIR"
-_DEFAULT_STATE_DIR = os.path.expanduser("~/.onex_state")
 _LOCK_FILENAME = "active_namespace.yaml"
 
 
@@ -89,8 +90,8 @@ def _serialize_lock(lock: ModelEpicNamespaceLock) -> str:
 
 def _lock_path() -> Path:
     """Resolve the namespace lock file path."""
-    raw = os.environ.get(_STATE_DIR_ENV, _DEFAULT_STATE_DIR).strip()
-    state_dir = raw or _DEFAULT_STATE_DIR
+    raw = os.environ.get(_STATE_DIR_ENV, "").strip()
+    state_dir = raw or runtime_paths().onex_state_dir
     return Path(state_dir).expanduser().resolve() / "epics" / _LOCK_FILENAME
 
 

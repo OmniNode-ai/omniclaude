@@ -47,7 +47,6 @@ import importlib
 import json
 import os
 from collections.abc import Callable, Mapping
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cryptography.exceptions import InvalidTag
@@ -66,6 +65,7 @@ from omniclaude.models.model_hook_payload_encryption_request import (
 from omniclaude.models.model_hook_payload_encryption_result import (
     ModelHookPayloadEncryptionResult,
 )
+from omniclaude.models.model_runtime_paths import runtime_paths
 
 #: The sealed payload's one field: the ciphertext and what a reader needs.
 ENVELOPE_FIELD = "payload_encryption"
@@ -136,7 +136,7 @@ def default_key_reader() -> KeyReader:
     """The secret store reader of this machine, as a plain ``ref -> text`` call."""
     try:
         module = importlib.import_module(_STORE_READER_MODULE)
-        reader = module.reader_for_this_machine(Path("~/.onex").expanduser())
+        reader = module.reader_for_this_machine(runtime_paths().store_reader_home)
     except Exception as exc:
         msg = f"no secret store reader is available ({type(exc).__name__})"
         raise PayloadEncryptionError(msg) from exc
