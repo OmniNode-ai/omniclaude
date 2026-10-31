@@ -232,7 +232,7 @@ relay:
   container: "omninode-gateway-forwarder"
   required_network: "omnibase-infra-network"
   role: >
-    Sole process bridging a local .201 broker to the cloud MSK relay. Anything
+    Sole process bridging a local broker to the cloud MSK relay. Anything
     it cannot see on its attached lane network can never reach the cloud
     gateway, independent of every other link in the hooks->relay chain.
 
@@ -500,8 +500,40 @@ produce_grant_pending: []
 # alongside the broker overlay before enabling contractor hooks. Exact principal
 # matching keeps the operator's own developer identities unchanged. Suppression
 # happens before local-bus publish, journal, fan-out (including evt halves) or spool.
+#
+# OMN-21599: the hook reads these facts and omnimarket's
+# node_developer_lane_admission_compute decides. The selected lane is the one the
+# developer bound with `onex profile bind-lane`, else the declared `lane`; the
+# developer's principal is checked against THAT lane's own declaration, never
+# another's. Each lane's declaration is `principal_declaration` for the declared
+# lane and `bound_lane_principal_declaration` (`{lane}` filled) for any other. A
+# lane in `collaborator_barred_lanes` is one a declared collaborator never uses
+# (RULING 2026-10-30T12:43:03Z); a collaborator who selects it is refused.
+#
+# A refusal never blocks the person's work (RULING 2026-10-30T16:45:31Z: the dev
+# lane is ours to break, a collaborator's product work is not). The hook drops
+# every event class, so nothing reaches any lane, and exits 0; the
+# `refusal_notice.event_class` prints one warning built from `message`, with the
+# refusal's remedy (or `default_remedy`). `admission-node-missing` is the hook's
+# own code for an installed omnimarket without the node.
 developer_event_policy:
+  refusal_notice:
+    event_class: "prompt.submitted"
+    message: "ONEX: this prompt was not mirrored to any lane ({refusal}: {detail}). Your session is unaffected. Fix: {fix}"
+    default_remedy: "ask the operator for your lane's setup."
+    remedies:
+      binding-invalid: "run 'onex profile bind-lane <lane>' with your lane's name, or 'onex profile unbind-lane'."
+      binding-unknown-lane: "run 'onex profile bind-lane <lane>' with a lane the hook edge knows, or 'onex profile unbind-lane'."
+      declaration-malformed: "reinstall your lane's developer list in your workspace config root (ONEX_WORKSPACE_CONFIG_ROOT)."
+      bound-lane-declaration-missing: "install your lane's developer list at config/lab/lane-overlays/<lane>.developer-principal.yaml under your workspace config root (ONEX_WORKSPACE_CONFIG_ROOT)."
+      no-declared-principal: "log in to your lane: 'onex auth lane-login --lane <lane> --sasl-username <principal> --sasl-password-stdin'."
+      collaborator-on-barred-lane: "bind your own lane: 'onex profile bind-lane <lane>'."
+      principal-declared-for-another-lane: "bind the lane your principal is declared on: 'onex profile bind-lane <lane>'."
+      admission-node-missing: "update the onex plugin and start a new session so its environment carries node_developer_lane_admission_compute."
   principal_declaration: "config/lab/developer-principal-overlay.yaml"
+  bound_lane_principal_declaration: "config/lab/lane-overlays/{lane}.developer-principal.yaml"
+  collaborator_barred_lanes:
+    - "dev"
   excluded_event_classes:
     - "prompt.submitted"
     - "content.captured"

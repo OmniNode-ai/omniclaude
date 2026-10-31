@@ -1,0 +1,60 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-21599"
+title: "A collaborator's prompt hook checks the lane they are bound to"
+summary: "The prompt hook selected the hook-edge contract's declared lane for every developer, so a collaborator bound to another lane (onex profile bind-lane) passed unchecked or was blocked for lacking a login on the declared lane. developer_event_suppressed now reads the facts (the contract's lanes, each lane's declared people from the private overlay, the developer's lane store) and applies the decision of omnimarket's node_developer_lane_admission_compute, whose stdlib-only handler it loads by path. The hook-edge contract names the per-lane declaration path and the lane a collaborator never uses. A collaborator selecting that lane, a bound lane with no list installed, a missing principal and a principal declared on another lane are refused; the operator's own flow is unchanged."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn21599-bound-lane-check"
+    statement: |-
+      The prompt hook admits a developer bound to a collaborator lane on that lane's own declared list and refuses the removed binding, the removed principal, a collaborator selecting the barred lane and a bound lane with no list; the operator's own dev flow is unchanged.
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: the planted cases hold on the real hook appender -- falsifier: uv run pytest on tests/hooks/test_hook_lane_binding_omn21599.py fails one of them, or the file is absent at the merge base
+  - id: "req-omn21599-refusal-never-blocks"
+    statement: |-
+      An admission refusal never blocks the person's prompt (RULING 2026-10-30T16:45:31Z). Every refusal (no binding or principal, a bound lane with no list or no config root, a collaborator on the barred lane, a principal on another lane, an unknown or invalid binding, a malformed or unreadable list, an installed omnimarket without the node) drops every event class so nothing reaches any lane, exits 0, and the hook-edge contract's refusal_notice class prints one warning naming the fix; a collaborator principal still never publishes to dev and the operator's own dev flow is unchanged.
+    acceptance:
+      - id: "AC2"
+        statement: |-
+          AC2: every refusal state exits 0 with nothing journalled and one warning naming the contract's remedy, through the appender and through the real prompt hook script -- falsifier: uv run pytest on tests/hooks/test_hook_lane_binding_omn21599.py fails a drops_and_warns case or test_the_real_prompt_hook_exits_zero_on_a_refusal, or the handler still raises a node refusal
+evidence_requirements:
+  - kind: "tests"
+    description: "The planted cases through the hook appender and its command line: bound with a declared principal passes, binding removed, principal removed, a collaborator selecting the barred lane, a bound lane with no list and a principal declared on another lane each exit 0, journal nothing and print one warning (they blocked the prompt before the refusal-never-blocks fix); the operator's own flow is unchanged."
+    command: "uv run pytest tests/hooks/test_hook_lane_binding_omn21599.py tests/hooks/test_contractor_hook_policy.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn21599-ac1-bound-lane-check"
+    description: "The hook tests pass; at the merge base the lane-binding test file does not exist, so the same command fails."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hook_lane_binding_omn21599.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn21599-ac2-refusal-never-blocks"
+    description: "The refusal cases and the real prompt hook script pass: each refusal exits 0, journals nothing and prints one warning; the handler prints the contract's notice and never raises a refusal."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hook_lane_binding_omn21599.py tests/hooks/test_contractor_hook_policy.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: "command"
+        check_value: "grep -q 'systemMessage' src/omniclaude/handlers/handler_hook_local_bus_publish.py && ! grep -q 'HookEdgeLaneCredentialError' src/omniclaude/handlers/handler_hook_local_bus_publish.py"
+    binds_ac: ["AC2"]
+  - id: "dod-omn21599-deploy-source-readback"
+    description: |-
+      Hosted-runner source-artifact deploy check: read the hook handler from GitHub at the checkout's exact
+      commit and require that it hands the lane decision to omnimarket's admission node and no longer reads the
+      declared lane's principal inline. Missing source or a missing token fails the command. This is published
+      source readback, not an assertion that a live runtime has been deployed.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/handlers/handler_hook_local_bus_publish.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -c -e 'node_developer_lane_admission_compute' -e 'node.admit(' | grep -qx 3"

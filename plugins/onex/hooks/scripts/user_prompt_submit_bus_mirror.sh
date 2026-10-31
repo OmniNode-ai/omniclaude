@@ -138,13 +138,9 @@ onex_hook_gate USER_PROMPT_SUBMIT || {
 
 INPUT="$(cat)"
 
-if ! command -v jq >/dev/null 2>&1; then
-    # No jq: cannot safely build a JSON payload. Fail-open, no emission.
-    exit 0
-fi
-if ! echo "$INPUT" | jq -e . >/dev/null 2>&1; then
-    INPUT='{}'
-fi
+# No jq: cannot safely build a JSON payload. Fail-open, no emission.
+command -v jq >/dev/null 2>&1 || exit 0
+echo "$INPUT" | jq -e . >/dev/null 2>&1 || INPUT='{}'
 
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SESSION_ID=""
 # OMN-18609: the lane a hook event belongs to is resolved from the harness's
@@ -186,6 +182,9 @@ PAYLOAD=$(jq -nc \
 # singleton drainer (launchd ai.omninode.hook-emit-drainer) pays that
 # import once and publishes the backlog.
 _EMIT_DISPATCH_PY="${HOOKS_LIB}/hook_emit_append.py"
+# OMN-21599: an admission refusal never blocks the prompt. The appender writes its one
+# warning (a systemMessage the person sees) here, because emitter stdout goes to the log.
+export ONEX_HOOK_NOTICE_FILE="${LOG_FILE%/*}/prompt-notice.$$"
 if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
     # OMN-20110: foreground through the bounded runner, never disowned. A
     # miss or failure fails the hook (blocking exit naming the cause) and
@@ -237,5 +236,6 @@ if [[ -n "${PYTHON_CMD:-}" && -f "$_EMIT_DISPATCH_PY" ]]; then
                 || onex_emit_fail_exit "$INPUT"
         fi
 fi
+[[ -f "$ONEX_HOOK_NOTICE_FILE" ]] && { cat "$ONEX_HOOK_NOTICE_FILE"; rm -f "$ONEX_HOOK_NOTICE_FILE"; }
 
 exit 0

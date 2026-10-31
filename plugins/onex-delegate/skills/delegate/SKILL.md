@@ -10,7 +10,7 @@ tags: [delegation, dispatch, single-command]
 composable: false
 args:
   - name: prompt
-    description: "The task to delegate (e.g., 'write unit tests for verify_registration.py')"
+    description: "The task to delegate (e.g., 'write unit tests for verify_registration.py'), or `models` to list your models and `models first <provider> [<model>]` to choose the one delegation tries first"
     required: true
   - name: --task-type
     description: "Override task classification: test, document, research, code_generation, refactor, reasoning, review (default: auto-classify from prompt)"
@@ -164,6 +164,23 @@ Add `Bash(onex delegate:*)` to `permissions.allow` in `~/.claude/settings.json`
 
 This rule covers only `onex delegate` invocations. The one-time setup commands above
 (`onex local init`, `onex secret set`) are separate commands and ask once each.
+
+## Choosing the model delegation tries first
+
+After onboarding, you can pick which of your models delegation tries first without
+leaving Claude Code and without re-running onboarding:
+
+```
+/onex:delegate models
+/onex:delegate models first openrouter qwen/qwen3.8-27b
+/onex:delegate models first --clear
+```
+
+The first command lists your providers and their models; the one tried first is listed
+first. The second runs `onex models first <provider> <model>`, and the next delegation
+tries that model before any other. The third goes back to the usual order. The
+procedure is in `prompt.md`. Add `Bash(onex models:*)` to `permissions.allow` as well if
+you do not want a prompt each time.
 
 ## Task Types
 
