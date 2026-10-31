@@ -345,7 +345,7 @@ async def test_watch_registry_round_trip() -> None:
 def test_kafka_producer_utils_public_functions() -> None:
     from omniclaude.lib import kafka_producer_utils as kpu
 
-    assert kpu.KAFKA_PUBLISH_TIMEOUT_SECONDS == 10.0
+    assert not hasattr(kpu, "KAFKA_PUBLISH_TIMEOUT_SECONDS")
     with patch.dict("os.environ", {}, clear=True):
         assert kpu.get_kafka_bootstrap_servers() is None
     envelope = kpu.create_event_envelope(

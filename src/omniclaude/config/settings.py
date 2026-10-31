@@ -118,6 +118,9 @@ class Settings(BaseSettings):
         le=60000,
         description="Kafka request timeout in milliseconds",
     )
+    kafka_publish_timeout_seconds: float = Field(
+        default=10.0, ge=1.0, le=300.0, description="Kafka publish timeout (seconds)"
+    )
 
     # =========================================================================
     # POSTGRESQL DATABASE CONFIGURATION
@@ -323,15 +326,6 @@ class Settings(BaseSettings):
         description=(
             "Enable event-based agent routing via Kafka. When True, "
             "KAFKA_BOOTSTRAP_SERVERS must be configured. "
-            "Defaults to False for safety."
-        ),
-    )
-    use_onex_routing_nodes: bool = Field(
-        default=False,
-        description=(
-            "Enable ONEX routing nodes for agent routing. When True, "
-            "route_via_events_wrapper calls HandlerRoutingDefault (compute) "
-            "and HandlerRoutingEmitter (effect) instead of direct AgentRouter. "
             "Defaults to False for safety."
         ),
     )

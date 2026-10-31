@@ -18,7 +18,6 @@ Usage:
         get_kafka_bootstrap_servers,
         publish_to_kafka,
         publish_to_kafka_sync,
-        KAFKA_PUBLISH_TIMEOUT_SECONDS,
     )
 """
 
@@ -33,11 +32,9 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-logger = logging.getLogger(__name__)
+from omniclaude.config import settings
 
-# Kafka publish timeout (10 seconds)
-# Prevents indefinite blocking if broker is slow/unresponsive
-KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
+logger = logging.getLogger(__name__)
 
 # Shared Kafka producer (singleton across all publishers)
 _kafka_producer: Any | None = None  # Why: kafka.KafkaProducer — external lib without stubs
@@ -182,7 +179,7 @@ async def get_shared_producer():
                 linger_ms=10,
                 acks=1,
                 max_batch_size=16384,
-                request_timeout_ms=5000,
+                request_timeout_ms=settings.request_timeout_ms,
             )
 
             await producer.start()
@@ -216,7 +213,7 @@ async def publish_to_kafka(
         True if published successfully, False if producer unavailable.
 
     Raises:
-        TimeoutError: If publish exceeds KAFKA_PUBLISH_TIMEOUT_SECONDS.
+        TimeoutError: If publish exceeds settings.kafka_publish_timeout_seconds.
         Exception: Other Kafka errors propagate to caller for handling.
     """
     producer = await get_shared_producer()
@@ -228,7 +225,7 @@ async def publish_to_kafka(
         producer.send_and_wait(
             topic, value=envelope, key=partition_key.encode("utf-8")
         ),
-        timeout=KAFKA_PUBLISH_TIMEOUT_SECONDS,
+        timeout=settings.kafka_publish_timeout_seconds,
     )
     return True
 
@@ -291,7 +288,7 @@ def _run_async_in_new_thread(coro: Any) -> Any:  # Why: generic coroutine runner
     """Run an async coroutine in a new thread with its own event loop."""
     pool = _get_thread_pool()
     future = pool.submit(_run_in_new_loop, coro)
-    return future.result(timeout=KAFKA_PUBLISH_TIMEOUT_SECONDS + 5)
+    return future.result(timeout=settings.kafka_publish_timeout_seconds + 5)
 
 
 def publish_to_kafka_sync(coro) -> bool:

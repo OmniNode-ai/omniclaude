@@ -1,0 +1,34 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21623
+title: "Burn down the contracts_and_di findings of omniclaude: Kafka publish and request timeouts come from Settings"
+summary: >
+  omnibase_core's contracts_and_di check, run read-only over omniclaude, reported literal timeouts
+  bound to KAFKA_PUBLISH_TIMEOUT_SECONDS (three copies) and request_timeout_ms (publishers and the
+  routing and intelligence event clients). This slice declares the publish timeout once on Settings,
+  reads the request timeout from the Settings field that already exists, and injects both into the
+  publishers and clients. No constants module is added.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21623-kafka-timeouts
+    statement: The Kafka publish and request timeouts in the publishers and event clients are read from Settings and a literal no longer binds them.
+    acceptance:
+      - id: BURNDOWN1
+        statement: "BURNDOWN1: the Settings field kafka_publish_timeout_seconds defaults to 10.0, is overridden by KAFKA_PUBLISH_TIMEOUT_SECONDS and refuses values outside 1 to 300; the three publisher modules read it; the routing and intelligence event clients default request_timeout_ms from Settings and an explicit argument wins -- falsifier: uv run pytest tests/unit/config/test_kafka_timeouts_from_settings_omn21623.py -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "The timeout-from-settings tests and the event client, publisher and relay tests pass"
+    command: "uv run pytest tests/unit/config/test_kafka_timeouts_from_settings_omn21623.py tests/lib/core/test_routing_event_client.py tests/lib/core/test_intelligence_event_client.py tests/lib/test_transformation_event_publisher.py tests/unit/ratchet_burndown/test_omn20560_characterization.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21623-kafka-timeouts-from-settings
+    description: "The settings field, the three publisher constants, the two relay publishers and the two event clients read their timeouts from Settings; the new tests fail at the merge base, which has the literals, and pass here."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/config/test_kafka_timeouts_from_settings_omn21623.py tests/lib/core/test_routing_event_client.py tests/lib/core/test_intelligence_event_client.py tests/lib/test_transformation_event_publisher.py tests/unit/ratchet_burndown/test_omn20560_characterization.py -q --no-cov"
+        cwd: "."

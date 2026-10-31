@@ -24,8 +24,6 @@ from omniclaude.hooks.topics import build_topic
 
 logger = logging.getLogger(__name__)
 
-# Kafka publish timeout (10 seconds)
-KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 
 def get_kafka_bootstrap_servers() -> str | None:

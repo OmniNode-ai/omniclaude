@@ -16,7 +16,6 @@ Public API:
 from __future__ import annotations
 
 import logging
-from types import TracebackType
 from typing import Any, cast
 from uuid import uuid4
 
@@ -43,7 +42,7 @@ class RoutingEventClient:
     def __init__(
         self,
         bootstrap_servers: str | None = None,
-        request_timeout_ms: int = 5000,
+        request_timeout_ms: int | None = None,
     ) -> None:
         self.bootstrap_servers = (
             bootstrap_servers or settings.get_effective_kafka_bootstrap_servers()
@@ -54,7 +53,7 @@ class RoutingEventClient:
                 message="bootstrap_servers required (set KAFKA_BOOTSTRAP_SERVERS)",
                 details={"component": "RoutingEventClient"},
             )
-        self.request_timeout_ms = request_timeout_ms
+        self.request_timeout_ms = request_timeout_ms or settings.request_timeout_ms
         self._event_bus: EventBusKafka | None = None
         self._wiring: RequestResponseWiring | None = None
         self._started = False
@@ -182,7 +181,9 @@ class RoutingEventClientContext:
     """Context manager for automatic client lifecycle management."""
 
     def __init__(
-        self, bootstrap_servers: str | None = None, request_timeout_ms: int = 5000
+        self,
+        bootstrap_servers: str | None = None,
+        request_timeout_ms: int | None = None,
     ):
         self.client = RoutingEventClient(
             bootstrap_servers=bootstrap_servers, request_timeout_ms=request_timeout_ms
@@ -192,12 +193,7 @@ class RoutingEventClientContext:
         await self.client.start()
         return self.client
 
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> bool:
+    async def __aexit__(self, *exc_info: object) -> bool:
         await self.client.stop()
         return False
 
@@ -228,7 +224,7 @@ async def route_via_events(
     context: dict[str, Any] | None = None,
     max_recommendations: int = 5,
     min_confidence: float = 0.6,
-    timeout_ms: int = 5000,
+    timeout_ms: int | None = None,
     fallback_to_local: bool = True,
 ) -> list[dict[str, Any]]:
     """Convenience function for routing requests. Falls back to local AgentRouter on failure."""

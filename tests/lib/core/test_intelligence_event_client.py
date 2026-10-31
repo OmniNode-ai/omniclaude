@@ -41,6 +41,7 @@ def mock_settings():
     settings_mock = MagicMock()
     settings_mock.get_effective_kafka_bootstrap_servers.return_value = "localhost:9092"
     settings_mock.kafka_environment = "dev"
+    settings_mock.request_timeout_ms = 5000
     return settings_mock
 
 

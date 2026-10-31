@@ -64,10 +64,6 @@ except ImportError:  # nosec B110 - Optional dependency, graceful degradation
 logger = logging.getLogger(__name__)
 
 
-# Kafka publish timeout (10 seconds)
-# Prevents indefinite blocking if broker is slow/unresponsive
-KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
-
 # Lazy-loaded Kafka producer (singleton)
 _kafka_producer: Any | None = (
     None  # Why: kafka.KafkaProducer — external lib without stubs
@@ -165,7 +161,7 @@ async def _get_kafka_producer() -> (
                 linger_ms=10,  # Batch for 10ms
                 acks=1,  # Leader acknowledgment (balance speed/reliability)
                 max_batch_size=16384,  # 16KB batches
-                request_timeout_ms=5000,  # 5 second timeout
+                request_timeout_ms=settings.request_timeout_ms,
             )
 
             await producer.start()
@@ -261,7 +257,7 @@ async def publish_action_event(
         # Publish with timeout to prevent indefinite hanging
         await asyncio.wait_for(
             producer.send_and_wait(topic, value=event, key=partition_key),
-            timeout=KAFKA_PUBLISH_TIMEOUT_SECONDS,
+            timeout=settings.kafka_publish_timeout_seconds,
         )
 
         # Calculate metrics
@@ -294,7 +290,7 @@ async def publish_action_event(
         logger.error(
             f"Timeout publishing action event to Kafka "
             f"(action_type={action_type}, action_name={action_name}, "
-            f"timeout={KAFKA_PUBLISH_TIMEOUT_SECONDS}s)",
+            f"timeout={settings.kafka_publish_timeout_seconds}s)",
             extra={"correlation_id": correlation_id},
         )
 

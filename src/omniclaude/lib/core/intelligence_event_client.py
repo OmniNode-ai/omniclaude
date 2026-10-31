@@ -44,7 +44,7 @@ class IntelligenceEventClient:
         self,
         bootstrap_servers: str | None = None,
         enable_intelligence: bool = True,
-        request_timeout_ms: int = 5000,
+        request_timeout_ms: int | None = None,
     ):
         self.bootstrap_servers = (
             bootstrap_servers or settings.get_effective_kafka_bootstrap_servers()
@@ -56,7 +56,7 @@ class IntelligenceEventClient:
                 details={"component": "IntelligenceEventClient"},
             )
         self.enable_intelligence = enable_intelligence
-        self.request_timeout_ms = request_timeout_ms
+        self.request_timeout_ms = request_timeout_ms or settings.request_timeout_ms
         self._environment: str | None = None  # Validated in start()
         self._event_bus: EventBusKafka | None = None
         self._wiring: RequestResponseWiring | None = None
@@ -222,7 +222,7 @@ class IntelligenceEventClientContext:
         self,
         bootstrap_servers: str | None = None,
         enable_intelligence: bool = True,
-        request_timeout_ms: int = 5000,
+        request_timeout_ms: int | None = None,
     ):
         self.client = IntelligenceEventClient(
             bootstrap_servers=bootstrap_servers,

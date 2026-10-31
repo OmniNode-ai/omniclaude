@@ -37,10 +37,10 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
+from omniclaude.config import settings
 from omniclaude.hooks.schemas import PROMPT_PREVIEW_MAX_LENGTH, _sanitize_prompt_preview
 from omniclaude.hooks.topics import TopicBase, build_topic
 from omniclaude.lib.kafka_publisher_base import (
-    KAFKA_PUBLISH_TIMEOUT_SECONDS,
     close_shared_producer,
     create_event_envelope,
     publish_to_kafka,
@@ -249,7 +249,7 @@ async def publish_transformation_event(
             event_type.value if isinstance(event_type, TransformationEventType) else event_type,
             source_agent,
             target_agent,
-            KAFKA_PUBLISH_TIMEOUT_SECONDS,
+            settings.kafka_publish_timeout_seconds,
             extra={"correlation_id": correlation_id},
         )
         return False
