@@ -2344,7 +2344,10 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["ubuntu-latest"]')
       }}
     if:  always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success'
-    timeout-minutes: 15
+    # OMN-19998: a 5-way shard ran 459 s to 819 s on green dev runs; Split 1/5 of
+    # the push run on 9ee6e7f115a2 reached 903 s and the 15-minute ceiling
+    # cancelled it, turning Tests Gate red with no failing test.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
