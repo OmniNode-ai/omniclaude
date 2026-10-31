@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -212,3 +213,40 @@ def test_batched_adapter_reports_main_crash_before_traceback(
     assert first == f"guard core crashed: {summary} (core {name})"
     assert rest.startswith("Traceback (most recent call last):\n")
     assert rest.rstrip().endswith(f"{exception}: {message}")
+
+
+def test_dispatch_runtime_deadline_comes_from_contract_or_injection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """OMN-21737: the admission runtime deadline is bound, not hard-coded."""
+    from omnibase_core.runtime import runtime_local
+
+    from omniclaude.nodes.node_git_effect.models import GitOperation
+    from omniclaude.nodes.node_git_effect.models.model_git_timeout_policy import (
+        ModelGitTimeoutPolicy,
+    )
+
+    seen: list[int] = []
+
+    class _Stop(Exception):
+        pass
+
+    def _capture(*args: object, timeout: int, **kwargs: object) -> None:
+        seen.append(timeout)
+        raise _Stop
+
+    monkeypatch.setattr(runtime_local, "RuntimeLocal", _capture)
+    monkeypatch.delenv("OMNICLAUDE_GIT_TIMEOUT_ADMISSION_CHECK", raising=False)
+    request = ModelGitAdmissionRequest(raw_payload="{}")
+    with pytest.raises(_Stop):
+        guard.dispatch(request, tmp_path / "a")
+    with pytest.raises(_Stop):
+        guard.dispatch(request, tmp_path / "b", runtime_timeout_seconds=7.2)
+    monkeypatch.setenv("OMNICLAUDE_GIT_TIMEOUT_ADMISSION_CHECK", "11")
+    with pytest.raises(_Stop):
+        guard.dispatch(request, tmp_path / "c")
+
+    contract_value = ModelGitTimeoutPolicy.from_contract(env={}).timeout_for(
+        GitOperation.ADMISSION_CHECK
+    )
+    assert seen == [math.ceil(contract_value), 8, 11]
