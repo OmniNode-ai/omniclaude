@@ -118,6 +118,8 @@ handler_routing:
 # Error handling
 error_handling:
   selection_timeout_seconds: 10
+  http_timeout_margin_seconds: 2
+  probe_timeout_seconds: 2
   on_timeout: return_structured_error
   on_malformed_output: return_structured_error
   on_out_of_set: return_structured_error
