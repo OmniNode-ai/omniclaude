@@ -39,3 +39,12 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "bash -c 'ONEX_STATE_DIR=$(mktemp -d) uv run pytest tests/unit/models/test_model_service_endpoint_defaults.py tests/unit/models/test_model_routing_defaults.py tests/golden/test_manifest_injector_golden.py -q --no-cov'"
+  - id: dod-omn21727-slice-proof
+    description: "The slice carries tests that pass at the PR head and the direct-model-call baseline no longer lists the removed ManifestInjector._embed_text site."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "bash -c 'ONEX_STATE_DIR=$(mktemp -d) uv run pytest tests/unit/models/test_model_service_endpoint_defaults.py tests/ci/test_repo_evidence_caller_workflow.py -q --no-cov'"
+      - check_type: command
+        check_value: "bash -c '! grep -q \"ManifestInjector._embed_text\" .onex_ratchets/direct_model_call_baseline.yaml'"
