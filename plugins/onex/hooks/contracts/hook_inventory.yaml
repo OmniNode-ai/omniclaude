@@ -299,7 +299,12 @@ expected_hooks:
       run by its path -- to node_lane_github_read_guard_effect, which refuses
       it from a lane and names the local reader. The matcher covers the GitHub
       MCP tools for that check alone; such a call never reaches the seven.
-      tests/hooks/test_lane_github_read_guard_hook.py.
+      tests/hooks/test_lane_github_read_guard_hook.py. Then the dev runtime
+      mutation check (OMN-21795) hands a Bash command that names docker and a
+      lifecycle verb to omnimarket's node_dev_runtime_mutation_guard_effect, which refuses
+      a recreate, removal or restart of a protected compose project (the dev
+      runtime, declared in its contract) unless a live ledger grant row names
+      the project. tests/hooks/test_dev_runtime_mutation_guard_hook.py.
     enforcement: true
     on_failure: "block"
     lite_mode_exit: false
