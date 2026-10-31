@@ -21,6 +21,8 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from omniclaude.models.model_endpoint_defaults import ModelEndpointDefaults
+
 # ---------------------------------------------------------------------------
 # Constants (mirrors capability_probe.py)
 # ---------------------------------------------------------------------------
@@ -184,7 +186,12 @@ def print_status(caps: dict[str, object], refreshed: bool = False) -> None:
     tier_desc = _TIER_DESCRIPTIONS.get(tier, "")
     probed_at_str = str(caps.get("probed_at", ""))
     kafka_servers = str(caps.get("kafka_servers", ""))
-    intelligence_url = str(caps.get("intelligence_url", "http://localhost:8053"))
+    intelligence_url = str(
+        caps.get(
+            "intelligence_url",
+            ModelEndpointDefaults.from_contract().intelligence_service_url,
+        )
+    )
 
     _, age_str = _age_string(probed_at_str) if probed_at_str else (-1, "unknown")
 
@@ -229,18 +236,12 @@ def print_status(caps: dict[str, object], refreshed: bool = False) -> None:
             print(f"  Kafka        {symbol} {status:12s}({all_hosts})")
 
     # Intelligence
-    if inline_intel_ok is not None:
-        symbol = _CHECK if inline_intel_ok else _CROSS
-        status = "healthy" if inline_intel_ok else "unreachable"
-        intel_health = f"{intelligence_url.rstrip('/')}/health"
-        print(f"  Intelligence {symbol} {status:12s}({intel_health})")
-    else:
-        # Infer from tier
-        intel_ok = tier == "full_onex"
-        symbol = _CHECK if intel_ok else _CROSS
-        status = "healthy" if intel_ok else "unreachable"
-        intel_health = f"{intelligence_url.rstrip('/')}/health"
-        print(f"  Intelligence {symbol} {status:12s}({intel_health})")
+    # Inline probe result when there is one, else inferred from the tier
+    intel_ok = inline_intel_ok if inline_intel_ok is not None else tier == "full_onex"
+    symbol = _CHECK if intel_ok else _CROSS
+    status = "healthy" if intel_ok else "unreachable"
+    intel_health = f"{intelligence_url.rstrip('/')}/health"
+    print(f"  Intelligence {symbol} {status:12s}({intel_health})")
 
     print()
     print(f"Probe file:    {_get_capabilities_file()}")
@@ -278,7 +279,7 @@ def _try_import_probe_module() -> object | None:
 def main() -> None:
     """Entry point for /onex-status skill."""
     kafka_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "")
-    intelligence_url = os.getenv("INTELLIGENCE_SERVICE_URL", "http://localhost:8053")
+    intelligence_url = ModelEndpointDefaults.from_contract().intelligence_service_url
 
     # Try to read existing capabilities file
     caps = _read_capabilities()
