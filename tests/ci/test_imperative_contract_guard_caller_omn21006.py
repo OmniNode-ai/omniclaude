@@ -59,8 +59,10 @@ FINDING_KEYS = (
 # All finding fields, including details, line numbers, reachability and allowlisting.
 # OMN-21536 moved two CLI mains out of handlers/, so their two dead-handler
 # non_live_violations rows (handler_lane_github_read_cli, handler_pr_ownership_cli) left.
+# OMN-21780 removed lines from manifest_injector.py, shifting the line numbers of its
+# non_live_freestanding_violations rows; no finding was added or dropped.
 RECORDED_OCC_FINDING_DIGEST = (
-    "e79a39794a54133244e592b3d42f99cbe4276e2cd0cb79ab8fa618306be96325"
+    "dd6087db58d28c227be192d92f4e42298c1bb795f687fafa3e990d19facb863f"
 )
 
 

@@ -212,6 +212,13 @@ invariants:
   - done_guard_error_refuses: true
   - closeout_instructions_require_bound_receipts: true
 
+# Linear GraphQL endpoint (OMN-21791): read by ModelLinearEndpoint.from_contract,
+# or replaced by an overlay-resolved ModelLinearEndpoint injected into the handler.
+endpoint:
+  host: api.linear.app
+  path: /graphql
+  timeout_seconds: 20
+
 # Error handling
 error_handling:
   retry_policy:
