@@ -41,9 +41,7 @@ HOOKS_LIB = ROOT / "plugins" / "onex" / "hooks" / "lib"
 GOLDEN = (
     Path(__file__).resolve().parents[1] / "fixtures/pr_ownership_effect_golden.json"
 )
-NODE_MODULE = (
-    "omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership_cli"
-)
+NODE_MODULE = "omniclaude.nodes.node_pr_ownership_guard_effect.runtime_pr_ownership"
 
 OWNER = "OmniNode-ai"
 REPO = "omniclaude"

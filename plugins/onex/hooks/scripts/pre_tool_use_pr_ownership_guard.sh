@@ -166,7 +166,7 @@ printf '%s' "$CMD" > "$CMD_FILE"
 # and the session resolver, which stay hook-library siblings, from the directory
 # named by --hooks-lib. An interpreter that cannot import the module fails the
 # evaluation below, and a failed evaluation of a real mutation verb is refused.
-GUARD_MODULE="omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership_cli"
+GUARD_MODULE="omniclaude.nodes.node_pr_ownership_guard_effect.runtime_pr_ownership"
 
 # OMN-16983: run the decision core without a source-tree layout assumption.
 # The previous form did `cd "$PLUGIN_ROOT/../.."` with a matching PYTHONPATH so
