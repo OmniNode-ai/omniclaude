@@ -27,17 +27,17 @@ from typing import Any
 
 import requests
 
+from omniclaude.models.model_runtime_paths import runtime_paths
+
 
 class PatternTrackingLogger:
     def __init__(self, log_file: str | None = None) -> None:
         if log_file:
             self.log_file = log_file
         else:
-            # Create log file in user's home directory with date
-            log_dir = os.path.expanduser("~/Library/Logs")
-            os.makedirs(log_dir, exist_ok=True)
-            today = datetime.now(UTC).strftime("%Y%m%d")
-            self.log_file = f"{log_dir}/pattern_tracking_{today}.log"
+            logs = runtime_paths().pattern_tracking_log_dir
+            os.makedirs(logs, exist_ok=True)
+            self.log_file = f"{logs}/pattern_tracking_{datetime.now(UTC):%Y%m%d}.log"
 
         # Configure logging
         logging.basicConfig(

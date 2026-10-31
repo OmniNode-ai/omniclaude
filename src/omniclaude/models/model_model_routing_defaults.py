@@ -58,7 +58,9 @@ class ModelModelRoutingDefaults(BaseModel):
         """Resolve the contract's ``model_routing`` section against the overlay env."""
         with open(path or _CONTRACT_PATH, encoding="utf-8") as f:
             section = (yaml.safe_load(f) or {}).get("model_routing") or {}
-        resolved = {key: _expand(str(value)) for key, value in section.items()}
+        resolved = {
+            key: expand_overlay_value(str(value)) for key, value in section.items()
+        }
         return cls.model_validate(
             {
                 "savings_baseline_model": resolved.get("savings_baseline_model", ""),
@@ -71,7 +73,7 @@ class ModelModelRoutingDefaults(BaseModel):
         )
 
 
-def _expand(value: str) -> str:
+def expand_overlay_value(value: str) -> str:
     def _sub(match: re.Match[str]) -> str:
         default = match.group("default")
         return os.environ.get(match.group("name"), default if default else "")

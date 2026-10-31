@@ -30,6 +30,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from omniclaude.models.model_runtime_paths import runtime_paths
+
 # ---------------------------------------------------------------------------
 # Anti-pattern definitions
 # ---------------------------------------------------------------------------
@@ -153,8 +155,6 @@ DEFAULT_REPOS = [
     "onex_change_control",
     "omnibase_spi",
 ]
-
-OMNI_HOME = Path("/Users/jonah/Code/omni_home")  # local-path-ok
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +298,7 @@ def scan_repo(
     handlers_only: bool = False,
 ) -> tuple[int, list[Violation]]:
     """Scan a repo for infrastructure coupling violations."""
-    repo_root = OMNI_HOME / repo_name
+    repo_root = runtime_paths().require_registry_root() / repo_name
     src_dir = repo_root / "src"
 
     if not src_dir.is_dir():
