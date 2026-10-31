@@ -52,4 +52,4 @@ dod_evidence:
     source: manual
     checks:
       - check_type: command
-        check_value: "gh api 'repos/OmniNode-ai/omniclaude/contents/plugins/onex/skills/_bin/lab-onboarding.sh?ref=06982c6cb63d6fd8c5a11e6bcbc0df116ef88796' --jq .content | base64 -d | grep -q 'openai_compatible'"
+        check_value: "gh api 'repos/OmniNode-ai/omniclaude/contents/plugins/onex/skills/_bin/lab-onboarding.sh?ref=06982c6cb63d6fd8c5a11e6bcbc0df116ef88796' --jq .content | base64 -d | grep 'openai_compatible' >/dev/null"
