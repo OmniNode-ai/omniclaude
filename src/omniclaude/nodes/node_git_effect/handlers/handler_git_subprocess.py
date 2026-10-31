@@ -9,6 +9,9 @@ Targeting rules:
     - git ops: ``cwd=request.working_directory`` (fallback: process cwd)
     - gh ops: ``-R {request.repo}`` when set, else ``cwd`` + infer from remote
 
+Per-operation deadlines and the binary probe deadline come from the node
+contract's ``error_handling.timeouts`` block through ``ModelGitTimeoutPolicy``.
+
 Concurrency is capped by an ``asyncio.Semaphore`` whose width defaults to 3
 and is configurable via ``OMNICLAUDE_GIT_MAX_CONCURRENT``.
 
@@ -36,6 +39,9 @@ from omniclaude.nodes.node_git_effect.models import (
     ModelGitResult,
 )
 from omniclaude.nodes.node_git_effect.models.model_git_result import GitResultStatus
+from omniclaude.nodes.node_git_effect.models.model_git_timeout_policy import (
+    ModelGitTimeoutPolicy,
+)
 
 __all__ = ["HandlerGitSubprocess"]
 
@@ -56,26 +62,6 @@ TICKET_STAMP_END = "<!-- ONEX_TICKET_STAMP_END -->"
 TICKET_STAMP_TEMPLATE = """{start}
 **Ticket**: [{ticket_id}](https://linear.app/omninode/issue/{ticket_id})
 {end}"""
-
-# Per-operation timeouts (OMN-2817 1e) - env-configurable
-OPERATION_TIMEOUTS: dict[GitOperation, float] = {
-    GitOperation.ADMISSION_CHECK: 30.0,
-    GitOperation.BRANCH_CREATE: float(
-        os.getenv("OMNICLAUDE_GIT_TIMEOUT_BRANCH_CREATE", "30")
-    ),
-    GitOperation.COMMIT: float(os.getenv("OMNICLAUDE_GIT_TIMEOUT_COMMIT", "30")),
-    GitOperation.PUSH: float(os.getenv("OMNICLAUDE_GIT_TIMEOUT_PUSH", "60")),
-    GitOperation.PR_CREATE: float(os.getenv("OMNICLAUDE_GIT_TIMEOUT_PR_CREATE", "45")),
-    GitOperation.PR_UPDATE: float(os.getenv("OMNICLAUDE_GIT_TIMEOUT_PR_UPDATE", "45")),
-    GitOperation.PR_CLOSE: float(os.getenv("OMNICLAUDE_GIT_TIMEOUT_PR_CLOSE", "30")),
-    GitOperation.PR_MERGE: float(os.getenv("OMNICLAUDE_GIT_TIMEOUT_PR_MERGE", "60")),
-    GitOperation.PR_LIST: float(os.getenv("OMNICLAUDE_GIT_TIMEOUT_PR_LIST", "45")),
-    GitOperation.PR_VIEW: float(os.getenv("OMNICLAUDE_GIT_TIMEOUT_PR_VIEW", "45")),
-    GitOperation.TAG_CREATE: float(
-        os.getenv("OMNICLAUDE_GIT_TIMEOUT_TAG_CREATE", "60")
-    ),
-    GitOperation.LABEL_ADD: float(os.getenv("OMNICLAUDE_GIT_TIMEOUT_LABEL_ADD", "30")),
-}
 
 # Per-operation required fields (OMN-2817 1d)
 REQUIRED_FIELDS: dict[GitOperation, list[str]] = {
@@ -208,7 +194,14 @@ class HandlerGitSubprocess:
 
     handler_key: str = "subprocess"
 
-    def __init__(self) -> None:
+    def __init__(self, *, timeout_policy: ModelGitTimeoutPolicy | None = None) -> None:
+        # Deadlines come from the node contract plus the operator overlay
+        # (OMN-21737); the composition root may inject a resolved policy.
+        self._timeout_policy: ModelGitTimeoutPolicy = (
+            timeout_policy
+            if timeout_policy is not None
+            else ModelGitTimeoutPolicy.from_contract(env=os.environ)
+        )
         self._git_available: bool = False
         self._gh_available: bool = False
         self._git_version: str | None = None
@@ -240,7 +233,12 @@ class HandlerGitSubprocess:
 
         with tempfile.TemporaryDirectory(prefix="git-admission-") as temporary:
             result = await asyncio.to_thread(
-                dispatch, request.admission, Path(temporary)
+                dispatch,
+                request.admission,
+                Path(temporary),
+                runtime_timeout_seconds=self._timeout_policy.timeout_for(
+                    GitOperation.ADMISSION_CHECK
+                ),
             )
         return ModelGitResult(
             operation=request.operation.value,
@@ -260,7 +258,7 @@ class HandlerGitSubprocess:
             result = subprocess.run(
                 ["git", "--version"],
                 capture_output=True,
-                timeout=5,
+                timeout=self._timeout_policy.binary_probe_timeout_seconds,
                 check=False,
             )
             if result.returncode == 0:
@@ -279,7 +277,7 @@ class HandlerGitSubprocess:
             result = subprocess.run(
                 ["gh", "--version"],
                 capture_output=True,
-                timeout=5,
+                timeout=self._timeout_policy.binary_probe_timeout_seconds,
                 check=False,
             )
             if result.returncode == 0:
@@ -334,7 +332,7 @@ class HandlerGitSubprocess:
             return validation
         if not self._git_available:
             return self._unavailable_result("git", request)
-        timeout = OPERATION_TIMEOUTS[request.operation]
+        timeout = self._timeout_policy.timeout_for(request.operation)
         async with self._semaphore:
             if args and args[0] == "push":
                 refusal = await asyncio.to_thread(
@@ -385,7 +383,7 @@ class HandlerGitSubprocess:
         full_args = list(args)
         if request.repo:
             full_args.extend(["-R", request.repo])
-        timeout = OPERATION_TIMEOUTS[request.operation]
+        timeout = self._timeout_policy.timeout_for(request.operation)
         async with self._semaphore:
             if args[:2] == ["pr", "merge"]:
                 refusal = await asyncio.to_thread(
