@@ -13,7 +13,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .model_git_request import GitOperation
@@ -65,6 +64,10 @@ class ModelGitTimeoutPolicy(BaseModel):
         A missing or invalid contract value, or a malformed overlay value,
         fails validation; no code fallback duplicates the contract.
         """
+        # Imported here so merely importing this module (for example from the
+        # PR-body lint, which runs without PyYAML) does not require PyYAML.
+        import yaml
+
         contract_path = (
             path if path is not None else Path(__file__).parents[1] / "contract.yaml"
         )
