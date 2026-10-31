@@ -1,0 +1,289 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+# Generated with plugins/onex/skills/_lib/contract_generator/generate_contract.py;
+# heuristic checks replaced with scoped evidence and explicit unproven refusals.
+---
+schema_version: 1.0.0
+ticket_id: OMN-21093
+title: T0.3 The adapter node and its generated binding
+summary: 'This branch contributes the AC8 installed-binding inventory gate fix. All twelve acceptance
+  criteria are copied verbatim from Linear, read 2026-10-27T14:33:40Z. The local AC8 regressions and AC9
+  shape check do not establish full adapter completion. AC1-AC7 and AC10-AC12 remain unproven; their explicit
+  refusal checks must be replaced with real qualification before completion. In particular, second-bus
+  adapter qualification is not yet proven: no second-bus receipt-mode run is asserted by this contract.
+  The refusal checks deliberately fail in hosted and local verification; pending is not a pass. AC9 still
+  requires the PR canonical-file-shape verdict with the baseline unchanged. The separate hosted source
+  deployment readback verifies publication of the AC8 handler, not an installed adapter or a second-bus
+  run.'
+is_seam_ticket: true
+interface_change: true
+interfaces_touched:
+- protocols
+evidence_requirements:
+- kind: tests
+  description: AC8 positive and negative inventory fixtures; does not prove the remaining adapter criteria.
+  command: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov -p no:randomly
+- kind: tests
+  description: AC9 local shape ratchet and unchanged baseline; PR CI verdict still required.
+  command: git diff --exit-code a12883b2b660fc9a696f9c3973fe00411ac872b9 HEAD -- .onex_ratchets/canonical_file_shape_baseline.txt
+    && uv run --no-project --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@d7ed23f1e89b8b6ce6079d303f8599c661c7f191"
+    python -m omnibase_core.validators.canonical_file_shape --base a12883b2b660fc9a696f9c3973fe00411ac872b9
+    --head HEAD
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn21093-ac1
+  description: AC1 qualification not yet proven; see the unchanged linear_dod_text. Second-bus adapter
+    qualification is not yet proven. Refuse completion until behavioral qualification is supplied.
+  source: linear
+  linear_dod_text: 'AC1: the exact rendered command, run with recorded hook JSON piped on stdin (one fixture
+    per hook event the bindings name), publishes one command whose payload is built from that JSON, hosts
+    no handler (the receipt-mode run reports `host_handlers=False`, and no node module is imported in
+    the adapter process), and prints only the hook''s output shape (`{result}`, `{deny}`, `{messages}`,
+    `hookSpecificOutput.additionalContext`, or nothing) -- falsifier: a payload not drawn from stdin,
+    a hosted handler, or a `ModelSkillResult` on stdout.'
+  checks:
+  - check_type: command
+    check_value: python3 -c 'raise SystemExit('"'"'AC1 qualification not yet proven; see the unchanged
+      linear_dod_text. Second-bus adapter qualification is not yet proven. Refuse completion until behavioral
+      qualification is supplied.'"'"')'
+  binds_ac:
+  - AC1
+  status: pending
+- id: dod-omn21093-ac2
+  description: AC2 qualification not yet proven; see the unchanged linear_dod_text. Second-bus adapter
+    qualification is not yet proven. Refuse completion until behavioral qualification is supplied.
+  source: linear
+  linear_dod_text: 'AC2: the rendered failure table for a host whose client-section maximum is `required`
+    maps "adapter never started" to `{deny}`, and for `observe` or `selective` to `next(e)`; a change
+    of that maximum changes only the rendered table literal -- falsifier: a required-host render whose
+    missing-executable branch calls `next(e)`.'
+  checks:
+  - check_type: command
+    check_value: python3 -c 'raise SystemExit('"'"'AC2 qualification not yet proven; see the unchanged
+      linear_dod_text. Second-bus adapter qualification is not yet proven. Refuse completion until behavioral
+      qualification is supplied.'"'"')'
+  binds_ac:
+  - AC2
+  status: pending
+- id: dod-omn21093-ac3
+  description: AC3 qualification not yet proven; see the unchanged linear_dod_text. Second-bus adapter
+    qualification is not yet proven. Refuse completion until behavioral qualification is supplied.
+  source: linear
+  linear_dod_text: 'AC3: the same contract renders a byte-identical module; changing one deadline in the
+    contract changes only that literal in the output -- falsifier: golden diff beyond the literal.'
+  checks:
+  - check_type: command
+    check_value: python3 -c 'raise SystemExit('"'"'AC3 qualification not yet proven; see the unchanged
+      linear_dod_text. Second-bus adapter qualification is not yet proven. Refuse completion until behavioral
+      qualification is supplied.'"'"')'
+  binds_ac:
+  - AC3
+  status: pending
+- id: dod-omn21093-ac4
+  description: AC4 qualification not yet proven; see the unchanged linear_dod_text. Second-bus adapter
+    qualification is not yet proven. Refuse completion until behavioral qualification is supplied.
+  source: linear
+  linear_dod_text: 'AC4: the rendered module contains no branching other than the verdict-table lookup
+    and the fixed failure table, measured by an allowlist of AST node kinds over the rendered output,
+    and a contract data field containing code is rendered as a string literal -- falsifier: a fixture
+    whose rendered output contains a conditional on request content, or executes a data field.'
+  checks:
+  - check_type: command
+    check_value: python3 -c 'raise SystemExit('"'"'AC4 qualification not yet proven; see the unchanged
+      linear_dod_text. Second-bus adapter qualification is not yet proven. Refuse completion until behavioral
+      qualification is supplied.'"'"')'
+  binds_ac:
+  - AC4
+  status: pending
+- id: dod-omn21093-ac5
+  description: AC5 qualification not yet proven; see the unchanged linear_dod_text. Second-bus adapter
+    qualification is not yet proven. Refuse completion until behavioral qualification is supplied.
+  source: linear
+  linear_dod_text: 'AC5: the binding passes the adapter nothing but the hook input and the binding name
+    -- falsifier: a rendered argument carrying a mode or any value not drawn from the hook input.'
+  checks:
+  - check_type: command
+    check_value: python3 -c 'raise SystemExit('"'"'AC5 qualification not yet proven; see the unchanged
+      linear_dod_text. Second-bus adapter qualification is not yet proven. Refuse completion until behavioral
+      qualification is supplied.'"'"')'
+  binds_ac:
+  - AC5
+  status: pending
+- id: dod-omn21093-ac6
+  description: AC6 qualification not yet proven; see the unchanged linear_dod_text. Second-bus adapter
+    qualification is not yet proven. Refuse completion until behavioral qualification is supplied.
+  source: linear
+  linear_dod_text: 'AC6: `claude_code_binding_install` writes the rendered module and records its sha256,
+    and the installed file''s sha256 equals the render''s -- falsifier: a mismatch, or an installed file
+    differing from a fresh render.'
+  checks:
+  - check_type: command
+    check_value: python3 -c 'raise SystemExit('"'"'AC6 qualification not yet proven; see the unchanged
+      linear_dod_text. Second-bus adapter qualification is not yet proven. Refuse completion until behavioral
+      qualification is supplied.'"'"')'
+  binds_ac:
+  - AC6
+  status: pending
+- id: dod-omn21093-ac7
+  description: AC7 qualification not yet proven; see the unchanged linear_dod_text. Second-bus adapter
+    qualification is not yet proven. Refuse completion until behavioral qualification is supplied.
+  source: linear
+  linear_dod_text: 'AC7: no rendered module is tracked in any repository -- falsifier: `git ls-files`
+    in omniclaude or omnimarket lists one.'
+  checks:
+  - check_type: command
+    check_value: python3 -c 'raise SystemExit('"'"'AC7 qualification not yet proven; see the unchanged
+      linear_dod_text. Second-bus adapter qualification is not yet proven. Refuse completion until behavioral
+      qualification is supplied.'"'"')'
+  binds_ac:
+  - AC7
+  status: pending
+- id: dod-omn21093-ac8
+  description: 'AC8: behavioral fixtures require nonzero gate exit for undeclared installed events, binding/event
+    ownership mismatches and malformed artifacts, with declared controls accepted; the existing required
+    hook-inventory-gate workflow calls the validator.'
+  source: linear
+  linear_dod_text: 'AC8: the hook-inventory gate fails when the installed binding registers an event absent
+    from `client_bindings`, and runs in the existing required `hook-inventory-gate` check -- falsifier:
+    the gate exits 0 on that fixture, or the workflow does not call it.'
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov
+      -p no:randomly
+  binds_ac:
+  - AC8
+  status: pending
+- id: dod-omn21093-ac9
+  description: 'AC9: local equivalent of the PR shape ratchet plus byte-unchanged baseline from the branch
+    base. The PR canonical-file-shape result remains pending until CI runs.'
+  source: linear
+  linear_dod_text: 'AC9: the PR''s `canonical-file-shape` check passes with `.onex_ratchets/canonical_file_shape_baseline.txt`
+    unchanged -- falsifier: a baseline line added or the check red.'
+  checks:
+  - check_type: command
+    check_value: git diff --exit-code a12883b2b660fc9a696f9c3973fe00411ac872b9 HEAD -- .onex_ratchets/canonical_file_shape_baseline.txt
+      && uv run --no-project --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@d7ed23f1e89b8b6ce6079d303f8599c661c7f191"
+      python -m omnibase_core.validators.canonical_file_shape --base a12883b2b660fc9a696f9c3973fe00411ac872b9
+      --head HEAD
+  binds_ac:
+  - AC9
+  status: pending
+- id: dod-omn21093-ac10
+  description: AC10 qualification not yet proven; see the unchanged linear_dod_text. Second-bus adapter
+    qualification is not yet proven. Refuse completion until behavioral qualification is supplied.
+  source: linear
+  linear_dod_text: 'AC10: a reply split into chunks is reassembled by content-record id and its sha256
+    checked against the echoed hash -- falsifier: a fixture reply delivered out of order, or with one
+    chunk missing, returned as anything but `native` or `{deny}`.'
+  checks:
+  - check_type: command
+    check_value: python3 -c 'raise SystemExit('"'"'AC10 qualification not yet proven; see the unchanged
+      linear_dod_text. Second-bus adapter qualification is not yet proven. Refuse completion until behavioral
+      qualification is supplied.'"'"')'
+  binds_ac:
+  - AC10
+  status: pending
+- id: dod-omn21093-ac11
+  description: AC11 qualification not yet proven; see the unchanged linear_dod_text. Second-bus adapter
+    qualification is not yet proven. Refuse completion until behavioral qualification is supplied.
+  source: linear
+  linear_dod_text: 'AC11: an `additive` row renders a command-hook registration whose command is exactly
+    `onex-claude-code-hook --binding <name>` (v6; v5 named `onex skill`), byte-identical across renders,
+    and the adapter maps `inject` to `hookSpecificOutput.additionalContext` only when the package''s sha256
+    equals the echoed hash, and every other outcome to no output -- falsifier: a rendered registration
+    carrying any other argument, or a hash-mismatch fixture that produces `additionalContext`.'
+  checks:
+  - check_type: command
+    check_value: python3 -c 'raise SystemExit('"'"'AC11 qualification not yet proven; see the unchanged
+      linear_dod_text. Second-bus adapter qualification is not yet proven. Refuse completion until behavioral
+      qualification is supplied.'"'"')'
+  binds_ac:
+  - AC11
+  status: pending
+- id: dod-omn21093-ac12
+  description: AC12 qualification not yet proven; see the unchanged linear_dod_text. Second-bus adapter
+    qualification is not yet proven. Refuse completion until behavioral qualification is supplied.
+  source: linear
+  linear_dod_text: 'AC12: `claude_code_binding_install` writes additive registrations into the user settings
+    only, renders only rows whose probe rows (P16-P19) the capability report marks supported, and a re-install
+    with a row removed removes its registration -- falsifier: a registration surviving its row''s removal,
+    an unsupported row installed, or `git ls-files` listing a rendered registration.'
+  checks:
+  - check_type: command
+    check_value: python3 -c 'raise SystemExit('"'"'AC12 qualification not yet proven; see the unchanged
+      linear_dod_text. Second-bus adapter qualification is not yet proven. Refuse completion until behavioral
+      qualification is supplied.'"'"')'
+  binds_ac:
+  - AC12
+  status: pending
+- id: dod-omn21093-hosted-source-deploy-readback
+  description: 'Hosted-runner source deployment probe at the checked-out commit: the published inventory
+    handler must contain the binding/event mismatch finding. Missing or pre-fix source fails. This reads
+    product source, not a receipt; it does not qualify the running adapter or a second bus. Declared for
+    hosted execution; this lane does not execute a GitHub API read.'
+  source: manual
+  status: pending
+  checks:
+  - check_type: command
+    check_value: gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/handlers/handler_client_binding_inventory.py?ref=$(git
+      rev-parse HEAD)" --jq ' .content | gsub("\n"; "") | @base64d | contains("INSTALLED_BINDING_EVENT_MISMATCH")'
+      | grep -qx true
+requirements:
+- id: req-omn21093-adapter-and-binding
+  statement: The adapter node and its generated binding satisfy the ticket acceptance criteria.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: the exact rendered command, run with recorded hook JSON piped on stdin (one fixture
+      per hook event the bindings name), publishes one command whose payload is built from that JSON,
+      hosts no handler (the receipt-mode run reports `host_handlers=False`, and no node module is imported
+      in the adapter process), and prints only the hook''s output shape (`{result}`, `{deny}`, `{messages}`,
+      `hookSpecificOutput.additionalContext`, or nothing) -- falsifier: a payload not drawn from stdin,
+      a hosted handler, or a `ModelSkillResult` on stdout.'
+  - id: AC2
+    statement: 'AC2: the rendered failure table for a host whose client-section maximum is `required`
+      maps "adapter never started" to `{deny}`, and for `observe` or `selective` to `next(e)`; a change
+      of that maximum changes only the rendered table literal -- falsifier: a required-host render whose
+      missing-executable branch calls `next(e)`.'
+  - id: AC3
+    statement: 'AC3: the same contract renders a byte-identical module; changing one deadline in the contract
+      changes only that literal in the output -- falsifier: golden diff beyond the literal.'
+  - id: AC4
+    statement: 'AC4: the rendered module contains no branching other than the verdict-table lookup and
+      the fixed failure table, measured by an allowlist of AST node kinds over the rendered output, and
+      a contract data field containing code is rendered as a string literal -- falsifier: a fixture whose
+      rendered output contains a conditional on request content, or executes a data field.'
+  - id: AC5
+    statement: 'AC5: the binding passes the adapter nothing but the hook input and the binding name --
+      falsifier: a rendered argument carrying a mode or any value not drawn from the hook input.'
+  - id: AC6
+    statement: 'AC6: `claude_code_binding_install` writes the rendered module and records its sha256,
+      and the installed file''s sha256 equals the render''s -- falsifier: a mismatch, or an installed
+      file differing from a fresh render.'
+  - id: AC7
+    statement: 'AC7: no rendered module is tracked in any repository -- falsifier: `git ls-files` in omniclaude
+      or omnimarket lists one.'
+  - id: AC8
+    statement: 'AC8: the hook-inventory gate fails when the installed binding registers an event absent
+      from `client_bindings`, and runs in the existing required `hook-inventory-gate` check -- falsifier:
+      the gate exits 0 on that fixture, or the workflow does not call it.'
+  - id: AC9
+    statement: 'AC9: the PR''s `canonical-file-shape` check passes with `.onex_ratchets/canonical_file_shape_baseline.txt`
+      unchanged -- falsifier: a baseline line added or the check red.'
+  - id: AC10
+    statement: 'AC10: a reply split into chunks is reassembled by content-record id and its sha256 checked
+      against the echoed hash -- falsifier: a fixture reply delivered out of order, or with one chunk
+      missing, returned as anything but `native` or `{deny}`.'
+  - id: AC11
+    statement: 'AC11: an `additive` row renders a command-hook registration whose command is exactly `onex-claude-code-hook
+      --binding <name>` (v6; v5 named `onex skill`), byte-identical across renders, and the adapter maps
+      `inject` to `hookSpecificOutput.additionalContext` only when the package''s sha256 equals the echoed
+      hash, and every other outcome to no output -- falsifier: a rendered registration carrying any other
+      argument, or a hash-mismatch fixture that produces `additionalContext`.'
+  - id: AC12
+    statement: 'AC12: `claude_code_binding_install` writes additive registrations into the user settings
+      only, renders only rows whose probe rows (P16-P19) the capability report marks supported, and a
+      re-install with a row removed removes its registration -- falsifier: a registration surviving its
+      row''s removal, an unsupported row installed, or `git ls-files` listing a rendered registration.'

@@ -167,3 +167,190 @@ def test_ac8_the_gate_exits_1_on_the_undeclared_installed_binding_and_0_without(
 def test_ac8_the_required_hook_inventory_workflow_runs_this_gate() -> None:
     text = WORKFLOW.read_text()
     assert "scripts/validation/validate_hook_inventory.py" in text
+
+
+@pytest.mark.parametrize("artifact_kind", ["settings", "install_record"])
+@pytest.mark.parametrize(
+    ("event", "matcher"), [("SessionStart", None), ("tool.call", "Bash")]
+)
+def test_each_binding_keeps_its_own_contract_event(
+    tmp_path, artifact_kind, event, matcher
+):
+    contract = _contract(
+        tmp_path,
+        [
+            ROW,
+            {"name": "start", "hook_event": "SessionStart"},
+            {"name": "shell", "hook_event": "tool.call", "matcher_tool": "Bash"},
+        ],
+    )
+    if artifact_kind == "settings":
+        body = {
+            "hooks": {
+                event: [
+                    {
+                        "matcher": matcher,
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "onex-claude-code-hook --binding delegation",
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+    else:
+        body = {
+            "bindings": ["delegation"],
+            "events": [{"event": event, "matcher": matcher}],
+            "render_sha256": "0" * 64,
+        }
+    artifact = _record(tmp_path, **body)
+    findings = _lib().client_binding_findings(contract, (artifact,))
+    assert "INSTALLED_BINDING_EVENT_MISMATCH" in {f.code for f in findings}
+    gate = _run_gate(contract, "--installed-binding-artifact", str(artifact))
+    assert gate.returncode == 1, gate.stdout + gate.stderr
+    assert "INSTALLED_BINDING_EVENT_MISMATCH" in gate.stderr
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "/opt/onex/bin/onex-claude-code-hook --binding ghost",
+        "'/opt/onex tools/onex-claude-code-hook' --binding ghost",
+    ],
+)
+def test_executable_spelling_cannot_hide_an_undeclared_binding(tmp_path, command):
+    contract = _contract(tmp_path, [ROW])
+    record = _record(
+        tmp_path,
+        hooks={
+            "tool.call": [
+                {"matcher": "Agent", "hooks": [{"type": "command", "command": command}]}
+            ]
+        },
+    )
+    assert "INSTALLED_BINDING_UNDECLARED" in {
+        f.code for f in _lib().client_binding_findings(contract, (record,))
+    }
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "onex-claude-code-hook --binding delegation",
+        "/opt/onex/bin/onex-claude-code-hook --binding delegation",
+        "'/opt/onex tools/onex-claude-code-hook' --binding delegation",
+    ],
+)
+def test_declared_binding_command_spellings_are_clean(tmp_path, command):
+    contract = _contract(tmp_path, [ROW])
+    record = _record(
+        tmp_path,
+        hooks={
+            "tool.call": [
+                {"matcher": "Agent", "hooks": [{"type": "command", "command": command}]}
+            ]
+        },
+    )
+    assert _lib().client_binding_findings(contract, (record,)) == ()
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "onex-claude-code-hook",
+        "onex-claude-code-hook --binding",
+        "onex-claude-code-hook --binding=delegation",
+        "onex-claude-code-hook --binding delegation --mode required",
+        "onex-claude-code-hook --binding delegation && echo extra",
+    ],
+)
+def test_binding_command_must_carry_only_the_binding_name(tmp_path, command):
+    contract = _contract(tmp_path, [ROW])
+    record = _record(
+        tmp_path,
+        hooks={
+            "tool.call": [
+                {"matcher": "Agent", "hooks": [{"type": "command", "command": command}]}
+            ]
+        },
+    )
+    assert "INSTALLED_BINDING_COMMAND_MALFORMED" in {
+        f.code for f in _lib().client_binding_findings(contract, (record,))
+    }
+
+
+def test_valid_multi_binding_install_record_keeps_pairing(tmp_path):
+    contract = _contract(
+        tmp_path, [ROW, {"name": "start", "hook_event": "SessionStart"}]
+    )
+    record = _record(
+        tmp_path,
+        bindings=["delegation", "start"],
+        events=[
+            {"event": "tool.call", "matcher": "Agent"},
+            {"event": "SessionStart", "matcher": None},
+        ],
+        render_sha256="0" * 64,
+    )
+    assert _lib().client_binding_findings(contract, (record,)) == ()
+
+
+@pytest.mark.parametrize(
+    ("names", "events"),
+    [
+        (["delegation"], []),
+        ([], [{"event": "tool.call", "matcher": "Agent"}]),
+        (["delegation", "start"], [{"event": "tool.call", "matcher": "Agent"}]),
+    ],
+)
+def test_incomplete_install_records_fail_closed(tmp_path, names, events):
+    lib = _lib()
+    contract = _contract(tmp_path, [ROW])
+    record = _record(tmp_path, bindings=names, events=events, render_sha256="0" * 64)
+    with pytest.raises(lib.HookInventoryError, match="differ in length"):
+        lib.client_binding_findings(contract, (record,))
+    gate = _run_gate(contract, "--installed-binding-artifact", str(record))
+    assert gate.returncode == 2
+    assert "differ in length" in gate.stderr
+
+
+def test_other_settings_hooks_are_preserved_and_ignored(tmp_path):
+    contract = _contract(tmp_path, [ROW])
+    record = _record(
+        tmp_path,
+        hooks={
+            "SessionStart": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python /opt/observer.py --binding start",
+                        }
+                    ]
+                }
+            ]
+        },
+    )
+    before = record.read_bytes()
+    assert _lib().client_binding_findings(contract, (record,)) == ()
+    assert record.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"bindings": "delegation", "events": []},
+        {"bindings": ["delegation"], "events": ["tool.call"]},
+        {"hooks": {"tool.call": "delegation"}},
+        {"hooks": {"tool.call": [{"hooks": [{"command": ["onex-claude-code-hook"]}]}]}},
+    ],
+)
+def test_malformed_artifact_shapes_fail_closed(tmp_path, body):
+    lib = _lib()
+    contract = _contract(tmp_path, [ROW])
+    record = _record(tmp_path, **body)
+    with pytest.raises(lib.HookInventoryError):
+        lib.client_binding_findings(contract, (record,))

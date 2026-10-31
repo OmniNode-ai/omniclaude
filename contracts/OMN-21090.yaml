@@ -1,0 +1,125 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+schema_version: 1.0.0
+ticket_id: OMN-21090
+title: Claude Code context service and delegation adapter (compaction mod)
+summary: OMN-21093 contributes stricter installed-binding inventory validation. Epic completion remains
+  pending until the live Linear children are Done; the checks below fail closed without authenticated
+  Linear access or while a track is incomplete.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-compaction-epic
+  statement: Every epic track completes its child criteria.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: every Track T0 ticket under this epic is Done with its own criteria met -- falsifier:
+      a child ticket of this epic in track Shared not in state Done, read through the Linear API'
+  - id: AC2
+    statement: 'AC2: every Track A ticket under this epic is Done with its own criteria met -- falsifier:
+      a child ticket of this epic in track A not in state Done, read through the Linear API'
+  - id: AC3
+    statement: 'AC3: every Track B ticket under this epic is Done with its own criteria met -- falsifier:
+      a child ticket of this epic in track B not in state Done, read through the Linear API'
+  - id: AC4
+    statement: 'AC4: every Track C ticket under this epic is Done with its own criteria met -- falsifier:
+      a child ticket of this epic in track C not in state Done, read through the Linear API'
+  - id: AC5
+    statement: 'AC5: every Track E ticket under this epic is Done with its own criteria met -- falsifier:
+      a child ticket of this epic in track E not in state Done, read through the Linear API'
+evidence_requirements:
+- kind: tests
+  description: Installed bindings must retain their own declared event and matcher in settings and install
+    records.
+  command: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov -p no:randomly
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn21090-ac1-live-children
+  description: AC1 remains a live Linear completion check. This contribution does not assert that the
+    epic track is complete. Missing authorization, an unreadable or paginated response, and any non-Done
+    child fail.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: uv run python -m omniclaude.handlers.handler_compaction_epic_completion
+      --epic OMN-21090 --title-prefix T0.
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC1
+- id: dod-omn21090-ac2-live-children
+  description: AC2 remains a live Linear completion check. This contribution does not assert that the
+    epic track is complete. Missing authorization, an unreadable or paginated response, and any non-Done
+    child fail.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: uv run python -m omniclaude.handlers.handler_compaction_epic_completion
+      --epic OMN-21090 --title-prefix TA.
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC2
+- id: dod-omn21090-ac3-live-children
+  description: AC3 remains a live Linear completion check. This contribution does not assert that the
+    epic track is complete. Missing authorization, an unreadable or paginated response, and any non-Done
+    child fail.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: uv run python -m omniclaude.handlers.handler_compaction_epic_completion
+      --epic OMN-21090 --title-prefix TB.
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC3
+- id: dod-omn21090-ac4-live-children
+  description: AC4 remains a live Linear completion check. This contribution does not assert that the
+    epic track is complete. Missing authorization, an unreadable or paginated response, and any non-Done
+    child fail.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: uv run python -m omniclaude.handlers.handler_compaction_epic_completion
+      --epic OMN-21090 --title-prefix TC.
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC4
+- id: dod-omn21090-ac5-live-children
+  description: AC5 remains a live Linear completion check. This contribution does not assert that the
+    epic track is complete. Missing authorization, an unreadable or paginated response, and any non-Done
+    child fail.
+  source: manual
+  checks:
+  - check_type: command
+    check_value: uv run python -m omniclaude.handlers.handler_compaction_epic_completion
+      --epic OMN-21090 --title-prefix TE.
+    cwd: ${OMNI_HOME}/omniclaude
+  binds_ac:
+  - AC5
+- id: dod-omn21093-binding-inventory-contribution
+  description: 'Hosted-runner behavioral probe of the hook inventory command: declared controls pass;
+    swapped event/matcher pairs, unknown absolute-path bindings and malformed commands fail. No runtime
+    deployment is changed. This proves the AC8 contribution, not completion of all OMN-21093 criteria.'
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov
+      -p no:randomly
+    cwd: ${OMNI_HOME}/omniclaude
+- id: dod-omn21090-hosted-source-deploy-readback
+  description: 'Hosted-runner source deployment probe: read the inventory handler published by this repository
+    at the checked-out commit and require its binding/event mismatch finding. A missing handler or pre-fix
+    commit fails. This reads product source, not an authored receipt, and is separate from the behavioral
+    tests. It is declared for hosted execution; this lane reads PR and CI state only from its supplied
+    snapshot.'
+  source: manual
+  execution_scope: hosted_and_local
+  checks:
+  - check_type: command
+    check_value: gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/handlers/handler_client_binding_inventory.py?ref=$(git
+      rev-parse HEAD)" --jq '.content | gsub("\n"; "") | @base64d | contains("INSTALLED_BINDING_EVENT_MISMATCH")'
+      | grep -qx true
+    cwd: ${OMNI_HOME}/omniclaude
