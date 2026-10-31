@@ -42,6 +42,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from omniclaude.models.model_endpoint_defaults import ModelEndpointDefaults
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -64,7 +66,8 @@ DEFAULT_PUBLIC_REPOS = [
     "onex_change_control",
 ]
 
-GITHUB_API_BASE = "https://api.github.com"
+GITHUB_API_BASE = ModelEndpointDefaults.from_contract().github_api_base_url
+GITHUB_WEB_PREFIX = ModelEndpointDefaults.from_contract().github_https_url_prefix
 
 # Exponential backoff delays for 202 responses (seconds)
 BACKOFF_DELAYS = [1, 2, 4, 8, 16, 32]
@@ -576,10 +579,8 @@ def normalize_url(url: str) -> str:
     url = url.strip()
 
     # SSH form: git@github.com:owner/repo[.git]
-    ssh_match = re.match(r"git@github\.com[:/](.+)", url, re.IGNORECASE)
-    if ssh_match:
-        path_part = ssh_match.group(1)
-        url = f"https://github.com/{path_part}"
+    if ssh_match := re.match(r"git@github\.com[:/](.+)", url, re.IGNORECASE):
+        url = f"{GITHUB_WEB_PREFIX}{ssh_match.group(1)}"
 
     # Strip trailing .git (case-insensitive)
     url = re.sub(r"\.git$", "", url, flags=re.IGNORECASE)
@@ -1392,7 +1393,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # Register GitHub repo URLs into seen_remotes for deduplication
         for repo_name in github_repos:
-            canonical = normalize_url(f"https://github.com/{org}/{repo_name}")
+            canonical = normalize_url(f"{GITHUB_WEB_PREFIX}{org}/{repo_name}")
             seen_remotes.add(canonical)
 
     if not args.github_only and local_path is not None:

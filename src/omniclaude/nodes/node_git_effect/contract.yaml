@@ -296,6 +296,23 @@ error_handling:
       - GitTimeoutError
   circuit_breaker:
     enabled: false
+  # Subprocess deadlines (OMN-21737), read by ModelGitTimeoutPolicy. The
+  # operator overlay OMNICLAUDE_GIT_TIMEOUT_<OPERATION> replaces one value.
+  timeouts:
+    binary_probe_timeout_seconds: 5
+    operation_timeout_seconds:
+      admission_check: 30
+      branch_create: 30
+      commit: 30
+      push: 60
+      pr_create: 45
+      pr_update: 45
+      pr_close: 30
+      pr_merge: 60
+      pr_list: 45
+      pr_view: 45
+      tag_create: 60
+      label_add: 30
 
 # Metadata
 metadata:

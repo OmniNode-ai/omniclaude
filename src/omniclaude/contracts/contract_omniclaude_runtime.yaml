@@ -72,6 +72,28 @@ aggregator:
   finalized_session_warning_threshold: "${env.OMNICLAUDE_AGGREGATOR_FINALIZED_SESSION_WARNING_THRESHOLD:10000}"
   finalized_session_warning_interval_seconds: "${env.OMNICLAUDE_AGGREGATOR_FINALIZED_SESSION_WARNING_INTERVAL_SECONDS:3600}"
 
+endpoints:
+  # Endpoint URLs and registry references that used to be string literals at their
+  # call sites (OMN-21743, child of OMN-21623). They are declared here with the
+  # ${env.VAR:default} overlay convention, so a per-lane operator overlay supplies the
+  # real endpoint, and reach their callers as an injected ModelEndpointDefaults
+  # (models/model_endpoint_defaults.py). A field this section does not declare fails
+  # to load; no call site holds a URL.
+  github_api_base_url: "https://api.github.com"
+  github_https_url_prefix: "https://github.com/"
+  intelligence_service_url: "${env.INTELLIGENCE_SERVICE_URL:http://localhost:8053}"
+  runtime_health_url: "${env.OMNINODE_RUNTIME_HEALTH_URL:http://localhost:8085/health}"
+  valkey_default_url: "redis://onex-valkey:6379/0"
+  gemini_api_endpoint: "https://generativelanguage.googleapis.com/v1beta"
+  rag_base_url: "http://localhost:8181"
+  quirk_finding_schema_ref: "registry://onex/omniclaude/quirk-finding-produced/v1"
+  changelog_sources:
+    claude-code: "https://code.claude.com/docs/en/changelog"
+    anthropic-sdk-python: "https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/CHANGELOG.md"
+    github-cli: "https://raw.githubusercontent.com/cli/cli/trunk/CHANGELOG.md"
+    uv: "https://raw.githubusercontent.com/astral-sh/uv/main/CHANGELOG.md"
+    kafka-python: "https://raw.githubusercontent.com/dpkp/kafka-python/master/CHANGES.md"
+
 timeouts:
   # Runtime timeouts in seconds -- OMN-21623 contracts-and-DI burn-down. The trace
   # frame assembler and replay engine, the diagnostics and health-check tools and
@@ -111,6 +133,18 @@ model_routing:
   # Quorum members the manifest lists, as a JSON array of objects with name,
   # model, provider, weight and use_case.
   intelligence_models: "${env.OMNICLAUDE_INTELLIGENCE_MODELS_JSON}"
+
+service_endpoints:
+  # Service endpoints omniclaude code falls back to — OMN-21727 (child of OMN-21623).
+  # The operator overlay / per-lane service env supplies each value through the
+  # ${env.VAR[:default]} overlay convention; ModelServiceEndpointDefaults.from_contract()
+  # resolves it.
+  # OpenAI-compatible embeddings endpoint ManifestInjector._embed_text posts to. No
+  # default lives in the repository: an unset value resolves empty.
+  embedding_service_url: "${env.EMBEDDING_SERVICE_URL}"
+  # Valkey URL IntelligenceCache uses when neither redis_url nor settings.valkey_url is
+  # given; VALKEY_PASSWORD, when set, is added as the URL's credential.
+  valkey_default_url: "${env.OMNICLAUDE_VALKEY_DEFAULT_URL:redis://onex-valkey:6379/0}"
 
 metadata:
   author: "OmniNode Team"
