@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for the intelligence event client (OMN-21769).
+# Source of truth for the code-analysis topics IntelligenceEventClient addresses;
+# intelligence_event_client.py reads this file and holds no topic literal.
+# Wire-ready names, no environment prefix (OMN-1972); canonical onex.cmd/evt
+# convention (OMN-2367).
+
+code_analysis:
+  requested: onex.cmd.omniintelligence.code-analysis.v1
+  completed: onex.evt.omniintelligence.code-analysis-completed.v1
+  failed: onex.evt.omniintelligence.code-analysis-failed.v1
