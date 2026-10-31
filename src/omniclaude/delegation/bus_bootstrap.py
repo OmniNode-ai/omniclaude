@@ -113,9 +113,10 @@ async def bootstrap_delegation_bus(
 
         try:
             from omnimarket.nodes.node_projection_delegation.handlers.handler_projection_delegation import (
-                HandlerProjectionDelegation,
                 ModelTaskDelegatedEvent,
             )
+
+            from omniclaude.handlers.container import container_delegation
         except ImportError:
             logger.warning(
                 "omnimarket not installed — skipping delegation projection "
@@ -126,7 +127,7 @@ async def bootstrap_delegation_bus(
 
         try:
             event = ModelTaskDelegatedEvent(**data)
-            handler = HandlerProjectionDelegation()
+            handler = container_delegation.build_projection_delegation()
             await asyncio.to_thread(handler.project, event, db_adapter)
         except Exception:
             logger.exception(
