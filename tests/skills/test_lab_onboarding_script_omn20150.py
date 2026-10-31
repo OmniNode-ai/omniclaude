@@ -2988,7 +2988,7 @@ def test_openai_compatible_menu_asks_its_url_key_and_models(tmp_path: Path) -> N
                 ("Choose your OpenAI-compatible models", "2,1"),
                 ("Continue?", "q"),
             ],
-            timeout=_LOCAL_TIMEOUT * 3,
+            timeout=_LOCAL_TIMEOUT,
         )
     menu = out.split(_MENU)[0]
     assert (
@@ -3017,7 +3017,7 @@ def test_openai_compatible_key_the_endpoint_refuses_is_skipped_with_its_words(
                 ("Every model was skipped", ""),
                 (_MENU, "q"),
             ],
-            timeout=_LOCAL_TIMEOUT * 3,
+            timeout=_LOCAL_TIMEOUT,
         )
     assert "its model list answered HTTP 401: Invalid API key" in out
     assert "Nothing was stored for it" in out

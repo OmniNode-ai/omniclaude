@@ -32,12 +32,20 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn21263-ac4-menu
-    description: 'The menu''s sixth choice asks the endpoint''s URL, its key at a hidden prompt, and its models listed from its own /v1/models read with that key as a bearer header; a key the endpoint refuses stores nothing and names the refusal. Fails at the merge base, whose menu has five choices and refuses 6.'
+    description: 'The menu''s sixth choice asks the endpoint''s URL, its key at a hidden prompt, and its models listed from its own /v1/models read with that key as a bearer header. Fails at the merge base, whose menu has five choices and refuses 6.'
     source: manual
     binds_ac: [AC4]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k 'openai_compatible_menu or openai_compatible_key'"
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k openai_compatible_menu"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21263-ac4-refused-key
+    description: 'A key the endpoint refuses stores nothing and names the endpoint''s own words. Fails at the merge base, whose menu has no sixth choice.'
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_omn20150.py -q --no-cov -k openai_compatible_key"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn21263-ac4-phase3
     description: 'Phase 3 runs onex models add openai_compatible with the chosen models and --url, the key on stdin and in no argument; --provider openai_compatible with no stored key and no terminal stops before installing. Fails at the merge base, which refuses --provider openai_compatible.'
