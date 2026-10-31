@@ -22,6 +22,7 @@ from typing import Any
 import yaml
 
 from omniclaude.delegation.runner import canonical_bifrost_contract_path
+from omniclaude.models.model_endpoint_defaults import ModelEndpointDefaults
 
 try:
     import httpx
@@ -190,7 +191,7 @@ class ModelConfig:
         """
         if self.endpoint is None:
             if self.provider == ModelProvider.GEMINI:
-                self.endpoint = "https://generativelanguage.googleapis.com/v1beta"
+                self.endpoint = ModelEndpointDefaults.from_contract().gemini_api_endpoint
 
         if self.api_key is None and self.provider == ModelProvider.GEMINI:
             self.api_key = os.getenv("GEMINI_API_KEY", "")
@@ -368,9 +369,8 @@ class AIQuorum:
                     file=sys.stderr,
                 )
                 return models
-            else:
-                print("No enabled models in config, using defaults", file=sys.stderr)
-                return self.DEFAULT_MODELS
+            print("No enabled models in config, using defaults", file=sys.stderr)
+            return self.DEFAULT_MODELS
 
         except Exception as e:
             print(f"Error loading config from {config_path}: {e}", file=sys.stderr)
@@ -602,14 +602,13 @@ Provide your evaluation:"""
         """
         if model.provider == ModelProvider.OPENAI_COMPATIBLE:
             return await self._score_with_openai_compatible(model, scoring_prompt)
-        elif model.provider == ModelProvider.GEMINI:
+        if model.provider == ModelProvider.GEMINI:
             return await self._score_with_gemini(model, scoring_prompt)
-        elif model.provider == ModelProvider.OPENAI:
+        if model.provider == ModelProvider.OPENAI:
             return await self._score_with_openai(model, scoring_prompt)
-        else:
-            raise QuorumUnconfiguredProviderError(
-                f"Unsupported model provider: {model.provider}"
-            )
+        raise QuorumUnconfiguredProviderError(
+            f"Unsupported model provider: {model.provider}"
+        )
 
     async def _score_with_openai_compatible(
         self, model: ModelConfig, scoring_prompt: str

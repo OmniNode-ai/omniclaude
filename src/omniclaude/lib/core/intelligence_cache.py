@@ -56,6 +56,7 @@ from typing import Any
 
 # FAIL FAST: Required configuration
 from omniclaude.config import settings
+from omniclaude.models.model_endpoint_defaults import ModelEndpointDefaults
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +87,8 @@ class IntelligenceCache:
         # Default uses Docker hostname (onex-valkey:6379); override with VALKEY_URL in .env for localhost development
         # Password must be set via VALKEY_PASSWORD environment variable (no hardcoded defaults)
         valkey_password = os.getenv("VALKEY_PASSWORD", "")
-        if valkey_password:
-            default_url = f"redis://:{valkey_password}@onex-valkey:6379/0"
-        else:
-            default_url = "redis://onex-valkey:6379/0"
+        scheme, _, location = ModelEndpointDefaults.from_contract().valkey_default_url.partition("://")
+        default_url = f"{scheme}://:{valkey_password}@{location}" if valkey_password else f"{scheme}://{location}"
         self.redis_url = redis_url or settings.valkey_url or default_url
         self._client: Any | None = None  # Why: redis.asyncio.Redis — external lib, optional import
 
