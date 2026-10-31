@@ -58,10 +58,15 @@ requirements:
       - id: "AC8"
         statement: "AC8: exactly one local public-repo-hygiene hook runs the exported command without narrowing its trigger or overriding the repository's enforced classes and added-lines scope, and the caller uses the reusable workflow in this checkout -- falsifier: uv run pytest tests/scripts/test_public_repo_hygiene_local_hook_omn19998.py -q fails at the merge base, where no local public-repo-hygiene hook is declared"
   - id: "req-omn19998-hostile-reviewer-lan-runners"
-    statement: "The Hostile Reviewer fallback requires arch-amd64 to stay on LAN runners that can reach its review voters and exclude h203-light runners."
+    statement: "The Hostile Reviewer fallback requires arch-amd64 to stay on LAN runners that can reach its review voters and exclude runners that cannot reach them."
     acceptance:
       - id: "AC9"
-        statement: "AC9: the hostile-review job's dedicated runner fallback requires self-hosted, omnibase-ci and arch-amd64, excluding h203-light runners that cannot reach the review voters -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\" fails at the merge base, where the fallback lacks arch-amd64"
+        statement: "AC9: the hostile-review job's dedicated runner fallback requires self-hosted, omnibase-ci and arch-amd64, excluding runners that cannot reach the review voters -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\" fails at the merge base, where the fallback lacks arch-amd64"
+  - id: "req-omn19998-test-job-timeout-headroom"
+    statement: "The sharded test job's ceiling holds its slowest measured shard with headroom, so a slow runner cannot cancel a shard and turn Tests Gate red with no failing test."
+    acceptance:
+      - id: "AC10"
+        statement: "AC10: the ci.yml test job's timeout-minutes is at least 1.5 times the 903 s that cancelled Split 1/5 on dev head 9ee6e7f115a2 -- falsifier: uv run pytest tests/ci/test_test_job_timeout_headroom_omn19998.py -q fails with timeout-minutes at 15"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -156,10 +161,20 @@ dod_evidence:
     binds_ac:
       - "AC8"
   - id: "dod-omn19998-hostile-reviewer-lan-runners"
-    description: "The Hostile Reviewer runner placement tests require arch-amd64 in the fallback, excluding h203-light runners that cannot reach the review voters."
+    description: "The Hostile Reviewer runner placement tests require arch-amd64 in the fallback, excluding runners that cannot reach the review voters."
     source: manual
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\""
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_contract_omn19998_deployment_vocab.py -q"
     binds_ac:
       - "AC9"
+  - id: "dod-omn19998-test-job-timeout-headroom"
+    description: "The test job's timeout-minutes holds at least 1.5 times the slowest measured shard; at 15 minutes the test fails."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_test_job_timeout_headroom_omn19998.py -q"
+    binds_ac:
+      - "AC10"
