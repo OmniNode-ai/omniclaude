@@ -24,6 +24,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
 from omniclaude.trace.change_frame import FailureType
 from omniclaude.trace.frame_assembler import (
     CheckSpec,
@@ -310,6 +311,7 @@ class TestAssembleChangeFrame:
         passing_check = CheckSpec(
             command=["echo", "ok"],
             failure_type=FailureType.LINT_FAIL,
+            timeout=ModelRuntimeTimeouts.from_contract().trace_lint_check_seconds,
         )
 
         # Override run_checks to return a passing result

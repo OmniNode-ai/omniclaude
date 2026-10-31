@@ -25,6 +25,7 @@ from uuid import uuid4
 
 import pytest
 
+from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
 from omniclaude.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
@@ -51,6 +52,8 @@ from omniclaude.trace.replay_engine import (
     _detect_divergence_reason,
     load_frame_from_jsonl,
 )
+
+_LIMITS = ModelRuntimeTimeouts.from_contract()
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -250,7 +253,7 @@ class TestCloneRepoToTempdir:
         mock_result = MagicMock()
         mock_result.returncode = 0
         with patch("subprocess.run", return_value=mock_result) as mock_run:
-            result = _clone_repo_to_tempdir("/repo", "/tmpdir")
+            result = _clone_repo_to_tempdir("/repo", "/tmpdir", _LIMITS)
             assert result is True
             mock_run.assert_called_once()
 
@@ -258,12 +261,12 @@ class TestCloneRepoToTempdir:
         mock_result = MagicMock()
         mock_result.returncode = 1
         with patch("subprocess.run", return_value=mock_result):
-            result = _clone_repo_to_tempdir("/repo", "/tmpdir")
+            result = _clone_repo_to_tempdir("/repo", "/tmpdir", _LIMITS)
             assert result is False
 
     def test_returns_false_on_exception(self) -> None:
         with patch("subprocess.run", side_effect=FileNotFoundError("git not found")):
-            result = _clone_repo_to_tempdir("/repo", "/tmpdir")
+            result = _clone_repo_to_tempdir("/repo", "/tmpdir", _LIMITS)
             assert result is False
 
 
@@ -277,14 +280,14 @@ class TestCheckoutCommit:
         mock_result = MagicMock()
         mock_result.returncode = 0
         with patch("subprocess.run", return_value=mock_result):
-            result = _checkout_commit("abc123", "/tmpdir")
+            result = _checkout_commit("abc123", "/tmpdir", _LIMITS)
             assert result is True
 
     def test_returns_false_on_failure(self) -> None:
         mock_result = MagicMock()
         mock_result.returncode = 128
         with patch("subprocess.run", return_value=mock_result):
-            result = _checkout_commit("invalid", "/tmpdir")
+            result = _checkout_commit("invalid", "/tmpdir", _LIMITS)
             assert result is False
 
 
@@ -299,7 +302,7 @@ class TestApplyPatch:
         mock_result.returncode = 0
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("subprocess.run", return_value=mock_result):
-                result = _apply_patch(DIFF_PATCH, tmpdir)
+                result = _apply_patch(DIFF_PATCH, tmpdir, _LIMITS)
                 assert result is True
 
     def test_returns_false_on_failure(self) -> None:
@@ -307,7 +310,7 @@ class TestApplyPatch:
         mock_result.returncode = 1
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("subprocess.run", return_value=mock_result):
-                result = _apply_patch(DIFF_PATCH, tmpdir)
+                result = _apply_patch(DIFF_PATCH, tmpdir, _LIMITS)
                 assert result is False
 
     def test_cleans_up_patch_file(self) -> None:
@@ -315,7 +318,7 @@ class TestApplyPatch:
         mock_result.returncode = 0
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("subprocess.run", return_value=mock_result):
-                _apply_patch(DIFF_PATCH, tmpdir)
+                _apply_patch(DIFF_PATCH, tmpdir, _LIMITS)
             # Patch file should be deleted
             assert not (Path(tmpdir) / "_replay.patch").exists()
 
