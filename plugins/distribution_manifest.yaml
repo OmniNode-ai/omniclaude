@@ -508,6 +508,14 @@ components:
   backing_nodes:
   - node_hostile_reviewer_orchestrator
   rationale: 'class=dispatch, no ERROR/placeholder findings; backing nodes exist: [''node_hostile_reviewer_orchestrator'']. Beta-CANDIDATE pending Phase 2 admission proof.'
+- id: ilo_redfish
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/ilo_redfish/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-21835, the hand-run caller of the iLO 4 Redfish effect CLI); replaced by an onex skill dispatch skill on node_ilo_redfish_effect, OMN-21835, once that node declares a bus command topic and a skill mapping entry.
 - id: insights_to_plan
   kind: skill
   exposure: beta
