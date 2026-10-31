@@ -24,11 +24,11 @@ from enum import StrEnum
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
+from omniclaude.models.model_lib_timeouts import lib_timeouts
 from omniclaude.verification.self_check import ModelTaskContract
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_TIMEOUT_SECONDS = 30.0
 _LOCAL_VERIFIER_MODEL_ENV_VAR = "OMNICLAUDE_LOCAL_VERIFIER_MODEL_NAME"
 _LOCAL_VERIFIER_ENDPOINT_ENV_VAR = "LLM_CODER_FAST_URL"
 
@@ -234,7 +234,7 @@ async def run_local_verification(
 
     try:
         async with httpx.AsyncClient(
-            timeout=_DEFAULT_TIMEOUT_SECONDS,
+            timeout=lib_timeouts().local_verifier_seconds,
         ) as client:
             response = await client.post(
                 f"{url}/v1/chat/completions",

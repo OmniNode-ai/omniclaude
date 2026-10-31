@@ -135,12 +135,6 @@ entries:
   - path: src/omniclaude/hooks/schemas.py
     family: M
     content_sha1: c7e91de0fe25139180ace008e4d6f5591857af95
-  - path: src/omniclaude/lib/core/intelligence_cache.py
-    family: E
-    content_sha1: 856fc9bea8efbe10ff39e94b265073566e9ff52a
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    family: E
-    content_sha1: cea1383d024cebfdbecafd4136be8601e41ebbe9
   - path: src/omniclaude/lib/core/manifest_injector.py
     family: M
     content_sha1: 29d1c152c208d195550e03b16ac4a28700994556

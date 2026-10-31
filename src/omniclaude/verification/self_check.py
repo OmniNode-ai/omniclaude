@@ -21,6 +21,8 @@ from enum import StrEnum
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from omniclaude.models.model_lib_timeouts import lib_timeouts
+
 # ---------------------------------------------------------------------------
 # Contract types — local definitions until omnibase_core.models.task lands.
 # TODO(OMN-7028): Replace with `from omnibase_core.models.task import ...`
@@ -103,8 +105,6 @@ class ModelTaskContract(BaseModel):
 # Self-check result models
 # ---------------------------------------------------------------------------
 
-_CHECK_TIMEOUT_SECONDS = 120
-
 
 class EnumCheckStatus(StrEnum):
     """Allowed statuses for a mechanical check result."""
@@ -155,14 +155,14 @@ class ModelSelfCheckResult(BaseModel):
 def run_self_check(
     contract: ModelTaskContract,
     working_dir: str | None = None,
-    timeout: int = _CHECK_TIMEOUT_SECONDS,
+    timeout: int = lib_timeouts().self_check_seconds,
 ) -> ModelSelfCheckResult:
     """Run all mechanical checks in the contract and return structured results.
 
     Args:
         contract: The task contract containing definition_of_done checks.
         working_dir: Working directory for shell command execution.
-        timeout: Per-check timeout in seconds (default 120).
+        timeout: Per-check timeout in seconds (default: the lib timeouts contract).
 
     Returns:
         ModelSelfCheckResult with per-check PASS/FAIL and evidence metadata.
