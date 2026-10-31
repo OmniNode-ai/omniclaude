@@ -1,0 +1,33 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-21773"
+title: "A work-ledger event reaches the bus even when the appender runs under an interpreter without the lane admission node"
+summary: "onex-ledger journals every ledger row through hook_emit_append.py under its own interpreter. Since omniclaude#3052 the appender ran the developer lane admission for every event type, and under an interpreter whose omnimarket predates node_developer_lane_admission_compute the refusal dropped each work.ledger.* row with exit 0, no journal record and no failure-log line. The database work ledger projection stopped at 2026-10-31T00:12:25Z. A ledger row is not a developer hook event, so append_event no longer asks the admission about a work.ledger.* type; every other class is still governed."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn21773-ledger-events-skip-admission"
+    statement: |-
+      A work.ledger.* event is journalled whatever the installed omnimarket and whatever the developer lane admission decides; every other event class is still dropped on a refusal.
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: a work.ledger.* event is journalled when the admission node is missing and for a refused collaborator, and a tool.executed event is still dropped in the same states -- falsifier: uv run pytest on tests/hooks/test_hook_lane_binding_omn21599.py fails test_ledger_events_are_journalled_when_the_node_is_missing or test_ledger_events_are_journalled_for_a_refused_collaborator, or either passes with the append_event guard reverted
+evidence_requirements:
+  - kind: "tests"
+    description: "The ledger-event cases and the existing admission cases pass through the hook appender and its command line."
+    command: "uv run pytest tests/hooks/test_hook_lane_binding_omn21599.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn21773-ac1-ledger-events-skip-admission"
+    description: "The hook tests pass, including the two ledger-event cases; with the append_event guard reverted the same command fails."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hook_lane_binding_omn21599.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
