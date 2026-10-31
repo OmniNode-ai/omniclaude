@@ -116,55 +116,55 @@ class HandlerHistoryPostgres:
         cid = correlation_id or uuid4()
 
         async with self._lock:
-            # Idempotency: skip duplicate correlation_ids
-            if cid in self._seen_correlation_ids:
-                logger.debug(
-                    "Duplicate correlation_id=%s for agent=%s, skipping",
-                    cid,
-                    entry.agent_name,
-                )
-                return self._build_stats_snapshot()
+            self._store_entry(entry, cid)
+            return self._build_stats_snapshot()
 
-            # Evict oldest half when cap reached, preserving recent entries.
-            # Phase 2+ will use database-level UPSERT for true idempotency.
-            if len(self._seen_correlation_ids) >= _MAX_DEDUP_ENTRIES:
-                evict_count = _MAX_DEDUP_ENTRIES // 2
-                keys_to_evict = list(self._seen_correlation_ids)[:evict_count]
-                for k in keys_to_evict:
-                    del self._seen_correlation_ids[k]
-                logger.info(
-                    "Dedup cache evicted %d oldest entries, %d remain",
-                    evict_count,
-                    len(self._seen_correlation_ids),
-                )
-
-            self._seen_correlation_ids[cid] = None
-
-            if entry.agent_name not in self._store:
-                self._store[entry.agent_name] = []
-            self._store[entry.agent_name].append(entry)
-
-            # Evict oldest half when per-agent cap reached (mirrors dedup eviction)
-            agent_entries = self._store[entry.agent_name]
-            if len(agent_entries) > _MAX_STORE_ENTRIES_PER_AGENT:
-                evict_count = _MAX_STORE_ENTRIES_PER_AGENT // 2
-                self._store[entry.agent_name] = agent_entries[evict_count:]
-                logger.info(
-                    "Store evicted %d oldest entries for agent=%s, %d remain",
-                    evict_count,
-                    entry.agent_name,
-                    len(self._store[entry.agent_name]),
-                )
-
+    def _store_entry(self, entry: ModelAgentStatsEntry, cid: UUID) -> None:
+        """Apply one routing decision to the in-memory store; caller holds the lock."""
+        # Idempotency: skip duplicate correlation_ids
+        if cid in self._seen_correlation_ids:
             logger.debug(
-                "Recorded routing decision for agent=%s "
-                "total_entries=%d correlation_id=%s",
-                entry.agent_name,
-                len(self._store[entry.agent_name]),
+                "Duplicate correlation_id=%s for agent=%s, skipping",
                 cid,
+                entry.agent_name,
+            )
+            return
+
+        # Evict oldest half when cap reached, preserving recent entries.
+        # Phase 2+ will use database-level UPSERT for true idempotency.
+        if len(self._seen_correlation_ids) >= _MAX_DEDUP_ENTRIES:
+            evict_count = _MAX_DEDUP_ENTRIES // 2
+            keys_to_evict = list(self._seen_correlation_ids)[:evict_count]
+            for k in keys_to_evict:
+                del self._seen_correlation_ids[k]
+            logger.info(
+                "Dedup cache evicted %d oldest entries, %d remain",
+                evict_count,
+                len(self._seen_correlation_ids),
             )
 
-            return self._build_stats_snapshot()
+        self._seen_correlation_ids[cid] = None
+
+        self._store.setdefault(entry.agent_name, []).append(entry)
+
+        # Evict oldest half when per-agent cap reached (mirrors dedup eviction)
+        agent_entries = self._store[entry.agent_name]
+        if len(agent_entries) > _MAX_STORE_ENTRIES_PER_AGENT:
+            evict_count = _MAX_STORE_ENTRIES_PER_AGENT // 2
+            self._store[entry.agent_name] = agent_entries[evict_count:]
+            logger.info(
+                "Store evicted %d oldest entries for agent=%s, %d remain",
+                evict_count,
+                entry.agent_name,
+                len(self._store[entry.agent_name]),
+            )
+
+        logger.debug(
+            "Recorded routing decision for agent=%s total_entries=%d correlation_id=%s",
+            entry.agent_name,
+            len(self._store[entry.agent_name]),
+            cid,
+        )
 
     async def query_routing_stats(
         self,
