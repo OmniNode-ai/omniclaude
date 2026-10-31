@@ -66,8 +66,10 @@ FINDING_KEYS = (
 # non_live_freestanding_violations rows; no finding was added or dropped.
 # OMN-21728 moved literal runtime paths into the runtime contract, which shifted the
 # line numbers of the dead-handler rows it touched; no finding was added or dropped.
+# OMN-21769 read slice topics from manifests, so one dead-module hardcoded_topic row left,
+# and one handler_history_postgres direct_db row moved one line; no finding was added.
 RECORDED_OCC_FINDING_DIGEST = (
-    "0a93571e77006f3262bcdba60b051ae4a146e97d4bfd5f2f080f08f5297e1f61"
+    "c9da24e207510c2da4afc45ccdeee01d549a0c22efb2bba7a8ac25e1062874d0"
 )
 
 

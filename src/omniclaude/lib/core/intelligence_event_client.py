@@ -26,6 +26,7 @@ from omnibase_infra.runtime.request_response_wiring import RequestResponseWiring
 
 from omniclaude.config import settings
 from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
+from omniclaude.models.model_topic_manifest import ModelTopicManifest
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +34,8 @@ logger = logging.getLogger(__name__)
 class IntelligenceEventClient:
     """Kafka client for intelligence events using RequestResponseWiring."""
 
-    # Canonical topic names per onex.cmd/evt convention (OMN-2367)
-    TOPIC_REQUEST = "onex.cmd.omniintelligence.code-analysis.v1"  # arch-topic-naming: ignore
-    TOPIC_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"  # arch-topic-naming: ignore
-    TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"  # arch-topic-naming: ignore
+    # Canonical topic names per onex.cmd/evt convention (OMN-2367), declared in topics.yaml
+    TOPICS = ModelTopicManifest.beside(__file__).sections["code_analysis"]
 
     _INSTANCE_NAME = "intelligence"
 
@@ -95,9 +94,9 @@ class IntelligenceEventClient:
                 instances=[
                     ModelRequestResponseInstance(
                         name=self._INSTANCE_NAME,
-                        request_topic=self.TOPIC_REQUEST,
+                        request_topic=self.TOPICS["requested"],
                         reply_topics=ModelReplyTopics(
-                            completed=self.TOPIC_COMPLETED, failed=self.TOPIC_FAILED
+                            completed=self.TOPICS["completed"], failed=self.TOPICS["failed"]
                         ),
                         timeout_seconds=max(
                             1, math.ceil(self.request_timeout_ms / 1000)
@@ -179,7 +178,7 @@ class IntelligenceEventClient:
             emitted_at if emitted_at is not None else datetime.now(UTC)
         ).isoformat()
         payload = {
-            "event_type": self.TOPIC_REQUEST,
+            "event_type": self.TOPICS["requested"],
             "event_id": str(uuid4()),
             "timestamp": timestamp,
             "tenant_id": os.getenv("TENANT_ID", "default"),

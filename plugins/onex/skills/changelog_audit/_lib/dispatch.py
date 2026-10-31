@@ -20,19 +20,15 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+from omniclaude.models.model_endpoint_defaults import ModelEndpointDefaults
+
 _ALLOWED_SCHEMES = frozenset({"https"})
 _PRIVATE_HOSTS = re.compile(
     r"^(localhost|127\.|0\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)",
     re.IGNORECASE,
 )
 
-CHANGELOG_URLS: dict[str, str] = {
-    "claude-code": "https://code.claude.com/docs/en/changelog",
-    "anthropic-sdk-python": "https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/CHANGELOG.md",
-    "github-cli": "https://raw.githubusercontent.com/cli/cli/trunk/CHANGELOG.md",
-    "uv": "https://raw.githubusercontent.com/astral-sh/uv/main/CHANGELOG.md",
-    "kafka-python": "https://raw.githubusercontent.com/dpkp/kafka-python/master/CHANGES.md",
-}
+CHANGELOG_URLS = ModelEndpointDefaults.from_contract().changelog_sources
 
 SUPPORTED_TARGETS = frozenset(CHANGELOG_URLS) | {"custom-url"}
 
