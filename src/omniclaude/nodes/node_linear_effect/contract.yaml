@@ -212,6 +212,10 @@ invariants:
   - done_guard_error_refuses: true
   - closeout_instructions_require_bound_receipts: true
 
+# Linear API endpoint, read by handler_linear_ticketing (OMN-21791)
+linear_api:
+  graphql_host: api.linear.app
+
 # Error handling
 error_handling:
   retry_policy:

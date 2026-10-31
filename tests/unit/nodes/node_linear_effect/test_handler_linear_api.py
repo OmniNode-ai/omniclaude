@@ -565,3 +565,20 @@ def test_real_guard_refuses_receipt_stale_against_current_origin_dev(
     assert "stale_contract" in result.error
     assert "origin/dev" in result.error
     assert "[x]" not in linear.issue["description"]
+
+
+@pytest.mark.unit
+def test_graphql_host_comes_from_the_node_contract(tmp_path: Path) -> None:
+    """[OMN-21791] The host is the contract's value, and a contract without one raises."""
+    from omniclaude.nodes.node_linear_effect.handlers.handler_linear_ticketing import (
+        graphql_host,
+    )
+
+    declared = tmp_path / "contract.yaml"
+    declared.write_text("linear_api:\n  graphql_host: example.test\n", encoding="utf-8")
+    assert graphql_host(declared) == "example.test"
+    assert graphql_host()
+    empty = tmp_path / "empty.yaml"
+    empty.write_text("linear_api:\n  graphql_host: ''\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        graphql_host(empty)

@@ -31,6 +31,9 @@ import os
 import re
 from collections.abc import Callable
 from functools import partial
+from pathlib import Path
+
+from omnibase_core.utils.util_safe_yaml_loader import load_yaml_mapping_no_duplicates
 
 from omniclaude.nodes.node_linear_effect.handlers.handler_lane_repo_evidence import (
     LaneRepoEvidence,
@@ -43,7 +46,7 @@ from omniclaude.nodes.node_linear_effect.models import (
     ModelLinearResult,
 )
 
-LINEAR_GRAPHQL_HOST = "api.linear.app"
+_CONTRACT_PATH = Path(__file__).parents[1] / "contract.yaml"
 LINEAR_GRAPHQL_PATH = "/graphql"
 LINEAR_TIMEOUT_S = 20
 _KEY_ENV = "LINEAR_API_KEY"
@@ -96,14 +99,31 @@ class LinearApiError(RuntimeError):
     """The Linear API could not answer; the message never carries the key."""
 
 
-def http_transport(query: str, variables: dict[str, object]) -> dict[str, object]:
-    """POST one GraphQL document with the key from the environment."""
+def graphql_host(contract_path: Path = _CONTRACT_PATH) -> str:
+    """The Linear GraphQL host the node contract declares; a missing value raises."""
+    contract = load_yaml_mapping_no_duplicates(
+        contract_path.read_text(encoding="utf-8"), source=str(contract_path)
+    )
+    section = contract["linear_api"]
+    host = section["graphql_host"] if isinstance(section, dict) else None
+    if not isinstance(host, str) or not host:
+        raise ValueError("linear_api.graphql_host must be a non-empty string")
+    return host
+
+
+def http_transport(
+    query: str, variables: dict[str, object], host: str | None = None
+) -> dict[str, object]:
+    """POST one GraphQL document with the key from the environment.
+
+    ``host`` is injected; by default it is the one the node contract declares.
+    """
     key = os.environ.get(_KEY_ENV, "")
     if not key:
         raise LinearApiError(f"no Linear credential: {_KEY_ENV} is not set")
     payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
     connection = http.client.HTTPSConnection(
-        LINEAR_GRAPHQL_HOST, timeout=LINEAR_TIMEOUT_S
+        host if host is not None else graphql_host(), timeout=LINEAR_TIMEOUT_S
     )
     try:
         connection.request(
