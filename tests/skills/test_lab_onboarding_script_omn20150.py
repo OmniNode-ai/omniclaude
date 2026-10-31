@@ -815,10 +815,14 @@ def _listed(out: str, heading: str) -> list[str]:
 @pytest.mark.parametrize("provider", ["none", "glm"])
 def test_only_the_beta_providers_are_accepted(tmp_path: Path, provider: str) -> None:
     """No lab-model fallback, and GLM is out of the beta: gemini, openrouter, openai,
-    ollama or a local model server by URL (OMN-21163)."""
+    ollama, a local model server by URL (OMN-21163) or an OpenAI-compatible
+    endpoint with a key (OMN-21263)."""
     result = _run(tmp_path, "--provider", provider)
     assert result.returncode == 2
-    assert "must be gemini, openrouter, openai, ollama or local" in result.stderr
+    assert (
+        "must be gemini, openrouter, openai, ollama, local or openai_compatible"
+        in result.stderr
+    )
 
 
 def test_no_key_and_nobody_to_ask_stops_before_installing(tmp_path: Path) -> None:
@@ -1066,7 +1070,7 @@ def _ollama_config(
             "/bin/bash",
             "-c",
             f"WORKSPACE={ws}\n{consts}\n"
-            + _functions("ollama_config")
+            + _functions("ollama_config", "model_config")
             + f'\nollama_config {ram} "{model}"\n',
         ],
         capture_output=True,
@@ -1251,12 +1255,12 @@ def test_several_models_are_chosen_by_number(tmp_path: Path, answer: str) -> Non
     assert "You chose: Gemini, OpenAI, Ollama" in out
 
 
-@pytest.mark.parametrize("answer", ["", "6", "0", "x"])
+@pytest.mark.parametrize("answer", ["", "7", "0", "x"])
 def test_an_empty_or_out_of_range_choice_asks_again(
     tmp_path: Path, answer: str
 ) -> None:
     out, _ = _preflight(
-        tmp_path, [(_MENU, answer), ("Choose at least one, 1 to 5", "q")]
+        tmp_path, [(_MENU, answer), ("Choose at least one, 1 to 6", "q")]
     )
     assert out.count(_MENU) == 2
 
@@ -2784,7 +2788,7 @@ def test_recommended_order_ollama_download_is_sized_from_the_catalogue(
             "/bin/bash",
             "-c",
             f"WORKSPACE={ws}\n{consts}\n"
-            + _functions("ollama_config")
+            + _functions("ollama_config", "model_config")
             + '\nollama_config 64 "fixture-ollama-huge"\n',
         ],
         capture_output=True,
@@ -2909,3 +2913,195 @@ def test_recommended_order_enter_takes_it_without_a_model_id(
     )
     assert "Press Enter to take the recommended order." in result.stdout
     assert f"CHOSEN={chosen}" in result.stdout, result.stdout + result.stderr
+
+
+# ---------------------------------------------------------------------------
+# OMN-21263: an endpoint that speaks the OpenAI API and needs a key (vLLM or LM
+# Studio behind auth, a company gateway). The menu's sixth choice asks its URL,
+# then the key (hidden), then its models from its own /v1/models read with that
+# key; phase 3 hands the URL and models to `onex models add openai_compatible`
+# and the key on stdin, never as an argument.
+# ---------------------------------------------------------------------------
+
+_COMPAT_KEY = "sk-or-v1-omn21263-endpoint-key"  # shaped like OpenRouter's, on purpose
+_COMPAT_URL_PROMPT = "Its URL, such as https://llm.example.com"
+
+
+@contextmanager
+def _compat_endpoint(*, lists_models: bool = True) -> Iterator[dict[str, Any]]:
+    """An OpenAI-compatible endpoint that refuses any request without the key."""
+    served: dict[str, Any] = {"auth": []}
+
+    class _Endpoint(BaseHTTPRequestHandler):
+        def _send(self, status: int, body: object) -> None:
+            payload = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def _authorized(self) -> bool:
+            auth = self.headers.get("Authorization")
+            served["auth"].append((self.command, self.path, auth))
+            return auth == f"Bearer {_COMPAT_KEY}"
+
+        def do_GET(self) -> None:
+            if not self._authorized():
+                self._send(401, {"error": {"message": "Invalid API key"}})
+            elif self.path == "/v1/models" and lists_models:
+                self._send(200, {"data": [{"id": "compat-a"}, {"id": "compat-b"}]})
+            else:
+                self._send(404, {"error": {"message": "not found"}})
+
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length") or 0)
+            self.rfile.read(length)
+            if not self._authorized():
+                self._send(401, {"error": {"message": "Invalid API key"}})
+            else:
+                self._send(200, {"choices": [{"message": {"content": "ok"}}]})
+
+        def log_message(self, *_args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Endpoint)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    served["url"] = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        yield served
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_openai_compatible_menu_asks_its_url_key_and_models(tmp_path: Path) -> None:
+    """AC4: the sixth choice asks the endpoint's URL, its key (hidden, any shape)
+    and its models, listed from its own /v1/models read with that key."""
+    with _compat_endpoint() as endpoint:
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "6"),
+                (_COMPAT_URL_PROMPT, endpoint["url"]),
+                ("OpenAI-compatible key (1 of 1)", _COMPAT_KEY),
+                ("Choose your OpenAI-compatible models", "2,1"),
+                ("Continue?", "q"),
+            ],
+            timeout=_LOCAL_TIMEOUT * 3,
+        )
+    menu = out.split(_MENU)[0]
+    assert (
+        "6) OpenAI-compatible  any endpoint that speaks the OpenAI API with a key"
+        in menu
+    )
+    assert "You chose: OpenAI-compatible" in out
+    assert _COMPAT_KEY not in out
+    assert "looks like" not in out
+    assert ("GET", "/v1/models", f"Bearer {_COMPAT_KEY}") in endpoint["auth"]
+    summary = out.split("Ready to set up:")[1]
+    assert "OpenAI-compatible key received, models compat-b, compat-a" in summary
+
+
+def test_openai_compatible_key_the_endpoint_refuses_is_skipped_with_its_words(
+    tmp_path: Path,
+) -> None:
+    """A key the endpoint refuses stores nothing and says why; the menu comes back."""
+    with _compat_endpoint() as endpoint:
+        out, _ = _preflight(
+            tmp_path,
+            [
+                (_MENU, "6"),
+                (_COMPAT_URL_PROMPT, endpoint["url"]),
+                ("OpenAI-compatible key (1 of 1)", "wrong-key"),
+                ("Every model was skipped", ""),
+                (_MENU, "q"),
+            ],
+            timeout=_LOCAL_TIMEOUT * 3,
+        )
+    assert "its model list answered HTTP 401: Invalid API key" in out
+    assert "Nothing was stored for it" in out
+    assert "wrong-key" not in out
+
+
+def test_openai_compatible_by_provider_flag_needs_a_stored_key_unattended(
+    tmp_path: Path,
+) -> None:
+    result = _unattended_preflight(tmp_path, "--provider", "openai_compatible")
+    assert result.returncode == 1, result.stdout
+    assert "no key is stored for openai_compatible" in result.stdout
+    assert "Nothing was installed" in result.stdout
+
+
+def _compat_phase3(
+    tmp_path: Path,
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """Phase 3's step for the endpoint with `onex models` faked."""
+    fake = tmp_path / "onex-models"
+    calls = tmp_path / "calls"
+    stdins = tmp_path / "stdins"
+    fake.write_text(
+        "#!/bin/bash\n"
+        f'stdin="$(cat)"; echo "$*" >>"{calls}"; printf \'%s\\n\' "$stdin" >>"{stdins}"\n'
+        'echo \'{"provider": "openai_compatible", "status": "passed", "model": "compat-b"}\'\n'
+    )
+    fake.chmod(0o755)
+    snippet = (
+        f"LOG=/dev/null; STATUS={tmp_path}/status; RUN_DIR={tmp_path}; MODELS=openai_compatible; SKIPPED=\n"
+        "say() { printf '%s\\n' \"$*\"; }\n"
+        + _functions(
+            "pending_key",
+            "set_pending_key",
+            "uses_key",
+            "in_list",
+            "has_model",
+            "provider_label",
+            "receipt_field",
+            "set_result",
+            "result_of",
+            "passed_models",
+            "add_model_res",
+            "result_line",
+            "cause_of",
+            "model_result",
+            "setup_model",
+            "comma_list",
+        )
+        + "\n"
+        + _functions(
+            "local_url_add_args",
+            "chosen_models",
+            "set_chosen_models",
+            "onex_order",
+            "put_first",
+            source=HANDLER,
+        )
+        + f'\nmodels_cmd() {{ "{fake}" "$@"; }}\n'
+        + 'KEY_GEMINI=""; KEY_OPENROUTER=""; KEY_OPENAI=""; MODEL_RES=""\n'
+        + f'KEY_COMPAT="{_COMPAT_KEY}"; COMPAT_URL="https://llm.example.com"\n'
+        + 'set_chosen_models openai_compatible "compat-b"\n'
+        + 'setup_model openai_compatible; say "$(result_line openai_compatible)"\n'
+    )
+    result = subprocess.run(
+        ["/bin/bash", "-c", snippet],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    return result, (calls.read_text().splitlines() if calls.exists() else [])
+
+
+def test_openai_compatible_url_models_and_key_reach_onex_models_add(
+    tmp_path: Path,
+) -> None:
+    """AC4: phase 3 runs `onex models add openai_compatible --url --model`, with
+    the key on stdin and never in an argument."""
+    result, calls = _compat_phase3(tmp_path)
+    adds = [call for call in calls if call.startswith("add ")]
+    assert adds == [
+        "add openai_compatible --json --model compat-b --url https://llm.example.com"
+    ], result.stdout + result.stderr
+    assert (tmp_path / "stdins").read_text().strip() == _COMPAT_KEY
+    assert all(_COMPAT_KEY not in call for call in calls)
+    assert "OpenAI-compatible ✓ answered (compat-b)" in result.stdout, result.stderr
