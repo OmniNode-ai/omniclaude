@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 schema_version: "1.0.0"
 ticket_id: OMN-21623
 title: "Burn down the contracts_and_di findings of omniclaude: trace, replay, diagnostics, health-check and coverage timeouts come from the runtime contract"
@@ -17,10 +19,18 @@ requirements:
     acceptance:
       - id: BURNDOWN2
         statement: "BURNDOWN2: ModelRuntimeTimeouts.from_contract() reads every field from the contract timeouts section, an env var overrides the inline default, a missing field or section fails to load, and each call site passes the injected value -- falsifier: uv run pytest tests/unit/models/test_model_runtime_timeouts.py -q --no-cov"
+  - id: req-omn21623-selector-policy
+    statement: The transition selector reads its deadlines and retry policy from its contract or an injected policy.
+    acceptance:
+      - id: AC1
+        statement: "AC1 (BURNDOWN2): contract and injected policy values reach selection, HTTP, health-probe and retry boundaries, invalid values fail validation, and the node selects a bounded action over a live HTTP connection -- falsifier: uv run pytest tests/nodes/test_node_transition_selector_effect/test_unit.py -q --no-cov"
 evidence_requirements:
   - kind: tests
     description: "The runtime-timeouts tests and the trace, health-check and coverage tests pass"
     command: "uv run pytest tests/unit/models/test_model_runtime_timeouts.py tests/unit/trace tests/unit/lib/utils tests/skills/coverage_sweep -q --no-cov"
+  - kind: tests
+    description: Selector policy, node logic and model regressions
+    command: "uv run pytest tests/nodes/test_node_transition_selector_effect/test_unit.py tests/nodes/test_node_transition_selector_effect/test_node_logic.py tests/nodes/test_node_transition_selector_effect/test_models.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -33,4 +43,30 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/models/test_model_runtime_timeouts.py tests/unit/trace tests/unit/lib/utils tests/skills/coverage_sweep -q --no-cov"
+  - id: dod-omn21623-selector-policy
+    binds_ac: [AC1]
+    description: >-
+      New policy tests first reported 3 failures and 12 passes without the policy
+      implementation. Contract values and constructor-injected policy reach the
+      selection deadline, HTTP timeout, health probe and retry loop. The actual
+      node is constructed with an ONEX container and selects action-001 over
+      loopback HTTP. The planted timeout fixture still triggers literal_timeout;
+      the clean fixture does not. The read-only scan falls from 840 to 837
+      findings, with literal_timeout falling from 339 to 336.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/nodes/test_node_transition_selector_effect/test_unit.py tests/nodes/test_node_transition_selector_effect/test_node_logic.py tests/nodes/test_node_transition_selector_effect/test_models.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn21623-selector-published-artifact
+    binds_ac: [AC1]
+    description: >-
+      Hosted-runner artifact readback checks the published policy module at the
+      checked-out head against that checkout. Runtime behavior is exercised by
+      the loopback HTTP node test above; this check reads the published artifact.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: >-
+          bash -o pipefail -c 'gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_transition_selector_effect/models/model_selector_policy.py?ref=$(git rev-parse HEAD)" --jq .content | base64 -d | cmp - src/omniclaude/nodes/node_transition_selector_effect/models/model_selector_policy.py'
         cwd: "."

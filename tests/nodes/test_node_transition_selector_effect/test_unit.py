@@ -271,3 +271,211 @@ class TestBuildPromptPurity:
             prompt = node._build_prompt(request)
             assert "Build the code" in prompt
             assert "Run tests" in prompt
+
+
+class TestContractRuntimePolicy:
+    """Contract changes and injected policy reach the actual I/O boundaries."""
+
+    def test_policy_reads_contract_and_refuses_missing_values(
+        self, tmp_path: Path
+    ) -> None:
+        import yaml
+
+        from omniclaude.nodes.node_transition_selector_effect.models.model_selector_policy import (
+            ModelSelectorPolicy,
+        )
+
+        contract = yaml.safe_load(_CONTRACT_PATH.read_text())
+        policy = ModelSelectorPolicy.from_contract(_CONTRACT_PATH)
+        assert policy.selection_timeout_seconds == 10
+        assert policy.http_timeout_seconds == 12
+        assert policy.probe_timeout_seconds == 2
+        assert policy.max_retries == 1
+        assert policy.retry_delay_seconds == 0.5
+        contract["error_handling"]["selection_timeout_seconds"] = 0.025
+        changed = tmp_path / "contract.yaml"
+        changed.write_text(yaml.safe_dump(contract))
+        assert (
+            ModelSelectorPolicy.from_contract(changed).selection_timeout_seconds
+            == 0.025
+        )
+        del contract["error_handling"]["selection_timeout_seconds"]
+        changed.write_text(yaml.safe_dump(contract))
+        with pytest.raises((ValueError, KeyError)):
+            ModelSelectorPolicy.from_contract(changed)
+
+    @pytest.mark.asyncio
+    async def test_injected_policy_controls_http_probe_and_retry(self) -> None:
+        from omniclaude.nodes.node_transition_selector_effect.models.model_selector_policy import (
+            ModelSelectorPolicy,
+        )
+
+        node = _make_node()
+        node.policy = ModelSelectorPolicy(
+            selection_timeout_seconds=0.025,
+            http_timeout_margin_seconds=0.01,
+            probe_timeout_seconds=0.015,
+            max_retries=2,
+            initial_delay_ms=3,
+        )
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"choices": [{"message": {"content": "answer"}}]}
+        client = AsyncMock()
+        client.get.return_value = response
+        client.post.return_value = response
+        factory = MagicMock()
+        factory.return_value.__aenter__ = AsyncMock(return_value=client)
+        factory.return_value.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "LLM_CODER_FAST_URL": "http://test-endpoint:8001",
+                    "OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME": "test-model",
+                },
+            ),
+            patch(
+                "omniclaude.nodes.node_transition_selector_effect.node.httpx.AsyncClient",
+                factory,
+            ),
+        ):
+            assert await node._call_model_once("prompt") == "answer"
+            factory.assert_called_with(timeout=0.035)
+            assert await node._probe_endpoint()
+            assert client.get.call_args.kwargs["timeout"] == 0.015
+            assert await node._probe_endpoint(timeout=0.02)
+            assert client.get.call_args.kwargs["timeout"] == 0.02
+        with (
+            patch.object(
+                node,
+                "_call_model_once",
+                AsyncMock(side_effect=[OSError("first"), OSError("second"), "answer"]),
+            ) as call,
+            patch(
+                "omniclaude.nodes.node_transition_selector_effect.node.asyncio.sleep",
+                AsyncMock(),
+            ) as sleep,
+        ):
+            assert await node._call_model("prompt") == "answer"
+            assert call.await_count == 3
+            assert sleep.await_count == 2
+            sleep.assert_awaited_with(0.003)
+
+    @pytest.mark.asyncio
+    async def test_injected_deadline_returns_structured_timeout(self) -> None:
+        import asyncio
+
+        from omniclaude.nodes.node_transition_selector_effect.models.model_selector_policy import (
+            ModelSelectorPolicy,
+        )
+
+        node = _make_node()
+        node.policy = ModelSelectorPolicy.from_contract(_CONTRACT_PATH).model_copy(
+            update={"selection_timeout_seconds": 0.005}
+        )
+
+        async def slow_call(prompt: str) -> str:
+            await asyncio.sleep(10)
+            return "unreachable"
+
+        with (
+            patch.dict(os.environ, {"LLM_CODER_FAST_URL": "http://test-endpoint:8001"}),
+            patch.object(node, "_call_model", slow_call),
+        ):
+            result = await node.select(_make_request())
+        assert result.error_kind == SelectionErrorKind.SELECTION_TIMEOUT
+        assert "0.005s" in result.error_detail
+
+    def test_constructor_keeps_injected_policy(self) -> None:
+        from omnibase_core.models.container.model_onex_container import (
+            ModelONEXContainer,
+        )
+
+        from omniclaude.nodes.node_transition_selector_effect.models.model_selector_policy import (
+            ModelSelectorPolicy,
+        )
+
+        policy = ModelSelectorPolicy.from_contract(_CONTRACT_PATH)
+        node = NodeTransitionSelectorEffect(ModelONEXContainer(), policy=policy)
+        assert node.policy is policy
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("selection_timeout_seconds", 0),
+            ("selection_timeout_seconds", float("inf")),
+            ("http_timeout_margin_seconds", -1),
+            ("probe_timeout_seconds", 0),
+            ("initial_delay_ms", -1),
+            ("max_retries", -1),
+            ("max_retries", 1.5),
+        ],
+    )
+    def test_policy_refuses_invalid_values(self, field: str, value: float) -> None:
+        from pydantic import ValidationError
+
+        from omniclaude.nodes.node_transition_selector_effect.models.model_selector_policy import (
+            ModelSelectorPolicy,
+        )
+
+        values = ModelSelectorPolicy.from_contract(_CONTRACT_PATH).model_dump()
+        values[field] = value
+        with pytest.raises(ValidationError):
+            ModelSelectorPolicy.model_validate(values)
+
+    @pytest.mark.asyncio
+    async def test_node_selects_over_live_http_with_injected_policy(self) -> None:
+        import asyncio
+        import json
+
+        from omniclaude.nodes.node_transition_selector_effect.models.model_selector_policy import (
+            ModelSelectorPolicy,
+        )
+
+        received = []
+
+        async def respond(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            headers = await reader.readuntil(b"\r\n\r\n")
+            length = next(
+                int(line.split(b":", 1)[1])
+                for line in headers.split(b"\r\n")
+                if line.lower().startswith(b"content-length:")
+            )
+            received.append(json.loads(await reader.readexactly(length)))
+            body = json.dumps(
+                {"choices": [{"message": {"content": '{"selected": 1}'}}]}
+            ).encode()
+            writer.write(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+                + str(len(body)).encode()
+                + b"\r\nConnection: close\r\n\r\n"
+                + body
+            )
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(respond, "127.0.0.1", 0)
+        async with server:
+            port = server.sockets[0].getsockname()[1]
+            from omnibase_core.models.container.model_onex_container import (
+                ModelONEXContainer,
+            )
+
+            node = NodeTransitionSelectorEffect(
+                ModelONEXContainer(),
+                policy=ModelSelectorPolicy.from_contract(_CONTRACT_PATH),
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "LLM_CODER_FAST_URL": f"http://127.0.0.1:{port}",
+                    "OMNICLAUDE_TRANSITION_SELECTOR_MODEL_NAME": "test-model",
+                },
+            ):
+                result = await node.select(_make_request())
+        assert result.success
+        assert result.selected_action.action_id == "action-001"
+        assert received[0]["model"] == "test-model"
