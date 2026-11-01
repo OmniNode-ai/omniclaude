@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21860
+title: "The lapsed review of the two disabled dispatch-claim hooks is done and the omniclaude hook-inventory gate is green again"
+summary: >
+  The review_by of 2026-10-31 on the disabled hook_dispatch_claim_pretool.sh and
+  hook_dispatch_claim_posttool.sh entries lapsed and the hook-inventory gate refuses every
+  commit with DISABLE_REVIEW_LAPSED. Defects D1 to D4 of OMN-17005 were re-read against
+  origin/dev and all four still hold, so both entries stay disabled with a review_by of
+  2026-11-14, a reason naming the defects with file and line, and OMN-17005 as the fixing
+  ticket. The gate code and its policy are not touched.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21860-review-done
+    statement: The two disabled dispatch-claim hook entries carry a done review, a near review_by and the open fixing ticket, and the gate is unchanged.
+    acceptance:
+      - id: AC1
+        statement: "AC1: each of defects D1 to D4 of OMN-17005 is re-read against omniclaude origin/dev and the PR states per defect whether it still holds -- falsifier: grep the PR body for D1, D2, D3 and D4 each with a held or fixed verdict"
+      - id: AC2
+        statement: "AC2: the hook-inventory gate passes on the branch, either because the pair is re-enabled with its tests and a dispatch-claim run passing on a lab host, or because the entries carry a review_by no more than 14 days after 2026-11-01, the concrete reason and OMN-17005 -- falsifier: uv run pytest tests/hooks/test_hook_inventory.py -q and uv run python plugins/onex/hooks/lib/hook_inventory.py --check"
+      - id: AC3
+        statement: "AC3: the gate code and its policy are unchanged in the diff -- falsifier: git diff origin/dev --stat -- plugins/onex/hooks/lib/hook_inventory.py shows no lines"
+evidence_requirements:
+  - kind: tests
+    description: "The hook-inventory parity tests pass with the new review_by."
+    command: "uv run pytest tests/hooks/test_hook_inventory.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21860-defects-reread
+    description: "D1 to D4 of OMN-17005 each still hold on origin/dev; the inventory reason names the file and line of each."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: "bash -o pipefail -c 'grep -c \"permissionDenied\" plugins/onex/hooks/scripts/hook_dispatch_claim_pretool.sh && grep -c \"CLAUDE_AGENT_ID:-session\" plugins/onex/hooks/scripts/hook_dispatch_claim_pretool.sh && grep -c \"_DEFAULT_TTL = 300\" plugins/onex/hooks/lib/dispatch_claim_gate.py && grep -c \"(OMN-21860): all four still hold\" plugins/onex/hooks/contracts/hook_inventory.yaml'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21860-gate-green
+    description: "The hook-inventory parity tests and the gate's own validator pass with both entries disabled until 2026-11-14."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory.py -q --no-cov -k 'test_inventory_parses_and_the_live_tree_is_green or test_every_disable_carries_the_four_omn_17006_fields or test_declared_disables_are_on_disk_and_unregistered or test_disables_are_within_review_today'"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'test \"$(grep -c \"review_by: .2026-11-14.\" plugins/onex/hooks/contracts/hook_inventory.yaml)\" -ge 2'"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "uv run python scripts/validation/validate_hook_inventory.py"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21860-gate-unchanged
+    description: "plugins/onex/hooks/lib/hook_inventory.py is unchanged against origin/dev."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: command
+        check_value: "bash -o pipefail -c 'test -z \"$(git diff origin/dev --stat -- plugins/onex/hooks/lib/hook_inventory.py)\" && grep -q \"Reviewed 2026-11-01 (OMN-21860)\" plugins/onex/hooks/contracts/hook_inventory.yaml'"
+        cwd: "${OMNI_HOME}/omniclaude"
