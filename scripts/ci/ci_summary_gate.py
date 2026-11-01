@@ -101,7 +101,7 @@ GATE_JOBS: tuple[str, ...] = (
     # required, so this registration is enforcement-equivalent. The job is
     # unconditional in ci.yml (`if: always()`), so a skip is anomalous and never
     # a legitimate opt-out, which is why it is ALSO a STRICT_SUCCESS_JOBS member
-    # below. Pinned by tests/ci/test_skip_count_ratchet_omn18790.py.
+    # below. Validator logic lives in core's node_skip_count_ratchet_check_compute.
     "Skip Count Ratchet (OMN-18776)",  # skip-count-ratchet
     # OMN-20109: the real-hook system suite (tests/hooks_system). THIS LINE IS HALF
     # THE MECHANISM, on the identical reasoning as the entries above: the

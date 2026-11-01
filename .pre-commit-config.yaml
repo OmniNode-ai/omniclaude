@@ -27,6 +27,13 @@
 #   pre-commit run --all-files --hook-stage pre-push  # Run pre-push hooks
 
 repos:
+  # OMN-21516: consume the core validators by hook id.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: dev-20261101103701-2fc5e461fca7
+    hooks:
+      - id: check-ai-slop
+      - id: skip-count-ratchet
+
   - repo: local
     hooks:
       - id: linear-lane-repo-evidence
@@ -147,7 +154,7 @@ repos:
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_hooks_shard_omn19681.py -q --no-cov
         language: system
         pass_filenames: false
-        files: '^(\.github/workflows/ci\.yml|tests/ci/test_hooks_shard_omn19681\.py|scripts/ci/skip_count_ratchet\.py|config/hooks_test_file_durations\.json|\.pre-commit-config\.yaml)$'
+        files: '^(\.github/workflows/ci\.yml|tests/ci/test_hooks_shard_omn19681\.py|config/hooks_test_file_durations\.json|\.pre-commit-config\.yaml)$'
         stages: [pre-commit]
 
       - id: comment-render-delegation
@@ -1444,14 +1451,6 @@ repos:
         always_run: true
         stages: [pre-commit]
 
-      - id: check-ai-slop
-        name: Check for AI-slop patterns
-        language: system
-        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/check_ai_slop.py --strict
-        types_or: [python, markdown]
-        pass_filenames: true
-        stages: [pre-commit]
-
       # OMN-14584: bare-name node-identity-keying check (fast, author-time).
       # Generalizes three independently-discovered-and-fixed incidents
       # (OMN-10865, OMN-14571, OMN-14575) into one AST-based gate: keying a
@@ -1850,21 +1849,6 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         files: ^(uv\.lock|pyproject\.toml)$
-
-      # OMN-18790: the skip-count ratchet's own logic, driven over synthetic
-      # reports locally. The case that matters is the RED one: a reintroduced
-      # environmentally-skipped test must turn the gate red. The shipped
-      # baseline's provenance is validated in the same pass, because a baseline
-      # number with no recorded measurement is a claim, not a measurement.
-      # SYNC with ci.yml job 'skip-count-ratchet' (Operating Rule #5).
-      - id: skip-count-ratchet
-        name: Skip-count baseline ratchet selftest (OMN-18790)
-        entry: bash scripts/uv-run-worktree-safe.sh python scripts/ci/skip_count_ratchet.py --selftest
-        language: system
-        pass_filenames: false
-        stages: [pre-commit]
-        files: >-
-          ^(scripts/ci/skip_count_ratchet\.py|config/skip_count_baseline\.yaml|tests/ci/test_skip_count_ratchet_omn18790\.py|\.github/workflows/ci\.yml)$
 
       # OMN-18784: the same evidence checks run in Agent Framework Tests.
       # Always run so deleting a workflow or a test cannot evade the check.
