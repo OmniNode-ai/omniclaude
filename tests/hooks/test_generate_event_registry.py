@@ -118,6 +118,27 @@ class TestBuildProjectedRegistry:
         projected = gen.build_projected_registry(daemon_events)
         assert set(projected) == {"session.started"}
 
+    def test_node_owned_event_is_excluded_and_unflagged_is_kept(self, gen: Any) -> None:
+        daemon_events = {
+            "session.started": {
+                "fan_out": [{"topic": "onex.evt.omniclaude.session-started.v1"}]
+            },
+            "compaction.prepared": {
+                "fan_out": [
+                    {"topic": "onex.evt.omnimarket.context-compaction-prepared.v1"}
+                ],
+                "node_owned": True,
+            },
+            "compaction.malformed": {
+                "fan_out": [
+                    {"topic": "onex.evt.omnimarket.context-compaction-other.v1"}
+                ],
+                "node_owned": "yes",
+            },
+        }
+        projected = gen.build_projected_registry(daemon_events)
+        assert set(projected) == {"session.started", "compaction.malformed"}
+
     def test_empty_daemon_events_yields_empty_registry(self, gen: Any) -> None:
         assert gen.build_projected_registry({}) == {}
 
