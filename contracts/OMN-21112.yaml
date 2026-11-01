@@ -10,6 +10,12 @@ summary: >
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
+requirements:
+  - id: req-omn21112-hook-registry-projection
+    statement: Node-owned events need no hook-side registration.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the projection excludes events with node_owned set to literal boolean true and preserves unflagged events and malformed non-boolean declarations."
 evidence_requirements:
   - kind: tests
     description: "Generator tests: a node_owned event is excluded and a malformed declaration is kept."
@@ -22,6 +28,18 @@ dod_evidence:
   - id: dod-omn21112-generator-node-owned
     description: "The generator excludes a node_owned: true event and keeps an event whose node_owned value is not the literal boolean true."
     source: manual
+    execution_scope: hosted_and_local
+    binds_ac: ["AC1"]
     checks:
-      - check_type: command
-        check_value: "uv run pytest tests/hooks/test_generate_event_registry.py -q -p no:randomly --no-cov"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_generate_event_registry.py::TestBuildProjectedRegistry::test_node_owned_event_is_excluded_and_unflagged_is_kept -q -p no:randomly --no-cov"
+  - id: dod-omn21112-deploy-source-validation
+    description: >-
+      Deployment source validation: the checked-out generator excludes node-owned
+      events while retaining hook-owned events. The synthetic registry test runs
+      on the hosted runner without a sibling checkout or a running daemon.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_generate_event_registry.py::TestBuildProjectedRegistry::test_node_owned_event_is_excluded_and_unflagged_is_kept -q -p no:randomly --no-cov"
