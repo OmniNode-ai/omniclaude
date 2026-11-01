@@ -41,5 +41,5 @@ dod_evidence:
     binds_ac: [AC2]
     checks:
       - check_type: "test_passes"
-        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_session_model_omn20557.py::test_the_refusal_is_named_as_neither_an_answer_nor_a_failure -q --no-cov"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_session_model_omn20557.py -k test_the_refusal_is_named_as_neither_an_answer_nor_a_failure -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
