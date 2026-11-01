@@ -274,7 +274,9 @@ repos:
   # co-author trailer rules and the rule that refuses a hook whose entry writes
   # are omnibase_core hooks, each a refusal that rewrites nothing. The ids exist
   # only at this dev-merge tag, so they sit in their own block; no other block of
-  # this file pins a rev that carries them.
+  # this file pins a rev that carries them. Not moved to the newer tag below: from
+  # there commit-hygiene writes a report under .onex_state, which
+  # tests/ci/test_precommit_core_hooks_canary_omn21499.py refuses.
   - repo: https://github.com/OmniNode-ai/omnibase_core
     rev: dev-20261029044430-3f33be0d5364
     hooks:
@@ -283,6 +285,29 @@ repos:
         exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
       - id: commit-hygiene-message
         stages: [commit-msg]
+
+  # OMN-21539 (plan task T2.1): the omnibase_core validators this repository lacked,
+  # taken by hook id at the newest dev-merge tag and held to a generated per-file
+  # baseline whose target is zero. This block is the one home of that tag: the
+  # whole-tree CI step (precommit-suite in ci.yml) runs `pre-commit run --all-files`
+  # and so reads the rev from here, and tests/ci/test_core_hook_ids_omn21539.py
+  # asserts each id below resolves to the omnibase_core URL. The baselines sit at
+  # .onex/baselines/<hook id>, the location the core hooks document. No suppression
+  # marker and no allowlist: a finding not in the baseline fails, an entry whose
+  # finding is gone fails, and an entry is never added. A file the audit findings
+  # name (F49, omniclaude#3019) is in none of the baselines.
+  # Not wired, with the reason in contracts/OMN-21539.yaml: check-no-dict-any (its
+  # baseline would add suppression comments the shape ratchet refuses),
+  # check-no-io-outside-effects and check-hardcoded-topic-compute (no baseline option
+  # at this tag, findings in the tree). check-no-raw-sqlite3 is wired in the v0.47.57
+  # block below.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: dev-20261101023710-a66b5ff79cc0
+    hooks:
+      - id: handler-di-gate
+        args: [--baseline, .onex/baselines/handler-di-gate.txt]
+      - id: check-no-backward-compat
+        args: [--dir, src/, --baseline, .onex/baselines/check-no-backward-compat.yaml]
 
   # Fast file checks that can run in parallel
   - repo: https://github.com/pre-commit/pre-commit-hooks
