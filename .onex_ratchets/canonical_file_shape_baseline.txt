@@ -511,7 +511,6 @@ scripts/ci/run_aislop_precommit.py
 scripts/ci/run_aislop_sweep.py
 scripts/ci/run_golden_chain_live.py
 scripts/ci/run_runtime_profiles_validator.py
-scripts/ci/skip_count_ratchet.py
 scripts/ci/test_selection_loader.py
 scripts/ci/test_selection_models.py
 scripts/ci/verify_pypi_pin_resolvability.py
@@ -625,7 +624,6 @@ scripts/validate_onex.py
 scripts/validate_pattern_extraction.py
 scripts/validate_pattern_integration.py
 scripts/validation/_path_scope.py
-scripts/validation/check_ai_slop.py
 scripts/validation/check_node_identity_keying.py
 scripts/validation/check_precommit_additional_dependencies.sh
 scripts/validation/check_registry_consistency.py

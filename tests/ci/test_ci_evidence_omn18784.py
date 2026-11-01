@@ -13,14 +13,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.ci.skip_count_ratchet import (
-    BaselineEntry,
-    InputError,
-    Observation,
-    evaluate,
-    observe,
-)
-
 ROOT = Path(__file__).resolve().parents[2]
 RETIRED = (
     ".github/workflows/integration-tests.yml",
@@ -117,7 +109,8 @@ def test_ac1_ac2_actual_agent_job_refuses_bad_selection(
     if state == "missing":
         assert "tests/test_enhanced_router.py" in result.stderr
     if state == "valid":
-        assert observe([tmp_path / "junit-agent-framework.xml"]).collected == len(named)
+        report = (tmp_path / "junit-agent-framework.xml").read_text(encoding="utf-8")
+        assert len(re.findall(r"<testcase\b", report)) == len(named)
 
 
 def test_gate_is_wired_in_ci_and_precommit() -> None:
@@ -136,24 +129,3 @@ def test_gate_is_wired_in_ci_and_precommit() -> None:
     assert relative in hook["entry"]
     assert hook["always_run"] is True
     assert hook["pass_filenames"] is False
-
-
-def test_ac6_one_empty_shard_cannot_hide_behind_a_real_report(tmp_path: Path) -> None:
-    empty = tmp_path / "empty.xml"
-    real = tmp_path / "real.xml"
-    empty.write_text('<testsuites><testsuite tests="0"/></testsuites>')
-    real.write_text(
-        '<testsuites><testsuite tests="1"><testcase name="test_control"/></testsuite></testsuites>'
-    )
-    assert observe([real]).collected == 1
-    with pytest.raises(InputError, match="collected 0 tests"):
-        observe([empty, real])
-
-
-def test_verdict_is_derived_from_empty_selection_check() -> None:
-    entry = BaselineEntry.load(
-        ROOT / "config/skip_count_baseline.yaml", "omniclaude/agent-framework-tests"
-    )
-    assert evaluate(entry, Observation(frozenset(), 1, 1))[0] == 0
-    code, lines = evaluate(entry, Observation(frozenset(), 0, 1))
-    assert code != 0, lines

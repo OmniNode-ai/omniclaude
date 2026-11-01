@@ -40,8 +40,6 @@ proof of that acceptance criterion.
 from __future__ import annotations
 
 import re
-import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -51,7 +49,6 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 BASELINE = REPO_ROOT / "config" / "skip_count_baseline.yaml"
-SCRIPT = REPO_ROOT / "scripts" / "ci" / "skip_count_ratchet.py"
 ROUTER_TESTS = REPO_ROOT / "tests" / "test_enhanced_router.py"
 
 JOB_KEY = "agent-framework-tests"
@@ -86,30 +83,6 @@ def _job_text(key: str) -> str:
     following = re.compile(r"\n  [a-z0-9_-]+:\n")
     match = following.search(raw, start + 1)
     return raw[start : match.start() if match else len(raw)]
-
-
-def _run_ratchet(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(SCRIPT), *args],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-        check=False,
-    )
-
-
-def _junit(tests: int, skipped: int = 0, name: str = "agent-framework") -> str:
-    cases = "".join(
-        f'<testcase classname="tests.test_enhanced_router" name="test_{i}">'
-        + ("<skipped/>" if i < skipped else "")
-        + "</testcase>"
-        for i in range(tests)
-    )
-    return (
-        '<?xml version="1.0" encoding="utf-8"?><testsuites>'
-        f'<testsuite name="{name}" tests="{tests}" errors="0" failures="0" '
-        f'skipped="{skipped}">{cases}</testsuite></testsuites>'
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -241,58 +214,3 @@ def test_ac4_neither_job_carries_an_advisory_setting() -> None:
             f"job {key!r} carries continue-on-error. Epic OMN-18775 AC4 refuses "
             "relabelling a check rather than making it enforce."
         )
-
-
-# ---------------------------------------------------------------------------
-# AC2 — a job that collects zero tests FAILS, with a positive control
-# ---------------------------------------------------------------------------
-
-
-def test_ac2_zero_collection_is_refused_for_this_suite(tmp_path: Path) -> None:
-    """Falsifier: an empty report passes, so the phantom shape returns silently."""
-    junit = tmp_path / JUNIT_NAME
-    junit.write_text(_junit(tests=0), encoding="utf-8")
-    result = _run_ratchet(
-        "--baseline", str(BASELINE), "--suite", SUITE, "--junit", str(junit)
-    )
-    assert result.returncode != 0, (
-        "a report collecting zero tests passed the ratchet. That is the phantom "
-        f"job restored: stdout={result.stdout!r} stderr={result.stderr!r}"
-    )
-    assert "collected 0 tests" in (result.stdout + result.stderr)
-
-
-def test_ac2_positive_control_a_real_report_with_no_skips_passes(
-    tmp_path: Path,
-) -> None:
-    """The control for the zero above: the same gate, on an input that should pass.
-
-    Without it, the refusal above is also satisfied by a gate that refuses
-    everything, and a gate that always fails is removed rather than fixed.
-    """
-    entry = yaml.safe_load(BASELINE.read_text(encoding="utf-8"))["suites"][SUITE]
-    junit = tmp_path / JUNIT_NAME
-    junit.write_text(_junit(tests=int(entry["baseline_collected"])), encoding="utf-8")
-    result = _run_ratchet(
-        "--baseline", str(BASELINE), "--suite", SUITE, "--junit", str(junit)
-    )
-    assert result.returncode == 0, (
-        f"a real, full, skip-free report was refused: "
-        f"stdout={result.stdout!r} stderr={result.stderr!r}"
-    )
-
-
-def test_ac2_a_new_skip_in_this_suite_fails(tmp_path: Path) -> None:
-    """Falsifier: the suite may quietly convert its tests into skips instead."""
-    entry = yaml.safe_load(BASELINE.read_text(encoding="utf-8"))["suites"][SUITE]
-    junit = tmp_path / JUNIT_NAME
-    junit.write_text(
-        _junit(tests=int(entry["baseline_collected"]), skipped=1), encoding="utf-8"
-    )
-    result = _run_ratchet(
-        "--baseline", str(BASELINE), "--suite", SUITE, "--junit", str(junit)
-    )
-    assert result.returncode != 0, (
-        "a newly skipped test in the restored suite passed the ratchet; the "
-        "restored coverage can therefore be hollowed out one skip at a time."
-    )

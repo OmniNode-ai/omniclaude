@@ -58,8 +58,9 @@ def test_ac4_baseline_preserves_exact_two_file_deletion() -> None:
     baseline = (ROOT / ".onex_ratchets/canonical_file_shape_baseline.txt").read_text()
     manifest = (ROOT / "plugins/distribution_manifest.yaml").read_text()
     # OMN-21116 removed two rows (957 -> 955). Subsequent dev commits removed
-    # the one retired fix lock (OMN-21429) and two path checks (OMN-20566).
-    assert len(baseline.splitlines()) == 957 - 2 - 1 - 2
+    # the one retired fix lock (OMN-21429), two path checks (OMN-20566) and the
+    # two local CI scripts replaced by core validators (OMN-21516).
+    assert len(baseline.splitlines()) == 957 - 2 - 1 - 2 - 2
     for suffix in (".sh", "-probe.sh"):
         name = PATTERNS[1] + suffix
         assert not (ROOT / "plugins/onex/hooks/scripts" / name).exists()
