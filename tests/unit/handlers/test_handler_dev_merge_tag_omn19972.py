@@ -6,7 +6,7 @@ The dep-provenance gate, the internal-sibling-pins check and the nightly
 dev-tag train each held their own copy of ``dev-<14 digits>-<12 hex>``, and the
 copies disagreed (two used ``re.match``, which lets a trailing newline through).
 All three now import the stdlib-only rule in ``handler_dev_merge_tag``, and this
-file holds that rule equal to omnibase_core's Internal Sibling Pins contract.
+file holds that rule equal to omnibase_core's first-party ref contract.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from omnibase_core.handlers.handler_internal_sibling_pins_cli import load_contract
+from omnibase_core.validation.validator_first_party_ref import dev_tag_pattern
 
 from omniclaude.handlers.handler_dev_merge_tag import (
     DEV_MERGE_TAG_PATTERN,
@@ -55,7 +55,7 @@ def test_refuse_invalid_dev_merge_tag(tag: str) -> None:
 
 
 def test_rule_matches_omnibase_core_contract() -> None:
-    core_pattern = load_contract().dev_tag_pattern
+    core_pattern = dev_tag_pattern()
     assert (
         re.sub(r"\(\?P<stamp>(\[0-9\]\{14\})\)", r"\1", DEV_MERGE_TAG_PATTERN)
         == core_pattern
