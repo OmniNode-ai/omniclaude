@@ -37,6 +37,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -593,6 +594,87 @@ def test_disables_are_within_review_today() -> None:
     findings = _findings(_REPO_ROOT, datetime.now(UTC).date())
     lapsed = [f for f in findings if f.code == "DISABLE_REVIEW_LAPSED"]
     assert not lapsed, [f.render() for f in lapsed]
+
+
+def test_the_dispatch_claim_disables_outlive_their_lapsed_review_date() -> None:
+    """OMN-21845: the two dispatch-claim rows carry a review date past the lapse.
+
+    ``test_disables_are_within_review_today`` reads the calendar, so it goes red
+    with no diff and green again with none: it cannot show that *this* change is
+    what fixed anything. This test pins 2026-11-01, the day the two rows lapsed
+    on, so the row's own ``review_by`` is the subject. Move either row back to
+    2026-10-31 and it fails.
+    """
+    lapse_day = date(2026, 11, 1)
+    inventory = _LIB.load_inventory(_REPO_ROOT / _INVENTORY_REL)
+    dispatch_claim = {
+        disabled.script: disabled
+        for disabled in inventory.disabled
+        if disabled.script
+        in {
+            "hook_dispatch_claim_pretool.sh",
+            "hook_dispatch_claim_posttool.sh",
+        }
+    }
+    assert set(dispatch_claim) == {
+        "hook_dispatch_claim_pretool.sh",
+        "hook_dispatch_claim_posttool.sh",
+    }, sorted(dispatch_claim)
+    for script, disabled in sorted(dispatch_claim.items()):
+        assert disabled.review_by >= lapse_day, (
+            f"{script} carries review_by {disabled.review_by.isoformat()}, "
+            f"which has lapsed as of {lapse_day.isoformat()}"
+        )
+
+    lapsed = [
+        f for f in _findings(_REPO_ROOT, lapse_day) if f.code == "DISABLE_REVIEW_LAPSED"
+    ]
+    assert not lapsed, [f.render() for f in lapsed]
+
+
+def test_the_moved_dispatch_claim_rows_state_why_their_review_date_moved() -> None:
+    """OMN-21845: the move carries its reason, so the next reader need not guess.
+
+    A date moved with no reason is the OMN-13244 defect again: a disable whose
+    own record does not say why it outlived its review. The comment names the
+    old date, the new one and why neither re-registration nor deletion was
+    available, so OMN-17005 stays visibly owed.
+
+    The new date is read out of the comment and compared with what the rows
+    actually carry, rather than hard-coded here. A later review may legitimately
+    move the date again (OMN-21860 moved it from 2026-12-31 to the reviewed
+    2026-11-14), and the property worth pinning is that the comment and the rows
+    never disagree: move a row without amending the comment and this fails.
+    """
+    text = (_REPO_ROOT / _INVENTORY_REL).read_text(encoding="utf-8")
+    moved = re.search(
+        r"Review date moved 2026-10-31 -> (\d{4}-\d{2}-\d{2}) "
+        r"for the two dispatch-claim rows",
+        text,
+    )
+    assert moved is not None, "the moved rows carry no comment naming the move"
+    stated = date.fromisoformat(moved.group(1))
+
+    inventory = _LIB.load_inventory(_REPO_ROOT / _INVENTORY_REL)
+    carried = {
+        disabled.script: disabled.review_by
+        for disabled in inventory.disabled
+        if disabled.script
+        in {
+            "hook_dispatch_claim_pretool.sh",
+            "hook_dispatch_claim_posttool.sh",
+        }
+    }
+    assert len(carried) == 2, sorted(carried)
+    for script, review_by in sorted(carried.items()):
+        assert review_by == stated, (
+            f"the comment states the rows moved to {stated.isoformat()}, but "
+            f"{script} carries review_by {review_by.isoformat()}"
+        )
+
+    assert "OMN-17005 is still in Backlog" in text, (
+        "the move's reason does not name OMN-17005 as still open"
+    )
 
 
 def test_deleting_a_disabled_script_fails_the_gate(

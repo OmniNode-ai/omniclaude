@@ -1276,6 +1276,15 @@ expected_hooks:
     order: 0
 
 disabled_hooks:
+  # Review date moved 2026-10-31 -> 2026-11-14 for the two dispatch-claim rows
+  # below. OMN-21845 first moved it to 2026-12-31 to clear the gate; OMN-21860
+  # then did the review itself and re-read all four defects against origin/dev
+  # on 2026-11-01, so the date is the reviewed one and each row records what was
+  # re-read. OMN-17005 is still in Backlog with none of its ACs held, so
+  # re-registration is not available, and it has not closed won't-fix, so
+  # conversion to kind delete is not available either. The date lapsing on the
+  # clock turned the required Hook Inventory Gate red on omniclaude dev at
+  # 76c05c284 regardless of any diff. The OMN-17005 decision is still owed.
   - script: "hook_dispatch_claim_pretool.sh"
     owner: "omniclaude hooks lane"
     reason: >
