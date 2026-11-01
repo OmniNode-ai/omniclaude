@@ -1,0 +1,61 @@
+# omniclaude baseline of the handler-di-gate hook (OMN-21539). Shrink-only, target zero.
+# Each line is a file under handlers/ or nodes/ (or named *_cli.py) that held findings when the
+# hook was adopted, and the number it holds. They are burn-down entries: fix the finding and lower
+# the entry (delete it at zero) in the same change. A file may not hold more than its entry, an
+# entry must equal what the file holds, and an entry the base revision lacks or holds lower fails.
+# Burn-down ticket: none minted yet; the ticket that burns this list down is named here by id.
+# Do not add a line; do not raise a count.
+src/omniclaude/handlers/container/container_delegation.py 4
+src/omniclaude/handlers/container/container_event_emit.py 2
+src/omniclaude/handlers/container/container_runtime.py 4
+src/omniclaude/handlers/handler_contract_endpoint_resolver.py 1
+src/omniclaude/handlers/handler_hook_local_bus_publish.py 1
+src/omniclaude/handlers/handler_internal_sibling_pins.py 1
+src/omniclaude/nodes/node_agent_chat/handler_auto_emit.py 3
+src/omniclaude/nodes/node_agent_chat/handler_chat_publisher.py 4
+src/omniclaude/nodes/node_agent_chat/handler_chat_reader.py 4
+src/omniclaude/nodes/node_agent_chat/handler_file_chat_store.py 1
+src/omniclaude/nodes/node_agent_inbox_effect/handler_kafka_inbox.py 1
+src/omniclaude/nodes/node_agent_inbox_effect/handler_standalone_inbox.py 3
+src/omniclaude/nodes/node_agent_router/handlers/handler_agent_router.py 2
+src/omniclaude/nodes/node_agent_routing_compute/handler_routing_llm.py 4
+src/omniclaude/nodes/node_dev_head_monitor_effect/handlers/handler_dev_head_monitor.py 3
+src/omniclaude/nodes/node_dev_head_monitor_effect/models/model_dev_head_types.py 1
+src/omniclaude/nodes/node_evidence_bundle/enums/enum_execution_outcome.py 1
+src/omniclaude/nodes/node_evidence_bundle/handler_evidence_bundle_default.py 1
+src/omniclaude/nodes/node_friction_observer_compute/handlers/handler_friction_observer.py 3
+src/omniclaude/nodes/node_git_effect/handlers/handler_git_admission.py 1
+src/omniclaude/nodes/node_git_effect/handlers/handler_git_admission_transport.py 1
+src/omniclaude/nodes/node_git_effect/handlers/handler_git_subprocess.py 4
+src/omniclaude/nodes/node_git_effect/handlers/handler_shell_heredoc.py 1
+src/omniclaude/nodes/node_git_effect/handlers/handler_shell_redirect.py 1
+src/omniclaude/nodes/node_git_effect/handlers/handler_shell_words.py 3
+src/omniclaude/nodes/node_git_effect/models/model_git_timeout_policy.py 1
+src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_record.py 3
+src/omniclaude/nodes/node_lane_github_read_guard_effect/handlers/handler_lane_github_read_guard.py 3
+src/omniclaude/nodes/node_lane_github_read_guard_effect/runtime_lane_github_read.py 1
+src/omniclaude/nodes/node_linear_effect/handlers/handler_hook_evidence_readers.py 1
+src/omniclaude/nodes/node_linear_effect/handlers/handler_lane_repo_evidence.py 1
+src/omniclaude/nodes/node_linear_effect/handlers/handler_linear_ticketing.py 2
+src/omniclaude/nodes/node_linear_effect/handlers/handler_local_pr_state.py 2
+src/omniclaude/nodes/node_linear_effect/models/model_linear_endpoint.py 1
+src/omniclaude/nodes/node_linear_effect/runtime_done_closeout_instructions.py 1
+src/omniclaude/nodes/node_omnimemory_promotion/handler_pattern_promotion_default.py 1
+src/omniclaude/nodes/node_personality_logging_effect/node.py 6
+src/omniclaude/nodes/node_pr_ownership_guard_effect/handlers/handler_pr_ownership.py 2
+src/omniclaude/nodes/node_pr_ownership_guard_effect/handlers/handler_pr_ownership_lane.py 1
+src/omniclaude/nodes/node_routing_emission_effect/handler_routing_emitter.py 1
+src/omniclaude/nodes/node_routing_history_reducer/handler_history_postgres.py 2
+src/omniclaude/nodes/node_skill_board_readback_orchestrator/handler_board_readback_skill.py 2
+src/omniclaude/nodes/node_skill_cloud_delegate_orchestrator/handler_cloud_delegate_skill.py 2
+src/omniclaude/nodes/node_skill_comment_sweep_orchestrator/handler_comment_sweep_skill.py 3
+src/omniclaude/nodes/node_skill_feature_dashboard_orchestrator/models/model_result.py 2
+src/omniclaude/nodes/node_skill_lane_dispatch_orchestrator/handler_lane_dispatch_skill.py 2
+src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_omninode_dev_setup_skill.py 2
+src/omniclaude/nodes/node_skill_overseer_verify_tick_orchestrator/handler_overseer_verify_tick_skill.py 2
+src/omniclaude/nodes/node_skill_plans_board_refresh_orchestrator/handler_plans_board_refresh_skill.py 2
+src/omniclaude/nodes/node_skill_weekly_review_orchestrator/handler_weekly_review_skill.py 2
+src/omniclaude/nodes/node_transcript_usage_read_effect/handlers/handler_transcript_usage_read.py 1
+src/omniclaude/nodes/node_transition_selector_effect/models/model_selector_policy.py 1
+src/omniclaude/nodes/node_transition_selector_effect/models/model_transition_selector_result.py 2
+src/omniclaude/nodes/node_validate_skills_compute/handlers/handler_skill_hygiene.py 1

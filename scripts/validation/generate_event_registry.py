@@ -150,8 +150,7 @@ def load_daemon_events(daemon_registry_path: Path) -> dict[str, Any]:
         raise ValueError(
             f"{daemon_registry_path} must contain a top-level 'events' mapping"
         )
-    result: dict[str, Any] = events
-    return result
+    return dict(events)
 
 
 def project_registration(event_type: str, event_def: dict[str, Any]) -> dict[str, Any]:
@@ -187,6 +186,10 @@ def project_registration(event_type: str, event_def: dict[str, Any]) -> dict[str
     }
 
 
+# An event the registry declares ``node_owned: true`` is emitted by an omnimarket
+# node, never by a hook client (OMN-21112): like DAEMON_INTERNAL_EVENT_TYPES, it has
+# no client-side registration to project, and omnimarket's drift validator skips
+# the same flag.
 def build_projected_registry(
     daemon_events: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
@@ -195,6 +198,7 @@ def build_projected_registry(
         event_type: project_registration(event_type, event_def)
         for event_type, event_def in daemon_events.items()
         if event_type not in DAEMON_INTERNAL_EVENT_TYPES
+        and event_def.get("node_owned") is not True
     }
 
 

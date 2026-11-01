@@ -65,3 +65,14 @@ def test_an_older_onex_still_delegates_without_the_flag() -> None:
     text = PROMPT_MD.read_text()
     assert "No such option: --session-model" in text
     assert "once more without `--session-model`" in text
+
+
+def test_the_refusal_is_named_as_neither_an_answer_nor_a_failure() -> None:
+    """OMN-20376: a model that reads the refusal as a failed delegation stops and reports it."""
+    prompt = PROMPT_MD.read_text()
+    assert "No such option '--session-model'" in prompt
+    assert "nothing dispatched" in prompt
+    assert "not the answer and not a failure to report" in prompt
+    skill = SKILL_MD.read_text()
+    assert "No such option '--session-model'" in skill
+    assert "is neither row" in skill

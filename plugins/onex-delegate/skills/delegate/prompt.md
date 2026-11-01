@@ -8,6 +8,9 @@ run. Nothing else.
 onex delegate "<prompt>" --json --session-model <session-model-id> [--task-type <type>] [--max-tokens <n>]
 ```
 
+If that command exits 2 with `Error: No such option '--session-model'` and `REFUSED -- argument_parsing, nothing dispatched`, the installed `onex` predates the flag and
+no delegation ran. That refusal is not the answer and not a failure to report: run the same command once more without `--session-model`, then answer from that run.
+
 Run it exactly like that: a plain `onex delegate` invocation with no redirect, pipe, `&&`
 or `2>&1`. The permission rule `Bash(onex delegate:*)` covers only a plain invocation.
 
