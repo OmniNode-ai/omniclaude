@@ -13,14 +13,14 @@ requirements:
     acceptance:
       - id: "AC1"
         statement: |-
-          AC1: the hook inventory validator refuses at base for 2026-11-01 and admits on the fix branch for the same date -- falsifier: uv run pytest tests/hooks/test_hook_inventory.py -q -k disables_are_within_review_today
+          AC1: the hook inventory validator refuses at base for 2026-11-01 and admits on the fix branch for the same date -- falsifier: uv run pytest tests/hooks/test_hook_inventory.py -q -k the_dispatch_claim_disables_outlive_their_lapsed_review_date
       - id: "AC2"
         statement: |-
-          AC2: the two moved rows carry a stated reason naming OMN-17005 still open -- falsifier: grep -c 'Review date moved 2026-10-31 -> 2026-12-31 for the two dispatch-claim rows' plugins/onex/hooks/contracts/hook_inventory.yaml
+          AC2: the two moved rows carry a stated reason naming OMN-17005 still open -- falsifier: uv run pytest tests/hooks/test_hook_inventory.py -q -k the_moved_dispatch_claim_rows_state_why_their_review_date_moved
 evidence_requirements:
   - kind: "tests"
     description: "no declared disable in the live inventory has lapsed its review date today"
-    command: "uv run pytest tests/hooks/test_hook_inventory.py -q -k disables_are_within_review_today"
+    command: "uv run pytest tests/hooks/test_hook_inventory.py -q -k the_dispatch_claim_disables_outlive_their_lapsed_review_date"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -31,14 +31,14 @@ dod_evidence:
     source: "manual"
     checks:
       - check_type: "test_passes"
-        check_value: "uv run pytest tests/hooks/test_hook_inventory.py -q -k disables_are_within_review_today"
+        check_value: "uv run pytest tests/hooks/test_hook_inventory.py -q -k the_dispatch_claim_disables_outlive_their_lapsed_review_date"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC1"]
   - id: "dod-ac2"
     description: "the moved dispatch-claim rows state why their review date moved"
     source: "manual"
     checks:
-      - check_type: "command"
-        check_value: "grep -q 'Review date moved 2026-10-31 -> 2026-12-31 for the two dispatch-claim rows' plugins/onex/hooks/contracts/hook_inventory.yaml"
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_hook_inventory.py -q -k the_moved_dispatch_claim_rows_state_why_their_review_date_moved"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC2"]
