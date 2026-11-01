@@ -41,7 +41,7 @@ requirements:
 evidence_requirements:
   - kind: tests
     description: The omniclaude-side checks (AC7 ls-files scan, AC8 inventory gate).
-    command: uv run pytest tests/hooks/test_no_rendered_binding_module_tracked_omn21093.py tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q
+    command: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q
 emergency_bypass:
   enabled: false
   justification: ""
@@ -120,7 +120,7 @@ dod_evidence:
     execution_scope: hosted_and_local
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_no_rendered_binding_module_tracked_omn21093.py -q"
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -k ac7 -q"
     binds_ac: ["AC7"]
 
   - id: dod-omn21093-ac7-omnimarket-ls-files
@@ -186,3 +186,14 @@ dod_evidence:
         check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_install.py -k ac12 -q"
         cwd: "${OMNI_HOME}/omnimarket"
     binds_ac: ["AC12"]
+
+  - id: dod-omn21093-deploy-source-validation
+    description: >-
+      Deployment source validation: the checked-out hook inventory refuses undeclared
+      installed bindings and events, and no rendered binding module is tracked.
+      Runs on the hosted runner without an installed binding or sibling checkout.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q"
