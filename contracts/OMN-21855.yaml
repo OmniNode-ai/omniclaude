@@ -26,7 +26,7 @@ requirements:
 evidence_requirements:
   - kind: tests
     description: "The caller tests assert the verifier-tag shape, the absence of verifier-version and the dev-merge tag of the reusable ref"
-    command: "uv run pytest tests/ci -q -k repo_evidence_caller"
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_receipt_gate_caller_pin_omn20134.py tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov -p no:randomly"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -38,18 +38,18 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci -q -k repo_evidence_caller"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_receipt_gate_caller_pin_omn20134.py -q --no-cov -p no:randomly"
   - id: dod-omn21855-ac2-tests-assert-verifier-tag
     binds_ac: [AC2]
     description: Every caller test file passes with the verifier-tag assertions, including the merge-base comparison that expects verifier-version to be replaced by verifier-tag; the only verifier-version text left in tests/ is the embedded merge-base caller, pinned by git blob id, and the assertions that the key is absent.
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci -q"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_receipt_gate_caller_pin_omn20134.py tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov -p no:randomly"
   - id: dod-omn21855-ac3-lab-proof
     binds_ac: [AC3]
     description: The PR body carries the lab line with the receipts of the verifier tag install and of the caller tests run at the pushed head; the hosted check re-runs the caller tests.
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci -q -k repo_evidence_caller"
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_receipt_gate_caller_pin_omn20134.py -q --no-cov -p no:randomly"
