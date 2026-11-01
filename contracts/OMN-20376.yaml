@@ -35,10 +35,11 @@ dod_evidence:
         cwd: "${OMNI_HOME}/omniclaude"
   - id: "dod-wording-pinned"
     description: >-
-      The session-model test file pins the refusal wording in both documents.
+      Execute the session-model regression test against both skill documents;
+      copying the test to an older product tree must fail its wording assertions.
     source: "manual"
     binds_ac: [AC2]
     checks:
-      - check_type: "command"
-        check_value: "grep -q test_the_refusal_is_named_as_neither_an_answer_nor_a_failure plugins/onex-delegate/tests/test_delegate_session_model_omn20557.py"
+      - check_type: "test_passes"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_session_model_omn20557.py::test_the_refusal_is_named_as_neither_an_answer_nor_a_failure -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
