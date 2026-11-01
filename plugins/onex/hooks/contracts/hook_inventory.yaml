@@ -1276,13 +1276,15 @@ expected_hooks:
     order: 0
 
 disabled_hooks:
-  # Review date moved 2026-10-31 -> 2026-12-31 for the two dispatch-claim rows
-  # below (OMN-21845): OMN-17005 is still in Backlog with none of its ACs held,
-  # so re-registration is not available, and it has not closed won't-fix, so
+  # Review date moved 2026-10-31 -> 2026-11-14 for the two dispatch-claim rows
+  # below. OMN-21845 first moved it to 2026-12-31 to clear the gate; OMN-21860
+  # then did the review itself and re-read all four defects against origin/dev
+  # on 2026-11-01, so the date is the reviewed one and each row records what was
+  # re-read. OMN-17005 is still in Backlog with none of its ACs held, so
+  # re-registration is not available, and it has not closed won't-fix, so
   # conversion to kind delete is not available either. The date lapsing on the
   # clock turned the required Hook Inventory Gate red on omniclaude dev at
-  # 76c05c284 regardless of any diff. The OMN-17005 decision is still owed;
-  # 2026-12-31 matches the other dated rows in this file.
+  # 76c05c284 regardless of any diff. The OMN-17005 decision is still owed.
   - script: "hook_dispatch_claim_pretool.sh"
     owner: "omniclaude hooks lane"
     reason: >
@@ -1293,8 +1295,16 @@ disabled_hooks:
       honour; AGENT_ID falls back to the shared constant `session` so two
       anonymous lanes are the same claimant and never collide; and the lease
       is a fixed non-renewable 300s whose expiry deletes the claim file
-      instead of recording CLAIM_EXPIRED.
-    review_by: "2026-12-31"
+      instead of recording CLAIM_EXPIRED. Re-read against origin/dev on
+      2026-11-01 (OMN-21860): all four still hold. D1 hook_dispatch_claim_pretool.sh
+      sources error-guard.sh at line 38 and exits 2 at line 146 with no
+      `trap - EXIT`, so error-guard.sh line 222 still turns it into exit 0.
+      D2 line 145 still prints {"type":"permissionDenied"}. D3 line 79 is
+      still AGENT_ID="${CLAUDE_AGENT_ID:-session}". D4 dispatch_claim_gate.py
+      has _DEFAULT_TTL = 300 (line 50) and unlinks an expired claim at line
+      261 with no renewal, fencing token or CLAIM_EXPIRED record. OMN-17005
+      is still Backlog.
+    review_by: "2026-11-14"
     restoration:
       kind: "re_register"
       reenable_ticket: "OMN-17005"
@@ -1313,8 +1323,10 @@ disabled_hooks:
       The release half of the same OMN-8928/8929 pair. It is unregistered for
       the same reason and must be restored, or deleted, together with its
       pre-tool sibling — a release path registered without its acquire path
-      would report `not_owner` on every call.
-    review_by: "2026-12-31"
+      would report `not_owner` on every call. Reviewed 2026-11-01 (OMN-21860):
+      the acquire half's defects D1 to D4 still hold, so this half stays
+      disabled with it.
+    review_by: "2026-11-14"
     restoration:
       kind: "re_register"
       reenable_ticket: "OMN-17005"
