@@ -1,0 +1,27 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21112
+title: "TA.10 compaction topic registration: the event registry projection skips node-owned events"
+summary: >
+  The generator that projects omnimarket's topics.yaml into EVENT_REGISTRY skips
+  an event the registry declares node_owned: true, so the compaction commands
+  and receipts that an omnimarket node emits need no hook-side registration and
+  no growth of the baselined registry files.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Generator tests: a node_owned event is excluded and a malformed declaration is kept."
+    command: "uv run pytest tests/hooks/test_generate_event_registry.py -q -p no:randomly --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21112-generator-node-owned
+    description: "The generator excludes a node_owned: true event and keeps an event whose node_owned value is not the literal boolean true."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_generate_event_registry.py -q -p no:randomly --no-cov"
