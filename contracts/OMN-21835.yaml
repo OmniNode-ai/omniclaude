@@ -1,0 +1,41 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21835
+title: "iLO 4 Redfish management for the Gen8 and Gen9 lab servers: the ilo_redfish bootstrap skill"
+summary: >
+  The operator asked for a Claude Code skill and a CLI helper that manage the Gen8 and Gen9 lab servers
+  through the iLO RESTful API instead of the web UI, read-only by default. The logic is the
+  node_ilo_redfish_effect node in omnimarket. ilo_redfish is the bootstrap skill that calls its CLI: it
+  builds one request, requires a recorded operator approval before any write, and holds no credentials,
+  addresses or Redfish logic.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21835-skill
+    statement: ilo_redfish exists as a bootstrap skill that is read-only by default, requires a recorded approval naming the action and the host before a write, keeps Smart Array out of scope and holds no credential or address.
+    acceptance:
+      - id: AC1
+        statement: "AC1: omniclaude plugins/onex/skills/ilo_redfish/SKILL.md exists with bootstrap: true, a Replaced-by line, the approval procedure, the retry rule and the Smart Array exclusion, and carries no address, ticket id or credential -- falsifier: uv run pytest tests/skills/test_ilo_redfish_omn21835.py tests/unit/nodes/test_skill_node_coverage.py -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "The skill shape test, its planted refusal and the skill-to-node coverage test pass"
+    command: "uv run pytest tests/skills/test_ilo_redfish_omn21835.py tests/unit/nodes/test_skill_node_coverage.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21835-ac1-skill
+    description: "The skill declares bootstrap: true, names node_ilo_redfish_effect, carries the setup, approval and retry sections and the Smart Array exclusion, holds no address or ticket id; a planted copy without the approval section is refused; the directory holds only SKILL.md; the manifest assigns it. Fails at the merge base, which has no such skill."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_ilo_redfish_omn21835.py tests/unit/nodes/test_skill_node_coverage.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: test_passes
+        check_value: "python3 scripts/validation/validate_skill_node_boundary.py --skills-root plugins/onex/skills --skill ilo_redfish --strict"
+        cwd: "."
+      - check_type: test_passes
+        check_value: "bash scripts/check-skill-monorepo-refs.sh"
+        cwd: "."
