@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from omnibase_core.handlers.handler_internal_sibling_pins_cli import load_contract
+from omnibase_core.validation.validator_first_party_ref import dev_tag_pattern
 
 from omniclaude.handlers.handler_dev_merge_tag import (
     DEV_MERGE_TAG_PATTERN,
@@ -55,7 +55,7 @@ def test_refuse_invalid_dev_merge_tag(tag: str) -> None:
 
 
 def test_rule_matches_omnibase_core_contract() -> None:
-    core_pattern = load_contract().dev_tag_pattern
+    core_pattern = dev_tag_pattern()
     assert (
         re.sub(r"\(\?P<stamp>(\[0-9\]\{14\})\)", r"\1", DEV_MERGE_TAG_PATTERN)
         == core_pattern
