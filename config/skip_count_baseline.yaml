@@ -6,9 +6,8 @@
 # baseline with no recorded measurement is a claim, not a measurement.
 #
 # Lowering a number here is the ONLY way to lower the bar. There is no flag and
-# no environment variable on scripts/ci/skip_count_ratchet.py that does it, and
-# tests/ci/test_skip_count_ratchet_omn18790.py reads the parser's own option
-# strings to keep it that way.
+# no environment variable on -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check
+# that does it. The core node owns the parser and its option checks.
 #
 # mode: count    — the collected set is identical every run; compare the number.
 # mode: nodeids  — an impacted-test selector varies the collected set, so compare
@@ -48,7 +47,7 @@ suites:
     provenance:
       measured_at: '2026-09-18'
       measured_by: OMN-18790
-      measurement_command: gh run download 35404945505 --repo OmniNode-ai/omniclaude --pattern 'hooks-test-results' --dir <dir> && uv run python scripts/ci/skip_count_ratchet.py --print-observed --suite omniclaude/hooks-tests --junit <dir>/hooks-test-results/junit-hooks.xml
+      measurement_command: gh run download 35404945505 --repo OmniNode-ai/omniclaude --pattern 'hooks-test-results' --dir <dir> && uv run python -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check --print-observed --suite omniclaude/hooks-tests --junit <dir>/hooks-test-results/junit-hooks.xml
       source_runs:
       - '35404945505'
       corroborating_runs:
@@ -101,7 +100,7 @@ suites:
     provenance:
       measured_at: '2026-09-19'
       measured_by: OMN-18805
-      measurement_command: uv run pytest tests/test_enhanced_router.py --junitxml=<dir>/junit-agent-framework.xml && uv run python scripts/ci/skip_count_ratchet.py --print-observed --suite omniclaude/agent-framework-tests --junit <dir>/junit-agent-framework.xml
+      measurement_command: uv run pytest tests/test_enhanced_router.py --junitxml=<dir>/junit-agent-framework.xml && uv run python -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check --print-observed --suite omniclaude/agent-framework-tests --junit <dir>/junit-agent-framework.xml
       source_runs:
       - local-2026-09-19-restored-suite
       corroborating_runs: []
@@ -116,7 +115,7 @@ suites:
     provenance:
       measured_at: '2026-09-18'
       measured_by: OMN-18790
-      measurement_command: gh run download 35395348934 --repo OmniNode-ai/omniclaude --pattern 'test-results-*' --dir <dir> && uv run python scripts/ci/skip_count_ratchet.py --print-observed --suite omniclaude/test-split --junit <dir>/test-results-*/junit-test-*.xml
+      measurement_command: gh run download 35395348934 --repo OmniNode-ai/omniclaude --pattern 'test-results-*' --dir <dir> && uv run python -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check --print-observed --suite omniclaude/test-split --junit <dir>/test-results-*/junit-test-*.xml
       source_runs:
       - '35395348934'
       corroborating_runs:
