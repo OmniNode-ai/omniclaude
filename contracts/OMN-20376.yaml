@@ -1,0 +1,38 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20376"
+title: "The /onex:delegate skill reruns without --session-model when the installed onex refuses the flag"
+summary: >-
+  The published delegate skill passes --session-model, which the newest released
+  onex CLI refuses with exit 2 and nothing dispatched. The skill now names that
+  refusal as neither an answer nor a failure to report and says to rerun the
+  same command once without the flag, so the C30 probe gets a correlation id.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-skill-names-the-refusal"
+    description: >-
+      prompt.md and SKILL.md name the exact refusal of --session-model and say to
+      rerun the same command once without it.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q "not the answer and not a failure to report" plugins/onex-delegate/skills/delegate/prompt.md
+          && grep -q "is neither row" plugins/onex-delegate/skills/delegate/SKILL.md
+  - id: "dod-wording-pinned"
+    description: >-
+      The session-model test file pins the refusal wording in both documents.
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: >-
+          grep -q "test_the_refusal_is_named_as_neither_an_answer_nor_a_failure"
+          plugins/onex-delegate/tests/test_delegate_session_model_omn20557.py
