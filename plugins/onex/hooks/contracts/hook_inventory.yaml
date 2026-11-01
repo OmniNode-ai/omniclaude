@@ -1286,8 +1286,16 @@ disabled_hooks:
       honour; AGENT_ID falls back to the shared constant `session` so two
       anonymous lanes are the same claimant and never collide; and the lease
       is a fixed non-renewable 300s whose expiry deletes the claim file
-      instead of recording CLAIM_EXPIRED.
-    review_by: "2026-10-31"
+      instead of recording CLAIM_EXPIRED. Re-read against origin/dev on
+      2026-11-01 (OMN-21860): all four still hold. D1 hook_dispatch_claim_pretool.sh
+      sources error-guard.sh at line 38 and exits 2 at line 146 with no
+      `trap - EXIT`, so error-guard.sh line 222 still turns it into exit 0.
+      D2 line 145 still prints {"type":"permissionDenied"}. D3 line 79 is
+      still AGENT_ID="${CLAUDE_AGENT_ID:-session}". D4 dispatch_claim_gate.py
+      has _DEFAULT_TTL = 300 (line 50) and unlinks an expired claim at line
+      261 with no renewal, fencing token or CLAIM_EXPIRED record. OMN-17005
+      is still Backlog.
+    review_by: "2026-11-14"
     restoration:
       kind: "re_register"
       reenable_ticket: "OMN-17005"
@@ -1306,8 +1314,10 @@ disabled_hooks:
       The release half of the same OMN-8928/8929 pair. It is unregistered for
       the same reason and must be restored, or deleted, together with its
       pre-tool sibling — a release path registered without its acquire path
-      would report `not_owner` on every call.
-    review_by: "2026-10-31"
+      would report `not_owner` on every call. Reviewed 2026-11-01 (OMN-21860):
+      the acquire half's defects D1 to D4 still hold, so this half stays
+      disabled with it.
+    review_by: "2026-11-14"
     restoration:
       kind: "re_register"
       reenable_ticket: "OMN-17005"
