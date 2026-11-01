@@ -77,12 +77,12 @@ RULES: dict[str, Rule] = {
         "omnibase_core.validation.checker_enum_governance",
         passes_filenames=False,
     ),
-    # Core's pre-node validator, the module the deleted wrapper ran. ``check-local-paths``
-    # is the hook id the validator-requirements handshake names; core's compute node
-    # (LOCAL_PATHS_COMPUTE_NODE below) is held to the same goldens.
+    # ``check-local-paths`` is the hook id the validator-requirements handshake names. Core's
+    # ``validator_local_paths`` module no longer has a command line, so the hook runs the
+    # compute node (LOCAL_PATHS_COMPUTE_NODE below).
     "local_paths": Rule(
         "check-local-paths",
-        "omnibase_core.validation.validator_local_paths",
+        "omnibase_core.nodes.node_local_paths_check_compute.runtime_local_paths_check",
         text_files_only=True,
     ),
 }
