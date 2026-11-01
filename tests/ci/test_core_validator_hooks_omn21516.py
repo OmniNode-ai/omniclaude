@@ -64,3 +64,23 @@ def test_tracked_files_do_not_reference_local_validator_copies() -> None:
             if name.encode("utf-8") in contents:
                 findings.append(f"{relative}: {name}")
     assert not findings, "\n".join(findings)
+
+
+def test_ai_slop_hook_is_registered_from_core() -> None:
+    config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text("utf-8"))
+    core_hook_ids = [
+        hook["id"]
+        for repo in config["repos"]
+        if repo["repo"] == CORE_REPO
+        for hook in repo["hooks"]
+    ]
+    assert "check-ai-slop" in core_hook_ids
+
+
+def test_skip_count_steps_pass_the_committed_baseline() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8")
+    module = "runtime_skip_count_ratchet_check"
+    invocations = [chunk.split("--junit", 1)[0] for chunk in workflow.split(module)[1:]]
+    assert len(invocations) >= 3
+    for invocation in invocations:
+        assert "--baseline config/skip_count_baseline.yaml" in invocation
