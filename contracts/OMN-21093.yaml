@@ -1,12 +1,12 @@
 schema_version: "1.0.0"
 ticket_id: OMN-21093
-title: "T0.3 adapter node: every acceptance criterion bound to a verified check"
+title: "T0.3 adapter node: omniclaude-owned acceptance criteria bound to verified checks"
 summary: >-
   The adapter, render and install nodes and the onex-claude-code-hook console script
   are merged in omnimarket; client_bindings is read by omniclaude's hook-inventory gate
   and the claude_code_binding_install skill entry is in omnibase_infra. This contract
-  binds each of the 12 acceptance criteria to the check that exercises it on current
-  origin/dev, and adds the omniclaude half of AC7 (git ls-files in omniclaude).
+  binds the omniclaude-owned criteria (AC7 ls-files scan in omniclaude, AC8 inventory gate)
+  to checks that run on the hosted runner; the omnimarket-owned criteria are bound by omnimarket.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -14,30 +14,10 @@ requirements:
   - id: req-omn21093-ac-bindings
     statement: Each T0.3 acceptance criterion has a falsifiable, bound check.
     acceptance:
-      - id: AC1
-        statement: "AC1: the exact rendered command, run with recorded hook JSON piped on stdin (one fixture per hook event the bindings name), publishes one command whose payload is built from that JSON, hosts no handler (the receipt-mode run reports `host_handlers=False`, and no node module is imported in the adapter process), and prints only the hook's output shape (`{result}`, `{deny}`, `{messages}`, `hookSpecificOutput.additionalContext`, or nothing) -- falsifier: a payload not drawn from stdin, a hosted handler, or a `ModelSkillResult` on stdout."
-      - id: AC2
-        statement: "AC2: the rendered failure table for a host whose client-section maximum is `required` maps \"adapter never started\" to `{deny}`, and for `observe` or `selective` to `next(e)`; a change of that maximum changes only the rendered table literal -- falsifier: a required-host render whose missing-executable branch calls `next(e)`."
-      - id: AC3
-        statement: "AC3: the same contract renders a byte-identical module; changing one deadline in the contract changes only that literal in the output -- falsifier: golden diff beyond the literal."
-      - id: AC4
-        statement: "AC4: the rendered module contains no branching other than the verdict-table lookup and the fixed failure table, measured by an allowlist of AST node kinds over the rendered output, and a contract data field containing code is rendered as a string literal -- falsifier: a fixture whose rendered output contains a conditional on request content, or executes a data field."
-      - id: AC5
-        statement: "AC5: the binding passes the adapter nothing but the hook input and the binding name -- falsifier: a rendered argument carrying a mode or any value not drawn from the hook input."
-      - id: AC6
-        statement: "AC6: `claude_code_binding_install` writes the rendered module and records its sha256, and the installed file's sha256 equals the render's -- falsifier: a mismatch, or an installed file differing from a fresh render."
       - id: AC7
         statement: "AC7: no rendered module is tracked in any repository -- falsifier: `git ls-files` in omniclaude or omnimarket lists one."
       - id: AC8
         statement: "AC8: the hook-inventory gate fails when the installed binding registers an event absent from `client_bindings`, and runs in the existing required `hook-inventory-gate` check -- falsifier: the gate exits 0 on that fixture, or the workflow does not call it."
-      - id: AC9
-        statement: "AC9: the PR's `canonical-file-shape` check passes with `.onex_ratchets/canonical_file_shape_baseline.txt` unchanged -- falsifier: a baseline line added or the check red."
-      - id: AC10
-        statement: "AC10: a reply split into chunks is reassembled by content-record id and its sha256 checked against the echoed hash -- falsifier: a fixture reply delivered out of order, or with one chunk missing, returned as anything but `native` or `{deny}`."
-      - id: AC11
-        statement: "AC11: an `additive` row renders a command-hook registration whose command is exactly `onex-claude-code-hook --binding <name>` (v6; v5 named `onex skill`), byte-identical across renders, and the adapter maps `inject` to `hookSpecificOutput.additionalContext` only when the package's sha256 equals the echoed hash, and every other outcome to no output -- falsifier: a rendered registration carrying any other argument, or a hash-mismatch fixture that produces `additionalContext`."
-      - id: AC12
-        statement: "AC12: `claude_code_binding_install` writes additive registrations into the user settings only, renders only rows whose probe rows (P16-P19) the capability report marks supported, and a re-install with a row removed removes its registration -- falsifier: a registration surviving its row's removal, an unsupported row installed, or `git ls-files` listing a rendered registration."
 evidence_requirements:
   - kind: tests
     description: The omniclaude-side checks (AC7 ls-files scan, AC8 inventory gate).
@@ -47,72 +27,6 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
-  - id: dod-omn21093-ac1
-    description: >-
-      The exact rendered command run with recorded hook JSON on stdin publishes one command drawn from that JSON, hosts no handler (no node module imported in the adapter process), and prints only the hook's output shape.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_adapter.py tests/nodes/node_claude_code_hook_adapter_effect/test_compaction_hook_input_omn21099.py -k 'ac1 or recorded or entry_prints' -q"
-        cwd: "${OMNI_HOME}/omnimarket"
-    binds_ac: ["AC1"]
-
-  - id: dod-omn21093-ac2
-    description: >-
-      A required-host render maps never-started to deny and observe or selective to native; a change of the maximum changes only the table literal.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_render.py -k ac2 -q"
-        cwd: "${OMNI_HOME}/omnimarket"
-    binds_ac: ["AC2"]
-
-  - id: dod-omn21093-ac3
-    description: >-
-      The same contract renders a byte-identical module and one deadline change moves only that literal.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_render.py -k ac3 -q"
-        cwd: "${OMNI_HOME}/omnimarket"
-    binds_ac: ["AC3"]
-
-  - id: dod-omn21093-ac4
-    description: >-
-      The rendered module has no branching beyond the verdict-table lookup and the fixed failure table, and a data field carrying code is a string literal.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_render.py tests/nodes/node_claude_code_hook_adapter_effect/test_render_loader_dollar_rule_omn21099.py -k 'ac4 or dollar' -q"
-        cwd: "${OMNI_HOME}/omnimarket"
-    binds_ac: ["AC4"]
-
-  - id: dod-omn21093-ac5
-    description: >-
-      The binding passes the adapter nothing but the hook input and the binding name.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_render.py -k ac5 -q"
-        cwd: "${OMNI_HOME}/omnimarket"
-    binds_ac: ["AC5"]
-
-  - id: dod-omn21093-ac6
-    description: >-
-      The installed file's sha256 equals the render's.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_install.py -k 'ac6' -q"
-        cwd: "${OMNI_HOME}/omnimarket"
-    binds_ac: ["AC6"]
-
   - id: dod-omn21093-ac7-omniclaude-ls-files
     description: >-
       git ls-files in omniclaude lists no rendered module (with a positive control that the scan finds one).
@@ -121,17 +35,6 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -k ac7 -q"
-    binds_ac: ["AC7"]
-
-  - id: dod-omn21093-ac7-omnimarket-ls-files
-    description: >-
-      git ls-files in omnimarket lists no rendered module.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_install.py -k ac7 -q"
-        cwd: "${OMNI_HOME}/omnimarket"
     binds_ac: ["AC7"]
 
   - id: dod-omn21093-ac8
@@ -143,49 +46,6 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q"
     binds_ac: ["AC8"]
-
-  - id: dod-omn21093-ac9
-    description: >-
-      Canonical-file-shape baseline is unchanged by the PR.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: command
-        check_value: "git diff --exit-code origin/dev -- .onex_ratchets/canonical_file_shape_baseline.txt"
-    binds_ac: ["AC9"]
-
-  - id: dod-omn21093-ac10
-    description: >-
-      A chunked reply is reassembled by content-record id with sha256 check; out-of-order, missing chunk or mismatch is never a reply.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_adapter.py -k ac10 -q"
-        cwd: "${OMNI_HOME}/omnimarket"
-    binds_ac: ["AC10"]
-
-  - id: dod-omn21093-ac11
-    description: >-
-      An additive row renders the exact registration command, and inject maps to additionalContext only on a hash match.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_render.py tests/nodes/node_claude_code_hook_adapter_effect/test_adapter.py -k ac11 -q"
-        cwd: "${OMNI_HOME}/omnimarket"
-    binds_ac: ["AC11"]
-
-  - id: dod-omn21093-ac12
-    description: >-
-      Additive registrations go to user settings only, unsupported probe rows are not installed, and removing a row removes its registration.
-    source: manual
-    execution_scope: local_done_gate
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/nodes/node_claude_code_hook_adapter_effect/test_install.py -k ac12 -q"
-        cwd: "${OMNI_HOME}/omnimarket"
-    binds_ac: ["AC12"]
 
   - id: dod-omn21093-deploy-source-validation
     description: >-
