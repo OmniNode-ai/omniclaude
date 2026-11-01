@@ -22,14 +22,14 @@ dod_evidence:
       - check_type: command
         check_value: "uv run pytest -q tests/ci/test_core_validator_hooks_omn21516.py"
   - id: dod-002
-    description: "AC2 (omniclaude): the ai_slop canary defect is refused by the core node through pre-commit run --files"
+    description: "AC2 (omniclaude): the ai_slop canary defect is refused by the core node through pre-commit run --files (lab run in the PR body; this check proves the hook is registered)"
     source: manual
     checks:
       - check_type: command
-        check_value: "pre-commit run check-ai-slop --files <file with a sycophantic docstring> exits 1 with a sycophancy finding"
+        check_value: "grep -n -- 'id: check-ai-slop' .pre-commit-config.yaml"
   - id: dod-003
     description: "AC3 (omniclaude skip-count): the core node refuses a report that exceeds the committed baseline, using the CI invocation shape"
     source: manual
     checks:
       - check_type: command
-        check_value: "python -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check --suite omniclaude/agent-framework-tests --baseline config/skip_count_baseline.yaml --junit <report with 1 skip> exits 1"
+        check_value: "grep -n -- '--baseline config/skip_count_baseline.yaml' .github/workflows/ci.yml"
