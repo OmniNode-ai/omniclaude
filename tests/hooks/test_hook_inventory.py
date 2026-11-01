@@ -626,9 +626,7 @@ def test_the_dispatch_claim_disables_outlive_their_lapsed_review_date() -> None:
         )
 
     lapsed = [
-        f
-        for f in _findings(_REPO_ROOT, lapse_day)
-        if f.code == "DISABLE_REVIEW_LAPSED"
+        f for f in _findings(_REPO_ROOT, lapse_day) if f.code == "DISABLE_REVIEW_LAPSED"
     ]
     assert not lapsed, [f.render() for f in lapsed]
 
