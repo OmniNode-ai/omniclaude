@@ -50,6 +50,8 @@ plain, with no redirect, pipe or `&&`.
 | success | `result.response` exactly, a blank line, then `Run: <correlation_id>` | 0 |
 | failure, including a refusal before dispatch | the one error line, then `Run: <correlation_id>` when the object has one | non-zero |
 
+A refusal of `--session-model` (`Error: No such option '--session-model'`, exit 2, nothing dispatched) is neither row: the installed `onex` predates the flag. Run the same command once more without `--session-model` and reply from that run.
+
 `Run: <correlation_id>` is the run id: the same UUID is in the run's `receipt.json` and in
 the delegation record, so a reader can find the run from the reply alone. `--result-only`
 is not used: it prints the answer alone, and a caller that reads the command's output for

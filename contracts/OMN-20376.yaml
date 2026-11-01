@@ -1,0 +1,45 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-20376"
+title: "The /onex:delegate skill reruns without --session-model when the installed onex refuses the flag"
+summary: >-
+  The published delegate skill passes --session-model, which the newest released
+  onex CLI refuses with exit 2 and nothing dispatched. The skill now names that
+  refusal as neither an answer nor a failure to report and says to rerun the
+  same command once without the flag, so the C30 probe gets a correlation id.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+requirements:
+  - id: req-omn20376-rerun
+    statement: The delegate skill names the --session-model refusal and reruns once without the flag, and a test pins the wording.
+    acceptance:
+      - id: AC1
+        statement: "AC1: prompt.md and SKILL.md name the refusal of --session-model as neither an answer nor a failure to report and say to rerun the same command once without it -- falsifier: grep both documents for the wording"
+      - id: AC2
+        statement: "AC2: the session-model test file pins the refusal wording in both documents -- falsifier: the named test fails when the wording is removed"
+dod_evidence:
+  - id: "dod-skill-names-the-refusal"
+    description: >-
+      prompt.md and SKILL.md name the exact refusal of --session-model and say to
+      rerun the same command once without it.
+    source: "manual"
+    binds_ac: [AC1]
+    checks:
+      - check_type: "command"
+        check_value: "bash -o pipefail -c 'grep -q \"not the answer and not a failure to report\" plugins/onex-delegate/skills/delegate/prompt.md && grep -q \"is neither row\" plugins/onex-delegate/skills/delegate/SKILL.md'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-wording-pinned"
+    description: >-
+      Execute the session-model regression test against both skill documents;
+      copying the test to an older product tree must fail its wording assertions.
+    source: "manual"
+    binds_ac: [AC2]
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_session_model_omn20557.py -k test_the_refusal_is_named_as_neither_an_answer_nor_a_failure -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
