@@ -545,10 +545,11 @@ components:
   kind: skill
   exposure: beta
   owning_package: onex-skills-beta
-  surface_class: pure_skill
+  surface_class: dispatch
   path: plugins/onex/skills/lean_contract_seams/SKILL.md
-  backing_nodes: []
-  rationale: class=pure_skill (bootstrap skill created under OMN-21627, the hand-run form of the contracts-and-seams-first practice); replaced by its node-backed skill on node_contract_seams_orchestrator, OMN-21627.
+  backing_nodes:
+  - node_contract_seams_orchestrator
+  rationale: 'class=dispatch (the node-backed form of the contracts-and-seams-first bootstrap skill, OMN-21627); backing nodes exist: [''node_contract_seams_orchestrator''].'
 - id: lean_experiment_first
   kind: skill
   exposure: beta

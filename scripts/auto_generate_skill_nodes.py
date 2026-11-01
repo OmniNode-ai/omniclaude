@@ -30,7 +30,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.generate_skill_node import is_bootstrap_skill
+from scripts.generate_skill_node import needs_no_local_node
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -48,9 +48,9 @@ def _kebab_to_snake(kebab: str) -> str:
 def find_skills_missing_nodes() -> list[str]:
     """Return kebab-case names of skills that have SKILL.md but no orchestrator node.
 
-    A bootstrap skill (``bootstrap: true`` in its frontmatter) is not listed: the
-    node-home ratchet (OMN-20702) refuses a new node here, so its node is built
-    in omnimarket when its node-backed skill comes online.
+    A bootstrap skill (``bootstrap: true`` in its frontmatter) and a shim whose
+    ``backing_node:`` is an omnimarket node are not listed: the node-home ratchet
+    (OMN-20702) refuses a new node here, so the node is built in omnimarket.
     """
     if not _SKILLS_DIR.exists():
         return []
@@ -61,7 +61,7 @@ def find_skills_missing_nodes() -> list[str]:
             continue
         if not (skill_dir / "SKILL.md").exists():
             continue
-        if is_bootstrap_skill(skill_dir):
+        if needs_no_local_node(skill_dir):
             continue
 
         snake = _kebab_to_snake(skill_dir.name)

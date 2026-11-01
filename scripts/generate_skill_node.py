@@ -130,18 +130,18 @@ def read_skill_frontmatter(skill_dir: Path) -> tuple[str, str]:
     return name, description
 
 
-def is_bootstrap_skill(skill_dir: Path) -> bool:
-    """Return True when the SKILL.md frontmatter declares ``bootstrap: true``.
+def needs_no_local_node(skill_dir: Path) -> bool:
+    """Return True when the frontmatter declares ``bootstrap: true`` or ``backing_node: node_*``.
 
-    A bootstrap skill is the hand-run form of a practice, kept until its
-    node-backed skill comes online. The node-home ratchet (OMN-20702) refuses a
-    new ONEX node directory in this repository, so no node is generated for it.
+    A bootstrap skill is the hand-run form of a practice; its node-backed shim
+    names the omnimarket node (OMN-21627). The node-home ratchet (OMN-20702)
+    refuses a new node directory in this repository, so neither gets one here.
 
     Args:
         skill_dir: Directory containing ``SKILL.md``.
 
     Returns:
-        True only for a literal ``bootstrap: true`` line inside the frontmatter.
+        True only for one of those two lines inside the frontmatter.
     """
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
@@ -152,7 +152,7 @@ def is_bootstrap_skill(skill_dir: Path) -> bool:
     for line in lines[1:]:
         if line.strip() == "---":
             return False
-        if line.strip() == "bootstrap: true":
+        if line.strip().startswith(("bootstrap: true", "backing_node: node_")):
             return True
     return False
 
@@ -457,7 +457,7 @@ def discover_all_skills(repo_root: Path) -> list[str]:
     """Return a sorted list of all kebab-case skill names found in the skills directory.
 
     Skips directories starting with ``_`` (lib/shared helpers) and bootstrap
-    skills, which carry no node here (see ``is_bootstrap_skill``).
+    skills and their omnimarket-backed shims (see ``needs_no_local_node``).
 
     Args:
         repo_root: Absolute path to the repository root.
@@ -471,7 +471,7 @@ def discover_all_skills(repo_root: Path) -> list[str]:
     return sorted(
         d.name
         for d in skills_dir.iterdir()
-        if d.is_dir() and not d.name.startswith("_") and not is_bootstrap_skill(d)
+        if d.is_dir() and not d.name.startswith("_") and not needs_no_local_node(d)
     )
 
 
