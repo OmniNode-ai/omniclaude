@@ -37,6 +37,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -638,12 +639,39 @@ def test_the_moved_dispatch_claim_rows_state_why_their_review_date_moved() -> No
     own record does not say why it outlived its review. The comment names the
     old date, the new one and why neither re-registration nor deletion was
     available, so OMN-17005 stays visibly owed.
+
+    The new date is read out of the comment and compared with what the rows
+    actually carry, rather than hard-coded here. A later review may legitimately
+    move the date again (OMN-21860 moved it from 2026-12-31 to the reviewed
+    2026-11-14), and the property worth pinning is that the comment and the rows
+    never disagree: move a row without amending the comment and this fails.
     """
     text = (_REPO_ROOT / _INVENTORY_REL).read_text(encoding="utf-8")
-    assert (
-        "Review date moved 2026-10-31 -> 2026-12-31 for the two dispatch-claim rows"
-        in text
-    ), "the moved rows carry no comment naming the move"
+    moved = re.search(
+        r"Review date moved 2026-10-31 -> (\d{4}-\d{2}-\d{2}) "
+        r"for the two dispatch-claim rows",
+        text,
+    )
+    assert moved is not None, "the moved rows carry no comment naming the move"
+    stated = date.fromisoformat(moved.group(1))
+
+    inventory = _LIB.load_inventory(_REPO_ROOT / _INVENTORY_REL)
+    carried = {
+        disabled.script: disabled.review_by
+        for disabled in inventory.disabled
+        if disabled.script
+        in {
+            "hook_dispatch_claim_pretool.sh",
+            "hook_dispatch_claim_posttool.sh",
+        }
+    }
+    assert len(carried) == 2, sorted(carried)
+    for script, review_by in sorted(carried.items()):
+        assert review_by == stated, (
+            f"the comment states the rows moved to {stated.isoformat()}, but "
+            f"{script} carries review_by {review_by.isoformat()}"
+        )
+
     assert "OMN-17005 is still in Backlog" in text, (
         "the move's reason does not name OMN-17005 as still open"
     )
