@@ -68,12 +68,12 @@ dod_evidence:
         check_value: "git grep -q -E 'id: handler-di-gate' -- .pre-commit-config.yaml && git grep -q -E 'id: check-no-backward-compat' -- .pre-commit-config.yaml"
         cwd: "."
   - id: dod-omn21539-ac3-baselines-clean
-    description: "No baseline names a file that finding F49 names (the hook config, the two scripts and the three test files of omniclaude#3019), and no baseline body line carries a suppression marker. Fails at the merge base only if a baseline admitted one of them."
+    description: "No baseline names a file that finding F49 names (the hook config, the two scripts and the three test files of omniclaude#3019), and no baseline body line carries a suppression marker. Fails at the merge base, which has neither baseline file."
     source: manual
     binds_ac: [AC3]
     checks:
       - check_type: command
-        check_value: "! grep -n -E '(\\.pre-commit-config\\.yaml|scripts/auto_generate_skill_nodes\\.py|scripts/detect_secrets_guard\\.py|tests/scripts/test_detect_secrets_guard\\.py|tests/unit/scripts/test_auto_generate_skill_nodes\\.py|tests/ci/test_precommit_core_hooks_canary_omn21499\\.py)' .onex/baselines/handler-di-gate.txt .onex/baselines/check-no-backward-compat.yaml .onex/baselines/check-no-backward-compat.yaml"
+        check_value: "test -s .onex/baselines/handler-di-gate.txt && test -s .onex/baselines/check-no-backward-compat.yaml && ! grep -n -E '(\\.pre-commit-config\\.yaml|scripts/auto_generate_skill_nodes\\.py|scripts/detect_secrets_guard\\.py|tests/scripts/test_detect_secrets_guard\\.py|tests/unit/scripts/test_auto_generate_skill_nodes\\.py|tests/ci/test_precommit_core_hooks_canary_omn21499\\.py)' .onex/baselines/handler-di-gate.txt .onex/baselines/check-no-backward-compat.yaml .onex/baselines/check-no-backward-compat.yaml"
         cwd: "."
   - id: dod-omn21539-ac3-baseline-shape
     description: "Each baseline is non-empty, per file, and every entry points at a file that exists; the wiring test holds the F49 and suppression-marker cases. Fails at the merge base, which has none of the baselines."
