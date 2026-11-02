@@ -83,7 +83,7 @@ def test_internal_sibling_pins_allows_the_core_pin_behind_a_newer_dev_tag() -> N
 
 
 def test_core_check_local_paths_hook_pins_at_least_the_floor() -> None:
-    """The release-tagged core hook block runs 0.47.61 or later, where check-local-paths runs core's compute node."""
+    """The core hook block carrying check-local-paths runs 0.47.61 or later, where it runs core's compute node."""
     lines = (
         (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8").splitlines()
     )
@@ -92,5 +92,13 @@ def test_core_check_local_paths_hook_pins_at_least_the_floor() -> None:
         line for line in reversed(lines[:hook_at]) if line.strip().startswith("rev:")
     )
     rev = rev_line.split(":", 1)[1].strip()
-    assert rev.startswith("v"), rev
-    assert Version(rev[1:]) >= FLOOR, rev
+    if rev.startswith("v"):
+        assert Version(rev[1:]) >= FLOOR, rev
+    else:
+        # A dev merge tag at or after the one pyproject reads carries the release.
+        stamp, floor_stamp = (
+            dev_merge_tag_stamp(rev),
+            dev_merge_tag_stamp(_source_tag()),
+        )
+        assert stamp is not None and floor_stamp is not None, rev
+        assert stamp >= floor_stamp, rev

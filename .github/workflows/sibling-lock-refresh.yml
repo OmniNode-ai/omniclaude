@@ -259,7 +259,7 @@ jobs:
       - name: Re-derive the capture-contract mirror at the pinned omnimarket rev
         run: |
           set -euo pipefail
-          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          rev="$(grep -oE 'omnimarket\.git\?(rev|tag)=[^#"]+#[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*#//')"
           [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
           git -C .clones/omnimarket -c advice.detachedHead=false checkout --quiet "$rev"
           uv run python scripts/validation/generate_event_registry.py \

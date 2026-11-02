@@ -34,6 +34,20 @@ repos:
       - id: check-ai-slop
       - id: skip-count-ratchet
 
+  # OMN-21900: every first-party reference is a dev-merge tag, never a sha, and has one
+  # home. The two ids run one entry (runtime_first_party_ref); the ticket's name
+  # check-first-party-ref does not exist. Findings that cannot be removed in the same
+  # change are held in the generated shrink-only per-file baseline; the zero target
+  # is stated in that file. CI twin: the first-party-ref job in .github/workflows/ci.yml,
+  # at a different omnibase_core tag (the validator allows one home per tag literal).
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: dev-20261101184124-fa758b315456
+    hooks:
+      - id: check-internal-sibling-pins
+        args: [--baseline, .onex/baselines/first_party_ref.yaml]
+      - id: check-action-pins
+        args: [--baseline, .onex/baselines/first_party_ref.yaml]
+
   - repo: local
     hooks:
       - id: linear-lane-repo-evidence
@@ -212,7 +226,7 @@ repos:
       # .github/workflows/ci.yml, same omnibase_core tag.
       - id: check-node-home
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: d7ed23f1e89b8b6ce6079d303f8599c661c7f191 # pragma: allowlist secret
+    rev: dev-20261018024445-b6ee996befa1
     hooks:
       # Shape-gate independence (OMN-20298): a shape-gate detector job never waits on
       # the change-control preflight and never reads its result. BLOCKING, zero
@@ -260,7 +274,7 @@ repos:
   # Shared ONEX governance hooks (omnibase_core; moved from onex_change_control
   # under the same hook ids, OMN-20074 OCC retirement S8)
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: v0.47.39
+    rev: dev-20261018024445-b6ee996befa1
     hooks:
       - id: no-hardcoded-topics
         stages: [pre-commit]
@@ -272,7 +286,7 @@ repos:
   # no-bare-feature-flags comes from omnibase_core (omnibase_core#1936, OMN-20920,
   # OCC retirement S8). A separate block keeps the hooks above on v0.47.39.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 9218fe703b08d329f76eecd37fabbbc7b0c2baad  # pragma: allowlist secret
+    rev: dev-20261018024445-b6ee996befa1
     hooks:
       - id: no-bare-feature-flags
         stages: [pre-commit]
@@ -353,8 +367,13 @@ repos:
   # .github/workflows/hardcoded-model-config.yml pins; core d7ed23f1 carries
   # the tightened model guard (OMN-21147) and reports 228 findings in this
   # tree. Move this rev with that workflow once those findings are cleared.
+  # OMN-21900: no dev-merge tag carries the validator source of 70f7ceda (the earliest
+  # tag, dev-20261018024445, is already past the tightened guard and reports 24 new
+  # findings here). Release v0.47.43 carries it byte for byte (same
+  # hardcoded_model_config tree, same hook entry), so the rev is that release and the
+  # first_party_ref baseline holds it until the findings are cleared and it moves to a tag.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: 70f7ceda44af968ccf26264ecd429cfd27503971  # pragma: allowlist secret
+    rev: v0.47.43
     hooks:
       - id: check-hardcoded-model-config-compute
 
@@ -363,7 +382,7 @@ repos:
   # pinned omnibase_core; keep this rev equal to the pin in
   # .github/workflows/url-authority-gate.yml. Suppress: # url-authority-ok: <reason>
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: d720f33cf02aca1886d43811337d80aa1a47720e # pragma: allowlist secret
+    rev: dev-20261018024445-b6ee996befa1
     hooks:
       - id: check-url-authority
         args: [--repo, omniclaude, --repo-root, .]
@@ -381,7 +400,7 @@ repos:
   # markers too, with the same spelling. CI runs these same hook ids with
   # `pre-commit run <id> --all-files` (ci.yml, the arch-* jobs).
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: v0.47.61
+    rev: dev-20261101184124-fa758b315456
     hooks:
       - id: check-no-utcnow
         files: ^src/.*\.py$

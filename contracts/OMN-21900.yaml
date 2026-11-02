@@ -1,0 +1,66 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21900
+title: "Every first-party reference is a dev-merge tag, never a sha: omniclaude consumes the core first_party_ref validator"
+summary: "omniclaude wires check-internal-sibling-pins and check-action-pins from omnibase_core at a dev-merge tag in .pre-commit-config.yaml and a first-party-ref job in ci.yml, converts its pyproject omnimarket and omniintelligence rev pins to dev-merge tags, and holds the findings that cannot be removed in the same change in a generated shrink-only per-file baseline. The sha relock in scripts/relock_git_sources.py skips a tag-pinned source, which the dev-tag train moves."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn21900-omniclaude-wiring"
+    statement: "The validator runs by hook id and in ci.yml at dev-merge tags, pyproject names no first-party rev sha, and a reintroduced sha rev is refused."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: omniclaude consumes the core validator by hook ids from omnibase_core at a dev-merge tag in .pre-commit-config.yaml and in ci.yml, with no first-party rev = sha pin left in pyproject.toml for omnimarket and omniintelligence -- falsifier: uvx pre-commit run check-action-pins --all-files and check-internal-sibling-pins --all-files exit 0 on the PR head, and a canary that puts a sha rev on the core hook repo (and one that puts rev = sha on the omnimarket source) exits non-zero"
+  - id: "req-omn21900-omniclaude-baseline"
+    statement: "Findings that cannot be removed in the same change sit in a generated shrink-only per-file baseline with a zero-target note and no suppression marker."
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: every existing violation that cannot be removed in the same change is held in the shrink-only per-file baseline .onex/baselines/first_party_ref.yaml with no suppression marker, and a canary adding one finding to a baselined file is refused -- falsifier: a canary that adds one extra actions/checkout@v7 to baselined ci.yml exits non-zero with third_party_not_sha, and the unmodified tree exits 0"
+  - id: "req-omn21900-commit-gates"
+    statement: "The commit passes both omnimarket pin gates with no bypass."
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: both commit gates, check-omnimarket-dispatch-drift and check-daemon-venv-skew, pass for the commit itself without a bypass -- falsifier: the commit succeeds with hooks running (no --no-verify) on the lab host, and the lab line records the hook run result"
+evidence_requirements:
+  - kind: tests
+    description: "The wiring, the pyproject pins, the baseline shape, both canaries and the relock skip of a tag pin are tested"
+    command: "uv run pytest tests/ci/test_first_party_ref_wiring_omn21900.py tests/scripts/test_relock_tag_pin_omn21900.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn21900-ac1-wiring"
+    description: "AC1: both hook ids are wired from omnibase_core at a dev-merge tag, ci.yml runs the validator, pyproject names tags, and a canary sha rev is refused"
+    source: "manual"
+    binds_ac: ["AC1"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_first_party_ref_wiring_omn21900.py -q --no-cov -k 'wired or ci_runs or pyproject or reintroduced'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn21900-ac2-baseline"
+    description: "AC2: the baseline is generated with a zero-target note and no suppression marker; the tree passes with it and one more finding in a baselined file is refused"
+    source: "manual"
+    binds_ac: ["AC2"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_first_party_ref_wiring_omn21900.py -q --no-cov -k 'baseline or one_more_finding'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn21900-ac3-commit-gates"
+    description: "AC3: the lock pins omnimarket by the dev-merge tag the commit gates resolve (the gate resolves the tag, not the clone HEAD), and the lock readers accept that spelling. Hosted: the lab-host run of the hook cannot be controlled at the merge base by this job."
+    source: "manual"
+    execution_scope: "hosted_and_local"
+    binds_ac: ["AC3"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/ci/test_omnimarket_pin_resolver_omn21900.py -q --no-cov -o addopts=''"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn21900-deploy-checkout-test"
+    description: "Hosted-runner run of the wiring and relock tests at the checkout; they need no container daemon or private runtime (the wiring test reads git over https for the core tag)"
+    source: "manual"
+    execution_scope: "hosted_and_local"
+    binds_ac: ["AC1", "AC2"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/ci/test_first_party_ref_wiring_omn21900.py tests/scripts/test_relock_tag_pin_omn21900.py -q --no-cov -o addopts=''"
+        cwd: "${OMNI_HOME}/omniclaude"
