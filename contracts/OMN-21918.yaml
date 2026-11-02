@@ -1,0 +1,59 @@
+schema_version: 1.0.0
+ticket_id: OMN-21918
+title: Quality Gate red on the omnibase_core bump pull requests is traced to its upstream jobs, and the omniclaude-owned cause is fixed
+summary: Quality Gate in ci.yml is a result-reading aggregator. On the omnibase_core bump pull requests it is red because the internal-sibling-pins upstream is red, Tests Gate is red because its test upstream is skipped behind Quality Gate, and the product-readiness reason-graph is red because the unit slice fails. This change fixes the slice failure that belongs to omniclaude (the validator parity suite ran a core module whose argparse main core removed, so the local-paths rule checked nothing). The internal-sibling-pins cause and the pre-commit rev follow-up belong to the bump pull request. It performs no deploy, container restart, image build or runtime mutation.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+requirements:
+  - id: req-quality-gate-red-upstreams-named
+    statement: The jobs that turn Quality Gate and Tests Gate red are upstream jobs of those aggregators, and the test job cannot run behind a red Quality Gate.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: internal-sibling-pins is a needed upstream of the quality-gate job, and the test job runs only when quality-gate succeeded, so a red internal-sibling-pins turns Quality Gate red and leaves Tests Gate red with test skipped -- falsifier: the command below exits 1 when internal-sibling-pins leaves quality-gate.needs or the test job drops its quality-gate condition'
+  - id: req-red-causes-classified
+    statement: The product-readiness reason-graph red on a core bump is caused by the unit slice, and the local-paths rule of the validator parity suite is one defect inside omniclaude that the slice reports.
+    acceptance:
+      - id: AC2
+        statement: 'AC2: the parity suite runs the local-paths rule through core''s compute node runtime, so the rule reports its findings under a core release that removed the validator module''s main -- falsifier: test_local_paths_rule_runs_core_compute_node fails when the rule names omnibase_core.validation.validator_local_paths'
+  - id: req-parity-rule-modules-run-code
+    statement: Every module the parity suite runs with python -m reaches code.
+    acceptance:
+      - id: AC3
+        statement: 'AC3: every rule of the parity suite names a module that carries a __main__ guard, and the suite fails on a rule whose module has none, where python -m exits 0 having checked nothing -- falsifier: test_every_rule_module_is_runnable_as_main fails for the local_paths rule at origin/dev with omnibase-core 0.47.61 installed'
+evidence_requirements:
+  - kind: tests
+    command: python3 -c "import yaml; w = yaml.safe_load(open('.github/workflows/ci.yml')); j = w['jobs']; assert 'internal-sibling-pins' in j['quality-gate']['needs']; assert \"needs.quality-gate.result == 'success'\" in j['test']['if']"
+    description: Reads the workflow jobs and refuses when the dependency that makes internal-sibling-pins turn Quality Gate red, or the test job's quality-gate condition, is gone.
+  - kind: tests
+    command: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q --no-cov -k "local_paths_rule_runs_core_compute_node or runnable_as_main or local_paths"
+    description: Runs the local-paths rule through core's compute node and refuses a rule whose module has no __main__ guard.
+dod_evidence:
+  - id: dod-quality-gate-upstream-dependency
+    source: manual
+    binds_ac:
+      - AC1
+    description: Reads the workflow jobs and refuses when internal-sibling-pins is not a needed upstream of quality-gate, or the test job does not require quality-gate to succeed.
+    checks:
+      - check_type: command
+        check_value: python3 -c "import yaml; w = yaml.safe_load(open('.github/workflows/ci.yml')); j = w['jobs']; assert 'internal-sibling-pins' in j['quality-gate']['needs']; assert \"needs.quality-gate.result == 'success'\" in j['test']['if']"
+  - id: dod-local-paths-rule-compute-node
+    source: manual
+    binds_ac:
+      - AC2
+    description: The local-paths rule names core's compute node and reports every golden finding.
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q --no-cov -k "local_paths_rule_runs_core_compute_node or local_paths"
+  - id: dod-parity-rule-modules-have-main
+    source: manual
+    binds_ac:
+      - AC3
+    description: Every parity rule module carries a __main__ guard, so python -m reaches code.
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q --no-cov -k runnable_as_main

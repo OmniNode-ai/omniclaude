@@ -16,6 +16,7 @@ loses a finding the scripts reported fails here.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import tempfile
@@ -50,6 +51,10 @@ class Rule(NamedTuple):
     text_files_only: bool = False
 
 
+LOCAL_PATHS_COMPUTE_NODE = (
+    "omnibase_core.nodes.node_local_paths_check_compute.runtime_local_paths_check"
+)
+
 RULES: dict[str, Rule] = {
     "no_utcnow": Rule(
         "check-no-utcnow",
@@ -77,19 +82,16 @@ RULES: dict[str, Rule] = {
         "omnibase_core.validation.checker_enum_governance",
         passes_filenames=False,
     ),
-    # Core's pre-node validator, the module the deleted wrapper ran. ``check-local-paths``
-    # is the hook id the validator-requirements handshake names; core's compute node
-    # (LOCAL_PATHS_COMPUTE_NODE below) is held to the same goldens.
+    # Core's compute node, held to the goldens the deleted wrapper produced. ``check-local-paths``
+    # is the hook id the validator-requirements handshake names. The pre-node module
+    # ``omnibase_core.validation.validator_local_paths`` is not run: core removed its argparse
+    # ``main``, so ``python -m`` on it exits 0 having checked nothing (OMN-21918).
     "local_paths": Rule(
         "check-local-paths",
-        "omnibase_core.validation.validator_local_paths",
+        LOCAL_PATHS_COMPUTE_NODE,
         text_files_only=True,
     ),
 }
-
-LOCAL_PATHS_COMPUTE_NODE = (
-    "omnibase_core.nodes.node_local_paths_check_compute.runtime_local_paths_check"
-)
 
 # The scripts this suite's nodes replaced. None may be invoked again (AC1).
 REPLACED_SCRIPTS: tuple[str, ...] = (
@@ -214,16 +216,28 @@ def test_real_tree_is_clean(rule_name: str) -> None:
     assert verdict == Verdict(0, ()), f"{rule.hook_id} flags the tree: {verdict}"
 
 
-@pytest.mark.parametrize("case_name", sorted(CORPUS["local_paths"]))
-def test_local_paths_compute_node_matches_golden(
-    case_name: str, tmp_path: Path
-) -> None:
-    """Core's compute node gives the deleted wrapper's verdict too, so the hook can move to it."""
-    files = dict(CORPUS["local_paths"][case_name])
-    materialise(tmp_path, files)
-    rule = RULES["local_paths"]._replace(node_module=LOCAL_PATHS_COMPUTE_NODE)
+def test_local_paths_rule_runs_core_compute_node() -> None:
+    """The local-paths rule runs core's node runtime, the module core's usage names (OMN-21918).
 
-    assert _node_verdict(tmp_path, rule, files) == load_golden("local_paths")[case_name]
+    Core's ``validator_local_paths`` lost its argparse ``main`` when its checks gained a node
+    runtime, so ``python -m`` on it exits 0 having checked nothing, and every case that
+    expects a finding fails against a core release that carries the change.
+    """
+    assert RULES["local_paths"].node_module == LOCAL_PATHS_COMPUTE_NODE
+
+
+@pytest.mark.parametrize("rule_name", sorted(RULES))
+def test_every_rule_module_is_runnable_as_main(rule_name: str) -> None:
+    """``python -m <module>`` must reach code: a module with no ``__main__`` guard passes vacuously."""
+    spec = importlib.util.find_spec(RULES[rule_name].node_module)
+
+    assert spec is not None
+    assert spec.origin is not None
+    source = Path(spec.origin).read_text(encoding="utf-8")
+    assert any(
+        guard in source
+        for guard in ('__name__ == "__main__"', "__name__ == '__main__'")
+    ), f"{RULES[rule_name].node_module} has no __main__ guard; python -m runs nothing"
 
 
 def test_core_node_hooks_pin_the_locked_core_version() -> None:
