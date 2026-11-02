@@ -73,7 +73,7 @@ def compact_stamp(request: ModelCompactStampRequest) -> ModelCompactStampResult:
     if not isinstance(pre, int) or isinstance(pre, bool) or pre < 1:
         return nothing
     return ModelCompactStampResult(
-        context_tokens=pre, model=_transcript_model(Path(request.transcript_path))
+        pre_tokens=pre, model=_transcript_model(Path(request.transcript_path))
     )
 
 

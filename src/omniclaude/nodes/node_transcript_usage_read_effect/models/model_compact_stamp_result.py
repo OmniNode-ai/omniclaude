@@ -15,9 +15,12 @@ class ModelCompactStampResult(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    context_tokens: int | None = Field(default=None, ge=1)
+    pre_tokens: int | None = Field(default=None, ge=1)
     model: str | None = None
 
     def stamp(self) -> dict[str, int | str]:
         """The payload keys to set: only those the transcript gave."""
-        return self.model_dump(exclude_none=True)
+        keys = {"pre_tokens": "context_tokens"}
+        return {
+            keys.get(k, k): v for k, v in self.model_dump(exclude_none=True).items()
+        }
