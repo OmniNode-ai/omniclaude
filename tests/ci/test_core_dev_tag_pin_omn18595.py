@@ -80,3 +80,15 @@ def test_internal_sibling_pins_allows_the_core_pin_behind_a_newer_dev_tag() -> N
     )
     verdicts = {f.distribution: f.verdict for f in result.findings}
     assert verdicts["omnibase-core"] is EnumSiblingPinVerdict.ALLOWED, verdicts
+
+
+def test_core_check_local_paths_hook_pins_at_least_the_floor() -> None:
+    """The release-tagged core hook block runs 0.47.61 or later, where check-local-paths runs core's compute node."""
+    lines = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8").splitlines()
+    hook_at = next(i for i, line in enumerate(lines) if "id: check-local-paths" in line)
+    rev_line = next(
+        line for line in reversed(lines[:hook_at]) if line.strip().startswith("rev:")
+    )
+    rev = rev_line.split(":", 1)[1].strip()
+    assert rev.startswith("v"), rev
+    assert Version(rev[1:]) >= FLOOR, rev

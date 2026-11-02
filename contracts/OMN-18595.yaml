@@ -45,10 +45,10 @@ dod_evidence:
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC2"]
   - id: "dod-omn18595-omniclaude-local-paths-node"
-    description: "AC3: the local-paths rule runs core's compute node and the core hooks pin v0.47.61, the locked core version"
+    description: "AC3: the local-paths rule runs core's compute node and the core hooks pin v0.47.61 or later, the locked core version (the floor test fails at origin/dev 416d627b, which pins v0.47.57)"
     source: "manual"
     checks:
       - check_type: "test_passes"
-        check_value: "uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py -q --no-cov -k 'local_paths and not real_tree or pin_the_locked_core_version'"
+        check_value: "uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py tests/scripts/validator_parity_omn20566/test_node_parity.py -q --no-cov -k 'local_paths and not real_tree or pin_the_locked_core_version or hook_pins_at_least_the_floor'"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC3"]
