@@ -80,3 +80,23 @@ def test_internal_sibling_pins_allows_the_core_pin_behind_a_newer_dev_tag() -> N
     )
     verdicts = {f.distribution: f.verdict for f in result.findings}
     assert verdicts["omnibase-core"] is EnumSiblingPinVerdict.ALLOWED, verdicts
+
+
+def test_local_paths_rule_runs_core_compute_node_at_the_new_core_hooks() -> None:
+    """The core hooks pin 0.47.61 or later and local-paths runs the compute node (AC3).
+
+    Under core 0.47.61 validator_local_paths has no command line, so a rule that
+    still runs it reports nothing; the parity suite must run the node the hook runs.
+    """
+    from tests.scripts.validator_parity_omn20566.harness import core_hook_revs
+    from tests.scripts.validator_parity_omn20566.test_node_parity import (
+        LOCAL_PATHS_COMPUTE_NODE,
+        RULES,
+    )
+
+    assert RULES["local_paths"].node_module == LOCAL_PATHS_COMPUTE_NODE
+    hook_ids = {rule.hook_id for rule in RULES.values()}
+    revs = core_hook_revs(hook_ids)
+    assert set(revs) == hook_ids, revs
+    for hook_id, rev in revs.items():
+        assert Version(rev.removeprefix("v")) >= FLOOR, (hook_id, rev)
