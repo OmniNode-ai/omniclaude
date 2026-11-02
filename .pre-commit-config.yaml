@@ -320,7 +320,7 @@ repos:
   # Not wired, with the reason in contracts/OMN-21539.yaml: check-no-dict-any (its
   # baseline would add suppression comments the shape ratchet refuses),
   # check-no-io-outside-effects and check-hardcoded-topic-compute (no baseline option
-  # at this tag, findings in the tree). check-no-raw-sqlite3 is wired in the v0.47.57
+  # at this tag, findings in the tree). check-no-raw-sqlite3 is wired in the v0.47.61
   # block below.
   - repo: https://github.com/OmniNode-ai/omnibase_core
     rev: dev-20261101023710-a66b5ff79cc0
@@ -395,7 +395,7 @@ repos:
   # markers too, with the same spelling. CI runs these same hook ids with
   # `pre-commit run <id> --all-files` (ci.yml, the arch-* jobs).
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261026082311-9b083ad32228
+    rev: dev-20261101184124-fa758b315456
     hooks:
       - id: check-no-utcnow
         files: ^src/.*\.py$

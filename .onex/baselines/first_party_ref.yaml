@@ -1112,9 +1112,6 @@ entries:
   text: 'rev: dev-20261101103701-2fc5e461fca7'
 - path: pyproject.toml
   rule: missing_source
-  text: 'missing_source: omnibase-core has no git source'
-- path: pyproject.toml
-  rule: missing_source
   text: 'missing_source: omnibase-infra has no git source'
 - path: pyproject.toml
   rule: missing_source

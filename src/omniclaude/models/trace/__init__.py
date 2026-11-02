@@ -1,24 +1,17 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Agent Trace and PR Debugging System — trace package.
+"""Agent Trace and PR Debugging System — data models (TRACE-02).
 
-This package provides schema definitions and ORM-compatible table definitions
-for the Agent Trace system (TRACE-02).
-
-NOTE: Migration freeze is active (OMN-2055 / .migration_freeze).
-The Alembic migration for these tables must be applied once the freeze lifts.
-See src/omniclaude/trace/db_schema.py for the complete DDL.
-
-This package also implements the core data models, persistence, and analysis
-infrastructure for tracking agent execution as ChangeFrames.
+ChangeFrame, PREnvelope, FailureSignature and FixTransition models, the
+ORM-compatible row definitions and the intelligence-integration payloads.
 
 NOTE: Migration freeze is active (OMN-2055 / .migration_freeze).
 The Alembic migration for these tables must be applied once the freeze lifts.
-See src/omniclaude/trace/db_schema.py for the complete DDL.
+See src/omniclaude/models/trace/db_schema.py for the complete DDL.
 """
 
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     AssociationMethod,
     ChangeFrame,
     FailureType,
@@ -32,15 +25,15 @@ from omniclaude.trace.change_frame import (
     ModelWorkspaceRef,
     OutcomeStatus,
 )
-from omniclaude.trace.failure_signature import (
+from omniclaude.models.trace.failure_signature import (
     FailureSignature,
     compute_failure_signature,
 )
-from omniclaude.trace.fix_transition import (
+from omniclaude.models.trace.fix_transition import (
     FixTransition,
     OpenFailure,
 )
-from omniclaude.trace.intelligence_integration import (
+from omniclaude.models.trace.intelligence_integration import (
     ContextItem,
     FixTransitionEvent,
     FixTransitionProcessingResult,
@@ -52,7 +45,7 @@ from omniclaude.trace.intelligence_integration import (
     score_failure_signature_match,
     score_file_touched_match,
 )
-from omniclaude.trace.pr_envelope import (
+from omniclaude.models.trace.pr_envelope import (
     AssociationResult,
     ModelCIArtifact,
     ModelPRBodyVersion,
@@ -60,11 +53,6 @@ from omniclaude.trace.pr_envelope import (
     ModelPRTimeline,
     PRDescriptionDelta,
     PREnvelope,
-)
-from omniclaude.trace.replay_engine import (
-    ReplayEngine,
-    ReplayMode,
-    ReplayResult,
 )
 
 __all__ = [
@@ -89,10 +77,6 @@ __all__ = [
     "ModelPRTimeline",
     "PRDescriptionDelta",
     "PREnvelope",
-    # replay_engine exports
-    "ReplayEngine",
-    "ReplayMode",
-    "ReplayResult",
     # failure_signature exports
     "FailureSignature",
     "compute_failure_signature",

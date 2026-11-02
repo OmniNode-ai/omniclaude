@@ -27,7 +27,7 @@ from uuid import uuid4
 import pytest
 
 from omniclaude.hooks.topics import TopicBase, build_topic
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     ModelDelta,
@@ -38,7 +38,7 @@ from omniclaude.trace.change_frame import (
     ModelToolEvent,
     ModelWorkspaceRef,
 )
-from omniclaude.trace.fix_transition import (
+from omniclaude.models.trace.fix_transition import (
     FixTransition,
     OpenFailure,
     compute_fix_diff_hash,
@@ -77,7 +77,7 @@ DIFF_PATCH_FIX = """\
 
 
 def make_check_result(exit_code: int = 0) -> ModelCheckResult:
-    from omniclaude.trace.frame_assembler import sha256_of
+    from omniclaude.handlers.trace.frame_assembler import sha256_of
 
     return ModelCheckResult(
         command="ruff check src/",
@@ -95,7 +95,7 @@ def make_change_frame(
     files_changed: list[str] | None = None,
     failure_sig_id: str | None = None,
 ) -> ChangeFrame:
-    from omniclaude.trace.frame_assembler import sha256_of
+    from omniclaude.handlers.trace.frame_assembler import sha256_of
 
     if files_changed is None:
         files_changed = ["src/router.py"]
