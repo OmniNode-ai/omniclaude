@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for omniclaude.trace.db_schema.
+"""Unit tests for omniclaude.models.trace.db_schema.
 
 Tests verify:
 - DDL strings contain all required tables and indexes
@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from omniclaude.trace.db_schema import (
+from omniclaude.models.trace.db_schema import (
     ALL_TRACE_TABLES,
     TABLE_CHANGE_FRAMES,
     TABLE_FAILURE_SIGNATURES,

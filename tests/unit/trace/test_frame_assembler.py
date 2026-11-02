@@ -25,7 +25,7 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
-from omniclaude.trace.change_frame import FailureType
+from omniclaude.models.trace.change_frame import FailureType
 from omniclaude.trace.frame_assembler import (
     CheckSpec,
     SessionContext,
@@ -316,7 +316,7 @@ class TestAssembleChangeFrame:
 
         # Override run_checks to return a passing result
         with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-            from omniclaude.trace.change_frame import ModelCheckResult
+            from omniclaude.models.trace.change_frame import ModelCheckResult
 
             mock_checks.return_value = [
                 ModelCheckResult(
@@ -347,7 +347,7 @@ class TestAssembleChangeFrame:
         self._mock_subprocess_run(mock_run)
 
         with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-            from omniclaude.trace.change_frame import ModelCheckResult
+            from omniclaude.models.trace.change_frame import ModelCheckResult
 
             mock_checks.return_value = [
                 ModelCheckResult(
@@ -376,7 +376,7 @@ class TestAssembleChangeFrame:
         self._mock_subprocess_run(mock_run)
 
         with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-            from omniclaude.trace.change_frame import ModelCheckResult
+            from omniclaude.models.trace.change_frame import ModelCheckResult
 
             mock_checks.return_value = [
                 ModelCheckResult(
@@ -410,7 +410,7 @@ class TestAssembleChangeFrame:
         self._mock_subprocess_run(mock_run)
 
         with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-            from omniclaude.trace.change_frame import ModelCheckResult
+            from omniclaude.models.trace.change_frame import ModelCheckResult
 
             mock_checks.return_value = [
                 ModelCheckResult(
@@ -439,7 +439,7 @@ class TestAssembleChangeFrame:
         ts = "2026-02-19T14:22:31Z"
 
         with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-            from omniclaude.trace.change_frame import ModelCheckResult
+            from omniclaude.models.trace.change_frame import ModelCheckResult
 
             mock_checks.return_value = [
                 ModelCheckResult(
@@ -486,7 +486,7 @@ class TestPersistFrameToJsonl:
             mock_run.side_effect = side_effect
 
             with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-                from omniclaude.trace.change_frame import ModelCheckResult
+                from omniclaude.models.trace.change_frame import ModelCheckResult
 
                 mock_checks.return_value = [
                     ModelCheckResult(
@@ -528,7 +528,7 @@ class TestPersistFrameToJsonl:
 
     def test_appends_multiple_frames(self, tmp_path: Path) -> None:
         """Multiple frames should append as separate JSONL lines."""
-        from omniclaude.trace.change_frame import (
+        from omniclaude.models.trace.change_frame import (
             ChangeFrame,
             ModelCheckResult,
             ModelDelta,
@@ -594,7 +594,7 @@ class TestPersistFrameToJsonl:
 
 import pytest
 
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     ModelDelta,

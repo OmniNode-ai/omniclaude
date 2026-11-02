@@ -38,7 +38,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from omniclaude.trace.fix_transition import FIX_TRANSITION_TOPIC, FixTransition
+from omniclaude.models.trace.fix_transition import FIX_TRANSITION_TOPIC, FixTransition
 
 # ---------------------------------------------------------------------------
 # Constants

@@ -24,7 +24,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from omniclaude.trace.change_frame import FailureType
+from omniclaude.models.trace.change_frame import FailureType
 
 
 class FailureSignature(BaseModel):
