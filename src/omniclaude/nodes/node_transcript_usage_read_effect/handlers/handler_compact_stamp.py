@@ -18,9 +18,8 @@ node's own models only.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
 
 from omniclaude.nodes.node_transcript_usage_read_effect.models import (
     ModelCompactStampRequest,
@@ -85,9 +84,9 @@ class HandlerCompactStamp:
 
 
 def stamp(
-    payload: dict[str, Any],
-    items_for_compact: Callable[[dict[str, Any]], list[dict[str, Any]]],
-    hook_input: dict[str, Any],
+    payload: dict[str, object],
+    items_for_compact: Callable[..., list[dict[str, object]]],
+    hook_input: Mapping[str, object],
 ) -> None:
     """The hook's call: set the keys the transcript gives on a PostCompact payload.
 
