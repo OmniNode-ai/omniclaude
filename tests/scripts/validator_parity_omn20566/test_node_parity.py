@@ -42,6 +42,11 @@ from tests.scripts.validator_parity_omn20566.harness import (
 pytestmark = pytest.mark.unit
 
 
+LOCAL_PATHS_COMPUTE_NODE = (
+    "omnibase_core.nodes.node_local_paths_check_compute.runtime_local_paths_check"
+)
+
+
 class Rule(NamedTuple):
     hook_id: str
     node_module: str
@@ -77,19 +82,16 @@ RULES: dict[str, Rule] = {
         "omnibase_core.validation.checker_enum_governance",
         passes_filenames=False,
     ),
-    # Core's pre-node validator, the module the deleted wrapper ran. ``check-local-paths``
-    # is the hook id the validator-requirements handshake names; core's compute node
-    # (LOCAL_PATHS_COMPUTE_NODE below) is held to the same goldens.
+    # ``check-local-paths`` is the hook id the validator-requirements handshake names.
+    # From omnibase-core 0.47.61 the hook's entry is core's compute node, and
+    # validator_local_paths no longer has a command line (OMN-18595), so the rule runs
+    # the module the hook runs.
     "local_paths": Rule(
         "check-local-paths",
-        "omnibase_core.validation.validator_local_paths",
+        LOCAL_PATHS_COMPUTE_NODE,
         text_files_only=True,
     ),
 }
-
-LOCAL_PATHS_COMPUTE_NODE = (
-    "omnibase_core.nodes.node_local_paths_check_compute.runtime_local_paths_check"
-)
 
 # The scripts this suite's nodes replaced. None may be invoked again (AC1).
 REPLACED_SCRIPTS: tuple[str, ...] = (
