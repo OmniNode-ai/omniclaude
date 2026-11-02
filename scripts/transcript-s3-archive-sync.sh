@@ -24,11 +24,47 @@
 set -euo pipefail
 
 OMNI_HOME="${OMNI_HOME:?OMNI_HOME must be set to the registry root}"
-INFRA_SYNC_SCRIPT="${OMNI_HOME}/omninode_infra/scripts/archive_claude_sessions.sh"
-[[ -x "${INFRA_SYNC_SCRIPT}" ]] || {
-  echo "REFUSED: sync script not found or not executable: ${INFRA_SYNC_SCRIPT}" >&2
+
+# Resolve the omninode_infra clone by DISCOVERY, like the bucket and the KMS key
+# below, instead of assuming it is a sibling of the registry root.
+#
+# WHY (OMN-17427, measured 2026-11-02): this line used to hardcode
+# "${OMNI_HOME}/omninode_infra/scripts/archive_claude_sessions.sh". On the operator
+# Mac the clone lives at ~/OmniNode/repos/omninode_infra while OMNI_HOME is
+# ~/code/omni, so the path never resolved and the agent exited 1 on every run. The
+# launchd job was installed and loaded, which made it look healthy, while the archive
+# took nothing: the bucket's newest object under projects/ was 2026-09-25T21:16:55Z,
+# 38 days stale, and 186 local session files (879 MB) on that host had never been
+# uploaded. A per-host path is not config to copy by hand (kb#1571), so the
+# resolution order is declared here and every candidate is named in the refusal.
+INFRA_SYNC_REL="scripts/archive_claude_sessions.sh"
+INFRA_SYNC_CANDIDATES=()
+# 1. An explicit override wins, for a host whose clone is somewhere else again.
+[[ -n "${OMNINODE_INFRA_PATH:-}" ]] &&
+  INFRA_SYNC_CANDIDATES+=("${OMNINODE_INFRA_PATH%/}/${INFRA_SYNC_REL}")
+# 2. The registry-root sibling, which is the layout on the lab hosts.
+INFRA_SYNC_CANDIDATES+=("${OMNI_HOME}/omninode_infra/${INFRA_SYNC_REL}")
+# 3. The repos/ root beside the config tree, the layout on the operator Mac.
+INFRA_SYNC_CANDIDATES+=("${HOME}/OmniNode/repos/omninode_infra/${INFRA_SYNC_REL}")
+# 4. The parent of the registry root, where the sibling-clone convention puts it.
+INFRA_SYNC_CANDIDATES+=("$(dirname "${OMNI_HOME}")/omninode_infra/${INFRA_SYNC_REL}")
+
+INFRA_SYNC_SCRIPT=""
+for candidate in "${INFRA_SYNC_CANDIDATES[@]}"; do
+  if [[ -x "${candidate}" ]]; then
+    INFRA_SYNC_SCRIPT="${candidate}"
+    break
+  fi
+done
+[[ -n "${INFRA_SYNC_SCRIPT}" ]] || {
+  echo "REFUSED: sync script not found or not executable at any known omninode_infra clone." >&2
+  echo "  Set OMNINODE_INFRA_PATH to the clone root. Tried, in order:" >&2
+  for candidate in "${INFRA_SYNC_CANDIDATES[@]}"; do
+    echo "    ${candidate}" >&2
+  done
   exit 1
 }
+echo "infra sync script: ${INFRA_SYNC_SCRIPT}"
 
 export AWS_PROFILE="${AWS_PROFILE:-default}"
 
