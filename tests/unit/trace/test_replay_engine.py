@@ -26,7 +26,7 @@ from uuid import uuid4
 import pytest
 
 from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     ModelDelta,
@@ -75,7 +75,7 @@ def make_check_result(
     command: str = "ruff check src/",
     env_hash: str = "abc123",
 ) -> ModelCheckResult:
-    from omniclaude.trace.frame_assembler import sha256_of
+    from omniclaude.handlers.trace.frame_assembler import sha256_of
 
     return ModelCheckResult(
         command=command,
@@ -90,7 +90,7 @@ def make_change_frame(
     outcome_status: str = "pass",
     check_results: list[ModelCheckResult] | None = None,
 ) -> ChangeFrame:
-    from omniclaude.trace.frame_assembler import sha256_of
+    from omniclaude.handlers.trace.frame_assembler import sha256_of
 
     if check_results is None:
         check_results = [make_check_result(exit_code=0)]
@@ -505,7 +505,7 @@ class TestReplayEngine:
 
     def test_unknown_commit_skips_checkout(self) -> None:
         """Frame with base_commit='unknown' skips checkout step."""
-        from omniclaude.trace.frame_assembler import sha256_of
+        from omniclaude.handlers.trace.frame_assembler import sha256_of
 
         frame = ChangeFrame(
             frame_id=uuid4(),

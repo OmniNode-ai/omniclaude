@@ -30,7 +30,7 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict
 
 from omniclaude.hooks.topics import TopicBase
-from omniclaude.trace.change_frame import ChangeFrame
+from omniclaude.models.trace.change_frame import ChangeFrame
 
 # ---------------------------------------------------------------------------
 # FixTransition model

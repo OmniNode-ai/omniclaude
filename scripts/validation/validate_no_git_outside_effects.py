@@ -46,7 +46,7 @@ def is_node_module(path: Path) -> bool:
     """Return True if the file is inside a nodes/ directory (i.e., an ONEX node module).
 
     The git/gh check only applies to ONEX nodes. Infrastructure modules like
-    src/omniclaude/trace/ are allowed to call git for their intrinsic purposes.
+    src/omniclaude/handlers/trace/ are allowed to call git for their intrinsic purposes.
     """
     return "nodes" in path.parts
 
