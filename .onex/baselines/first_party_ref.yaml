@@ -1,0 +1,1121 @@
+# Shrink-only baseline for the first_party_ref hook (OMN-21501).
+# One entry per tolerated finding: file path, rule id and the normalized offending
+# source text (never a line number). Entries are counted: two identical findings in
+# one file need two identical entries.
+#
+# RULE: entries only leave. A finding not listed here fails. An entry whose finding
+# is gone fails until it is removed. --write-baseline creates this file when absent
+# and afterwards only shrinks it; it refuses, with a nonzero exit, any write that
+# would add an entry.
+# Zero target: first_party_ref is blocking with max_violations 0 and no suppressions.
+# This file only holds the findings that were not removable when the hook was wired;
+# it is generated, it only shrinks, and it carries no suppression marker, allowlist or
+# exception entry.
+---
+schema_version: 1
+hook: first_party_ref
+entries:
+- path: .github/workflows/advisory-job-gate-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/advisory-job-gate-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/create-github-app-token@v3'
+- path: .github/workflows/advisory-job-gate-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/auto-merge.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/auto-merge.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ban-hardcoded-runner-ip.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/branch-claim-check-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/branch-claim-check-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/create-github-app-token@v3'
+- path: .github/workflows/branch-claim-check-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/build-and-push-migrate-image.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/build-and-push-migrate-image.yml
+  rule: third_party_not_sha
+  text: '- uses: aws-actions/amazon-ecr-login@v2'
+- path: .github/workflows/build-and-push-migrate-image.yml
+  rule: third_party_not_sha
+  text: '- uses: aws-actions/configure-aws-credentials@v6'
+- path: .github/workflows/canonical-inference-gate.yml
+  rule: cross_repo_ref_not_dev_tag
+  text: uv run --with "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@940d2f2ab44d2f455a607926674b90ecbc9b74ba" \
+- path: .github/workflows/canonical-inference-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/canonical-inference-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: '- uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/download-artifact@v8'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-node@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-node@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-node@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-node@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: codecov/codecov-action@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: docker/build-push-action@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: docker/build-push-action@v7'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: docker/login-action@v4'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: docker/metadata-action@v6'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: docker/setup-buildx-action@v4'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: github/codeql-action/upload-sarif@v4.39.0'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: lycheeverse/lychee-action@v2'
+- path: .github/workflows/ci.yml
+  rule: third_party_not_sha
+  text: 'uses: tj-actions/changed-files@v47'
+- path: .github/workflows/closes-ref-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/concurrency-primitive-guard.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/concurrency-primitive-guard.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/contract-validation.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/contract-validation.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/dep-provenance-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/deploy-gate-reusable.yml
+  rule: cross_repo_ref_not_dev_tag
+  text: 'ref: ${{ steps.pin.outputs.sha }}'
+- path: .github/workflows/deploy-gate-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/deploy-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/doctrine-claim-gate-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/doctrine-claim-gate-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/doctrine-claim-gate-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/git-env-scrub.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/setup-python@v7'
+- path: .github/workflows/git-env-scrub.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/hardcoded-model-config-reusable.yml
+  rule: cross_repo_ref_not_dev_tag
+  text: uvx --from "git+https://github.com/OmniNode-ai/omnibase_core@${CORE_REF}" \
+- path: .github/workflows/hardcoded-model-config-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/hook-edge-lane-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/hook-edge-lane-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/hook-inventory-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/hook-inventory-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/hostile-reviewer.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/hostile-reviewer.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/github-script@v9'
+- path: .github/workflows/hostile-reviewer.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/hostile-reviewer.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/kb-doc-gate-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/kb-doc-gate-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/lane-identity-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/lane-identity-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/lane-identity-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/no-faked-boundary.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/no-faked-boundary.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/omni-standards-compliance.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/omni-standards-compliance.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/omni-standards-compliance.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/omni-standards-compliance.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/omni-standards-compliance.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/omni-standards-compliance.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/onex-schema-compat.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/cache/restore@v6'
+- path: .github/workflows/onex-schema-compat.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/onex-schema-compat.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/pin-resolvability-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/private-repo-runner-placement-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/private-repo-runner-placement-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/private-repo-runner-placement-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/product-readiness-shadow.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/public-repo-hygiene-audit.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/public-repo-hygiene-audit.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/create-github-app-token@v3'
+- path: .github/workflows/public-repo-hygiene-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/public-repo-hygiene-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/public-repo-hygiene-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/create-github-app-token@v3'
+- path: .github/workflows/public-skill-hygiene.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/public-skill-hygiene.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/receipt-honesty.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/receipt-honesty.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/release-dry-run.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/release-dry-run.yml
+  rule: third_party_not_sha
+  text: '- uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/release.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/release.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/release.yml
+  rule: third_party_not_sha
+  text: '- uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/release.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/create-github-app-token@v3'
+- path: .github/workflows/release.yml
+  rule: third_party_not_sha
+  text: 'uses: peter-evans/repository-dispatch@v4'
+- path: .github/workflows/release.yml
+  rule: third_party_not_sha
+  text: 'uses: peter-evans/repository-dispatch@v4'
+- path: .github/workflows/release.yml
+  rule: third_party_not_sha
+  text: 'uses: softprops/action-gh-release@v3'
+- path: .github/workflows/release.yml
+  rule: third_party_not_sha
+  text: 'uses: softprops/action-gh-release@v3'
+- path: .github/workflows/required-check-manifest-reconcile.yml
+  rule: third_party_not_sha
+  text: '- uses: actions/checkout@v7'
+- path: .github/workflows/required-check-manifest-reconcile.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/required-check-skip-guard-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/required-check-skip-guard-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/required-check-skip-guard-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/route-runner-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/route-runner-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/route-runner-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/runner-label-exists-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/runner-label-exists-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/runner-label-exists-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/secrets-baseline-wiring-reusable.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/dependency-review-action@v5'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/upload-artifact@v7'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: github/codeql-action/analyze@v4.39.0'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: github/codeql-action/autobuild@v4.39.0'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: github/codeql-action/init@v4.39.0'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: github/codeql-action/upload-sarif@v4.39.0'
+- path: .github/workflows/security-scan.yml
+  rule: third_party_not_sha
+  text: 'uses: github/codeql-action/upload-sarif@v4.39.0'
+- path: .github/workflows/sibling-lock-refresh.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/sibling-lock-refresh.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/sibling-lock-refresh.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/stale-todo-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/todo-audit-on-merge.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/url-authority-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/url-authority-gate.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .github/workflows/validate-pr-contracts.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/validate-pr-contracts.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/validate-pr-contracts.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/setup-python@v7'
+- path: .github/workflows/validate-validator-requirements.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/validate-validator-requirements.yml
+  rule: third_party_not_sha
+  text: 'uses: actions/checkout@v7'
+- path: .github/workflows/validate-validator-requirements.yml
+  rule: third_party_not_sha
+  text: 'uses: astral-sh/setup-uv@v7'
+- path: .pre-commit-config.yaml
+  rule: first_party_not_dev_tag
+  text: 'rev: v0.47.46'
+- path: .pre-commit-config.yaml
+  rule: first_party_ref_two_homes
+  text: 'rev: dev-20261018024445-b6ee996befa1'
+- path: .pre-commit-config.yaml
+  rule: first_party_ref_two_homes
+  text: 'rev: dev-20261029151319-6e0a5eee541a'
+- path: .pre-commit-config.yaml
+  rule: first_party_ref_two_homes
+  text: 'rev: dev-20261101103701-2fc5e461fca7'
+- path: pyproject.toml
+  rule: missing_source
+  text: 'missing_source: omnibase-core has no git source'
+- path: pyproject.toml
+  rule: missing_source
+  text: 'missing_source: omnibase-infra has no git source'
+- path: pyproject.toml
+  rule: missing_source
+  text: 'missing_source: omnibase-spi has no git source'

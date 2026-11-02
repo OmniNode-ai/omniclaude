@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 ACTION = "OmniNode-ai/omnibase_core/.github/actions/validate-boundaries"
 # omnibase_core#1972 merged to dev.
-CORE_1972_MERGE = "c1f8e8fe0c513c0ac70ad666433a3ce1cec136c1"
+CORE_1972_MERGE = "dev-20261020152934-5104ffc35806"
 PEERS = (
     "omniclaude",
     "omnidash",
