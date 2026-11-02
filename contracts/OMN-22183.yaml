@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-22183
+title: "The onboarding guide states the detached-HEAD rule the drift guard enforces"
+summary: >
+  The guide called every clone left at a detached HEAD expected, while the drift guard behind onex delegate
+  refused a canonical clone on a detached HEAD. The guide now says a clone is expected detached only at the
+  commit the floor marker names, and that onex delegate refuses a clone detached anywhere else with the
+  converge-canonical-clone.sh repair. A test reads the guide against the recorded fixture so the two cannot drift.
+  The guard half is the omnibase_infra pull request for the same ticket.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22183-guide-states-rule
+    statement: The onboarding guide states the rule the guard enforces and a test reads both.
+    acceptance:
+      - id: AC3
+        statement: "AC3: plugins/onex/ONBOARDING.md states the rule the guard enforces, and a test reads both so they cannot drift -- falsifier: uv run pytest tests/skills/test_onboarding_detached_rule_omn22183.py -q"
+      - id: AC4
+        statement: "AC4: a regression test built from the recorded refusal (fixture under tests/fixtures/onboarding_walk_2026_11_02/) fails on the old guide and passes on the fix -- falsifier: uv run pytest tests/skills -q -k walk_2026_11_02"
+evidence_requirements:
+  - kind: tests
+    description: "The detached-rule tests pass against the guide"
+    command: "uv run pytest tests/skills/test_onboarding_detached_rule_omn22183.py -q --no-cov -p no:randomly"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22183-ac3-guide-states-rule
+    binds_ac: [AC3]
+    description: The guide carries the rule and the test reading guide and fixture passes.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_detached_rule_omn22183.py -q --no-cov -p no:randomly"
+  - id: dod-omn22183-ac4-regression-test
+    binds_ac: [AC4]
+    description: The walk_2026_11_02 tests run green on the fix (they fail on the old guide wording).
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills -q --no-cov -k walk_2026_11_02 -p no:randomly"
