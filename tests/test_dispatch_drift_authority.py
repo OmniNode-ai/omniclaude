@@ -15,11 +15,12 @@ broken delegation for every lane on the host.
 Neither gate's live half was registered anywhere, which is why it had never
 surfaced.
 
-The resolution: the canonical clone's CHECKED-OUT head is the authority,
-whichever branch it is on, and this gate reads it before any network probe.
-Where there is no clone (CI) it falls back to ``uv.lock``, which follows the
-clone through the refresh workflow -- never to a remote branch chosen
-independently of the clone.
+The resolution: the canonical clone was the authority, whichever branch it was
+on, and this gate read its checked-out head before any network probe. OMN-21915
+replaced the head with the commit of the dev-merge tag the lock pins (the clone
+supplies tags only). Where there is no clone (CI) it falls back to ``uv.lock``,
+which follows the dev-tag train through the refresh workflow -- never to a remote
+branch chosen independently of the clone.
 
 The fourth touch point is gone rather than automated. A bump used to have to
 move a hand-maintained 40-hex literal in the gate's own workflow, and that
@@ -95,15 +96,24 @@ def clone_on_a_non_main_branch(tmp_path: Path) -> tuple[Path, str, str]:
     return repo, main_sha, dev_sha
 
 
-def test_expected_sha_is_the_clones_checked_out_head_not_main(
+def test_expected_sha_is_the_pinned_tags_commit_not_the_clones_head_or_main(
     clone_on_a_non_main_branch: tuple[Path, str, str],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The gate answers to the clone's checked-out head, whichever branch it is."""
+    """OMN-21915: the gate answers to the pinned tag, whatever branch the clone is on."""
     from scripts import check_omnimarket_dispatch_drift as drift  # noqa: PLC0415
 
     repo, main_sha, dev_sha = clone_on_a_non_main_branch
+    tag = f"dev-20261101000000-{main_sha[:12]}"
+    _git(repo, "tag", tag, main_sha)
+    lock = tmp_path / "uv.lock"
+    lock.write_text(
+        '[[package]]\nname = "omnimarket"\nversion = "1"\n'
+        'source = { git = "https://github.com/OmniNode-ai/omnimarket.git'
+        f'?tag={tag}#{main_sha}" }}\n',
+        encoding="utf-8",
+    )
     for var in (
         "OMNIMARKET_EXPECTED_SHA",
         "OMNIMARKET_CANONICAL_SHA",
@@ -112,15 +122,15 @@ def test_expected_sha_is_the_clones_checked_out_head_not_main(
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("OMNI_HOME", str(tmp_path))
 
-    sha, source = drift._resolve_expected_sha()
+    sha, source = drift._resolve_expected_sha(lock_path=lock)
 
-    assert sha == dev_sha, (
-        "the gate resolved a ref other than the clone's checked-out head; a "
-        "clone on dev and a guard on main is the split that produced the live "
-        "refusals this change exists to remove"
+    assert sha == main_sha, (
+        "the gate resolved the clone's checked-out head instead of the commit of "
+        "the tag the lock pins; the head moves under a commit whose hooks run for "
+        "minutes, which is the refusal OMN-21915 removes"
     )
-    assert sha != main_sha
-    assert "clone" in source
+    assert sha != dev_sha
+    assert tag in source
 
 
 def test_no_remote_branch_probe_decides_the_expected_sha(
