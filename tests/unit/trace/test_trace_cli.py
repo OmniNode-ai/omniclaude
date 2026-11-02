@@ -26,7 +26,7 @@ from uuid import UUID, uuid4
 from click.testing import CliRunner
 
 from omniclaude.cli.trace import make_trace_group
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     ModelDelta,
@@ -37,7 +37,7 @@ from omniclaude.trace.change_frame import (
     ModelToolEvent,
     ModelWorkspaceRef,
 )
-from omniclaude.trace.pr_envelope import (
+from omniclaude.models.trace.pr_envelope import (
     ModelCIArtifact,
     ModelPRBodyVersion,
     ModelPRText,

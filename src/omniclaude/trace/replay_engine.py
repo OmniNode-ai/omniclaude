@@ -32,7 +32,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     OutcomeStatus,

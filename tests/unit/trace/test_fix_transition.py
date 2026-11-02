@@ -27,7 +27,7 @@ from uuid import uuid4
 import pytest
 
 from omniclaude.hooks.topics import TopicBase, build_topic
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     ModelDelta,
@@ -38,7 +38,7 @@ from omniclaude.trace.change_frame import (
     ModelToolEvent,
     ModelWorkspaceRef,
 )
-from omniclaude.trace.fix_transition import (
+from omniclaude.models.trace.fix_transition import (
     FixTransition,
     OpenFailure,
     compute_fix_diff_hash,

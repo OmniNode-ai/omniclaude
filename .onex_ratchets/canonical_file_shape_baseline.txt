@@ -934,13 +934,7 @@ src/omniclaude/skills/weekly_review/__init__.py
 src/omniclaude/skills/weekly_review/config_loader_weekly_review.py
 src/omniclaude/skills/weekly_review/model_weekly_review_rubric.py
 src/omniclaude/trace/__init__.py
-src/omniclaude/trace/change_frame.py
-src/omniclaude/trace/db_schema.py
-src/omniclaude/trace/failure_signature.py
-src/omniclaude/trace/fix_transition.py
 src/omniclaude/trace/frame_assembler.py
-src/omniclaude/trace/intelligence_integration.py
-src/omniclaude/trace/pr_envelope.py
 src/omniclaude/trace/replay_engine.py
 src/omniclaude/verification/__init__.py
 src/omniclaude/verification/evidence_writer.py
