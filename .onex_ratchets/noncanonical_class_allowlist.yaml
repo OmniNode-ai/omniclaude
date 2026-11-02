@@ -25,4 +25,3 @@ allowlist:
   - "omniclaude.nodes.node_github_pr_watcher_effect.handlers.watch_registry:WatchRegistry"
   - "omniclaude.nodes.node_personality_logging_effect.personality_adapter:PersonalityAdapter"
   - "omniclaude.services.session_registry_client:SessionRegistryClient"
-  - "omniclaude.trace.replay_engine:ReplayEngine"
