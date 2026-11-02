@@ -268,7 +268,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@6161eb2601347377a2e34a6de21f4517be18de88",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev-20261102030739-01560dc0e0c3",
 ]
 
 [tool.uv.sources]
@@ -288,9 +288,20 @@ override-dependencies = [
 # The >=0.38.14 floor above is what now carries that fix; do not re-add an override.
 # scripts/check_dep_provenance.py enforces this -- omnibase-infra is a forbidden
 # git-source override as of OMN-17176.
+# OMN-18595, RULINGs 2026-10-16T07:34:18Z and 2026-10-16T09:35:49Z (OMN-19998):
+# omnibase-core is read from its dev merge tag, as omnimarket and omnibase_infra
+# already read it. A PyPI release pin is refused by internal-sibling-pins
+# whenever core's dev has merged since the release, which is every release
+# cascade (omniclaude#3038, #3042, #3063, #3102). This tag names the v0.47.61
+# release commit 4def8b7a, so the code is exactly the 0.47.61 release, and the
+# nightly sibling-pin train moves it from here. The version range in [project]
+# stays for external installs. OMN-13873's PyPI rule still holds for every
+# other form: check_dep_provenance.py accepts only this tag-only dev-tag shape.
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "dev-20261101145407-4def8b7a9978" }
 # OMN-20910: pin the Claude API voter merge; it retains the lab roster reader,
 # the larger retry budget and the torch-free default install.
-omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "921b322b8e43f695961a06a04759dc88bb3e88ff" }  # pragma: allowlist secret
+# OMN-21900: a first-party source names a dev-merge tag, never a sha (first_party_ref validator).
+omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "dev-20261101151826-9dca2e7608f7" }
 # OMN-16979: pin an approved dispatch commit; never substitute a PyPI source,
 # because the dispatch-drift guard verifies direct VCS provenance.
 # OMN-18622 recorded that `sibling-lock-refresh.yml` could never move this
@@ -313,7 +324,8 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 #
 # So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
 # on workflow_dispatch and review the bot PR.
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", rev = "6161eb2601347377a2e34a6de21f4517be18de88" }  # pragma: allowlist secret
+# OMN-21900: a first-party source names a dev-merge tag, never a sha (first_party_ref validator).
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "dev-20261102030739-01560dc0e0c3" }
 
 # OMN-18752: which surface decides the commit a git-sourced sibling must carry.
 # `clone` is claimed only where something enforces it. omnimarket's in-process

@@ -38,8 +38,8 @@ from omnibase_core.validators.no_unguarded_git_subprocess import (
     scrub_git_location_env,
 )
 
-SCM_TIMEOUT_S = 90
-GIT_TIMEOUT_S = 30
+from omniclaude.models.model_lib_timeouts import lib_timeouts
+
 DEFAULT_BUS_LANE = "dev"
 _BUS_LANE_ENV = "ONEX_SCM_BUS_LANE"
 _ONEX_BIN_ENV = "ONEX_BIN"
@@ -87,7 +87,7 @@ def run_scm(verb: str, args: list[str]) -> dict[str, object] | None:
             command,
             capture_output=True,
             text=True,
-            timeout=SCM_TIMEOUT_S,
+            timeout=lib_timeouts().lane_evidence_scm_seconds,
             check=False,
             env=scrub_git_location_env(os.environ),
         )
@@ -279,7 +279,7 @@ class LaneRepoEvidence:
             ["git", "-C", str(clone), *args],
             capture_output=True,
             text=True,
-            timeout=GIT_TIMEOUT_S,
+            timeout=lib_timeouts().lane_evidence_git_seconds,
             check=False,
             env=scrub_git_location_env(os.environ),
         )

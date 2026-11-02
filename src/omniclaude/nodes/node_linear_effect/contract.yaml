@@ -189,9 +189,13 @@ handler_routing:
         module: omniclaude.nodes.node_linear_effect.handlers.handler_done_receipt_policy
         name: run_hook
     - operation: ticket_closeout_instruction_audit
+      event_model:
+        module: omniclaude.nodes.node_linear_effect.models
+        name: ModelCloseoutInstructionAuditRequest
       handler:
         module: omniclaude.nodes.node_linear_effect.handlers.handler_done_closeout_instructions
-        name: findings
+        name: HandlerDoneCloseoutInstructions
+      output_events: [ModelCloseoutInstructionAuditResult]
   default_backend: linear_api
   backends:
     - backend: linear_api
@@ -207,6 +211,13 @@ invariants:
   - acceptance_tick_requires_current_bound_pass_receipt: true
   - done_guard_error_refuses: true
   - closeout_instructions_require_bound_receipts: true
+
+# Linear GraphQL endpoint (OMN-21791): read by ModelLinearEndpoint.from_contract,
+# or replaced by an overlay-resolved ModelLinearEndpoint injected into the handler.
+endpoint:
+  host: api.linear.app
+  path: /graphql
+  timeout_seconds: 20
 
 # Error handling
 error_handling:

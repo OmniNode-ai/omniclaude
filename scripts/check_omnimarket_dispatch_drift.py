@@ -25,10 +25,10 @@ This gate catches that drift at two surfaces:
    b. ``OMNIMARKET_EXPECTED_SHA`` environment variable
    c. ``--canonical-sha=<sha>`` CLI override (tests / CI injection)
    d. ``OMNIMARKET_CANONICAL_SHA`` environment variable
-   e. the canonical clone's CHECKED-OUT head (the same fact the OMN-18675
-      venv guard resolves)
+   e. the commit of the pinned dev-merge tag (OMN-21915), read from the canonical
+      clone at ``OMNIMARKET_ROOT`` or ``$OMNI_HOME/omnimarket``; the clone's
+      checked-out head is not consulted (``git_source_pins.pinned_tag_commit``)
    f. this repo's ``uv.lock`` pin, where no canonical clone exists (CI)
-   f. Local canonical clone at ``$OMNI_HOME/omnimarket`` (offline fallback)
 
    The gate *fails* if the pinned SHA does not match the expected SHA.  A stale
    or unapproved git-source pin is the target negative case.
@@ -50,13 +50,12 @@ This gate catches that drift at two surfaces:
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import re
-import subprocess
 import sys
 import tomllib
-from collections.abc import Mapping
 from pathlib import Path
 
 # Sibling module in this same directory, imported by path so the gate behaves
@@ -68,12 +67,15 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 import hook_interpreter  # noqa: E402
 
+# The pinned-tag resolver both gates share (OMN-21915).
+git_source_pins = importlib.import_module("git_source_pins")
+
 # Regex to extract the git SHA from a uv.lock source line of the form:
 #   source = { git = "https://...omnimarket.git?tag=v0.4.0#<sha>" }
 #   source = { git = "https://...omnimarket.git?rev=<sha>#<sha>" }
 # The SHA lives after the final '#' in the URL string.
 _OMNIMARKET_SHA_RE = re.compile(
-    r'"https://github\.com/OmniNode-ai/omnimarket\.git[^"]*#([0-9a-f]{40})"'
+    r'"(https://github\.com/OmniNode-ai/omnimarket\.git[^"]*)#([0-9a-f]{40})"'
 )
 
 
@@ -98,8 +100,14 @@ def _extract_omnimarket_sha(lock_text: str) -> str | None:
     """
     match = _OMNIMARKET_SHA_RE.search(lock_text)
     if match:
-        return match.group(1)
+        return match.group(2)
     return None
+
+
+def _extract_omnimarket_dev_tag(lock_text: str) -> str | None:
+    """Return the dev-merge tag the omnimarket lock source names in ``?tag=``, or None."""
+    match = _OMNIMARKET_SHA_RE.search(lock_text)
+    return git_source_pins.dev_tag_of_source(match.group(1)) if match else None
 
 
 # ---------------------------------------------------------------------------
@@ -107,28 +115,9 @@ def _extract_omnimarket_sha(lock_text: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-# Git environment variables that override ``git -C`` and would retarget a
-# probe at the repository being committed rather than the clone it was handed.
-# pre-commit exports GIT_DIR and GIT_INDEX_FILE to every hook (OMN-18434).
-_GIT_LOCATION_VARS: tuple[str, ...] = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_COMMON_DIR",
-    "GIT_CEILING_DIRECTORIES",
-    "GIT_NAMESPACE",
-)
-
-
-def _scrub_git_location_env(env: Mapping[str, str]) -> dict[str, str]:
-    return {k: v for k, v in env.items() if k not in _GIT_LOCATION_VARS}
-
-
-def _lock_pinned_sha() -> str | None:
+def _lock_pinned_sha(lock_path: Path | None = None) -> str | None:
     """The omnimarket git rev this repo's ``uv.lock`` pins, or None."""
-    lock_path = _canonical_lock_path()
+    lock_path = lock_path or _canonical_lock_path()
     if not lock_path.is_file():
         return None
     try:
@@ -137,9 +126,19 @@ def _lock_pinned_sha() -> str | None:
         return None
 
 
+def _lock_dev_tag(lock_path: Path | None = None) -> str | None:
+    """The dev-merge tag ``uv.lock`` names for omnimarket, or None for a rev pin."""
+    lock_path = lock_path or _canonical_lock_path()
+    try:
+        return _extract_omnimarket_dev_tag(lock_path.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+
+
 def _resolve_expected_sha(
     expected_sha_override: str | None = None,
     canonical_sha_override: str | None = None,
+    lock_path: Path | None = None,
 ) -> tuple[str, str]:
     """Return (sha, source_description) for the expected omnimarket dispatch SHA.
 
@@ -148,27 +147,19 @@ def _resolve_expected_sha(
     2. ``OMNIMARKET_EXPECTED_SHA`` environment variable
     3. ``canonical_sha_override`` (CLI arg / test injection)
     4. ``OMNIMARKET_CANONICAL_SHA`` environment variable
-    5. the canonical clone's CHECKED-OUT head (``$OMNI_HOME/omnimarket``,
-       or ``OMNIMARKET_ROOT``)
-    6. this repo's ``uv.lock`` pin for omnimarket
+    5. the commit of the dev-merge tag the lock pins, read from the canonical
+       clone (``OMNIMARKET_ROOT`` or ``$OMNI_HOME/omnimarket``)
+    6. this repo's ``uv.lock`` pin, where there is no clone (CI)
 
-    OMN-18752 removed a seventh source that used to sit ahead of both:
-    ``git ls-remote <remote> refs/heads/main``. It had to go because it made
-    this gate answer to a different ref from the OMN-18675 venv guard, which
-    resolves the canonical clone -- and that clone is checked out on ``dev``.
-    omnimarket's ``main`` is release-synced, so it lags ``dev`` and the two
-    gates demanded different commits at every moment except the instant main
-    caught up. Observed live 2026-09-18: the venv guard required ``cfd5b4eb``
-    while this gate required ``7f77f9d8``, and this gate's own printed remedy
-    would have broken ``onex delegate`` for every lane on the host. Neither
-    gate's live half was registered anywhere, which is why it had never
-    surfaced.
+    OMN-21915: source 5 used to be the clone's CHECKED-OUT head. That head moved 11
+    times in 2 hours, so a commit whose hooks run for minutes was refused for a pin
+    that was right when it started. A tag does not move. The clone is read for its
+    tags only; a clone that cannot prove the pinned tag raises and never falls
+    through to ``uv.lock``, which would compare the pin with itself.
 
-    So the authority is the clone's checked-out head, whichever branch it is
-    on, and where there is no clone (CI) it is ``uv.lock`` -- which follows the
-    clone through ``sibling-lock-refresh.yml``. Both answer to the clone with
-    at most one bump-PR of latency between them. A remote branch picked
-    independently of the clone is not an authority and is no longer consulted.
+    OMN-18752 removed the older ``git ls-remote <remote> refs/heads/main`` source:
+    main is release-synced and lags ``dev``, so it answered to a different ref
+    from the OMN-18675 venv guard. A remote branch is not an authority here.
 
     Raises ValueError if no source succeeds.
     """
@@ -186,45 +177,31 @@ def _resolve_expected_sha(
     if env_sha:
         return env_sha, f"OMNIMARKET_CANONICAL_SHA={env_sha[:8]}"
 
-    omnimarket_root = os.environ.get("OMNIMARKET_ROOT", "")
-
-    # The canonical clone's CHECKED-OUT head, which is the same fact the
-    # OMN-18675 venv guard resolves. This now runs FIRST among the derived
-    # sources; before OMN-18752 a `git ls-remote ... refs/heads/main` probe sat
-    # ahead of it and made the two gates answer to different refs.
     candidates: list[Path] = []
-    if omnimarket_root:
-        candidates.append(Path(omnimarket_root))
-    omni_home = os.environ.get("OMNI_HOME", "")
-    if omni_home:
-        candidates.append(Path(omni_home) / "omnimarket")
+    if os.environ.get("OMNIMARKET_ROOT"):
+        candidates.append(Path(os.environ["OMNIMARKET_ROOT"]))
+    if os.environ.get("OMNI_HOME"):
+        candidates.append(Path(os.environ["OMNI_HOME"]) / "omnimarket")
 
+    lock_sha = _lock_pinned_sha(lock_path)
     for path in candidates:
-        if (path / ".git").exists() or (path / "HEAD").exists():
-            try:
-                result = subprocess.run(
-                    ["git", "-C", str(path), "rev-parse", "HEAD"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    timeout=5,
-                    # OMN-18434: an exported GIT_DIR overrides `git -C` and
-                    # would retarget this probe at the repo being committed.
-                    env=_scrub_git_location_env(os.environ),
-                )
-                sha = result.stdout.strip()
-                if len(sha) == 40:
-                    return sha, f"local clone {path} (checked-out head)"
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                continue
+        if not ((path / ".git").exists() or (path / "HEAD").exists()):
+            continue
+        if lock_sha is None:
+            raise ValueError(
+                "omnimarket not found in uv.lock — cannot name the pinned dev-merge tag"
+            )
+        try:
+            tag, commit = git_source_pins.pinned_tag_commit(
+                path, rev=lock_sha, declared_tag=_lock_dev_tag(lock_path)
+            )
+        except (git_source_pins.ErrorPinnedTag, OSError) as exc:
+            raise ValueError(str(exc)) from exc
+        return commit, f"dev-merge tag {tag} in clone {path} (clone head not consulted)"
 
     # No canonical clone on this host -- the ordinary CI shape. uv.lock follows
-    # the clone through sibling-lock-refresh.yml, so reading it keeps CI and the
-    # host answering to one authority. This replaced the hand-maintained 40-hex
-    # literal the gate's own workflow used to carry, which was the fourth touch
-    # point of an omnimarket bump and the one most easily missed: it failed the
-    # PR on each of the two previous bumps. A derived value cannot go stale.
-    lock_sha = _lock_pinned_sha()
+    # the dev-tag train through sibling-lock-refresh.yml, so reading it keeps CI
+    # and the host answering to one authority.
     if lock_sha:
         return lock_sha, "uv.lock pin (no canonical clone on this host)"
 
@@ -457,6 +434,7 @@ def main(argv: list[str] | None = None) -> int:
         expected_sha, sha_source = _resolve_expected_sha(
             expected_sha_override=args.expected_sha,
             canonical_sha_override=args.canonical_sha,
+            lock_path=lock_path,
         )
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -494,12 +472,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {finding}", file=sys.stderr)
         print(
             "\nFix options:\n"
-            "  1. If uv.lock lags the canonical clone, advance it the sanctioned\n"
-            "     way: run .github/workflows/sibling-lock-refresh.yml on\n"
-            "     workflow_dispatch and review the bot PR (OMN-18752). Never\n"
-            "     hand-edit the rev, and never pin omnimarket@main -- main is\n"
-            "     release-synced and lags the branch the canonical clone is on,\n"
-            "     which is the split this gate itself used to cause.\n"
+            "  1. If uv.lock does not carry the pinned dev-merge tag's commit,\n"
+            "     advance the pin the sanctioned way: the dev-tag train in\n"
+            "     .github/workflows/sibling-lock-refresh.yml (workflow_dispatch,\n"
+            "     reviewed as a bot PR). Never hand-edit the rev, and never pin\n"
+            "     omnimarket@main -- main is release-synced and lags dev.\n"
             "  2. If the live daemon venv is stale, rebuild it:\n"
             "         bash scripts/repair-plugin-venv.sh",
             file=sys.stderr,

@@ -95,6 +95,7 @@ if TYPE_CHECKING:
 
 # Import settings for configuration
 from omniclaude.config import settings
+from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
 
 
 class HealthStatus(Enum):
@@ -123,6 +124,24 @@ class HealthCheckResult:
         return asdict(self)
 
 
+def _error_result(error: Exception, start_time: float) -> dict[str, Any]:
+    """Build the result dict for a health check that raised ``error``."""
+    return {
+        "status": "error",
+        "error": str(error),
+        "response_time_ms": (time.time() - start_time) * 1000,
+    }
+
+
+def _timeout_result(label: str, seconds: float) -> dict[str, Any]:
+    """Build the result dict for a health check that timed out after ``seconds``."""
+    return {
+        "status": "timeout",
+        "error": f"{label} timed out after {seconds:g} seconds",
+        "response_time_ms": seconds * 1000,
+    }
+
+
 class Phase4HealthChecker:
     """
     Enhanced health checker with async support and comprehensive error handling.
@@ -135,6 +154,7 @@ class Phase4HealthChecker:
         self,
         base_url: str | None = None,
         config: "PatternTrackerConfig | None" = None,
+        timeouts: ModelRuntimeTimeouts | None = None,
     ):
         """
         Initialize Phase 4 health checker.
@@ -142,7 +162,9 @@ class Phase4HealthChecker:
         Args:
             base_url: Base URL for Phase 4 intelligence service (defaults to settings.intelligence_service_url)
             config: Optional pattern tracker configuration
+            timeouts: Contract-declared timeouts (resolved from the runtime contract when None)
         """
+        self.timeouts = timeouts or ModelRuntimeTimeouts.from_contract()
         self.base_url = base_url or str(settings.intelligence_service_url)
         self.config = config or (get_tracker().config if HAS_PATTERN_TRACKER else None)
         self._health_cache: dict[str, tuple[dict[str, Any], float]] = {}
@@ -153,7 +175,9 @@ class Phase4HealthChecker:
 
         self.log_file = ensure_state_path("hooks", "logs", "health-checks.log")
 
-    def _log(self, level: str, message: str, **kwargs: str | int | float | bool | None) -> None:
+    def _log(
+        self, level: str, message: str, **kwargs: str | int | float | bool | None
+    ) -> None:
         """Internal logging method for health check events."""
         timestamp = datetime.now(UTC).isoformat()
         log_entry = {
@@ -210,7 +234,9 @@ class Phase4HealthChecker:
             if not HAS_HTTPX:
                 raise ImportError("httpx not available for async health checks")
 
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeouts.health_check_httpx_seconds
+            ) as client:
                 response = await client.get(f"{self.base_url}/health")
                 response_time_ms = (time.time() - start_time) * 1000
 
@@ -296,7 +322,10 @@ class Phase4HealthChecker:
         """Check if Phase 4 intelligence service is reachable"""
         start_time = time.time()
         try:
-            response = requests.get(f"{self.base_url}/health", timeout=2)
+            response = requests.get(
+                f"{self.base_url}/health",
+                timeout=self.timeouts.health_check_base_seconds,
+            )
             response_time_ms = (time.time() - start_time) * 1000
 
             result = {
@@ -319,11 +348,7 @@ class Phase4HealthChecker:
             return result
 
         except requests.exceptions.Timeout:
-            return {
-                "status": "timeout",
-                "error": "Request timed out after 2 seconds",
-                "response_time_ms": 2000,
-            }
+            return _timeout_result("Request", self.timeouts.health_check_base_seconds)
         except requests.exceptions.ConnectionError:
             return {
                 "status": "connection_error",
@@ -331,18 +356,15 @@ class Phase4HealthChecker:
                 "response_time_ms": (time.time() - start_time) * 1000,
             }
         except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e),
-                "response_time_ms": (time.time() - start_time) * 1000,
-            }
+            return _error_result(e, start_time)
 
     def check_database_connectivity(self) -> dict[str, Any]:
         """Check if we can reach the database through Phase 4 API"""
         start_time = time.time()
         try:
             response = requests.get(
-                f"{self.base_url}/api/pattern-traceability/health", timeout=5
+                f"{self.base_url}/api/pattern-traceability/health",
+                timeout=self.timeouts.health_check_pattern_seconds,
             )
             response_time_ms = (time.time() - start_time) * 1000
 
@@ -369,17 +391,11 @@ class Phase4HealthChecker:
                 }
 
         except requests.exceptions.Timeout:
-            return {
-                "status": "timeout",
-                "error": "Database health check timed out after 5 seconds",
-                "response_time_ms": 5000,
-            }
+            return _timeout_result(
+                "Database health check", self.timeouts.health_check_pattern_seconds
+            )
         except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e),
-                "response_time_ms": (time.time() - start_time) * 1000,
-            }
+            return _error_result(e, start_time)
 
     def check_lineage_endpoint(self) -> dict[str, Any]:
         """Test pattern lineage tracking endpoint"""
@@ -398,7 +414,7 @@ class Phase4HealthChecker:
             response = requests.post(
                 f"{self.base_url}/api/pattern-traceability/lineage/track",
                 json=test_payload,
-                timeout=3,
+                timeout=self.timeouts.health_check_post_seconds,
             )
 
             response_time_ms = (time.time() - start_time) * 1000
@@ -428,17 +444,11 @@ class Phase4HealthChecker:
                 }
 
         except requests.exceptions.Timeout:
-            return {
-                "status": "timeout",
-                "error": "Lineage endpoint test timed out after 3 seconds",
-                "response_time_ms": 3000,
-            }
+            return _timeout_result(
+                "Lineage endpoint test", self.timeouts.health_check_post_seconds
+            )
         except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e),
-                "response_time_ms": (time.time() - start_time) * 1000,
-            }
+            return _error_result(e, start_time)
 
     def check_feedback_endpoint(self) -> dict[str, Any]:
         """Test pattern feedback endpoint"""
@@ -455,7 +465,7 @@ class Phase4HealthChecker:
             response = requests.post(
                 f"{self.base_url}/api/pattern-traceability/feedback/submit",
                 json=test_payload,
-                timeout=3,
+                timeout=self.timeouts.health_check_post_seconds,
             )
 
             response_time_ms = (time.time() - start_time) * 1000
@@ -475,17 +485,11 @@ class Phase4HealthChecker:
                 }
 
         except requests.exceptions.Timeout:
-            return {
-                "status": "timeout",
-                "error": "Feedback endpoint test timed out after 3 seconds",
-                "response_time_ms": 3000,
-            }
+            return _timeout_result(
+                "Feedback endpoint test", self.timeouts.health_check_post_seconds
+            )
         except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e),
-                "response_time_ms": (time.time() - start_time) * 1000,
-            }
+            return _error_result(e, start_time)
 
     def run_comprehensive_health_check(self) -> dict[str, Any]:
         """Run all health checks and return comprehensive status"""

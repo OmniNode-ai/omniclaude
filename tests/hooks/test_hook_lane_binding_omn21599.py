@@ -306,6 +306,41 @@ def test_installed_omnimarket_without_the_node_drops_and_warns(
     assert not target.exists()
 
 
+def test_ledger_events_are_journalled_when_the_node_is_missing(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OMN-21773: onex-ledger runs the appender under an interpreter whose omnimarket may
+    predate the admission node. A refusal there dropped every ledger row, exit 0, no record;
+    the rolling ledger's database projection stopped at 2026-10-31T00:12:25Z. A ledger row is
+    not a developer hook event, so the refusal never reaches it. Other classes still drop."""
+    import hook_content_capture as capture
+
+    _store(home, {"lanes": {_HOME_LANE: {"sasl_username": _OPERATOR}}})
+    monkeypatch.setattr(capture, "package_files", lambda *_parts: [])
+    monkeypatch.setitem(sys.modules, "hook_content_capture", capture)
+    monkeypatch.delitem(
+        sys.modules, "node_developer_lane_admission_compute", raising=False
+    )
+    target = tmp_path / "journal"
+    _append(target, "tool.executed")
+    assert not target.exists()
+    for event_type in ("work.ledger.status", "work.ledger.typed.terminal"):
+        _append(target, event_type)
+    assert len(list(target.glob("*.json"))) == 2
+
+
+def test_ledger_events_are_journalled_for_a_refused_collaborator(
+    home: Path, tmp_path: Path
+) -> None:
+    _store(home, _bound(binding=False))
+    target = tmp_path / "journal"
+    result = _cli(target, "work.ledger.claim")
+    assert result.returncode == 0, result.stderr
+    assert len(list(target.glob("*.json"))) == 1
+    _append(target, "tool.executed")
+    assert len(list(target.glob("*.json"))) == 1
+
+
 def test_an_unwritable_notice_never_blocks(
     home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

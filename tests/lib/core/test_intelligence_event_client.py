@@ -129,38 +129,38 @@ class TestIntelligenceEventClientInitialization:
 
     def test_topic_request_uses_onex_cmd_prefix(self) -> None:
         """GAP-1: TOPIC_REQUEST must use onex.cmd namespace (OMN-2367)."""
-        assert IntelligenceEventClient.TOPIC_REQUEST.startswith("onex.cmd.")
+        assert IntelligenceEventClient.TOPICS["requested"].startswith("onex.cmd.")
 
     def test_topic_request_does_not_contain_requested_suffix(self) -> None:
         """GAP-1: TOPIC_REQUEST must not contain 'requested' suffix (OMN-2367)."""
-        assert "requested" not in IntelligenceEventClient.TOPIC_REQUEST
+        assert "requested" not in IntelligenceEventClient.TOPICS["requested"]
 
     def test_topic_request_exact_value(self) -> None:
         """GAP-1: TOPIC_REQUEST must match canonical omniintelligence topic (OMN-2367)."""
         assert (
-            IntelligenceEventClient.TOPIC_REQUEST
+            IntelligenceEventClient.TOPICS["requested"]
             == "onex.cmd.omniintelligence.code-analysis.v1"
         )
 
     def test_topic_completed_uses_onex_evt_prefix(self) -> None:
         """GAP-1: TOPIC_COMPLETED must use onex.evt namespace (OMN-2367)."""
-        assert IntelligenceEventClient.TOPIC_COMPLETED.startswith("onex.evt.")
+        assert IntelligenceEventClient.TOPICS["completed"].startswith("onex.evt.")
 
     def test_topic_completed_exact_value(self) -> None:
         """GAP-1: TOPIC_COMPLETED must match canonical omniintelligence topic (OMN-2367)."""
         assert (
-            IntelligenceEventClient.TOPIC_COMPLETED
+            IntelligenceEventClient.TOPICS["completed"]
             == "onex.evt.omniintelligence.code-analysis-completed.v1"
         )
 
     def test_topic_failed_uses_onex_evt_prefix(self) -> None:
         """GAP-1: TOPIC_FAILED must use onex.evt namespace (OMN-2367)."""
-        assert IntelligenceEventClient.TOPIC_FAILED.startswith("onex.evt.")
+        assert IntelligenceEventClient.TOPICS["failed"].startswith("onex.evt.")
 
     def test_topic_failed_exact_value(self) -> None:
         """GAP-1: TOPIC_FAILED must match canonical omniintelligence topic (OMN-2367)."""
         assert (
-            IntelligenceEventClient.TOPIC_FAILED
+            IntelligenceEventClient.TOPICS["failed"]
             == "onex.evt.omniintelligence.code-analysis-failed.v1"
         )
 
@@ -168,15 +168,15 @@ class TestIntelligenceEventClientInitialization:
         """Test that topic names follow onex.cmd/evt convention (OMN-2367)."""
         # Check class-level topic constants (no instantiation needed)
         assert (
-            IntelligenceEventClient.TOPIC_REQUEST
+            IntelligenceEventClient.TOPICS["requested"]
             == "onex.cmd.omniintelligence.code-analysis.v1"
         )
         assert (
-            IntelligenceEventClient.TOPIC_COMPLETED
+            IntelligenceEventClient.TOPICS["completed"]
             == "onex.evt.omniintelligence.code-analysis-completed.v1"
         )
         assert (
-            IntelligenceEventClient.TOPIC_FAILED
+            IntelligenceEventClient.TOPICS["failed"]
             == "onex.evt.omniintelligence.code-analysis-failed.v1"
         )
 

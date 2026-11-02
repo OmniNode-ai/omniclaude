@@ -1,0 +1,29 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-20134"
+title: "omniclaude's Repo Evidence Gate caller pins the omnibase_core dev-merge tag whose receipt-gate carries the fix-parent fallback"
+summary: "No receipt-gate caller pin carried the fix-parent control fallback (control_uses_fix_parent); omniclaude pinned a full commit sha, which the dev-merge-tag-only ruling (2026-10-29T01:50:26Z) forbids. The caller moves to the omnibase_core dev-merge tag dev-20261030152335-66d35d2283c3, whose receipt-gate.yml carries the fallback, and tests/ci/receipt_gate_pin.py holds that pin as the one test-side constant."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-caller-pins-fix-parent-dev-tag"
+    statement: "omniclaude's Repo Evidence Gate caller pins the omnibase_core receipt-gate reusable at a dev-merge tag whose receipt-gate.yml carries the fix-parent control fallback, keeping its job id and inputs."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: .github/workflows/call-repo-evidence-gate.yml pins receipt-gate.yml at the dev-merge tag dev-20261030152335-66d35d2283c3 and not at a commit sha -- falsifier: uv run pytest tests/ci/test_receipt_gate_caller_pin_omn20134.py -q -p no:randomly --no-cov fails at the merge base, where the caller pins 4e4f5e0404d364e296c5d37db6aa3ab9e07f8ffa"
+evidence_requirements:
+  - kind: "tests"
+    description: "The caller's reusable pin is the dev-merge tag."
+    command: "uv run pytest tests/ci/test_receipt_gate_caller_pin_omn20134.py -q -p no:randomly --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn20134-caller-pins-dev-tag"
+    description: "AC1: the Repo Evidence Gate caller pins the omnibase_core receipt-gate reusable at the dev-merge tag dev-20261030152335-66d35d2283c3."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_receipt_gate_caller_pin_omn20134.py -q -p no:randomly --no-cov"
+    binds_ac: ["AC1"]

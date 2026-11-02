@@ -1,0 +1,142 @@
+# Shrink-only baseline for the check-no-backward-compat hook (OMN-21501).
+# One entry per tolerated finding: file path, rule id and the normalized offending
+# source text (never a line number). Entries are counted: two identical findings in
+# one file need two identical entries.
+#
+# RULE: entries only leave. A finding not listed here fails. An entry whose finding
+# is gone fails until it is removed. --write-baseline creates this file when absent
+# and afterwards only shrinks it; it refuses, with a nonzero exit, any write that
+# would add an entry.
+---
+schema_version: 1
+hook: check-no-backward-compat
+entries:
+- path: src/omniclaude/config/settings.py
+  rule: compat-comment
+  text: '"falling back to POSTGRES_DATABASE for backwards compatibility. "'
+- path: src/omniclaude/config/settings.py
+  rule: compat-comment
+  text: '# for backward compatibility during migration from archon to ONEX naming.'
+- path: src/omniclaude/hooks/cli_emit.py
+  rule: compat-comment
+  text: '# Note: tool_type is kept for backwards compatibility but ignored'
+- path: src/omniclaude/hooks/cli_emit.py
+  rule: compat-comment
+  text: 'tool_type: str | None, # Kept for backwards compatibility, ignored'
+- path: src/omniclaude/hooks/cohort_assignment.py
+  rule: compat-comment
+  text: '# DEPRECATED: These constants are kept for backward compatibility only.'
+- path: src/omniclaude/hooks/context_config.py
+  rule: compat-comment
+  text: OMNICLAUDE_CONTEXT_COHORT_*) for backward compatibility and
+- path: src/omniclaude/hooks/context_config.py
+  rule: compat-docstring
+  text: 'def from_env(cls) -> ContextInjectionConfig:'
+- path: src/omniclaude/hooks/contracts/contract_hook_session_ended.py
+  rule: compat-comment
+  text: '# Re-export from shared schema module for backwards compatibility'
+- path: src/omniclaude/hooks/event_registry.py
+  rule: compat-comment
+  text: '# Legacy payload shape: raw "prompt" field (backwards compatibility)'
+- path: src/omniclaude/hooks/handler_context_injection.py
+  rule: compat-comment
+  text: '# Alias for backward compatibility with tests and exports'
+- path: src/omniclaude/hooks/handler_context_injection.py
+  rule: compat-comment
+  text: '# Convenience Functions (for backward compatibility)'
+- path: src/omniclaude/hooks/handler_context_injection.py
+  rule: compat-comment
+  text: Defaults to None for backward compatibility. None is treated as UNMEASURED.
+- path: src/omniclaude/hooks/handler_context_injection.py
+  rule: compat-comment
+  text: Defaults to None for backward compatibility. None is treated as validated
+- path: src/omniclaude/hooks/handler_context_injection.py
+  rule: compat-comment
+  text: or stale (OMN-2355 escape hatch retained for backward compatibility).
+- path: src/omniclaude/hooks/handler_event_emitter.py
+  rule: compat-comment
+  text: '# ONEX: exempt - backwards compatibility wrapper for config-based method'
+- path: src/omniclaude/hooks/handler_event_emitter.py
+  rule: compat-comment
+  text: '# ONEX: exempt - backwards compatibility wrapper for config-based method'
+- path: src/omniclaude/hooks/handler_event_emitter.py
+  rule: compat-comment
+  text: '# ONEX: exempt - backwards compatibility wrapper for config-based method'
+- path: src/omniclaude/hooks/handler_event_emitter.py
+  rule: compat-comment
+  text: '# ONEX: exempt - backwards compatibility wrapper for config-based method'
+- path: src/omniclaude/hooks/handler_event_emitter.py
+  rule: compat-comment
+  text: '# ONEX: exempt - backwards compatibility wrapper for config-based method'
+- path: src/omniclaude/hooks/handler_event_emitter.py
+  rule: compat-comment
+  text: '# ONEX: exempt - backwards compatibility wrapper for config-based method'
+- path: src/omniclaude/hooks/handler_event_emitter.py
+  rule: compat-comment
+  text: '# ONEX: exempt - backwards compatibility wrapper for config-based method'
+- path: src/omniclaude/hooks/handler_event_emitter.py
+  rule: compat-comment
+  text: '# ONEX: exempt - backwards compatibility wrapper for config-based method'
+- path: src/omniclaude/hooks/models_injection_tracking.py
+  rule: compat-comment
+  text: '# Session tracking - serializes to "session_id" for backwards compatibility'
+- path: src/omniclaude/hooks/schemas.py
+  rule: compat-comment
+  text: '# All optional with None default for backward compatibility — old events'
+- path: src/omniclaude/hooks/schemas.py
+  rule: compat-comment
+  text: '# All optional with None default for backward compatibility.'
+- path: src/omniclaude/lib/core/manifest_injector.py
+  rule: compat-comment
+  text: '"schemas": schemas, # Also keep "schemas" for backward compatibility'
+- path: src/omniclaude/lib/core/manifest_injector.py
+  rule: compat-comment
+  text: '# Cached manifest data (for backward compatibility)'
+- path: src/omniclaude/lib/core/manifest_injector.py
+  rule: compat-comment
+  text: '# Check both "tables" and "schemas" keys for compatibility'
+- path: src/omniclaude/lib/core/manifest_injector.py
+  rule: compat-comment
+  text: '# Convenience function for quick access (sync wrapper for backward compatibility)'
+- path: src/omniclaude/lib/core/manifest_injector.py
+  rule: compat-comment
+  text: '# Sync wrapper (backward compatibility)'
+- path: src/omniclaude/lib/core/manifest_injector.py
+  rule: compat-comment
+  text: '- Maintains same format_for_prompt() API for backward compatibility'
+- path: src/omniclaude/lib/core/manifest_injector.py
+  rule: compat-comment
+  text: Maintains backward compatibility with static YAML version.
+- path: src/omniclaude/lib/core/manifest_injector.py
+  rule: compat-comment
+  text: backward compatibility. Prefer using inject_manifest_async() directly
+- path: src/omniclaude/lib/core/manifest_injector.py
+  rule: compat-docstring
+  text: 'def format_for_prompt(self, sections: list[str] | None = None) -> str:'
+- path: src/omniclaude/lib/core/manifest_injector.py
+  rule: compat-docstring
+  text: def inject_manifest(
+- path: src/omniclaude/lib/manifest_injection_event_publisher.py
+  rule: compat-comment
+  text: '# Re-export close for backwards compatibility'
+- path: src/omniclaude/lib/manifest_injection_event_publisher.py
+  rule: compat-comment
+  text: '# Synchronous wrapper for backward compatibility'
+- path: src/omniclaude/lib/transformation_event_publisher.py
+  rule: compat-comment
+  text: '# Re-export close for backwards compatibility'
+- path: src/omniclaude/lib/transformation_event_publisher.py
+  rule: compat-comment
+  text: '# Synchronous wrapper for backward compatibility'
+- path: src/omniclaude/lib/utils/correction/generator.py
+  rule: compat-comment
+  text: '# We keep this in the Protocol for compatibility with the external package.'
+- path: src/omniclaude/lib/utils/manifest_loader.py
+  rule: compat-comment
+  text: '- Maintains same API for backward compatibility'
+- path: src/omniclaude/lib/utils/validator_naming_conventions.py
+  rule: compat-comment
+  text: '# TypeScript/JavaScript patterns (legacy support)'
+- path: src/omniclaude/shared/models/model_skill_result.py
+  rule: compat-comment
+  text: '"""Skill result model - re-export shim for backward compatibility.'

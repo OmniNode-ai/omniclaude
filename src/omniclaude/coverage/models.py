@@ -107,7 +107,7 @@ class ModelCoverageCache(BaseModel):
     result: ModelCoverageScanResult = Field(description="Cached scan result")
     cache_path: str = Field(default="", description="Path to cache file on disk")
 
-    def is_expired(self, ttl_seconds: float = 3600.0) -> bool:
+    def is_expired(self, ttl_seconds: float) -> bool:
         """Check if cache entry has expired."""
         import time
 

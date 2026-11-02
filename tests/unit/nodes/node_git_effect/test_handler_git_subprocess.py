@@ -32,11 +32,11 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import yaml
 
 from omniclaude.nodes.node_git_effect.handlers.handler_git_subprocess import (
     _MAX_OUTPUT_BYTES,
     _TRUNCATION_MARKER,
-    OPERATION_TIMEOUTS,
     TICKET_STAMP_END,
     TICKET_STAMP_START,
     HandlerGitSubprocess,
@@ -48,6 +48,14 @@ from omniclaude.nodes.node_git_effect.models import (
     ModelPRListFilters,
 )
 from omniclaude.nodes.node_git_effect.models.model_git_result import GitResultStatus
+from omniclaude.nodes.node_git_effect.models.model_git_timeout_policy import (
+    ModelGitTimeoutPolicy,
+)
+
+_CONTRACT_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "src/omniclaude/nodes/node_git_effect/contract.yaml"
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -859,10 +867,115 @@ def test_initialize_probe_gh_not_found() -> None:
 
 @pytest.mark.unit
 def test_per_operation_timeout_values() -> None:
-    """Each operation has a configured timeout value."""
+    """Each operation has a positive deadline declared by the node contract."""
+    policy = ModelGitTimeoutPolicy.from_contract(env={})
     for op in GitOperation:
-        assert op in OPERATION_TIMEOUTS
-        assert OPERATION_TIMEOUTS[op] > 0
+        assert policy.timeout_for(op) > 0
+    assert policy.binary_probe_timeout_seconds > 0
+
+
+@pytest.mark.unit
+def test_contract_timeouts_reach_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A no-argument handler takes the contract deadlines plus the overlay."""
+    contract = yaml.safe_load(_CONTRACT_PATH.read_text(encoding="utf-8"))
+    declared = contract["error_handling"]["timeouts"]
+    for op in GitOperation:
+        monkeypatch.delenv(ModelGitTimeoutPolicy.overlay_env_name(op), raising=False)
+    monkeypatch.setenv("OMNICLAUDE_GIT_TIMEOUT_PUSH", "7.5")
+
+    policy = HandlerGitSubprocess()._timeout_policy
+
+    assert policy.timeout_for(GitOperation.PUSH) == 7.5
+    for op in GitOperation:
+        if op is not GitOperation.PUSH:
+            assert policy.timeout_for(op) == float(
+                declared["operation_timeout_seconds"][op.value]
+            )
+    assert policy.binary_probe_timeout_seconds == float(
+        declared["binary_probe_timeout_seconds"]
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_injected_timeout_reaches_wait_for() -> None:
+    """An injected policy's deadline is the one the subprocess wait applies."""
+    contract_policy = ModelGitTimeoutPolicy.from_contract(env={})
+    deadlines = dict(contract_policy.operation_timeout_seconds)
+    deadlines[GitOperation.COMMIT] = 3.25
+    handler = HandlerGitSubprocess(
+        timeout_policy=contract_policy.model_copy(
+            update={"operation_timeout_seconds": deadlines}
+        )
+    )
+    handler._git_available = True
+    seen: list[float] = []
+
+    async def _fake_wait_for(awaitable: Any, timeout: float) -> Any:
+        seen.append(timeout)
+        awaitable.close()
+        raise TimeoutError
+
+    with (
+        patch("asyncio.create_subprocess_exec", return_value=_make_proc_mock()),
+        patch("asyncio.wait_for", side_effect=_fake_wait_for),
+    ):
+        result = await handler.commit(
+            ModelGitRequest(
+                operation=GitOperation.COMMIT,
+                commit_message="msg",
+                correlation_id=_CORRELATION_ID,
+            )
+        )
+
+    assert seen == [3.25]
+    assert result.error_code == "TIMEOUT"
+    assert "3.25s" in (result.error or "")
+
+
+@pytest.mark.unit
+def test_injected_probe_timeout_reaches_initialize() -> None:
+    """The binary probe uses the policy's probe deadline for git and gh."""
+    policy = ModelGitTimeoutPolicy.from_contract(env={}).model_copy(
+        update={"binary_probe_timeout_seconds": 1.5}
+    )
+    handler = HandlerGitSubprocess(timeout_policy=policy)
+    completed = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout=b"v", stderr=b""
+    )
+    with patch("subprocess.run", return_value=completed) as run:
+        handler.initialize()
+
+    assert [call.kwargs["timeout"] for call in run.call_args_list] == [1.5, 1.5]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda t: t["operation_timeout_seconds"].pop("push"),
+        lambda t: t["operation_timeout_seconds"].__setitem__("push", 0),
+        lambda t: t.__setitem__("binary_probe_timeout_seconds", -1),
+        lambda t: t.pop("binary_probe_timeout_seconds"),
+    ],
+    ids=["missing-op", "zero-op", "negative-probe", "missing-probe"],
+)
+def test_invalid_contract_timeouts_fail(tmp_path: Path, mutation: Any) -> None:
+    """A missing or non-positive contract deadline fails; no code default fills it."""
+    contract = yaml.safe_load(_CONTRACT_PATH.read_text(encoding="utf-8"))
+    mutation(contract["error_handling"]["timeouts"])
+    path = tmp_path / "contract.yaml"
+    path.write_text(yaml.safe_dump(contract), encoding="utf-8")
+
+    with pytest.raises((ValueError, KeyError)):
+        ModelGitTimeoutPolicy.from_contract(path, env={})
+
+
+@pytest.mark.unit
+def test_malformed_overlay_fails() -> None:
+    """A malformed overlay value is refused rather than silently ignored."""
+    with pytest.raises(ValueError):
+        ModelGitTimeoutPolicy.from_contract(env={"OMNICLAUDE_GIT_TIMEOUT_PUSH": "soon"})
 
 
 # ===========================================================================

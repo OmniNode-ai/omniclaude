@@ -9,7 +9,7 @@
 # reads; this node refuses the three read paths around it: a GitHub MCP read
 # tool, a direct call to api.github.com, and the real gh binary run by its path.
 # The PreToolUse Bash guards entrypoint reaches it through one process call,
-# `python -m` the handler_lane_github_read_cli module.
+# `python -m` the runtime_lane_github_read module.
 
 name: node_lane_github_read_guard_effect
 version: "1.0.0"

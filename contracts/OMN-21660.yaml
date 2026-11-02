@@ -1,0 +1,58 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21660
+title: "onex:preflight reads the session identity from the declared lane identity, not a raw gh api user call"
+summary: >
+  The onex:preflight skill's profile-selection block called gh api user to learn who the session is.
+  The lane gh shim refuses that read, so a lane could not run the block. The block now offers
+  node_team_identity_compute the declared lane identity: the broker principal of the lane the hook edge
+  contract declares, read by hook_edge_lane.resolve_credential_environment from the surface the contract
+  names for that lane. It makes no gh call, never reads the identity from a variable, and runs the
+  team profile on every outcome short of a clean operator answer, including no store, an unreadable or
+  half-written store and a world-readable credential file.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21660-declared-lane-identity
+    statement: The preflight skill selects its profile from the declared lane identity and never calls gh.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the selection block holds no gh call and hands the declared lane principal to node_team_identity_compute as a broker_binding claim -- falsifier: uv run pytest tests/skills/test_preflight_skill_profile.py -q --no-cov"
+      - id: AC2
+        statement: "AC2: with no lane store, a half-written store or a world-readable credential file the block runs the team profile and still runs the runner -- falsifier: uv run pytest tests/skills/test_preflight_skill_profile.py -q --no-cov -k lane_identity"
+      - id: AC3
+        statement: "AC3: a PATH whose gh refuses every call changes nothing; the new tests fail on the base block and pass on the new one -- falsifier: uv run pytest tests/skills/test_preflight_skill_profile.py -q --no-cov -k gh_refuses"
+evidence_requirements:
+  - kind: tests
+    description: "Skill profile-selection and runner tests pass"
+    command: "uv run pytest tests/skills/test_preflight_skill_profile.py tests/scripts/test_session_preflight_runner.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21660-ac1
+    description: "The selection block holds no gh call and offers the declared lane principal as a broker_binding claim; fails at the merge base, whose block calls gh api user and offers a github_auth claim."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_preflight_skill_profile.py -q --no-cov -k 'test_a_positive_operator_match_runs_the_operator_profile or gh_refuses'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21660-ac2
+    description: "No lane store, a half-written store and a world-readable credential file each run the team profile, call no resolver and still run the runner; fails at the merge base, which has no lane store reader."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_preflight_skill_profile.py -q --no-cov -k lane_identity"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21660-ac3
+    description: "A gh that refuses every call is never invoked and the operator is still selected; fails at the merge base."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_preflight_skill_profile.py -q --no-cov -k gh_refuses"
+        cwd: "${OMNI_HOME}/omniclaude"

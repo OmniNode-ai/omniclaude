@@ -1,0 +1,50 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21795
+title: "Guard: dev runtime containers are recreated only by a deployment or a grant"
+summary: >
+  Operator, 2026-10-31: dev runtime containers are recreated only by a
+  deployment or under a grant. The PreToolUse Bash entrypoint hands a command
+  that names docker and a lifecycle verb to omnimarket's
+  node_dev_runtime_mutation_guard_effect, which refuses a recreate, removal or
+  restart of the dev runtime compose project unless a live ledger grant row
+  names it. The entrypoint's two node checks now share one runner, so the
+  baselined entrypoint does not grow.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21795-hook-wiring
+    statement: The registered PreToolUse Bash entrypoint refuses a hand recreate, removal or restart of the dev runtime and passes read-only calls and other projects.
+    acceptance:
+      - id: AC1
+        statement: "AC1: a PreToolUse Bash hook refuses docker or docker compose up, down, rm, restart, stop, kill, start or create aimed at the omnibase-infra project (by -p, COMPOSE_PROJECT_NAME, its compose file, its project label or a declared container name, locally or over ssh) unless a live grant row on the ledger names compose:omnibase-infra; planted refusal tests fail on the unguarded hook and pass on the guard -- falsifier: uv run pytest tests/hooks/test_dev_runtime_mutation_guard_hook.py -q"
+      - id: AC3
+        statement: "AC3: read-only docker calls (ps, logs, inspect, events, compose config or ps) and every other compose project are never refused by this hook -- falsifier: uv run pytest tests/hooks/test_dev_runtime_mutation_guard_hook.py -k ac3 -q"
+evidence_requirements:
+  - kind: tests
+    description: The hook test and the lane GitHub read hook test (same entrypoint), on a lab host with the omnimarket node installed.
+    command: uv run pytest tests/hooks/test_dev_runtime_mutation_guard_hook.py tests/hooks/test_lane_github_read_guard_hook.py -q
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21795-hook-ac1
+    description: AC1 runs the planted hand restart and recreate through the registered entrypoint, and a live grant row that admits it.
+    source: manual
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_dev_runtime_mutation_guard_hook.py -k ac1 -q
+        cwd: .
+  - id: dod-omn21795-hook-ac3
+    description: AC3 runs a read-only docker call over ssh, another compose project and a non-docker command through the entrypoint.
+    source: manual
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_dev_runtime_mutation_guard_hook.py -k ac3 -q
+        cwd: .

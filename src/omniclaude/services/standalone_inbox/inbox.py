@@ -115,8 +115,8 @@ class StandaloneInbox:
         *,
         repo: str,
         pr_number: int,
-        timeout_seconds: int = 3600,
-        poll_interval_seconds: int = 10,
+        timeout_seconds: int,
+        poll_interval_seconds: int,
     ) -> (
         dict[str, Any]  # any-ok: pre-existing
         | None  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
@@ -129,8 +129,8 @@ class StandaloneInbox:
         Args:
             repo: Full repo slug.
             pr_number: PR number to wait for.
-            timeout_seconds: Max seconds to wait. Default 1 hour.
-            poll_interval_seconds: Seconds between polls. Default 10.
+            timeout_seconds: Max seconds to wait.
+            poll_interval_seconds: Seconds between polls.
 
         Returns:
             Notification payload dict, or None on timeout.

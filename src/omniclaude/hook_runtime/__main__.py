@@ -17,12 +17,12 @@ import socket
 import sys
 from pathlib import Path
 
-_DEFAULT_SOCKET_PATH = "/tmp/omniclaude-hook-runtime.sock"  # noqa: S108  # nosec B108
-_DEFAULT_PID_PATH = "/tmp/omniclaude-hook-runtime.pid"  # noqa: S108  # nosec B108
+from omniclaude.models.model_runtime_paths import runtime_paths
 
 
 def _build_parser() -> argparse.ArgumentParser:
     """Build and return the CLI argument parser."""
+    paths = runtime_paths()
     parser = argparse.ArgumentParser(
         description="Hook Runtime Daemon — lightweight Unix socket server for hook enforcement",
         prog="python -m omniclaude.hook_runtime",
@@ -32,12 +32,12 @@ def _build_parser() -> argparse.ArgumentParser:
     start_p = sub.add_parser("start", help="Start the hook runtime daemon")
     start_p.add_argument(
         "--socket-path",
-        default=_DEFAULT_SOCKET_PATH,
+        default=paths.hook_socket,
         help="Unix socket path (default: %(default)s)",
     )
     start_p.add_argument(
         "--pid-path",
-        default=_DEFAULT_PID_PATH,
+        default=paths.hook_pid,
         help="PID file path (default: %(default)s)",
     )
     start_p.add_argument(
@@ -50,19 +50,19 @@ def _build_parser() -> argparse.ArgumentParser:
     stop_p = sub.add_parser("stop", help="Stop a running hook runtime daemon")
     stop_p.add_argument(
         "--socket-path",
-        default=_DEFAULT_SOCKET_PATH,
+        default=paths.hook_socket,
         help="Unix socket path (default: %(default)s)",
     )
     stop_p.add_argument(
         "--pid-path",
-        default=_DEFAULT_PID_PATH,
+        default=paths.hook_pid,
         help="PID file path (default: %(default)s)",
     )
 
     status_p = sub.add_parser("status", help="Check hook runtime daemon status")
     status_p.add_argument(
         "--socket-path",
-        default=_DEFAULT_SOCKET_PATH,
+        default=paths.hook_socket,
         help="Unix socket path (default: %(default)s)",
     )
 

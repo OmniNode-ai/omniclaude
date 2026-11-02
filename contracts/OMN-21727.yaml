@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21727
+title: "omniclaude contracts_and_di literal_url burn-down, slice rf1230b-c3"
+summary: >
+  Three literal_url findings in src/omniclaude/lib/core: the fallback Valkey URL of
+  IntelligenceCache (with and without a password) and the fallback embeddings endpoint of
+  ManifestInjector._embed_text. This slice declares both endpoints in the runtime contract
+  service_endpoints section, resolved from the operator overlay env, loads them into a frozen
+  ModelServiceEndpointDefaults and injects that model into IntelligenceCache and
+  ManifestInjector. No constants module, baseline entry or suppression is added.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21727-endpoints-from-contract
+    statement: The fallback Valkey URL and embeddings endpoint of src/omniclaude/lib/core come from the runtime contract overlay and are injected.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the contracts_and_di count for literal_url over the slice paths drops to zero and the repo total drops by the slice size, with no baseline entry or suppression added -- falsifier: onex run of runtime_validator_run with the contracts_and_di reference over omniclaude before and after, counts compared per rule"
+      - id: AC2
+        statement: "AC2: every moved URL is taken through an injected parameter bound from the node contract or overlay and none remains hard-coded in the touched code -- falsifier: uv run pytest tests/unit -q over the touched modules plus the checker re-run on the slice paths"
+      - id: AC3
+        statement: "AC3: the slice lands as one PR titled with this ticket id and carries lab proof of the tests and the checker re-run -- falsifier: uv run pytest tests/unit -q on the lab through lab-run at the PR head, receipt path in the PR body"
+evidence_requirements:
+  - kind: tests
+    description: "Service-endpoint defaults, model-routing defaults and manifest injector tests pass"
+    command: "uv run pytest tests/unit/models/test_model_service_endpoint_defaults.py tests/unit/models/test_model_routing_defaults.py tests/golden/test_manifest_injector_golden.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21727-endpoints-from-contract
+    description: "The contract, the frozen model and the two callers carry the endpoints; no URL literal remains in intelligence_cache.py or in ManifestInjector._embed_text."
+    source: manual
+    binds_ac: [AC1, AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "bash -c 'ONEX_STATE_DIR=$(mktemp -d) uv run pytest tests/unit/models/test_model_service_endpoint_defaults.py tests/unit/models/test_model_routing_defaults.py tests/golden/test_manifest_injector_golden.py -q --no-cov'"
+  - id: dod-omn21727-slice-proof
+    description: "The slice carries tests that pass at the PR head and the direct-model-call baseline no longer lists the removed ManifestInjector._embed_text site."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "bash -c 'ONEX_STATE_DIR=$(mktemp -d) uv run pytest tests/unit/models/test_model_service_endpoint_defaults.py tests/ci/test_repo_evidence_caller_workflow.py -q --no-cov'"
+      - check_type: command
+        check_value: "bash -c '! grep -q \"ManifestInjector._embed_text\" .onex_ratchets/direct_model_call_baseline.yaml'"

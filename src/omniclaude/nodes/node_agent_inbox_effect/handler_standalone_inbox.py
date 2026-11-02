@@ -178,7 +178,7 @@ class HandlerStandaloneInbox:
 
     async def gc_inbox(
         self,
-        ttl_hours: int = 24,
+        ttl_hours: int,
     ) -> int:
         """Remove expired message files from all agent inboxes.
 

@@ -5,8 +5,11 @@ a log file on disk. Show the user the answer from that object, then one line nam
 run. Nothing else.
 
 ```bash
-onex delegate "<prompt>" --json [--task-type <type>] [--max-tokens <n>]
+onex delegate "<prompt>" --json --session-model <session-model-id> [--task-type <type>] [--max-tokens <n>]
 ```
+
+If that command exits 2 with `Error: No such option '--session-model'` and `REFUSED -- argument_parsing, nothing dispatched`, the installed `onex` predates the flag and
+no delegation ran. That refusal is not the answer and not a failure to report: run the same command once more without `--session-model`, then answer from that run.
 
 Run it exactly like that: a plain `onex delegate` invocation with no redirect, pipe, `&&`
 or `2>&1`. The permission rule `Bash(onex delegate:*)` covers only a plain invocation.
@@ -20,6 +23,7 @@ the current directory's project and fails outside a repo that co-installs
 - `--json` — required. The one stdout line is the typed result, and its `correlation_id` is the run id the closing line carries; `--result-only` is not used because it prints the answer alone, with no run id.
 - `--task-type` — `test | document | research | code_generation | refactor | reasoning | review`. Omit to auto-classify from the prompt.
 - `--max-tokens` — response budget (default 2048).
+- `--session-model` — the exact model ID this Claude Code session runs, as the session's own system prompt names it (for example `claude-opus-5-5`). The run's savings are stated against your own model, and the receipt names `baseline_source: session_model`. Never guess an ID: if the session does not name one, leave the flag out and the fixed default baseline is used. If the command fails with `No such option: --session-model`, the installed `onex` predates the flag: run the same command once more without `--session-model`.
 
 The command builds the payload, dispatches the node, and extracts the result
 internally. Do NOT construct a payload file, `cd` anywhere, or read any

@@ -198,11 +198,6 @@ from pathlib import Path
 from typing import Final
 
 from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
-from omniclaude.nodes.node_git_effect.models import (
-    GitOperation,
-    ModelGitRequest,
-    ModelGitResult,
-)
 from omniclaude.nodes.node_git_effect.models.model_git_admission import (
     ModelGitAdmissionRequest,
     ModelGitAdmissionResult,
@@ -2716,41 +2711,17 @@ class HandlerGitAdmission:
 
 
 def dispatch(
-    request: ModelGitAdmissionRequest, state_root: Path
+    request: ModelGitAdmissionRequest,
+    state_root: Path,
+    *,
+    runtime_timeout_seconds: float | None = None,
 ) -> ModelGitAdmissionResult:
-    """Use the canonical runtime and its contract-declared in-memory bus.
+    """Dispatch through the contract-bound admission transport."""
+    from omniclaude.nodes.node_git_effect.container import container_git_admission
 
-    Git index, HEAD and dirty-file reads must occur on the hook's host. A remote
-    broker consumer would inspect a different filesystem. This is an explicit
-    in-process deployment, never a fallback from a failed remote dispatch.
-    """
-    from omnibase_core.enums.enum_workflow_result import EnumWorkflowResult
-    from omnibase_core.runtime.runtime_local import RuntimeLocal
-
-    state_root.mkdir(parents=True, exist_ok=True)
-    input_path = state_root / "input.json"
-    input_path.write_text(
-        ModelGitRequest(
-            operation=GitOperation.ADMISSION_CHECK,
-            admission=request,
-            correlation_id=request.correlation_id,
-        ).model_dump_json()
+    return container_git_admission.build_git_admission_transport().dispatch(
+        request, state_root, runtime_timeout_seconds=runtime_timeout_seconds
     )
-    runtime = RuntimeLocal(
-        workflow_path=Path(__file__).resolve().parent.parent / "contract.yaml",
-        state_root=state_root,
-        input_path=input_path,
-        backend_overrides={"event_bus": "inmemory"},
-        timeout=30,
-    )
-    if runtime.run() is not EnumWorkflowResult.COMPLETED:
-        raise RuntimeError(
-            runtime.last_error or "git admission runtime did not complete"
-        )
-    result = runtime.handler_result
-    if not isinstance(result, ModelGitResult) or result.admission is None:
-        raise RuntimeError("git admission runtime returned no typed verdict")
-    return result.admission
 
 
 def _is_publish_command(command: str) -> bool:

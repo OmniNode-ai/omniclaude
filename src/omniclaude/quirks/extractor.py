@@ -34,10 +34,8 @@ from typing import Any
 from uuid import uuid4
 
 from omniclaude.hooks.topics import TopicBase
-from omniclaude.lib.kafka_publisher_base import (
-    create_event_envelope,
-    publish_to_kafka,
-)
+from omniclaude.lib.kafka_publisher_base import create_event_envelope, publish_to_kafka
+from omniclaude.models.model_lib_timeouts import lib_timeouts
 from omniclaude.quirks.detectors.context import DetectionContext
 from omniclaude.quirks.detectors.registry import get_all_detectors
 from omniclaude.quirks.models import QuirkSignal
@@ -126,10 +124,12 @@ class NodeQuirkSignalExtractorEffect:
 
         if self._worker_task is not None:
             try:
-                await asyncio.wait_for(self._worker_task, timeout=5.0)
+                await asyncio.wait_for(
+                    self._worker_task, timeout=lib_timeouts().quirk_worker_stop_seconds
+                )
             except TimeoutError:
                 logger.warning(
-                    "NodeQuirkSignalExtractorEffect: worker did not stop within 5s; cancelling"
+                    "NodeQuirkSignalExtractorEffect: worker did not stop within its timeout; cancelling"
                 )
                 self._worker_task.cancel()
         logger.info("NodeQuirkSignalExtractorEffect stopped (run_id=%s)", self._run_id)

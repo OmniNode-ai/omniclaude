@@ -1,0 +1,48 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21742
+title: "omniclaude handler-shape burn-down, slice rf1310-s2: handlers take one typed request and no envelope"
+summary: >
+  OMN-21742 is a lane slice of the OMN-21536 handler-shape burn-down. At the dev tip
+  7b20a679d the handler_shape checker of omnibase_core reported 18 findings over
+  omniclaude src (module_function_handler 15, mutating_public_method 3, envelope_in_core 0,
+  noncanonical_handle 0). This slice takes four handler modules. The session cost emitter
+  and the chat auto-emit become handler classes with a typed handle(request) and request
+  and result models. The chat store path property and the routing history
+  record_routing_decision no longer mutate handler state in a public method. The count over
+  src drops from 18 to 14 (module_function_handler 15 to 13, mutating_public_method 3 to 1).
+  No baseline entry or suppression is added.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21742-rf1310-s2
+    statement: The four touched handler modules report no handler-shape finding, and the handlers name no event envelope.
+    acceptance:
+      - id: AC1
+        statement: "AC1 (slice rf1310-s2): the handler-shape finding count over the four slice paths is zero with no baseline entry or suppression added, and the count over src falls from 18 to 14 -- falsifier: ValidatorHandlerShape run over omniclaude src before and after, counts compared per rule"
+      - id: AC2
+        statement: "AC2 (slice rf1310-s2): the touched handlers use handle(request) with typed models and name no event envelope -- falsifier: uv run pytest over the touched modules plus the handler-shape re-run on the slice paths"
+evidence_requirements:
+  - kind: tests
+    description: "The touched modules' unit tests pass at the PR head"
+    command: "uv run pytest tests/unit/hooks/test_handler_session_cost_emitter.py tests/unit/nodes/node_agent_chat tests/routing/test_handlers.py tests/unit/test_session_id_migration_src.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21742-ac2-tests
+    description: "The touched handlers' tests run through HandlerSessionCostEmitter and HandlerAutoEmit. Fails at the merge base, where those classes do not exist."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_handler_session_cost_emitter.py tests/unit/nodes/node_agent_chat tests/routing/test_handlers.py tests/unit/test_session_id_migration_src.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn21742-ac1-classes-on-branch
+    description: "Deploy check: the two converted handler modules at the checked-out head define their handler classes. Fails at the merge base."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: "grep -q 'class HandlerSessionCostEmitter' src/omniclaude/hooks/handler_session_cost_emitter.py && grep -q 'class HandlerAutoEmit' src/omniclaude/nodes/node_agent_chat/handler_auto_emit.py"

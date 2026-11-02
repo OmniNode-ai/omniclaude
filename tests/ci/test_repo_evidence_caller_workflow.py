@@ -18,32 +18,26 @@ from scripts.ci.ci_summary_gate import (
     EXTERNAL_SWEEP_EXCLUSIONS,
     evaluate_external_sweep,
 )
+from tests.ci.receipt_gate_pin import RECEIPT_GATE_PIN_TAG
 
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CALLER_PATH = REPO_ROOT / ".github" / "workflows" / "call-repo-evidence-gate.yml"
 
-# First release whose wheel ships node_dod_verify occ-difference, omnimarket#3277.
-_DIFFERENCE_CLASSIFIER_FLOOR = (0, 4, 294)
+# OMN-21855 (ruling 2026-10-31T21:49:54Z): the caller installs its
+# verifier from an omnimarket dev-merge tag through verifier-tag and passes no
+# verifier-version, which the reusable keeps only as a warned fallback. The
+# reusable resolves the tag to a commit and refuses a moved tag, a tag not on
+# omnimarket dev and one that does not descend from its floor commit.
+_DEV_MERGE_TAG = r"dev-\d{14}-[0-9a-f]{12}"
 
-# OMN-20074: the receipt-gate pin omnimarket's caller uses, the squash commit of
-# omnibase_core#1932 on dev. It descends from omnibase_core#1914 and #1912, whose
-# head step writes the contract-home marker the difference step needs to name a
-# contract that lives in another repository, and it adds the writer app's
-# workflow-pin (#1927) and plugin version bump (#1931) classification.
-_FLEET_RECEIPT_GATE_PIN = "4e4f5e0404d364e296c5d37db6aa3ab9e07f8ffa"
-
-# First release whose wheel reads that marker and reports
-# contract_in_another_repo, omnimarket#3563.
-_CONTRACT_HOME_CLASSIFIER_FLOOR = (0, 4, 305)
-
-# First release whose wheel ships classify_plugin_manifest_version_only and
-# classify_workflow_core_pin_only (omnimarket#3694), the classifiers the pinned
-# reusable hands a writer app plugin version bump and an omnibase_core checkout
-# pin bump to. It also ships omnimarket#3751: node_dod_verify refuses a contract
-# YAML that repeats a mapping key.
-_WRITER_APP_CLASSIFIER_FLOOR = (0, 4, 310)
+# OMN-20074: the receipt-gate pin is an omnibase_core dev-merge tag, held in
+# tests/ci/receipt_gate_pin.py (OMN-20134). It descends from omnibase_core#1932,
+# #1914 and #1912, whose head step writes the contract-home marker the difference
+# step needs to name a contract that lives in another repository, and it adds the
+# writer app's workflow-pin (#1927) and plugin version bump (#1931) classification.
+_FLEET_RECEIPT_GATE_PIN = RECEIPT_GATE_PIN_TAG
 
 
 def test_caller_workflow_shape() -> None:
@@ -72,14 +66,17 @@ def test_caller_workflow_shape() -> None:
     )
     job = data["jobs"]["repo-evidence"]
     assert re.fullmatch(
-        r"OmniNode-ai/omnibase_core/\.github/workflows/receipt-gate\.yml@[0-9a-f]{40}",
+        r"OmniNode-ai/omnibase_core/\.github/workflows/receipt-gate\.yml@dev-\d{14}-[0-9a-f]{12}",
         job["uses"],
-    ), "receipt-gate reusable must be pinned by an immutable full SHA"
+    ), "receipt-gate reusable must be pinned by an omnibase_core dev-merge tag"
     assert job["with"]["evidence-source"] == "caller", (
         "caller evidence mode is required"
     )
-    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", job["with"]["verifier-version"]), (
-        "verifier-version must be a numeric semantic version"
+    assert re.fullmatch(_DEV_MERGE_TAG, job["with"]["verifier-tag"]), (
+        "verifier-tag must be an omnimarket dev-merge tag"
+    )
+    assert "verifier-version" not in job["with"], (
+        "caller must not pass the verifier-version fallback"
     )
     for key in ("steps", "secrets", "if", "name", "permissions"):
         assert key not in job, f"caller job must not declare {key}"
@@ -87,14 +84,16 @@ def test_caller_workflow_shape() -> None:
 
 
 def test_caller_verifier_ships_the_occ_difference_classifier() -> None:
+    """The verifier comes from a dev-merge tag, not a released version number.
+
+    The reusable checks the tag's ancestry against its own floor commit, so the
+    caller asserts only the tag's shape and the absence of the version fallback.
+    """
     job = yaml.safe_load(CALLER_PATH.read_text(encoding="utf-8"))["jobs"][
         "repo-evidence"
     ]
-    version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
-    assert version >= _DIFFERENCE_CLASSIFIER_FLOOR, (
-        "verifier-version must ship node_dod_verify occ-difference "
-        f"(>= {'.'.join(map(str, _DIFFERENCE_CLASSIFIER_FLOOR))})"
-    )
+    assert re.fullmatch(_DEV_MERGE_TAG, job["with"]["verifier-tag"])
+    assert "verifier-version" not in job["with"]
 
 
 def test_caller_enforces_and_stops_comparing_with_occ_after_the_s6_cutover() -> None:
@@ -103,8 +102,7 @@ def test_caller_enforces_and_stops_comparing_with_occ_after_the_s6_cutover() -> 
     ]
     assert job["with"].get("compare-with-occ") == "false"
     assert job["with"].get("shadow") == "false"
-    version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
-    assert version >= (0, 4, 294)
+    assert re.fullmatch(_DEV_MERGE_TAG, job["with"]["verifier-tag"])
 
 
 def test_caller_pins_the_reusable_that_classifies_a_contract_in_another_repo() -> None:
@@ -121,16 +119,15 @@ def test_caller_pins_the_reusable_that_classifies_a_contract_in_another_repo() -
     pin = job["uses"].rsplit("@", 1)[1]
     assert pin == _FLEET_RECEIPT_GATE_PIN, (
         f"receipt-gate must be pinned at {_FLEET_RECEIPT_GATE_PIN} "
-        f"(omnibase_core#1932, a descendant of #1914); found {pin}"
+        f"(a descendant of omnibase_core#1932 and #1914); found {pin}"
     )
-    version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
-    assert version >= _CONTRACT_HOME_CLASSIFIER_FLOOR, (
-        "verifier-version must read the contract-home marker "
-        f"(>= {'.'.join(map(str, _CONTRACT_HOME_CLASSIFIER_FLOOR))})"
+    assert re.fullmatch(_DEV_MERGE_TAG, job["with"]["verifier-tag"]), (
+        "verifier-tag must be an omnimarket dev-merge tag that reads the "
+        "contract-home marker"
     )
 
 
-def test_caller_runs_the_writer_app_classifiers_of_verifier_0_4_310() -> None:
+def test_caller_runs_the_writer_app_classifiers_of_the_verifier_tag() -> None:
     """OMN-20074: writer app plugin bumps and core pin bumps must classify.
 
     At omnibase_core#1914 with verifier 0.4.305 the reusable hands neither a
@@ -144,13 +141,13 @@ def test_caller_runs_the_writer_app_classifiers_of_verifier_0_4_310() -> None:
     pin = job["uses"].rsplit("@", 1)[1]
     assert pin == _FLEET_RECEIPT_GATE_PIN, (
         f"receipt-gate must be pinned at {_FLEET_RECEIPT_GATE_PIN} "
-        f"(omnibase_core#1932, the writer app classifier hand-off); found {pin}"
+        f"(a descendant of omnibase_core#1932, the writer app classifier hand-off); found {pin}"
     )
-    version = tuple(int(part) for part in job["with"]["verifier-version"].split("."))
-    assert version >= _WRITER_APP_CLASSIFIER_FLOOR, (
-        "verifier-version must ship the writer app plugin manifest and workflow "
-        f"pin classifiers (>= {'.'.join(map(str, _WRITER_APP_CLASSIFIER_FLOOR))})"
+    assert re.fullmatch(_DEV_MERGE_TAG, job["with"]["verifier-tag"]), (
+        "verifier-tag must be an omnimarket dev-merge tag that ships the writer "
+        "app plugin manifest and workflow pin classifiers"
     )
+    assert "verifier-version" not in job["with"]
 
 
 def _duplicate_key_refusals(root: Path) -> list[str]:

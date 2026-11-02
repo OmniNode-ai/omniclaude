@@ -103,6 +103,7 @@ def _sanitize_for_logging(text: str) -> str:
 from .consensus.quorum import AIQuorum
 from .correction.generator import CorrectionGenerator
 from .validator_naming_conventions import NamingValidator, Violation
+from omniclaude.models.model_endpoint_defaults import ModelEndpointDefaults
 
 # =============================================================================
 # Pattern Enforcement Kafka Emission (OMN-2378)
@@ -685,7 +686,7 @@ class QualityEnforcer:
             try:
                 # Get RAG config from CONFIG
                 rag_config = CONFIG.get("rag", {})
-                intelligence_url = rag_config.get("base_url", "http://localhost:8181")
+                intelligence_url = rag_config.get("base_url", ModelEndpointDefaults.from_contract().rag_base_url)
                 timeout = rag_config.get("timeout_seconds", 0.5)
 
                 generator = CorrectionGenerator(
@@ -915,9 +916,9 @@ class QualityEnforcer:
         # Handle different tool types
         if "content" in params:
             return str(params["content"])
-        elif "new_string" in params:
+        if "new_string" in params:
             return str(params["new_string"])
-        elif "edits" in params:
+        if "edits" in params:
             # MultiEdit case
             return "\n".join(
                 str(edit.get("new_string", "")) for edit in params["edits"]
@@ -1318,19 +1319,18 @@ async def main() -> int:
             print()  # Add newline
 
             return exit_code
-        else:
-            # No violations, allow the operation
-            output = result
+        # No violations, allow the operation
+        output = result
 
-            # Add enhanced metadata for logging
-            if enhanced_metadata:
-                output["enhanced_metadata"] = enhanced_metadata
+        # Add enhanced metadata for logging
+        if enhanced_metadata:
+            output["enhanced_metadata"] = enhanced_metadata
 
-            # Output result to stdout
-            json.dump(output, sys.stdout, indent=2)
-            print()  # Add newline
+        # Output result to stdout
+        json.dump(output, sys.stdout, indent=2)
+        print()  # Add newline
 
-            return 0
+        return 0
 
     except json.JSONDecodeError as e:
         # Sanitize error message before logging (may contain input fragments)

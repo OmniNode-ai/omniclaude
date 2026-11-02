@@ -79,6 +79,8 @@ from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 from omniclaude.lib.intelligence_usage_tracker import IntelligenceUsageTracker
 from omniclaude.lib.pattern_quality_scorer import PatternQualityScorer
 from omniclaude.lib.task_classifier import TaskClassifier, TaskContext
+from omniclaude.models.model_model_routing_defaults import ModelModelRoutingDefaults
+from omniclaude.models.model_service_endpoint_defaults import ModelServiceEndpointDefaults
 
 from .intelligence_cache import IntelligenceCache
 from .intelligence_event_client import IntelligenceEventClient
@@ -571,6 +573,8 @@ class ManifestInjector:
         enable_cache: bool = True,
         cache_ttl_seconds: int | None = None,
         agent_name: str | None = None,
+        model_routing_defaults: ModelModelRoutingDefaults | None = None,
+        service_endpoint_defaults: ModelServiceEndpointDefaults | None = None,
     ):
         """
         Initialize manifest injector.
@@ -586,9 +590,14 @@ class ManifestInjector:
             cache_ttl_seconds: Cache TTL override (default: from env or 300)
             agent_name: Agent name for logging (if known at init time)
                        Falls back to AGENT_NAME environment variable if not provided
+            model_routing_defaults: Default model ids for the models section
+                (default: the runtime contract model_routing overlay, read on first use)
+            service_endpoint_defaults: Default service endpoints (default: the runtime contract service_endpoints overlay)
         """
         # Initialize logger early for use throughout __init__
         self.logger = logging.getLogger(__name__)
+        self._model_routing_defaults = model_routing_defaults
+        self._service_endpoint_defaults = service_endpoint_defaults
 
         self.kafka_brokers = (
             kafka_brokers or settings.get_effective_kafka_bootstrap_servers() or None
@@ -618,9 +627,7 @@ class ManifestInjector:
         # Valkey cache is checked BEFORE in-memory cache for better hit rates
         self._valkey_cache: IntelligenceCache | None = None
         if enable_cache:
-            self._valkey_cache = IntelligenceCache()
-        else:
-            self._valkey_cache = None
+            self._valkey_cache = IntelligenceCache(endpoint_defaults=service_endpoint_defaults)
 
         # Cached manifest data (for backward compatibility)
         self._manifest_data: dict[str, Any] | None = None
@@ -1360,11 +1367,9 @@ class ManifestInjector:
             # Default to GTE-Qwen2-1.5B (1536 dimensions, matches archon_vectors collection)
             model = "Alibaba-NLP/gte-Qwen2-1.5B-instruct"
 
-        # GTE-Qwen2 embedding service (OpenAI-compatible API)
-        # Default to localhost - production URLs should be set via EMBEDDING_SERVICE_URL env var
-        embedding_url = os.environ.get(
-            "EMBEDDING_SERVICE_URL", "http://localhost:8002/v1/embeddings"
-        )
+        # GTE-Qwen2 embedding service (OpenAI-compatible API); the endpoint comes from the
+        # runtime contract service_endpoints overlay (EMBEDDING_SERVICE_URL), no URL in source
+        embedding_url = (self._service_endpoint_defaults or ModelServiceEndpointDefaults.from_contract()).embedding_service_url
 
         try:
             payload = {
@@ -2707,18 +2712,14 @@ class ManifestInjector:
 
             # 3. Build AI models section
             # Check Gemini provider
+            routing = (
+                self._model_routing_defaults or ModelModelRoutingDefaults.from_contract()
+            )
             if env_keys.get("gemini") or env_keys.get("google"):
-                gemini_config = provider_config.get("gemini-2.5-flash", {})
+                gemini_config = provider_config.get("gemini", {})
                 ai_models["gemini"] = {
                     "provider": "google",
-                    "models": gemini_config.get(
-                        "models",
-                        {
-                            "haiku": "gemini-2.5-flash",
-                            "sonnet": "gemini-2.5-flash",
-                            "opus": "gemini-2.5-pro",
-                        },
-                    ),
+                    "models": gemini_config.get("models", routing.gemini_tier_models),
                     "available": True,
                     "api_key_set": True,
                 }
@@ -2728,14 +2729,7 @@ class ManifestInjector:
                 zai_config = provider_config.get("zai", {})
                 ai_models["zai"] = {
                     "provider": "z.ai",
-                    "models": zai_config.get(
-                        "models",
-                        {
-                            "haiku": "glm-4.5-air",
-                            "sonnet": "glm-4.5",
-                            "opus": "glm-4.6",
-                        },
-                    ),
+                    "models": zai_config.get("models", routing.zai_tier_models),
                     "available": True,
                     "api_key_set": True,
                     "rate_limits": zai_config.get("rate_limits", {}),
@@ -2743,41 +2737,7 @@ class ManifestInjector:
 
             # 4. Add intelligence models (AI Quorum configuration)
             intelligence_models = [
-                {
-                    "name": "Gemini Flash",
-                    "model": "gemini-1.5-flash",
-                    "provider": "google",
-                    "weight": 1.0,
-                    "use_case": "Fast analysis, quick validation",
-                },
-                {
-                    "name": "Codestral",
-                    "model": "codestral-latest",
-                    "provider": "mistral",
-                    "weight": 1.5,
-                    "use_case": "Code generation, ONEX compliance",
-                },
-                {
-                    "name": "DeepSeek Lite",
-                    "model": "deepseek-coder-lite",
-                    "provider": "deepseek",
-                    "weight": 1.0,
-                    "use_case": "Code understanding, pattern matching",
-                },
-                {
-                    "name": "Llama 3.1",
-                    "model": "llama-3.1-70b",
-                    "provider": "together",
-                    "weight": 2.0,
-                    "use_case": "Architectural decisions, quality assessment",
-                },
-                {
-                    "name": "DeepSeek Full",
-                    "model": "deepseek-coder-33b",
-                    "provider": "deepseek",
-                    "weight": 2.0,
-                    "use_case": "Critical validation, complex analysis",
-                },
+                entry.model_dump() for entry in routing.intelligence_models
             ]
 
             # Build result

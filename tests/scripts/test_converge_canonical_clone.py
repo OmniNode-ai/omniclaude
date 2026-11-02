@@ -292,6 +292,29 @@ def test_execute_converges_and_preserves(scratch: Scratch) -> None:
 
 
 @pytest.mark.unit
+def test_note_names_what_the_caller_saved_in_the_one_ledger_row(
+    scratch: Scratch,
+) -> None:
+    """OMN-21821: --note is appended to the single row, with pipes made harmless."""
+    _dirty_like_the_incident(scratch)
+    note = "2 source path(s) pushed to origin branch rescue/x | and a.ts kept only in the archive"
+    proc = scratch.run(
+        "omnimarket", "--execute", "--ticket", "OMN-21821", "--note", note
+    )
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+    rows = [
+        line
+        for line in scratch.ledger.read_text(encoding="utf-8").splitlines()
+        if "| STATUS |" in line
+    ]
+    assert len(rows) == 1
+    assert (
+        "saved: 2 source path(s) pushed to origin branch rescue/x ; and a.ts kept"
+        in rows[0]
+    )
+    assert rows[0].count(" | ") == 5  # the note added no field separator
+
+
 def test_execute_with_clean_untracked(scratch: Scratch) -> None:
     _dirty_like_the_incident(scratch)
     proc = scratch.run("omnimarket", "--execute", "--clean-untracked")

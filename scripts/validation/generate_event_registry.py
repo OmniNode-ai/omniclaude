@@ -60,33 +60,11 @@ EVENT_REGISTRY_MODULE = REPO_ROOT / "src" / "omniclaude" / "hooks" / "event_regi
 # constructs or emits these, so omniclaude's client-side EVENT_REGISTRY
 # intentionally does not carry a registration for them. Keep this set in sync
 # with the module docstring in event_registry.py and the OMN-15967 ticket body.
+DAEMON_INTERNAL_EVENT_TYPES_FILE = Path(__file__).with_name(
+    "daemon_internal_event_types.yaml"
+)
 DAEMON_INTERNAL_EVENT_TYPES: frozenset[str] = frozenset(
-    {
-        "daemon.health.probe",
-        "delegate_skill.completed",
-        "delegate_skill.failed",
-        "delegation.disposition_recorded",
-        "delegation.request",
-        # omnimarket-owned work-ledger and PR-watcher events. They are written
-        # by lanes and watchers through the daemon, never by a Claude Code hook
-        # client, so there is nothing client-side to project.
-        "pr.state.observed",
-        # omnimarket-owned: the delegate-skill node's terminal events and the
-        # provider-quota observation (OMN-20154). The daemon emits them; no
-        # hook client does.
-        "provider.quota.observed",
-        "work.ledger.ack",
-        "work.ledger.claim",
-        "work.ledger.correction",
-        "work.ledger.friction",
-        "work.ledger.hold",
-        "work.ledger.msg",
-        "work.ledger.operator_consent",
-        "work.ledger.release",
-        "work.ledger.ruling",
-        "work.ledger.status",
-        "work.ledger.terminal",
-    }
+    yaml.safe_load(DAEMON_INTERNAL_EVENT_TYPES_FILE.read_text(encoding="utf-8"))
 )
 
 # Daemon-side fan-out topics that do not resolve to a TopicBase member because
@@ -150,8 +128,7 @@ def load_daemon_events(daemon_registry_path: Path) -> dict[str, Any]:
         raise ValueError(
             f"{daemon_registry_path} must contain a top-level 'events' mapping"
         )
-    result: dict[str, Any] = events
-    return result
+    return dict(events)
 
 
 def project_registration(event_type: str, event_def: dict[str, Any]) -> dict[str, Any]:
@@ -187,6 +164,10 @@ def project_registration(event_type: str, event_def: dict[str, Any]) -> dict[str
     }
 
 
+# An event the registry declares ``node_owned: true`` is emitted by an omnimarket
+# node, never by a hook client (OMN-21112): like DAEMON_INTERNAL_EVENT_TYPES, it has
+# no client-side registration to project, and omnimarket's drift validator skips
+# the same flag.
 def build_projected_registry(
     daemon_events: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
@@ -195,6 +176,7 @@ def build_projected_registry(
         event_type: project_registration(event_type, event_def)
         for event_type, event_def in daemon_events.items()
         if event_type not in DAEMON_INTERNAL_EVENT_TYPES
+        and event_def.get("node_owned") is not True
     }
 
 

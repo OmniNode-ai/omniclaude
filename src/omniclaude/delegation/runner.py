@@ -204,9 +204,8 @@ def _build_transport_and_handler() -> tuple[
     ModelONEXContainer.
     """
     from omnibase_infra.mixins.mixin_llm_http_transport import MixinLlmHttpTransport
-    from omnibase_infra.nodes.node_llm_inference_effect.handlers.handler_llm_openai_compatible import (
-        HandlerLlmOpenaiCompatible,
-    )
+
+    from omniclaude.handlers.container import container_delegation
 
     class _InProcessTransport(MixinLlmHttpTransport):
         """Minimal concrete transport for in-process Bifrost delegation calls."""
@@ -218,7 +217,7 @@ def _build_transport_and_handler() -> tuple[
             )
 
     transport = _InProcessTransport()
-    handler = HandlerLlmOpenaiCompatible(transport=transport)
+    handler = container_delegation.build_llm_openai_compatible(transport=transport)
     return transport, handler
 
 
@@ -290,11 +289,9 @@ class DelegationRunner:
             transport, handler = _build_transport_and_handler()
             self._transport = transport
 
-            from omnibase_infra.nodes.node_llm_inference_effect.handlers.bifrost.handler_bifrost_gateway import (
-                HandlerBifrostGateway,
-            )
+            from omniclaude.handlers.container import container_delegation
 
-            self._gateway = HandlerBifrostGateway(
+            self._gateway = container_delegation.build_bifrost_gateway(
                 config=cfg,
                 inference_handler=handler,
                 on_routing_decision=self._handle_routing_decision,

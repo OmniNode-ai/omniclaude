@@ -51,6 +51,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from omniclaude.hooks.cohort_assignment import CohortAssignmentConfig
+from omniclaude.models.model_runtime_paths import runtime_paths
 
 # Sentinel used to distinguish "user never set api_url" from "user explicitly set it to the
 # same value as the built-in default". Must not be a valid URL.
@@ -130,7 +131,7 @@ class SessionStartInjectionConfig(BaseModel):
         description="Skip UserPromptSubmit injection if SessionStart already injected",
     )
     marker_file_dir: str = Field(
-        default="/tmp/omniclaude-sessions",  # noqa: S108  # nosec B108
+        default_factory=lambda: runtime_paths().session_marker_dir,
         description="Directory for session marker files",
     )
 
@@ -220,10 +221,7 @@ class SessionStartInjectionConfig(BaseModel):
                 skip_user_prompt_if_injected=safe_bool(
                     "OMNICLAUDE_SESSION_SKIP_IF_INJECTED", True
                 ),
-                marker_file_dir=os.getenv(
-                    "OMNICLAUDE_SESSION_INJECTION_MARKER_DIR",
-                    "/tmp/omniclaude-sessions",  # noqa: S108  # nosec B108
-                ),
+                marker_file_dir=runtime_paths().session_marker_dir,
             )
         except Exception as e:  # noqa: BLE001 — boundary: config must never raise
             # Catch Pydantic ValidationError or any unexpected errors.

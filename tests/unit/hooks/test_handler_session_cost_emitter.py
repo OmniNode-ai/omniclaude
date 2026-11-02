@@ -12,6 +12,7 @@ Tests cover:
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -19,12 +20,21 @@ import pytest
 
 from omniclaude.hooks.handler_session_cost_emitter import (
     _EVENT_TYPE,
-    emit_session_cost,
+    HandlerSessionCostEmitter,
+)
+from omniclaude.models.model_session_cost_emit_request import (
+    ModelSessionCostEmitRequest,
 )
 
 pytestmark = pytest.mark.unit
 
 FIXTURE_DIR = Path(__file__).parents[2] / "fixtures" / "session_cost"
+
+
+def emit_session_cost(**fields: object) -> bool:
+    fields.setdefault("accumulator_dir", Path(tempfile.gettempdir()))
+    request = ModelSessionCostEmitRequest.model_validate(fields)
+    return HandlerSessionCostEmitter().handle(request).emitted
 
 
 def _fixture(name: str) -> dict[str, object]:

@@ -38,10 +38,8 @@ import yaml
 from omnibase_core.enums import EnumMessageCategory
 from omnibase_core.models.dispatch.model_dispatch_route import ModelDispatchRoute
 
+from omniclaude.handlers.container import container_runtime
 from omniclaude.hooks.topics import TopicBase
-from omniclaude.nodes.node_skill_comment_sweep_orchestrator.handler_comment_sweep_skill import (
-    HandlerCommentSweepSkill,
-)
 from omniclaude.nodes.node_skill_comment_sweep_orchestrator.models.model_render_delegation import (
     ModelRenderDelegation,
 )
@@ -481,7 +479,7 @@ class SkillCommandDispatcher:
         # Dispatch via shared handler
         result: ModelSkillResult
         if skill_id == "comment-sweep":
-            result = await HandlerCommentSweepSkill(
+            result = await container_runtime.build_comment_sweep_skill(
                 task_dispatcher=task_dispatcher,
                 event_emitter=emit_event,
             ).handle(skill_request)

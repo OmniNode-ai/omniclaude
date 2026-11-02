@@ -16,6 +16,11 @@ from enum import StrEnum
 from omnibase_core.enums import EnumCoreErrorCode
 from omnibase_core.models.errors import ModelOnexError
 
+from omniclaude.models.model_topic_manifest import ModelTopicManifest
+
+# Topic names the enum projects from the manifest beside this module (OMN-21769)
+_TOPICS = ModelTopicManifest.beside(__file__)
+
 # Valid topic name pattern: alphanumeric segments separated by single dots
 # No leading/trailing dots, no consecutive dots, no special characters except dots
 _TOPIC_SEGMENT_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
@@ -56,19 +61,17 @@ class TopicBase(StrEnum):
 
     # OMN-20001: typed semantic ledger rows; the existing v1 family stays owned
     # by the daemon registry. These members project its canonical v2 wire topics.
-    WORK_LEDGER_ACK_V2 = "onex.evt.omnimarket.work-ledger-ack.v2"
-    WORK_LEDGER_CLAIM_V2 = "onex.evt.omnimarket.work-ledger-claim.v2"
-    WORK_LEDGER_CORRECTION_V2 = "onex.evt.omnimarket.work-ledger-correction.v2"
-    WORK_LEDGER_FRICTION_V2 = "onex.evt.omnimarket.work-ledger-friction.v2"
-    WORK_LEDGER_HOLD_V2 = "onex.evt.omnimarket.work-ledger-hold.v2"
-    WORK_LEDGER_MSG_V2 = "onex.evt.omnimarket.work-ledger-msg.v2"
-    WORK_LEDGER_OPERATOR_CONSENT_V2 = (
-        "onex.evt.omnimarket.work-ledger-operator-consent.v2"
-    )
-    WORK_LEDGER_RELEASE_V2 = "onex.evt.omnimarket.work-ledger-release.v2"
-    WORK_LEDGER_RULING_V2 = "onex.evt.omnimarket.work-ledger-ruling.v2"
-    WORK_LEDGER_STATUS_V2 = "onex.evt.omnimarket.work-ledger-status.v2"
-    WORK_LEDGER_TERMINAL_V2 = "onex.evt.omnimarket.work-ledger-terminal.v2"
+    WORK_LEDGER_ACK_V2 = _TOPICS.get("work_ledger_v2", "ack")
+    WORK_LEDGER_CLAIM_V2 = _TOPICS.get("work_ledger_v2", "claim")
+    WORK_LEDGER_CORRECTION_V2 = _TOPICS.get("work_ledger_v2", "correction")
+    WORK_LEDGER_FRICTION_V2 = _TOPICS.get("work_ledger_v2", "friction")
+    WORK_LEDGER_HOLD_V2 = _TOPICS.get("work_ledger_v2", "hold")
+    WORK_LEDGER_MSG_V2 = _TOPICS.get("work_ledger_v2", "msg")
+    WORK_LEDGER_OPERATOR_CONSENT_V2 = _TOPICS.get("work_ledger_v2", "operator_consent")
+    WORK_LEDGER_RELEASE_V2 = _TOPICS.get("work_ledger_v2", "release")
+    WORK_LEDGER_RULING_V2 = _TOPICS.get("work_ledger_v2", "ruling")
+    WORK_LEDGER_STATUS_V2 = _TOPICS.get("work_ledger_v2", "status")
+    WORK_LEDGER_TERMINAL_V2 = _TOPICS.get("work_ledger_v2", "terminal")
 
     # ==========================================================================
     # omninode routing topics (agent routing commands/events)

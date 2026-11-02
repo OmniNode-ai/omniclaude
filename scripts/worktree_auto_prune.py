@@ -112,6 +112,7 @@ from omniclaude.hooks.lib.worktree_prune_policy import (
     classify_rescue_only,
     classify_worktree_prune,
 )
+from omniclaude.models.model_endpoint_policy import ModelEndpointPolicy
 
 # The one pre-removal save every removal path calls [OMN-19539]. A sibling
 # module, so the scripts dir goes on the path the same way whether this file is
@@ -127,7 +128,6 @@ from worktree_removal_snapshot import (  # noqa: E402
     snapshot_before_removal,
 )
 
-LINEAR_API_URL = "https://api.linear.app/graphql"  # url-authority-ok: the tracker's single documented GraphQL endpoint, read-only ticket-state lookups from a local maintenance script that is not a runtime node and has no routing authority or integration catalog to resolve from
 LINEAR_BATCH_SIZE = 50
 BASE_REF_CANDIDATES: tuple[str, ...] = ("origin/dev", "origin/main")
 GIT_TIMEOUT_SECONDS = 60
@@ -770,8 +770,8 @@ def _remote_slug(canonical: Path) -> str | None:
     url = out[:-4] if out.endswith(".git") else out
     for prefix in (
         "git@github.com:",
-        "ssh://git@github.com/",
-        "https://github.com/",
+        ModelEndpointPolicy.from_contract().github_ssh_base,
+        ModelEndpointPolicy.from_contract().github_web_base,
     ):
         if url.startswith(prefix):
             owner, _, name = url[len(prefix) :].partition("/")
@@ -987,8 +987,8 @@ def resolve_ticket_states(
             for alias, ident in aliases.items()
         )
         payload = json.dumps({"query": f"query {{ {selections} }}"}).encode()
-        request = urllib.request.Request(  # noqa: S310 — constant https endpoint
-            LINEAR_API_URL,
+        request = urllib.request.Request(  # noqa: S310 — contract-declared https endpoint
+            ModelEndpointPolicy.from_contract().linear_graphql_url,
             data=payload,
             headers={"Content-Type": "application/json", "Authorization": api_key},
             method="POST",

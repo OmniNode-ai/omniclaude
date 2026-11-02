@@ -31,25 +31,14 @@ import sys
 
 import click
 
+from omniclaude.handlers.container import container_quirks
 from omniclaude.quirks.controller import (
     ApprovalRequiredError,
     InsufficientFindingsError,
     InvalidTransitionError,
-    NodeValidatorRolloutOrchestratorOrchestrator,
     PromotionError,
 )
 from omniclaude.quirks.enums import QuirkStage, QuirkType
-
-
-def _get_controller() -> NodeValidatorRolloutOrchestratorOrchestrator:
-    """Return a controller instance.
-
-    Uses in-memory store only (no DB session factory) because this CLI is
-    intended for development/operator use without requiring a live DB
-    connection.  For production use, wire up a session factory via the
-    Python API directly.
-    """
-    return NodeValidatorRolloutOrchestratorOrchestrator(db_session_factory=None)
 
 
 @click.group()
@@ -67,7 +56,7 @@ def status_cmd() -> None:
     """Print current stage for all quirk types."""
 
     async def _run() -> None:
-        controller = _get_controller()
+        controller = container_quirks.build_cli_orchestrator()
         await controller.start()
         records = await controller.get_all_stages()
         await controller.stop()
@@ -148,7 +137,7 @@ def promote_cmd(  # stub-ok: fully implemented
     target = QuirkStage.WARN if to_stage.lower() == "warn" else QuirkStage.BLOCK
 
     async def _run() -> None:
-        controller = _get_controller()
+        controller = container_quirks.build_cli_orchestrator()
         await controller.start()
         try:
             record = await controller.promote(
@@ -209,7 +198,7 @@ def approve_block_cmd(quirk_type: str, approver: str) -> None:
         sys.exit(1)
 
     async def _run() -> None:
-        controller = _get_controller()
+        controller = container_quirks.build_cli_orchestrator()
         await controller.start()
         try:
             await controller.approve_block(qt, approver=approver)

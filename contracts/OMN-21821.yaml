@@ -1,0 +1,33 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-21821"
+title: "converge-canonical-clone.sh --note names what a caller saved in the one ledger row"
+summary: "The converge script takes --note and appends it to its single STATUS row as saved text, so the dirty-converge node's row names the rescue branch and the archive-only paths."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn21821-converge-note"
+    statement: |-
+      converge-canonical-clone.sh --note names what a caller saved in the one ledger row
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: --note text lands in the one STATUS row with pipes made harmless -- falsifier: uv run pytest tests/scripts/test_converge_canonical_clone.py -q -k note_names_what_the_caller_saved
+evidence_requirements:
+  - kind: "tests"
+    description: "--note text lands in the one STATUS row with pipes made harmless"
+    command: "uv run pytest tests/scripts/test_converge_canonical_clone.py -q -k note_names_what_the_caller_saved"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-ac1"
+    description: "--note text lands in the one STATUS row with pipes made harmless"
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_converge_canonical_clone.py -q -k note_names_what_the_caller_saved"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]

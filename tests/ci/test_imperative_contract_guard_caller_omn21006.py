@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CALLER = ROOT / ".github/workflows/imperative-contract-guard.yml"
 ALLOWLIST_PATH = ".github/imperative-contract-allowlist.yaml"
 ALLOWLIST = ROOT / ALLOWLIST_PATH
-CORE_SHA = "70f7ceda44af968ccf26264ecd429cfd27503971"
+CORE_SHA = "dev-20261020174236-c6ae5d56d1b6"
 # OMN-18531: the canonical-file-shape hook and CI job run core at the commit carrying mod-file-growth.
 SHAPE_CORE_SHA = "dev-20261029151319-6e0a5eee541a"
 CORE_USES = "OmniNode-ai/omnibase_core/.github/workflows/imperative-contract-guard.yml"
@@ -57,8 +57,19 @@ FINDING_KEYS = (
     "non_live_freestanding_violations",
 )
 # All finding fields, including details, line numbers, reachability and allowlisting.
+# OMN-21536 moved two CLI mains out of handlers/, so their two dead-handler
+# non_live_violations rows (handler_lane_github_read_cli, handler_pr_ownership_cli) left.
+# OMN-21623 moved the runtime timeouts to the contract and folded repeated subprocess
+# blocks into helpers: diagnostics.py lost one dead subprocess_network finding (3 to 2),
+# replay_engine.py lost its one (1 to 0), and the other recorded lines moved.
+# OMN-21780 removed lines from manifest_injector.py, shifting the line numbers of its
+# non_live_freestanding_violations rows; no finding was added or dropped.
+# OMN-21728 moved literal runtime paths into the runtime contract, which shifted the
+# line numbers of the dead-handler rows it touched; no finding was added or dropped.
+# OMN-21769 read slice topics from manifests, so one dead-module hardcoded_topic row left,
+# and one handler_history_postgres direct_db row moved one line; no finding was added.
 RECORDED_OCC_FINDING_DIGEST = (
-    "dc967304fad97a8fbd0a5b4c19be43713fc2f1f4f2a70d7a1a8427813d5ab2ec"
+    "c9da24e207510c2da4afc45ccdeee01d549a0c22efb2bba7a8ac25e1062874d0"
 )
 
 
@@ -99,7 +110,7 @@ def test_caller_pins_core_and_keeps_the_job_and_context() -> None:
     assert workflow["name"] == "Imperative Contract Guard"
     assert "imperative-contract-guard" in workflow["jobs"]
     _guard_job()
-    assert re.fullmatch(r"[0-9a-f]{40}", CORE_SHA)
+    assert re.fullmatch(r"dev-[0-9]{14}-[0-9a-f]{12}", CORE_SHA)
     assert workflow["permissions"] == {"contents": "read"}
     for path in (ROOT / ".github/workflows").iterdir():
         if path.suffix in {".yml", ".yaml"}:

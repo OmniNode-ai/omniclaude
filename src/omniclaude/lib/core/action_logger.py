@@ -60,6 +60,8 @@ from types import TracebackType
 from typing import Any
 from uuid import UUID, uuid4
 
+from omniclaude.models.model_lib_timeouts import lib_timeouts
+
 from .action_event_publisher import (
     publish_action_event,
     publish_decision,
@@ -158,8 +160,7 @@ class ActionLogger:
         working_directory: str | None = None,
         debug_mode: bool = True,
     ):
-        """
-        Initialize action logger.
+        """Initialize action logger.
 
         Args:
             agent_name: Agent executing actions
@@ -508,7 +509,7 @@ if __name__ == "__main__":
             "Read", {"file_path": "/path/to/file.py"}
         ) as action:
             # Simulate file reading
-            await asyncio.sleep(0.05)  # 50ms
+            await asyncio.sleep(lib_timeouts().demo_sleep_seconds)
             action.set_result({"line_count": 100, "file_size_bytes": 5432})
 
         print("✓ Tool call logged with context manager")

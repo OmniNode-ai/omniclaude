@@ -12,8 +12,8 @@ Tests:
 - _apply_patch (mocked subprocess)
 - _classify_outcome
 - _detect_divergence_reason
-- ReplayEngine.replay — FULL, STUBBED, TEST_ONLY modes (mocked workspace)
-- ReplayEngine.replay — workspace setup failure path
+- FrameReplayer.replay — FULL, STUBBED, TEST_ONLY modes (mocked workspace)
+- FrameReplayer.replay — workspace setup failure path
 """
 
 from __future__ import annotations
@@ -25,7 +25,22 @@ from uuid import uuid4
 
 import pytest
 
-from omniclaude.trace.change_frame import (
+from omniclaude.handlers.trace.replay_engine import (
+    REASON_ENV_CHANGED,
+    REASON_STUBBED_UNKNOWN,
+    REASON_UNKNOWN,
+    FrameReplayer,
+    ReplayMode,
+    ReplayResult,
+    _apply_patch,
+    _checkout_commit,
+    _classify_outcome,
+    _clone_repo_to_tempdir,
+    _detect_divergence_reason,
+    load_frame_from_jsonl,
+)
+from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     ModelDelta,
@@ -37,20 +52,8 @@ from omniclaude.trace.change_frame import (
     ModelWorkspaceRef,
     OutcomeStatus,
 )
-from omniclaude.trace.replay_engine import (
-    REASON_ENV_CHANGED,
-    REASON_STUBBED_UNKNOWN,
-    REASON_UNKNOWN,
-    ReplayEngine,
-    ReplayMode,
-    ReplayResult,
-    _apply_patch,
-    _checkout_commit,
-    _classify_outcome,
-    _clone_repo_to_tempdir,
-    _detect_divergence_reason,
-    load_frame_from_jsonl,
-)
+
+_LIMITS = ModelRuntimeTimeouts.from_contract()
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -72,7 +75,7 @@ def make_check_result(
     command: str = "ruff check src/",
     env_hash: str = "abc123",
 ) -> ModelCheckResult:
-    from omniclaude.trace.frame_assembler import sha256_of
+    from omniclaude.handlers.trace.frame_assembler import sha256_of
 
     return ModelCheckResult(
         command=command,
@@ -87,7 +90,7 @@ def make_change_frame(
     outcome_status: str = "pass",
     check_results: list[ModelCheckResult] | None = None,
 ) -> ChangeFrame:
-    from omniclaude.trace.frame_assembler import sha256_of
+    from omniclaude.handlers.trace.frame_assembler import sha256_of
 
     if check_results is None:
         check_results = [make_check_result(exit_code=0)]
@@ -250,7 +253,7 @@ class TestCloneRepoToTempdir:
         mock_result = MagicMock()
         mock_result.returncode = 0
         with patch("subprocess.run", return_value=mock_result) as mock_run:
-            result = _clone_repo_to_tempdir("/repo", "/tmpdir")
+            result = _clone_repo_to_tempdir("/repo", "/tmpdir", _LIMITS)
             assert result is True
             mock_run.assert_called_once()
 
@@ -258,12 +261,12 @@ class TestCloneRepoToTempdir:
         mock_result = MagicMock()
         mock_result.returncode = 1
         with patch("subprocess.run", return_value=mock_result):
-            result = _clone_repo_to_tempdir("/repo", "/tmpdir")
+            result = _clone_repo_to_tempdir("/repo", "/tmpdir", _LIMITS)
             assert result is False
 
     def test_returns_false_on_exception(self) -> None:
         with patch("subprocess.run", side_effect=FileNotFoundError("git not found")):
-            result = _clone_repo_to_tempdir("/repo", "/tmpdir")
+            result = _clone_repo_to_tempdir("/repo", "/tmpdir", _LIMITS)
             assert result is False
 
 
@@ -277,14 +280,14 @@ class TestCheckoutCommit:
         mock_result = MagicMock()
         mock_result.returncode = 0
         with patch("subprocess.run", return_value=mock_result):
-            result = _checkout_commit("abc123", "/tmpdir")
+            result = _checkout_commit("abc123", "/tmpdir", _LIMITS)
             assert result is True
 
     def test_returns_false_on_failure(self) -> None:
         mock_result = MagicMock()
         mock_result.returncode = 128
         with patch("subprocess.run", return_value=mock_result):
-            result = _checkout_commit("invalid", "/tmpdir")
+            result = _checkout_commit("invalid", "/tmpdir", _LIMITS)
             assert result is False
 
 
@@ -299,7 +302,7 @@ class TestApplyPatch:
         mock_result.returncode = 0
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("subprocess.run", return_value=mock_result):
-                result = _apply_patch(DIFF_PATCH, tmpdir)
+                result = _apply_patch(DIFF_PATCH, tmpdir, _LIMITS)
                 assert result is True
 
     def test_returns_false_on_failure(self) -> None:
@@ -307,7 +310,7 @@ class TestApplyPatch:
         mock_result.returncode = 1
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("subprocess.run", return_value=mock_result):
-                result = _apply_patch(DIFF_PATCH, tmpdir)
+                result = _apply_patch(DIFF_PATCH, tmpdir, _LIMITS)
                 assert result is False
 
     def test_cleans_up_patch_file(self) -> None:
@@ -315,7 +318,7 @@ class TestApplyPatch:
         mock_result.returncode = 0
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("subprocess.run", return_value=mock_result):
-                _apply_patch(DIFF_PATCH, tmpdir)
+                _apply_patch(DIFF_PATCH, tmpdir, _LIMITS)
             # Patch file should be deleted
             assert not (Path(tmpdir) / "_replay.patch").exists()
 
@@ -379,7 +382,7 @@ class TestDetectDivergenceReason:
 
 
 # ---------------------------------------------------------------------------
-# ReplayEngine tests (with mocked workspace setup)
+# FrameReplayer tests (with mocked workspace setup)
 # ---------------------------------------------------------------------------
 
 
@@ -392,11 +395,11 @@ def _mock_successful_workspace(mock_run: MagicMock) -> None:
     mock_run.return_value = success
 
 
-class TestReplayEngine:
-    """Tests for ReplayEngine.replay() in all three modes."""
+class TestFrameReplayer:
+    """Tests for FrameReplayer.replay() in all three modes."""
 
-    def _make_engine(self) -> ReplayEngine:
-        return ReplayEngine(repo_root="/fake/repo")
+    def _make_engine(self) -> FrameReplayer:
+        return FrameReplayer(repo_root="/fake/repo")
 
     def test_test_only_mode_pass(self) -> None:
         """TEST_ONLY: all checks pass → outcome matches original."""
@@ -502,7 +505,7 @@ class TestReplayEngine:
 
     def test_unknown_commit_skips_checkout(self) -> None:
         """Frame with base_commit='unknown' skips checkout step."""
-        from omniclaude.trace.frame_assembler import sha256_of
+        from omniclaude.handlers.trace.frame_assembler import sha256_of
 
         frame = ChangeFrame(
             frame_id=uuid4(),

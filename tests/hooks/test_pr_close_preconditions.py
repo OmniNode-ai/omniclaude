@@ -20,7 +20,7 @@ CLI = ROOT / "scripts/pr_claim_registry_cli.py"
 GUARD = [
     sys.executable,
     "-m",
-    "omniclaude.nodes.node_pr_ownership_guard_effect.handlers.handler_pr_ownership_cli",
+    "omniclaude.nodes.node_pr_ownership_guard_effect.runtime_pr_ownership",
 ]
 HOOK = ROOT / "plugins/onex/hooks/scripts/pre_tool_use_bash_guards.sh"
 KEY = "omninode-ai/omniclaude#19160"

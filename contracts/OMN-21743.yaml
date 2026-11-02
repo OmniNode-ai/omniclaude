@@ -1,0 +1,75 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21743
+title: "omniclaude contracts_and_di literal_url burn-down, slice rf1310-c1: URLs come from the node contract or overlay through DI"
+summary: >
+  omnibase_core's contracts_and_di check, run read-only over omniclaude dev 7b20a679d, reported 97
+  literal_url findings (821 findings in all). This slice clears 16 of them in 8 files, leaving 81 and a
+  total of 805. The endpoint URLs and registry references now sit in the runtime contract's endpoints section (env overlay
+  convention) and reach their callers as an injected ModelEndpointDefaults. No constants module, baseline entry or suppression
+  is added, and no URL string remains in the touched code.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21743-literal-url-slice
+    statement: The URLs of the slice are read from the runtime contract or a skill-local YAML file and none stays hard-coded in the touched code.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the contracts_and_di count for literal_url over the slice paths drops to zero and the repo total drops by the slice size, with no baseline entry or suppression added -- falsifier: onex run of runtime_validator_run with the contracts_and_di reference over omniclaude src before and after, counts compared per rule"
+      - id: AC2
+        statement: "AC2: every moved URL is taken through an injected parameter bound from the node contract or overlay and none remains hard-coded in the touched code -- falsifier: uv run pytest tests/unit -q over the touched modules plus the checker re-run on the slice paths"
+      - id: AC3
+        statement: "AC3: the slice lands as one PR titled with this ticket id and carries lab proof of the tests and the checker re-run -- falsifier: uv run pytest tests/unit -q on the lab through lab-run at the PR head, receipt path in the PR body"
+evidence_requirements:
+  - kind: tests
+    description: "ModelEndpointDefaults loads every field from the contract, the touched modules hold no URL literal, and the touched callers' suites pass"
+    command: "uv run pytest tests/unit/models tests/lib/test_quorum.py tests/unit/quirks/test_quirk_classifier.py tests/skills/test_changelog_audit_skill.py tests/unit/skills/test_check_database_health.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21743-endpoint-model-and-callers
+    binds_ac: [AC2]
+    description: >-
+      ModelEndpointDefaults.from_contract() reads every field of the contract endpoints section, an
+      env var overrides the inline default, a missing field or section fails to load and a pattern
+      that does not compile is refused. The callers read their endpoints from the model.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/models/test_model_endpoint_defaults.py tests/lib/test_quorum.py tests/unit/quirks/test_quirk_classifier.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn21743-no-url-literal-in-slice
+    binds_ac: [AC1, AC2]
+    description: >-
+      An ast scan of the 8 touched files finds no string constant opening with scheme://host. The
+      same scan over the same files at the merge base finds 16, the number of literal_url findings the
+      checker reported there, and a planted literal is seen, so the zero is not vacuous.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/models/test_omn21743_no_url_literals.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn21743-skill-libraries
+    binds_ac: [AC2]
+    description: >-
+      The changelog audit, status, GitHub stats and database health skill libraries read their
+      URLs from the runtime contract, and their existing suites pass.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/models/test_omn21743_no_url_literals.py tests/skills/test_changelog_audit_skill.py tests/skills/gather-github-stats tests/unit/skills/test_check_database_health.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn21743-lab-proof
+    binds_ac: [AC3]
+    description: >-
+      The PR is titled with OMN-21743 and its body carries the lab-run line (host, sha, exit code) of
+      the unit run at the PR head and the before and after checker counts.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/models/test_model_endpoint_defaults.py -q --no-cov"
+        cwd: "."

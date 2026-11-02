@@ -129,12 +129,6 @@ entries:
     target: gemini
     ticket: OMN-20295
     expires: '2026-12-31'
-  - path: src/omniclaude/lib/core/manifest_injector.py
-    kind: http
-    symbol: ManifestInjector._embed_text
-    target: http
-    ticket: OMN-20295
-    expires: '2026-12-31'
   - path: src/omniclaude/lib/utils/consensus/quorum.py
     kind: http
     symbol: AIQuorum._score_with_gemini

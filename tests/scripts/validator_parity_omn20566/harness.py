@@ -126,16 +126,18 @@ def text_only(root: Path, rels: Iterable[str]) -> list[str]:
     return sorted(rel for rel in rels if "text" in tags_from_path(str(root / rel)))
 
 
-def locked_core_version() -> str:
-    """The omnibase-core version this repository's ``uv.lock`` resolves."""
+def locked_core_tag() -> str:
+    """The dev merge tag ``uv.lock`` resolves ``omnibase-core`` from (OMN-21900)."""
     lock = tomllib.loads((REPO_ROOT / "uv.lock").read_text(encoding="utf-8"))
-    versions = [
-        package["version"]
+    sources = [
+        str(package["source"]["git"])
         for package in lock["package"]
         if package["name"] == "omnibase-core"
     ]
-    assert len(versions) == 1, f"uv.lock resolves omnibase-core {versions}"
-    return str(versions[0])
+    assert len(sources) == 1, f"uv.lock resolves omnibase-core from {sources}"
+    match = re.search(r"\?tag=([^#]+)#", sources[0])
+    assert match, f"uv.lock names omnibase-core by no tag: {sources[0]}"
+    return match.group(1)
 
 
 def core_hook_revs(hook_ids: Iterable[str]) -> dict[str, str]:

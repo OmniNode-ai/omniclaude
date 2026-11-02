@@ -72,6 +72,80 @@ aggregator:
   finalized_session_warning_threshold: "${env.OMNICLAUDE_AGGREGATOR_FINALIZED_SESSION_WARNING_THRESHOLD:10000}"
   finalized_session_warning_interval_seconds: "${env.OMNICLAUDE_AGGREGATOR_FINALIZED_SESSION_WARNING_INTERVAL_SECONDS:3600}"
 
+endpoints:
+  # Endpoint URLs and registry references that used to be string literals at their
+  # call sites (OMN-21743, child of OMN-21623). They are declared here with the
+  # ${env.VAR:default} overlay convention, so a per-lane operator overlay supplies the
+  # real endpoint, and reach their callers as an injected ModelEndpointDefaults
+  # (models/model_endpoint_defaults.py). A field this section does not declare fails
+  # to load; no call site holds a URL.
+  github_api_base_url: "https://api.github.com"
+  github_https_url_prefix: "https://github.com/"
+  intelligence_service_url: "${env.INTELLIGENCE_SERVICE_URL:http://localhost:8053}"
+  runtime_health_url: "${env.OMNINODE_RUNTIME_HEALTH_URL:http://localhost:8085/health}"
+  valkey_default_url: "redis://onex-valkey:6379/0"
+  gemini_api_endpoint: "https://generativelanguage.googleapis.com/v1beta"
+  rag_base_url: "http://localhost:8181"
+  quirk_finding_schema_ref: "registry://onex/omniclaude/quirk-finding-produced/v1"
+  changelog_sources:
+    claude-code: "https://code.claude.com/docs/en/changelog"
+    anthropic-sdk-python: "https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/CHANGELOG.md"
+    github-cli: "https://raw.githubusercontent.com/cli/cli/trunk/CHANGELOG.md"
+    uv: "https://raw.githubusercontent.com/astral-sh/uv/main/CHANGELOG.md"
+    kafka-python: "https://raw.githubusercontent.com/dpkp/kafka-python/master/CHANGES.md"
+
+timeouts:
+  # Runtime timeouts in seconds -- OMN-21623 contracts-and-DI burn-down. The trace
+  # frame assembler and replay engine, the diagnostics and health-check tools and
+  # the coverage scanner passed these as
+  # integer literals at each subprocess or HTTP call. ModelRuntimeTimeouts
+  # .from_contract() overlay-resolves each value and the callers receive the model
+  # injected; a per-lane overlay sets the env var, the inline default rides along.
+  trace_git_diff_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_GIT_DIFF_SECONDS:10}"
+  trace_git_identity_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_GIT_IDENTITY_SECONDS:5}"
+  trace_environment_hash_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_ENVIRONMENT_HASH_SECONDS:10}"
+  trace_lint_check_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_LINT_CHECK_SECONDS:15}"
+  trace_type_check_seconds: "${env.OMNICLAUDE_TIMEOUT_TRACE_TYPE_CHECK_SECONDS:30}"
+  diagnostics_curl_health_seconds: "${env.OMNICLAUDE_TIMEOUT_DIAGNOSTICS_CURL_HEALTH_SECONDS:5}"
+  diagnostics_docker_seconds: "${env.OMNICLAUDE_TIMEOUT_DIAGNOSTICS_DOCKER_SECONDS:10}"
+  diagnostics_http_seconds: "${env.OMNICLAUDE_TIMEOUT_DIAGNOSTICS_HTTP_SECONDS:5}"
+  health_check_httpx_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_HTTPX_SECONDS:5}"
+  health_check_base_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_BASE_SECONDS:2}"
+  health_check_pattern_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_PATTERN_SECONDS:5}"
+  health_check_post_seconds: "${env.OMNICLAUDE_TIMEOUT_HEALTH_CHECK_POST_SECONDS:3}"
+  replay_clone_seconds: "${env.OMNICLAUDE_TIMEOUT_REPLAY_CLONE_SECONDS:60}"
+  replay_checkout_seconds: "${env.OMNICLAUDE_TIMEOUT_REPLAY_CHECKOUT_SECONDS:30}"
+  replay_apply_seconds: "${env.OMNICLAUDE_TIMEOUT_REPLAY_APPLY_SECONDS:30}"
+  coverage_cache_ttl_seconds: "${env.OMNICLAUDE_TIMEOUT_COVERAGE_CACHE_TTL_SECONDS:3600}"
+  coverage_pytest_seconds: "${env.OMNICLAUDE_TIMEOUT_COVERAGE_PYTEST_SECONDS:300}"
+  coverage_git_log_seconds: "${env.OMNICLAUDE_TIMEOUT_COVERAGE_GIT_LOG_SECONDS:30}"
+
+model_routing:
+  # Model ids omniclaude code uses by default — OMN-21780 (child of OMN-21623).
+  # No model id lives in the repository: an operator overlay / the per-lane service
+  # env supplies each value through the ${env.VAR} overlay convention, and
+  # ModelModelRouting.from_contract() resolves it. An unset value resolves empty.
+  savings_baseline_model: "${env.OMNICLAUDE_SAVINGS_BASELINE_MODEL}"
+  # Tier -> model map per provider, as a JSON object, used when the provider
+  # config file carries no entry for the provider.
+  gemini_tier_models: "${env.OMNICLAUDE_GEMINI_TIER_MODELS_JSON}"
+  zai_tier_models: "${env.OMNICLAUDE_ZAI_TIER_MODELS_JSON}"
+  # Quorum members the manifest lists, as a JSON array of objects with name,
+  # model, provider, weight and use_case.
+  intelligence_models: "${env.OMNICLAUDE_INTELLIGENCE_MODELS_JSON}"
+
+service_endpoints:
+  # Service endpoints omniclaude code falls back to — OMN-21727 (child of OMN-21623).
+  # The operator overlay / per-lane service env supplies each value through the
+  # ${env.VAR[:default]} overlay convention; ModelServiceEndpointDefaults.from_contract()
+  # resolves it.
+  # OpenAI-compatible embeddings endpoint ManifestInjector._embed_text posts to. No
+  # default lives in the repository: an unset value resolves empty.
+  embedding_service_url: "${env.EMBEDDING_SERVICE_URL}"
+  # Valkey URL IntelligenceCache uses when neither redis_url nor settings.valkey_url is
+  # given; VALKEY_PASSWORD, when set, is added as the URL's credential.
+  valkey_default_url: "${env.OMNICLAUDE_VALKEY_DEFAULT_URL:redis://onex-valkey:6379/0}"
+
 metadata:
   author: "OmniNode Team"
   license: "MIT"
@@ -82,3 +156,19 @@ metadata:
     - runtime
     - config
     - omniclaude
+
+runtime_paths:
+  # Filesystem locations omniclaude code uses — OMN-21728 (child of OMN-21623).
+  # Code holds no path: ModelRuntimePaths.from_contract() resolves each value through
+  # the ${env.VAR:default} overlay convention, so an operator overlay / the per-lane
+  # service env supplies the location and the default rides along here.
+  hook_socket: "${env.OMNICLAUDE_HOOK_RUNTIME_SOCKET:/tmp/omniclaude-hook-runtime.sock}"
+  hook_pid: "${env.OMNICLAUDE_HOOK_RUNTIME_PID:/tmp/omniclaude-hook-runtime.pid}"
+  session_marker_dir: "${env.OMNICLAUDE_SESSION_INJECTION_MARKER_DIR:/tmp/omniclaude-sessions}"
+  usage_cache: "${env.OMNICLAUDE_USAGE_CACHE_PATH:/tmp/omniclaude-usage-cache.json}"
+  linear_relay_dedup_db: "${env.OMNICLAUDE_LINEAR_RELAY_DEDUP_DB:/tmp/linear_relay_dedup.db}"
+  opencode_db: "${env.OMNICLAUDE_OPENCODE_DB:~/.local/share/opencode/opencode.db}"
+  store_reader_home: "${env.OMNICLAUDE_STORE_READER_HOME:~/.onex}"
+  onex_state_dir: "${env.OMNICLAUDE_DEFAULT_ONEX_STATE_DIR:~/.onex_state}"
+  pattern_tracking_log_dir: "${env.OMNICLAUDE_PATTERN_TRACKING_LOG_DIR:~/Library/Logs}"
+  registry_root: "${env.OMNI_HOME}"

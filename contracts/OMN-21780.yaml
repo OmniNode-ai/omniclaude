@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21780
+title: "omniclaude contracts_and_di literal_model_name burn-down, slice rf1500-c4"
+summary: >
+  omnibase_core's contracts_and_di check reported 14 literal_model_name findings in omniclaude src,
+  in the savings calculator's baseline model and in the manifest injector's provider tiers and quorum
+  list. This slice declares those ids in the runtime contract model_routing section, resolved from the operator overlay env, loads them into
+  a frozen model and injects that model into SavingsCalculator and ManifestInjector. No constants
+  module, baseline entry or suppression is added.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21780-model-ids-from-contract
+    statement: The model ids of the savings baseline and the manifest models section come from the runtime contract overlay and are injected.
+    acceptance:
+      - id: AC2
+        statement: "AC2: the defaults resolve from the runtime contract overlay, an injected defaults model reaches SavingsCalculator and ManifestInjector._query_models, and no model id is hard-coded in the touched code -- falsifier: uv run pytest tests/unit/models/test_model_routing_defaults.py tests/delegation/test_savings.py -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "Model-routing defaults, savings and manifest injector tests pass"
+    command: "uv run pytest tests/unit/models/test_model_routing_defaults.py tests/delegation/test_savings.py tests/golden/test_manifest_injector_golden.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21780-model-ids-from-contract
+    description: "The contract, the frozen model and the two callers carry the model ids; the contracts_and_di scan over src falls from 368 to 354 findings, literal_model_name from 14 to 0."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "bash -c 'ONEX_STATE_DIR=$(mktemp -d) uv run pytest tests/unit/models/test_model_routing_defaults.py tests/delegation/test_savings.py tests/golden/test_manifest_injector_golden.py -q --no-cov'"

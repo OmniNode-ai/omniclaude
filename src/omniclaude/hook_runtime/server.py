@@ -35,11 +35,9 @@ from omniclaude.hook_runtime.protocol import (
     HookRuntimeResponse,
     parse_hook_runtime_request,
 )
+from omniclaude.models.model_runtime_paths import runtime_paths
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_SOCKET_PATH = "/tmp/omniclaude-hook-runtime.sock"  # noqa: S108  # nosec B108
-_DEFAULT_PID_PATH = "/tmp/omniclaude-hook-runtime.pid"  # noqa: S108  # nosec B108
 
 
 def _hooks_disabled() -> bool:
@@ -63,8 +61,8 @@ def _hooks_disabled() -> bool:
 class HookRuntimeConfig:
     """Configuration for the hook runtime daemon server."""
 
-    socket_path: str = _DEFAULT_SOCKET_PATH
-    pid_path: str = _DEFAULT_PID_PATH
+    socket_path: str = field(default_factory=lambda: runtime_paths().hook_socket)
+    pid_path: str = field(default_factory=lambda: runtime_paths().hook_pid)
     delegation: DelegationConfig = field(default_factory=DelegationConfig)
 
     @classmethod

@@ -23,14 +23,45 @@ from omniclaude.nodes.node_agent_chat import (
     EnumChatChannel,
     EnumChatMessageType,
     EnumChatSeverity,
+    HandlerAutoEmit,
     HandlerChatPublisher,
     HandlerChatReader,
     HandlerFileChatStore,
     ModelAgentChatMessage,
-    emit_ci_alert,
-    emit_progress,
-    emit_status,
 )
+from omniclaude.nodes.node_agent_chat.models.model_auto_emit_request import (
+    ModelAutoEmitRequest,
+)
+
+
+def _emit(
+    message_type: EnumChatMessageType,
+    body: str,
+    publisher: HandlerChatPublisher,
+    **fields: object,
+) -> bool:
+    request = ModelAutoEmitRequest.model_validate(
+        {"message_type": message_type, "body": body, **fields}
+    )
+    return HandlerAutoEmit(publisher).handle(request).published
+
+
+def emit_ci_alert(
+    body: str, *, publisher: HandlerChatPublisher, **fields: object
+) -> bool:
+    return _emit(EnumChatMessageType.CI_ALERT, body, publisher, **fields)
+
+
+def emit_status(
+    body: str, *, publisher: HandlerChatPublisher, **fields: object
+) -> bool:
+    return _emit(EnumChatMessageType.STATUS, body, publisher, **fields)
+
+
+def emit_progress(
+    body: str, *, publisher: HandlerChatPublisher, **fields: object
+) -> bool:
+    return _emit(EnumChatMessageType.PROGRESS, body, publisher, **fields)
 
 
 @pytest.fixture

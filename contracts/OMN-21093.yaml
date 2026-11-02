@@ -1,0 +1,59 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21093
+title: "T0.3 adapter node: omniclaude-owned acceptance criteria bound to verified checks"
+summary: >-
+  The adapter, render and install nodes and the onex-claude-code-hook console script
+  are merged in omnimarket; client_bindings is read by omniclaude's hook-inventory gate
+  and the claude_code_binding_install skill entry is in omnibase_infra. This contract
+  binds the omniclaude-owned criteria (AC7 ls-files scan in omniclaude, AC8 inventory gate)
+  to checks that run on the hosted runner; the omnimarket-owned criteria are bound by omnimarket.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21093-ac-bindings
+    statement: Each T0.3 acceptance criterion has a falsifiable, bound check.
+    acceptance:
+      - id: AC7
+        statement: "AC7: no rendered module is tracked in any repository -- falsifier: `git ls-files` in omniclaude or omnimarket lists one."
+      - id: AC8
+        statement: "AC8: the hook-inventory gate fails when the installed binding registers an event absent from `client_bindings`, and runs in the existing required `hook-inventory-gate` check -- falsifier: the gate exits 0 on that fixture, or the workflow does not call it."
+evidence_requirements:
+  - kind: tests
+    description: The omniclaude-side checks (AC7 ls-files scan, AC8 inventory gate).
+    command: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21093-ac7-omniclaude-ls-files
+    description: >-
+      git ls-files in omniclaude lists no rendered module (with a positive control that the scan finds one).
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -k ac7 -q"
+    binds_ac: ["AC7"]
+
+  - id: dod-omn21093-ac8
+    description: >-
+      The hook-inventory gate fails on an installed binding event absent from client_bindings, and the existing hook-inventory-gate workflow calls it.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q"
+    binds_ac: ["AC8"]
+
+  - id: dod-omn21093-deploy-source-validation
+    description: >-
+      Deployment source validation: the checked-out hook inventory refuses undeclared
+      installed bindings and events, and no rendered binding module is tracked.
+      Runs on the hosted runner without an installed binding or sibling checkout.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q"

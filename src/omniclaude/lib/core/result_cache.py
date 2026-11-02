@@ -26,6 +26,8 @@ import sys
 import time
 from typing import Any
 
+from omniclaude.models.model_lib_timeouts import lib_timeouts
+
 
 class ResultCache:
     """
@@ -35,15 +37,14 @@ class ResultCache:
     for repeated queries.
     """
 
-    def __init__(self, default_ttl_seconds: int = 3600) -> None:
-        """
-        Initialize cache.
+    def __init__(self, default_ttl_seconds: int | None = None) -> None:
+        """Initialize cache.
 
         Args:
-            default_ttl_seconds: Default time-to-live in seconds (default: 1 hour)
+            default_ttl_seconds: Default time-to-live in seconds (default: the lib timeouts contract)
         """
         self.cache: dict[str, dict[str, Any]] = {}
-        self.default_ttl = default_ttl_seconds
+        self.default_ttl = default_ttl_seconds or lib_timeouts().cache_ttl_seconds
 
     def _generate_key(self, query: str, context: dict[str, Any] | None = None) -> str:
         """
@@ -254,7 +255,7 @@ class ResultCache:
 
 # Standalone test
 if __name__ == "__main__":
-    cache = ResultCache(default_ttl_seconds=60)  # 1 minute for testing
+    cache = ResultCache(default_ttl_seconds=lib_timeouts().demo_ttl_seconds)
 
     print("=== Testing Result Cache ===\n")
 
@@ -290,10 +291,10 @@ if __name__ == "__main__":
 
     # Test expiration
     print("\n5. TTL Expiration:")
-    cache.set("expires-soon", ["agent-4"], ttl_seconds=1)
+    cache.set("expires-soon", ["agent-4"], ttl_seconds=lib_timeouts().demo_ttl_short)
     print(f"   Immediate: {cache.get('expires-soon')}")
-    time.sleep(1.5)
-    print(f"   After 1.5s: {cache.get('expires-soon')}")
+    time.sleep(lib_timeouts().demo_wait_seconds)
+    print(f"   After the wait: {cache.get('expires-soon')}")
 
     # Test cleanup
     print("\n6. Cleanup:")

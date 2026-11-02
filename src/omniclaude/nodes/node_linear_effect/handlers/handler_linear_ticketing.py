@@ -39,13 +39,11 @@ from omniclaude.nodes.node_linear_effect.handlers.handler_lane_repo_evidence imp
 from omniclaude.nodes.node_linear_effect.models import (
     LinearOperation,
     LinearResultStatus,
+    ModelLinearEndpoint,
     ModelLinearRequest,
     ModelLinearResult,
 )
 
-LINEAR_GRAPHQL_HOST = "api.linear.app"
-LINEAR_GRAPHQL_PATH = "/graphql"
-LINEAR_TIMEOUT_S = 20
 _KEY_ENV = "LINEAR_API_KEY"
 _DONE_STATE = "Done"
 _UNCHECKED_LABELLED_BOX_RE = re.compile(r"^(\s*(?:[-*+]|\d+[.)])\s*)\[ \](\s+)(.*)$")
@@ -96,19 +94,28 @@ class LinearApiError(RuntimeError):
     """The Linear API could not answer; the message never carries the key."""
 
 
-def http_transport(query: str, variables: dict[str, object]) -> dict[str, object]:
+def http_transport(
+    endpoint: ModelLinearEndpoint,
+) -> Transport:
+    """A transport that POSTs GraphQL documents to ``endpoint`` with the env key."""
+    return partial(_post_graphql, endpoint)
+
+
+def _post_graphql(
+    endpoint: ModelLinearEndpoint, query: str, variables: dict[str, object]
+) -> dict[str, object]:
     """POST one GraphQL document with the key from the environment."""
     key = os.environ.get(_KEY_ENV, "")
     if not key:
         raise LinearApiError(f"no Linear credential: {_KEY_ENV} is not set")
     payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
     connection = http.client.HTTPSConnection(
-        LINEAR_GRAPHQL_HOST, timeout=LINEAR_TIMEOUT_S
+        endpoint.host, timeout=endpoint.timeout_seconds
     )
     try:
         connection.request(
             "POST",
-            LINEAR_GRAPHQL_PATH,
+            endpoint.path,
             body=payload,
             headers={"Content-Type": "application/json", "Authorization": key},
         )
@@ -165,11 +172,16 @@ class HandlerLinearApi:
     def __init__(
         self,
         *,
-        transport: Transport = http_transport,
+        transport: Transport | None = None,
+        endpoint: ModelLinearEndpoint | None = None,
         guard_decision: GuardDecision | None = None,
         evidence: LaneRepoEvidence | None = None,
     ) -> None:
-        self._transport = transport
+        self._transport = (
+            transport
+            if transport is not None
+            else http_transport(endpoint or ModelLinearEndpoint.from_contract())
+        )
         self._guard_decision = guard_decision
         self._evidence = evidence
         self._evidence_lib = hook_module("no_pr_bound_evidence")

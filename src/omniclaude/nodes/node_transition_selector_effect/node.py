@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import time
+from functools import cached_property
 from typing import TYPE_CHECKING
 
 import httpx
@@ -36,6 +37,9 @@ from omniclaude.nodes.node_transition_selector_effect.models.model_goal_conditio
 )
 from omniclaude.nodes.node_transition_selector_effect.models.model_navigation_context import (
     ModelNavigationContext,
+)
+from omniclaude.nodes.node_transition_selector_effect.models.model_selector_policy import (
+    ModelSelectorPolicy,
 )
 from omniclaude.nodes.node_transition_selector_effect.models.model_transition_selector_request import (
     ModelTransitionSelectorRequest,
@@ -81,14 +85,6 @@ def _resolve_model_id() -> str:
     return model_id
 
 
-# Selection timeout in seconds (matches contract.yaml error_handling.selection_timeout_seconds).
-# asyncio.wait_for is the authoritative timeout; httpx timeout is set slightly higher so that
-# asyncio cancellation fires first and produces a clean SELECTION_TIMEOUT error rather than
-# an httpx.ReadTimeout that would surface as MODEL_UNAVAILABLE.
-_SELECTION_TIMEOUT_SECONDS = 10.0
-_HTTP_TIMEOUT_SECONDS = _SELECTION_TIMEOUT_SECONDS + 2.0
-
-
 class NodeTransitionSelectorEffect(NodeEffect):
     """Effect node: local model as constrained transition selector.
 
@@ -105,17 +101,25 @@ class NodeTransitionSelectorEffect(NodeEffect):
     Capability: navigation.transition_selection
     """
 
-    def __init__(self, container: ModelONEXContainer) -> None:
+    def __init__(
+        self,
+        container: ModelONEXContainer,
+        *,
+        policy: ModelSelectorPolicy | None = None,
+    ) -> None:
         """Initialize the transition selector effect node.
 
         Args:
             container: ONEX container for dependency injection.
         """
         super().__init__(container)
+        if policy is not None:
+            self.policy = policy
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+    @cached_property
+    def policy(self) -> ModelSelectorPolicy:
+        """Resolve contract policy once, unless the composition root injected it."""
+        return ModelSelectorPolicy.from_contract()
 
     async def select(
         self,
@@ -159,7 +163,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
         try:
             raw_output = await asyncio.wait_for(
                 self._call_model(prompt),
-                timeout=_SELECTION_TIMEOUT_SECONDS,
+                timeout=self.policy.selection_timeout_seconds,
             )
         except RuntimeError as exc:
             # Configuration error (e.g. LLM_CODER_FAST_URL not set)
@@ -178,7 +182,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
                 "transition_selector.timeout",
                 extra={
                     "correlation_id": str(correlation_id),
-                    "timeout_s": _SELECTION_TIMEOUT_SECONDS,
+                    "timeout_s": self.policy.selection_timeout_seconds,
                 },
             )
             endpoint = _resolve_endpoint()
@@ -186,7 +190,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
                 error_kind=SelectionErrorKind.SELECTION_TIMEOUT,
                 error_detail=(
                     f"LLM endpoint timed out at {endpoint} "
-                    f"after {_SELECTION_TIMEOUT_SECONDS}s "
+                    f"after {self.policy.selection_timeout_seconds}s "
                     f"(configured via LLM_CODER_FAST_URL). "
                     f"Verify the endpoint is running: curl {endpoint}/health"
                 ),
@@ -272,10 +276,6 @@ class NodeTransitionSelectorEffect(NodeEffect):
             duration_ms=duration_ms,
             correlation_id=correlation_id,
         )
-
-    # ------------------------------------------------------------------
-    # Prompt Construction (versioned via contract.yaml)
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _build_action_list(action_set: tuple[ModelTypedAction, ...]) -> str:
@@ -375,11 +375,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
         )
         return prompt
 
-    # ------------------------------------------------------------------
-    # Endpoint Health Probing
-    # ------------------------------------------------------------------
-
-    async def _probe_endpoint(self, timeout: float = 2.0) -> bool:
+    async def _probe_endpoint(self, timeout: float | None = None) -> bool:
         """Probe LLM endpoint health. Returns True if reachable.
 
         Best-effort: assumes the configured endpoint exposes a simple health path.
@@ -391,28 +387,19 @@ class NodeTransitionSelectorEffect(NodeEffect):
             async with httpx.AsyncClient() as client:
                 resp = await client.get(
                     f"{endpoint}/health",
-                    timeout=timeout,
+                    timeout=self.policy.probe_timeout_seconds
+                    if timeout is None
+                    else timeout,
                 )
                 return resp.status_code == 200
         except (httpx.TimeoutException, httpx.NetworkError, OSError):
             return False
 
-    # ------------------------------------------------------------------
-    # Model Call
-    # ------------------------------------------------------------------
-
-    # Retry policy (matches contract.yaml error_handling.retry_policy)
-    _MAX_RETRIES = 1
-    _RETRY_DELAY_SECONDS = 0.5  # initial_delay_ms: 500
-
     async def _call_model(self, prompt: str) -> str:
         """Call the local model with retry on model_unavailable.
 
-        Implements the retry_policy from contract.yaml:
-          max_retries: 1, initial_delay_ms: 500, retry_on: [model_unavailable]
-
-        Uses LLM_CODER_FAST_URL (Qwen3-14B, port 8001). Requests JSON mode
-        if available for structured output.
+        Uses the injected contract retry policy and configured model endpoint.
+        Requests JSON mode for structured output.
 
         Args:
             prompt: The fully-rendered classification prompt.
@@ -424,21 +411,21 @@ class NodeTransitionSelectorEffect(NodeEffect):
             Exception: After all retries are exhausted.
         """
         last_exc: Exception | None = None
-        for attempt in range(self._MAX_RETRIES + 1):
+        for attempt in range(self.policy.max_retries + 1):
             try:
                 return await self._call_model_once(prompt)
             except Exception as exc:  # noqa: BLE001 — boundary: retry loop catches all
                 last_exc = exc
-                if attempt < self._MAX_RETRIES:
+                if attempt < self.policy.max_retries:
                     logger.warning(
                         "transition_selector.model_retry",
                         extra={
                             "attempt": attempt + 1,
-                            "max_retries": self._MAX_RETRIES,
+                            "max_retries": self.policy.max_retries,
                             "error": str(exc),
                         },
                     )
-                    await asyncio.sleep(self._RETRY_DELAY_SECONDS)
+                    await asyncio.sleep(self.policy.retry_delay_seconds)
         raise last_exc  # type: ignore[misc]  # Why: last_exc may be unbound if loop never executed
 
     async def _call_model_once(self, prompt: str) -> str:
@@ -470,7 +457,9 @@ class NodeTransitionSelectorEffect(NodeEffect):
             "response_format": {"type": "json_object"},
         }
 
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(
+            timeout=self.policy.http_timeout_seconds
+        ) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
             data = response.json()
@@ -482,10 +471,6 @@ class NodeTransitionSelectorEffect(NodeEffect):
 
         content: str = choices[0].get("message", {}).get("content", "")
         return content
-
-    # ------------------------------------------------------------------
-    # Output Parsing
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _parse_selection(raw_output: str) -> int | None:
@@ -529,10 +514,6 @@ class NodeTransitionSelectorEffect(NodeEffect):
                 return None
 
         return selected
-
-    # ------------------------------------------------------------------
-    # Class-level helpers for external callers (TransitionSelector API)
-    # ------------------------------------------------------------------
 
     @staticmethod
     def build_request(

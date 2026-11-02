@@ -11,15 +11,15 @@ from omniclaude.nodes.node_lane_github_read_guard_effect.enums import (
     EnumLaneGithubReadVerdict,
     EnumSessionMode,
 )
-from omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_lane_github_read_cli import (
-    build_request,
-)
 from omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_lane_github_read_guard import (
     LANE_ENV_MARKERS,
     HandlerLaneGithubReadGuard,
 )
 from omniclaude.nodes.node_lane_github_read_guard_effect.models import (
     ModelLaneGithubReadRequest,
+)
+from omniclaude.nodes.node_lane_github_read_guard_effect.runtime_lane_github_read import (
+    build_request,
 )
 
 pytestmark = pytest.mark.unit

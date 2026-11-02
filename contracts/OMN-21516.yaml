@@ -1,0 +1,57 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21516
+title: "T2.2: omniclaude consumes the core check-ai-slop and skip-count-ratchet hooks"
+summary: "Delete the two repo-local validator script copies and consume the omnibase_core hook ids pinned to a dev-merge tag"
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-core-hooks-no-local-copies"
+    statement: "Neither repo-local validator script exists and both hook ids resolve to omnibase_core at a dev-merge tag."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: uv run pytest tests/ci/test_core_validator_hooks_omn21516.py -k 'core_registration or copies_are_absent or local_validator_copies'"
+  - id: "req-ai-slop-from-core"
+    statement: "The check-ai-slop hook is registered in .pre-commit-config.yaml from omnibase_core, so the core node refuses the ai_slop canary defect."
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: uv run pytest tests/ci/test_core_validator_hooks_omn21516.py -k ai_slop_hook_is_registered_from_core"
+  - id: "req-skip-count-baseline"
+    statement: "Every skip-count step in .github/workflows/ci.yml passes --baseline config/skip_count_baseline.yaml to the core node."
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: uv run pytest tests/ci/test_core_validator_hooks_omn21516.py -k skip_count_steps_pass_the_committed_baseline"
+evidence_requirements:
+  - kind: tests
+    description: "Focused CI tests and the new hook-registration test pass"
+    command: "uv run pytest -q tests/ci/test_core_validator_hooks_omn21516.py tests/ci/test_ci_evidence_omn18784.py tests/ci/test_hooks_shard_omn19681.py tests/ci/test_agent_framework_job_omn18805.py"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-001"
+    description: "AC1 (omniclaude rows): neither script exists and both hook ids resolve to omnibase_core at a dev-merge tag"
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_core_validator_hooks_omn21516.py -q --no-cov -k 'core_registration or copies_are_absent or local_validator_copies'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-002"
+    description: "AC2 (omniclaude): the check-ai-slop hook is registered from omnibase_core (lab canary run in the PR body)"
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_core_validator_hooks_omn21516.py -q --no-cov -k 'ai_slop_hook_is_registered_from_core'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
+  - id: "dod-003"
+    description: "AC3 (omniclaude skip-count): every core skip-count step passes the committed baseline"
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_core_validator_hooks_omn21516.py -q --no-cov -k 'skip_count_steps_pass_the_committed_baseline'"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC3"]

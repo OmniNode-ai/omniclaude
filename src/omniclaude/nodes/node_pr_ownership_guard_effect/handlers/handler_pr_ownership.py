@@ -478,7 +478,11 @@ def run_command_file(command: str, *, cwd: str | None, default_repo: str | None)
     request = ModelPrOwnershipRequest(
         command=command, cwd=cwd, default_repo=default_repo
     )
-    handler = HandlerPrOwnership(defer_claims=True)
+    from omniclaude.nodes.node_pr_ownership_guard_effect.container import (
+        container_pr_ownership,
+    )
+
+    handler = container_pr_ownership.build_pr_ownership(defer_claims=True)
     result = handler.handle(request)
     sys.stdout.write(json.dumps(result.verdict_payload()) + "\n")
     if result.blocked:

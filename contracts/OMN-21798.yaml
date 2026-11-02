@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21798
+title: "omniclaude contracts_and_di literal_url burn-down, slice rf1540-c7: script URLs come from the endpoint policy contract"
+summary: >
+  omnibase_core's contracts_and_di check, run read-only over omniclaude dev 6a2197d70 (src, scripts and plugins),
+  reported 92 literal_url findings (800 findings in all). This slice clears 3 of them in 1 file
+  (scripts/worktree_auto_prune.py), leaving 89 and a total of 797. The Linear
+  GraphQL endpoint and the GitHub URL prefixes are declared in src/omniclaude/contracts/contract_endpoint_policy.yaml
+  (env overlay convention) and reach the scripts as an injected ModelEndpointPolicy. No baseline entry, suppression
+  or constants module is added and no URL string remains in the touched code. Further files were tried and stopped
+  by the canonical-file-shape ratchet (a baselined file only shrinks, no new code file outside the canonical homes).
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21798-literal-url-slice
+    statement: The URLs of the slice are read from the endpoint policy contract and none stays hard-coded in the touched code.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the contracts_and_di count for literal_url over the slice paths drops to zero and the repo total drops by the slice size, with no baseline entry or suppression added -- falsifier: onex run of runtime_validator_run with the contracts_and_di reference over omniclaude src before and after, counts compared per rule"
+      - id: AC2
+        statement: "AC2: every URL comes from the owning node contract or overlay and is injected, none hard-coded in the touched code -- falsifier: uv run pytest tests/unit -q over the touched modules plus the checker re-run on the slice paths"
+      - id: AC3
+        statement: "AC3: the slice lands as one PR titled with this ticket id and carries lab proof of the tests and the checker re-run -- falsifier: uv run pytest tests/unit -q on the lab through lab-run at the PR head, receipt path in the PR body"
+evidence_requirements:
+  - kind: tests
+    description: "ModelEndpointPolicy loads every field from the contract, the touched script holds no URL literal, and their suites pass"
+    command: "uv run pytest tests/unit/models/test_model_endpoint_policy.py tests/scripts/test_worktree_auto_prune.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21798-ac1-ac2-endpoint-policy-and-slice
+    binds_ac: [AC1, AC2]
+    description: >-
+      ModelEndpointPolicy.from_contract() reads every field of the contract (an overlay variable overrides the declared
+      value, a missing field or section fails to load), an ast scan of the touched script finds no string constant opening
+      with scheme://host, and a planted literal is seen, so the zero is not vacuous.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/models/test_model_endpoint_policy.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn21798-ac2-touched-callers
+    binds_ac: [AC2]
+    description: The suites of the touched scripts pass.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_worktree_auto_prune.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn21798-ac3-lab-proof
+    binds_ac: [AC3]
+    description: The PR is titled with OMN-21798 and its body carries the lab line of the unit run at the PR head and the before and after checker counts.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/models/test_model_endpoint_policy.py -q --no-cov"
+        cwd: "."

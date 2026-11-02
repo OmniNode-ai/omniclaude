@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21729
+title: "Contracts and DI burn-down: cache, inbox, verification and lane evidence timeouts, slice rf1625-c3"
+summary: >-
+  Twenty literal timeout findings leave the result cache, agent router, action
+  logger demo, coverage cache, quirk extractor, verification, inbox and linear
+  effect lane evidence modules. Each value is declared in
+  contract_omniclaude_lib_timeouts.yaml and reaches the code through a
+  validated model, with an injectable parameter where the code already took one.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21729-timeouts-from-contract
+    statement: Lib and effect module timeouts, polls and TTLs come from the lib timeouts contract, not from literals in code.
+    acceptance:
+      - id: AC1
+        statement: "AC1 (BURNDOWN): literal_timeout over the slice paths drops to zero and the repo total falls from 326 to 306 over src, scripts and plugins, with no baseline entry or suppression -- falsifier: contracts_and_di validator over omniclaude before and after, counts compared per rule"
+      - id: AC2
+        statement: "AC2 (BURNDOWN): every moved timeout is taken through the lib timeouts contract model and none remains hard-coded in the touched code -- falsifier: uv run pytest tests/unit/models -q --no-cov plus the checker re-run on the slice paths"
+      - id: AC3
+        statement: "AC3 (BURNDOWN): the slice lands as one PR titled with this ticket id and carries lab proof of the tests and the checker re-run -- falsifier: uv run pytest tests/unit -q on the lab at the PR head, receipt path in the PR body"
+evidence_requirements:
+  - kind: tests
+    description: Lib timeouts contract and consumer regressions
+    command: "uv run pytest tests/unit/models/test_model_lib_timeouts.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21729-lib-timeouts-contract
+    binds_ac: [AC1, AC2, AC3]
+    description: >-
+      The contract values equal the model values, a missing or non-positive value
+      fails validation, and the result cache, coverage cache entry, self check,
+      standalone inbox, quirk extractor and lane evidence read their values from the
+      contract, and the coverage cache entry and agent inbox take the value from
+      their caller. The read-only validator scan over src, scripts
+      and plugins falls from 326 to 306 literal_timeout findings with every other
+      rule unchanged.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/models/test_model_lib_timeouts.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn21729-hosted-source-deploy-readback
+    description: >-
+      Hosted-runner source publication check for the lib timeout policy and its
+      runtime consumers at the checked-out commit. Download each product file
+      from the public repository at HEAD and require byte equality with the
+      checkout. Missing publication, an HTTP failure, or pre-refactor source
+      fails. This checks published source, not running service health; the
+      behavioral timeout tests remain a separate evidence item above.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: command
+        cwd: "."
+        check_value: |
+          bash -euo pipefail -c '
+            head_sha=$(git rev-parse HEAD);
+            for path in \
+              src/omniclaude/models/model_lib_timeouts.py \
+              src/omniclaude/contracts/contract_omniclaude_lib_timeouts.yaml \
+              src/omniclaude/nodes/node_agent_inbox_effect/handler_kafka_inbox.py \
+              src/omniclaude/nodes/node_agent_inbox_effect/handler_standalone_inbox.py \
+              src/omniclaude/nodes/node_agent_inbox_effect/protocols/protocol_agent_inbox.py \
+              src/omniclaude/nodes/node_linear_effect/handlers/handler_lane_repo_evidence.py \
+              src/omniclaude/services/standalone_inbox/background_watcher.py \
+              src/omniclaude/services/standalone_inbox/inbox.py;
+            do curl --fail --silent --show-error --location --retry 3 \
+                "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$head_sha/$path" \
+                | cmp - "$path";
+            done
+          '

@@ -74,6 +74,7 @@ def _run(
     env.pop(_OVERLAY_ENV, None)
     env.pop(_ROOTS_ENV, None)
     env.pop("OMNICLAUDE_SESSION_INTENT", None)
+    env.pop("ONEX_REMOTE_LANE", None)
     env["HOME"] = str(tmp_path / "home")
     (tmp_path / "home").mkdir(exist_ok=True)
     # OMN-18430: the runner discovers an overlay in the per-user configuration
@@ -823,6 +824,43 @@ def test_shared_checks_pass_under_team_without_the_operator_check(
     assert operator_payload is not None
     assert operator_payload["failed_check_ids"] == ["coordination_host"]
     assert operator_payload["skipped_check_ids"] == []
+
+
+def test_default_profile_is_team_in_a_remote_lane(tmp_path: Path) -> None:
+    """OMN-21672: no --profile inside a remote lane runs team, so an operator-only check is skipped."""
+    overlay = _overlay(tmp_path, [_PASSING, _OPERATOR_ONLY])
+    result, payload = _tick(
+        tmp_path, overlay, env_extra={"ONEX_REMOTE_LANE": "rlane-x"}
+    )
+    assert result.returncode == EXIT_OK, result.stdout + result.stderr
+    assert payload is not None
+    assert payload["profile"] == "team"
+    assert payload["included_check_ids"] == ["shell_present"]
+    assert payload["skipped_check_ids"] == ["coordination_host"]
+
+
+def test_default_profile_is_operator_when_the_lane_variable_is_blank(
+    tmp_path: Path,
+) -> None:
+    overlay = _overlay(tmp_path, [_PASSING, _OPERATOR_ONLY])
+    result, payload = _tick(tmp_path, overlay, env_extra={"ONEX_REMOTE_LANE": "  "})
+    assert result.returncode == EXIT_BLOCKED, result.stdout + result.stderr
+    assert payload is not None
+    assert payload["profile"] == "operator"
+
+
+def test_an_explicit_profile_beats_the_lane_default_profile(tmp_path: Path) -> None:
+    overlay = _overlay(tmp_path, [_PASSING, _OPERATOR_ONLY])
+    result, payload = _tick(
+        tmp_path,
+        overlay,
+        "--profile",
+        "operator",
+        env_extra={"ONEX_REMOTE_LANE": "rlane-x"},
+    )
+    assert result.returncode == EXIT_BLOCKED, result.stdout + result.stderr
+    assert payload is not None
+    assert payload["profile"] == "operator"
 
 
 def test_the_default_profile_is_operator(tmp_path: Path) -> None:

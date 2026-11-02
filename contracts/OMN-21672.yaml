@@ -1,0 +1,35 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21672
+title: "A remote lane runs the team preflight profile by default and reads LINEAR_API_KEY from the secret store on any lab host"
+summary: >
+  The session preflight runner ran the operator profile unless the caller typed --profile team, so
+  whether a lab lane ran the team profile depended on the command the model typed. With no --profile
+  it now reads ONEX_REMOTE_LANE, which the remote-lane runner exports into every lane: set means
+  team, unset means operator, and an explicit --profile always wins. The omniclaude side of the
+  ticket is AC1; AC2 and AC3 land in the runner repository and the private overlay.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21672-default-profile
+    statement: session_preflight.py resolves its profile from the lane identity when --profile is not given.
+    acceptance:
+      - id: AC1
+        statement: "AC1: session_preflight.py run with ONEX_REMOTE_LANE set and no --profile resolves the team profile, run with neither set resolves operator, and an explicit --profile always wins -- falsifier: uv run pytest tests/scripts/test_session_preflight_runner.py -q -k default_profile"
+evidence_requirements:
+  - kind: tests
+    description: "The preflight runner suite passes with the planted lane and non-lane default-profile cases"
+    command: "uv run pytest tests/scripts/test_session_preflight_runner.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21672-ac1-default-profile
+    description: "With ONEX_REMOTE_LANE set and no --profile the receipt profile is team and the operator-only check is skipped; with it unset or blank the profile is operator; an explicit --profile operator inside a lane stays operator. Fails at the merge base, which defaults to operator in a lane."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_session_preflight_runner.py -q --no-cov -k default_profile"
+        cwd: "."

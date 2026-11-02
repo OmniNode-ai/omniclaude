@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21728
+title: "omniclaude contracts_and_di literal_path burn-down, slice rf1800-c1"
+summary: >
+  omnibase_core's contracts_and_di check reported 57 literal_path findings in omniclaude. This slice
+  moves 13 of them (hook runtime socket and PID, session marker directory, statusline usage cache,
+  Linear relay dedup database, opencode database, secret store home, default state directory,
+  pattern tracking log directory and the coupling check's registry root) into a runtime_paths
+  section of the runtime contract, resolved from the operator overlay env, loaded into a frozen
+  model and injected into the callers. No constants module, baseline entry or suppression is added.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21728-paths-from-contract
+    statement: The filesystem locations of the touched modules come from the runtime contract overlay and are injected.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the contracts_and_di literal_path count over the slice paths is zero and the repo total drops by 13 (57 to 44), with no baseline entry or suppression added -- falsifier: onex run of runtime_validator_run with the contracts_and_di reference over omniclaude before and after, counts compared per rule"
+      - id: AC2
+        statement: "AC2: every moved path is taken through an injected parameter bound from the node contract or overlay and none remains hard-coded in the touched code -- falsifier: uv run pytest tests/unit -q over the touched modules plus the checker re-run on the slice paths"
+evidence_requirements:
+  - kind: tests
+    description: "Runtime paths model and touched-module tests pass"
+    command: "uv run pytest tests/unit/models/test_model_runtime_paths.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21728-paths-from-contract
+    description: "The contract section, the frozen model and the nine callers carry the locations; the whole-tree contracts_and_di scan falls from 805 to 792 findings, literal_path from 57 to 44, and no touched file keeps a literal_path finding."
+    source: manual
+    binds_ac: [AC1, AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "bash -c 'ONEX_STATE_DIR=$(mktemp -d) uv run pytest tests/unit/models/test_model_runtime_paths.py tests/unit/hook_runtime/test_launcher.py -q --no-cov'"

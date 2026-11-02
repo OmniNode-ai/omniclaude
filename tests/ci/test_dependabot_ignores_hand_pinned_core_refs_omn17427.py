@@ -36,13 +36,16 @@ def test_no_github_actions_version_update_entry_exists() -> None:
 
 @pytest.mark.parametrize("name", HAND_PINNED)
 def test_each_hand_pinned_ref_is_still_pinned_and_test_asserted(name: str) -> None:
-    pattern = re.compile(rf"uses:\s*{re.escape(name)}@([0-9a-f]{{40}})")
+    # A hand-pinned ref is a full sha or an omnibase_core dev-merge tag (OMN-20134).
+    pattern = re.compile(
+        rf"uses:\s*{re.escape(name)}@([0-9a-f]{{40}}|dev-\d{{14}}-[0-9a-f]{{12}})"
+    )
     shas = {
         sha
         for path in (ROOT / ".github/workflows").glob("*.yml")
         for sha in pattern.findall(path.read_text(encoding="utf-8"))
     }
-    assert len(shas) == 1, f"Expected exactly one distinct SHA for {name}: {shas}"
+    assert len(shas) == 1, f"Expected exactly one distinct pin for {name}: {shas}"
     sha = shas.pop()
     assert any(
         sha in path.read_text(encoding="utf-8")

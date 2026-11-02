@@ -1,0 +1,46 @@
+schema_version: "1.0.0"
+ticket_id: OMN-21536
+title: "handler_shape burn-down in omniclaude: process entries leave the handler modules"
+summary: >
+  OMN-21536 replaced the canonical_handler_shape repository script with the handler_shape
+  checker in omnibase_core, which judges every handler class and every handler module, bound
+  or not. This change is the first omniclaude slice of the burn-down of what that checker
+  reports. Three handler directories held a process entry (a CLI main) beside, or instead of,
+  a handler: handler_lane_github_read_cli, handler_pr_ownership_cli and
+  handler_done_closeout_instructions. The two pure entries move to runtime_*.py modules, and
+  the closeout audit becomes HandlerDoneCloseoutInstructions with a typed
+  handle(request) -> result and a runtime_done_closeout_instructions.py entry. The checker's
+  module_function_handler count over omniclaude src drops from 18 to 15.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21536-omniclaude-slice1
+    statement: No handler_*.py of the three nodes defines a CLI main; each process entry is a runtime_*.py module the hooks and tests name.
+    acceptance:
+      - id: AC1
+        statement: "AC1 (omniclaude slice 1): the closeout instruction audit is a handler class with a typed request and result, and the lane GitHub read guard and PR ownership guard process entries are runtime_*.py modules -- falsifier: uv run pytest tests/unit/nodes/test_cli_entries_not_in_handler_modules_omn21536.py tests/scripts/test_done_closeout_instructions.py -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "The entry-placement test, the closeout audit tests and the guard tests that name the renamed modules pass"
+    command: "uv run pytest tests/unit/nodes/test_cli_entries_not_in_handler_modules_omn21536.py tests/scripts/test_done_closeout_instructions.py tests/unit/nodes/node_lane_github_read_guard_effect -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21536-ac1-entries-moved
+    description: "No handler_*.py of node_linear_effect, node_lane_github_read_guard_effect and node_pr_ownership_guard_effect defines main; the three runtime_*.py entries define it; the closeout audit tests run through HandlerDoneCloseoutInstructions. Fails at the merge base, where the entries sit in handler_*.py modules."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/nodes/test_cli_entries_not_in_handler_modules_omn21536.py tests/scripts/test_done_closeout_instructions.py tests/unit/nodes/node_lane_github_read_guard_effect -q --no-cov"
+        cwd: "."
+  - id: dod-omn21536-ac1-deploy-entries-on-branch
+    description: "Deploy check: the closeout audit handler module at the checked-out head, read through the GitHub contents API, defines the HandlerDoneCloseoutInstructions class. Fails at the merge base, where that class does not exist."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: "gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_linear_effect/handlers/handler_done_closeout_instructions.py?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -q 'class HandlerDoneCloseoutInstructions'"

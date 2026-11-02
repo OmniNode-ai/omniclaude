@@ -14,7 +14,6 @@ access must go through the projection API or runtime health surface.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 from datetime import UTC, datetime
@@ -22,10 +21,9 @@ from typing import Any
 
 import requests
 
-_RUNTIME_HEALTH_URL = os.environ.get(
-    "OMNINODE_RUNTIME_HEALTH_URL",
-    "http://localhost:8085/health",  # kafka-fallback-ok
-)
+from omniclaude.models.model_endpoint_defaults import ModelEndpointDefaults
+
+_RUNTIME_HEALTH_URL = ModelEndpointDefaults.from_contract().runtime_health_url
 _TIMEOUT_S = 5.0
 
 

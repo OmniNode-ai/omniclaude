@@ -37,8 +37,6 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
-SCRIPT = REPO_ROOT / "scripts" / "ci" / "skip_count_ratchet.py"
-BASELINE = REPO_ROOT / "config" / "skip_count_baseline.yaml"
 
 HOOKS_JOB_KEY = "hooks-tests"
 SHARDS = 3
@@ -76,16 +74,6 @@ def _job_text(key: str) -> str:
     following = re.compile(r"\n  [a-z0-9_-]+:\n")
     match = following.search(raw, start + 1)
     return raw[start : match.start() if match else len(raw)]
-
-
-def _run_ratchet(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(SCRIPT), *args],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-        check=False,
-    )
 
 
 def _junit(tests: int, skipped: int = 0, name: str = "hooks", prefix: str = "a") -> str:
@@ -230,46 +218,6 @@ def test_ratchet_recursive_find_reads_every_shards_junit_reports(
         f"expected the find command to read every shard's {JUNIT_BASENAME}, "
         f"found {found!r} (stderr={result.stderr!r})"
     )
-
-
-def test_ratchet_script_counts_skips_summed_across_both_shard_reports(
-    tmp_path: Path,
-) -> None:
-    """Falsifier: the ratchet script under-counts when given two shard reports.
-
-    A shard split is only safe if the thing being ratcheted -- the total
-    skipped-test count -- is the SUM over both shards' reports, not just one.
-    """
-    shard_one = tmp_path / "junit-hooks-1.xml"
-    shard_one.write_text(_junit(tests=20, skipped=5, prefix="1"), encoding="utf-8")
-    shard_two = tmp_path / "junit-hooks-2.xml"
-    shard_two.write_text(_junit(tests=20, skipped=7, prefix="2"), encoding="utf-8")
-
-    baseline = yaml.safe_load(BASELINE.read_text(encoding="utf-8"))
-    registered = baseline["suites"].get("omniclaude/hooks-tests", {})
-    max_skips = registered.get("max_skips")
-    assert max_skips is not None, "omniclaude/hooks-tests must stay registered"
-
-    result = _run_ratchet(
-        "--baseline",
-        str(BASELINE),
-        "--suite",
-        "omniclaude/hooks-tests",
-        "--junit",
-        str(shard_one),
-        str(shard_two),
-    )
-    out = result.stdout + result.stderr
-    # 12 combined skips must be compared against the real registered baseline,
-    # never against one shard's 5 or 7 in isolation.
-    if max_skips < 12:
-        assert result.returncode != 0, (
-            "12 combined skips exceeds the registered baseline "
-            f"({max_skips}) but the ratchet did not fail: {out}"
-        )
-    else:
-        assert result.returncode == 0, out
-        assert "12" in out, f"expected the combined skip count (12) in output: {out}"
 
 
 def _planner_source() -> str:
