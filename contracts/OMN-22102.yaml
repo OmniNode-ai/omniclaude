@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-22102
+title: "canonical_clone_sync refresh finds the knowledge base clone that sits beside the registry root"
+summary: >
+  On lab hosts the knowledge base canonical clone sits beside the registry root, not under it, so a refresh of
+  that repository answered NO_CLONE and origin/main stayed stale. The sibling lookup in canonical_clone_sync.py
+  was a single special case for one other beside-root clone. It now reads a declared set of override variables
+  (one per beside-root clone; the directory is the variable's name without _HOME, lower-cased), so the refresh
+  finds both. The sync's own
+  clone set is unchanged: only the refresh looks beside the root.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22102-refresh-finds-sibling
+    statement: A refresh finds a declared canonical clone that sits beside the registry root.
+    acceptance:
+      - id: AC1
+        statement: "AC1: a refresh of the OmniNode-ai knowledge base clone with OMNI_HOME set and the clone one level above $OMNI_HOME prints REFRESHED or UP_TO_DATE and not NO_CLONE -- falsifier: uv run pytest plugins/onex/hooks/tests -q -k sibling_clone"
+      - id: AC2
+        statement: "AC2: a regression test built from the recorded lab-host layout (a registry root with the clone one level up, fixture path in the PR) fails on the broken code and passes on the fix -- falsifier: uv run pytest plugins/onex/hooks/tests -q -k sibling_clone"
+evidence_requirements:
+  - kind: tests
+    description: "The sibling_clone tests and the existing refresh and sync tests pass"
+    command: "uv run pytest plugins/onex/hooks/tests tests/hooks/test_canonical_clone_sync_refresh.py tests/hooks/test_canonical_clone_sync.py -q --no-cov -k 'sibling or refresh or clone' -p no:randomly"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22102-ac1-refresh-finds-sibling
+    binds_ac: [AC1]
+    description: The sibling_clone tests refresh the knowledge base clone from a clone beside the registry root and get REFRESHED or UP_TO_DATE.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest plugins/onex/hooks/tests -q --no-cov -k sibling_clone -p no:randomly"
+  - id: dod-omn22102-ac2-regression-test
+    binds_ac: [AC2]
+    description: The recorded-layout test file exists and runs green on the fix (it fails on the old code, where four of its seven tests fail).
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest plugins/onex/hooks/tests/test_canonical_clone_sync_sibling_clone.py -q --no-cov -p no:randomly"
