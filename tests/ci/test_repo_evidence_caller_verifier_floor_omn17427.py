@@ -1,14 +1,18 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""OMN-17427: the repo-evidence caller stays on the verifier floor that refuses a partly bound contract.
+"""OMN-17427, OMN-21855: the repo-evidence caller installs its verifier from an omnimarket dev-merge tag.
 
 Operator ruling 2026-10-10T11:04:11Z: the hosted `repo-evidence / dod-verify`
 context must refuse a contract whose acceptance criteria are only partly bound,
-in every repository. The refusal is delivered by the pinned verifier, and the
-receipt-gate reusable refuses a `verifier-version` below its VERIFIER_FLOOR
-(omnibase_core#1932). This file pins the caller on both sides of that floor and
-is the check-only pre-commit hook `call-repo-evidence-gate-verifier-floor`.
+in every repository. The refusal is delivered by the verifier, and the receipt-gate
+reusable refuses a verifier below its floor (omnibase_core#1932). Operator ruling
+2026-10-31T21:49:54Z moved the floor from a version number to an
+ancestry fact: the reusable takes `verifier-tag`, resolves it to a commit and
+refuses a moved tag, a tag not on omnimarket dev and one that does not descend from
+the floor commit. This file holds the caller to that shape: a dev-merge `verifier-tag`
+and no `verifier-version`. It is the check-only pre-commit hook
+`call-repo-evidence-gate-verifier-floor`.
 """
 
 from __future__ import annotations
@@ -25,20 +29,12 @@ from tests.ci.test_repo_evidence_caller_workflow import CALLER_PATH
 
 pytestmark = pytest.mark.unit
 
-# The pin descends from omnibase_core#1932, which adds VERIFIER_FLOOR to the reusable's
-# "Install the pinned verifier" step. The dev-merge tag lives in
-# tests/ci/receipt_gate_pin.py, the one constant a pin advance rewrites.
+# The dev-merge tag lives in tests/ci/receipt_gate_pin.py, the one constant a pin
+# advance rewrites. It descends from omnibase_core#2203, which adds verifier-tag.
 _FLOOR_REUSABLE_TAG = RECEIPT_GATE_PIN_TAG
 _ADMITTED_REUSABLE_PINS = (_FLOOR_REUSABLE_TAG,)
 _RECEIPT_GATE = "OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml"
-
-# 0.4.303 is the first omnimarket release carrying omnimarket#3511, the refusal of
-# a contract that leaves an acceptance criterion unbound.
-_VERIFIER_FLOOR = (0, 4, 303)
-
-
-def _version(text: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in text.split("."))
+_DEV_MERGE_TAG = re.compile(r"dev-\d{14}-[0-9a-f]{12}")
 
 
 def _job(path: Path = CALLER_PATH) -> dict[str, Any]:
@@ -48,41 +44,43 @@ def _job(path: Path = CALLER_PATH) -> dict[str, Any]:
 
 
 def _floor_refusals(job: dict[str, Any]) -> list[str]:
-    """Name every way the caller job falls off the floor; empty means it holds."""
+    """Name every way the caller job leaves the dev-merge tag shape; empty means it holds."""
     refusals: list[str] = []
     reusable, _, pin = str(job.get("uses", "")).partition("@")
     if reusable != _RECEIPT_GATE:
         refusals.append(f"uses {reusable!r} is not the omnibase_core receipt-gate")
-    if pin not in _ADMITTED_REUSABLE_PINS:
+    if not _DEV_MERGE_TAG.fullmatch(pin):
+        refusals.append(f"reusable pin {pin!r} is not a dev-merge tag")
+    elif pin not in _ADMITTED_REUSABLE_PINS:
         refusals.append(
-            f"reusable pin {pin!r} is not {_FLOOR_REUSABLE_TAG}, which descends from omnibase_core#1932"
+            f"reusable pin {pin!r} is not {_FLOOR_REUSABLE_TAG}, which descends from omnibase_core#2203"
         )
-    declared = str(job.get("with", {}).get("verifier-version", ""))
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", declared):
-        refusals.append(f"verifier-version {declared!r} is not a numeric version")
-    elif _version(declared) < _VERIFIER_FLOOR:
+    with_ = job.get("with", {})
+    declared = str(with_.get("verifier-tag", ""))
+    if not _DEV_MERGE_TAG.fullmatch(declared):
+        refusals.append(f"verifier-tag {declared!r} is not an omnimarket dev-merge tag")
+    if "verifier-version" in with_:
         refusals.append(
-            f"verifier-version {declared} is below {'.'.join(map(str, _VERIFIER_FLOOR))}"
+            "verifier-version is the warned fallback; the caller passes none"
         )
     return refusals
 
 
-def test_caller_pins_the_reusable_that_carries_the_verifier_floor() -> None:
+def test_caller_pins_the_reusable_that_carries_the_verifier_tag_input() -> None:
     uses = _job()["uses"]
     reusable, _, pin = uses.partition("@")
     assert reusable == _RECEIPT_GATE, "the caller must use omnibase_core's receipt-gate"
     assert pin in _ADMITTED_REUSABLE_PINS, (
-        "pin the receipt-gate reusable at or past omnibase_core#1932 "
+        "pin the receipt-gate reusable at or past omnibase_core#2203 "
         f"({_FLOOR_REUSABLE_TAG}); found {pin}"
     )
+    assert _DEV_MERGE_TAG.fullmatch(pin), "the reusable ref must be a dev-merge tag"
 
 
-def test_caller_verifier_version_is_at_or_above_the_floor() -> None:
-    declared = _job()["with"]["verifier-version"]
-    assert _version(declared) >= _VERIFIER_FLOOR, (
-        f"verifier-version {declared} must be at or above the reusable's "
-        f"VERIFIER_FLOOR {'.'.join(map(str, _VERIFIER_FLOOR))}"
-    )
+def test_caller_passes_a_verifier_tag_and_no_verifier_version() -> None:
+    with_ = _job()["with"]
+    assert _DEV_MERGE_TAG.fullmatch(with_["verifier-tag"])
+    assert "verifier-version" not in with_
 
 
 def test_the_real_caller_has_no_floor_refusal() -> None:
@@ -90,31 +88,51 @@ def test_the_real_caller_has_no_floor_refusal() -> None:
 
 
 @pytest.mark.parametrize(
-    ("version", "expected"),
+    ("tag", "expected"),
     [
-        ("0.4.280", False),
-        ("0.4.302", False),
-        ("0.4.303", True),
-        ("0.4.310", True),
+        ("dev-20261101000200-949993edf3b7", True),
+        ("dev-20261101000200-949993edf3b", False),
+        ("dev-20261101000200-949993EDF3B7", False),
+        ("dev-2026110100020-949993edf3b7", False),
+        ("0.4.310", False),
+        ("v0.4.310", False),
     ],
 )
-def test_floor_comparison_has_a_refusing_and_an_admitting_case(
-    version: str, expected: bool
+def test_dev_merge_tag_shape_has_admitting_and_refusing_cases(
+    tag: str, expected: bool
 ) -> None:
-    assert (_version(version) >= _VERIFIER_FLOOR) is expected
+    assert bool(_DEV_MERGE_TAG.fullmatch(tag)) is expected
 
 
-@pytest.mark.parametrize("version", ["0.4.280", "0.4.302"])
-def test_a_caller_below_the_floor_is_refused(version: str, tmp_path: Path) -> None:
-    """Negative control: a copy of the caller with a verifier below the floor fails."""
+def test_a_caller_that_passes_verifier_version_is_refused(tmp_path: Path) -> None:
+    """Negative control: a copy of the caller that adds the fallback fails."""
     text = CALLER_PATH.read_text(encoding="utf-8")
-    planted = re.sub(r"(?m)^(\s*verifier-version:\s*)\S+$", rf"\g<1>{version}", text)
-    assert f"verifier-version: {version}" in planted
+    planted = re.sub(
+        r"(?m)^(\s*)(verifier-tag:\s*\S+)$",
+        r"\g<1>\g<2>\n\g<1>verifier-version: 0.4.310",
+        text,
+    )
+    assert "verifier-version: 0.4.310" in planted
     copy = tmp_path / "call-repo-evidence-gate.yml"
     copy.write_text(planted, encoding="utf-8")
     refusals = _floor_refusals(_job(copy))
     assert len(refusals) == 1
-    assert f"verifier-version {version} is below 0.4.303" in refusals[0]
+    assert "verifier-version is the warned fallback" in refusals[0]
+
+
+def test_a_caller_with_a_released_version_in_place_of_the_tag_is_refused(
+    tmp_path: Path,
+) -> None:
+    text = CALLER_PATH.read_text(encoding="utf-8")
+    planted = re.sub(
+        r"(?m)^(\s*)verifier-tag:\s*\S+$", r"\g<1>verifier-tag: 0.4.310", text
+    )
+    assert "verifier-tag: 0.4.310" in planted
+    copy = tmp_path / "call-repo-evidence-gate.yml"
+    copy.write_text(planted, encoding="utf-8")
+    refusals = _floor_refusals(_job(copy))
+    assert len(refusals) == 1
+    assert "is not an omnimarket dev-merge tag" in refusals[0]
 
 
 def test_a_caller_on_another_reusable_pin_is_refused(tmp_path: Path) -> None:

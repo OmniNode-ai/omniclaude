@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-21952
+title: "omniclaude repo-evidence caller moves to the omnibase_core reusable that delegates the criteria check, so the hosted dod-verify needs no Linear credential"
+summary: >
+  repo-evidence / dod-verify is red on omniclaude pull requests whose cited ticket the hosted runner cannot read.
+  omniclaude's caller (.github/workflows/call-repo-evidence-gate.yml) still called the omnibase_core receipt-gate
+  reusable at dev-20261030152335-66d35d2283c3 with verifier-version 0.4.310, which predates OMN-21676 (the hosted
+  criteria comparison is delegated to a trusted pre-merge check, so the hosted job holds no Linear credential).
+  omnibase_core, omnimarket, omnibase_spi and omnibase_infra already call the reusable at
+  dev-20261101005012-ac2f26e3e5bf with verifier-tag dev-20261101000200-949993edf3b7. This change moves omniclaude's
+  caller to the same pair. The check is not widened: shadow and compare-with-occ stay "false", the triggers, the
+  permissions and the job id are unchanged, and no secret is added to the caller. A pull request that carries no
+  contracts/<OMN-N>.yaml for its cited ticket still fails, and this change does not mark any evidence.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21952-caller-verifier-tag
+    statement: The repo-evidence caller calls the omnibase_core reusable that carries the verifier-tag input and installs its verifier from an omnimarket dev-merge tag.
+    acceptance:
+      - id: AC1
+        statement: "AC1: .github/workflows/call-repo-evidence-gate.yml calls OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@dev-20261101005012-ac2f26e3e5bf with verifier-tag dev-20261101000200-949993edf3b7 and no verifier-version key -- falsifier: uv run pytest tests/ci/test_repo_evidence_caller_workflow.py tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_receipt_gate_caller_pin_omn20134.py -q --no-cov fails at origin/dev"
+  - id: req-omn21952-check-not-widened
+    statement: Every other line of the caller matches the merge base, so the check is neither widened nor loosened.
+    acceptance:
+      - id: AC2
+        statement: "AC2: the caller keeps shadow false, compare-with-occ false, evidence-source caller, its triggers and its read-only permissions, and differs from the merge base only in the reusable ref and the verifier input -- falsifier: uv run pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov fails when any other caller line moves"
+evidence_requirements:
+  - kind: tests
+    description: "The caller tests assert the verifier-tag shape, the absence of verifier-version, the dev-merge tag of the reusable ref and that no other caller line moved"
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_receipt_gate_caller_pin_omn20134.py tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov -p no:randomly"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21952-ac1-caller-shape
+    binds_ac: [AC1]
+    description: The caller tests pass against the caller at the omnibase_core dev-merge tag with verifier-tag set and verifier-version absent.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_receipt_gate_caller_pin_omn20134.py -q --no-cov -p no:randomly"
+  - id: dod-omn21952-ac2-check-not-widened
+    binds_ac: [AC2]
+    description: The merge-base comparison passes, so the only caller lines that moved are the reusable ref and the verifier input.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov -p no:randomly"
