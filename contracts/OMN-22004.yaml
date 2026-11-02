@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-22004
+title: "TA.22 producer half: the PostCompact capture stamps context_tokens and model so a mod-answered compaction counts as token savings"
+summary: >
+  At PostCompact the hook capture producer reads the newest compact_boundary record of transcript_path with the
+  TA.20b reader and stamps payload.context_tokens (compactMetadata.preTokens) and payload.model (the session model
+  the transcript names) on the hook.event. It stamps neither when no boundary or no positive integer preTokens is
+  found. The behaviour lives in HandlerCompactStamp of node_transcript_usage_read_effect; the capture contract
+  declares both keys for PostCompact. The redaction contract already declares payload.context_tokens and
+  payload.model as capture_verbatim by field path, so it needed no change.
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - events
+requirements:
+  - id: req-omn22004-stamp
+    statement: A PostCompact event carries the boundary's context size and the session model, and nothing invented.
+    acceptance:
+      - id: AC1
+        statement: "AC1: a PostCompact event from a session whose transcript holds a compact_boundary record carries payload.context_tokens equal to that record's compactMetadata.preTokens and payload.model equal to the session model -- falsifier: uv run pytest -k postcompact_context_tokens_model in omniclaude fails against a fixture transcript whose preTokens differs from the stamped value"
+      - id: AC2
+        statement: "AC2: a PostCompact whose transcript holds no compact_boundary record, or whose boundary has no preTokens, carries neither key and the savings handler writes no row -- falsifier: uv run pytest -k postcompact_no_boundary_unstamped fails on a fixture where a value is invented"
+      - id: AC3
+        statement: "AC3: the capture contract and the redaction contract declare both keys for PostCompact and event_registry_drift passes in omniclaude and omnimarket -- falsifier: uv run pytest -k event_registry_drift fails on a PostCompact key absent from the contract"
+      - id: AC4
+        statement: "AC4: on a lab host session the captured PostCompact event on the dev bus carries both keys, and omnimarket tests/test_omn18531_compaction_savings.py passes against that captured event -- falsifier: uv run pytest tests/test_omn18531_compaction_savings.py -q fails on the captured fixture"
+evidence_requirements:
+  - kind: tests
+    description: "The stamp tests and the capture contract tests pass"
+    command: "uv run pytest tests/unit/hooks/test_postcompact_context_tokens_omn22004.py tests/unit/hooks/test_claude_hook_capture_contract.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22004-ac1-stamp
+    binds_ac: [AC1]
+    description: The journalled PostCompact event carries the boundary's preTokens and the transcript's model.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_postcompact_context_tokens_omn22004.py -k postcompact_context_tokens_model -q --no-cov"
+  - id: dod-omn22004-ac2-unstamped
+    binds_ac: [AC2]
+    description: No boundary, or a boundary without a positive integer preTokens, stamps neither key.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_postcompact_context_tokens_omn22004.py -k postcompact_no_boundary_unstamped -q --no-cov"
+  - id: dod-omn22004-ac3-contract
+    binds_ac: [AC3]
+    description: The capture contract lists both keys for PostCompact and the generated fixtures match.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_claude_hook_capture_contract.py tests/hooks/test_deployed_registry_redaction_omn17201.py -q --no-cov"
+  - id: dod-omn22004-ac4-lab-replay
+    binds_ac: [AC4]
+    description: A recorded transcript replayed through the hook capture yields a journalled event the omnimarket savings runner turns into one context_compaction row; the replay is in the PR's Lab line.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_postcompact_context_tokens_omn22004.py -k journalled_event_carries_the_stamp -q --no-cov"

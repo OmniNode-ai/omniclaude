@@ -216,7 +216,7 @@ coverage:
     registered_today: false
     reaches_bus_today: false
     build_priority: P0
-    metadata_fields: [trigger]
+    metadata_fields: [trigger, context_tokens, model]
     content_fields: {compact_summary: capture_verbatim}
   - hook: PreModelSwitch
     registered_today: false
