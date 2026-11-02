@@ -123,7 +123,7 @@ def test_classify_at_clone_head_is_in_sync(fixture_clone: Path) -> None:
     older = _git(fixture_clone, "rev-parse", "HEAD~2")
 
     verdict = gsp.classify(
-        clone=fixture_clone, installed=head, locked=older, clone_head=head
+        clone=fixture_clone, installed=head, locked=older, expected=head
     )
 
     assert verdict.state is gsp.EnumGitPinState.IN_SYNC
@@ -140,7 +140,7 @@ def test_classify_behind_clone_is_a_named_finding_not_pin_drift(
     older = _git(fixture_clone, "rev-parse", "HEAD~2")
 
     verdict = gsp.classify(
-        clone=fixture_clone, installed=older, locked=older, clone_head=head
+        clone=fixture_clone, installed=older, locked=older, expected=head
     )
 
     assert verdict.state is gsp.EnumGitPinState.BEHIND_CLONE
@@ -150,8 +150,9 @@ def test_classify_behind_clone_is_a_named_finding_not_pin_drift(
         "a git source behind the clone must not borrow the registry pin-drift "
         "wording — that wording carries a remedy that would move it backwards"
     )
-    assert gsp.CLONE_RECONCILER in finding, (
-        "the finding must name the reconciler that owns converging this surface"
+    assert "Re-sync this surface from the lock" in finding, (
+        "the finding must name the owner of the fix: the surface re-syncs from "
+        "the lock that names the pinned tag, not from the clone HEAD (OMN-21915)"
     )
     assert older[:12] in finding and head[:12] in finding
 
@@ -164,7 +165,7 @@ def test_classify_ahead_of_clone_is_a_finding(fixture_clone: Path) -> None:
     older = _git(fixture_clone, "rev-parse", "HEAD~1")
 
     verdict = gsp.classify(
-        clone=fixture_clone, installed=head, locked=head, clone_head=older
+        clone=fixture_clone, installed=head, locked=head, expected=older
     )
 
     assert verdict.state is gsp.EnumGitPinState.AHEAD_OF_CLONE
@@ -181,50 +182,11 @@ def test_classify_unrelated_commit_is_a_finding(
     absent = "0" * 40
 
     verdict = gsp.classify(
-        clone=fixture_clone, installed=absent, locked=head, clone_head=head
+        clone=fixture_clone, installed=absent, locked=head, expected=head
     )
 
     assert verdict.state is gsp.EnumGitPinState.UNKNOWN
     assert verdict.finding is not None
-
-
-def test_lock_behind_clone_is_reported_against_the_refresh_workflow(
-    fixture_clone: Path,
-) -> None:
-    """AC1/AC5: the lock lagging the clone names the surface that owns re-locking.
-
-    The venv can be exactly right while the lock is stale — that is the normal
-    state in the window between an omnimarket merge and the bump PR landing.
-    It is reported, and it is reported against the refresh workflow, never
-    against the venv.
-    """
-    from scripts import git_source_pins as gsp  # noqa: PLC0415
-
-    head = _git(fixture_clone, "rev-parse", "HEAD")
-    older = _git(fixture_clone, "rev-parse", "HEAD~2")
-
-    finding = gsp.lock_lag_finding(
-        name="omnimarket", locked=older, clone_head=head, clone=fixture_clone
-    )
-
-    assert finding is not None
-    assert gsp.LOCK_RELOCK_OWNER in finding
-    assert gsp.CLONE_RECONCILER not in finding, (
-        "re-locking is not the venv reconciler's job; naming it here sends the "
-        "reader to the surface that cannot fix this"
-    )
-
-
-def test_lock_at_clone_head_produces_no_lag_finding(fixture_clone: Path) -> None:
-    from scripts import git_source_pins as gsp  # noqa: PLC0415
-
-    head = _git(fixture_clone, "rev-parse", "HEAD")
-    assert (
-        gsp.lock_lag_finding(
-            name="omnimarket", locked=head, clone_head=head, clone=fixture_clone
-        )
-        is None
-    )
 
 
 # --------------------------------------------------------------------------
@@ -434,13 +396,12 @@ def test_probes_ignore_an_inherited_git_dir(
     monkeypatch.setenv("GIT_INDEX_FILE", str(other / ".git" / "index"))
 
     verdict = gsp.classify(
-        clone=fixture_clone, installed=older, locked=older, clone_head=head
+        clone=fixture_clone, installed=older, locked=older, expected=head
     )
 
     assert verdict.state is gsp.EnumGitPinState.BEHIND_CLONE, (
         "an inherited GIT_DIR retargeted the probe at an unrelated repository"
     )
-    assert gsp.clone_head(fixture_clone) == head
 
 
 # --------------------------------------------------------------------------
@@ -506,47 +467,8 @@ def test_rewrite_refuses_when_the_rev_appears_only_in_comments(
 
 
 # --------------------------------------------------------------------------
-# the lag is reported, and it does not block
+# the teeth stay where the breakage is
 # --------------------------------------------------------------------------
-
-
-def test_lock_lag_is_reported_as_a_note_not_a_blocking_finding(
-    fixture_clone: Path,
-) -> None:
-    """The lock lagging the clone is stated, owned, and does not fail the gate.
-
-    Measured on the operator Mac 2026-09-18: omnimarket published five
-    releases in three hours. omnimarket is release-on-merge, so the interval
-    in which this repo's lock equals the canonical clone head is the interval
-    between one merge and the next — minutes. A blocking finding here would
-    leave the gate red on a developer host essentially always, on a condition
-    the person committing cannot fix and a scheduled workflow closes on its
-    own. That is a gate people learn to ignore, which is rule 5's failure
-    approached from the other side.
-
-    What must never happen is silence. The lag is always reported, with the
-    workflow that owns it and the command to run now, so the difference
-    between "lagging, known, owned" and "nobody is looking" stays visible.
-
-    The findings that DO block are unchanged and are the ones that actually
-    break something: a venv whose git source disagrees with the clone means
-    the OMN-18675 guard refuses every `onex delegate` on that interpreter.
-    """
-    from scripts import git_source_pins as gsp  # noqa: PLC0415
-
-    head = _git(fixture_clone, "rev-parse", "HEAD")
-    older = _git(fixture_clone, "rev-parse", "HEAD~2")
-
-    note = gsp.lock_lag_finding(
-        name="omnimarket", locked=older, clone_head=head, clone=fixture_clone
-    )
-    assert note is not None, "the lag must still be stated"
-    assert gsp.LOCK_RELOCK_OWNER in note
-
-    assert gsp.lock_lag_blocks() is False, (
-        "the lock lag must not fail the gate: it is unactionable by the "
-        "committer and a scheduled owner closes it"
-    )
 
 
 def test_a_venv_behind_the_clone_still_blocks(fixture_clone: Path) -> None:
@@ -557,7 +479,7 @@ def test_a_venv_behind_the_clone_still_blocks(fixture_clone: Path) -> None:
     older = _git(fixture_clone, "rev-parse", "HEAD~2")
 
     verdict = gsp.classify(
-        clone=fixture_clone, installed=older, locked=older, clone_head=head
+        clone=fixture_clone, installed=older, locked=older, expected=head
     )
     assert verdict.state is gsp.EnumGitPinState.BEHIND_CLONE
     assert verdict.finding is not None
