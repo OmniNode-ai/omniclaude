@@ -92,7 +92,9 @@ def test_sync_reads_omnimarket_at_the_rev_the_lock_pins() -> None:
     """
     _, run = _sync_step(_steps())
     ci_text = CI.read_text(encoding="utf-8")
-    pin_grep = "grep -oE 'omnimarket\\.git\\?rev=[0-9a-f]{40}' uv.lock"
+    # OMN-21900: the lock pins omnimarket by a dev-merge tag (`?tag=<tag>#<sha>`);
+    # both resolvers read the sha after the `#`, for `?tag=` and the legacy `?rev=`.
+    pin_grep = "grep -oE 'omnimarket\\.git\\?(rev|tag)=[^#\"]+#[0-9a-f]{40}' uv.lock"
     assert pin_grep in ci_text, "ci.yml's om_pin resolution moved; re-point this test"
     assert pin_grep in run
     assert re.search(

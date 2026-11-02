@@ -163,7 +163,10 @@ def test_whole_tree_job_provides_omnimarket_nodes_at_the_lock_pin() -> None:
     hook the omnimarket node tree at the uv.lock pin through OMNI_HOME.
     """
     runs = "\n".join(str(step.get("run", "")) for step in _job()["steps"])
-    assert "omnimarket\\.git\\?rev=" in runs
+    # OMN-21900: uv.lock names a first-party source by a dev-merge tag, so the lock
+    # pin reads `omnimarket.git?tag=<tag>#<sha>`; the resolver still accepts the
+    # legacy `?rev=` spelling and takes the sha after the `#` in both.
+    assert "omnimarket\\.git\\?(rev|tag)=" in runs
     assert "sparse-checkout set src/omnimarket/nodes" in runs
     assert '"$OMNI_HOME/omnimarket"' in runs
 

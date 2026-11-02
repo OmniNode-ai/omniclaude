@@ -279,7 +279,7 @@ jobs:
   # job PLACEMENT would change to reveal it.
   route:
     name: Runner Route (OMN-18031)
-    uses: OmniNode-ai/omnimarket/.github/workflows/route-runner-reusable.yml@d857d807694b4477ad316f3df76042cc3c55081e
+    uses: OmniNode-ai/omnimarket/.github/workflows/route-runner-reusable.yml@dev-20261017104842-d857d807694b
     with:
       workflow_path: .github/workflows/ci.yml
     secrets:
@@ -297,7 +297,7 @@ jobs:
   # receipt-gate caller still run on every PR.
   zone-filter:
     # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
-    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@7631ef3321e1a6561f4b2c70019ee57d24160620
+    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@dev-20261020143940-5e1b8259d3e2
     with:
       python-version: "3.12"
 
@@ -929,7 +929,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           uv run --no-project \
-            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@v0.43.0' \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core.git@dev-20261020222351-a5955a3685cd' \
             python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml
 
   migration-freeze:
@@ -1725,7 +1725,7 @@ jobs:
           set -euo pipefail
           # A sibling is read at the rev this repo's uv.lock pins, never its live
           # branch (ruling 2026-10-01), so a merge there cannot turn this red.
-          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          rev="$(grep -oE 'omnimarket\.git\?(rev|tag)=[^#"]+#[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*#//')"
           [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
           echo "rev=${rev}" >> "$GITHUB_OUTPUT"
 
@@ -1809,7 +1809,7 @@ jobs:
           set -euo pipefail
           # A sibling is read at the rev this repo's uv.lock pins, never its live
           # branch (ruling 2026-10-01), so a merge there cannot turn this red.
-          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          rev="$(grep -oE 'omnimarket\.git\?(rev|tag)=[^#"]+#[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*#//')"
           [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
           echo "rev=${rev}" >> "$GITHUB_OUTPUT"
 
@@ -3952,6 +3952,35 @@ jobs:
             "$tags_dir" > "$RUNNER_TEMP/dev-tags.json"
           "${check[@]}" --dev-tags "$RUNNER_TEMP/dev-tags.json"
 
+  # OMN-21900: every first-party reference is a dev-merge tag, never a sha, with one
+  # home per literal (RULING 2026-10-29T01:50:26Z). The core validator reads the
+  # workflow, pre-commit and pyproject surfaces; findings that cannot be removed in the
+  # same change are held in .onex/baselines/first_party_ref.yaml, which only shrinks.
+  # Pre-commit twin: the check-internal-sibling-pins and check-action-pins hooks, at a
+  # different omnibase_core tag. Feeds Quality Gate; no `paths:` filter, `if: always()`.
+  first-party-ref:
+    if: always()
+    name: first-party-ref
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "0.8.3"
+
+      - name: First-party references name dev-merge tags
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv run --no-project --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261102040524-8f54bf966c41' \
+            python -m omnibase_core.nodes.node_first_party_tag_inventory_effect.runtime_first_party_ref \
+            --baseline .onex/baselines/first_party_ref.yaml
+
   quality-gate:
     name: Quality Gate
     # OMN-14127: result-reading aggregator (no heavy work) feeding the required
@@ -4014,6 +4043,8 @@ jobs:
       - no-polymorphic-agent
       # Internal sibling pins read by dev tag, not release (OMN-21282)
       - internal-sibling-pins
+      # First-party references name dev-merge tags (OMN-21900)
+      - first-party-ref
     if: always()
     steps:
       - name: Check quality results
@@ -4082,7 +4113,8 @@ jobs:
             "agent-contract-validation=${{ needs.agent-contract-validation.result }}" \
             "skill-monorepo-ref-gate=${{ needs.skill-monorepo-ref-gate.result }}" \
             "no-polymorphic-agent=${{ needs.no-polymorphic-agent.result }}" \
-            "internal-sibling-pins=${{ needs.internal-sibling-pins.result }}"; do
+            "internal-sibling-pins=${{ needs.internal-sibling-pins.result }}" \
+            "first-party-ref=${{ needs.first-party-ref.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
 
@@ -4283,7 +4315,7 @@ jobs:
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["ubuntu-latest"]')
       }}
     steps:
-      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@c1f8e8fe0c513c0ac70ad666433a3ce1cec136c1 # omnibase_core dev (OMN-20074)
+      - uses: OmniNode-ai/omnibase_core/.github/actions/validate-boundaries@dev-20261020152934-5104ffc35806 # omnibase_core dev (OMN-20074)
         with:
           checks: "boundary-parity"
           warn-only: "false"
@@ -4318,7 +4350,7 @@ jobs:
       - name: Ratchet non-canonical lifecycle-word classes against frozen allowlist (OMN-14350)
         run: |
           uv run --no-project \
-            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@d7ed23f1e89b8b6ce6079d303f8599c661c7f191' \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261018024445-b6ee996befa1' \
             python -m omnibase_core.validators.no_noncanonical_lifecycle_classes \
             --check-stale \
             --allowlist .onex_ratchets/noncanonical_class_allowlist.yaml \
@@ -4343,7 +4375,7 @@ jobs:
       - name: Refuse shape-gate detector jobs that depend on the preflight (OMN-20298)
         run: |
           uv run --no-project \
-            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@d7ed23f1e89b8b6ce6079d303f8599c661c7f191' \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261018024445-b6ee996befa1' \
             python -m omnibase_core.handlers.handler_shape_gate_independence
 
   precommit-suite:
@@ -4396,7 +4428,7 @@ jobs:
           # omnimarket node tree at the uv.lock pin, so the skill backing-node
           # hook resolves every backing node in this whole-tree run with no
           # allowlist entry (OMN-20560), as the Skill Backing Node workflow does.
-          om_rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          om_rev="$(grep -oE 'omnimarket\.git\?(rev|tag)=[^#"]+#[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*#//')"
           [[ -n "$om_rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
           git init --quiet "$OMNI_HOME/omnimarket"
           git -C "$OMNI_HOME/omnimarket" sparse-checkout set src/omnimarket/nodes
@@ -6204,7 +6236,7 @@ jobs:
           set -euo pipefail
           # A sibling is read at the rev this repo's uv.lock pins, never its live
           # branch (ruling 2026-10-01).
-          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          rev="$(grep -oE 'omnimarket\.git\?(rev|tag)=[^#"]+#[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*#//')"
           [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
           echo "rev=${rev}" >> "$GITHUB_OUTPUT"
 
@@ -6296,7 +6328,7 @@ jobs:
           set -euo pipefail
           # A sibling is read at the rev this repo's uv.lock pins, never its live
           # branch (ruling 2026-10-01).
-          rev="$(grep -oE 'omnimarket\.git\?rev=[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*rev=//')"
+          rev="$(grep -oE 'omnimarket\.git\?(rev|tag)=[^#"]+#[0-9a-f]{40}' uv.lock | head -1 | sed 's/.*#//')"
           [[ -n "$rev" ]] || { echo "::error::omnimarket rev not found in uv.lock"; exit 1; }
           echo "rev=${rev}" >> "$GITHUB_OUTPUT"
 
