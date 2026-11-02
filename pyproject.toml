@@ -288,6 +288,16 @@ override-dependencies = [
 # The >=0.38.14 floor above is what now carries that fix; do not re-add an override.
 # scripts/check_dep_provenance.py enforces this -- omnibase-infra is a forbidden
 # git-source override as of OMN-17176.
+# OMN-18595, RULINGs 2026-10-16T07:34:18Z and 2026-10-16T09:35:49Z (OMN-19998):
+# omnibase-core is read from its dev merge tag, as omnimarket and omnibase_infra
+# already read it. A PyPI release pin is refused by internal-sibling-pins
+# whenever core's dev has merged since the release, which is every release
+# cascade (omniclaude#3038, #3042, #3063, #3102). This tag names the v0.47.61
+# release commit 4def8b7a, so the code is exactly the 0.47.61 release, and the
+# nightly sibling-pin train moves it from here. The version range in [project]
+# stays for external installs. OMN-13873's PyPI rule still holds for every
+# other form: check_dep_provenance.py accepts only this tag-only dev-tag shape.
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "dev-20261101145407-4def8b7a9978" }
 # OMN-20910: pin the Claude API voter merge; it retains the lab roster reader,
 # the larger retry budget and the torch-free default install.
 omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", rev = "921b322b8e43f695961a06a04759dc88bb3e88ff" }  # pragma: allowlist secret

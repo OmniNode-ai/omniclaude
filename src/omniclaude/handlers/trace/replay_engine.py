@@ -31,13 +31,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from omniclaude.handlers.trace.frame_assembler import CheckSpec, run_checks, sha256_of
 from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     OutcomeStatus,
 )
-from omniclaude.trace.frame_assembler import CheckSpec, run_checks, sha256_of
 
 # ---------------------------------------------------------------------------
 # Replay mode enum
@@ -283,11 +283,11 @@ def _detect_divergence_reason(
 # ---------------------------------------------------------------------------
 
 
-class ReplayEngine:
+class FrameReplayer:
     """Deterministic replay engine for ChangeFrames.
 
     Usage:
-        engine = ReplayEngine(repo_root="/path/to/repo")
+        engine = FrameReplayer(repo_root="/path/to/repo")
         result = engine.replay(frame=my_frame, mode=ReplayMode.TEST_ONLY)
     """
 
