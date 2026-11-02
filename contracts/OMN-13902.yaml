@@ -45,6 +45,11 @@ requirements:
     acceptance:
       - id: AC7
         statement: 'AC7: After upgrading packages and before capture-mirror sync or delta detection, the refresh judges the lock against HEAD:uv.lock with live dev tags, re-locks every refused pin at its base version, and requires an unguarded final judgement to pass. -- falsifier: uv run pytest -q -o addopts="" --noconftest tests/workflows/test_sibling_lock_refresh_holds_refused_pins_omn13902.py'
+  - id: req-daemon-internal-run-step
+    statement: delegation.run_step is a daemon-internal event type that the client event registry generator excludes.
+    acceptance:
+      - id: AC8
+        statement: 'AC8: delegation.run_step is in DAEMON_INTERNAL_EVENT_TYPES and is excluded from the projected client registry. -- falsifier: uv run pytest tests/hooks/test_generate_event_registry.py -q --no-cov -k delegation_run_step_is_daemon_internal'
 evidence_requirements:
   - kind: tests
     command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
@@ -121,3 +126,11 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv run pytest -q -o addopts="" --noconftest tests/workflows/test_sibling_lock_refresh_holds_refused_pins_omn13902.py
+  - id: dod-omniclaude-daemon-internal-run-step
+    source: manual
+    binds_ac:
+      - AC8
+    description: delegation.run_step is listed as a daemon-internal event type, so the generated client registry carries no registration for it. The new test fails against the merge base, which lacks the entry.
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_generate_event_registry.py -q --no-cov -k delegation_run_step_is_daemon_internal
