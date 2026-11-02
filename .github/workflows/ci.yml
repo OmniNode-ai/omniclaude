@@ -3895,8 +3895,10 @@ jobs:
 
   # OMN-21282 AC2, RULING 2026-10-16T07:34:18Z: an internal sibling is read by
   # its dev merge tag, never held back for a release. A change that moves an
-  # internal sibling in uv.lock to a release (a PyPI version or a git release
-  # tag) while that sibling carries a newer dev merge tag is refused. Pins the
+  # internal sibling in uv.lock to a git release tag, or to a release off PyPI,
+  # while that sibling carries a newer dev merge tag is refused. RULING
+  # 2026-11-02T15:20:36Z (OMN-19998) exempts a published PyPI release, whose
+  # upload time uv.lock records, from that refusal. Pins the
   # change does not move are reported and not judged, so this job never refuses
   # a change for a pin it did not touch. It feeds Quality Gate, a required
   # context, and has no `paths:` filter and an `if: always()`, so it reports on

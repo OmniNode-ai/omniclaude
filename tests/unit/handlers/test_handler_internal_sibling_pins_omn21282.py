@@ -33,14 +33,19 @@ pytestmark = pytest.mark.unit
 _CORE_REPO = "omnibase_core"
 _DEV_OLD = "dev-20261018000000-aaaaaaaaaaaa"
 _DEV_NEW = "dev-20261020120000-bbbbbbbbbbbb"
+# OMN-19998: a published PyPI release is accepted behind a newer dev tag, so the
+# judged-by-publish-time path below is exercised on a private index instead.
+_PRIVATE_INDEX = "https://registry.example.invalid/simple"
 
 
-def _registry(name: str, version: str, uploaded: str) -> str:
+def _registry(
+    name: str, version: str, uploaded: str, index: str = "https://pypi.org/simple"
+) -> str:
     return (
         "[[package]]\n"
         f'name = "{name}"\n'
         f'version = "{version}"\n'
-        'source = { registry = "https://pypi.org/simple" }\n'
+        f'source = {{ registry = "{index}" }}\n'
         f'sdist = {{ url = "https://files.example/{name}-{version}.tar.gz", '
         f'hash = "sha256:00", size = 1, upload-time = "{uploaded}" }}\n'
         "wheels = [\n"
@@ -76,7 +81,9 @@ def _request(
 
 def test_moved_release_pin_older_than_a_dev_tag_is_refused() -> None:
     base = _lock(_registry("omnibase-core", "0.47.50", "2026-10-17T09:00:00Z"))
-    head = _lock(_registry("omnibase-core", "0.47.51", "2026-10-19T09:00:00Z"))
+    head = _lock(
+        _registry("omnibase-core", "0.47.51", "2026-10-19T09:00:00Z", _PRIVATE_INDEX)
+    )
     result = handle(_request(head, base, {_CORE_REPO: [_DEV_OLD, _DEV_NEW]}))
     assert not result.passed
     [refused] = result.refused
@@ -123,7 +130,9 @@ def test_unmoved_release_pin_stands_and_is_not_refused() -> None:
 
 def test_moved_release_pin_with_unread_tags_is_refused() -> None:
     base = _lock(_registry("omnibase-core", "0.47.50", "2026-10-17T09:00:00Z"))
-    head = _lock(_registry("omnibase-core", "0.47.51", "2026-10-19T09:00:00Z"))
+    head = _lock(
+        _registry("omnibase-core", "0.47.51", "2026-10-19T09:00:00Z", _PRIVATE_INDEX)
+    )
     result = handle(_request(head, base))
     assert not result.passed
     assert result.repos_needing_tags == [_CORE_REPO]
@@ -150,7 +159,11 @@ def test_cli_over_fixture_lock_files(tmp_path: Path, capsys) -> None:
         _lock(_registry("omnibase-core", "0.47.50", "2026-10-17T09:00:00Z"))
     )
     head.write_text(
-        _lock(_registry("omnibase-core", "0.47.51", "2026-10-19T09:00:00Z"))
+        _lock(
+            _registry(
+                "omnibase-core", "0.47.51", "2026-10-19T09:00:00Z", _PRIVATE_INDEX
+            )
+        )
     )
     args = ["--head-lock", str(head), "--base-lock", str(base)]
     assert main([*args, "--needs-tags"]) == 0

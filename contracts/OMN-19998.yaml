@@ -72,6 +72,11 @@ requirements:
     acceptance:
       - id: "AC11"
         statement: "AC11: tests/workflows/test_cross_repo_uses_ref_policy_omn18494.py passes with a receipt-gate.yml caller pinned at @dev-20261030152335-66d35d2283c3 and refuses @dev and a short-stamp tag -- falsifier: uv run pytest tests/workflows/test_cross_repo_uses_ref_policy_omn18494.py -q --no-cov fails at the merge base for the dev-merge-tag test, where DEV_MERGE_TAG_RE does not exist"
+  - id: "req-omn19998-pypi-release-behind-dev-tag"
+    statement: "RULING 2026-11-02T15:20:36Z (lane=orchestrator-1036, kind=process): internal-sibling-pins accepts a moved internal-sibling pin on a published PyPI release while the sibling's dev carries a newer merge tag, reads no dev tags for it, and still refuses a git release tag, a release off PyPI and a release the lock records no upload time for. scripts/check_dep_provenance.py (OMN-13873) is unchanged."
+    acceptance:
+      - id: "AC12"
+        statement: "AC12: handle() and the CLI return ALLOWED and exit 0 for a PyPI release of omnibase-core published 20261101145451 beside the newer dev merge tag dev-20261101233629-173cd14208fe, with no repository needing its tags read, and still REFUSE a git release tag, a release off PyPI and a PyPI release with no upload-time behind that tag, including beside an accepted release -- falsifier: uv run pytest tests/unit/handlers/test_handler_internal_sibling_pins_omn19998.py tests/unit/handlers/test_handler_internal_sibling_pins_omn21282.py -q --no-cov fails at the merge base, where the three acceptance tests and the mixed-lock test fail with omnibase-core REFUSED"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -191,3 +196,11 @@ dod_evidence:
         check_value: "uv run pytest tests/workflows/test_cross_repo_uses_ref_policy_omn18494.py -q --no-cov"
     binds_ac:
       - "AC11"
+  - id: "dod-omn19998-pypi-release-behind-dev-tag"
+    description: "The PyPI-release acceptance tests and the negative controls (git release tag, release off PyPI, release with no upload-time) pass at the head; at the merge base the acceptance tests fail with omnibase-core REFUSED."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/handlers/test_handler_internal_sibling_pins_omn19998.py tests/unit/handlers/test_handler_internal_sibling_pins_omn21282.py tests/ci/test_core_dev_tag_pin_omn18595.py -q --no-cov"
+    binds_ac:
+      - "AC12"
