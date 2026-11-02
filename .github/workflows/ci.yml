@@ -3977,7 +3977,7 @@ jobs:
       - name: First-party references name dev-merge tags
         working-directory: ${{ github.workspace }}
         run: |
-          uv run --no-project --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261102080237-7e087d566f24' \
+          uv run --no-project --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261102040524-8f54bf966c41' \
             python -m omnibase_core.nodes.node_first_party_tag_inventory_effect.runtime_first_party_ref \
             --baseline .onex/baselines/first_party_ref.yaml
 

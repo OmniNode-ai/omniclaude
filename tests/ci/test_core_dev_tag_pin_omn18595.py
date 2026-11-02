@@ -30,6 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CORE_GIT = "https://github.com/OmniNode-ai/omnibase_core.git"
 # The release whose cascade PRs could not land; the pin must carry at least it.
 FLOOR = Version("0.47.61")
+# The core dev merge tag this bump moves the pin to; a later bump raises it.
+PIN_FLOOR_TAG = "dev-20261102043243-124b1e99af99"
 # A dev merge tag later than any release, as core's dev always has one.
 LATER_DEV_TAG = "dev-29991231235959-000000000000"
 
@@ -102,3 +104,13 @@ def test_core_check_local_paths_hook_pins_at_least_the_floor() -> None:
         )
         assert stamp is not None and floor_stamp is not None, rev
         assert stamp >= floor_stamp, rev
+
+
+def test_core_pin_is_at_least_the_bumped_dev_merge_tag() -> None:
+    """The bump lands: the pin pyproject reads is no older than PIN_FLOOR_TAG."""
+    stamp, floor_stamp = (
+        dev_merge_tag_stamp(_source_tag()),
+        dev_merge_tag_stamp(PIN_FLOOR_TAG),
+    )
+    assert stamp is not None and floor_stamp is not None, _source_tag()
+    assert stamp >= floor_stamp, _source_tag()
