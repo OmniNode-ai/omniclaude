@@ -1,29 +1,17 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""internal-sibling-pins: refuse a release pin where a newer dev tag exists (OMN-21282).
+"""internal-sibling-pins: refuse a release pin behind a newer dev merge tag (OMN-21282).
 
-RULING 2026-10-16T07:34:18Z: a consumer reads an internal sibling by branch or
-tag and never waits for a release. Every dev merge of a sibling is tagged
-``dev-<UTC YYYYMMDDHHMMSS>-<sha12>`` by the sibling's own dev-merge-tag.yml, and
-the nightly train (RULING 2026-10-19T10:11:00Z, OMN-19998) rolls those tags into
-one bump per consumer. A change that lands the consumer on a release, a PyPI
-version or a git release tag, while the sibling already carries a newer dev
-merge tag pins the past, so this check refuses it.
-
-Only pins the change moves are judged. A release pin the change leaves where it
-was is reported as STANDING and not refused: refusing it would refuse every
-change to this repository for a pin it did not touch. A moved release pin whose
-sibling's tags were not read is refused, never assumed fine.
-
-Release time is the earliest ``upload-time`` uv.lock records for the version's
-files. A git release tag carries no time in the lock, so it is refused whenever
-its sibling carries any dev merge tag. A ``rev`` pin is not a release-version
-pin and is left to the clone-governed relock (OMN-18752); a dev merge tag pin
-passes.
-
-The handler reads no network and runs no git. The CI job lists the repositories
-it needs (``--needs-tags``), reads their tags with ``git ls-remote`` and passes
-them back as JSON (``--dev-tags``).
+RULING 2026-10-16T07:34:18Z: a consumer reads an internal sibling by branch or tag and
+never waits for a release; every dev merge is tagged ``dev-<UTC YYYYMMDDHHMMSS>-<sha12>``.
+RULING 2026-11-02T15:20:36Z (OMN-19998) relaxes one case: a moved PyPI release whose upload
+time the lock records is ALLOWED behind a newer dev tag, since omnibase-core resolves from
+PyPI (OMN-13873) and its dev tag cannot be pinned. A git release tag, a release off PyPI
+and a release with no recorded upload time are still refused behind a newer dev tag.
+Only pins the change moves are judged; one it leaves is STANDING. A moved pin whose
+sibling's tags were not read is refused. A ``rev`` pin is left to the relock (OMN-18752).
+The handler reads no network: the CI job lists the repositories it needs (``--needs-tags``),
+reads their tags with ``git ls-remote`` and passes them back as JSON (``--dev-tags``).
 """
 
 from __future__ import annotations
@@ -36,6 +24,7 @@ import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
+from urllib.parse import urlsplit
 
 from omniclaude.enums.enum_sibling_pin_kind import EnumSiblingPinKind
 from omniclaude.enums.enum_sibling_pin_verdict import EnumSiblingPinVerdict
@@ -66,20 +55,15 @@ _STAMP_FORMAT: Final = "%Y%m%d%H%M%S"
 
 def _release_stamp(package: dict[str, object]) -> str | None:
     """The earliest upload time of the version's files, as a dev tag stamp."""
-    files: list[object] = []
-    sdist = package.get("sdist")
-    if sdist is not None:
-        files.append(sdist)
     wheels = package.get("wheels")
-    if isinstance(wheels, list):
-        files.extend(wheels)
-    stamps: list[str] = []
-    for entry in files:
-        uploaded = entry.get("upload-time") if isinstance(entry, dict) else None
-        if not isinstance(uploaded, str):
-            continue
-        moment = datetime.fromisoformat(uploaded.replace("Z", "+00:00"))
-        stamps.append(moment.astimezone(UTC).strftime(_STAMP_FORMAT))
+    files = [package.get("sdist"), *(wheels if isinstance(wheels, list) else [])]
+    stamps = [
+        datetime.fromisoformat(f["upload-time"].replace("Z", "+00:00"))
+        .astimezone(UTC)
+        .strftime(_STAMP_FORMAT)
+        for f in files
+        if isinstance(f, dict) and isinstance(f.get("upload-time"), str)
+    ]
     return min(stamps) if stamps else None
 
 
@@ -189,6 +173,19 @@ def handle(request: ModelInternalSiblingPinsRequest) -> ModelInternalSiblingPins
                     f"{pinned} is not moved by this change",
                 )
             )
+            continue
+        source = package.get("source")
+        registry = source.get("registry") if isinstance(source, dict) else None
+        if (
+            kind is EnumSiblingPinKind.RELEASE
+            and released is not None
+            and urlsplit(str(registry)).hostname == "pypi.org"
+        ):
+            reason = (
+                f"{pinned} is a published PyPI release; a newer dev merge tag of "
+                f"{repo} is not a refusal (RULING 2026-11-02T15:20:36Z, OMN-19998)"
+            )
+            findings.append(finding(EnumSiblingPinVerdict.ALLOWED, reason))
             continue
         if repo not in request.dev_tags:
             needing.add(repo)
