@@ -25,7 +25,7 @@ from uuid import uuid4
 
 import pytest
 
-from omniclaude.trace.pr_envelope import (
+from omniclaude.models.trace.pr_envelope import (
     ModelCIArtifact,
     ModelPRBodyVersion,
     ModelPRText,

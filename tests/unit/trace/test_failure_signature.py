@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for omniclaude.trace.failure_signature.
+"""Unit tests for omniclaude.models.trace.failure_signature.
 
 Tests cover:
 - normalize_failure_output() strips timestamps, PIDs, paths, memory addresses
@@ -17,8 +17,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from omniclaude.trace.change_frame import FailureType
-from omniclaude.trace.failure_signature import (
+from omniclaude.models.trace.change_frame import FailureType
+from omniclaude.models.trace.failure_signature import (
     FailureSignature,
     _derive_signature_id,
     _extract_primary_signal,
