@@ -392,3 +392,18 @@ def test_the_resolver_never_reads_the_clone_head() -> None:
     code = gate.split("def _resolve_expected_sha", 1)[1].split("\ndef ", 1)[0]
     assert "rev-parse" not in code.split('"""')[-1]
     assert not hasattr(pins, "clone_head")
+
+
+def test_shallow_tagless_clone_names_the_lock_pin_but_a_full_one_fails(
+    clone: Clone, tmp_path: Path
+) -> None:
+    """The CI sibling clone is one shallow rev with no tags: no tag source at all."""
+    shallow = tmp_path / "shallow"
+    _git(tmp_path, "clone", "-q", "--depth", "1", f"file://{clone.path}", str(shallow))
+
+    assert pins.pinned_tag_commit(shallow, rev=clone.tagged, declared_tag=None) == (
+        "uv.lock",
+        clone.tagged,
+    )
+    with pytest.raises(pins.ErrorPinnedTag):
+        pins.pinned_tag_commit(clone.path, rev="0" * 40, declared_tag=None)

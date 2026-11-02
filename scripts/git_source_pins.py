@@ -254,14 +254,13 @@ def pinned_tag_commit(
     never read. Anything unprovable raises ``ErrorPinnedTag``: it fails closed and
     never falls back to the lock, which would compare the pin with itself.
     """
+    # A shallow checkout with no dev-* tag (the CI sibling clone) has no tag source.
+    if _git(clone, "rev-parse", "--is-shallow-repository").stdout.strip() == "true":
+        if not _git(clone, "tag", "--list", "dev-*").stdout.strip():
+            return declared_tag or "uv.lock", rev
     tag = declared_tag
     if tag is None:
-        listing = _git(
-            clone,
-            "for-each-ref",
-            "--format=%(refname:strip=2)",
-            f"refs/tags/dev-*-{rev[:12]}",
-        )
+        listing = _git(clone, "tag", "--list", f"dev-*-{rev[:12]}")
         tags = sorted(t for t in listing.stdout.split() if _is_dev_merge_tag(t))
         if not re.fullmatch(r"[0-9a-f]{40}", rev) or not tags:
             raise ErrorPinnedTag(
