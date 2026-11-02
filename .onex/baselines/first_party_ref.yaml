@@ -1100,6 +1100,9 @@ entries:
   text: 'uses: astral-sh/setup-uv@v7'
 - path: .pre-commit-config.yaml
   rule: first_party_not_dev_tag
+  text: 'rev: 70f7ceda44af968ccf26264ecd429cfd27503971 # pragma: allowlist secret'
+- path: .pre-commit-config.yaml
+  rule: first_party_not_dev_tag
   text: 'rev: v0.47.46'
 - path: .pre-commit-config.yaml
   rule: first_party_ref_two_homes

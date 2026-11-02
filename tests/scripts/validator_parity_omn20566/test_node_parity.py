@@ -26,6 +26,7 @@ from typing import NamedTuple
 
 import pytest
 
+from omniclaude.handlers.handler_dev_merge_tag import dev_merge_tag_stamp
 from tests.scripts.validator_parity_omn20566.corpus import CORPUS
 from tests.scripts.validator_parity_omn20566.harness import (
     REPO_ROOT,
@@ -34,7 +35,7 @@ from tests.scripts.validator_parity_omn20566.harness import (
     hook_args,
     hook_scope,
     load_golden,
-    locked_core_version,
+    locked_core_tag,
     materialise,
     run_node,
     text_only,
@@ -241,12 +242,25 @@ def test_every_rule_module_is_runnable_as_main(rule_name: str) -> None:
 
 
 def test_core_node_hooks_pin_the_locked_core_version() -> None:
-    """The core hooks run the omnibase-core version uv.lock resolves (AC3, plan fact 43)."""
+    """The core hooks run a core no older than the one uv.lock resolves (AC3, plan fact 43).
+
+    OMN-21900: a first-party reference is a dev-merge tag and a tag literal has one
+    home, so a hook can no longer share the lock's tag, or name a ``v<version>``
+    release. The invariant that survives is that every core hook is pinned at a
+    dev-merge tag whose stamp is not older than the lock's own core tag.
+    """
     hook_ids = {rule.hook_id for rule in RULES.values()}
     revs = core_hook_revs(hook_ids)
 
     assert set(revs) == hook_ids
-    assert revs == dict.fromkeys(hook_ids, f"v{locked_core_version()}")
+    locked_stamp = dev_merge_tag_stamp(locked_core_tag())
+    assert locked_stamp is not None
+    for hook_id, rev in revs.items():
+        stamp = dev_merge_tag_stamp(rev)
+        assert stamp is not None, f"{hook_id} pins {rev}, not a dev merge tag"
+        assert stamp >= locked_stamp, (
+            f"{hook_id} pins {rev}, older than the locked core {locked_core_tag()}"
+        )
 
 
 @pytest.mark.parametrize(

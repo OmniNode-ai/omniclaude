@@ -45,12 +45,14 @@ PIN_PAIRS: tuple[tuple[str, str, str], ...] = (
     ),
 )
 
-# OMN-21900: a first-party reference is a dev-merge tag, never a sha, so the pin is a
-# tag or (historically) a sha. Only the step that runs the paired validator is judged;
-# other omnibase_core pins in ci.yml are separate tools with their own tags.
+# OMN-21900: the pin is a dev-merge tag (formerly a sha). The token is captured as an
+# opaque ref and only compared for equality: the dev-merge-tag rule has one definition
+# (handler_dev_merge_tag, OMN-19972) and is not spelled again here. Only the step that
+# runs the paired validator is judged; other omnibase_core pins in ci.yml are separate
+# tools with their own tags.
 _CI_PIN_RE = re.compile(
     r"omnibase-core\s*@\s*git\+https://github\.com/OmniNode-ai/omnibase_core"
-    r"@([0-9a-f]{40}|dev-[0-9]{14}-[0-9a-f]{12})'\s*\\\s*python -m omnibase_core\.validators\.no_noncanonical_lifecycle_classes"
+    r"@([^\s'\\]+)'\s*\\\s*python -m omnibase_core\.validators\.no_noncanonical_lifecycle_classes"
 )
 
 

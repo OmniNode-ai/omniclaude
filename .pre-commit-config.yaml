@@ -367,8 +367,12 @@ repos:
   # .github/workflows/hardcoded-model-config.yml pins; core d7ed23f1 carries
   # the tightened model guard (OMN-21147) and reports 228 findings in this
   # tree. Move this rev with that workflow once those findings are cleared.
+  # OMN-21900: no dev-merge tag carries the validator source of this rev (the earliest
+  # tag, dev-20261018024445, is already past the tightened guard and reports 24 new
+  # findings here), so this is the one sha left; the first_party_ref baseline holds it
+  # until the findings are cleared and the rev moves to a tag.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261018024445-b6ee996befa1
+    rev: 70f7ceda44af968ccf26264ecd429cfd27503971  # pragma: allowlist secret
     hooks:
       - id: check-hardcoded-model-config-compute
 

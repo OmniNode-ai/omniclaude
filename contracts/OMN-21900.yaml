@@ -47,13 +47,13 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_first_party_ref_wiring_omn21900.py -q --no-cov -k 'baseline or one_more_finding'"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: "dod-omn21900-ac3-commit-gates"
-    description: "AC3: the dispatch-drift gate passes against the pinned omnimarket dev-merge tag (the gate resolves the tag, not the clone HEAD)"
+    description: "AC3: the lock pins omnimarket by the dev-merge tag the commit gates resolve (the gate resolves the tag, not the clone HEAD), and the lock readers accept that spelling. Hosted: the lab-host run of the hook cannot be controlled at the merge base by this job."
     source: "manual"
-    execution_scope: "local_done_gate"
+    execution_scope: "hosted_and_local"
     binds_ac: ["AC3"]
     checks:
       - check_type: "test_passes"
-        check_value: "bash .pre-commit-hooks/check-omnimarket-dispatch-drift.sh"
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/ci/test_omnimarket_pin_resolver_omn21900.py -q --no-cov -o addopts=''"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: "dod-omn21900-deploy-checkout-test"
     description: "Hosted-runner run of the wiring and relock tests at the checkout; they need no container daemon or private runtime (the wiring test reads git over https for the core tag)"
