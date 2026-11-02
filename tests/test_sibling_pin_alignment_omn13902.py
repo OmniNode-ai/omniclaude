@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""OMN-13902: the omnimarket git rev is one commit on every surface.
+"""OMN-13902: the omnimarket git tag is one dev-merge tag on every surface (OMN-21900).
 
 The sibling-lock refresh advances a clone-governed git source forward only, and
 rewrites the dependency occurrence and the source occurrence together. These
-tests read the three places a rev lives -- the dependency line, the
+tests read the three places a tag lives -- the dependency line, the
 ``[tool.uv.sources]`` entry and ``uv.lock`` -- and refuse a refresh that moved
 one and left another behind.
 
@@ -24,19 +24,19 @@ import pytest
 pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_SHA = re.compile(r"[0-9a-f]{40}")
+_TAG = re.compile(r"dev-[0-9]{14}-[0-9a-f]{12}")
 _DEPENDENCY_PIN = re.compile(
-    r'"omnimarket @ git\+https://github\.com/OmniNode-ai/omnimarket\.git@([0-9a-f]{40})"'
+    r'"omnimarket @ git\+https://github\.com/OmniNode-ai/omnimarket\.git@(dev-[0-9]{14}-[0-9a-f]{12})"'
 )
 _SOURCE_PIN = re.compile(
-    r'^omnimarket = \{ git = "[^"]+", rev = "([0-9a-f]{40})" \}',
+    r'^omnimarket = \{ git = "[^"]+", tag = "(dev-[0-9]{14}-[0-9a-f]{12})" \}',
     flags=re.MULTILINE,
 )
-_LOCK_PIN = re.compile(r"omnimarket\.git\?rev=([0-9a-f]{40})")
+_LOCK_PIN = re.compile(r"omnimarket\.git\?tag=(dev-[0-9]{14}-[0-9a-f]{12})")
 
-# A full sha that is no commit omnimarket has ever carried: every planted skew
+# A dev-merge tag that is no tag omnimarket has ever carried: every planted skew
 # below moves exactly one surface onto it.
-_PLANTED_REV = "0123456789abcdef0123456789abcdef01234567"
+_PLANTED_REV = "dev-20000101000000-0123456789ab"
 
 
 def skew_problems(pyproject_text: str, lock_text: str) -> list[str]:
@@ -50,16 +50,16 @@ def skew_problems(pyproject_text: str, lock_text: str) -> list[str]:
         )
     if len(source) != 1:
         problems.append(
-            f"omnimarket must have exactly one [tool.uv.sources] rev, found {len(source)}"
+            f"omnimarket must have exactly one [tool.uv.sources] tag, found {len(source)}"
         )
     if len(dependency) == 1 and len(source) == 1 and dependency[0] != source[0]:
         problems.append(
-            f"dependency rev {dependency[0]} differs from source rev {source[0]}"
+            f"dependency tag {dependency[0]} differs from source tag {source[0]}"
         )
     locked = set(_LOCK_PIN.findall(lock_text))
     if len(source) == 1 and locked != {source[0]}:
         problems.append(
-            f"uv.lock resolves omnimarket at {sorted(locked)}, not the source rev {source[0]}"
+            f"uv.lock resolves omnimarket at {sorted(locked)}, not the source tag {source[0]}"
         )
     return problems
 
@@ -75,10 +75,10 @@ def _source_rev(pyproject_text: str) -> str:
     return _SOURCE_PIN.findall(pyproject_text)[0]
 
 
-def test_omnimarket_rev_is_one_full_sha_on_every_surface() -> None:
+def test_omnimarket_tag_is_one_dev_merge_tag_on_every_surface() -> None:
     pyproject_text, lock_text = _repo_texts()
     assert skew_problems(pyproject_text, lock_text) == []
-    assert _SHA.fullmatch(_source_rev(pyproject_text))
+    assert _TAG.fullmatch(_source_rev(pyproject_text))
 
 
 def test_planted_source_skew_is_refused() -> None:
@@ -89,25 +89,25 @@ def test_planted_source_skew_is_refused() -> None:
     )
     assert skewed != pyproject_text
     problems = skew_problems(skewed, lock_text)
-    assert any("differs from source rev" in p for p in problems), problems
+    assert any("differs from source tag" in p for p in problems), problems
 
 
 def test_planted_lock_skew_is_refused() -> None:
     pyproject_text, lock_text = _repo_texts()
     live = _source_rev(pyproject_text)
     skewed = lock_text.replace(
-        f"omnimarket.git?rev={live}", f"omnimarket.git?rev={_PLANTED_REV}"
+        f"omnimarket.git?tag={live}", f"omnimarket.git?tag={_PLANTED_REV}"
     )
     assert skewed != lock_text
     problems = skew_problems(pyproject_text, skewed)
     assert any("uv.lock resolves omnimarket" in p for p in problems), problems
 
 
-def test_planted_short_sha_is_refused() -> None:
+def test_planted_truncated_tag_is_refused() -> None:
     pyproject_text, lock_text = _repo_texts()
     live = _source_rev(pyproject_text)
     skewed = _DEPENDENCY_PIN.sub(
-        lambda m: m.group(0).replace(live, live[:12]), pyproject_text
+        lambda m: m.group(0).replace(live, live[:20]), pyproject_text
     )
     assert skewed != pyproject_text
     problems = skew_problems(skewed, lock_text)

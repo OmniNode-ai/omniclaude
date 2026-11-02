@@ -6,7 +6,8 @@
 ``no-bare-feature-flags`` moved from onex_change_control into omnibase_core
 (omnibase_core#1936, merge commit 9218fe703b08d329f76eecd37fabbbc7b0c2baad)
 under the same hook id. This repository's ``.pre-commit-config.yaml`` must take
-it from an omnibase_core repo block pinned to that full commit sha, keep its
+it from an omnibase_core repo block pinned to a dev-merge tag that contains that
+commit (OMN-21900: a first-party ref is a dev-merge tag, never a sha), keep its
 ``stages``, and name no onex_change_control repository at all.
 """
 
@@ -23,8 +24,9 @@ pytestmark = pytest.mark.unit
 CONFIG = Path(__file__).resolve().parents[2] / ".pre-commit-config.yaml"
 CORE_REPO = "https://github.com/OmniNode-ai/omnibase_core"
 OCC_REPO = "https://github.com/OmniNode-ai/onex_change_control"
-EXPORTING_SHA = "9218fe703b08d329f76eecd37fabbbc7b0c2baad"
-TOPICS_AND_TODOS_PIN = "v0.47.39"
+# The first dev-merge tag of omnibase_core that contains the exporting merge commit.
+EXPORTING_TAG = "dev-20261018024445-b6ee996befa1"
+TOPICS_AND_TODOS_PIN = "dev-20261018024445-b6ee996befa1"
 
 
 def _owners(hook_id: str) -> list[tuple[str, str, dict[str, Any]]]:
@@ -40,7 +42,7 @@ def _owners(hook_id: str) -> list[tuple[str, str, dict[str, Any]]]:
 
 def test_no_bare_feature_flags_comes_from_omnibase_core() -> None:
     owners = _owners("no-bare-feature-flags")
-    assert [(url, rev) for url, rev, _ in owners] == [(CORE_REPO, EXPORTING_SHA)]
+    assert [(url, rev) for url, rev, _ in owners] == [(CORE_REPO, EXPORTING_TAG)]
     assert owners[0][2].get("stages") == ["pre-commit"]
 
 
@@ -50,7 +52,7 @@ def test_config_names_no_onex_change_control_repository() -> None:
 
 
 @pytest.mark.parametrize("hook_id", ["no-hardcoded-topics", "no-untracked-todos"])
-def test_other_core_hooks_keep_their_release_tag(hook_id: str) -> None:
+def test_other_core_hooks_keep_their_pin(hook_id: str) -> None:
     """This change repoints one hook only; the other two keep their pin."""
     owners = _owners(hook_id)
     assert [(url, rev) for url, rev, _ in owners] == [(CORE_REPO, TOPICS_AND_TODOS_PIN)]

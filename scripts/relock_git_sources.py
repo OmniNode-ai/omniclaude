@@ -192,8 +192,10 @@ def advance_all(
         # pin with nothing enforcing the clone — see the authority table in
         # pyproject.toml and ``EnumGitSourceAuthority``.
         declared = authority.get(name, gsp.EnumGitSourceAuthority.LOCK)
-        if declared is not gsp.EnumGitSourceAuthority.CLONE:
-            print(f"[relock] skip {name}: authority is {declared.value}, not clone")
+        # A tag-pinned source (OMN-21900) names no rev on any pyproject line, so
+        # there is nothing here to rewrite; the dev-tag train below moves it.
+        if declared is not gsp.EnumGitSourceAuthority.CLONE or source.tag:
+            print(f"[relock] skip {name}: authority {declared.value} or tag pin")
             continue
         clone = gsp.canonical_clone(source.repo, registry_root)
         if clone is None:

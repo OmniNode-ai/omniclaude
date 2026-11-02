@@ -30,6 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CORE_GIT = "https://github.com/OmniNode-ai/omnibase_core.git"
 # The release whose cascade PRs could not land; the pin must carry at least it.
 FLOOR = Version("0.47.61")
+# The core dev merge tag this bump moves the pin to; a later bump raises it.
+PIN_FLOOR_TAG = "dev-20261102043243-124b1e99af99"
 # A dev merge tag later than any release, as core's dev always has one.
 LATER_DEV_TAG = "dev-29991231235959-000000000000"
 
@@ -83,7 +85,7 @@ def test_internal_sibling_pins_allows_the_core_pin_behind_a_newer_dev_tag() -> N
 
 
 def test_core_check_local_paths_hook_pins_at_least_the_floor() -> None:
-    """The release-tagged core hook block runs 0.47.61 or later, where check-local-paths runs core's compute node."""
+    """The core hook block carrying check-local-paths runs 0.47.61 or later, where it runs core's compute node."""
     lines = (
         (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8").splitlines()
     )
@@ -92,5 +94,23 @@ def test_core_check_local_paths_hook_pins_at_least_the_floor() -> None:
         line for line in reversed(lines[:hook_at]) if line.strip().startswith("rev:")
     )
     rev = rev_line.split(":", 1)[1].strip()
-    assert rev.startswith("v"), rev
-    assert Version(rev[1:]) >= FLOOR, rev
+    if rev.startswith("v"):
+        assert Version(rev[1:]) >= FLOOR, rev
+    else:
+        # A dev merge tag at or after the one pyproject reads carries the release.
+        stamp, floor_stamp = (
+            dev_merge_tag_stamp(rev),
+            dev_merge_tag_stamp(_source_tag()),
+        )
+        assert stamp is not None and floor_stamp is not None, rev
+        assert stamp >= floor_stamp, rev
+
+
+def test_core_pin_is_at_least_the_bumped_dev_merge_tag() -> None:
+    """The bump lands: the pin pyproject reads is no older than PIN_FLOOR_TAG."""
+    stamp, floor_stamp = (
+        dev_merge_tag_stamp(_source_tag()),
+        dev_merge_tag_stamp(PIN_FLOOR_TAG),
+    )
+    assert stamp is not None and floor_stamp is not None, _source_tag()
+    assert stamp >= floor_stamp, _source_tag()
