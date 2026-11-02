@@ -28,8 +28,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from omniclaude.trace.fix_transition import FixTransition
-from omniclaude.trace.intelligence_integration import (
+from omniclaude.handlers.trace.fix_transition import FixTransition
+from omniclaude.handlers.trace.intelligence_integration import (
     CONTEXT_ITEM_TYPE,
     PATTERN_PROMOTION_THRESHOLD,
     ContextItem,

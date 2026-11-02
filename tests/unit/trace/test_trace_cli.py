@@ -26,7 +26,8 @@ from uuid import UUID, uuid4
 from click.testing import CliRunner
 
 from omniclaude.cli.trace import make_trace_group
-from omniclaude.trace.change_frame import (
+from omniclaude.handlers.trace.replay_engine import ReplayMode, ReplayResult
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     ModelDelta,
@@ -37,14 +38,13 @@ from omniclaude.trace.change_frame import (
     ModelToolEvent,
     ModelWorkspaceRef,
 )
-from omniclaude.trace.pr_envelope import (
+from omniclaude.models.trace.pr_envelope import (
     ModelCIArtifact,
     ModelPRBodyVersion,
     ModelPRText,
     ModelPRTimeline,
     PREnvelope,
 )
-from omniclaude.trace.replay_engine import ReplayMode, ReplayResult
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -187,7 +187,7 @@ def _build_group(
             return stored_pr_frames
         return []
 
-    # Build a minimal mock ReplayEngine if result provided
+    # Build a minimal mock FrameReplayer if result provided
     replay_engine = None
     if mock_replay_result is not None:
         from unittest.mock import MagicMock
@@ -485,7 +485,7 @@ class TestTraceReplay:
         runner = CliRunner()
         result = runner.invoke(group, ["replay", str(frame.frame_id)])
         assert result.exit_code != 0
-        assert "ReplayEngine not configured" in result.output
+        assert "FrameReplayer not configured" in result.output
 
     def test_invalid_uuid_returns_error(self) -> None:
         result_obj = self._make_replay_result(ReplayMode.FULL, False)
