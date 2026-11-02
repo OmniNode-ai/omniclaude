@@ -60,6 +60,6 @@ dod_evidence:
         check_value: "grep -c 'dev-20261102043243-124b1e99af99' pyproject.toml uv.lock"
         cwd: "${OMNI_HOME}/omniclaude"
       - check_type: "test_passes"
-        check_value: "uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py -q --no-cov"
+        check_value: "uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py -q --no-cov -k bumped_dev_merge_tag"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC1"]
