@@ -1,0 +1,29 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-21910"
+title: "The session handoff is a declared contract with a check that assembles and validates it, and a handoff that leaves a ruling unaccounted for is refused"
+summary: "The omniclaude half of OMN-21910: the handoff skill becomes a dispatch-only shim that calls the node_handoff_check_effect node through onex run-node and holds no logic. The prompt.md that carried the terminal commit into the retired registry tree is removed, and no code file stays under the skill directory. The node itself, its contract and its tests land in the omnimarket pull request, which merges first; this change deploys nothing and calls no runtime."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-handoff-skill-is-a-shim"
+    statement: "The handoff skill only dispatches to the omnimarket node and carries no logic or code file."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the handoff skill directory holds SKILL.md alone, SKILL.md dispatches through onex run-node to node_handoff_check_effect and carries no terminal commit -- falsifier: the shim tests in tests/skills/test_handoff_skill.py fail if a code file or prompt.md is present, or the dispatch or the node name is missing"
+evidence_requirements:
+  - kind: "tests"
+    description: "The handoff shim tests."
+    command: "uv run pytest tests/skills/test_handoff_skill.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn21910-shim-tests"
+    description: "AC1: the shim tests pass against the thin SKILL.md."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_handoff_skill.py -q --no-cov"
+    binds_ac: ["AC1"]
