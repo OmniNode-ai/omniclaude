@@ -1879,21 +1879,13 @@ def refresh_clone(
 
 
 def sibling_clones(env: Mapping[str, str]) -> list[Path]:
-    """``omnibase_internal``, which lives beside the registry, not in it.
-
-    ``$OMNIBASE_INTERNAL_HOME``, default ``$OMNI_HOME/../omnibase_internal``:
-    the location omnibase_internal's ``install-canonical-clone-git-hooks.sh``
-    requires to be a canonical clone, so a linked worktree there is not one.
-    """
-    override = env.get("OMNIBASE_INTERNAL_HOME", "")
-    registry_home = env.get("OMNI_HOME", "")
-    if override and Path(override).is_absolute():
-        clone = Path(override)
-    elif registry_home:
-        clone = Path(registry_home).parent / "omnibase_internal"
-    else:
-        return []
-    return [clone] if (clone / ".git").is_dir() else []
+    """Canonical clones beside the registry root, not in it: each direct child of
+    ``$OMNI_HOME/..`` and the absolute path in each ``*_INTERNAL_HOME`` variable.
+    A linked worktree (``.git`` a file) is not one; no repository is named."""
+    beside = Path(env["OMNI_HOME"]).parent if env.get("OMNI_HOME") else None
+    found = [c for c in discover_clones([beside]) if c != beside] if beside else []
+    homes = (Path(v) for k, v in sorted(env.items()) if k.endswith("_INTERNAL_HOME"))
+    return found + [c for c in homes if c.is_absolute() and (c / ".git").is_dir()]
 
 
 def _clones_for(env: Mapping[str, str], repo: str) -> list[Path]:
@@ -1901,8 +1893,9 @@ def _clones_for(env: Mapping[str, str], repo: str) -> list[Path]:
     wanted = repo.casefold().removesuffix(".git")
     clones = discover_clones(registry_roots(env))
     # OMN-17427: lanes on h201 and h101 got NO_CLONE for omnibase_internal on
-    # 2026-10-07 because the sibling is no registry root's child. Only the
-    # refresh looks there; the sync's clone set is unchanged.
+    # 2026-10-07 because the sibling is no registry root's child; OMN-22102: the
+    # same for the knowledge base clone on three lab hosts. Only the refresh
+    # looks there; the sync's clone set is unchanged.
     seen = {clone.resolve() for clone in clones}
     for clone in sibling_clones(env):
         resolved = clone.resolve()
