@@ -221,10 +221,9 @@ def test_main_passes_when_no_live_venv(
 ) -> None:
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "absent"))
     # OMN-18752: also isolate the canonical-clone registry. The git-source arm
-    # judges a clone-governed pin against $OMNI_HOME/<repo> HEAD, so leaving
-    # this test pointed at the developer's real clones made its verdict depend
-    # on how recently omnimarket had merged — which is host state, not the
-    # thing this test is about.
+    # reads the pinned dev-merge tag from $OMNI_HOME/<repo>, so leaving this
+    # test pointed at the developer's real clones made its verdict depend on
+    # which tags that host held — host state, not the thing this test is about.
     monkeypatch.setenv("OMNI_HOME", str(tmp_path / "no-registry"))
     rc = skew.main(["uv.lock"])
     out = capsys.readouterr().out
@@ -232,7 +231,7 @@ def test_main_passes_when_no_live_venv(
     assert "PASS" in out
     # Absence is STATED, never silent: a run that evaluated no clone must say
     # so, or it reads identically to one that evaluated a clone and liked it.
-    assert "clone-authority not evaluated" in out
+    assert "pinned tag not evaluated" in out
 
 
 @pytest.mark.unit

@@ -1,0 +1,53 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-21915"
+title: "The omnimarket dispatch-drift and daemon-venv-skew gates compare against the pinned dev-merge tag, not the canonical clone HEAD"
+summary: "check_omnimarket_dispatch_drift.py and check_daemon_venv_skew.py (through git_source_pins) resolved the expected omnimarket commit from the canonical clone's checked-out HEAD, which moved 11 times in 2 hours, so a correctly pinned commit whose hooks ran for minutes was refused. Both now resolve the commit of the dev-merge tag the lock pins, through one resolver (pinned_tag_commit in scripts/git_source_pins.py) that reads the clone for tags only. A pin that is not the tag commit, a rev no dev-merge tag names, an off-tag installed commit and a tag the clone does not hold are all still refused. Hook scripts and tests only: no deploy, container restart, image build or runtime mutation."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-gates-follow-the-pinned-tag"
+    statement: "Both gates compare against the commit of the pinned dev-merge tag, so the result does not change when the canonical clone HEAD moves."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: both gates compare against the pinned dev-merge tag resolved to its commit and not against the clone HEAD -- falsifier: a pytest that makes the clone HEAD differ from the tag commit and asserts the gate result follows the tag, failing on the pre-fix code and passing after"
+  - id: "req-gates-stay-as-strict"
+    statement: "A pin that is not the tag commit and a stale or off-tag installed venv are still refused, an unreadable tag source fails closed, and the override flags and env names are unchanged."
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: a pin that is not the tag commit is still refused and a stale installed venv is still refused, with the override flags and env names unchanged -- falsifier: negative-case pytest cases (wrong pin, off-tag installed commit) that exit non-zero on the fixed code"
+  - id: "req-commit-window-race-gone"
+    statement: "With the clone advanced past the tag, a commit that pins the tag passes both gates."
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: with the clone advanced past the tag, a commit that pins the tag passes both hooks -- falsifier: uvx pre-commit run check-omnimarket-dispatch-drift --all-files and check-daemon-venv-skew --all-files on a lab host against a scratch clone through OMNIMARKET_ROOT, exit 0 recorded, and the same state failing on origin/dev code"
+evidence_requirements:
+  - kind: "tests"
+    description: "The pinned-tag authority tests, including the negative cases, and the gate tests they replace."
+    command: "uv run pytest tests/scripts/test_pinned_tag_authority_omn21915.py tests/test_dispatch_drift_authority.py tests/test_git_source_pins.py tests/scripts/test_check_omnimarket_dispatch_drift.py tests/scripts/test_check_daemon_venv_skew.py tests/test_venv_gate_registration.py -q -p no:randomly --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn21915-gates-follow-the-tag"
+    description: "AC1: with the clone HEAD past the tag, the dispatch gate and the skew gate both follow the tag commit, and the result does not change when HEAD moves again."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_pinned_tag_authority_omn21915.py tests/test_dispatch_drift_authority.py -q -p no:randomly --no-cov -k 'clone_is_past_it or head_moves or skew_gate_expects or pinned_tags_commit'"
+    binds_ac: ["AC1"]
+  - id: "dod-omn21915-gates-stay-strict"
+    description: "AC2: a wrong pin, a rev no dev-merge tag names, a missing tag, a tag whose name disagrees with its commit, a stale venv and an off-tag installed commit are each refused; the override flags and env names behave as before."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_pinned_tag_authority_omn21915.py tests/test_git_source_pins.py -q -p no:randomly --no-cov -k 'refused or fails_closed or stale or off_tag or override_flags or fallback'"
+    binds_ac: ["AC2"]
+  - id: "dod-omn21915-race-gone"
+    description: "AC3: against a scratch clone through OMNIMARKET_ROOT advanced past the tag, a lock that pins the tag passes the dispatch gate main() and the skew gate, and a venv installed at the tag commit passes."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_pinned_tag_authority_omn21915.py -q -p no:randomly --no-cov -k 'clone_is_past_it or head_moves or installed_venv_at_the_tag_commit or rev_pin_is_judged'"
+    binds_ac: ["AC3"]
