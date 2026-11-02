@@ -29,37 +29,36 @@ it.
 
 ## The resolution
 
-**For a git source the canonical clone is the authority, on every surface, and
-the lock follows it.** The lock is re-pointed at the clone head by
-``relock_git_sources.py`` under the sibling-lock-refresh workflow; it never
-drags a venv backwards.
+**For a git source the pinned dev-merge tag is the authority, and the canonical
+clone supplies its commit** (OMN-21915). The expected commit used to be the
+clone's checked-out HEAD, which moved 11 times in 2 hours and refused commits
+whose pin was right when they started. ``pinned_tag_commit`` resolves the tag a
+pin names to its commit and is the one resolver both gates call
+(``check_omnimarket_dispatch_drift.py`` too). The clone is read for tags only.
 
-The consequence for this gate is that a git source is classified by COMMIT
-ANCESTRY, never by comparing version strings:
+A git source is classified by COMMIT ANCESTRY against that commit, never by
+comparing version strings:
 
-- installed **at** the clone head — ``IN_SYNC``, whatever the lock names. This
-  is the exact live condition that produced the OMN-18746 stop.
-- installed **behind** the clone — a finding that names
-  ``check-omnimarket-venv-drift.sh``, the reconciler that owns converging the
-  surface. Deliberately NOT worded as registry pin drift, because that wording
-  carries a remedy that moves the package backwards.
-- installed **ahead** of the clone, or on a commit the clone does not contain —
-  findings. A clone that cannot resolve the commit fails closed.
+- installed **at** the pinned tag's commit -- ``IN_SYNC``.
+- installed **behind** it, **ahead** of it, or on a commit that shares no line
+  with it -- a finding. A clone that cannot resolve a commit fails closed.
 
-The LOCK lagging the clone is a separate condition with a separate owner: the
-refresh workflow, not the venv reconciler. Reporting it against the venv sends
-the reader to a surface that cannot fix it.
+The lock moves forward through the dev-tag train in ``relock_git_sources.py``,
+never by dragging a venv backwards.
 
-Only the version comparison is bypassed for git sources — they are not silent.
+Only the version comparison is bypassed for git sources -- they are not silent.
 ``check_daemon_venv_skew.py``'s ``_NON_PINNED_SOURCE_KEYS`` deliberately still
 does not list ``git``; git sources are routed here instead.
 """
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
+import re
 import subprocess
+import sys
 import tomllib
 from dataclasses import dataclass
 from enum import Enum
@@ -69,7 +68,6 @@ from urllib.parse import urlsplit
 # The two owners a finding can name. Kept as constants so the tests assert the
 # routing rather than a wording that drifts.
 CLONE_RECONCILER = "omnibase_infra/scripts/check-omnimarket-venv-drift.sh --repair"
-LOCK_RELOCK_OWNER = ".github/workflows/sibling-lock-refresh.yml"
 
 _GIT_TIMEOUT_SECONDS = 30
 
@@ -113,6 +111,7 @@ class ModelGitSource:
     name: str
     url: str
     rev: str
+    tag: str | None = None  # the dev-merge tag the lock source names
 
     @property
     def repo(self) -> str:
@@ -200,7 +199,7 @@ def parse_git_sources(lock_path: Path) -> dict[str, ModelGitSource]:
             continue
         base = git_url.split("?", 1)[0].split("#", 1)[0]
         sources[normalize(name)] = ModelGitSource(
-            name=normalize(name), url=base, rev=rev
+            name=normalize(name), url=base, rev=rev, tag=dev_tag_of_source(git_url)
         )
     return sources
 
@@ -223,9 +222,73 @@ def canonical_clone(repo: str, registry_root: str | None = None) -> Path | None:
     return clone if (clone / ".git").exists() else None
 
 
-def clone_head(clone: Path, branch: str = "HEAD") -> str | None:
-    result = _git(clone, "rev-parse", branch)
-    return result.stdout.strip() if result.returncode == 0 else None
+class ErrorPinnedTag(ValueError):
+    """The dev-merge tag a pin names cannot be resolved to a commit."""
+
+
+def _is_dev_merge_tag(tag: str) -> bool:
+    """The one definition is handler_dev_merge_tag (stdlib only, found on ``src``)."""
+    src = str(Path(__file__).resolve().parent.parent / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    module = importlib.import_module("omniclaude.handlers.handler_dev_merge_tag")
+    return bool(module.is_dev_merge_tag(tag))
+
+
+def dev_tag_of_source(git_url: str) -> str | None:
+    """The dev-merge tag a uv git source URL names in its ``?tag=`` query, or None."""
+    for part in urlsplit(git_url).query.split("&"):
+        key, _, value = part.partition("=")
+        if key == "tag" and _is_dev_merge_tag(value):
+            return value
+    return None
+
+
+def pinned_tag_commit(
+    clone: Path, *, rev: str, declared_tag: str | None
+) -> tuple[str, str]:
+    """Return ``(tag, commit)``: the dev-merge tag a pin names and the commit it is.
+
+    ``declared_tag`` is the ``?tag=`` of the lock source; a bare rev pin names the
+    dev-merge tag of that very commit. The clone supplies tags only and its HEAD is
+    never read. Anything unprovable raises ``ErrorPinnedTag``: it fails closed and
+    never falls back to the lock, which would compare the pin with itself.
+    """
+    tag = declared_tag
+    if tag is None:
+        listing = _git(
+            clone,
+            "for-each-ref",
+            "--format=%(refname:strip=2)",
+            f"refs/tags/dev-*-{rev[:12]}",
+        )
+        tags = sorted(t for t in listing.stdout.split() if _is_dev_merge_tag(t))
+        if not re.fullmatch(r"[0-9a-f]{40}", rev) or not tags:
+            raise ErrorPinnedTag(
+                f"pinned rev {rev[:12]} is named by no dev-merge tag in the clone "
+                f"{clone}; pin a published dev-merge tag of omnimarket (or refresh "
+                f"the clone if the tag is newer than it)"
+            )
+        tag = tags[0]
+    if not _is_dev_merge_tag(tag):
+        raise ErrorPinnedTag(
+            f"{tag!r} is not a dev-merge tag (dev-<UTC stamp>-<sha12>)"
+        )
+    found = _git(
+        clone, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}"
+    )
+    commit = found.stdout.strip()
+    if found.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ErrorPinnedTag(
+            f"the dev-merge tag {tag} is not in the clone {clone}; the tag source is "
+            f"unreadable, so this fails closed. Refresh the clone's tags and retry"
+        )
+    if not commit.startswith(tag[-12:]):
+        raise ErrorPinnedTag(
+            f"the tag {tag} points at {commit[:12]}, not at the commit its name "
+            f"carries; this fails closed"
+        )
+    return tag, commit
 
 
 def _contains(clone: Path, commit: str) -> bool:
@@ -265,116 +328,48 @@ def installed_git_commit(site_packages: Path, package: str) -> str | None:
 
 
 def classify(
-    *, clone: Path, installed: str, locked: str, clone_head: str
+    *,
+    clone: Path,
+    installed: str,
+    locked: str,
+    expected: str,
+    label: str = "clone HEAD",
 ) -> ModelGitPinVerdict:
-    """Place an installed git commit relative to the canonical clone head.
+    """Place an installed git commit relative to the expected commit.
 
-    ``locked`` is carried so the finding can say what the lock names, but it is
-    never the thing being judged — the clone is the authority.
+    ``expected`` is the commit of the dev-merge tag the lock pins (OMN-21915);
+    ``label`` names it in a finding. ``locked`` is carried so the finding can say
+    what the lock names, but it is never the thing being judged.
     """
-    if installed == clone_head:
+    if installed == expected:
         return ModelGitPinVerdict(state=EnumGitPinState.IN_SYNC, finding=None)
 
-    for commit, label in ((installed, "installed"), (clone_head, "clone HEAD")):
+    for commit, what in ((installed, "installed"), (expected, label)):
         if not _contains(clone, commit):
             return ModelGitPinVerdict(
                 state=EnumGitPinState.UNKNOWN,
                 finding=(
-                    f"git source: the {label} commit {commit[:12]} is not present in "
+                    f"git source: the {what} commit {commit[:12]} is not present in "
                     f"the canonical clone {clone} — ancestry cannot be resolved, so "
                     f"this fails closed. Fetch the clone, or resolve a diverged clone "
                     f"with {CLONE_RECONCILER}"
                 ),
             )
 
-    if _is_ancestor(clone, installed, clone_head):
-        return ModelGitPinVerdict(
-            state=EnumGitPinState.BEHIND_CLONE,
-            finding=(
-                f"git source is BEHIND the canonical clone: installed "
-                f"{installed[:12]}, clone HEAD {clone_head[:12]} (lock names "
-                f"{locked[:12]}). The canonical clone is the authority for a git "
-                f"source; converge the venv forward with {CLONE_RECONCILER}. This "
-                f"is not a version mismatch and must never be remedied by moving "
-                f"the package backwards"
-            ),
-        )
-
-    if _is_ancestor(clone, clone_head, installed):
-        return ModelGitPinVerdict(
-            state=EnumGitPinState.AHEAD_OF_CLONE,
-            finding=(
-                f"git source is AHEAD of the canonical clone: installed "
-                f"{installed[:12]}, clone HEAD {clone_head[:12]}. The clone was "
-                f"never advanced; fast-forward it (omnibase_infra/scripts/"
-                f"pull-all.sh) rather than rolling the venv back"
-            ),
-        )
-
+    if _is_ancestor(clone, installed, expected):
+        state, how = EnumGitPinState.BEHIND_CLONE, "BEHIND"
+    elif _is_ancestor(clone, expected, installed):
+        state, how = EnumGitPinState.AHEAD_OF_CLONE, "AHEAD of"
+    else:
+        state, how = EnumGitPinState.UNKNOWN, "DIVERGED from"
     return ModelGitPinVerdict(
-        state=EnumGitPinState.UNKNOWN,
+        state=state,
         finding=(
-            f"git source has DIVERGED from the canonical clone: installed "
-            f"{installed[:12]} and clone HEAD {clone_head[:12]} share no ancestry "
-            f"line. Resolve the clone by hand before converging anything"
+            f"git source is {how} {label}: installed {installed[:12]}, {label} "
+            f"{expected[:12]} (lock names {locked[:12]}). Re-sync this surface from "
+            f"the lock so it carries the pinned tag. This is not a version mismatch "
+            f"and must never be remedied by moving the package backwards"
         ),
-    )
-
-
-def lock_lag_blocks() -> bool:
-    """Whether a lock lagging the canonical clone should fail the gate. It does not.
-
-    Measured on the operator Mac 2026-09-18: omnimarket published five
-    releases in three hours. It is release-on-merge, so the interval in which
-    omniclaude's lock equals the canonical clone head is the interval between
-    one omnimarket merge and the next — minutes. Blocking on the lag would
-    leave this gate red on a developer host essentially always, on a
-    condition the person committing cannot fix and which
-    ``sibling-lock-refresh.yml`` closes on its own daily schedule. A gate that
-    is red on a correct, self-healing state is one people learn to ignore,
-    which is rule 5's failure approached from the other side.
-
-    Silence is not the alternative. The lag is ALWAYS printed, with the
-    workflow that owns it and the command to run now, so "lagging, known,
-    owned" stays distinguishable from "nobody is looking".
-
-    The findings that do block are unchanged and are the ones that break
-    something: a venv whose git source disagrees with the canonical clone
-    means the OMN-18675 in-process guard refuses every ``onex delegate`` on
-    that interpreter, and that is actionable by the person in front of it.
-    """
-    return False
-
-
-def lock_lag_finding(
-    *, name: str, locked: str, clone_head: str, clone: Path
-) -> str | None:
-    """Report ``uv.lock`` lagging the canonical clone, against its own owner.
-
-    This is a different condition with a different owner from a venv that lags.
-    The venv reconciler cannot fix a stale lock, so naming it here would send
-    the reader to a surface that cannot act. Re-locking is
-    ``relock_git_sources.py`` under the sibling-lock-refresh workflow.
-    """
-    if locked == clone_head:
-        return None
-    if not _contains(clone, locked) or not _contains(clone, clone_head):
-        return (
-            f"{name}: uv.lock names {locked[:12]}, which the canonical clone "
-            f"{clone} does not contain — the lock cannot be checked against the "
-            f"clone. Owner: {LOCK_RELOCK_OWNER}"
-        )
-    if _is_ancestor(clone, locked, clone_head):
-        return (
-            f"{name}: uv.lock is BEHIND the canonical clone — lock names "
-            f"{locked[:12]}, clone HEAD is {clone_head[:12]}. The lock follows the "
-            f"clone for a git source. Owner: {LOCK_RELOCK_OWNER} (run it on "
-            f"workflow_dispatch to open the bump PR now)"
-        )
-    return (
-        f"{name}: uv.lock names {locked[:12]}, which is not an ancestor of clone "
-        f"HEAD {clone_head[:12]} — the lock is ahead of, or diverged from, the "
-        f"clone. Owner: {LOCK_RELOCK_OWNER}"
     )
 
 

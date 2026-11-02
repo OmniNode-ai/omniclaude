@@ -94,10 +94,9 @@ import hook_interpreter  # noqa: E402
 # ``git`` is deliberately ABSENT from this set (OMN-18752). Adding it would make
 # a git-sourced sibling silent, and silence is the wrong answer: a git source is
 # routed to ``git_source_pins`` instead, which judges it by COMMIT ANCESTRY
-# against the canonical clone rather than by comparing version strings. The
+# against its pinned dev-merge tag, not by comparing version strings. The
 # version in the lock for a git source is just the version at that rev, so
-# comparing it to the installed version reports a "downgrade" remedy whenever
-# the other sanctioned reconciler has legitimately advanced the venv.
+# comparing it to the installed version reports a false "downgrade" remedy.
 _NON_PINNED_SOURCE_KEYS: frozenset[str] = frozenset(
     {"editable", "virtual", "directory"}
 )
@@ -343,17 +342,15 @@ def _check_git_source_skew(
     surfaces: list[tuple[str, Path]],
     authority: Mapping[str, git_source_pins.EnumGitSourceAuthority],
 ) -> tuple[list[str], list[str]]:
-    """Judge every git-sourced sibling against the canonical clone (OMN-18752).
+    """Judge every git-sourced sibling against its pinned dev-merge tag (OMN-21915).
 
     Returns ``(findings, notes)``. Notes are stated non-evaluations — the
     ordinary CI shape, where no canonical clone and no live venv exist — and are
     printed so a run that looked at nothing never reads like a clean bill of
     health.
 
-    Two different conditions with two different owners are reported here:
-    a SURFACE lagging the clone (owner: the venv reconciler) and the LOCK
-    lagging the clone (owner: the refresh workflow). They are separated because
-    the venv reconciler cannot fix a stale lock and vice versa.
+    A surface (venv, hook interpreter) off the pinned tag's commit is a finding;
+    the lock moving to a newer tag is the dev-tag train's job, not this gate's.
     """
     findings: list[str] = []
     notes: list[str] = []
@@ -382,27 +379,17 @@ def _check_git_source_skew(
         if clone is None:
             notes.append(
                 f"git source {name!r}: no canonical clone for {source.repo!r} under "
-                f"OMNI_HOME on this host — clone-authority not evaluated "
+                f"OMNI_HOME on this host — pinned tag not evaluated "
                 f"(lock names {source.rev[:12]})"
             )
             continue
-        head = git_source_pins.clone_head(clone)
-        if head is None:
-            findings.append(
-                f"git source {name!r}: cannot read HEAD of the canonical clone "
-                f"{clone} — the authority for this pin is unreadable, so this "
-                f"fails closed"
+        try:
+            tag, expected = git_source_pins.pinned_tag_commit(
+                clone, rev=source.rev, declared_tag=source.tag
             )
+        except git_source_pins.ErrorPinnedTag as exc:
+            findings.append(f"git source {name!r}: {exc}")
             continue
-
-        lag = git_source_pins.lock_lag_finding(
-            name=name, locked=source.rev, clone_head=head, clone=clone
-        )
-        if lag is not None:
-            # Stated, never silent — but not blocking. See
-            # ``git_source_pins.lock_lag_blocks`` for why.
-            (findings if git_source_pins.lock_lag_blocks() else notes).append(lag)
-
         for label, venv_python in surfaces:
             site_packages = _site_packages(venv_python)
             if site_packages is None:
@@ -416,7 +403,11 @@ def _check_git_source_skew(
                 )
                 continue
             verdict = git_source_pins.classify(
-                clone=clone, installed=installed, locked=source.rev, clone_head=head
+                clone=clone,
+                installed=installed,
+                locked=source.rev,
+                expected=expected,
+                label=f"pinned dev-merge tag {tag}",
             )
             if verdict.finding is not None:
                 findings.append(f"{label}: {verdict.finding}")
@@ -486,10 +477,9 @@ def main(argv: list[str] | None = None) -> int:
     # the orphan that left the chain in 035707dd2 must stay gone (OMN-18746)
     findings += hook_interpreter.check_orphan_absent()
 
-    # git-sourced siblings answer to the canonical clone, not to the lock
-    # (OMN-18752). Evaluated over every surface this gate already reads, so a
-    # git pin cannot be right on one interpreter and wrong on another without
-    # the gate saying so.
+    # git-sourced siblings answer to their pinned dev-merge tag (OMN-21915),
+    # over every surface this gate reads, so a pin cannot be right on one
+    # interpreter and wrong on another.
     surfaces: list[tuple[str, Path]] = []
     daemon_python = _live_venv_dir() / "bin" / "python3"
     if daemon_python.exists():
@@ -527,7 +517,7 @@ def main(argv: list[str] | None = None) -> int:
             "If uv.lock changed intentionally, that rebuild resyncs the marker + pins.\n"
             "For the hook interpreter, re-sync the venv find_python() resolves\n"
             "(named above) from this repo's uv.lock: uv sync in its own clone.\n"
-            "A GIT-source finding is none of those: the canonical clone is the\n"
+            "A GIT-source finding is none of those: the pinned dev-merge tag is the\n"
             "authority there, each such finding names its own owner, and no git\n"
             "source is ever repaired by moving it backwards (OMN-18752).",
             file=sys.stderr,
