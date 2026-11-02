@@ -4,17 +4,14 @@
 """Tests for the /onex:handoff skill overhaul — OMN-13041.
 
 Verifies:
-- SKILL.md exists and is NOT marked deprecated; description covers the 6 enforcement
-  behaviors (claim-certification, supersession, terminal-commit, stale-doc schema,
-  scorecard, deep-dive reconcile).
-- prompt.md exists and contains the required execution sections.
+- SKILL.md is a thin dispatch shim over node_handoff_check_effect (OMN-21910): it calls the
+  node through ``onex run-node`` and the skill directory holds no code file and no prompt.md.
 - stale_doc_finding.py exposes ModelStaleDocFinding with correct schema validation:
     resolution must be FIXED:<sha> or DEFERRED:<OMN-ticket>, free text is rejected.
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
@@ -28,124 +25,54 @@ SKILL_DIR = (
 
 
 # ---------------------------------------------------------------------------
-# SKILL.md structure
+# SKILL.md is a thin shim over node_handoff_check_effect (OMN-21910)
 # ---------------------------------------------------------------------------
 
-
-@pytest.mark.unit
-def test_skill_md_exists() -> None:
-    """SKILL.md must be present."""
-    assert (SKILL_DIR / "SKILL.md").exists(), "handoff/SKILL.md is missing"
+NODE = "node_handoff_check_effect"
 
 
-@pytest.mark.unit
-def test_skill_md_not_deprecated() -> None:
-    """SKILL.md must not contain a DEPRECATED notice — the skill is now active."""
-    content = (SKILL_DIR / "SKILL.md").read_text()
-    assert "DEPRECATED" not in content, (
-        "SKILL.md still carries a DEPRECATED notice; the overhaul should remove it"
-    )
+def _skill_text() -> str:
+    return (SKILL_DIR / "SKILL.md").read_text()
 
 
 @pytest.mark.unit
 def test_skill_md_frontmatter_parseable() -> None:
-    """SKILL.md frontmatter must be valid YAML."""
-    text = (SKILL_DIR / "SKILL.md").read_text()
+    """SKILL.md frontmatter must be valid YAML and not deprecated."""
+    text = _skill_text()
     parts = text.split("---", 2)
     assert len(parts) >= 3, "SKILL.md has no valid YAML frontmatter block"
-    fm = yaml.safe_load(parts[1])
-    assert isinstance(fm, dict), "Frontmatter must be a YAML mapping"
-    assert "description" in fm, "Frontmatter must have a description field"
+    frontmatter = yaml.safe_load(parts[1])
+    assert isinstance(frontmatter, dict)
+    assert "DEPRECATED" not in text
 
 
 @pytest.mark.unit
-def test_skill_md_covers_claim_certification() -> None:
-    """SKILL.md must document claim-certification lint (behavior a)."""
-    content = (SKILL_DIR / "SKILL.md").read_text()
-    assert re.search(r"claim[- ]certif", content, re.IGNORECASE), (
-        "SKILL.md missing claim-certification section"
-    )
+def test_skill_md_dispatches_the_node_through_run_node() -> None:
+    """The skill calls the node through ``onex run-node`` for assemble and resume."""
+    text = _skill_text()
+    assert f"onex run-node {NODE}" in text
+    for command in ('"command": "assemble"', '"command": "resume"'):
+        assert command in text
 
 
 @pytest.mark.unit
-def test_skill_md_covers_supersession() -> None:
-    """SKILL.md must document supersession handling (behavior b)."""
-    content = (SKILL_DIR / "SKILL.md").read_text()
-    assert re.search(r"supersess", content, re.IGNORECASE), (
-        "SKILL.md missing supersession section"
-    )
+def test_skill_directory_holds_no_code_and_no_prompt() -> None:
+    """No code file and no prompt.md: the logic lives in the node, not in the skill."""
+    names = {
+        p.name
+        for p in SKILL_DIR.rglob("*")
+        if p.is_file() and "__pycache__" not in p.parts
+    }
+    assert "prompt.md" not in names
+    assert not {n for n in names if n.endswith((".py", ".sh"))}
 
 
 @pytest.mark.unit
-def test_skill_md_covers_terminal_commit() -> None:
-    """SKILL.md must document terminal commit+push requirement (behavior c)."""
-    content = (SKILL_DIR / "SKILL.md").read_text()
-    assert re.search(r"terminal.{0,30}commit", content, re.IGNORECASE) or re.search(
-        r"commit.{0,30}push", content, re.IGNORECASE
-    ), "SKILL.md missing terminal commit+push section"
-
-
-@pytest.mark.unit
-def test_skill_md_covers_stale_doc_schema() -> None:
-    """SKILL.md must document typed stale-doc findings (behavior d)."""
-    content = (SKILL_DIR / "SKILL.md").read_text()
-    assert re.search(r"stale.doc", content, re.IGNORECASE) or re.search(
-        r"FIXED:", content
-    ), "SKILL.md missing typed stale-doc findings section"
-
-
-@pytest.mark.unit
-def test_skill_md_covers_scorecard() -> None:
-    """SKILL.md must document live-gh-query scorecard (behavior e)."""
-    content = (SKILL_DIR / "SKILL.md").read_text()
-    assert re.search(r"scorecard", content, re.IGNORECASE), (
-        "SKILL.md missing scorecard section"
-    )
-
-
-@pytest.mark.unit
-def test_skill_md_covers_deep_dive_reconcile() -> None:
-    """SKILL.md must document deep-dive reconcile (behavior f)."""
-    content = (SKILL_DIR / "SKILL.md").read_text()
-    assert re.search(r"deep.div", content, re.IGNORECASE), (
-        "SKILL.md missing deep-dive reconcile section"
-    )
-
-
-# ---------------------------------------------------------------------------
-# prompt.md structure
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-def test_prompt_md_exists() -> None:
-    """prompt.md must be present."""
-    assert (SKILL_DIR / "prompt.md").exists(), "handoff/prompt.md is missing"
-
-
-@pytest.mark.unit
-def test_prompt_md_has_scorecard_command() -> None:
-    """prompt.md must contain a gh CLI call to generate the scorecard."""
-    content = (SKILL_DIR / "prompt.md").read_text()
-    assert "gh " in content, "prompt.md must reference a gh CLI command for scorecard"
-
-
-@pytest.mark.unit
-def test_prompt_md_has_commit_push_step() -> None:
-    """prompt.md must mention git commit and push for terminal commit+push."""
-    content = (SKILL_DIR / "prompt.md").read_text()
-    assert "git commit" in content or "git push" in content, (
-        "prompt.md must include terminal commit+push step"
-    )
-
-
-@pytest.mark.unit
-def test_prompt_md_references_stale_doc_schema() -> None:
-    """prompt.md must reference FIXED:<sha> or DEFERRED:<ticket> pattern."""
-    content = (SKILL_DIR / "prompt.md").read_text()
-    assert "FIXED:" in content or "DEFERRED:" in content, (
-        "prompt.md must document the FIXED:<sha>|DEFERRED:<ticket> schema"
-    )
+def test_skill_md_carries_no_terminal_commit_into_the_registry_tree() -> None:
+    """The retired terminal commit and docs/handoff target are gone."""
+    text = _skill_text()
+    assert "git commit" not in text
+    assert "docs/handoff" not in text
 
 
 # ---------------------------------------------------------------------------
