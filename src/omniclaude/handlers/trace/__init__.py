@@ -8,17 +8,42 @@ for the Agent Trace system (TRACE-02).
 
 NOTE: Migration freeze is active (OMN-2055 / .migration_freeze).
 The Alembic migration for these tables must be applied once the freeze lifts.
-See src/omniclaude/trace/db_schema.py for the complete DDL.
+See src/omniclaude/models/trace/db_schema.py for the complete DDL.
 
 This package also implements the core data models, persistence, and analysis
 infrastructure for tracking agent execution as ChangeFrames.
 
 NOTE: Migration freeze is active (OMN-2055 / .migration_freeze).
 The Alembic migration for these tables must be applied once the freeze lifts.
-See src/omniclaude/trace/db_schema.py for the complete DDL.
+See src/omniclaude/models/trace/db_schema.py for the complete DDL.
 """
 
-from omniclaude.trace.change_frame import (
+from omniclaude.handlers.trace.failure_signature import (
+    FailureSignature,
+    compute_failure_signature,
+)
+from omniclaude.handlers.trace.fix_transition import (
+    FixTransition,
+    OpenFailure,
+)
+from omniclaude.handlers.trace.intelligence_integration import (
+    ContextItem,
+    FixTransitionEvent,
+    FixTransitionProcessingResult,
+    PatternPromotionCandidate,
+    build_context_item_from_fix_transition,
+    check_pattern_promotion,
+    parse_fix_transition_event,
+    process_fix_transition_event,
+    score_failure_signature_match,
+    score_file_touched_match,
+)
+from omniclaude.handlers.trace.replay_engine import (
+    ReplayEngine,
+    ReplayMode,
+    ReplayResult,
+)
+from omniclaude.models.trace.change_frame import (
     AssociationMethod,
     ChangeFrame,
     FailureType,
@@ -32,27 +57,7 @@ from omniclaude.trace.change_frame import (
     ModelWorkspaceRef,
     OutcomeStatus,
 )
-from omniclaude.trace.failure_signature import (
-    FailureSignature,
-    compute_failure_signature,
-)
-from omniclaude.trace.fix_transition import (
-    FixTransition,
-    OpenFailure,
-)
-from omniclaude.trace.intelligence_integration import (
-    ContextItem,
-    FixTransitionEvent,
-    FixTransitionProcessingResult,
-    PatternPromotionCandidate,
-    build_context_item_from_fix_transition,
-    check_pattern_promotion,
-    parse_fix_transition_event,
-    process_fix_transition_event,
-    score_failure_signature_match,
-    score_file_touched_match,
-)
-from omniclaude.trace.pr_envelope import (
+from omniclaude.models.trace.pr_envelope import (
     AssociationResult,
     ModelCIArtifact,
     ModelPRBodyVersion,
@@ -60,11 +65,6 @@ from omniclaude.trace.pr_envelope import (
     ModelPRTimeline,
     PRDescriptionDelta,
     PREnvelope,
-)
-from omniclaude.trace.replay_engine import (
-    ReplayEngine,
-    ReplayMode,
-    ReplayResult,
 )
 
 __all__ = [

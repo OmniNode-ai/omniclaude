@@ -26,8 +26,17 @@ from uuid import uuid4
 
 import pytest
 
+from omniclaude.handlers.trace.fix_transition import (
+    FixTransition,
+    OpenFailure,
+    compute_fix_diff_hash,
+    detect_fix_transition,
+    emit_fix_transition_event,
+    extract_unique_files,
+    serialize_fix_transition_event,
+)
 from omniclaude.hooks.topics import TopicBase, build_topic
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     ModelDelta,
@@ -37,15 +46,6 @@ from omniclaude.trace.change_frame import (
     ModelOutcome,
     ModelToolEvent,
     ModelWorkspaceRef,
-)
-from omniclaude.trace.fix_transition import (
-    FixTransition,
-    OpenFailure,
-    compute_fix_diff_hash,
-    detect_fix_transition,
-    emit_fix_transition_event,
-    extract_unique_files,
-    serialize_fix_transition_event,
 )
 
 #: Expected Kafka topic for fix transition events (mirrors the emit call)
@@ -77,7 +77,7 @@ DIFF_PATCH_FIX = """\
 
 
 def make_check_result(exit_code: int = 0) -> ModelCheckResult:
-    from omniclaude.trace.frame_assembler import sha256_of
+    from omniclaude.handlers.trace.frame_assembler import sha256_of
 
     return ModelCheckResult(
         command="ruff check src/",
@@ -95,7 +95,7 @@ def make_change_frame(
     files_changed: list[str] | None = None,
     failure_sig_id: str | None = None,
 ) -> ChangeFrame:
-    from omniclaude.trace.frame_assembler import sha256_of
+    from omniclaude.handlers.trace.frame_assembler import sha256_of
 
     if files_changed is None:
         files_changed = ["src/router.py"]

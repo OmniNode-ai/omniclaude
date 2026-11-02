@@ -33,8 +33,12 @@ logger = logging.getLogger(__name__)
 #: Type alias for JSON-serializable tool input/output dicts.
 ToolInputDict = dict[str, object]
 
+from omniclaude.handlers.trace.failure_signature import (
+    FailureSignature,
+    compute_failure_signature,
+)
 from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     FailureType,
     ModelCheckResult,
@@ -45,10 +49,6 @@ from omniclaude.trace.change_frame import (
     ModelOutcome,
     ModelToolEvent,
     ModelWorkspaceRef,
-)
-from omniclaude.trace.failure_signature import (
-    FailureSignature,
-    compute_failure_signature,
 )
 
 # ---------------------------------------------------------------------------

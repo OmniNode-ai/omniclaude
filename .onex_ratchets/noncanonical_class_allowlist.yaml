@@ -15,6 +15,7 @@ allowlist:
   - "omniclaude.delegation.inprocess_runner:InProcessDelegationRunner"
   - "omniclaude.delegation.runner:DelegationRunner"
   - "omniclaude.delegation.sqlite_adapter:SQLiteProjectionAdapter"
+  - "omniclaude.handlers.trace.replay_engine:ReplayEngine"
   - "omniclaude.hook_runtime.server:HookRuntimeServer"
   - "omniclaude.hooks.pipeline_checkpoint:PipelineCheckpointManager"
   - "omniclaude.lib.core.agent_router:AgentRouter"
@@ -25,4 +26,3 @@ allowlist:
   - "omniclaude.nodes.node_github_pr_watcher_effect.handlers.watch_registry:WatchRegistry"
   - "omniclaude.nodes.node_personality_logging_effect.personality_adapter:PersonalityAdapter"
   - "omniclaude.services.session_registry_client:SessionRegistryClient"
-  - "omniclaude.trace.replay_engine:ReplayEngine"

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for omniclaude.trace.models.
+"""Unit tests for omniclaude.handlers.trace.models.
 
 Tests cover:
 - Happy path construction for each model
@@ -18,7 +18,7 @@ import uuid
 import pytest
 from pydantic import ValidationError
 
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     AssociationMethod,
     ChangeFrame,
     FailureType,

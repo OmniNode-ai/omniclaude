@@ -18,14 +18,14 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from omniclaude.lib.utils import diagnostics
-from omniclaude.lib.utils.health_checks import Phase4HealthChecker
-from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
-from omniclaude.trace.frame_assembler import (
+from omniclaude.handlers.trace.frame_assembler import (
     default_checks,
     get_current_branch,
     run_git_diff_patch,
 )
+from omniclaude.lib.utils import diagnostics
+from omniclaude.lib.utils.health_checks import Phase4HealthChecker
+from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
 
 pytestmark = pytest.mark.unit
 
@@ -88,7 +88,9 @@ class TestContractLoading:
 class TestTraceCallSites:
     def test_git_diff_uses_the_injected_timeout(self) -> None:
         timeouts = _distinct_timeouts()
-        with patch("omniclaude.trace.frame_assembler.subprocess.run") as mock_run:
+        with patch(
+            "omniclaude.handlers.trace.frame_assembler.subprocess.run"
+        ) as mock_run:
             mock_run.return_value = MagicMock(stdout="", returncode=0)
             run_git_diff_patch("/repo", timeouts)
         seen = {call.kwargs["timeout"] for call in mock_run.call_args_list}
@@ -96,7 +98,9 @@ class TestTraceCallSites:
 
     def test_identity_lookup_uses_the_injected_timeout(self) -> None:
         timeouts = _distinct_timeouts()
-        with patch("omniclaude.trace.frame_assembler.subprocess.run") as mock_run:
+        with patch(
+            "omniclaude.handlers.trace.frame_assembler.subprocess.run"
+        ) as mock_run:
             mock_run.return_value = MagicMock(stdout="main\n", returncode=0)
             get_current_branch("/repo", timeouts)
         assert (
@@ -166,14 +170,16 @@ class TestToolCallSites:
 
 class TestReplayAndCoverageCallSites:
     def test_replay_helpers_use_the_injected_timeouts(self, tmp_path: Path) -> None:
-        from omniclaude.trace.replay_engine import (
+        from omniclaude.handlers.trace.replay_engine import (
             _apply_patch,
             _checkout_commit,
             _clone_repo_to_tempdir,
         )
 
         timeouts = _distinct_timeouts()
-        with patch("omniclaude.trace.replay_engine.subprocess.run") as mock_run:
+        with patch(
+            "omniclaude.handlers.trace.replay_engine.subprocess.run"
+        ) as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             _clone_repo_to_tempdir("/repo", "/tmpdir", timeouts)
             _checkout_commit("abc123", str(tmp_path), timeouts)

@@ -44,9 +44,9 @@ import click
 from rich.console import Console
 from rich.text import Text
 
-from omniclaude.trace.change_frame import ChangeFrame, ModelCheckResult, OutcomeStatus
-from omniclaude.trace.pr_envelope import ModelCIArtifact, PREnvelope
-from omniclaude.trace.replay_engine import ReplayEngine, ReplayMode, ReplayResult
+from omniclaude.handlers.trace import ReplayEngine, ReplayMode, ReplayResult
+from omniclaude.models.trace import ChangeFrame, ModelCheckResult, OutcomeStatus
+from omniclaude.models.trace.pr_envelope import ModelCIArtifact, PREnvelope
 
 # ---------------------------------------------------------------------------
 # Type aliases for injected data sources

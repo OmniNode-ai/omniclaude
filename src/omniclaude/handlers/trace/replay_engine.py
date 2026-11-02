@@ -31,13 +31,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from omniclaude.handlers.trace.frame_assembler import CheckSpec, run_checks, sha256_of
 from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     OutcomeStatus,
 )
-from omniclaude.trace.frame_assembler import CheckSpec, run_checks, sha256_of
 
 # ---------------------------------------------------------------------------
 # Replay mode enum

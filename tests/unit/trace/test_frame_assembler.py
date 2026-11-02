@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for omniclaude.trace.frame_assembler.
+"""Unit tests for omniclaude.handlers.trace.frame_assembler.
 
 Tests cover:
 - should_trace_tool() correctly classifies tools
@@ -24,9 +24,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
-from omniclaude.trace.change_frame import FailureType
-from omniclaude.trace.frame_assembler import (
+from omniclaude.handlers.trace.frame_assembler import (
     CheckSpec,
     SessionContext,
     assemble_change_frame,
@@ -38,6 +36,8 @@ from omniclaude.trace.frame_assembler import (
     sha256_of_dict,
     should_trace_tool,
 )
+from omniclaude.models.model_runtime_timeouts import ModelRuntimeTimeouts
+from omniclaude.models.trace.change_frame import FailureType
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -174,7 +174,7 @@ class TestHashHelpers:
 
 
 class TestRunGitDiffPatch:
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_returns_diff_when_available(self, mock_run: MagicMock) -> None:
         # HEAD diff returns a patch; ls-files returns no untracked files.
         def side_effect(cmd: list, **kwargs: object) -> MagicMock:
@@ -191,13 +191,13 @@ class TestRunGitDiffPatch:
         diff = run_git_diff_patch("/repo")
         assert diff == SAMPLE_DIFF.strip()
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_returns_empty_when_no_diff(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(stdout="", returncode=0)
         diff = run_git_diff_patch("/repo")
         assert diff == ""
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_returns_empty_on_subprocess_error(self, mock_run: MagicMock) -> None:
         import subprocess
 
@@ -205,7 +205,7 @@ class TestRunGitDiffPatch:
         diff = run_git_diff_patch("/repo")
         assert diff == ""
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_returns_empty_on_timeout(self, mock_run: MagicMock) -> None:
         import subprocess
 
@@ -213,7 +213,7 @@ class TestRunGitDiffPatch:
         diff = run_git_diff_patch("/repo")
         assert diff == ""
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_includes_untracked_new_files(self, mock_run: MagicMock) -> None:
         """Newly created (untracked) files must appear in the returned diff."""
         untracked_diff = (
@@ -276,7 +276,7 @@ class TestAssembleChangeFrame:
 
         mock_run.side_effect = side_effect
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_returns_none_for_non_write_tool(self, mock_run: MagicMock) -> None:
         """Read tool should return None (not traced)."""
         frame = assemble_change_frame(
@@ -288,7 +288,7 @@ class TestAssembleChangeFrame:
         )
         assert frame is None
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_returns_none_when_diff_empty(self, mock_run: MagicMock) -> None:
         """Empty git diff should return None (nothing to trace)."""
         self._mock_subprocess_run(mock_run, diff="")
@@ -302,7 +302,7 @@ class TestAssembleChangeFrame:
         )
         assert frame is None
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_returns_frame_for_valid_write(self, mock_run: MagicMock) -> None:
         """Valid Write with non-empty diff should return assembled ChangeFrame."""
         self._mock_subprocess_run(mock_run)
@@ -315,8 +315,10 @@ class TestAssembleChangeFrame:
         )
 
         # Override run_checks to return a passing result
-        with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-            from omniclaude.trace.change_frame import ModelCheckResult
+        with patch(
+            "omniclaude.handlers.trace.frame_assembler.run_checks"
+        ) as mock_checks:
+            from omniclaude.models.trace.change_frame import ModelCheckResult
 
             mock_checks.return_value = [
                 ModelCheckResult(
@@ -341,13 +343,15 @@ class TestAssembleChangeFrame:
         assert frame.agent_id == SAMPLE_SESSION.agent_id
         assert frame.trace_id == SAMPLE_SESSION.trace_id
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_outcome_fail_when_checks_fail(self, mock_run: MagicMock) -> None:
         """Outcome should be 'fail' when all checks fail."""
         self._mock_subprocess_run(mock_run)
 
-        with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-            from omniclaude.trace.change_frame import ModelCheckResult
+        with patch(
+            "omniclaude.handlers.trace.frame_assembler.run_checks"
+        ) as mock_checks:
+            from omniclaude.models.trace.change_frame import ModelCheckResult
 
             mock_checks.return_value = [
                 ModelCheckResult(
@@ -370,13 +374,15 @@ class TestAssembleChangeFrame:
         assert frame.outcome.status == "fail"
         assert frame.outcome.failure_signature_id is not None
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_outcome_partial_when_some_checks_fail(self, mock_run: MagicMock) -> None:
         """Outcome should be 'partial' when some but not all checks fail."""
         self._mock_subprocess_run(mock_run)
 
-        with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-            from omniclaude.trace.change_frame import ModelCheckResult
+        with patch(
+            "omniclaude.handlers.trace.frame_assembler.run_checks"
+        ) as mock_checks:
+            from omniclaude.models.trace.change_frame import ModelCheckResult
 
             mock_checks.return_value = [
                 ModelCheckResult(
@@ -404,13 +410,15 @@ class TestAssembleChangeFrame:
         assert frame is not None
         assert frame.outcome.status == "partial"
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_frame_has_tool_event(self, mock_run: MagicMock) -> None:
         """Assembled frame should contain a tool event record."""
         self._mock_subprocess_run(mock_run)
 
-        with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-            from omniclaude.trace.change_frame import ModelCheckResult
+        with patch(
+            "omniclaude.handlers.trace.frame_assembler.run_checks"
+        ) as mock_checks:
+            from omniclaude.models.trace.change_frame import ModelCheckResult
 
             mock_checks.return_value = [
                 ModelCheckResult(
@@ -432,14 +440,16 @@ class TestAssembleChangeFrame:
         assert len(frame.tool_events) == 1
         assert frame.tool_events[0].tool_name == "Bash"
 
-    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    @patch("omniclaude.handlers.trace.frame_assembler.subprocess.run")
     def test_frame_uses_injected_timestamp(self, mock_run: MagicMock) -> None:
         """Frame timestamp must use injected value, not datetime.now()."""
         self._mock_subprocess_run(mock_run)
         ts = "2026-02-19T14:22:31Z"
 
-        with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-            from omniclaude.trace.change_frame import ModelCheckResult
+        with patch(
+            "omniclaude.handlers.trace.frame_assembler.run_checks"
+        ) as mock_checks:
+            from omniclaude.models.trace.change_frame import ModelCheckResult
 
             mock_checks.return_value = [
                 ModelCheckResult(
@@ -467,10 +477,12 @@ class TestPersistFrameToJsonl:
     def test_creates_file_and_appends(self, tmp_path: Path) -> None:
         """persist_frame_to_jsonl should create file and write JSONL."""
 
-        from omniclaude.trace.frame_assembler import persist_frame_to_jsonl
+        from omniclaude.handlers.trace.frame_assembler import persist_frame_to_jsonl
 
         # Build a minimal valid ChangeFrame
-        with patch("omniclaude.trace.frame_assembler.subprocess.run") as mock_run:
+        with patch(
+            "omniclaude.handlers.trace.frame_assembler.subprocess.run"
+        ) as mock_run:
 
             def side_effect(cmd: list, **kwargs: object) -> MagicMock:
                 result = MagicMock()
@@ -485,8 +497,10 @@ class TestPersistFrameToJsonl:
 
             mock_run.side_effect = side_effect
 
-            with patch("omniclaude.trace.frame_assembler.run_checks") as mock_checks:
-                from omniclaude.trace.change_frame import ModelCheckResult
+            with patch(
+                "omniclaude.handlers.trace.frame_assembler.run_checks"
+            ) as mock_checks:
+                from omniclaude.models.trace.change_frame import ModelCheckResult
 
                 mock_checks.return_value = [
                     ModelCheckResult(
@@ -528,7 +542,7 @@ class TestPersistFrameToJsonl:
 
     def test_appends_multiple_frames(self, tmp_path: Path) -> None:
         """Multiple frames should append as separate JSONL lines."""
-        from omniclaude.trace.change_frame import (
+        from omniclaude.models.trace.change_frame import (
             ChangeFrame,
             ModelCheckResult,
             ModelDelta,
@@ -594,7 +608,7 @@ class TestPersistFrameToJsonl:
 
 import pytest
 
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
     ModelDelta,
@@ -651,7 +665,7 @@ class TestEmitChangeFrame:
             # Re-import to pick up the mock
             import importlib
 
-            import omniclaude.trace.frame_assembler as mod
+            import omniclaude.handlers.trace.frame_assembler as mod
 
             importlib.reload(mod)
             result = mod.emit_change_frame(frame, "session-123")
@@ -685,7 +699,7 @@ class TestEmitChangeFrame:
         ):
             import importlib
 
-            import omniclaude.trace.frame_assembler as mod
+            import omniclaude.handlers.trace.frame_assembler as mod
 
             importlib.reload(mod)
             result = mod.emit_change_frame(frame, "session-456")
@@ -705,7 +719,7 @@ class TestEmitChangeFrame:
         with patch.dict("sys.modules", {"emit_client_wrapper": mock_module}):
             import importlib
 
-            import omniclaude.trace.frame_assembler as mod
+            import omniclaude.handlers.trace.frame_assembler as mod
 
             importlib.reload(mod)
             mod.emit_change_frame(frame, "my-session")
