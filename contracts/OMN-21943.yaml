@@ -1,7 +1,7 @@
 schema_version: "1.0.0"
 ticket_id: "OMN-21943"
-title: "Six trace model modules move from src/omniclaude/trace to src/omniclaude/models/trace"
-summary: "A partial canonical-file-shape burn-down slice: change_frame, db_schema, failure_signature, fix_transition, intelligence_integration and pr_envelope move to src/omniclaude/models/trace, importers are updated, and exactly those six lines leave the canonical-file-shape baseline. frame_assembler, replay_engine and the trace package marker stay baselined. Code and tests only: no deploy or runtime mutation."
+title: "The nine src/omniclaude/trace modules move to src/omniclaude/models/trace and src/omniclaude/handlers/trace"
+summary: "A canonical-file-shape burn-down slice: change_frame, db_schema, failure_signature, fix_transition, intelligence_integration and pr_envelope move to src/omniclaude/models/trace; frame_assembler and replay_engine move to src/omniclaude/handlers/trace; the src/omniclaude/trace package is removed. Importers are updated, and exactly the nine src/omniclaude/trace lines leave the canonical-file-shape baseline. Code and tests only: no deploy or runtime mutation."
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []

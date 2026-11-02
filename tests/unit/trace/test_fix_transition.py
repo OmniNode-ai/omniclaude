@@ -77,7 +77,7 @@ DIFF_PATCH_FIX = """\
 
 
 def make_check_result(exit_code: int = 0) -> ModelCheckResult:
-    from omniclaude.trace.frame_assembler import sha256_of
+    from omniclaude.handlers.trace.frame_assembler import sha256_of
 
     return ModelCheckResult(
         command="ruff check src/",
@@ -95,7 +95,7 @@ def make_change_frame(
     files_changed: list[str] | None = None,
     failure_sig_id: str | None = None,
 ) -> ChangeFrame:
-    from omniclaude.trace.frame_assembler import sha256_of
+    from omniclaude.handlers.trace.frame_assembler import sha256_of
 
     if files_changed is None:
         files_changed = ["src/router.py"]

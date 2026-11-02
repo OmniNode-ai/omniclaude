@@ -44,9 +44,9 @@ import click
 from rich.console import Console
 from rich.text import Text
 
+from omniclaude.handlers.trace import FrameReplayer, ReplayMode, ReplayResult
 from omniclaude.models.trace import ChangeFrame, ModelCheckResult, OutcomeStatus
 from omniclaude.models.trace.pr_envelope import ModelCIArtifact, PREnvelope
-from omniclaude.trace.replay_engine import ReplayEngine, ReplayMode, ReplayResult
 
 # ---------------------------------------------------------------------------
 # Type aliases for injected data sources
@@ -453,7 +453,7 @@ def make_trace_group(
     single_frame_source: SingleFrameSource = _no_single_frame,
     pr_source: PRSource = _no_pr,
     pr_frame_source: PRFrameSource = _no_pr_frames,
-    replay_engine: ReplayEngine | None = None,
+    replay_engine: FrameReplayer | None = None,
 ) -> click.Group:
     """Construct the ``trace`` Click command group with injected data sources.
 
@@ -462,7 +462,7 @@ def make_trace_group(
         single_frame_source: Returns a single frame by UUID.
         pr_source: Returns a PREnvelope by PR number.
         pr_frame_source: Returns frames associated with a PR number.
-        replay_engine: ReplayEngine instance (or None to disable replay).
+        replay_engine: FrameReplayer instance (or None to disable replay).
 
     Returns:
         Configured Click group ready for registration under ``omn trace``.
@@ -597,10 +597,10 @@ def make_trace_group(
         help="Replay mode: full, stubbed, or test-only.",
     )
     def trace_replay(frame_id: str, mode_str: str) -> None:
-        """Replay a frame in the specified mode via ReplayEngine."""
+        """Replay a frame in the specified mode via FrameReplayer."""
         if replay_engine is None:
             raise click.ClickException(
-                "ReplayEngine not configured. Set OMNICLAUDE_REPLAY_REPO_ROOT."
+                "FrameReplayer not configured. Set OMNICLAUDE_REPLAY_REPO_ROOT."
             )
         try:
             fid = UUID(frame_id)
