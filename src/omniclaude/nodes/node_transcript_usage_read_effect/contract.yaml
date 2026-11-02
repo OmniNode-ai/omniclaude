@@ -65,6 +65,12 @@ handler_routing:
       event_model:
         name: ModelTranscriptUsageCommitRequest
         module: omniclaude.nodes.node_transcript_usage_read_effect.models
+    - handler:
+        name: HandlerCompactStamp
+        module: omniclaude.nodes.node_transcript_usage_read_effect.handlers.handler_compact_stamp
+      event_model:
+        name: ModelCompactStampRequest
+        module: omniclaude.nodes.node_transcript_usage_read_effect.models
 
 descriptor:
   node_archetype: effect

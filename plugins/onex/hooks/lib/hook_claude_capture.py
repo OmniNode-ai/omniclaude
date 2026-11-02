@@ -431,13 +431,11 @@ def build_event_payload(
     turn_id = None
     if hook_name not in _OUTSIDE_A_TURN and isinstance(session_id, str):
         turn_id = hook_turn_id.peek_turn_id(turn_dir, session_id)
-    agent_id = hook_input.get("agent_id")
-    transcript = hook_input.get("transcript_path")
     sidecar = read_sidecar(
         contract,
-        transcript_path=transcript if isinstance(transcript, str) else None,
-        session_id=session_id if isinstance(session_id, str) else None,
-        agent_id=agent_id if isinstance(agent_id, str) else None,
+        transcript_path=_str(hook_input.get("transcript_path")),
+        session_id=_str(session_id),
+        agent_id=_str(hook_input.get("agent_id")),
         index_dir=sidecar_index_dir,
     )
     result = contract.map_hook_stdin(
@@ -449,8 +447,10 @@ def build_event_payload(
         host=host,
     )
     payload: dict[str, Any] = result.event.model_dump(mode="json")
-    payload["session_id"] = result.event.lineage.session_id
-    return payload
+    if hook_name == "PostCompact":  # TA.22 (OMN-22004): the boundary's stamp
+        node = importlib.import_module(f"{_USAGE_NODE}.handlers.handler_compact_stamp")
+        node.stamp(payload["payload"], content_capture.items_for_compact, hook_input)
+    return {**payload, "session_id": result.event.lineage.session_id}
 
 
 def capture(
