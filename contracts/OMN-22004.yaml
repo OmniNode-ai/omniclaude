@@ -44,18 +44,18 @@ dod_evidence:
         check_value: "uv run pytest tests/unit/hooks/test_postcompact_context_tokens_omn22004.py -k postcompact_context_tokens_model -q --no-cov"
   - id: dod-omn22004-ac2-unstamped
     binds_ac: [AC2]
-    description: No boundary, or a boundary without a positive integer preTokens, stamps neither key.
+    description: No boundary, or a boundary without a positive integer preTokens, stamps neither key. A valid-boundary control must stamp both keys, so an always-unstamped producer fails this evidence.
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/unit/hooks/test_postcompact_context_tokens_omn22004.py -k postcompact_no_boundary_unstamped -q --no-cov"
+        check_value: "uv run pytest tests/unit/hooks/test_postcompact_context_tokens_omn22004.py -k 'postcompact_no_boundary_unstamped or postcompact_context_tokens_model' -q --no-cov"
   - id: dod-omn22004-ac3-contract
     binds_ac: [AC3]
-    description: The capture contract lists both keys for PostCompact and the generated fixtures match.
+    description: Assert both PostCompact metadata fields and their verbatim redaction declarations explicitly, then check the capture fixtures and registry redaction.
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/unit/hooks/test_claude_hook_capture_contract.py tests/hooks/test_deployed_registry_redaction_omn17201.py -q --no-cov"
+        check_value: "uv run pytest tests/unit/hooks/test_postcompact_context_tokens_omn22004.py::test_postcompact_contract_declares_stamp tests/unit/hooks/test_claude_hook_capture_contract.py tests/hooks/test_deployed_registry_redaction_omn17201.py -q --no-cov"
   - id: dod-omn22004-ac4-lab-replay
     binds_ac: [AC4]
     description: A recorded transcript replayed through the hook capture yields a journalled event the omnimarket savings runner turns into one context_compaction row; the replay is in the PR's Lab line.
@@ -63,3 +63,14 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/hooks/test_postcompact_context_tokens_omn22004.py -k journalled_event_carries_the_stamp -q --no-cov"
+  - id: dod-omn22004-hosted-source-deploy-readback
+    description: Read the published capture producer at the checked-out commit from GitHub and require the PostCompact stamp call. A pre-fix source or missing publication fails. This hosted source deployment check does not establish plugin installation or the outstanding dev-bus validation.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: command
+        check_value: >-
+          gh api "repos/OmniNode-ai/omniclaude/contents/plugins/onex/hooks/lib/hook_claude_capture.py?ref=$(git rev-parse HEAD)"
+          --jq '.content | gsub("\n"; "") | @base64d | contains("node.stamp(payload[\"payload\"], content_capture.items_for_compact, hook_input)")'
+          | grep -qx true
+        cwd: ${OMNI_HOME}/omniclaude

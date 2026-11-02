@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 _LIB_DIR = Path(__file__).resolve().parents[3] / "plugins" / "onex" / "hooks" / "lib"
 if str(_LIB_DIR) not in sys.path:
@@ -27,6 +28,21 @@ capture_mod = importlib.import_module("hook_claude_capture")
 pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("hook_lane_overlay")]
 
 MODEL = "claude-opus-5-5"
+
+
+def test_postcompact_contract_declares_stamp() -> None:
+    contract_path = (
+        Path(__file__).resolve().parents[3]
+        / "src/omniclaude/hooks/contracts/contract_hook_claude_capture.yaml"
+    )
+    contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
+    postcompact = next(
+        row for row in contract["coverage"] if row["hook"] == "PostCompact"
+    )
+    fields = {"context_tokens", "model"}
+    assert fields <= set(postcompact["metadata_fields"])
+    for field in fields:
+        assert contract["redaction"]["fields"][f"payload.{field}"] == "capture_verbatim"
 
 
 def _assistant(model: str, **extra: Any) -> str:
