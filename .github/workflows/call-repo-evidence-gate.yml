@@ -17,8 +17,13 @@
 # Read-only contents and pull-requests permissions are all this caller needs;
 # checkout and verification belong to the reusable, with no caller secrets.
 # The dev-merge tag of omnibase_core makes the reusable a fixed ref (the repo's
-# ruling is tags, never full commit shas); verifier-version pins the released
-# verifier used to read the caller's contracts.
+# ruling is tags, never full commit shas); verifier-tag names the omnimarket
+# dev-merge tag the verifier is installed from, so a verifier fix reaches this
+# caller once it is merged and tagged, with no release (OMN-21855).
+# The reusable resolves the tag to a commit and refuses a moved tag, a tag not
+# on omnimarket dev, or one that does not descend from its floor commit. The
+# caller passes no verifier-version, which the reusable keeps only as a warned
+# fallback. The verifier reads the caller's contracts.
 #
 # The job id is the context prefix: repo-evidence / dod-verify carries the
 # verdict, so do not add a job name.
@@ -30,15 +35,11 @@
 # setting compare-with-occ back to "true".
 #
 # The reusable is pinned to a dev-merge tag of omnibase_core, never a full
-# commit sha. The tag is a descendant of #1932 and #1912: it carries the
-# `shadow` input, the contract-home marker (with compare-with-occ "true" the
-# head step names the repository that holds a ticket's only other contract, and
-# verifier 0.4.305 classifies that refusal as contract_in_another_repo), the
-# writer app diff hand-off (#1927, #1931), the VERIFIER_FLOOR refusal of a
-# verifier-version below 0.4.303, and the fix-parent control fallback
-# (control_uses_fix_parent). verifier-version 0.4.310 is the first omnimarket
-# release that ships both writer app classifiers (omnimarket#3694); it also
-# carries omnimarket#3751, so a contract that repeats a mapping key is refused.
+# commit sha. The tag is a descendant of #1932, #1912 and #2203: it carries the
+# `shadow` input, the contract-home marker, the writer app diff hand-off
+# (#1927, #1931), the fix-parent control fallback (control_uses_fix_parent) and
+# the verifier-tag input (#2203). The verifier-tag below is the omnimarket
+# dev-merge tag the reusable resolves and checks against its floor commit.
 # The pin is advanced by omnimarket's node_receipt_gate_pin_advance_compute
 # (OMN-20134), which edits the uses line and RECEIPT_GATE_PIN_TAG in
 # tests/ci/receipt_gate_pin.py.
@@ -61,9 +62,9 @@ permissions:
 
 jobs:
   repo-evidence:
-    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@dev-20261030152335-66d35d2283c3 # omnibase_core dev-merge tag; carries the fix-parent control fallback (OMN-20134)
+    uses: OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@dev-20261101005012-ac2f26e3e5bf # omnibase_core dev-merge tag
     with:
       evidence-source: caller
-      verifier-version: 0.4.310
+      verifier-tag: dev-20261101000200-949993edf3b7
       compare-with-occ: "false"
       shadow: "false"
