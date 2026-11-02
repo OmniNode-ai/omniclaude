@@ -18,7 +18,7 @@ import uuid
 import pytest
 from pydantic import ValidationError
 
-from omniclaude.trace.change_frame import (
+from omniclaude.models.trace.model_change_frame import (
     AssociationMethod,
     ChangeFrame,
     FailureType,

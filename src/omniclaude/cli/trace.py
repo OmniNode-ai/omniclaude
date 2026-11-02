@@ -2,11 +2,9 @@
 # SPDX-License-Identifier: MIT
 """CLI command group for agent trace inspection.
 
-Implements the `omn trace` developer-facing command set for inspecting
-ChangeFrames and PREnvelopes produced by the Agent Trace and PR Debugging
-System (DESIGN_AGENT_TRACE_PR_DEBUGGING_SYSTEM.md).
-
-Stage 8 of DESIGN_AGENT_TRACE_PR_DEBUGGING_SYSTEM.md
+Implements the `omn trace` command set for inspecting the ChangeFrames and
+PREnvelopes of the Agent Trace and PR Debugging System (stage 8 of
+DESIGN_AGENT_TRACE_PR_DEBUGGING_SYSTEM.md).
 
 Commands
 --------
@@ -22,17 +20,14 @@ PR inspection:
   omn trace pr failure-path <pr_number>
   omn trace pr timeline <pr_number>
 
-Data sources
-------------
-Commands accept ChangeFrame data via one of two sources (injected for
-testability):
+Data sources (injected, for testability)
+----------------------------------------
 
 - ``FrameSource``: callable ``(session_id, limit) -> list[ChangeFrame]``
 - ``PRSource``: callable ``(pr_number) -> PREnvelope | None``
 - ``PRFrameSource``: callable ``(pr_number) -> list[ChangeFrame]``
 
-In production, these sources read from the DB / JSONL logs.
-In tests, they are replaced with simple list-returning mocks.
+Production sources read the DB / JSONL logs; tests pass list-returning mocks.
 """
 
 from __future__ import annotations
@@ -44,8 +39,12 @@ import click
 from rich.console import Console
 from rich.text import Text
 
-from omniclaude.trace.change_frame import ChangeFrame, ModelCheckResult, OutcomeStatus
-from omniclaude.trace.pr_envelope import ModelCIArtifact, PREnvelope
+from omniclaude.models.trace.model_change_frame import (
+    ChangeFrame,
+    ModelCheckResult,
+    OutcomeStatus,
+)
+from omniclaude.models.trace.model_pr_envelope import ModelCIArtifact, PREnvelope
 from omniclaude.trace.replay_engine import ReplayEngine, ReplayMode, ReplayResult
 
 # ---------------------------------------------------------------------------
