@@ -401,11 +401,9 @@ repos:
         args: [src/omniclaude/]
         stages: [pre-push]
         always_run: true
-      # Core's local-paths check. At v0.47.61 the hook runs core's
-      # node_local_paths_check_compute (validator_local_paths keeps the rule but no longer
-      # has a command line). check-local-paths is the hook id the validator-requirements
-      # handshake names; the parity suite holds the node to the old wrapper's goldens.
-      # The wrapper's exclude is kept.
+      # Core's local-paths check, which the old wrapper script ran. check-local-paths is the
+      # hook id the validator-requirements handshake names; the parity suite holds core's
+      # node_local_paths_check_compute to the goldens. The wrapper's exclude is kept.
       - id: check-local-paths
         exclude: '\.secrets\.baseline$|^docs/.*|^tests/fixtures/.*|^tests/.*/fixtures/.*'
 

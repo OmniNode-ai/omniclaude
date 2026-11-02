@@ -208,6 +208,10 @@ def test_every_other_caller_line_matches_the_merge_base(base_text: str) -> None:
     expected_job["uses"] = head_job["uses"]
     expected_job["with"]["compare-with-occ"] = "false"
     expected_job["with"]["shadow"] = "false"
+    # OMN-21855: the verifier comes from an omnimarket dev-merge tag, not a version.
+    del expected_job["with"]["verifier-version"]
+    expected_job["with"]["verifier-tag"] = head_job["with"]["verifier-tag"]
+    assert re.fullmatch(r"dev-\d{14}-[0-9a-f]{12}", head_job["with"]["verifier-tag"])
     assert head_job == expected_job
     expected = deepcopy(base)
     expected["jobs"]["repo-evidence"] = expected_job
