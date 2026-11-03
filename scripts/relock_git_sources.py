@@ -444,8 +444,39 @@ def mover_argv(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> list[str]:
     ]
 
 
+def move_dependency_home(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> int:
+    """Move the pin's ``dependencies`` home (``<dist> @ git+<url>@<tag>``); return the count.
+
+    omnimarket's pin mover rewrites only the ``[tool.uv.sources]`` entry. A
+    consumer that also names the sibling as a direct-URL dependency (omniclaude
+    does, for omnimarket) holds the tag in a second home that the node never
+    touches, so a train bump left it behind and the ``first_party_ref`` stale_pin
+    rule kept reading the old tag (OMN-17427). Only live lines move: comment lines
+    name past tags as history and stay as written.
+    """
+    url = pin.url.removesuffix(".git")
+    home = re.compile(
+        rf"(?P<head>git\+{re.escape(url)}(?:\.git)?@){re.escape(pin.tag)}(?![0-9A-Za-z])"
+    )
+    count = 0
+    lines: list[str] = []
+    for line in pyproject.read_text(encoding="utf-8").splitlines(keepends=True):
+        if not line.lstrip().startswith("#"):
+            line, hits = home.subn(lambda m: f"{m.group('head')}{new_tag}", line)
+            count += hits
+        lines.append(line)
+    if count:
+        pyproject.write_text("".join(lines), encoding="utf-8")
+    return count
+
+
 def node_mover(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> None:
-    """Rewrite one pin through omnimarket's dev-tag pin mover node."""
+    """Rewrite one pin through omnimarket's dev-tag pin mover node.
+
+    The node moves the ``[tool.uv.sources]`` home; ``move_dependency_home`` moves
+    the second home, so both stay on one tag (uv will not resolve a tree where a
+    direct-URL dependency and its source disagree).
+    """
     result = subprocess.run(
         mover_argv(pyproject, pin, new_tag),
         capture_output=True,
@@ -458,6 +489,7 @@ def node_mover(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> None:
             f"{pin.distribution}: the pin mover refused {pin.tag} -> {new_tag} "
             f"(exit {result.returncode}): {result.stdout.strip()} {result.stderr.strip()}"
         )
+    move_dependency_home(pyproject, pin, new_tag)
 
 
 def run_dev_tag_train(
