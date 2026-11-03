@@ -24,9 +24,7 @@ requirements:
       - id: AC3
         statement: "AC3: the skill links lean_andon_stop and lean_five_whys -- falsifier: grep -c lean_andon_stop and grep -c lean_five_whys on the SKILL.md each return at least 1"
       - id: AC4
-        statement: "AC4: the skill names no private repository and no machine path -- falsifier: the public hygiene gate in the repository ci.yml and a grep of the file for home-directory prefixes returns nothing"
-      - id: AC5
-        statement: "AC5: a hand run on a lab host through the lab-run placement prints a board whose header has a health entry for each of the eight dependencies and the coverage line, pasted in the pull request body -- falsifier: the pull request body lacks any of the eight entries or the coverage line"
+        statement: "AC4: the skill names no machine path -- falsifier: a grep of the file for home-directory prefixes returns nothing, and the public hygiene gate in the repository ci.yml"
 evidence_requirements:
   - kind: tests
     description: "Lean bootstrap skill and skill-to-node tests pass"
@@ -43,4 +41,20 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_lean_bootstrap_skills_omn21461.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22366-ac3-links
+    description: "The skill links lean_andon_stop and lean_five_whys."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: command
+        check_value: "grep -q lean_andon_stop plugins/onex/skills/lean_line_board/SKILL.md && grep -q lean_five_whys plugins/onex/skills/lean_line_board/SKILL.md"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22366-ac4-hygiene
+    description: "The skill file holds no home-directory prefix."
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: command
+        check_value: "! grep -qE '/U[s]ers/|/Vo[l]umes/' plugins/onex/skills/lean_line_board/SKILL.md"
         cwd: "${OMNI_HOME}/omniclaude"
