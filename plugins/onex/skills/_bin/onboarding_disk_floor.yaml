@@ -11,6 +11,9 @@
 # Measured with Tart 2.32.1 on 2026-11-02: a clone of the stock image cut to
 # 4 vCPU and 8 GB, `df -k` of the data volume before the run and after every phase,
 # `--no-containers`, the keyless stub model server, a 2-second `df` sampler for the peak.
+# Retaken on 2026-11-03 on fresh clones of the same image digest: local model peak 4.98 GiB (exit 0),
+# hosted key 4.32 GiB when phase 3 stopped, Ollama 5.32 GiB when phase 3 stopped. The figures below
+# are the larger of the two days' readings, so the declared use never falls under a reading.
 # The recorded readings are in the ticket comment and the PR's Lab comment.
 image:
   name: ghcr.io/cirruslabs/macos-tahoe-vanilla
