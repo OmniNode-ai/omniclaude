@@ -1,0 +1,75 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21262
+title: "Onboarding tells the developer what happens when none of their models answers"
+summary: >
+  Operator ask 2026-10-21. Under decision D3 of the delegation requirements
+  specification, an exhausted ladder ends returned_to_caller: the Claude Code
+  session does the task itself, with zero savings, while the provider still
+  bills the attempts. The model questions now print that in the developer's own
+  words before the menu, and ONBOARDING.md and the participant email carry the
+  same two sentences, so a developer who read either document recognises what
+  the run printed. The handler is a shrink-only baselined file, so the three
+  blank-line calls around the notice were folded onto their neighbours' lines
+  and its code-line count is unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21262-notice-before-the-questions
+    statement: Onboarding prints the exhausted-ladder notice before the model questions, and the two documents carry the same text.
+    acceptance:
+      - id: AC1
+        statement: "AC1: onboarding prints the notice before the model questions, and ONBOARDING.md and the participant email carry the same text"
+  - id: req-omn21262-anchored-code-has-the-outcome
+    statement: The notice ships only where the anchored code already ends an exhausted ladder with returned_to_caller.
+    acceptance:
+      - id: AC2
+        statement: "AC2: the notice ships only in a script pin whose anchored code (OMN-21255) includes the returned_to_caller end-of-ladder outcome"
+evidence_requirements:
+  - kind: tests
+    description: "The notice tests pass"
+    command: "uv run pytest tests/skills/test_onboarding_ladder_notice_omn21262.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21262-ac1-notice-precedes-the-first-question
+    description: 'ask_models runs with the script''s own helpers and an answer on stdin. Both of the operator''s sentences print, in order, above the first menu row and above the prompt that takes the choice, and the choice still resolves. Whitespace is collapsed before matching, so a sentence the screen wrapped still matches as one sentence. Fails at the merge base, where neither sentence is printed at all.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_ladder_notice_omn21262.py -q --no-cov -k test_the_notice_precedes_the_first_model_question"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21262-ac1-documents-carry-the-same-text
+    description: 'ONBOARDING.md is split at its participant-email heading and both halves are required to carry the same two sentences verbatim, with Markdown blockquote markers and wrapping normalised away. This is what makes the three surfaces one promise rather than three paraphrases; it fails at the merge base, where neither half carries them.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_ladder_notice_omn21262.py -q --no-cov -k test_onboarding_md_and_the_participant_email_carry_the_same_text"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21262-ac2-anchored-code-ends-with-returned-to-caller
+    description: 'AC2''s own condition, read from the two repositories that own it rather than from this one: omnibase_core at origin/main declares RETURNED_TO_CALLER in enum_delegation_terminal_failure_cause, and omnimarket''s delegate-skill orchestrator handler at origin/dev uses returned_to_caller. Both are read at an immutable ref. The release walk of OMN-21261 is that ticket''s deliverable and is not re-run here.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: command
+        check_value: "bash -c 'gh api \"repos/OmniNode-ai/omnibase_core/contents/src/omnibase_core/enums/enum_delegation_terminal_failure_cause.py?ref=main\" --jq .content | base64 -d | grep -cF \"RETURNED_TO_CALLER\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -c 'gh api \"repos/OmniNode-ai/omnimarket/contents/src/omnimarket/nodes/node_delegate_skill_orchestrator/handlers/handler_delegate_skill.py?ref=dev\" --jq .content | base64 -d | grep -cF \"returned_to_caller\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21262-deploy-probe
+    description: 'Deploy probe. Read the setup handler from GitHub at the checked-out commit, an immutable ref, and require that it carries the notice line, with the AC1 run test beside it. It fails at the merge base, where that line is absent from the handler.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_ladder_notice_omn21262.py -q --no-cov -k test_the_notice_precedes_the_first_model_question"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -cF \"If none of the models you choose can finish a task\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
