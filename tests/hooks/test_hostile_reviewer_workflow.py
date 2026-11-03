@@ -734,10 +734,16 @@ def test_degraded_quorum_exit_code_fails_the_gate_closed(
         "own name, not folded into infra_error"
     )
     assert 'echo "verdict=degraded_quorum"' in run_text
-    assert '[ "$VERDICT" = "degraded_quorum" ]' in run_text, (
-        "degraded_quorum must fail the step closed alongside blocked -- the "
-        "absence of a verdict is not a passing one"
+    # OMN-22293: the failure itself moved to the enforcement step, so a verified
+    # agent review receipt can lift it; blocked still fails this step.
+    enforce_text = str(
+        _named_step(workflow, "Enforce hostile-review verdict (OMN-22293)")["run"]
     )
+    assert '"$VERDICT" != "passed"' in enforce_text, (
+        "degraded_quorum must still fail the job closed, in the enforcement "
+        "step -- the absence of a verdict is not a passing one"
+    )
+    assert '[ "$VERDICT" = "blocked" ]' in run_text
 
 
 def test_verdict_parser_blocks_only_on_cross_model_agreement(

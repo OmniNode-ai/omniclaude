@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 ticket_id: OMN-22293
 title: The omniclaude Hostile Review job accepts a verified agent receipt, so credit exhaustion no longer holds every omniclaude head
-summary: The omniclaude pin on omnimarket moves to the newest dev merge tag so the internal-sibling-pins hook passes, then the Hostile Reviewer workflow gains the gate-accept step.
+summary: The omniclaude pin on omnimarket moves to the newest dev merge tag so the internal-sibling-pins hook passes (first commit). The omniclaude Hostile Reviewer workflow then gains one gate-accept step that calls omnimarket's gate-accept node (read from a trusted omnimarket dev tag, never the pull request checkout) and an enforcement step that carries the degraded_quorum and infra_error exits the review step used to take, skipped only when the node decides pass_agent. A blocked verdict still fails the review step.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -11,10 +11,33 @@ requirements:
   acceptance:
   - id: AC0
     statement: 'AC0: pyproject.toml pins omnimarket at dev-20261103020838-7b42a4c63edc in both places and uv.lock records only that tag -- falsifier: pre-commit run check-internal-sibling-pins --all-files fails at the merge base with stale_pin, and uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov fails over the merge base once the new omnimarket moved the module'
+- id: req-omn22293-ac1
+  statement: The workflow carries one gate-accept step that holds a node call and nothing else
+  acceptance:
+  - id: AC1
+    statement: 'AC1: The omniclaude hostile-reviewer.yml carries the one gate-accept step in the same shape as omnimarket (a node call, `if: always()`, and the Enforce step gaining only the `decision != ''pass_agent''` condition) -- falsifier: a workflow-file test in omniclaude run with `uv run pytest tests/ci -k hostile_review_agent_accept -v -rs` fails when the step holds more than a node call or the Enforce step run text differs from the default branch'
+- id: req-omn22293-ac2
+  statement: A verified receipt for the exact head lifts lost voters and nothing else
+  acceptance:
+  - id: AC2
+    statement: 'AC2: A degraded voter result with a verified passing receipt for the exact head turns "Hostile Review Gate" green, a passed voter result with `unchanged` stays green, a blocked voter result stays red whatever the node fake returns, and a receipt for another head is refused -- falsifier: the same workflow test run over the workflow own steps with a node fake finds any of the four outcomes different'
+- id: req-omn22293-ac3
+  statement: The node is read from a trusted revision and the step skips when it is absent
+  acceptance:
+  - id: AC3
+    statement: 'AC3: The step reads the node from a trusted revision and never from the pull request checkout, and skips with decision unchanged when that revision does not carry the node -- falsifier: `uv run pytest tests/ci -k hostile_review_accept_base_commit -v -rs` fails when the step runs code from the pull request checkout or does not skip on a missing node'
+- id: req-omn22293-dod1
+  statement: Merged and proven on a pull request head under a simulated credit exhaustion
+  acceptance:
+  - id: DOD1
+    statement: 'DOD1: Merged on omniclaude dev and proven on a pull request head under a simulated credit exhaustion, the proof record naming the head and the receipt id -- falsifier: the required context ci is not green on the merged PR head, or the proof record lacks an observed head sha and time'
 evidence_requirements:
 - kind: tests
-  description: The sibling-pins hook passes and the focused omnimarket-importing test passes.
-  command: uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov --tb=line
+  description: The three workflow test files run at the pushed head, and the existing Hostile Reviewer workflow tests that pinned the review step's exit codes.
+  command: uv run pytest tests/ci/test_hostile_review_agent_accept.py tests/ci/test_hostile_review_accept_step_shape.py tests/ci/test_hostile_review_accept_base_commit.py tests/hooks/test_hostile_reviewer_workflow.py tests/workflows/test_hostile_reviewer_fleet_and_stderr.py -q --no-cov --tb=line
+- kind: manual
+  description: 'deploy: the workflow file at the checked-out commit calls the gate-accept node and carries the enforcement step; the merge base does not.'
+  command: grep -F "node_agent_review_gate_accept_effect.runtime_gate_accept" .github/workflows/hostile-reviewer.yml
 emergency_bypass:
   enabled: false
   justification: ''
@@ -31,4 +54,53 @@ dod_evidence:
     cwd: .
   - check_type: command
     check_value: grep -c dev-20261103020838-7b42a4c63edc pyproject.toml
+    cwd: .
+- id: dod-omn22293-ac1
+  description: The step-shape test pins the added step to one node call under if always() and the enforcement step's run text by digest, and fails when the review step fails the job on anything but a blocked verdict.
+  source: manual
+  binds_ac:
+  - AC1
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_hostile_review_accept_step_shape.py tests/ci/test_hostile_review_agent_accept.py -q --no-cov --tb=line
+    cwd: .
+- id: dod-omn22293-ac2
+  description: One workflow test per decision runs the workflow's own review, accept and enforcement steps and its gate job with a node fake, across lost-voter, passed and blocked outcomes and a receipt bound to another head, and asserts every required context.
+  source: manual
+  binds_ac:
+  - AC2
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_hostile_review_agent_accept.py -q --no-cov --tb=line
+    cwd: .
+- id: dod-omn22293-ac3
+  description: The base-commit tests run the step with a trusted clone that lacks the node, a node in the pull request checkout, and a node that does not run; the clone step is run against a stub git with an unanchored tag, a forged tag and no tag.
+  source: manual
+  binds_ac:
+  - AC3
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_hostile_review_accept_base_commit.py -q --no-cov --tb=line
+    cwd: .
+- id: dod-omn22293-deploy
+  description: 'Deploy probe: the workflow file at the checked-out commit calls the gate-accept node, which the merge base does not, and the workflow tests pass on the runner.'
+  source: manual
+  binds_ac:
+  - AC2
+  checks:
+  - check_type: command
+    check_value: grep -F "node_agent_review_gate_accept_effect.runtime_gate_accept" .github/workflows/hostile-reviewer.yml
+    cwd: .
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_hostile_review_agent_accept.py tests/ci/test_hostile_review_accept_step_shape.py tests/ci/test_hostile_review_accept_base_commit.py -q --no-cov --tb=line
+    cwd: .
+- id: dod-omn22293-integration-proof
+  description: The pushed head ran the three workflow test files on a lab host and exited 0, and the gate-accept node ran against a pull request head under a simulated credit exhaustion. The proof record (head sha, time, receipt id) is the pull request comment that starts with Lab. Hosted CI cannot reach the lab, so only the local Done gate runs this unbound check.
+  source: manual
+  binds_ac:
+  - DOD1
+  execution_scope: local_done_gate
+  checks:
+  - check_type: command
+    check_value: uv run onex lab-work run --repo OmniNode-ai/omniclaude --sha "$(git rev-parse HEAD)" --lane dod-integration-proof-22293 -- uv run pytest tests/ci/test_hostile_review_agent_accept.py tests/ci/test_hostile_review_accept_step_shape.py tests/ci/test_hostile_review_accept_base_commit.py -q -p no:randomly --no-cov
     cwd: .

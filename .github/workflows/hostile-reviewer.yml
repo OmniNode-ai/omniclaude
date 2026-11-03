@@ -251,7 +251,7 @@ jobs:
 
       - name: Clean stale dependency clones
         working-directory: ${{ github.workspace }}
-        run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat ../ci-overlay
+        run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat ../omnimarket ../ci-overlay
 
       # OMN-20910: the roster is read at the exact commit OMNI_CI_OVERLAY_REF
       # names. Unset or not a full lowercase sha, the gate fails closed naming
@@ -318,6 +318,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             config/onex/overlays/node_review_voters_overlay_compute
+            config/onex/overlays/agent_review_gate_accept
           sparse-checkout-cone-mode: false
 
       - name: Place the CI overlay outside the workspace
@@ -420,6 +421,53 @@ jobs:
             sleep $((attempt * 10))
           done
           exit 1
+
+      - name: Clone omnimarket (trusted revision for the gate-accept node, OMN-22293)
+        working-directory: ${{ github.workspace }}
+        run: |
+          # The gate-accept node lives in omnimarket. It is read at omnimarket's newest
+          # dev-<UTC>-<sha12> tag, resolved here at run time, never at a branch tip and
+          # never from the pull request's checkout, under the same trust rule as the
+          # omniintelligence clone above: a tag is taken only when its commit starts
+          # with the sha12 its name records AND is an ancestor of omnimarket's dev
+          # branch. A tag failing either test is skipped with a warning.
+          #
+          # Unlike the clones above this step NEVER fails the job. The node can only
+          # lift a lost-voters verdict, never create one, so a clone that cannot be
+          # resolved leaves ../omnimarket absent, the gate-accept step reports
+          # `decision=unchanged`, and the voters' verdict stands.
+          repo_url="https://github.com/OmniNode-ai/omnimarket.git"
+          for attempt in {1..3}; do
+            rm -rf ../omnimarket
+            if git init -q ../omnimarket \
+              && git -C ../omnimarket remote add origin "$repo_url" \
+              && tags="$(git -C ../omnimarket ls-remote --tags --refs origin 'refs/tags/dev-*' | sed 's#.*refs/tags/##' | grep -E '^dev-[0-9]{14}-[0-9a-f]{12}$' | sort -r)" \
+              && [[ -n "$tags" ]] \
+              && git -C ../omnimarket fetch -q --no-tags --filter=blob:none origin \
+                '+refs/heads/dev:refs/remotes/origin/dev' '+refs/tags/dev-*:refs/tags/dev-*'; then
+              for tag in $tags; do
+                head_sha="$(git -C ../omnimarket rev-parse "refs/tags/${tag}^{commit}")"
+                if [[ "$head_sha" != "${tag##*-}"* ]]; then
+                  echo "::warning::omnimarket tag ${tag} resolves to ${head_sha}, not the commit its name records; skipped"
+                  continue
+                fi
+                if ! git -C ../omnimarket merge-base --is-ancestor "$head_sha" refs/remotes/origin/dev; then
+                  echo "::warning::omnimarket tag ${tag} (${head_sha}) is not an ancestor of its dev branch; skipped"
+                  continue
+                fi
+                git -C ../omnimarket checkout -q --detach "$head_sha"
+                echo "omnimarket read at tag ${tag} (${head_sha})"
+                exit 0
+              done
+              echo "::warning::no omnimarket dev-<UTC>-<sha12> tag is anchored to its commit and reachable from dev; the gate-accept step will skip"
+              rm -rf ../omnimarket
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "::warning::no omnimarket dev-<UTC>-<sha12> tag could be resolved and fetched; the gate-accept step will skip"
+          rm -rf ../omnimarket
+          exit 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -725,7 +773,10 @@ jobs:
               echo "named_cause=${NAMED_CAUSE}"
             } >> "$GITHUB_OUTPUT"
             echo "::error title=Hostile Reviewer degraded quorum::fewer models succeeded than agreement requires; no verdict was established"
-            exit 1
+            # OMN-22293: this step no longer fails the job on a lost-voters verdict.
+            # The "Enforce hostile-review verdict" step below does, unless the
+            # gate-accept step found a verified agent review receipt for this head.
+            exit 0
           fi
 
           if [ "$REVIEW_EXIT" -ne 0 ]; then
@@ -764,7 +815,8 @@ jobs:
             if [ -n "$NAMED_CAUSE" ]; then
               echo "::error title=Hostile Reviewer infra_error::${NAMED_CAUSE}"
             fi
-            exit 1
+            # OMN-22293: deferred to the "Enforce hostile-review verdict" step, as above.
+            exit 0
           fi
 
           # Parse verdict from JSON using Python inline. Pass the JSON's path
@@ -934,11 +986,72 @@ jobs:
           PY
           echo "::endgroup::"
 
-          # Set exit code: blocked → 1, degraded_quorum → 1 (no verdict was
-          # established, and the absence of a verdict is not a passing one),
-          # everything else → 0 (pilot: degraded is informational).
+          # Set exit code: blocked → 1, everything else → 0 here. A degraded_quorum
+          # (no verdict was established, and the absence of a verdict is not a
+          # passing one) and an infra_error still fail the job, but in the
+          # "Enforce hostile-review verdict" step below, so that a verified agent
+          # review receipt for this head can stand in for lost voters (OMN-22293).
+          # A blocked verdict fails the job here, where no receipt can lift it.
           VERDICT=$(echo "$VERDICT_DATA" | grep '^verdict=' | cut -d= -f2)
-          if [ "$VERDICT" = "blocked" ] || [ "$VERDICT" = "degraded_quorum" ]; then
+          if [ "$VERDICT" = "blocked" ]; then
+            exit 1
+          fi
+
+      - name: Accept an agent review receipt in place of lost voters (OMN-22293)
+        # One node call and nothing else: the gate-accept node reads this attempt's
+        # voter result and the pull request's reviews, asks the verifier about each
+        # receipt, and writes `decision` (unchanged, pass_agent or refuse), `reason`
+        # and `receipt_id` to this step's outputs and its summary line to the step
+        # summary. Only `pass_agent` skips the enforcement step below; on any other
+        # decision that step runs exactly as before. `if: always()` so a skipped or
+        # failed review step cannot hide the decision.
+        #
+        # The node runs from the omnimarket clone that "Clone omnimarket" read at a
+        # trusted revision, never the checkout under review (the same rule as the
+        # reviewer's own clones), so a pull request cannot supply the code that accepts
+        # itself. A clone that does not carry the node yet, or a node that does not
+        # run, leaves the voters' verdict as it stands. A blocked verdict has already
+        # failed the review step, which this step cannot undo.
+        id: accept
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ONEX_SKILL_OVERLAY_ROOTS: ${{ github.workspace }}/../ci-overlay/config/onex/overlays
+        run: |
+          ACCEPT_SRC="$GITHUB_WORKSPACE/../omnimarket/src"
+          if [ ! -d "$ACCEPT_SRC/omnimarket/nodes/node_agent_review_gate_accept_effect" ]; then
+            echo "::notice::the trusted omnimarket revision carries no node_agent_review_gate_accept_effect yet; the voters' verdict stands"
+            echo "decision=unchanged" >> "$GITHUB_OUTPUT"
+          else
+            ACCEPT_EXIT=0
+            PYTHONPATH="$ACCEPT_SRC" uv run --no-sync --project "$GITHUB_WORKSPACE/../omniintelligence" python -m omnimarket.nodes.node_agent_review_gate_accept_effect.runtime_gate_accept \
+              --repository "${{ github.repository }}" \
+              --pull-request "${{ github.event.pull_request.number }}" \
+              --head-sha "${{ github.event.pull_request.head.sha }}" \
+              --voter-result-path "${{ runner.temp }}/hostile-review-result.json" \
+              --step-output-path "$GITHUB_OUTPUT" \
+              --step-summary-path "$GITHUB_STEP_SUMMARY" || ACCEPT_EXIT=$?
+            if [ "$ACCEPT_EXIT" -ne 0 ]; then
+              echo "::warning::gate accept did not run (exit $ACCEPT_EXIT); the voters' verdict stands"
+              echo "decision=unchanged" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Enforce hostile-review verdict (OMN-22293)
+        # This job used to fail inside the review step on a degraded_quorum or an
+        # infra_error verdict, which left no step a verified agent review receipt
+        # could lift. The two exits live here now, with the same fail-closed reading:
+        # anything that is not a full `passed` verdict (or the pilot's informational
+        # `degraded`, unchanged) fails the job, a blocked verdict included
+        # (idempotent: the review step already failed on it). The only change to
+        # when this runs is the condition below: the gate-accept step skips it when
+        # it found a verified agent review receipt for this head.
+        if: always() && steps.accept.outputs.decision != 'pass_agent'
+        run: |
+          VERDICT="${{ steps.review.outputs.verdict }}"
+          echo "Resolved verdict: ${VERDICT:-unknown}"
+          if [ "$VERDICT" != "passed" ] && [ "$VERDICT" != "degraded" ]; then
+            echo "::error::Hostile Reviewer verdict is '${VERDICT:-unknown}', not 'passed': the absence of a verdict is not a passing one. See the PR comment posted by this job and the verdict artifact for details."
             exit 1
           fi
 

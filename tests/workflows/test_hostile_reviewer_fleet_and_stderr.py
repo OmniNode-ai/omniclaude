@@ -567,7 +567,13 @@ def test_a_broken_model_config_names_its_cause_in_the_job_log(tmp_path: Path) ->
     """
     result, artifact, outputs = _run_review_script(tmp_path, stub=FAILING_STUB)
 
-    assert result.returncode == 1, "an unusable reviewer must fail the job"
+    # OMN-22293: this step records the verdict and defers the failure to the
+    # "Enforce hostile-review verdict" step, so an agent receipt can lift it. The
+    # job still fails closed on infra_error: tests/ci/test_hostile_review_agent_accept.py
+    # runs this step and the enforcement step together and asserts both contexts red.
+    assert result.returncode == 0, (
+        "the review step defers an infra_error to enforcement"
+    )
     assert "ONEX_CORE_041_INVALID_CONFIGURATION" in result.stdout, (
         "the named cause must be readable in the job log; it was the one line "
         "that `2>/dev/null` was throwing away"
@@ -706,7 +712,9 @@ def test_a_degraded_quorum_fails_the_gate_closed(tmp_path: Path) -> None:
     """
     result, artifact, outputs = _run_review_script(tmp_path, stub=DEGRADED_QUORUM_STUB)
 
-    assert result.returncode == 1, "no verdict is not a passing verdict"
+    # OMN-22293: the review step records the verdict and defers the failure to the
+    # "Enforce hostile-review verdict" step (see the infra_error test above).
+    assert result.returncode == 0, "the review step defers a degraded quorum"
     assert outputs["verdict"] == "degraded_quorum"
     assert outputs["blocking_count"] == "0"
 
