@@ -160,6 +160,10 @@ outcome, not a failure.** Everything the setup is for works without them.
 Phase 3 is the one that matters: it ends by running a real delegation and reading back the
 receipt. If phase 3 passes, the machine works.
 
+Phase 3 writes the proven-floor marker `.onex-workspace-floor.json` in your workspace, naming the
+builds that delegation ran on, so a bare `onex delegate` in a new terminal is not refused as below
+the floor. There is nothing to run by hand for it.
+
 ### Where `onex` finds its runtime config
 
 `onex delegate` reads its runtime config from a config owner. It tries these in order and
