@@ -10,8 +10,20 @@ from omniclaude.nodes.node_validate_skills_compute.models.model_skill_validation
 from omniclaude.nodes.node_validate_skills_compute.models.model_skill_violation import (
     ModelSkillViolation,
 )
+from omniclaude.nodes.node_validate_skills_compute.models.model_whole_file_hygiene import (
+    ModelScrubMap,
+    ModelScrubMapRow,
+    ModelWholeFileFinding,
+    ModelWholeFileHygieneRequest,
+    ModelWholeFileHygieneResult,
+)
 
 __all__ = [
+    "ModelScrubMap",
+    "ModelScrubMapRow",
+    "ModelWholeFileFinding",
+    "ModelWholeFileHygieneRequest",
+    "ModelWholeFileHygieneResult",
     "ModelSkillValidationReport",
     "ModelSkillValidationRequest",
     "ModelSkillViolation",
