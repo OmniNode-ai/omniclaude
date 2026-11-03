@@ -1,0 +1,57 @@
+schema_version: "1.0.0"
+ticket_id: OMN-22335
+title: "The omnimarket pin names a dev merge tag inside the stale-pin window, so the Pre-commit Suite passes on dev and on pull requests"
+summary: >
+  The Pre-commit Suite hook check-internal-sibling-pins (core rule stale_pin, at most 50 merges
+  and 72 hours behind the newest dev merge tag) failed on every open pull request on 2026-11-03
+  because dev pinned omnimarket at dev-20261102102425-ce12119225dc, 75 merges behind at the first
+  failed log and 107 merges behind when the hook was run on the lab at dev head ea35e6f65. The pin
+  moves to dev-20261103180853-8d27ccad4bc0 in pyproject.toml and uv.lock, and the one importer of
+  the module omnimarket moved (routing.local_byok_route to handlers.routing.local_byok_route)
+  follows. The hook stays check-only; nothing is widened, skipped or excluded.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22335-omnimarket-pin-in-window
+    statement: "The omnimarket pin is a dev merge tag the stale_pin rule accepts, and the recorded stale tag is no longer pinned."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the Pre-commit Suite hook check-internal-sibling-pins exits 0 at the head and exits 1 at dev head ea35e6f65 with a stale_pin finding for omnimarket -- falsifier: the /omni:lab-run receipt of pre-commit run check-internal-sibling-pins --all-files at the pushed head is exit 0, and at dev it is exit 1"
+      - id: "AC2"
+        statement: "AC2: pyproject.toml (dependency and tool.uv.sources) and uv.lock name one omnimarket tag that is not the tag recorded in the failed-log fixture -- falsifier: uv run pytest -o addopts='' tests/ci/test_omnimarket_pin_not_stale_omn22335.py -q fails at the merge base, where the recorded stale tag is still pinned"
+      - id: "AC3"
+        statement: "AC3: the hook stays check-only and the pin-shape test passes -- falsifier: uv run pytest -o addopts='' tests/ci/test_precommit_suite_job_omn19612.py -q passes and the diff adds no exclude, skip or file-rewriting entry to .pre-commit-config.yaml"
+evidence_requirements:
+  - kind: tests
+    description: "The pin regression test built from the recorded failed-log excerpt and the Pre-commit Suite shape test."
+    command: "uv run pytest -o addopts='' tests/ci/test_omnimarket_pin_not_stale_omn22335.py tests/ci/test_precommit_suite_job_omn19612.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22335-hook-passes
+    description: "check-internal-sibling-pins passes at the head on the lab."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run --frozen --with pre-commit==4.6.2 pre-commit run check-internal-sibling-pins --all-files"
+    binds_ac:
+      - "AC1"
+  - id: dod-omn22335-pin-regression
+    description: "The regression test built from the recorded failed-log excerpt passes at the head and fails at the merge base."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest -o addopts='' tests/ci/test_omnimarket_pin_not_stale_omn22335.py -q"
+    binds_ac:
+      - "AC2"
+  - id: dod-omn22335-check-only
+    description: "The Pre-commit Suite shape test passes."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest -o addopts='' tests/ci/test_precommit_suite_job_omn19612.py -q"
+    binds_ac:
+      - "AC3"
