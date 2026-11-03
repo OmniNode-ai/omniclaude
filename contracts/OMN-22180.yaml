@@ -1,0 +1,59 @@
+schema_version: "1.0.0"
+ticket_id: OMN-22180
+title: "Onboarding leaves the floor marker and the guide says so, with no reconcile step"
+summary: >
+  The onboarding script already stamps the workspace floor at the end of phase 3
+  (OMN-20381). This ticket pins that with a test that runs the script's phase 3
+  against a simulated fresh workspace and asks the wrapper's question of the
+  result, adds the recorded 2026-11-02 refusal as a fixture with a positive
+  control (a script that never stamps reproduces it), and makes the guide say
+  that phase 3 writes the marker and that no reconcile step is needed.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22180-onboarding-leaves-floor-marker
+    statement: A machine onboarding has just set up is not refused by a bare onex delegate for a missing floor marker, and the guide and script agree on who creates the marker.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: on a machine the onboarding has just completed, with no hand edits after it, `onex delegate` with no pin and no transport flag is not refused for a missing floor marker, and `<workspace>/.onex-workspace-floor.json` exists and names the commits the install proved -- falsifier: `uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q` runs the onboarding against a simulated fresh workspace and fails today when the marker is absent'
+      - id: AC2
+        statement: 'AC2: the onboarding guide and the script agree on who creates the marker: if the script creates it, the guide names no reconcile step; if the guide runs `onex-host-reconcile`, a test finds that command in the guide''s step list -- falsifier: the same pytest module reads the guide text and the script and asserts one of the two shapes, never neither'
+      - id: AC3
+        statement: 'AC3: a regression test built from the incident''s recorded data (the refusal text above, saved as a fixture under `tests/fixtures/onboarding_walk_2026_11_02/`) fails on the broken code and passes on the fix -- falsifier: `uv run pytest tests/skills -q -k walk_2026_11_02`'
+evidence_requirements:
+  - kind: tests
+    description: The floor marker module passes against the script and the guide.
+    command: uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn-22180-ac1
+    description: Phase 3 of the script, run against a simulated fresh workspace, leaves the floor marker naming the installed omnimarket commit.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q --no-cov -k "phase3 or stamp"
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC1
+  - id: dod-omn-22180-ac2
+    description: The guide names phase 3 as the writer of the marker and no reconcile step; the script stamps it once.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q --no-cov -k agree
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC2
+  - id: dod-omn-22180-ac3
+    description: The recorded refusal fixture is reproduced by a script that never stamps and absent from the real script.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/skills -q --no-cov -k walk_2026_11_02
+        cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+      - AC3
