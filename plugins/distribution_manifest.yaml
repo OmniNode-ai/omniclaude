@@ -573,6 +573,14 @@ components:
   path: plugins/onex/skills/lean_go_and_see/SKILL.md
   backing_nodes: []
   rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on node_work_ledger_append_effect, task T-P4 of OMN-21433 (no child ticket yet).
+- id: lean_line_board
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_line_board/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-22366, the hand-run form of the line board, the visual management of the lean family); replaced by its node-backed skill on node_factory_floor_effect's lines operation, OMN-22373.
 - id: lean_poka_yoke
   kind: skill
   exposure: beta
