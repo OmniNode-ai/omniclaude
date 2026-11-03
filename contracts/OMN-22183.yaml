@@ -19,7 +19,7 @@ requirements:
       - id: AC3
         statement: "AC3: plugins/onex/ONBOARDING.md states the rule the guard enforces, and a test reads both so they cannot drift -- falsifier: uv run pytest tests/skills/test_onboarding_detached_rule_omn22183.py -q"
       - id: AC4
-        statement: "AC4: a regression test built from the recorded refusal (fixture under tests/fixtures/onboarding_walk_2026_11_02/) fails on the old guide and passes on the fix -- falsifier: uv run pytest tests/skills -q -k walk_2026_11_02"
+        statement: "AC4: a regression test built from the recorded refusal (fixture under tests/fixtures/onboarding_walk_2026_11_02/) fails on the old guide and passes on the fix -- falsifier: uv run pytest tests/skills/test_onboarding_detached_rule_omn22183.py -q -k walk_2026_11_02"
 evidence_requirements:
   - kind: tests
     description: "The detached-rule tests pass against the guide"
@@ -42,4 +42,4 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/skills -q --no-cov -k walk_2026_11_02 -p no:randomly"
+        check_value: "uv run pytest tests/skills/test_onboarding_detached_rule_omn22183.py -q --no-cov -k walk_2026_11_02 -p no:randomly"
