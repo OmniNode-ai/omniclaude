@@ -1,0 +1,34 @@
+schema_version: 1.0.0
+ticket_id: OMN-22293
+title: The omniclaude Hostile Review job accepts a verified agent receipt, so credit exhaustion no longer holds every omniclaude head
+summary: The omniclaude pin on omnimarket moves to the newest dev merge tag so the internal-sibling-pins hook passes, then the Hostile Reviewer workflow gains the gate-accept step.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn22293-pin
+  statement: pyproject.toml and uv.lock pin omnimarket at the newest dev merge tag the internal-sibling-pins hook names, and the moved import paths in the focused test follow it.
+  acceptance:
+  - id: AC0
+    statement: 'AC0: pyproject.toml pins omnimarket at dev-20261103020838-7b42a4c63edc in both places and uv.lock records only that tag -- falsifier: pre-commit run check-internal-sibling-pins --all-files fails at the merge base with stale_pin, and uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov fails over the merge base once the new omnimarket moved the module'
+evidence_requirements:
+- kind: tests
+  description: The sibling-pins hook passes and the focused omnimarket-importing test passes.
+  command: uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov --tb=line
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn22293-pin
+  description: The focused test that imports omnimarket's moved routing module passes at the bumped pin.
+  source: manual
+  binds_ac:
+  - AC0
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/skills/test_lab_onboarding_byok_tier_omn21377.py -q --no-cov --tb=line
+    cwd: .
+  - check_type: command
+    check_value: grep -c dev-20261103020838-7b42a4c63edc pyproject.toml
+    cwd: .
