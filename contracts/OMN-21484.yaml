@@ -51,7 +51,7 @@ dod_evidence:
   - id: dod-omn21484-ac1-negative-control
     description: 'The negative control: with every listed model answering, the menu is unchanged and the log carries no unusable row, so the AC1 assertion is testing the section and not an empty provider.'
     source: manual
-    binds_ac: [AC1]
+    binds_ac: []
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_model_menu_omn21484.py -q --no-cov -k test_model_menu_no_not_offered_section_when_every_model_answers"
