@@ -1,0 +1,72 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22181
+title: "omniclaude: the onboarding disk minimum and the guide's recommended VM agree, measured against what the install uses"
+summary: >
+  The preflight demanded 20 GB free disk while the guide's recommended VM has 17 GB free on the
+  stock macOS image. The install was measured on a clean Tart VM from the stock image
+  (4 vCPU, 8 GB); the local-model path peaked at 5.12 GiB. plugins/onex/skills/_bin/onboarding_disk_floor.yaml
+  now declares the image, the VM, the measured use per path and the margin; M1_DISK_GB is 10 and the
+  guide's VM is the stock image as pulled (50 GB disk, 17 GB free).
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-measure
+    statement: The peak disk use per path is measured on a clean Tart VM and recorded on the ticket.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the peak disk the install uses on a clean VM, per path, is measured by df before and after each phase on a clean Tart VM and recorded in a comment on the ticket with the VM spec and image -- falsifier: the comment is missing a per-path figure or the df readings"
+  - id: req-agree
+    statement: The preflight minimum per path equals measured use plus a margin and the guide's VM leaves at least that free on the stock image.
+    acceptance:
+      - id: AC2
+        statement: "AC2: the preflight minimum for each path equals the measured use plus a stated margin, and the guide's recommended VM size leaves at least that much free on the stock image -- falsifier: the disk-floor test fails when the guide's VM leaves less than the minimum"
+      - id: AC4
+        statement: "AC4: a regression test built from the incident's recorded data fails on the broken code and passes on the fix -- falsifier: pytest -k walk_2026_11_02"
+  - id: req-preflight-clean-vm
+    statement: A preflight-only run of the branch script on the stock-image VM exits 0 for the local-model path with no override of the disk reading.
+    acceptance:
+      - id: AC3
+        statement: "AC3: a preflight-only run of the script on a 4 vCPU, 8 GB Tart VM from the stock image exits 0 for the local-model path with no test override of the disk reading -- falsifier: the run exits non-zero"
+evidence_requirements:
+  - kind: tests
+    description: "Disk-floor agreement and walk regression tests pass"
+    command: "uv run pytest tests/skills/test_lab_onboarding_script_disk_floor.py tests/skills/test_lab_onboarding_walk_2026_11_02_omn22181.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22181-ac1
+    description: "The measurement comment on OMN-22181 carries the VM spec, the image and the df readings per phase for the local-model, hosted-key and Ollama paths; the figures are the ones in onboarding_disk_floor.yaml."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: "grep -c 'peak_use_gib' plugins/onex/skills/_bin/onboarding_disk_floor.yaml"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22181-ac2
+    description: "The agreement test reads the script constants, the guide text and the declared figures and fails when they disagree. Fails at the merge base, which has no declared source."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_script_disk_floor.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22181-ac3
+    description: "The Lab comment on the PR holds the preflight-only receipt from a clean stock-image VM running the branch script with no ONBOARD_TEST_DISK_GB."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: command
+        check_value: "grep -q 'M1_DISK_GB=10' plugins/onex/skills/_bin/lab-onboarding.sh"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22181-ac4
+    description: "The walk 2026-11-02 readings (17 GB free of 41) pass preflight for the local-model path; the same test fails against the script with M1_DISK_GB=20."
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills -q --no-cov -k walk_2026_11_02"
+        cwd: "${OMNI_HOME}/omniclaude"
