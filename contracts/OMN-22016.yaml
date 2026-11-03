@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-22016
+title: "TC.11 The additive binding rows: the omniclaude-owned criterion (hook inventory)"
+summary: >
+  The additive binding rows (session_start, agent_spawn, per_prompt) are declared in omnimarket's
+  node_claude_code_hook_adapter_effect contract, which is where client_bindings lives. This contract
+  binds the omniclaude-owned criterion AC6 to a check that runs on the hosted runner: every additive
+  row has an additive_bindings entry in hook_inventory.yaml (owner, reason, review_by, restoration
+  with a re-enable ticket, canary), and the check fails on a row without an entry, an entry missing a
+  field, an entry that disagrees with its row and an entry past review_by. The omnimarket-owned
+  criteria are bound by omnimarket. AC7's omniclaude half (declaring the miss record in the hook
+  registry) is not in this change: the canonical-file-shape ratchet refuses growth in the registry
+  files it must touch. The check is a test, not a gate wired into hook_inventory.py, for the same reason.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22016-omniclaude-acs
+    statement: The omniclaude-owned TC.11 acceptance criterion has a falsifiable, bound check.
+    acceptance:
+      - id: AC6
+        statement: "AC6: the hook-inventory gate passes with each row's entry and fails on a fixture row missing `review_by` or its re-enable ticket -- falsifier: `uv run pytest -k hook_inventory_additive_rows`, one passing control and one failing case per missing field"
+evidence_requirements:
+  - kind: tests
+    description: The hook-inventory additive-row tests.
+    command: uv run pytest tests/hooks/test_hook_inventory_additive_rows_omn22016.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22016-ac6-inventory
+    binds_ac: [AC6]
+    description: >-
+      The check passes with the three additive entries (a passing control) and fails on an entry
+      missing review_by or reenable_ticket, on a row with no entry, on a mismatch and on a lapsed review date.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_additive_rows_omn22016.py -k hook_inventory_additive_rows -q --no-cov"
+
+  - id: dod-omn22016-deploy-source-validation
+    description: >-
+      Deployment source validation: the checked-out hook inventory declares the three additive
+      bindings and the check agrees with the installed omnimarket contract. Runs on the hosted runner
+      without an installed binding or sibling checkout.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_additive_rows_omn22016.py -q --no-cov"
