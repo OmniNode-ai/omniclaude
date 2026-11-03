@@ -10,9 +10,13 @@ summary: >
   row has an additive_bindings entry in hook_inventory.yaml (owner, reason, review_by, restoration
   with a re-enable ticket, canary), and the check fails on a row without an entry, an entry missing a
   field, an entry that disagrees with its row and an entry past review_by. The omnimarket-owned
-  criteria are bound by omnimarket. AC7's omniclaude half (declaring the miss record in the hook
-  registry) is not in this change: the canonical-file-shape ratchet refuses growth in the registry
-  files it must touch. The check is a test, not a gate wired into hook_inventory.py, for the same reason.
+  criteria are bound by omnimarket. AC7's omniclaude half is the additive_miss_record entry of the
+  same inventory: the journal record type (profile, reason and elapsed time, no field that could
+  hold package text) with parity to omnimarket's emit registry once the installed release declares
+  it. It is declared in the inventory and not in the generated EVENT_REGISTRY: the adapter node
+  journals the record, so the emit registry marks it node-owned and the registry projects nothing,
+  and the canonical-file-shape ratchet refuses growth in those files. The checks are tests, not
+  gates wired into hook_inventory.py, for the same ratchet reason.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -22,6 +26,11 @@ requirements:
     acceptance:
       - id: AC6
         statement: "AC6: the hook-inventory gate passes with each row's entry and fails on a fixture row missing `review_by` or its re-enable ticket -- falsifier: `uv run pytest -k hook_inventory_additive_rows`, one passing control and one failing case per missing field"
+  - id: req-omn22016-miss-record
+    statement: The miss record type is declared in the hook inventory and carries no package text.
+    acceptance:
+      - id: AC7
+        statement: "AC7: the miss record is a journal record type declared in the hook registry with parity in omnimarket's emit registry, `event_registry_drift` passing in both, and it carries the profile, the reason and the elapsed time only -- falsifier: `uv run pytest -k event_registry_drift` in omniclaude and in omnimarket, plus a record-shape test failing if package text appears in the record"
 evidence_requirements:
   - kind: tests
     description: The hook-inventory additive-row tests.
@@ -41,6 +50,19 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_hook_inventory_additive_rows_omn22016.py -k hook_inventory_additive_rows -q --no-cov"
+
+  - id: dod-omn22016-ac7-miss-record
+    binds_ac: [AC7]
+    description: >-
+      The omniclaude half. The inventory declares the additive.miss record with exactly profile,
+      reason and elapsed_ms, a declaration that adds a field able to hold package text fails the
+      shape check, and the declaration agrees with the installed emit registry when that release
+      carries the record. The omnimarket half is bound by omnimarket's contract.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_additive_rows_omn22016.py -k event_registry_drift -q --no-cov"
 
   - id: dod-omn22016-deploy-source-validation
     description: >-

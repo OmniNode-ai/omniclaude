@@ -9,6 +9,7 @@ import re
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -277,3 +278,86 @@ def test_hook_inventory_additive_rows_an_entry_whose_row_is_not_declared_yet_is_
     None
 ):
     assert _check(None).findings == ()
+
+
+# --- AC7: the miss record ------------------------------------------------------------------
+
+MISS_FIELDS = ("profile", "reason", "elapsed_ms")
+_TEXT_LIKE = re.compile(r"text|package|prompt|content|message|body", re.IGNORECASE)
+
+
+class _MissRecord(BaseModel):
+    """The inventory's declaration of the additive miss journal record."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    event_type: str = Field(min_length=1)
+    topic_parts: dict[str, str | int]
+    journalled_by: str = Field(min_length=1)
+    fields: tuple[str, ...]
+
+
+def _declared_miss_record(inventory: Path = INVENTORY) -> _MissRecord:
+    raw = yaml.safe_load(inventory.read_text(encoding="utf-8"))["additive_miss_record"]
+    return _MissRecord.model_validate(raw)
+
+
+def _carries_package_text(record: _MissRecord) -> list[str]:
+    """Fields beyond the three, and any field whose name could hold package text."""
+    return [
+        name
+        for name in record.fields
+        if name not in MISS_FIELDS or _TEXT_LIKE.search(name)
+    ] + [name for name in MISS_FIELDS if name not in record.fields]
+
+
+def _installed_emit_registry() -> dict[str, Any]:
+    """The installed omnimarket's emit registry events; empty when the release has none."""
+    spec = importlib.util.find_spec("omnimarket.nodes.node_emit_daemon")
+    if spec is None or not spec.submodule_search_locations:
+        return {}
+    path = Path(next(iter(spec.submodule_search_locations))) / "registries/topics.yaml"
+    if not path.is_file():
+        return {}
+    return dict(yaml.safe_load(path.read_text(encoding="utf-8")).get("events") or {})
+
+
+def test_event_registry_drift_miss_record_is_declared_with_the_profile_reason_and_elapsed_only() -> (
+    None
+):
+    record = _declared_miss_record()
+    assert (record.event_type, record.fields) == ("additive.miss", MISS_FIELDS)
+    assert _carries_package_text(record) == []
+
+
+@pytest.mark.parametrize("extra", ["text", "package_text", "additionalContext", "body"])
+def test_event_registry_drift_a_miss_record_that_could_hold_package_text_fails(
+    tmp_path, extra: str
+) -> None:
+    text = INVENTORY.read_text(encoding="utf-8")
+    path = tmp_path / "hook_inventory.yaml"
+    path.write_text(
+        text.replace(
+            'fields: ["profile", "reason", "elapsed_ms"]',
+            f'fields: ["profile", "reason", "elapsed_ms", "{extra}"]',
+        ),
+        encoding="utf-8",
+    )
+    assert _carries_package_text(_declared_miss_record(path)) == [extra]
+
+
+def test_event_registry_drift_the_miss_record_matches_the_installed_emit_registry() -> (
+    None
+):
+    """Parity with omnimarket's emit registry once the installed release declares the record."""
+    declared = _declared_miss_record()
+    entry = _installed_emit_registry().get(declared.event_type)
+    if entry is None:
+        return  # an older release declares nothing yet, so there is nothing to disagree with
+    assert entry["node_owned"] is True
+    parts = declared.topic_parts
+    topic = (
+        f"onex.{parts['kind']}.{parts['producer']}.{parts['name']}.v{parts['version']}"
+    )
+    assert [rule["topic"] for rule in entry["fan_out"]] == [topic]
+    assert tuple(entry["required_fields"]) == declared.fields

@@ -2028,6 +2028,22 @@ additive_bindings:
         hook prints nothing; run in omnimarket, tests/nodes/node_claude_code_hook_adapter_effect.
 
 
+# ---------------------------------------------------------------------------
+# additive_miss_record — the journal record an additive call that injected nothing writes.
+# ---------------------------------------------------------------------------
+# An additive row that wanted a package and got none (no reply inside its budget, a bus that
+# failed, a package that fails its hash or the size cap) journals one record in the hook emit
+# journal under this event type and injects nothing (OMN-22016, plan task TC.11, AC7). The adapter
+# node in omnimarket writes it, so the emit registry in omnimarket declares it node-owned and the
+# generated EVENT_REGISTRY below carries no projection of it; this entry is the hook side's
+# declaration and the record-shape contract: the profile, the reason and the elapsed time, and no
+# field that could hold package text.
+additive_miss_record:
+  event_type: "additive.miss"
+  topic_parts: {kind: "evt", producer: "omnimarket", name: "additive-pack-missed", version: 1}
+  journalled_by: "node_claude_code_hook_adapter_effect"
+  fields: ["profile", "reason", "elapsed_ms"]
+
 golden_path:
   - A hook is removed from hooks.json — validate_hook_inventory.py exits 1 with UNREGISTERED_EXPECTED naming the script, its ticket and its owner. This is the OMN-13244 direction, and before this file it produced no signal for 16 of 18 days.
   - A hook is added to hooks.json without a declaration here — exits 1 with UNDECLARED_REGISTRATION. An inventory that only catches removals rots by addition.
