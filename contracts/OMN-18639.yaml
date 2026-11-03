@@ -1,0 +1,52 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-18639
+title: "omniclaude reads omnimarket from the newest dev merge tag"
+summary: "Advance the omnimarket dev merge tag pin to dev-20261102235857-65611aac6f14 in pyproject.toml and uv.lock, because internal-sibling-pins refused the previous tag as 68 merges behind"
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn18639-omnimarket-dev-tag-pin"
+    statement: "omnimarket is read from dev merge tag dev-20261102235857-65611aac6f14 in the pyproject.toml dependency line, the pyproject.toml uv source and uv.lock alike, so internal-sibling-pins allows it."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: pyproject.toml names dev-20261102235857-65611aac6f14 twice and uv.lock names it three times -- falsifier: grep -c of that tag in pyproject.toml and uv.lock returns other counts, or the old tag dev-20261102102425-ce12119225dc is still present"
+      - id: "AC2"
+        statement: "AC2: uv lock --check exits 0 and pre-commit run check-internal-sibling-pins --all-files passes -- falsifier: the hook reports stale_pin for omnimarket, or the lock is out of date against pyproject.toml"
+evidence_requirements:
+  - kind: tests
+    description: "The pin names the new tag in both files, the lock is current and the sibling pin hook passes"
+    command: "uv lock --check"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn18639-omnimarket-tag-in-files"
+    description: "AC1: the new omnimarket dev merge tag is named in pyproject.toml and uv.lock"
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -c 'dev-20261102235857-65611aac6f14' pyproject.toml uv.lock"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn18639-old-tag-gone"
+    description: "AC1: the previous omnimarket dev merge tag is named in neither file"
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "! grep -q 'dev-20261102102425-ce12119225dc' pyproject.toml uv.lock"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
+  - id: "dod-omn18639-lock-current-and-hook-passes"
+    description: "AC2: the lock is current and internal-sibling-pins passes"
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "uv lock --check"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: "command"
+        check_value: "pre-commit run check-internal-sibling-pins --all-files"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC2"]
