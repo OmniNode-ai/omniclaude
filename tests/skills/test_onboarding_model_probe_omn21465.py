@@ -202,9 +202,7 @@ def test_a_listed_model_that_404s_on_completion_is_not_offered(tmp_path: Path) -
     # OMN-21484: the unusable models are recorded with the provider's reason, but
     # they are no longer printed on the menu, where they could not be picked.
     assert "Not offered" not in menu
-    assert (
-        "gpt-4.1-nano: HTTP 404: The model `gpt-4.1-nano` has been deprecated" in out
-    )
+    assert "gpt-4.1-nano: HTTP 404: The model `gpt-4.1-nano` has been deprecated" in out
     assert "gpt-4o-2024-05-13: HTTP 404: The model does not exist" in out
     assert set(served["auth"]) == {
         f"Bearer {KEY}"
