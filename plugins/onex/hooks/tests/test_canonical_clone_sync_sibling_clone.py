@@ -15,6 +15,8 @@ repository, so the layout is what the tests record, not the name.
 
 from __future__ import annotations
 
+import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -113,3 +115,66 @@ def test_sibling_clone_sync_does_not_pick_up_a_clone_beside_the_root(
     results = ccs.run_sync(reg.env(), None, "manual", None)
     assert all(Path(r.clone) != beside for r in results)
     assert {Path(r.clone) for r in results} == {clone}
+
+
+@pytest.fixture
+def locked_child(reg: Registry) -> Iterator[Path]:
+    """A directory beside the registry root whose ``.git`` cannot be statted.
+
+    Mode 000 reproduces on any non-root account what a root-owned ``0700``
+    installer directory does to a home directory scan (OMN-17427): the stat of
+    ``<child>/.git`` raises ``PermissionError``."""
+    if os.geteuid() == 0:
+        pytest.skip("root reads a mode 000 directory")
+    child = reg.home.parent / "locked_installer"
+    child.mkdir()
+    child.chmod(0o000)
+    try:
+        yield child
+    finally:
+        child.chmod(0o700)
+
+
+def test_unreadable_directory_beside_the_root_does_not_abort_the_refresh(
+    reg: Registry, locked_child: Path
+) -> None:
+    clone = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
+    results = ccs.run_refresh(reg.env(), _BESIDE_SLUG, None, cwd=reg.tmp)
+    assert locked_child.exists()
+    assert [(Path(r.clone), r.result) for r in results] == [(clone, ccs.UP_TO_DATE)]
+
+
+def test_unreadable_directory_in_a_declared_root_does_not_abort_discovery(
+    reg: Registry, locked_child: Path
+) -> None:
+    clone = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
+    assert ccs.discover_clones([reg.home.parent]) == [clone]
+
+
+def test_home_directory_is_never_listed_for_sibling_clones(reg: Registry) -> None:
+    """A registry root directly under the account's home: the home is not a root to list."""
+    listed = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
+    env = reg.env(HOME=str(reg.home.parent))
+    assert ccs.sibling_clones(env) == []
+    results = ccs.run_refresh(env, _BESIDE_SLUG, None, cwd=reg.tmp)
+    assert [r.result for r in results] == [ccs.NO_CLONE]
+    assert listed.is_dir()
+
+
+def test_home_directory_layout_reads_the_declared_clone_and_never_the_home(
+    reg: Registry, locked_child: Path
+) -> None:
+    clone = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
+    target = reg.advance(_BESIDE, owner="OmniNode-ai", branch="main")
+    env = reg.env(HOME=str(reg.home.parent), BESIDE_INTERNAL_HOME=str(clone))
+    assert ccs.sibling_clones(env) == [clone]
+    results = ccs.run_refresh(env, _BESIDE_SLUG, None, cwd=reg.tmp)
+    assert [(Path(r.clone), r.result) for r in results] == [(clone, ccs.REFRESHED)]
+    assert _origin(clone, "main") == target
+
+
+def test_non_home_parent_is_still_listed_for_sibling_clones(reg: Registry) -> None:
+    clone = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
+    home = reg.tmp / "account_home"
+    home.mkdir()
+    assert ccs.sibling_clones(reg.env(HOME=str(home))) == [clone]
