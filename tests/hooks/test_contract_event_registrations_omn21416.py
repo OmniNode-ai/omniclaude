@@ -192,7 +192,12 @@ def _generator() -> Any:
 
 
 def _daemon_events_with_both() -> dict[str, Any]:
-    """The pinned omnimarket emit registry plus the two entries omnimarket adds."""
+    """The pinned omnimarket emit registry plus the entries it still lacks.
+
+    omnimarket#4755 (OMN-21320) declared ``delegation.run_step`` at the pin, so a
+    pinned entry is kept as published, not overwritten; ``delegation.usage_call``
+    is added.
+    """
     registry = (
         Path(omnimarket.__file__).parent
         / "nodes"
@@ -201,26 +206,25 @@ def _daemon_events_with_both() -> dict[str, Any]:
         / "topics.yaml"
     )
     events = dict(yaml.safe_load(registry.read_text())["events"])
-    assert USAGE_CALL not in events and RUN_STEP not in events, (
-        "pin already carries them"
-    )
+    assert USAGE_CALL not in events, "pin already carries delegation.usage_call"
     events[USAGE_CALL] = {
         "fan_out": [{"topic": "onex.evt.omnimarket.delegation-usage-call.v1"}],
         "partition_key_field": "tenant_id",
         "required_fields": ["call_id", "model_name", "tenant_id", "timestamp"],
     }
-    events[RUN_STEP] = {
-        "fan_out": [{"topic": "onex.evt.omnimarket.delegation-run-step.v1"}],
-        "partition_key_field": "correlation_id",
-        "required_fields": [
-            "tenant_id",
-            "correlation_id",
-            "step_sequence",
-            "step_kind",
-            "started_at",
-            "outcome",
-        ],
-    }
+    if RUN_STEP not in events:
+        events[RUN_STEP] = {
+            "fan_out": [{"topic": "onex.evt.omnimarket.delegation-run-step.v1"}],
+            "partition_key_field": "correlation_id",
+            "required_fields": [
+                "tenant_id",
+                "correlation_id",
+                "step_sequence",
+                "step_kind",
+                "started_at",
+                "outcome",
+            ],
+        }
     return events
 
 
