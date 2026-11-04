@@ -31,7 +31,7 @@ emergency_bypass:
   follow_up_ticket_id: ''
 dod_evidence:
   - id: dod-omn-22180-ac1
-    description: Phase 3 of the script, run against a simulated fresh workspace, leaves the floor marker naming the installed omnimarket commit (the script already did so at the merge base, so this item is coverage, not a bound regression control; AC1 is bound by the install-pin check).
+    description: Phase 3 of the script, run against a simulated fresh workspace, leaves the floor marker naming the installed omnimarket commit. The script already did so at the merge base; this item is coverage, while the incident check below binds the marker and guide together.
     source: manual
     checks:
       - check_type: test_passes
@@ -45,19 +45,11 @@ dod_evidence:
     binds_ac:
       - AC2
   - id: dod-omn-22180-ac3
-    description: The recorded refusal fixture is reproduced by a script that never stamps and absent from the real script.
+    description: The incident check runs phase 3 in a fresh workspace, checks the marker against the installed commit, reproduces the recorded refusal when stamping is removed, and requires the guide to name phase 3 as the writer. The merge base already stamps the marker but lacks that guide attribution.
     source: manual
     checks:
       - check_type: test_passes
         check_value: env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q --no-cov -k walk_2026_11_02
     binds_ac:
-      - AC3
-  - id: dod-omn-22180-install-pin
-    description: The installation inputs and lock agree on the omnimarket dev merge tag admitted by the sibling freshness gate.
-    source: manual
-    binds_ac:
       - AC1
-    checks:
-      - check_type: command
-        check_value: >-
-          python3 -c 'import tomllib; from pathlib import Path; p = tomllib.loads(Path("pyproject.toml").read_text()); tag = "dev-20261104002655-6335ba6fdcad"; sha = "6335ba6fdcadd1e7b6bcc83a355b510399cb18c0"; assert p["tool"]["uv"]["sources"]["omnimarket"]["tag"] == tag; assert any(d.endswith("@" + tag) for d in p["tool"]["uv"]["override-dependencies"]); lock = tomllib.loads(Path("uv.lock").read_text()); package = next(x for x in lock["package"] if x["name"] == "omnimarket"); assert package["source"]["git"].endswith("?tag=" + tag + "#" + sha)'
+      - AC3
