@@ -56,5 +56,5 @@ dod_evidence:
     binds_ac: [AC4]
     checks:
       - check_type: command
-        check_value: "! grep -qE '/U[s]ers/|/Vo[l]umes/' plugins/onex/skills/lean_line_board/SKILL.md"
+        check_value: "test -f plugins/onex/skills/lean_line_board/SKILL.md && ! grep -qE '/U[s]ers/|/Vo[l]umes/' plugins/onex/skills/lean_line_board/SKILL.md"
         cwd: "${OMNI_HOME}/omniclaude"
