@@ -11,6 +11,16 @@ summary: >
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
+requirements:
+  - id: req-refresh
+    statement: The installer finds and refreshes every gh shim copy on PATH that lacks the CI pass-through, and leaves the guard unchanged.
+    acceptance:
+      - id: AC1
+        statement: "AC1: with GITHUB_ACTIONS=true on a refreshed runner PATH the recorded deploy-gate call reaches the real gh and exits 0 -- falsifier: the call prints REFUSED (OMN-19856)"
+      - id: AC2
+        statement: "AC2: without GITHUB_ACTIONS, and with false, 1 or TRUE, the same read is still refused -- falsifier: any of those reads reaches the real gh"
+      - id: AC3
+        statement: "AC3: the regression test reads its call, PR number and refusal sentence from the recorded job-log fixture -- falsifier: the test fails on the old installer"
 evidence_requirements:
   - kind: tests
     description: "ci_runner_shim regression test built from the recorded job log fails on the old installer and passes on the fix"
@@ -23,20 +33,23 @@ dod_evidence:
   - id: dod-ac1-runner-gate-step-reads-body
     description: "AC1: with GITHUB_ACTIONS=true on a refreshed runner PATH the recorded deploy-gate call gh pr view 2013 --json body -q .body reaches the real gh and exits 0; the live per-host run is recorded on the PR Lab line"
     source: manual
+    binds_ac: [AC1]
     checks:
-      - check_type: command
+      - check_type: test_passes
         check_value: "uv run pytest tests/scripts/test_ci_runner_shim_omn22447.py -k install_makes_the_recorded_gate_step_read_its_body -q -p no:cacheprovider"
   - id: dod-ac2-guard-not-weakened
     description: "AC2: without GITHUB_ACTIONS, and with false, 1, TRUE or any other value, the same read is still refused"
     source: manual
+    binds_ac: [AC2]
     checks:
       - check_type: command
         check_value: "uv run pytest tests/scripts/test_gh_user_shim.py tests/scripts/test_gh_pr_state_read_guard.py tests/scripts/test_ci_runner_shim_omn22447.py -q -p no:cacheprovider"
   - id: dod-ac3-regression-from-job-log
     description: "AC3: the regression test reads its call, PR number and refusal sentence from tests/scripts/fixtures/ci_runner_shim_job_126037381765.txt"
     source: manual
+    binds_ac: [AC3]
     checks:
-      - check_type: command
+      - check_type: test_passes
         check_value: "uv run pytest tests/scripts/ -k ci_runner_shim -q -p no:cacheprovider"
       - check_type: command
         check_value: "test -s tests/scripts/fixtures/ci_runner_shim_job_126037381765.txt"
