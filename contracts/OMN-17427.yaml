@@ -249,6 +249,11 @@ requirements:
     acceptance:
       - id: AC59
         statement: "pyproject.toml names omnimarket at dev-20261102235857-65611aac6f14 in both dependencies and [tool.uv.sources] -- falsifier: rg -c 'dev-20261102235857-65611aac6f14' pyproject.toml prints 2 and fails over the merge base, which pins dev-20261102102425-ce12119225dc"
+  - id: req-trivy-installs-without-setup-trivy
+    statement: No workflow installs Trivy through aquasecurity/setup-trivy, whose get.trivy.dev host is NXDOMAIN, so the image scan runs a binary the job itself fetched.
+    acceptance:
+      - id: AC60
+        statement: "every aquasecurity/trivy-action step in ci.yml and security-scan.yml carries skip-setup-trivy: true, each scanning job installs Trivy from github.com/aquasecurity/trivy/releases/download/, and no executable workflow line names aquasecurity/setup-trivy or get.trivy.dev -- falsifier: uv run pytest tests/ci/test_trivy_install_skips_setup_trivy_omn17427.py -q --no-cov fails over the merge base, whose four trivy-action steps carry no skip-setup-trivy and whose jobs install nothing"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1206,3 +1211,12 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "test \"$(grep -c 'dev-20261102235857-65611aac6f14' pyproject.toml)\" = 2 && grep -q '65611aac6f14' uv.lock"
+  - id: dod-trivy-installs-without-setup-trivy
+    description: "Every trivy-action step skips setup-trivy, each scanning job fetches Trivy from the GitHub release archive, and no executable workflow line reaches get.trivy.dev. Two of the three assertions fail at the merge base."
+    source: manual
+    status: verified
+    binds_ac:
+      - AC60
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/ci/test_trivy_install_skips_setup_trivy_omn17427.py -q --no-cov"

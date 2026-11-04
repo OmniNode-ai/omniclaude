@@ -1957,6 +1957,93 @@ disabled_hooks:
         Decided with skip_token_surface_guard.sh; register or retire the two
         together.
 
+# ---------------------------------------------------------------------------
+# additive_bindings — rows of the adapter contract that register no script.
+# ---------------------------------------------------------------------------
+# An additive binding row (client_bindings.claude_code, kind additive, in omnimarket's
+# node_claude_code_hook_adapter_effect contract) is installed into the user's settings as
+# `onex-claude-code-hook --binding <name>`, never into hooks.json, so the script parity above
+# cannot see it. This section is its inventory (OMN-22016, plan task TC.11). Every additive
+# row needs an entry with the typed fields a deliberate disable carries (owner, reason,
+# review_by, restoration with a re-enable ticket) plus the canary that falsifies it. The gate
+# fails on a row with no entry, an entry that disagrees with its row on event, profile or
+# latency budget, an entry past its review_by, and (at load) an entry missing any field.
+# An entry whose row the installed omnimarket does not yet declare is not a finding.
+additive_bindings:
+  - binding: "session_start"
+    event: "SessionStart"
+    profile: "session_start"
+    latency_budget_ms: 5000
+    owner: "omniclaude hooks lane"
+    reason: >
+      Additive SessionStart row, installed on a lab host's session only until promotion. The server-side enabled list ships empty, so the row is answered none and prints nothing; it acts only when the session starts inside the workspace registry or an internal-library clone.
+    review_by: "2026-12-15"
+    restoration:
+      kind: "promote"
+      reenable_ticket: "OMN-21134"
+      action: >
+        Add session_start to enabled_additive_profiles in node_context_pack_orchestrator's contract through a data PR that cites the measured latency (TC.12), then install the row beyond the lab host.
+    canary:
+      command: "uv run pytest -k additive_list_empty"
+      expect: >
+        With the server-side enabled list empty the session_start call is answered none and the
+        hook prints nothing; run in omnimarket, tests/nodes/node_claude_code_hook_adapter_effect.
+
+  - binding: "agent_spawn"
+    event: "SubagentStart"
+    profile: "agent_spawn"
+    latency_budget_ms: 3000
+    owner: "omniclaude hooks lane"
+    reason: >
+      Additive SubagentStart row, installed on a lab host's session only until promotion. The server-side enabled list ships empty, so the row is answered none and prints nothing.
+    review_by: "2026-12-15"
+    restoration:
+      kind: "promote"
+      reenable_ticket: "OMN-21134"
+      action: >
+        Add agent_spawn to enabled_additive_profiles in node_context_pack_orchestrator's contract through a data PR that cites the measured latency (TC.12), then install the row beyond the lab host.
+    canary:
+      command: "uv run pytest -k additive_list_empty"
+      expect: >
+        With the server-side enabled list empty the agent_spawn call is answered none and the
+        hook prints nothing; run in omnimarket, tests/nodes/node_claude_code_hook_adapter_effect.
+
+  - binding: "per_prompt"
+    event: "UserPromptSubmit"
+    profile: "per_prompt"
+    latency_budget_ms: 500
+    owner: "omniclaude hooks lane"
+    reason: >
+      Additive UserPromptSubmit row, promoted last and installed on a lab host's session only until then. It stays out of the server-side enabled list until TC.13 promotes it, and the list loader refuses it before that.
+    review_by: "2026-12-15"
+    restoration:
+      kind: "promote"
+      reenable_ticket: "OMN-21135"
+      action: >
+        TC.13 adds per_prompt to enabled_additive_profiles and to the loader's promotable set after the measured p95 is within 500 ms, then installs the row beyond the lab host.
+    canary:
+      command: "uv run pytest -k additive_list_empty"
+      expect: >
+        With the server-side enabled list empty the per_prompt call is answered none and the
+        hook prints nothing; run in omnimarket, tests/nodes/node_claude_code_hook_adapter_effect.
+
+
+# ---------------------------------------------------------------------------
+# additive_miss_record — the journal record an additive call that injected nothing writes.
+# ---------------------------------------------------------------------------
+# An additive row that wanted a package and got none (no reply inside its budget, a bus that
+# failed, a package that fails its hash or the size cap) journals one record in the hook emit
+# journal under this event type and injects nothing (OMN-22016, plan task TC.11, AC7). The adapter
+# node in omnimarket writes it, so the emit registry in omnimarket declares it node-owned and the
+# generated EVENT_REGISTRY below carries no projection of it; this entry is the hook side's
+# declaration and the record-shape contract: the profile, the reason and the elapsed time, and no
+# field that could hold package text.
+additive_miss_record:
+  event_type: "additive.miss"
+  topic_parts: {kind: "evt", producer: "omnimarket", name: "additive-pack-missed", version: 1}
+  journalled_by: "node_claude_code_hook_adapter_effect"
+  fields: ["profile", "reason", "elapsed_ms"]
+
 golden_path:
   - A hook is removed from hooks.json — validate_hook_inventory.py exits 1 with UNREGISTERED_EXPECTED naming the script, its ticket and its owner. This is the OMN-13244 direction, and before this file it produced no signal for 16 of 18 days.
   - A hook is added to hooks.json without a declaration here — exits 1 with UNDECLARED_REGISTRATION. An inventory that only catches removals rots by addition.
