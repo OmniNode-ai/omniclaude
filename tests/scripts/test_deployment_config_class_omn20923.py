@@ -192,6 +192,24 @@ def test_residue_a_change_does_not_touch_is_reported_not_failed(
     assert "deployment-config (NEVER-EXEMPTABLE): 2" in out
 
 
+def test_residue_in_a_changed_file_the_change_did_not_add_is_not_failed(
+    tmp_path: Path,
+) -> None:
+    root, base = _repo(tmp_path, {"config/app.yaml": f"a: 1\nhost: {LAN_HOST}\n"})
+    _commit(root, {"config/app.yaml": f"a: 2\nhost: {LAN_HOST}\n"})
+    code, out = _cli(
+        root,
+        "--mode",
+        "enforce",
+        "--enforce-scope",
+        "added-lines",
+        "--diff-base",
+        base,
+    )
+    assert code == 0, out
+    assert "0 finding(s) fail the run" in out
+
+
 def test_an_added_lab_address_in_a_config_file_is_refused(tmp_path: Path) -> None:
     root, base = _repo(tmp_path, {"config/app.yaml": "a: 1\n"})
     _commit(root, {"config/app.yaml": f"a: 1\nhost: {LAN_HOST}\n"})

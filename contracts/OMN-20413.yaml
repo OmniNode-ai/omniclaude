@@ -34,3 +34,9 @@ dod_evidence:
         check_value: uv run pytest tests/ci/test_inherited_container_checks_omn20413.py -q --no-cov
     binds_ac:
       - AC1
+  - id: dod-omn20413-deployment-config-added-lines
+    description: The public-repo-hygiene deployment-config run under added-lines scope fails a finding only on a line the change adds, so residue in a touched workflow is reported and not failed, and an added lab address or overlay file is still refused.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/scripts/test_deployment_config_class_omn20923.py tests/scripts/test_deployment_config_workflow_shapes_omn20923.py tests/scripts/test_deployment_config_ratchet_omn20923.py -q --no-cov

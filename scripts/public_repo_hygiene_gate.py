@@ -2443,7 +2443,8 @@ def run_deployment_config(
     only when the caller holds one (``vocab``).
 
     Returns ``(exit_code, findings, failing)``. In ``enforce`` mode every
-    finding fails, or, under ``added-lines``, every finding in a changed file.
+    finding fails, or, under ``added-lines``, every finding on a line the change
+    adds (old residue in a touched file is reported, not failed).
     ``added-lines`` with no diff source is refused rather than enforcing
     nothing or the whole residue.
     """
@@ -2480,10 +2481,7 @@ def run_deployment_config(
     if mode != "enforce":
         failing: list[Finding] = []
     elif enforce_scope == ADDED_LINES_SCOPE and added_lines is not None:
-        changed = (
-            set(added_lines.lines) | added_lines.whole_files | added_lines.added_files
-        )
-        failing = [f for f in findings if f.path in changed]
+        failing = [f for f in findings if added_lines.covers(f)]
     else:
         failing = list(findings)
     return (1 if failing else 0), findings, failing
