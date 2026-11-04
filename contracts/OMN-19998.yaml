@@ -77,6 +77,11 @@ requirements:
     acceptance:
       - id: "AC12"
         statement: "AC12: handle() and the CLI return ALLOWED and exit 0 for a PyPI release of omnibase-core published 20261101145451 beside the newer dev merge tag dev-20261101233629-173cd14208fe, with no repository needing its tags read, and still REFUSE a git release tag, a release off PyPI and a PyPI release with no upload-time behind that tag, including beside an accepted release -- falsifier: uv run pytest tests/unit/handlers/test_handler_internal_sibling_pins_omn19998.py tests/unit/handlers/test_handler_internal_sibling_pins_omn21282.py -q --no-cov fails at the merge base, where the three acceptance tests and the mixed-lock test fail with omnibase-core REFUSED"
+  - id: "req-omn19998-omnimarket-pin-newest-dev-tag"
+    statement: "The omnimarket pin names the newest dev merge tag at the time of the change, so the first-party-ref and Pre-commit Suite sibling-pin staleness check passes on dev again."
+    acceptance:
+      - id: "AC13"
+        statement: "AC13: pyproject.toml names omnimarket at dev-20261104010134-0b7b2bde8a56 in both dependencies and [tool.uv.sources], and uv.lock resolves it to 0b7b2bde8a56 -- falsifier: test \"$(grep -c 'dev-20261104010134' pyproject.toml)\" = 2 fails over the merge base, which pins dev-20261102235857-65611aac6f14"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -204,3 +209,11 @@ dod_evidence:
         check_value: "uv run pytest tests/unit/handlers/test_handler_internal_sibling_pins_omn19998.py tests/unit/handlers/test_handler_internal_sibling_pins_omn21282.py tests/ci/test_core_dev_tag_pin_omn18595.py -q --no-cov"
     binds_ac:
       - "AC12"
+  - id: "dod-omn19998-omnimarket-pin-newest-dev-tag"
+    description: "pyproject.toml names the newest omnimarket dev merge tag in both pin homes and uv.lock resolves it; at the merge base the grep counts zero."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test \"$(grep -c 'dev-20261104010134' pyproject.toml)\" = 2 && grep -q 'tag=dev-20261104010134' uv.lock"
+    binds_ac:
+      - "AC13"
