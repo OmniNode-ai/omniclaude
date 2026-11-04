@@ -77,7 +77,7 @@ set -uo pipefail
 M1_MACOS_MAJOR=14
 M1_CPUS=4
 M1_RAM_GB=8
-M1_DISK_GB=20
+M1_DISK_GB=10             # local-model and hosted-key paths: measured peak use + margin, onboarding_disk_floor.yaml
 M2_CPUS=8
 M2_RAM_GB=16
 # Disk, measured 2026-09-30 on a Mac running the stack: images 4.7 GB (the runtime
@@ -90,7 +90,7 @@ HOST_RESERVE_GB=6         # Docker Desktop never leaves the host less than this
 BOOT_FREE_MEM_GB=4        # available memory required at the moment the stack boots
 BOOT_FREE_DISK_GB=15      # free disk required at the moment the stack boots
 MODE2_PORTS="5436 19092 16379 8085 8086"
-VM_SPEC="a macOS 14 (or newer) VM with 4 vCPU, 8 GB RAM and 40 GB disk, on a host with that much to spare (Tart or UTM on an Apple-silicon Mac, or a hosted Mac such as EC2 Mac)"
+VM_SPEC="a macOS 14 (or newer) VM with 4 vCPU, 8 GB RAM and 50 GB disk (the stock Tart macOS image as pulled, 17 GB free: do not resize it), on a host with that much to spare (Tart or UTM on an Apple-silicon Mac, or a hosted Mac such as EC2 Mac)"
 
 REPOS="omnibase_compat omnibase_core omnibase_spi omnibase_infra omnimarket omniclaude omnidash"
 GITHUB_ORG_URL="https://github.com/OmniNode-ai"
