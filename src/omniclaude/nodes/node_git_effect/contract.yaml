@@ -270,6 +270,13 @@ handler_routing:
         module: omniclaude.nodes.node_git_effect.handlers.handler_git_admission_transport
         name: HandlerGitAdmissionTransport
       output_events: [ModelGitResult]
+    - operation: refusal_advice
+      event_model:
+        module: omniclaude.nodes.node_git_effect.models.model_git_refusal_advice_request
+        name: ModelGitRefusalAdviceRequest
+      handler:
+        module: omniclaude.nodes.node_git_effect.handlers.handler_git_refusal_advice
+        name: HandlerGitRefusalAdvice
   default_backend: subprocess
   backends:
     - backend: subprocess
