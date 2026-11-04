@@ -1,0 +1,16 @@
+{
+  "walk": "clean macOS VM walk of 2026-11-02, pinned script ee8797af, --preflight-only at 21:02:25Z",
+  "pinned_script": "ee8797af",
+  "image": "ghcr.io/cirruslabs/macos-tahoe-vanilla",
+  "vm": {"vcpu": 4, "ram_gb": 8, "recommended_disk_gb": 40},
+  "refusal_recorded": "17 GB free disk (needs 20), exit 3",
+  "readings": {
+    "macos": "26.6.2",
+    "cpus": 4,
+    "ram_gb": 8,
+    "vm": true,
+    "disk_total_gb": 41,
+    "disk_free_gb": 17
+  },
+  "below_minimum_disk_free_gb": 9
+}
