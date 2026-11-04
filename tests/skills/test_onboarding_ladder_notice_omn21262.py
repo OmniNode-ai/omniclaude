@@ -59,7 +59,7 @@ def _ask_models(answer: str) -> str:
         + _function("labels", SCRIPT)
         + _function("is_stored", SCRIPT)
         + "LOG=/dev/null\n"
-        'say() { printf \'%s\\n\' "$*"; }\n'
+        "say() { printf '%s\\n' \"$*\"; }\n"
         "ALL_MODELS='gemini openrouter openai ollama local openai_compatible'\n"
         "STORED=''; MODELS=''\n"
         "ollama_overrides_ours() { return 1; }\n"
@@ -108,7 +108,9 @@ def test_onboarding_md_and_the_participant_email_carry_the_same_text() -> None:
     text = ONBOARDING_MD.read_text()
 
     email_heading = "### The participant email (template)"
-    assert email_heading in text, "the participant email template is not in ONBOARDING.md"
+    assert email_heading in text, (
+        "the participant email template is not in ONBOARDING.md"
+    )
     prose, email = (_flat(part) for part in text.split(email_heading, 1))
 
     for sentence in NOTICE:
