@@ -379,17 +379,17 @@ _resolve_lane() {
   _lane="parent:$(_clean "$parent")"; _lane_src="parent"
 }
 
-# Sets _cls, _method and _repo, _endpoint for the argv in "$@".
+# Sets _cls, _method and _repo, _endpoint, _repo_flag (the raw --repo value) for the argv in "$@".
 _classify() {
-  _cls=""; _method=""; _repo=""; _endpoint=""
-  local group="${1:-}" sub="${2:-}" a prev="" repo_flag="" has_field=0 is_mutation=0
+  _cls=""; _method=""; _repo=""; _endpoint=""; _repo_flag=""
+  local group="${1:-}" sub="${2:-}" a prev="" has_field=0 is_mutation=0
   for a in "$@"; do
     case "$prev" in
-      -R|--repo) repo_flag="$a" ;;
+      -R|--repo) _repo_flag="$a" ;;
       -X|--method) _method="$a" ;;
     esac
     case "$a" in
-      --repo=*) repo_flag="${a#--repo=}" ;;
+      --repo=*) _repo_flag="${a#--repo=}" ;;
       --method=*) _method="${a#--method=}" ;;
       -f|-F|--field|--raw-field|--input|--field=*|--raw-field=*|--input=*) has_field=1 ;;
     esac
@@ -438,8 +438,8 @@ _classify() {
         ;;
     esac
     [ "$group" = "status" ] && _method="GET"
-    if [ -n "$repo_flag" ]; then
-      _repo="${repo_flag##*/}"
+    if [ -n "$_repo_flag" ]; then
+      _repo="${_repo_flag##*/}"
     else
       case "$group" in
         pr|issue|run|workflow|release|label|repo|cache|ruleset)
@@ -1445,16 +1445,6 @@ fi
 unset _mq_a _mq_prev _mq_shape _mq_reason _mq_why _mq_rules _mq_log_dir
 
 
-# The repository tag of a cached fallback read, and of a write that can change one: the
-# repository name (case-folded) from the call, else GH_REPO, else "any" when neither names one.
-_gw_tag=""
-_gw_fb_tag() {
-  local name="${_repo:-${GH_REPO##*/}}"
-  if [ -z "$name" ]; then _gw_tag=any; return 0; fi
-  _ascii_upper_into name "$name"
-  _gw_tag="$(_sha "$name" | cut -c1-16)"
-}
-
 # --- cached read gateway (OMN-20911) ---------------------------------------------
 # The gateway shapes (_gw_shape: a failing-job log, one check run's detail, one commit object) reach GitHub
 # only through here, for every caller but the PR-state guard's allowed callers. A hit is
@@ -1524,12 +1514,9 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
     [ "$_gw_pinned" -eq 1 ] || _gw_ttl=300
   fi
   _gw_entry="$_gw_dir/$(_sha "$_gw_scope|$(printf '%s\037' "$@")")"
-  # A fallback read can be changed by a write; its name carries its repository so the write
-  # can drop it (see the pass-through below). The other shapes are immutable.
-  if [ "$_gw_kind" = "fallback" ]; then
-    _gw_fb_tag
-    _gw_entry="$_gw_dir/fb.$_gw_tag.${_gw_entry##*/}"
-  fi
+  # A fallback read can change under a write, so its name carries its repository (the
+  # pass-through below drops it after a write); the other gateway shapes are immutable.
+  [ "$_gw_kind" = "fallback" ] && _gw_entry="$_gw_dir/fb.${_repo:-${GH_REPO##*/}}.${_gw_entry##*/}"
   _now="$(date +%s)"
   if [ $(( $$ % 50 )) -eq 0 ]; then
     find "$_gw_dir" -type f -mmin +2880 -delete 2>/dev/null
@@ -1790,19 +1777,9 @@ _watcher_link() {
 if [ "${1:-}" = "pr" ]; then
   case "${2:-}" in
     create|ready|close|reopen|merge)
-      _mut_repo=""
-      _prev=""
-      for _a in "$@"; do
-        case "$_prev" in -R|--repo) _mut_repo="$_a" ;; esac
-        case "$_a" in --repo=*) _mut_repo="${_a#--repo=}" ;; esac
-        _prev="$_a"
-      done
+      _mut_repo="$_repo_flag"
       if [ -z "$_mut_repo" ]; then _read_origin; _mut_repo="$_origin"; fi
-      if [ -n "$_mut_repo" ]; then
-        rm -f "$_cache_root/$(_sha "$_mut_repo" | cut -c1-16)".* 2>/dev/null
-      else
-        rm -f "$_cache_root"/* 2>/dev/null
-      fi
+      rm -f "$_cache_root/${_mut_repo:+$(_sha "$_mut_repo" | cut -c1-16).}"* 2>/dev/null
       ;;
   esac
 fi
@@ -1879,17 +1856,11 @@ _warn_gateway_read "$@"
 _run_gh "$@"
 _rc=$?
 # A write can change what a cached fallback read answered (OMN-19998: a lane set the Actions
-# permissions and its read-back was served the answer cached before the write). Drop that
-# repository's cached fallback reads, and those naming no repository, after the write runs,
-# so a read made while it ran is dropped too; a write naming no repository drops them all.
+# permissions and its read-back was served the answer cached before the write). After it runs,
+# drop that repository's cached fallback reads and those naming none; with no repository, all.
 if [ "$_method" != "LOCAL" ] && ! _lane_is_read "$@"; then
-  _gw_fb_tag
-  _gw_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway"
-  if [ "$_gw_tag" = "any" ]; then
-    rm -f "$_gw_dir"/fb.* 2>/dev/null
-  else
-    rm -f "$_gw_dir/fb.$_gw_tag".* "$_gw_dir"/fb.any.* 2>/dev/null
-  fi
+  _fb_repo="${_repo:-${GH_REPO##*/}}"; _fb="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway/fb"
+  rm -f "$_fb.${_fb_repo:+$_fb_repo.}"* "$_fb.."* 2>/dev/null
 fi
 _log "$_rc" none
 exit "$_rc"
