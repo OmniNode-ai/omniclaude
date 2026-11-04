@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -195,3 +196,118 @@ def test_direct_model_call_gate_runs_whole_tree_in_ci_from_the_pre_push_stage() 
         f"pre-commit run {hook_id} --all-files --hook-stage pre-push" in command
         for command in commands
     ), f"{hook_id} is pre-push only and has no whole-tree step in {JOB_ID}"
+
+
+_SIBLING_STEP_NAME = (
+    "Provide the sibling clones the cross-repo hooks resolve through OMNI_HOME"
+)
+_OM_SHA = "6" * 40
+_CORE_DEV_SHA = "c" * 40
+_LOCK_OMNIMARKET = (
+    '[[package]]\nname = "omnimarket"\nversion = "0.1.0"\n'
+    'source = { git = "https://github.com/OmniNode-ai/omnimarket.git'
+    f'?tag=dev-20261104002655-6335ba6fdcad#{_OM_SHA}" }}\n'
+)
+
+
+def _core_lock(version: str, source: str) -> str:
+    return (
+        '[[package]]\nname = "omnibase-core"\n'
+        f'version = "{version}"\nsource = {source}\n\n' + _LOCK_OMNIMARKET
+    )
+
+
+def _run_sibling_step(tmp_path: Path, lock_text: str) -> tuple[int, list[str]]:
+    """Run the sibling-clones step's own shell against a lock, with git/uv stubbed.
+
+    ``git`` records its arguments instead of touching the network; ``uv`` answers
+    the version query with the version the lock declares, as the installed
+    metadata does. Returns the exit status and the recorded git calls.
+    """
+    step = next(s for s in _job()["steps"] if s.get("name") == _SIBLING_STEP_NAME)
+    (tmp_path / "uv.lock").write_text(lock_text, encoding="utf-8")
+    (tmp_path / "step.sh").write_text(str(step["run"]), encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "git.log"
+    (bin_dir / "git").write_text(
+        f'#!/bin/bash\necho "$*" >> "{log}"\n', encoding="utf-8"
+    )
+    (bin_dir / "uv").write_text(
+        "#!/bin/bash\n"
+        'awk \'$0 == "name = \\"omnibase-core\\"" {getline; print $3; exit}\' '
+        "uv.lock | tr -d '\"'\n",
+        encoding="utf-8",
+    )
+    for stub in bin_dir.iterdir():
+        stub.chmod(0o755)
+    env = {
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "RUNNER_TEMP": str(tmp_path / "runner"),
+        "GITHUB_ENV": str(tmp_path / "github_env"),
+    }
+    result = subprocess.run(
+        ["bash", "-e", "step.sh"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    return result.returncode, calls
+
+
+def test_sibling_core_clone_follows_a_dev_tag_git_source_by_locked_sha(
+    tmp_path: Path,
+) -> None:
+    """OMN-19612: a dev-tag omnibase-core must not be cloned as ``v<version>``.
+
+    uv.lock resolves omnibase-core from a dev merge tag (OMN-21282), whose
+    metadata version (here 0.47.66) has no release tag until the release PR
+    merges, so ``git clone --branch v0.47.66`` died with ``Remote branch
+    v0.47.66 not found``. The step must fetch the locked sha instead.
+    """
+    lock = _core_lock(
+        "0.47.66",
+        "{ git = "
+        '"https://github.com/OmniNode-ai/omnibase_core.git'
+        f'?tag=dev-20261104014415-cefaf61fea4f#{_CORE_DEV_SHA}" }}',
+    )
+    status, calls = _run_sibling_step(tmp_path, lock)
+    assert status == 0, calls
+    assert not any("--branch" in call for call in calls), calls
+    assert any(
+        "omnibase_core" in call
+        and "fetch" in call
+        and call.endswith(f"omnibase_core.git {_CORE_DEV_SHA}")
+        for call in calls
+    ), calls
+    assert any(
+        call.endswith("checkout --quiet FETCH_HEAD") and "omnibase_core" in call
+        for call in calls
+    ), calls
+
+
+def test_sibling_core_clone_keeps_the_release_tag_for_a_release_pin(
+    tmp_path: Path,
+) -> None:
+    lock = _core_lock("0.47.62", '{ registry = "https://pypi.org/simple" }')
+    status, calls = _run_sibling_step(tmp_path, lock)
+    assert status == 0, calls
+    assert any(
+        "clone" in call and "--branch v0.47.62 " in call and "omnibase_core.git" in call
+        for call in calls
+    ), calls
+
+
+def test_sibling_core_clone_fails_closed_on_a_git_source_with_no_locked_sha(
+    tmp_path: Path,
+) -> None:
+    lock = _core_lock(
+        "0.47.66",
+        '{ git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-1" }',
+    )
+    status, calls = _run_sibling_step(tmp_path, lock)
+    assert status != 0
+    assert not any("omnibase_core" in call for call in calls), calls

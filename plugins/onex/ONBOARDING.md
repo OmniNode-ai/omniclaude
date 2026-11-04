@@ -129,6 +129,12 @@ Every question comes before anything is installed:
 3. **Whether to run the local stack in Docker.** "Not now" is a complete setup — you can
    add it later. In a macOS VM the question is skipped, because Docker cannot run there.
 
+Before the model questions, the run prints what every model failing costs you:
+
+> If none of the models you choose can finish a task, free or paid, the task goes back to
+> Claude Code and Claude does it as usual. That task shows no savings, and any attempts your
+> models made are still billed by their provider.
+
 Every prompt has a **Quit setup** option. Choosing it before phase 1 leaves the machine
 untouched.
 
@@ -352,6 +358,11 @@ The second line must print lab-onboarding.sh: OK; if it prints FAILED, stop and 
 to this email. The run keeps your keys, your model order and your dashboard history, and
 moves your clones and local stack to the new pin. It takes about as long as a resumed run,
 plus a stack rebuild if you use Docker.
+
+One thing worth knowing, whether you set up today or change your models later.
+If none of the models you choose can finish a task, free or paid, the task goes back to
+Claude Code and Claude does it as usual. That task shows no savings, and any attempts your
+models made are still billed by their provider.
 ```
 
 ---
