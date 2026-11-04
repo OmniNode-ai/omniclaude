@@ -877,11 +877,16 @@ parse_model_choice() {
 
 ask_models() { # -> MODELS
   local a p i=0 note
-  say ""
-  say "  Your models"
-  say ""
-  say "  Choose one or more. Delegation picks among them for each task."
-  say ""
+  say ""; say "  Your models"; say ""
+  say "  Choose one or more. Delegation picks among them for each task."; say ""
+  # OMN-21262: an exhausted ladder ends returned_to_caller (delegation
+  # requirements specification, decision D3), so say what every model failing
+  # costs before the developer picks any. ONBOARDING.md and the participant
+  # email carry the same two sentences. The three blank-line calls are folded
+  # onto the statements above and below, so this baselined file still shrinks.
+  say "  If none of the models you choose can finish a task, free or paid, the task goes"
+  say "  back to Claude Code and Claude does it as usual. That task shows no savings, and"
+  say "  any attempts your models made are still billed by their provider."; say ""
   for p in $ALL_MODELS; do
     i=$((i + 1)); note=""
     is_stored "$p" && note="  (key stored)"
