@@ -454,7 +454,8 @@ def test_workflow_shape_has_one_app_authenticated_dev_bump() -> None:
     assert "--base dev" in publish["run"]
     assert "git merge-tree --write-tree" in publish["run"]
     assert "--body-file" in publish["run"]
-    assert "Evidence-Ticket: OMN-20710" in publish["run"]
+    assert "Evidence-Ticket: ${BUMP_TICKET}" in publish["run"]
+    assert job["env"]["BUMP_TICKET"] == "OMN-22470"
     assert publish["env"]["GH_TOKEN"] == "${{ steps.app-token.outputs.token }}"
     app = next(step for step in steps if step.get("id") == "app-token")
     assert app["with"]["app-id"] == "${{ secrets.ONEXBOT_OCC_APP_ID }}"
@@ -659,9 +660,11 @@ class _BotHarness:
         gh.chmod(0o755)
         self.shim = shim
         self.runs = 0
-        self.branch = yaml.safe_load(WORKFLOW.read_text())["jobs"][
-            "plugin-version-bump"
-        ]["env"]["BUMP_BRANCH"]
+        job_env = yaml.safe_load(WORKFLOW.read_text())["jobs"]["plugin-version-bump"][
+            "env"
+        ]
+        self.branch = job_env["BUMP_BRANCH"]
+        self.ticket = job_env["BUMP_TICKET"]
         _git(root, "init", "-q", "--bare", "-b", "dev", str(self.origin))
         self.seed.mkdir()
         _git(self.seed, "init", "-q", "-b", "dev")
@@ -724,6 +727,7 @@ class _BotHarness:
             env={
                 **env,
                 "BUMP_BRANCH": self.branch,
+                "BUMP_TICKET": self.ticket,
                 "GH_TOKEN": "unused",
                 "REPO": "OmniNode-ai/omniclaude",
                 "CHANGED": changed,
@@ -820,3 +824,48 @@ def test_single_bump_pr_is_one_fixed_branch_under_one_concurrency_group() -> Non
     assert run.count("gh pr create") == 1
     assert run.index('if [ -n "$open" ]') < run.index("gh pr create")
     assert '--head "$BUMP_BRANCH"' in run
+
+
+DRIFT_FIXTURE = REPO_ROOT / "tests/ci/fixtures/omn20710_ac3_drift.json"
+
+
+def _bump_ticket() -> str:
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+    return str(workflow["jobs"]["plugin-version-bump"]["env"]["BUMP_TICKET"])
+
+
+@pytest.mark.unit
+def test_bump_binding_ticket() -> None:
+    """OMN-22470 AC1: the commit, title and Evidence-Ticket come from one bump ticket, never OMN-20710."""
+    ticket = _bump_ticket()
+    assert ticket == "OMN-22470"
+    run = _publish_step()["run"]
+    assert 'echo "chore(${BUMP_TICKET}): post-merge plugin version bump"' in run
+    assert '--title "chore(${BUMP_TICKET}): post-merge plugin version bump"' in run
+    assert "Evidence-Ticket: ${BUMP_TICKET}" in run
+    assert "OMN-20710" not in run
+    assert (REPO_ROOT / "contracts" / f"{ticket}.yaml").is_file()
+
+
+@pytest.mark.unit
+def test_bump_binding_criteria_drift() -> None:
+    """OMN-22470 AC2: the bump is not bound to the ticket whose criteria drifted (omniclaude#3133).
+
+    The fixture is the recorded failure: OMN-20710 carried AC1-AC3 live while its
+    accepted contract pinned AC1 and AC2, so the landing controller held a green
+    version-only bump on CRITERIA_DRIFT. A ticket whose live labels are not all
+    accepted in its contract cannot bind the bump.
+    """
+    fixture = json.loads(DRIFT_FIXTURE.read_text())
+    drifted = set(fixture["live_criteria_labels"]) - set(
+        fixture["accepted_contract_labels"]
+    )
+    assert drifted == {"AC3"}
+    assert _bump_ticket() != fixture["ticket"]
+    contract = yaml.safe_load(
+        (REPO_ROOT / "contracts" / f"{_bump_ticket()}.yaml").read_text()
+    )
+    labels = {a["id"] for req in contract["requirements"] for a in req["acceptance"]}
+    bound = {ac for ev in contract["dod_evidence"] for ac in ev["binds_ac"]}
+    assert labels == {"AC1", "AC2"}
+    assert bound == labels

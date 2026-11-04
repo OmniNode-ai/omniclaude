@@ -1,0 +1,18 @@
+{
+  "recorded": "2026-11-04T06:19:06Z lane=bump-3133-0610 TERMINAL (omniclaude#3133 held on CRITERIA_DRIFT); contracts/OMN-20710.yaml on dev at b912bdb45",
+  "ticket": "OMN-20710",
+  "live_criteria_labels": [
+    "AC1",
+    "AC2",
+    "AC3"
+  ],
+  "accepted_contract_labels": [
+    "AC1",
+    "AC2"
+  ],
+  "drift": {
+    "added": [
+      "AC3"
+    ]
+  }
+}
