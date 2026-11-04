@@ -68,13 +68,12 @@ if [[ -f "${HOME}/.claude/scope-manifest.json" ]]; then
     ACTIVE_PLAN=$(jq -r '.plan_file // ""' "${HOME}/.claude/scope-manifest.json" 2>/dev/null) || ACTIVE_PLAN=""
 fi
 
-# PR status (best-effort, non-blocking)
-PR_STATUS=""
-if command -v gh >/dev/null 2>&1; then
-    # Bounded: `gh pr view` is a network call on the PostToolUse path. Without the
-    # timeout a hung remote stalls the hook (and, pre-OMN-17224, stacks emitters).
-    PR_STATUS=$(timeout 5 gh pr view --json number,url,state 2>/dev/null | jq -r '"PR #\(.number) [\(.state)]: \(.url)"' 2>/dev/null) || PR_STATUS=""
-fi
+# PR status: never read from GitHub here (OMN-19998). This hook runs under a
+# Claude or Codex process, which the gh shim counts as a lane, and lanes do not
+# read GitHub (OMN-20911): the old `gh pr view` spent the host's read budget on
+# every commit and wrote a gh_shim_lane_read_guard refusal once it was spent.
+# The checkpoint names the local reader instead.
+PR_STATUS="not read here; read it locally: pr_state_local.py --find <ticket> (branch ${BRANCH})"
 
 # -----------------------------------------------------------------------
 # Write checkpoint file
