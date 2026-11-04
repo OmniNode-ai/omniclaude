@@ -5,6 +5,7 @@
 from omniclaude.nodes.node_validate_skills_compute.handlers import (
     HandlerSkillContracts,
     HandlerSkillHygiene,
+    HandlerWholeFileHygiene,
 )
 
 
@@ -16,3 +17,8 @@ def build_skill_hygiene() -> HandlerSkillHygiene:
 def build_skill_contracts() -> HandlerSkillContracts:
     """Build the contracts handler with its constructor defaults."""
     return HandlerSkillContracts()
+
+
+def build_whole_file_hygiene() -> HandlerWholeFileHygiene:
+    """Build the whole-file hygiene handler with its constructor defaults."""
+    return HandlerWholeFileHygiene()

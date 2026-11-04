@@ -209,10 +209,27 @@ jobs:
           docker builder prune -af || true
           df -h
 
+      - name: Install Trivy v0.70.0 from the GitHub release archive
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          # aquasecurity/setup-trivy installs from get.trivy.dev, which is NXDOMAIN
+          # since 2026-11-03 (aquasecurity/setup-trivy#42). Install from the GitHub
+          # release archive and pass skip-setup-trivy to trivy-action instead.
+          TRIVY_VERSION="0.70.0"
+          mkdir -p "${RUNNER_TEMP}/trivy-bin"
+          curl --fail --show-error --silent --location --retry 3 --retry-delay 5 \
+            -o "${RUNNER_TEMP}/trivy.tar.gz" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar -xzf "${RUNNER_TEMP}/trivy.tar.gz" -C "${RUNNER_TEMP}/trivy-bin" trivy
+          echo "${RUNNER_TEMP}/trivy-bin" >> "$GITHUB_PATH"
+          "${RUNNER_TEMP}/trivy-bin/trivy" --version
+
       - name: Run Trivy vulnerability scanner
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.34.2 (pinned 2026-03-04)
         with:
+          skip-setup-trivy: true
           image-ref: 'omniclaude:scan'
           format: 'sarif'
           output: 'trivy-results.sarif'
@@ -228,6 +245,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.34.2 (pinned 2026-03-04)
         with:
+          skip-setup-trivy: true
           scan-type: 'fs'
           scan-ref: '.'
           format: 'table'

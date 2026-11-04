@@ -1,0 +1,55 @@
+# The scrub map of the plugin retirement plan (OMN-22273): every
+# private value class its scrub table names, and what the class becomes. The
+# whole-file hygiene leg reads this file: a finding of a listed class is
+# reported with the keys it becomes, and a file that does not parse is a
+# configuration error (exit 2), never a pass.
+#
+# The map holds classes and destination keys, never a private value: this
+# repository is public. Overlay keys are resolved at run time through
+# ONEX_SKILL_OVERLAY_ROOTS; the key schema and the resolver are not part of this
+# file.
+#
+# kind is one of: overlay-key, env-var, relative-path, not-rewritten.
+version: 1
+rows:
+  - row_id: registry_root_variable
+    description: the registry-root variable and its private spelling in code, prose and tests
+    finding_classes: [private-repo-name]
+    kind: env-var
+    keys: [ONEX_REGISTRY_ROOT]
+  - row_id: private_repository_names
+    description: a private repository named by its literal name, in any spelling
+    finding_classes: [private-repo-name, public-doc-private-repo]
+    kind: overlay-key
+    keys:
+      - repos.plugin_source
+      - repos.private_data
+      - repos.deploy
+      - repos.knowledge_base
+  - row_id: lab_hosts_and_addresses
+    description: lab host names, lane ids, compose names and lab addresses
+    finding_classes: [lab-config, private-network]
+    kind: overlay-key
+    keys: [lab_hosts]
+  - row_id: ledger_path_and_prose
+    description: the ledger path and ledger prose
+    kind: env-var
+    keys: [ONEX_LEDGER_PATH]
+  - row_id: knowledge_base_prose
+    description: prose that cites the team reference documents
+    finding_classes: [internal-kb-prose]
+    kind: overlay-key
+    keys: [repos.knowledge_base]
+  - row_id: machine_paths
+    description: machine-specific absolute paths
+    finding_classes: [machine-path]
+    kind: env-var
+    keys: [ONEX_REGISTRY_ROOT, ONEX_STATE_DIR]
+  - row_id: person_names
+    description: person names and person ids in skills
+    finding_classes: [person-name]
+    kind: overlay-key
+    keys: [people]
+  - row_id: private_package_imports
+    description: imports of the private shared base package
+    kind: not-rewritten

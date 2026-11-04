@@ -1,0 +1,69 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21484
+title: "Onboarding's model menu lists only models the developer's key can call, with no not-offered section"
+summary: >
+  After the OMN-21465 probe landed, the menu printed the usable and throttled
+  models and then a "Not offered, your key could not call these:" list that a
+  developer cannot pick and does not need (standup 2026-10-28). The rows are
+  still worth keeping for diagnosis, so the setup handler writes the unusable
+  model ids and the provider's own reason to the onboarding log instead of to
+  the screen, and the menu now carries usable and throttled models only.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21484-menu-usable-only
+    statement: The model menu prints usable and throttled models only, with no not-offered heading or rows.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the menu prints usable and throttled models only, and no not-offered heading or rows"
+  - id: req-omn21484-log-keeps-diagnosis
+    statement: A not-offered model is still recorded in the onboarding log for diagnosis.
+    acceptance:
+      - id: AC2
+        statement: "AC2: a not-offered model is still recorded in the onboarding log for diagnosis"
+evidence_requirements:
+  - kind: tests
+    description: "Model menu tests pass"
+    command: "uv run pytest tests/skills/test_onboarding_model_menu_omn21484.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21484-ac1-menu-has-no-not-offered-section
+    description: 'A stubbed provider lists two models that 404 on completion and one that answers 429. The menu numbers only the usable and throttled models, carries no "Not offered" heading and neither 404 model id under any wording, and the developer''s pick still resolves against the offered list. Fails at the merge base, where the handler prints the section with say.'
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_model_menu_omn21484.py -q --no-cov -k test_model_menu_no_not_offered_section"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21484-ac2-log-carries-the-unusable-ids
+    description: 'The same run reads the onboarding log the handler wrote: it carries both unusable model ids and the provider''s own reason for each (deprecated, and the model does not exist), so a developer who expected a model can still find out why it is absent. The log is a real file in the test, not the /dev/null of the OMN-21465 harness, so a screen row cannot pass for a logged one.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_model_menu_omn21484.py -q --no-cov -k test_model_menu_no_not_offered_section"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21484-ac1-negative-control
+    description: 'The negative control: with every listed model answering, the menu is unchanged and the log carries no unusable row, so the AC1 assertion is testing the section and not an empty provider.'
+    source: manual
+    binds_ac: []
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_model_menu_omn21484.py -q --no-cov -k test_model_menu_no_not_offered_section_when_every_model_answers"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21484-deploy-probe
+    description: "Deploy probe. Read the setup handler from GitHub at the checked-out commit, an immutable ref, and require that it no longer says the not-offered heading, with the AC1 test beside it. It fails at the merge base, where that say line is in the handler."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_model_menu_omn21484.py -q --no-cov -k test_model_menu_no_not_offered_section"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'gh api \"repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh?ref=$(git rev-parse HEAD)\" --jq .content | base64 -d | grep -F \"could not call these\" > /dev/null; test $? -eq 1'"
+        cwd: "${OMNI_HOME}/omniclaude"
