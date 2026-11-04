@@ -52,7 +52,7 @@ dod_evidence:
         check_value: "uv run pytest tests/skills/test_onboarding_ladder_notice_omn21262.py -q --no-cov -k test_onboarding_md_and_the_participant_email_carry_the_same_text"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn21262-ac2-anchored-returned-to-caller
-    description: 'AC2''s own condition, read from the two repositories that own it rather than from this one: omnibase_core at origin/main declares RETURNED_TO_CALLER in enum_delegation_terminal_failure_cause, and omnimarket''s delegate-skill orchestrator handler at origin/dev uses returned_to_caller. Both are read at an immutable ref. The release walk of OMN-21261 is that ticket''s deliverable and is not re-run here.'
+    description: 'AC2''s own condition, read from the two repositories that own it rather than from this one: omnibase_core at origin/main declares RETURNED_TO_CALLER in enum_delegation_terminal_failure_cause, and omnimarket''s delegate-skill orchestrator handler at origin/dev uses returned_to_caller. Both are read at an immutable ref. A third check requires this repository's own setup handler to carry the notice, so the item fails at the merge base, where the notice is absent. The release walk of OMN-21261 is that ticket''s deliverable and is not re-run here.'
     source: manual
     binds_ac: [AC2]
     checks:
@@ -61,6 +61,9 @@ dod_evidence:
         cwd: "${OMNI_HOME}/omniclaude"
       - check_type: command
         check_value: "bash -c 'gh api \"repos/OmniNode-ai/omnimarket/contents/src/omnimarket/nodes/node_delegate_skill_orchestrator/handlers/handler_delegate_skill.py?ref=dev\" --jq .content | base64 -d | grep -cF \"returned_to_caller\" > /dev/null'"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "grep -cF 'If none of the models you choose can finish a task' src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn21262-deploy-probe
     description: 'Deploy probe. Read the setup handler from GitHub at the checked-out commit, an immutable ref, and require that it carries the notice line, with the AC1 run test beside it. It fails at the merge base, where that line is absent from the handler.'
