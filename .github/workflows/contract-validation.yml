@@ -125,9 +125,13 @@ jobs:
             exit 0
           fi
 
-          core_version="$(awk '/^name = "omnibase-core"$/ {getline; gsub(/[^0-9.]/, "", $0); print; exit}' uv.lock)"
-          [[ -n "$core_version" ]] || { echo "validation-status=failed" >> "$GITHUB_OUTPUT"; echo "::error::omnibase-core version not found in uv.lock"; exit 1; }
-          if uv run --no-project --python 3.12 --with "omnibase-core==${core_version}" --with pyyaml python - "$CONTRACT_PATH" <<'PY'
+          core_ref="$(python3 -c 'import tomllib; p = next(p for p in tomllib.load(open("uv.lock", "rb"))["package"] if p["name"] == "omnibase-core"); print(p["source"]["git"].rsplit("#", 1)[-1])')"
+          [[ "$core_ref" =~ ^[0-9a-f]{40}$ ]] || { echo "validation-status=failed" >> "$GITHUB_OUTPUT"; echo "::error::omnibase-core Git commit not found in uv.lock"; exit 1; }
+          core_src="$(mktemp -d)"
+          git init --quiet "$core_src"
+          git -C "$core_src" fetch --quiet --depth 1 https://github.com/OmniNode-ai/omnibase_core.git "$core_ref"
+          git -C "$core_src" checkout --quiet FETCH_HEAD
+          if uv run --no-project --python 3.12 --with "$core_src" --with pyyaml python - "$CONTRACT_PATH" <<'PY'
           import sys
           import yaml
           from omnibase_core.models.ticket.model_ticket_contract import ModelTicketContract

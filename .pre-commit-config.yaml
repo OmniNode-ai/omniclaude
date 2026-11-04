@@ -106,6 +106,14 @@ repos:
         files: '^(\.github/workflows/ci\.yml|\.pre-commit-config\.yaml|contracts/OMN-18531\.yaml|tests/ci/test_mod_file_growth_pin_omn18531\.py)$'
         stages: [pre-commit]
 
+      - id: pinned-core-reader-tests
+        name: Core readers use the locked Git commit (OMN-22177)
+        entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_pinned_core_readers.py -q --no-cov
+        language: system
+        pass_filenames: false
+        files: '^(\.github/workflows/(ci|receipt-honesty|hostile-reviewer)\.yml|tests/ci/test_pinned_core_readers\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: plugin-version-bump-tests
         name: Bad plugin version refused, one bot bump PR (OMN-20710)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov

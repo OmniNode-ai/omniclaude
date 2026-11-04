@@ -182,6 +182,8 @@ jobs:
         run: uv run pytest tests/ci/test_raw_capture_guard_omn19513.py -q --no-cov
       - name: Verify a bad plugin version is refused and one bot bump PR is kept (OMN-20710)
         run: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov
+      - name: Verify core readers use the locked commit (OMN-22177)
+        run: uv run pytest tests/ci/test_pinned_core_readers.py -q --no-cov
       - name: Verify advisory gate controller cache and refusal controls (OMN-21006)
         run: uv run pytest tests/scripts/test_advisory_job_gate.py -q
       - name: Verify Git effect subprocess compatibility
@@ -591,21 +593,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Resolve the pinned omnibase-core version
+      - name: Resolve the pinned omnibase-core ref
         id: core_pin
         run: |
           set -euo pipefail
-          # A sibling is read at the version this repo's uv.lock pins, never its
-          # live branch (ruling 2026-10-01), so a merge there cannot turn this red.
-          version="$(awk -v n=omnibase-core '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
-          [[ -n "$version" ]] || { echo "::error::omnibase-core not found in uv.lock"; exit 1; }
-          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+          # OMN-22177: use the resolved Git pin, including for unreleased dev versions.
+          core_ref="$(python3 -c 'import tomllib; p = next(p for p in tomllib.load(open("uv.lock", "rb"))["package"] if p["name"] == "omnibase-core"); print(p["source"]["git"].rsplit("#", 1)[-1])')"
+          [[ "$core_ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::omnibase-core Git commit not found in uv.lock"; exit 1; }
+          echo "ref=${core_ref}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout omnibase_core
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
-          ref: ${{ steps.core_pin.outputs.tag }}
+          ref: ${{ steps.core_pin.outputs.ref }}
           path: omnibase_core
 
       - name: Verify handshake is current
@@ -6102,23 +6103,21 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Resolve the pinned omnibase-core version
+      - name: Resolve the pinned omnibase-core ref
         id: core_pin
         run: |
           set -euo pipefail
-          # A sibling is read at the version this repo's uv.lock pins, never its
-          # live branch (ruling 2026-10-01).
-          version="$(awk -v n=omnibase-core '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
-          [[ -n "$version" ]] || { echo "::error::omnibase-core not found in uv.lock"; exit 1; }
-          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+          # OMN-22177: use the resolved Git pin, including for unreleased dev versions.
+          core_ref="$(python3 -c 'import tomllib; p = next(p for p in tomllib.load(open("uv.lock", "rb"))["package"] if p["name"] == "omnibase-core"); print(p["source"]["git"].rsplit("#", 1)[-1])')"
+          [[ "$core_ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::omnibase-core Git commit not found in uv.lock"; exit 1; }
+          echo "ref=${core_ref}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout omnibase_core (provides the skill receipt-mode validator)
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
-          # Read at the omnibase-core version uv.lock pins (ruling 2026-10-01),
-          # not core's live dev.
-          ref: ${{ steps.core_pin.outputs.tag }}
+          # Read the exact core commit resolved in uv.lock.
+          ref: ${{ steps.core_pin.outputs.ref }}
           path: _omnibase_core
           token: ${{ github.token }}
       - name: Install uv
@@ -6131,7 +6130,7 @@ jobs:
         run: |
           set -euo pipefail
           uv venv .skill-receipt-venv --python 3.12
-          # Build omnibase_core from the freshly-checked-out dev source
+          # Build omnibase_core from the freshly-checked-out pinned source
           # (./_omnibase_core) into a wheel, then install THAT wheel by path. The
           # validator (OMN-13098) lands on omnibase_core dev before any release bump,
           # so a published index wheel does not yet contain it — installing the
@@ -6201,10 +6200,14 @@ jobs:
         run: |
           set -euo pipefail
           # OMN-20074: omnibase_core owns the agent config schema; read it at the
-          # version uv.lock pins.
-          core_version="$(awk '/^name = "omnibase-core"$/ {getline; gsub(/[^0-9.]/, "", $0); print; exit}' uv.lock)"
-          [[ -n "$core_version" ]] || { echo "::error::omnibase-core version not found in uv.lock"; exit 1; }
-          uv run --no-project --python 3.12 --with "omnibase-core==${core_version}" --with pyyaml python - plugins/onex/agents/configs/*.yaml <<'PY'
+          # exact commit uv.lock pins (OMN-22177: a dev pin's version is not on the index).
+          core_ref="$(python3 -c 'import tomllib; p = next(p for p in tomllib.load(open("uv.lock", "rb"))["package"] if p["name"] == "omnibase-core"); print(p["source"]["git"].rsplit("#", 1)[-1])')"
+          [[ "$core_ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::omnibase-core Git commit not found in uv.lock"; exit 1; }
+          core_src="$(mktemp -d)"
+          git init --quiet "$core_src"
+          git -C "$core_src" fetch --quiet --depth 1 https://github.com/OmniNode-ai/omnibase_core.git "$core_ref"
+          git -C "$core_src" checkout --quiet FETCH_HEAD
+          uv run --no-project --python 3.12 --with "$core_src" --with pyyaml python - plugins/onex/agents/configs/*.yaml <<'PY'
           import sys
 
           import yaml

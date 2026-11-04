@@ -632,11 +632,11 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
     assert "omniintelligence\\.git\\?rev=" not in combined, (
         "omniintelligence is no longer read at the rev uv.lock records"
     )
-    for pinned in ("omnibase-core", "omnibase-compat"):
-        assert f"n={pinned}" in combined, f"{pinned} version must be read from uv.lock"
-    assert combined.count('--branch "v${pin_version}"') == 2, (
-        "omnibase_core and omnibase_compat must be cloned at v<uv.lock version>"
-    )
+    assert 'p["name"] == "omnibase-core"' in combined
+    assert 'p["source"]["git"].rsplit("#", 1)[-1]' in combined
+    assert 'https://github.com/OmniNode-ai/omnibase_core.git "$core_ref"' in combined
+    assert "n=omnibase-compat" in combined
+    assert combined.count('--branch "v${pin_version}"') == 1
 
     assert "uv sync --locked --all-extras --python 3.12" in combined, (
         "reviewer dependency install must use the locked review path"

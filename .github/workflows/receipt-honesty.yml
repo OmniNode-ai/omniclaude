@@ -49,11 +49,12 @@ jobs:
       - name: Clone omnibase_core (provides the receipt-honesty validator)
         run: |
           set -euo pipefail
-          # Read at the omnibase-core version uv.lock pins (ruling 2026-10-01),
-          # not core's live default branch.
-          version="$(awk -v n=omnibase-core '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
-          [[ -n "$version" ]] || { echo "::error::omnibase-core not found in uv.lock"; exit 1; }
-          git clone --depth=1 --branch "v${version}" https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core
+          # OMN-22177: use the resolved Git pin, including for unreleased dev versions.
+          core_ref="$(python3 -c 'import tomllib; p = next(p for p in tomllib.load(open("uv.lock", "rb"))["package"] if p["name"] == "omnibase-core"); print(p["source"]["git"].rsplit("#", 1)[-1])')"
+          [[ "$core_ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::omnibase-core Git commit not found in uv.lock"; exit 1; }
+          git init --quiet ../omnibase_core
+          git -C ../omnibase_core fetch --depth=1 https://github.com/OmniNode-ai/omnibase_core.git "$core_ref"
+          git -C ../omnibase_core checkout --quiet FETCH_HEAD
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -106,4 +107,4 @@ jobs:
           # Pass explicit changed receipt paths; validator exits non-zero on any
           # honesty violation.
           # shellcheck disable=SC2086
-          .honesty-venv/bin/python -m omnibase_core.validation.validator_receipt_honesty $files
+          .honesty-venv/bin/python -m omnibase_core.nodes.node_receipt_honesty_check_compute.runtime_receipt_honesty_check $files
