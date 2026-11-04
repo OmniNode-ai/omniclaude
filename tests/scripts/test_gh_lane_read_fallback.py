@@ -465,3 +465,71 @@ def test_strict_read_refused_does_not_refuse_the_gateway_shapes(
     assert result.returncode == 0, result.stderr
     assert _calls(env) == [argv]
     assert _budget_spent(env) == 1
+
+
+# Friction class 694 (OMN-19998): a lane set the repository's Actions permissions with a
+# write, read them back within the fallback cache's 300 s and was served the answer cached
+# before its own write. A write now drops the cached fallback reads it can change.
+PERMISSIONS = "repos/o/r/actions/permissions/workflow"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "write",
+    [
+        ["api", "-X", "PUT", PERMISSIONS, "-f", "default_workflow_permissions=write"],
+        ["api", "graphql", "-f", "query=mutation { x }"],
+        ["variable", "set", "NAME", "--body", "v"],
+    ],
+)
+def test_lane_write_drops_the_cached_read_it_changes(
+    env: dict[str, str], write: list[str]
+) -> None:
+    read = ["api", PERMISSIONS]
+    before = _run(env, *read, extra={"ONEX_LANE": LANE, "FAKE_GH_STDOUT": "read"})
+    assert (before.returncode, before.stdout) == (0, "read"), before.stderr
+    changed = _run(env, *write, extra={"ONEX_LANE": LANE})
+    assert changed.returncode == 0, changed.stderr
+    after = _run(env, *read, extra={"ONEX_LANE": LANE, "FAKE_GH_STDOUT": "write"})
+    assert (after.returncode, after.stdout) == (0, "write"), after.stderr
+    assert _calls(env) == [read, write, read]
+    assert _budget_spent(env) == 2
+
+
+@pytest.mark.unit
+def test_lane_write_keeps_the_cached_reads_of_other_repositories(
+    env: dict[str, str],
+) -> None:
+    lane = {"ONEX_LANE": LANE}
+    other = ["api", "repos/o/other/actions/permissions/workflow"]
+    assert _run(env, *other, extra=lane).returncode == 0
+    write = [
+        "api",
+        "-X",
+        "PUT",
+        PERMISSIONS,
+        "-f",
+        "default_workflow_permissions=write",
+    ]
+    assert _run(env, *write, extra=lane).returncode == 0
+    assert _run(env, *other, extra=lane).returncode == 0
+    assert _calls(env) == [other, write]
+    assert _budget_spent(env) == 1
+
+
+@pytest.mark.unit
+def test_lane_write_keeps_the_immutable_gateway_shapes(env: dict[str, str]) -> None:
+    lane = {"ONEX_LANE": LANE}
+    log = ["api", "repos/o/r/actions/jobs/123/logs"]
+    assert _run(env, *log, extra=lane).returncode == 0
+    write = [
+        "api",
+        "-X",
+        "PUT",
+        PERMISSIONS,
+        "-f",
+        "default_workflow_permissions=write",
+    ]
+    assert _run(env, *write, extra=lane).returncode == 0
+    assert _run(env, *log, extra=lane).returncode == 0
+    assert _calls(env) == [log, write]
