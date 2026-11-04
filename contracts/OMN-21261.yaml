@@ -1,0 +1,39 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21261
+title: "Before each participant email, the exact emailed onboarding command runs end to end on a clean macOS VM with one real key per provider"
+summary: >
+  The onboarding script's INFRA_ANCHOR stood at an omnibase_infra commit from
+  2026-10-22, before omnibase_infra#5660 (OMN-22291) made the local stack's
+  health grader quiet. A participant walk at that anchor rebuilt the old grader
+  and failed phase 4 on a healthy stack. This change moves the anchor to a dev
+  commit that contains the fix, the precondition for the end-to-end walk on a
+  fresh account that the ticket's acceptance criteria require. It does not
+  satisfy those criteria; the walk is separate evidence recorded on the ticket.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21261-anchor-carries-health-fix
+    statement: The anchor a participant email pins is not one that predates the local stack health fix.
+    acceptance:
+      - id: "AC4"
+        statement: "AC4: INFRA_ANCHOR is not an omnibase_infra commit recorded as predating the local stack health fix (OMN-22291) -- falsifier: uv run pytest tests/skills/test_lab_onboarding_anchor_health_fix_omn21261.py -q --no-cov with INFRA_ANCHOR set back to aa81312c2c405424d4c947d61c7763d38e67b3a1"
+evidence_requirements:
+  - kind: tests
+    description: "The anchor shape test and the anchor health-fix floor test pass"
+    command: "uv run pytest tests/skills/test_lab_onboarding_anchor_omn21255.py tests/skills/test_lab_onboarding_anchor_health_fix_omn21261.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn21261-anchor-health-fix
+    description: "The script's INFRA_ANCHOR is not the 2026-10-22 commit that predates dcd3b55a3 (OMN-22291). Fails at the merge base, whose anchor is that commit. The clean-account end-to-end walk of the ticket's AC1 is separate evidence."
+    source: manual
+    binds_ac:
+      - "AC4"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_anchor_health_fix_omn21261.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
