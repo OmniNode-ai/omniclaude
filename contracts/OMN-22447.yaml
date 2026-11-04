@@ -24,7 +24,7 @@ requirements:
 evidence_requirements:
   - kind: tests
     description: "ci_runner_shim regression test built from the recorded job log fails on the old installer and passes on the fix"
-    command: "uv run pytest tests/scripts/ -k ci_runner_shim -q -p no:cacheprovider"
+    command: "uv run pytest tests/scripts/test_ci_runner_shim_omn22447.py -k ci_runner_shim -q -p no:cacheprovider"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -50,6 +50,6 @@ dod_evidence:
     binds_ac: [AC3]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/ -k ci_runner_shim -q -p no:cacheprovider"
+        check_value: "uv run pytest tests/scripts/test_ci_runner_shim_omn22447.py -k ci_runner_shim -q -p no:cacheprovider"
       - check_type: command
         check_value: "test -s tests/scripts/fixtures/ci_runner_shim_job_126037381765.txt"
