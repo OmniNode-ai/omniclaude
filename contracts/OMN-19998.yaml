@@ -92,6 +92,11 @@ requirements:
     acceptance:
       - id: "AC15"
         statement: "AC15: recovery preview and installation render --preserve-backlog exactly once and the selected absolute state root; invalid settings leave the installed unit untouched; recorded quiet-host journal rows survive a stalled recovery cycle while ordinary overflow eviction remains active -- falsifier: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -q --no-cov with Linux recovery rendering removed"
+  - id: req-omn19998-installed-binding-event
+    statement: "The hook-inventory gate refuses an installed Claude Code binding that sits on another binding's declared event, an adapter command spelled any way but '<path>/onex-claude-code-hook --binding <name>', and an install record whose bindings and events cannot be paired."
+    acceptance:
+      - id: "AC16"
+        statement: "AC16: client_binding_findings reports INSTALLED_BINDING_EVENT_MISMATCH for a binding installed on another binding's event, counts a path-qualified or --binding= adapter command as its binding or INSTALLED_BINDING_COMMAND_MALFORMED, and the gate exits 2 on an install record whose bindings and events differ in length -- falsifier: uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov -p no:randomly fails at the merge base (15 failed, 16 passed)"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -104,6 +109,14 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  - id: dod-omn19998-installed-binding-event
+    description: "The binding inventory tests exercise event mismatch, adapter command spellings, malformed adapter commands and unpaired install records through client_binding_findings and the hook-inventory gate script."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_client_bindings_omn18531.py -q --no-cov -p no:randomly"
+    binds_ac:
+      - "AC16"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
