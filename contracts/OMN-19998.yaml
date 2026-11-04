@@ -97,6 +97,11 @@ requirements:
     acceptance:
       - id: "AC19"
         statement: "AC19: inside a lane the shared-clone refusal text never recommends a fetch, and outside a lane it keeps the fetch advice -- falsifier: uv run pytest tests/hooks/test_git_fetch_guard.py -q --no-cov -k shared_clone_refusal fails at the merge base on the in-lane test"
+  - id: req-omn19998-transcript-archive-alarm
+    statement: "A failed run of the launchd transcript archive job raises an alarm through the shared alarm sender instead of exiting into an unread stderr log."
+    acceptance:
+      - id: "AC20"
+        statement: "AC20: the rendered transcript-s3-archive plist sends a non-zero sync exit to hook_canary_notify.sh with the exit code and last stderr line, records an undeliverable alarm, keeps the job's exit code, and sends nothing on success -- falsifier: uv run pytest tests/scripts/test_transcript_s3_archive_failure_alarm_omn19998.py -q --no-cov against the plist with the wrapper removed"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -128,6 +133,14 @@ dod_evidence:
           | python3 -c 'import sys; source = sys.stdin.read(); assert "class HandlerGitRefusalAdvice:" in source; assert "if request.lane:" in source; assert "canonical-clone-sync" in source; assert "<owner>/<repo> --wait" in source'
     binds_ac:
       - "AC19"
+  - id: dod-omn19998-transcript-archive-alarm
+    description: "The rendered plist's own ProgramArguments are run against a refused sync, an undeliverable alarm and a successful sync with a fake aws and curl. The next scheduled 04:30 run on the operator host has not been observed."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_transcript_s3_archive_failure_alarm_omn19998.py -q --no-cov"
+    binds_ac:
+      - "AC20"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
