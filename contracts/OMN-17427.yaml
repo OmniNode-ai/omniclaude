@@ -244,6 +244,11 @@ requirements:
     acceptance:
       - id: AC58
         statement: "From a copy of plugins/onex/hooks with no src above it, the capture encryption setting reads from the installed omniclaude package, the ticket gate evaluates an update and still refuses an unbound create -- falsifier: uv run pytest tests/unit/hooks/test_plugin_cache_install_omn17427.py -q --no-cov fails over the merge base, where both libs load from parents[4]/src"
+  - id: req-omnimarket-pin-newest-dev-tag
+    statement: The omnimarket pin names the newest dev merge tag, so the sibling-pin staleness gate passes.
+    acceptance:
+      - id: AC59
+        statement: "pyproject.toml names omnimarket at dev-20261102235857-65611aac6f14 in both dependencies and [tool.uv.sources] -- falsifier: rg -c 'dev-20261102235857-65611aac6f14' pyproject.toml prints 2 and fails over the merge base, which pins dev-20261102102425-ce12119225dc"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1192,3 +1197,12 @@ dod_evidence:
       - check_type: "test_passes"
         check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k test_no_count_refuses_a_create"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omnimarket-pin-newest-dev-tag
+    description: The omnimarket pin in pyproject.toml and uv.lock is the newest dev merge tag; the grep counts two pin lines and the lock names the tag's commit.
+    source: manual
+    status: verified
+    binds_ac:
+      - AC59
+    checks:
+      - check_type: command
+        check_value: "test \"$(grep -c 'dev-20261102235857-65611aac6f14' pyproject.toml)\" = 2 && grep -q '65611aac6f14' uv.lock"
