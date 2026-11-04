@@ -133,10 +133,6 @@ jobs:
           else
             git push --force origin "HEAD:refs/heads/${BUMP_BRANCH}"
           fi
-          if [ -n "$open" ]; then
-            echo "Updated #${open} in place."
-            exit 0
-          fi
           printf '%s\n' \
             "## Summary" \
             "" \
@@ -153,6 +149,17 @@ jobs:
             "${RUN_URL}" \
             "" \
             "Evidence-Ticket: ${BUMP_TICKET}" > "${RUNNER_TEMP}/plugin-version-bump.body"
+          if [ -n "$open" ]; then
+            binding="$(gh pr view "$open" --repo "$REPO" --json title,body --jq '.title + "\n" + .body')"
+            if ! grep -Fxq "chore(${BUMP_TICKET}): post-merge plugin version bump" <<< "$binding" || \
+              ! grep -Fxq "Evidence-Ticket: ${BUMP_TICKET}" <<< "$binding"; then
+              gh pr edit "$open" --repo "$REPO" \
+                --title "chore(${BUMP_TICKET}): post-merge plugin version bump" \
+                --body-file "${RUNNER_TEMP}/plugin-version-bump.body"
+            fi
+            echo "Updated #${open} in place."
+            exit 0
+          fi
           gh pr create --repo "$REPO" --base dev --head "$BUMP_BRANCH" \
             --title "chore(${BUMP_TICKET}): post-merge plugin version bump" \
             --body-file "${RUNNER_TEMP}/plugin-version-bump.body"

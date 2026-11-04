@@ -636,7 +636,20 @@ _FAKE_GH = """#!/bin/bash
 state="$FAKE_GH_STATE"
 case "$1 $2" in
   "pr list") cat "$state/open" 2>/dev/null || true ;;
-  "pr create") echo create >> "$state/calls"; echo 1 > "$state/open"; echo "https://example.invalid/pull/1" ;;
+  "pr create"|"pr edit")
+    echo "$2" >> "$state/calls"
+    shift 2
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --title) printf '%s\n' "$2" > "$state/title"; shift 2 ;;
+        --body-file) cp "$2" "$state/body"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    echo 1 > "$state/open"
+    echo "https://example.invalid/pull/1"
+    ;;
+  "pr view") cat "$state/title" "$state/body" ;;
   "pr close") echo close >> "$state/calls"; rm -f "$state/open" ;;
   *) echo "unexpected gh call: $*" >&2; exit 1 ;;
 esac
@@ -845,6 +858,37 @@ def test_bump_binding_ticket() -> None:
     assert "Evidence-Ticket: ${BUMP_TICKET}" in run
     assert "OMN-20710" not in run
     assert (REPO_ROOT / "contracts" / f"{ticket}.yaml").is_file()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("old_commit", [False, True])
+def test_bump_binding_ticket_rebinds_existing_pr(
+    tmp_path: Path, old_commit: bool
+) -> None:
+    bot = _BotHarness(tmp_path)
+    bot.merge_to_dev("two\n")
+    bot.run_workflow()
+    if old_commit:
+        old = tmp_path / "old-bump"
+        _git(tmp_path, "clone", "-q", "--branch", bot.branch, str(bot.origin), str(old))
+        _git(old, "commit", "--amend", "-q", "-m", "chore(OMN-20710): bump")
+        _git(old, "push", "-q", "--force", "origin", f"HEAD:{bot.branch}")
+    (bot.state / "title").write_text("chore(OMN-20710): bump\n")
+    (bot.state / "body").write_text("Evidence-Ticket: OMN-20710\n")
+    bot.run_workflow()
+    assert (bot.state / "title").read_text().strip() == (
+        f"chore({bot.ticket}): post-merge plugin version bump"
+    )
+    body = (bot.state / "body").read_text()
+    assert f"Evidence-Ticket: {bot.ticket}" in body
+    assert "OMN-20710" not in body
+    assert (bot.creates, bot.open_prs) == (1, 1)
+    assert "OMN-22470" in _git(
+        bot.root, "--git-dir", str(bot.origin), "log", "-1", "--format=%s", bot.branch
+    )
+    calls = (bot.state / "calls").read_text()
+    bot.run_workflow()
+    assert (bot.state / "calls").read_text() == calls
 
 
 @pytest.mark.unit
