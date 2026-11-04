@@ -1543,22 +1543,79 @@ docker_settings_file() {
   if [ -f "$d/settings-store.json" ]; then echo "$d/settings-store.json"; else echo "$d/settings.json"; fi
 }
 
-size_docker() { # memory MiB, cpus -> 0 changed, 1 error, 2 already enough
+# OMN-22237: macOS protects "$HOME/Library/Group Containers/group.com.docker"
+# (TCC), so a terminal without Full Disk Access gets EPERM for every call on
+# it. os.path.exists answers False for a refusal exactly as it does for an
+# absent file, so the earlier version read a protected settings file as an
+# empty dict, decided it had to be rewritten, and died writing it -- in 0s,
+# with its traceback on a stderr nothing captured. Absent, unreadable and
+# unwritable are three different facts with three different remedies, so each
+# gets its own exit code and a named cause on stderr.
+size_docker() { # memory MiB, cpus -> 0 changed, 1 error, 2 already enough, 3 unreadable, 4 unwritable
   "$(brew_bin | sed 's#/brew$##')/python3.13" - "$(docker_settings_file)" "$1" "$2" <<'PY'
-import json, os, sys
+import errno, json, os, sys
+
 path, mem, cpus = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
-data = json.load(open(path)) if os.path.exists(path) else {}
-mem_key = "MemoryMiB" if "MemoryMiB" in data or path.endswith("settings-store.json") else "memoryMiB"
-cpu_key = "Cpus" if "Cpus" in data or path.endswith("settings-store.json") else "cpus"
+UNREADABLE, UNWRITABLE = 3, 4
+PROTECTED = (errno.EPERM, errno.EACCES)
+TCC = "macOS protects that folder, and this terminal has no Full Disk Access"
+
+try:
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+except FileNotFoundError:
+    data = {}
+except OSError as exc:
+    if exc.errno not in PROTECTED:
+        raise
+    sys.stderr.write(
+        f"cannot read Docker Desktop's settings at {path}: "
+        f"{exc.strerror}. {TCC}.\n"
+    )
+    raise SystemExit(UNREADABLE)
+except ValueError as exc:
+    sys.stderr.write(
+        f"Docker Desktop's settings at {path} are not valid JSON: {exc}\n"
+    )
+    raise SystemExit(1)
+
+store = path.endswith("settings-store.json")
+mem_key = "MemoryMiB" if "MemoryMiB" in data or store else "memoryMiB"
+cpu_key = "Cpus" if "Cpus" in data or store else "cpus"
+# Read before write, and answer "already enough" without touching the path:
+# a Mac already at the floor must never need to write a protected file, or
+# the remedy a failure prints cannot clear it on a re-run.
 if int(data.get(mem_key, 0)) >= mem and int(data.get(cpu_key, 0)) >= cpus:
-    sys.exit(2)
+    raise SystemExit(2)
 data[mem_key] = max(mem, int(data.get(mem_key, 0)))
 data[cpu_key] = max(cpus, int(data.get(cpu_key, 0)))
-if os.path.exists(path):
-    os.replace(path, path + ".pre-onboarding")
-os.makedirs(os.path.dirname(path), exist_ok=True)
-json.dump(data, open(path, "w"), indent=2)
+try:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        os.replace(path, path + ".pre-onboarding")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+except OSError as exc:
+    if exc.errno not in PROTECTED:
+        raise
+    sys.stderr.write(
+        f"cannot write Docker Desktop's settings at {path}: "
+        f"{exc.strerror}. {TCC}.\n"
+    )
+    raise SystemExit(UNWRITABLE)
 PY
+}
+
+# OMN-22237: the engine reports what Docker Desktop was actually given, so a
+# Mac whose settings file this terminal may not read is still measurable.
+# MemTotal is bytes, NCPU whole cores.
+docker_engine_resources_ok() { # memory MiB, cpus
+  local info mem_bytes ncpu
+  info="$(docker info --format '{{.MemTotal}} {{.NCPU}}' 2>/dev/null)" || return 1
+  mem_bytes="${info%% *}"; ncpu="${info##* }"
+  case "$mem_bytes" in ''|*[!0-9]*) return 1 ;; esac
+  case "$ncpu" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$((mem_bytes / 1024 / 1024))" -ge "$1" ] && [ "$ncpu" -ge "$2" ]
 }
 
 docker_awaits_terms() { # Docker Desktop is showing its licence window and will not start until accepted
@@ -1702,12 +1759,32 @@ phase4() {
     say "  Docker Desktop: present"
   fi
 
-  size_docker "$mem" "$DOCKER_CPUS"
-  case $? in
+  # OMN-22237: keep the step's OWN stderr. `last_log_lines` reports the three
+  # lines before it, which is how the recorded failure printed an empty
+  # `Last error` for a step that had said exactly what was wrong.
+  local size_err size_rc
+  size_err="$(size_docker "$mem" "$DOCKER_CPUS" 2>&1 >>"$LOG")"
+  size_rc=$?
+  case $size_rc in
     0) say "  Docker Desktop set to ${mem_gb} GB and $DOCKER_CPUS CPUs; restarting it…"
        docker_ready && restart_docker >>"$LOG" 2>&1 ;;
     2) say "  Docker Desktop already has at least ${mem_gb} GB and $DOCKER_CPUS CPUs" ;;
-    *) FAILED_STEP="size Docker Desktop"; LAST_ERR="$(last_log_lines)"
+    3|4) log "size Docker Desktop: $size_err"
+       # The settings file is macOS-protected. The engine knows what Docker
+       # Desktop was given, so ask it instead: a Mac already at the floor needs
+       # no write, which is what makes the printed remedy clear the failure.
+       if ! docker_ready; then
+         say "  Docker Desktop's settings are in a folder macOS protects; starting Docker to read its resources instead…"
+         open -g -a Docker
+         wait_for_docker || true
+       fi
+       if docker_engine_resources_ok "$mem" "$DOCKER_CPUS"; then
+         say "  Docker Desktop already has at least ${mem_gb} GB and $DOCKER_CPUS CPUs (read from the engine; its settings file is protected by macOS)"
+       else
+         FAILED_STEP="size Docker Desktop"; LAST_ERR="$size_err"
+         phase_fail "grant this terminal Full Disk Access in System Settings > Privacy & Security > Full Disk Access, or open Docker Desktop and set Settings > Resources to ${mem_gb} GB and $DOCKER_CPUS CPUs, then run this again"
+       fi ;;
+    *) FAILED_STEP="size Docker Desktop"; LAST_ERR="${size_err:-$(last_log_lines)}"
        phase_fail "set Settings > Resources to ${mem_gb} GB and $DOCKER_CPUS CPUs by hand, then run this again" ;;
   esac
   if ! docker_ready; then

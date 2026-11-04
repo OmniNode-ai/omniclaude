@@ -21,6 +21,15 @@ points no model at a lab server.
 The run checks all of this before it changes anything. Below the minimum it stops and
 installs nothing.
 
+**If you say yes to Docker, give your terminal Full Disk Access** (System Settings >
+Privacy & Security > Full Disk Access), or set Docker Desktop's resources yourself
+before you start. Docker Desktop keeps its settings in `~/Library/Group
+Containers/group.com.docker`, a folder macOS protects: a fresh Mac grants a terminal
+nothing there, so the run cannot size Docker for you. Without Full Disk Access, open
+Docker Desktop once and set **Settings > Resources** to at least **10 GB of memory and
+4 CPUs**; the run then reads those figures from the Docker engine and continues
+(OMN-22237).
+
 You also need **a model key of your own**, unless you pick Ollama or a local model server.
 One of:
 

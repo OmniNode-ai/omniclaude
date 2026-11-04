@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-22237
+title: "Phase 4 sizes Docker Desktop through a macOS-protected folder, so the Docker phase no longer fails on a Mac with no Full Disk Access"
+summary: >
+  Docker Desktop keeps MemoryMiB/Cpus in $HOME/Library/Group Containers/group.com.docker, which macOS
+  protects. os.path.exists answers False for a refusal exactly as it does for an absent file, so size_docker
+  read the protected settings as an empty dict, judged them too small and died writing them: phase 4 failed in
+  0s with an empty Last error and a remedy (set Resources by hand) that the re-run could not act on, because it
+  reached the same unreadable read. size_docker now tells absent, unreadable and unwritable apart with their own
+  exit codes and a named cause on stderr; the caller keeps that stderr instead of the log's last three lines;
+  and a protected path falls back to the Docker engine's own MemTotal/NCPU, so opening Docker Desktop and
+  setting Resources by hand is a remedy that clears the failure. The guide states the requirement.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22237-protected-settings
+    statement: Phase 4 reads the Docker settings through a guard that names its cause, and proceeds on resources it can measure elsewhere.
+    acceptance:
+      - id: AC1
+        statement: "AC1: phase 4 reads the Docker settings path through a guard that distinguishes absent from unreadable, and on an unreadable or unwritable path stops with a named cause and remedy (grant the terminal Full Disk Access, or open Docker Desktop once and set Resources) rather than an empty error -- falsifier: uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q -k unreadable_names_cause"
+      - id: AC2
+        statement: "AC2: with the settings file already at or above the memory and CPU floor, phase 4 proceeds without needing to rewrite the protected path, so the printed remedy actually clears the failure on a re-run -- falsifier: uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q -k remedy_clears_on_rerun"
+      - id: AC3
+        statement: "AC3: the Last error field for a failed phase carries the step's own stderr and never the preceding log lines -- falsifier: uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q -k last_error_is_stderr"
+      - id: AC4
+        statement: "AC4: ONBOARDING.md states the Full Disk Access requirement in the Docker section, beside the memory and disk figures -- falsifier: git grep -n 'Full Disk Access' plugins/onex/ONBOARDING.md"
+      - id: AC5
+        statement: "AC5: a regression test built from this incident's recorded failure fails on the current script and passes on the fix -- falsifier: uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q -k incident_fixture"
+evidence_requirements:
+  - kind: tests
+    description: "The protected-settings tests pass against the script and the guide"
+    command: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:randomly"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22237-ac1-unreadable-named
+    binds_ac: [AC1]
+    description: "AC1: an unreadable settings path exits on its own code with a named cause, and absent is still written."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:randomly -k 'unreadable_names_cause or unreadable_is_distinct_from_absent'"
+  - id: dod-omn22237-ac2-remedy-clears
+    binds_ac: [AC2]
+    description: "AC2: at the floor nothing is written, and a protected path is measured through the engine instead."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:randomly -k remedy_clears_on_rerun"
+  - id: dod-omn22237-ac3-last-error-stderr
+    binds_ac: [AC3]
+    description: "AC3: the sizing step's failure paths carry its own stderr, not last_log_lines."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:randomly -k last_error_is_stderr"
+  - id: dod-omn22237-ac4-guide-states-fda
+    binds_ac: [AC4]
+    description: "AC4: the guide names Full Disk Access and the protected folder beside the resource table."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "git grep -q 'Full Disk Access' -- plugins/onex/ONBOARDING.md"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:randomly -k guide_states_full_disk_access"
+  - id: dod-omn22237-ac5-incident-replay
+    binds_ac: [AC5]
+    description: "AC5: the recorded 0s/empty-Last-error shape replayed; it fails on the merge-base script."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:randomly -k incident_fixture"
