@@ -1317,7 +1317,18 @@ def check_parity(
 
 ADAPTER_NODE_PACKAGE: Final = "omnimarket.nodes.node_claude_code_hook_adapter_effect"
 ADAPTER_CONTRACT_REL: Final = "node_claude_code_hook_adapter_effect/contract.yaml"
-_ADAPTER_COMMAND_PREFIX: Final = "onex-claude-code-hook --binding "
+_ADAPTER_COMMAND: Final = "onex-claude-code-hook"
+_IN: Final = (
+    f"client_bindings.claude_code in the adapter contract ({ADAPTER_CONTRACT_REL})"
+)
+_BINDING_MESSAGES: Final = {
+    "CLIENT_BINDING_MALFORMED": f"a row of {_IN} needs a name and a hook_event.",
+    "CLIENT_BINDING_DUPLICATE": f"declared twice in client_bindings.claude_code of the adapter contract ({ADAPTER_CONTRACT_REL}).",
+    "INSTALLED_BINDING_COMMAND_MALFORMED": f"{{p}} runs the adapter as {{s!r}}; only '{_ADAPTER_COMMAND} --binding <name>' is accepted.",
+    "INSTALLED_BINDING_UNDECLARED": f"{{p}} registers binding {{s!r}}, which {_IN} does not declare. The installed binding is rendered from that section alone; re-install, or declare the row.",
+    "INSTALLED_EVENT_UNDECLARED": f"{{p}} registers event {{e!r}} (matcher {{m!r}}), absent from {_IN}.",
+    "INSTALLED_BINDING_EVENT_MISMATCH": f"{{p}} registers binding {{s!r}} on event {{e!r}} (matcher {{m!r}}), which {_IN} declares for another binding.",
+}
 
 
 def resolve_adapter_contract() -> Path | None:
@@ -1349,87 +1360,78 @@ def declared_client_bindings(contract: Path | None) -> tuple[dict[str, Any], ...
     return tuple(rows or ())
 
 
-def _installed_binding_names(
-    artifact: dict[str, Any],
-) -> tuple[tuple[str, ...], tuple[tuple[str, str | None], ...]]:
-    """Binding names and (event, matcher) pairs an installed artifact registers.
+def _adapter_binding(command: str) -> str | None:
+    """Binding name of an adapter command; "" if malformed; None if not the adapter.
 
-    An artifact is either the install effect's ``install_record.json`` (a render sha256,
-    the binding names and the events of the rendered module) or the user's
-    ``settings.json`` (command hooks that run ``onex-claude-code-hook --binding <name>``).
+    Only ``<path>/onex-claude-code-hook --binding <name>`` is accepted, so no spelling
+    of the adapter (``--binding=``, extra arguments, a shell chain) hides a binding.
     """
-    names: list[str] = list(artifact.get("bindings") or ())
-    events: list[tuple[str, str | None]] = [
-        (e["event"], e.get("matcher")) for e in artifact.get("events") or ()
+    import shlex  # local: the rest of this module is stdlib-only at import time
+
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return "" if _ADAPTER_COMMAND in command else None
+    if not any(Path(arg).name == _ADAPTER_COMMAND for arg in argv):
+        return None
+    ok = len(argv) == 3 and Path(argv[0]).name == _ADAPTER_COMMAND
+    return argv[2] if ok and argv[1] == "--binding" else ""
+
+
+def _installed_binding_rows(
+    artifact: dict[str, Any], where: Path
+) -> list[tuple[Any, ...]]:
+    """(binding, event, matcher[, command]) rows an install record or settings.json registers.
+
+    A malformed adapter command yields binding None; an install record's parallel
+    ``bindings`` and ``events`` lists must pair one to one.
+    """
+    names, events = artifact.get("bindings") or [], artifact.get("events") or []
+    if len(names) != len(events):
+        raise HookInventoryError(f"{where}: bindings and events differ in length")
+    rows: list[tuple[Any, ...]] = [
+        (str(n), e["event"], e.get("matcher")) for n, e in zip(names, events)
     ]
-    hooks = artifact.get("hooks")
-    if isinstance(hooks, dict):
-        for event, entries in hooks.items():
-            for entry in entries:
-                for hook in entry.get("hooks", ()):
-                    command = str(hook.get("command", ""))
-                    if command.startswith(_ADAPTER_COMMAND_PREFIX):
-                        names.append(
-                            command.removeprefix(_ADAPTER_COMMAND_PREFIX).strip()
-                        )
-                        events.append((event, entry.get("matcher")))
-    return tuple(names), tuple(events)
+    for event, entries in (artifact.get("hooks") or {}).items():
+        for entry in entries:
+            for hook in entry.get("hooks", ()):
+                command = str(hook.get("command", ""))
+                if (name := _adapter_binding(command)) is not None:
+                    rows.append((name or None, event, entry.get("matcher"), command))
+    return rows
 
 
 def client_binding_findings(
     contract: Path | None, installed_artifacts: tuple[Path, ...] = ()
 ) -> tuple[Finding, ...]:
-    """Contract rows are well formed; nothing installed registers what the contract does not declare."""
+    """Contract rows are well formed; each installed binding sits on its own declared event."""
     findings: list[Finding] = []
-    rows = declared_client_bindings(contract)
-    seen: set[str] = set()
-    for row in rows:
+
+    def add(code: str, subject: str, **facts: Any) -> None:
+        text = _BINDING_MESSAGES[code].format(s=subject, **facts)
+        findings.append(Finding(code, subject, text))
+
+    by_name: dict[str, set[tuple[str, Any]]] = {}
+    for row in declared_client_bindings(contract):
         name = str(row.get("name", ""))
         if not name or not row.get("hook_event"):
-            findings.append(
-                Finding(
-                    "CLIENT_BINDING_MALFORMED",
-                    name or "<unnamed>",
-                    f"a row of client_bindings.claude_code in the adapter contract ({ADAPTER_CONTRACT_REL}) "
-                    "needs a name and a hook_event.",
-                )
-            )
-        if name in seen:
-            findings.append(
-                Finding(
-                    "CLIENT_BINDING_DUPLICATE",
-                    name,
-                    f"declared twice in client_bindings.claude_code of the adapter contract ({ADAPTER_CONTRACT_REL}).",
-                )
-            )
-        seen.add(name)
-    declared_events = {(str(r.get("hook_event")), r.get("matcher_tool")) for r in rows}
-    for artifact_path in installed_artifacts:
-        names, events = _installed_binding_names(
-            json.loads(artifact_path.read_text(encoding="utf-8"))
-        )
-        for name in names:
-            if name not in seen:
-                findings.append(
-                    Finding(
-                        "INSTALLED_BINDING_UNDECLARED",
-                        name,
-                        f"{artifact_path} registers binding {name!r}, which "
-                        f"client_bindings.claude_code in the adapter contract ({ADAPTER_CONTRACT_REL}) does not "
-                        "declare. The installed binding is rendered from that section "
-                        "alone; re-install, or declare the row.",
-                    )
-                )
-        for event, matcher in events:
-            if (event, matcher) not in declared_events:
-                findings.append(
-                    Finding(
-                        "INSTALLED_EVENT_UNDECLARED",
-                        f"{event}{{{matcher}}}",
-                        f"{artifact_path} registers event {event!r} (matcher {matcher!r}), "
-                        f"absent from client_bindings.claude_code in the adapter contract ({ADAPTER_CONTRACT_REL}).",
-                    )
-                )
+            add("CLIENT_BINDING_MALFORMED", name or "<unnamed>")
+        if name in by_name:
+            add("CLIENT_BINDING_DUPLICATE", name)
+        pair = (str(row.get("hook_event")), row.get("matcher_tool"))
+        by_name.setdefault(name, set()).add(pair)
+    declared = set().union(*by_name.values())
+    for p in installed_artifacts:
+        rows = _installed_binding_rows(json.loads(p.read_text(encoding="utf-8")), p)
+        for name, e, m, *command in rows:
+            if name is None:
+                add("INSTALLED_BINDING_COMMAND_MALFORMED", command[0], p=p)
+            elif name not in by_name:
+                add("INSTALLED_BINDING_UNDECLARED", name, p=p)
+            if (e, m) not in declared:
+                add("INSTALLED_EVENT_UNDECLARED", f"{e}{{{m}}}", p=p, e=e, m=m)
+            elif (e, m) not in by_name.get(name, declared):
+                add("INSTALLED_BINDING_EVENT_MISMATCH", name, p=p, e=e, m=m)
     return tuple(findings)
 
 
