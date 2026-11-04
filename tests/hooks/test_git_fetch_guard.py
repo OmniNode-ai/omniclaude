@@ -441,3 +441,67 @@ def test_hook_starts_no_interpreter_for_a_non_lane_fetch(lay: Layout) -> None:
         PATH="/usr/bin:/bin",
     )
     assert proc.returncode == 0, (proc.stdout, proc.stderr)
+
+
+# --------------------------------------------------------------------------- #
+# the shared-clone refusal's advice (OMN-19998, friction class 1)
+# --------------------------------------------------------------------------- #
+def test_shared_clone_refusal_never_recommends_a_fetch_a_lane_is_refused(
+    lay: Layout, policy: Policy
+) -> None:
+    """Recorded case: a lane's `git reset` in the shared clone was told that
+    `git fetch` and `git pull --ff-only` are never gated, ran one, and was
+    refused again by the lane git-fetch arm. The advice must match the arm."""
+    env = _env(ONEX_LANE="lane-a")
+    blocked = guard.evaluate_bash_command(
+        "git reset --hard origin/dev",
+        replace(policy, clone_sync_engine=str(ENGINE)),
+        lay.canonical,
+        lay.canonical,
+        (),
+    )
+    assert blocked.blocked  # the shared-clone refusal itself is retained
+    old = os.environ.get("ONEX_LANE")
+    os.environ.update(env)
+    try:
+        lane_decision = guard.evaluate_bash_command(
+            "git reset --hard origin/dev",
+            replace(policy, clone_sync_engine=str(ENGINE)),
+            lay.canonical,
+            lay.canonical,
+            (),
+        )
+    finally:
+        if old is None:
+            os.environ.pop("ONEX_LANE", None)
+        else:
+            os.environ["ONEX_LANE"] = old
+    assert lane_decision.blocked
+    reason = lane_decision.reason
+    assert "neither is `git fetch`" not in reason
+    assert "`git pull --ff-only`" not in reason
+    assert "canonical_clone_sync.py refresh" in reason
+    assert policy.fetch_ticket in reason
+    # The advice it gives is itself admitted from the lane: the recommended
+    # merge passes the fetch arm, and the fetch it no longer recommends does not.
+    assert not evaluate_bash_command(
+        "git merge --ff-only origin/dev", policy, lay.worktree, env
+    ).blocked
+    assert evaluate_bash_command(
+        "git fetch origin dev", policy, lay.worktree, env
+    ).blocked
+
+
+def test_shared_clone_refusal_outside_a_lane_keeps_its_fetch_advice(
+    lay: Layout, policy: Policy
+) -> None:
+    """Positive control: outside a lane the fetch arm admits a fetch, so the
+    original sentence is still true and is kept."""
+    decision = guard.evaluate_bash_command(
+        "git reset --hard origin/dev", policy, lay.canonical, lay.canonical, ()
+    )
+    assert decision.blocked
+    assert "neither is `git fetch`" in decision.reason
+    assert not evaluate_bash_command(
+        "git fetch origin dev", policy, lay.root, {}
+    ).blocked

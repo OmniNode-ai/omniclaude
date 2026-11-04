@@ -1091,7 +1091,7 @@ clone_fix() { # repo
 # where any `dev` has moved since: the same email installs the same commits.
 # A participant gets a fix only through a new email that pins a script naming a
 # newer anchor. ONBOARD_TEST_INFRA_ANCHOR exists for the tests' fixture repos.
-INFRA_ANCHOR="${ONBOARD_TEST_INFRA_ANCHOR:-aa81312c2c405424d4c947d61c7763d38e67b3a1}"
+INFRA_ANCHOR="${ONBOARD_TEST_INFRA_ANCHOR:-bf256f9660f2520dddb56328d2983f00bafdc910}"
 
 # ---------------------------------------------------------------------------
 # The workspace's tier-1 runtime config.
