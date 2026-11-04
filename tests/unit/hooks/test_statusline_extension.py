@@ -105,6 +105,7 @@ def test_extension_output_replaces_segment_and_is_cached(tmp_path: Path) -> None
     # A widened budget for the success path only: a bare process start on a
     # loaded runner can take longer than 300 ms.
     lines, _ = _render(tmp_path, str(ext), cache, budget_ms="3000")
+    assert len(lines) == 4
     assert lines[2].endswith("SEG-A")
     assert lines[3] == "SEG-B"
     assert BUILTIN_MARK not in "\n".join(lines)
@@ -137,6 +138,7 @@ def test_slow_extension_serves_last_good_cache(tmp_path: Path) -> None:
     cache.write_text("CACHED-A\nCACHED-B\n")
     ext = _ext(tmp_path, "slow", "sleep 1; echo SLOW-SEG")
     lines, _ = _render(tmp_path, str(ext), cache)
+    assert len(lines) == 4
     assert lines[2].endswith("CACHED-A")
     assert lines[3] == "CACHED-B"
     assert BUILTIN_MARK not in "\n".join(lines)
