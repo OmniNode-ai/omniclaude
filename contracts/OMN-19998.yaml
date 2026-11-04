@@ -92,6 +92,11 @@ requirements:
     acceptance:
       - id: "AC15"
         statement: "AC15: recovery preview and installation render --preserve-backlog exactly once and the selected absolute state root; invalid settings leave the installed unit untouched; recorded quiet-host journal rows survive a stalled recovery cycle while ordinary overflow eviction remains active -- falsifier: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -q --no-cov with Linux recovery rendering removed"
+  - id: req-omn19998-auto-checkpoint-no-gh-read
+    statement: "The PostToolUse auto-checkpoint hook writes its checkpoint after a git commit without any GitHub read through gh."
+    acceptance:
+      - id: "AC16"
+        statement: "AC16: a git commit PostToolUse payload writes one checkpoint naming the local PR reader and invokes no gh -- falsifier: uv run pytest tests/hooks/test_auto_checkpoint_no_gh_read.py -q --no-cov with the gh pr view call restored"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -104,6 +109,14 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  - id: dod-omn19998-auto-checkpoint-no-gh-read
+    description: "The registered auto-checkpoint hook runs on a git commit payload with a recording fake gh on PATH; the checkpoint is written as the positive control and the fake gh records no call."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_auto_checkpoint_no_gh_read.py -q --no-cov"
+    binds_ac:
+      - "AC16"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
