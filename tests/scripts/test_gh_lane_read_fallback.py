@@ -465,3 +465,64 @@ def test_strict_read_refused_does_not_refuse_the_gateway_shapes(
     assert result.returncode == 0, result.stderr
     assert _calls(env) == [argv]
     assert _budget_spent(env) == 1
+
+
+# OMN-19998: a lane's live inventory was refused because the gateway "could not write its
+# hourly budget file". mkdir -p exits 0 on an existing directory it cannot write, so a
+# read-only budget directory passed the directory check and every read was refused at the
+# append as a file fault, with bash's own redirection error leaking ahead of the refusal.
+_JOB_LOG = ["api", "repos/o/r/actions/jobs/19998/logs"]
+
+
+def _budget_dir(env: dict[str, str]) -> Path:
+    budget = Path(env["XDG_CACHE_HOME"]) / "omni" / "gh-shim" / "gateway" / "budget"
+    budget.mkdir(parents=True, exist_ok=True)
+    return budget
+
+
+def _hour_file(env: dict[str, str]) -> Path:
+    hour = subprocess.run(
+        ["date", "-u", "+%Y%m%d%H"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    return _budget_dir(env) / hour
+
+
+@pytest.mark.unit
+def test_owned_read_only_budget_directory_is_repaired_and_counted(
+    env: dict[str, str],
+) -> None:
+    budget = _budget_dir(env)
+    budget.chmod(0o555)
+    result = _run(env, *_JOB_LOG, extra={"ONEX_LANE": LANE})
+    assert result.returncode == 0, result.stderr
+    assert _calls(env) == [_JOB_LOG]
+    assert _budget_spent(env) == 1
+
+
+@pytest.mark.unit
+def test_owned_read_only_hour_file_is_repaired_and_keeps_its_count(
+    env: dict[str, str],
+) -> None:
+    hour_file = _hour_file(env)
+    hour_file.write_text("1\n2\n")
+    hour_file.chmod(0o444)
+    result = _run(env, *_JOB_LOG, extra={"ONEX_LANE": LANE})
+    assert result.returncode == 0, result.stderr
+    assert _calls(env) == [_JOB_LOG]
+    assert len(hour_file.read_text().splitlines()) == 3
+
+
+@pytest.mark.unit
+def test_unwritable_hour_file_still_refuses_and_names_the_cause(
+    env: dict[str, str],
+) -> None:
+    """A path no chmod repairs (here a directory where the hour file goes) stays refused."""
+    _hour_file(env).mkdir()
+    result = _run(env, *_JOB_LOG, extra={"ONEX_LANE": LANE})
+    assert result.returncode == 1
+    assert _calls(env) == []
+    lines = result.stderr.strip().splitlines()
+    assert len(lines) == 1, result.stderr
+    assert "cannot record this read in its budget file" in lines[0]
+    assert "(it is d" in lines[0]
+    assert "uid " in lines[0]
