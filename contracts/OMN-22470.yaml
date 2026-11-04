@@ -1,0 +1,50 @@
+---
+schema_version: 1.0.0
+ticket_id: OMN-22470
+title: The omniclaude post-merge plugin version bump PR binds to a ticket whose criteria it can meet
+summary: The bot bump workflow stamps its commit, title and Evidence-Ticket line with its own bump
+  ticket instead of OMN-20710, whose AC3 was added after the contract was accepted and held
+  omniclaude#3133 on CRITERIA_DRIFT.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-bump-binding
+  statement: The bump PR binds to OMN-22470, and a regression test built from the recorded
+    OMN-20710 drift refuses binding it to a ticket whose live criteria are not all accepted.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: the workflow commit message, PR body Evidence-Ticket line and PR creation use this
+      ticket, and no bot bump names OMN-20710 -- falsifier: uv run pytest tests/ci/test_plugin_version_bump_gate.py
+      -k bump_binding_ticket'
+  - id: AC2
+    statement: 'AC2: a regression test built from the recorded failure fails on the workflow before the
+      change and passes after it -- falsifier: uv run pytest tests/ci/test_plugin_version_bump_gate.py
+      -k bump_binding_criteria_drift'
+evidence_requirements:
+- kind: tests
+  description: The bump ticket tests pass and the existing bump gate tests still pass.
+  command: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn22470-ac1
+  description: The workflow names OMN-22470 in the commit subject, PR title and Evidence-Ticket line
+    and never OMN-20710.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov -k bump_binding_ticket
+  binds_ac:
+  - AC1
+- id: dod-omn22470-ac2
+  description: The recorded OMN-20710 drift fixture refuses binding the bump to OMN-20710; on the
+    workflow before this change the test fails.
+  source: manual
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/ci/test_plugin_version_bump_gate.py -q --no-cov -k bump_binding_criteria_drift
+  binds_ac:
+  - AC2
