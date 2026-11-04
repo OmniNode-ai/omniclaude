@@ -16,7 +16,7 @@ points no model at a lab server.
 | macOS | 14 or newer | 14 or newer |
 | CPU cores | 4 | 8 |
 | Memory | 8 GB | 16 GB |
-| Free disk | 20 GB | 30 GB (20 GB if Docker Desktop is already installed) |
+| Free disk | 10 GB | 30 GB (20 GB if Docker Desktop is already installed) |
 
 The run checks all of this before it changes anything. Below the minimum it stops and
 installs nothing.
@@ -388,5 +388,8 @@ ticket. A command you needed that is not documented here is the finding, not a d
 ## Compatibility
 
 The script runs under macOS's stock `/bin/bash` 3.2 as well as a modern bash, and on both
-Apple silicon and Intel. It also runs in a macOS 14+ VM with 4 vCPU, 8 GB RAM and 40 GB
-disk, where the Docker stack is not offered.
+Apple silicon and Intel. It also runs in a macOS 14+ VM with 4 vCPU, 8 GB RAM and 50 GB disk
+(the stock Tart macOS image as pulled, which has 17 GB free; do not resize it, because
+the disk cannot be grown past the image from inside the guest), where the Docker stack is
+not offered. The install of the local-model path uses about 5 GB of that, so 17 GB free
+clears the 10 GB minimum with room to spare.

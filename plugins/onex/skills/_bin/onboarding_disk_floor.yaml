@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# The one declared source of the onboarding disk figures.
+#
+# lab-onboarding.sh is downloaded as one pinned file, so it cannot read this file at
+# run time: its M1_DISK_GB constant and its VM_SPEC text carry copies of these figures,
+# and tests/skills/test_lab_onboarding_script_disk_floor.py fails when the script, this
+# file or the guide (plugins/onex/ONBOARDING.md) disagree. Change a figure here first.
+#
+# Measured with Tart 2.32.1 on 2026-11-02: a clone of the stock image cut to
+# 4 vCPU and 8 GB, `df -k` of the data volume before the run and after every phase,
+# `--no-containers`, the keyless stub model server, a 2-second `df` sampler for the peak.
+# Retaken on 2026-11-03 on fresh clones of the same image digest: local model peak 4.98 GiB (exit 0),
+# hosted key 4.32 GiB when phase 3 stopped, Ollama 5.32 GiB when phase 3 stopped. The figures below
+# are the larger of the two days' readings, so the declared use never falls under a reading.
+# The recorded readings are in the ticket comment and the PR's Lab comment.
+image:
+  name: ghcr.io/cirruslabs/macos-tahoe-vanilla
+  digest: sha256:eeec54bfe1f076e27786c5d92b89187a05b1d109b5071eb2dcdf02d596e34640
+  disk_gb: 50       # `tart get`: the disk as pulled; Tart refuses to shrink it
+  total_gb: 41      # `df -g /` inside the guest
+  free_gb: 17       # `df -g /` inside the guest, the reading the preflight takes
+vm:
+  vcpu: 4
+  ram_gb: 8
+  disk_gb: 50       # the image as pulled; the guest cannot grow it (SIP, resizeContainer -69519)
+requirements:
+  cpus: 4
+  ram_gb: 8
+margin_gb: 4        # run-to-run spread seen (0.15 GiB), repository growth between anchors, caches of the first call
+paths:
+  local_model:      # --provider local, measured to the end of phase 6, exit 0
+    peak_use_gib: 5.12
+    measured_use_gb: 6
+    min_gb: 10      # = M1_DISK_GB in lab-onboarding.sh
+  hosted_key:       # phases 0-3 measured on --provider openai_compatible (4.41 GiB), phases 5-6 as the local run (0.37 GiB)
+    peak_use_gib: 5.12   # the local run's figure: the same install
+    measured_use_gb: 6
+    min_gb: 10      # same install as the local path; the key is a few bytes in onex's key store
+  ollama_model:     # app and server install measured (5.44 GiB at the point Ollama starts), model from the registry manifest (0.92 GiB)
+    peak_use_gib: 6.73
+    measured_use_gb: 7
+    model_download_gb: 1   # the 8 GB Mac's row of the model config, qwen2.5-coder:1.5b; phase 3 checks M1_DISK_GB + download
+    min_gb: 11
