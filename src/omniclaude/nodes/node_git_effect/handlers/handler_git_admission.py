@@ -197,10 +197,14 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final
 
+from omniclaude.nodes.node_git_effect.container import container_git_admission
 from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
 from omniclaude.nodes.node_git_effect.models.model_git_admission import (
     ModelGitAdmissionRequest,
     ModelGitAdmissionResult,
+)
+from omniclaude.nodes.node_git_effect.models.model_git_refusal_advice_request import (
+    ModelGitRefusalAdviceRequest,
 )
 
 from .handler_shell_words import (
@@ -1151,21 +1155,6 @@ def _render_protected_push_reason(policy: Policy, git_root: Path, detail: str) -
         f"{policy.rule}). This is your own tree and almost everything in it "
         f"is your business -- but {detail}. To disable this guard: onex "
         f"hooks disable {GATE_BIT_NAME}"
-    )
-
-
-def _render_block_reason(
-    policy: Policy, invocation: _GitInvocation, git_root: Path, detail: str
-) -> str:
-    return (
-        f"BLOCKED: `git {invocation.subcommand}` in {git_root}, the shared "
-        f"registry clone ({policy.ticket}, {policy.rule}). Many "
-        "concurrent lanes work in this ONE tree, so a command that moves it "
-        "takes their work with it: "
-        f"{detail}. Use a sanctioned alternative instead -- "
-        f"{policy.safe_alternatives}. Reads are never gated, and neither is "
-        "`git fetch`, `git merge --ff-only` or `git pull --ff-only`. To "
-        f"disable this guard: onex hooks disable {GATE_BIT_NAME}"
     )
 
 
@@ -2233,30 +2222,6 @@ def _fetch_operands(subcommand: str, args: list[str]) -> tuple[list[str], bool]:
     return positionals[:1], False
 
 
-def _is_lane_path(path: Path, policy: Policy, worktree_roots: tuple[Path, ...]) -> bool:
-    texts = {str(path)}
-    try:
-        texts.add(str(path.resolve()))
-    except OSError:
-        pass
-    for text in texts:
-        probe = text.rstrip("/") + "/"
-        if any(marker in probe for marker in policy.fetch_lane_path_markers):
-            return True
-        if any(
-            probe.startswith(str(root).rstrip("/") + "/") for root in worktree_roots
-        ):
-            return True
-    return False
-
-
-def _lane_name(policy: Policy, environ: Mapping[str, str]) -> str:
-    for name in policy.fetch_lane_envs:
-        if environ.get(name):
-            return environ[name]
-    return ""
-
-
 def _fetch_refusal_text(
     policy: Policy, verb: str, repo: str, detail: str, branch: str | None
 ) -> str:
@@ -2322,11 +2287,12 @@ def _lane_fetch_refusal(
             target = Path(expanded)
         elif target is not None:
             target = target / expanded
+    advice = container_git_admission.build_git_refusal_advice()
     lane = (
-        bool(_lane_name(policy, environ))
-        or _is_lane_path(payload_cwd, policy, worktree_roots)
-        or (cwd_known and _is_lane_path(effective_cwd, policy, worktree_roots))
-        or (target is not None and _is_lane_path(target, policy, worktree_roots))
+        bool(advice.lane_name(policy, environ))
+        or advice.is_lane_path(payload_cwd, policy, worktree_roots)
+        or (cwd_known and advice.is_lane_path(effective_cwd, policy, worktree_roots))
+        or (target is not None and advice.is_lane_path(target, policy, worktree_roots))
     )
     if not lane:
         return None
@@ -2400,7 +2366,8 @@ def _log_fetch_refusal(
     state = environ.get("ONEX_STATE_DIR")
     if not state or not decision.fetch_verb:
         return
-    lane, source = _lane_name(policy, environ), "env"
+    advice = container_git_admission.build_git_refusal_advice()
+    lane, source = advice.lane_name(policy, environ), "env"
     if not lane:
         parts = cwd.parts
         if "omni_worktrees" in parts:
@@ -2603,9 +2570,25 @@ def evaluate_bash_command(
                 git_root=git_root,
             )
             if detail is not None:
+                advice = container_git_admission.build_git_refusal_advice()
                 return Decision(
                     blocked=True,
-                    reason=_render_block_reason(policy, invocation, git_root, detail),
+                    reason=advice.handle(
+                        ModelGitRefusalAdviceRequest(
+                            subcommand=invocation.subcommand,
+                            git_root=git_root,
+                            detail=detail,
+                            ticket=policy.ticket,
+                            rule=policy.rule,
+                            safe_alternatives=policy.safe_alternatives,
+                            fetch_ticket=policy.fetch_ticket,
+                            clone_sync_engine=policy.clone_sync_engine,
+                            gate_bit_name=GATE_BIT_NAME,
+                            lane=advice.caller_is_lane(
+                                policy, cwd, worktree_roots, os.environ
+                            ),
+                        )
+                    ),
                 )
         elif git_root is not None:
             protected = _protected_push_detail(
