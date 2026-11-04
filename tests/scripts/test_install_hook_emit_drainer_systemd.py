@@ -16,10 +16,14 @@ runner.
 
 from __future__ import annotations
 
+import shlex
 import shutil
 import stat
 import subprocess
+import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -57,7 +61,10 @@ def _prepare(tmp_path: Path) -> tuple[Path, dict[str, str], Path, Path]:
     # The omniclaude project venv is the Linux interpreter. The stub accepts
     # the installer's import probe so no real omnibase_infra is needed.
     _write_executable(
-        repo_root / ".venv" / "bin" / "python3", "#!/usr/bin/env bash\nexit 0\n"
+        repo_root / ".venv" / "bin" / "python3",
+        "#!/usr/bin/env bash\n"
+        '[[ "${2:-}" == "import omnibase_infra, omnimarket" ]] && exit 0\n'
+        f'exec "{sys.executable}" "$@"\n',
     )
 
     calls = tmp_path / "systemctl.calls"
@@ -208,3 +215,127 @@ def test_status_fails_when_the_unit_was_never_installed(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "install-hook-emit-drainer.sh" in result.stdout + result.stderr
+
+
+def test_recorded_quiet_host_repair_preserves_selected_journal(tmp_path: Path) -> None:
+    """2026-11-01T15:33:25Z: h053 ran for 37m with no captured event.
+
+    The alarm's installer preview and activation must use the same recovery
+    flag and state root. Installation alone is no evidence of event recovery.
+    """
+    installer, env, calls, unit = _prepare(tmp_path)
+    state = tmp_path / "h053 retained state"
+    journal = state / "hook_emit_journal"
+    journal.mkdir(parents=True)
+    retained = journal / "00000000000000000001_h053.json"
+    retained.write_text('{"host":"h053","queued_at":"2026-11-01T14:56:25Z"}')
+    before = retained.read_bytes()
+    env |= {"ONEX_STATE_DIR": str(state), "ONEX_HOOK_EMIT_PRESERVE_BACKLOG": "1"}
+
+    preview = _run(installer, env, "--dry-run")
+    assert preview.returncode == 0, preview.stdout + preview.stderr
+    rendered = preview.stdout.split("--- rendered unit (not installed) ---\n", 1)[1]
+    exec_start = next(
+        line for line in rendered.splitlines() if line.startswith("ExecStart=")
+    )
+    assert (
+        shlex.split(exec_start.removeprefix("ExecStart=")).count("--preserve-backlog")
+        == 1
+    )
+    assignments = [
+        assignment
+        for line in rendered.splitlines()
+        if line.startswith("Environment=")
+        for assignment in shlex.split(line.removeprefix("Environment="))
+    ]
+    assert f"ONEX_STATE_DIR={state}" in assignments
+    assert not calls.exists() and not unit.exists()
+
+    installed = _run(installer, env)
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    assert unit.read_text() == rendered
+    assert f"--user restart {_UNIT}" in calls.read_text().splitlines()
+    assert retained.read_bytes() == before
+
+    env["ONEX_HOOK_EMIT_PRESERVE_BACKLOG"] = "0"
+    normal = _run(installer, env)
+    assert normal.returncode == 0, normal.stdout + normal.stderr
+    assert "--preserve-backlog" not in unit.read_text()
+    assert retained.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [{"ONEX_HOOK_EMIT_PRESERVE_BACKLOG": "yes"}, {"ONEX_STATE_DIR": "relative"}],
+)
+def test_invalid_recovery_setting_keeps_existing_linux_unit(
+    tmp_path: Path, setting: dict[str, str]
+) -> None:
+    installer, env, calls, unit = _prepare(tmp_path)
+    unit.parent.mkdir(parents=True)
+    unit.write_text("previous unit")
+
+    result = _run(installer, env | setting)
+
+    assert result.returncode != 0
+    assert "ERROR:" in result.stderr
+    assert unit.read_text() == "previous unit"
+    assert not calls.exists()
+
+
+def test_rendered_recovery_cli_retains_recorded_rows_over_the_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hook_emit_drainer as drainer
+    import hook_emit_journal as journal
+
+    installer, env, _calls, _unit = _prepare(tmp_path)
+    env["ONEX_HOOK_EMIT_PRESERVE_BACKLOG"] = "1"
+    preview = _run(installer, env, "--dry-run")
+    assert preview.returncode == 0, preview.stdout + preview.stderr
+    argv = shlex.split(
+        next(
+            line.removeprefix("ExecStart=")
+            for line in preview.stdout.splitlines()
+            if line.startswith("ExecStart=")
+        )
+    )
+    jdir = Path(env["ONEX_STATE_DIR"]) / "hook_emit_journal"
+    # Projections of the quiet-host rows at 2026-10-19T13:02:54Z and
+    # 2026-11-01T15:33:25Z: host and the recorded duration without capture.
+    rows = [
+        ("2026-10-19T13:02:54+00:00", "h101", 272),
+        ("2026-10-19T13:02:54+00:00", "h202", 352),
+        ("2026-11-01T15:33:25+00:00", "h053", 37),
+    ]
+    for index, (observed, host, minutes) in enumerate(rows):
+        record = journal.JournalRecord(
+            event_id=f"capture-{index}",
+            event_type="tool.executed",
+            payload={"host": host},
+            correlation_id=None,
+            queued_at=datetime.fromisoformat(observed).astimezone(UTC)
+            - timedelta(minutes=minutes),
+        )
+        (jdir / f"{index:020d}_capture.json").write_text(record.to_json())
+    before = {path.name: path.read_bytes() for path in jdir.glob("*.json")}
+    enforce_bound = journal.enforce_bound
+    monkeypatch.setattr(journal, "enforce_bound", lambda path: enforce_bound(path, 2))
+    monkeypatch.setenv("ONEX_STATE_DIR", env["ONEX_STATE_DIR"])
+
+    def run_selected(journal_dir: Path, lock_path: Path, **options: object) -> int:
+        assert journal_dir == jdir
+        assert lock_path.parent == jdir.parent
+        stalled = SimpleNamespace(publish=lambda record: False)
+        assert drainer.drain_once(
+            journal_dir, stalled, preserve_backlog=bool(options["preserve_backlog"])
+        ) == (0, 3, 0)
+        return 0
+
+    monkeypatch.setattr(drainer, "run", run_selected)
+    assert drainer.main([*argv[2:], "--once"]) == 0
+    assert {path.name: path.read_bytes() for path in jdir.glob("*.json")} == before
+    assert not journal.loss_log_path(jdir).exists()
+    # Positive control: the ordinary bound still evicts an overflowing record.
+    assert journal.enforce_bound(jdir) == 1
+    assert journal.loss_log_path(jdir).exists()

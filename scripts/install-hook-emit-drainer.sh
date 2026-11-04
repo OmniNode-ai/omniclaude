@@ -74,6 +74,18 @@ print_backlog() {
   shopt -u nullglob
 }
 
+# Read-only status and uninstall do not consume recovery settings.
+if [[ "${1:-}" != "--status" && "${1:-}" != "--uninstall" ]]; then
+  if [[ -n "${ONEX_STATE_DIR:-}" && "${ONEX_STATE_DIR}" != /* ]]; then
+    echo "ERROR: ONEX_STATE_DIR must be absolute." >&2
+    exit 1
+  fi
+  case "${ONEX_HOOK_EMIT_PRESERVE_BACKLOG:-0}" in
+    0|1) ;;
+    *) echo "ERROR: ONEX_HOOK_EMIT_PRESERVE_BACKLOG must be 0 or 1." >&2; exit 1 ;;
+  esac
+fi
+
 if [[ "${SUPERVISOR}" == "systemd" ]]; then
   UNIT="${LABEL}.service"
   SRC_UNIT="${SCRIPT_DIR}/systemd/${UNIT}"
@@ -132,10 +144,22 @@ if [[ "${SUPERVISOR}" == "systemd" ]]; then
 
   RENDERED="$(mktemp)"
   trap 'rm -f "${RENDERED}"' EXIT
-  sed -e "s|__OMNI_HOME__|${OMNI_HOME_RESOLVED}|g" \
-      -e "s|__PYTHON__|${LINUX_PYTHON}|g" \
-      "${SRC_UNIT}" > "${RENDERED}"
-  if grep -q '__OMNI_HOME__\|__PYTHON__' "${RENDERED}"; then
+  "${LINUX_PYTHON}" - "${SRC_UNIT}" "${OMNI_HOME_RESOLVED}" "${LINUX_PYTHON}" <<'PY' > "${RENDERED}"
+import os
+import sys
+from pathlib import Path
+
+source, workspace, interpreter = sys.argv[1:]
+state = os.environ.get('ONEX_STATE_DIR') or f'{workspace}/.onex_state'
+# Environment= uses systemd quoting, with literal percent specifiers escaped.
+state = state.replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%')
+state = state.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+text = Path(source).read_text().replace('__STATE_DIR__', state)
+text = text.replace('__OMNI_HOME__', workspace).replace('__PYTHON__', interpreter)
+text = text.replace('__BACKLOG_ARGS__', ' --preserve-backlog' if os.environ.get('ONEX_HOOK_EMIT_PRESERVE_BACKLOG', '0') == '1' else '')
+sys.stdout.write(text)
+PY
+  if grep -q '__OMNI_HOME__\|__PYTHON__\|__STATE_DIR__\|__BACKLOG_ARGS__' "${RENDERED}"; then
     echo "ERROR: rendered unit still contains unexpanded tokens." >&2
     exit 1
   fi
@@ -196,24 +220,7 @@ if [[ "${1:-}" == "--status" ]]; then
   launchctl print "gui/${UID_GUI}/${LABEL}" 2>/dev/null | sed -n '1,12p' \
     || echo "state:   NOT LOADED"
 
-  STATE_DIR="${ONEX_STATE_DIR:-${OMNI_HOME_RESOLVED}/.onex_state}"
-  JOURNAL="${STATE_DIR}/hook_emit_journal"
-  echo "Journal: ${JOURNAL}"
-  shopt -s nullglob
-  pending=("${JOURNAL}"/*.json)
-  echo "Pending: ${#pending[@]}"
-
-  # OMN-17284: the emit spool is a SECOND backlog with a different cause.
-  # omnibase_infra's receipt-mode CLI writes here when the emit daemon's Unix
-  # socket is unreachable, so a deep spool means "no emit daemon", which the
-  # drainer does not fix and this command used not to mention at all. On the
-  # operator Mac 2026-09-15 the journal was full AND 736 records sat here, and
-  # only one of the two numbers was visible.
-  SPOOL="${STATE_DIR}/emit_spool"
-  spooled=("${SPOOL}"/*.json)
-  echo "Spool:   ${SPOOL} (emit_spool)"
-  echo "Spooled: ${#spooled[@]}"
-  shopt -u nullglob
+  print_backlog
 
   # Validate the plist this command just named. `launchctl print` reports
   # launchd's IN-MEMORY copy, which can be a previous, good version of a file
@@ -299,14 +306,6 @@ if [[ -n "${ONEX_WORKSPACE_CONFIG_ROOT:-}" ]] \
   echo "ERROR: ONEX_WORKSPACE_CONFIG_ROOT lacks config/lab/hook_edge_lane.yaml: ${ONEX_WORKSPACE_CONFIG_ROOT}" >&2
   exit 1
 fi
-if [[ -n "${ONEX_STATE_DIR:-}" && "${ONEX_STATE_DIR}" != /* ]]; then
-  echo "ERROR: ONEX_STATE_DIR must be absolute." >&2
-  exit 1
-fi
-case "${ONEX_HOOK_EMIT_PRESERVE_BACKLOG:-0}" in
-  0|1) ;;
-  *) echo "ERROR: ONEX_HOOK_EMIT_PRESERVE_BACKLOG must be 0 or 1." >&2; exit 1 ;;
-esac
 
 if [[ "${1:-}" != "--dry-run" ]]; then
   export OMNI_HOME="${OMNI_HOME_RESOLVED}"
@@ -332,7 +331,6 @@ sed -e "s|__OMNI_HOME__|${OMNI_HOME_RESOLVED}|g" \
     -e "s|__HOME__|${HOME}|g" \
     -e "s|__PYTHON__|${DAEMON_PYTHON}|g" \
     "${SRC_PLIST}" \
-  | sed -e 's|<key>Disabled</key>|<key>Disabled</key>|' \
   | "${BREW_PYTHON}" -c "
 import sys
 import os
@@ -344,8 +342,7 @@ s = sys.stdin.read()
 s = s.replace('<key>Disabled</key>\n  <true/>', '<key>Disabled</key>\n  <false/>', 1)
 config_root = os.environ.get('ONEX_WORKSPACE_CONFIG_ROOT', '')
 state_root = os.environ.get('ONEX_STATE_DIR', '')
-preserve_backlog = os.environ.get('ONEX_HOOK_EMIT_PRESERVE_BACKLOG', '0') == '1'
-if config_root or state_root or preserve_backlog:
+if config_root or state_root or os.environ.get('ONEX_HOOK_EMIT_PRESERVE_BACKLOG', '0') == '1':
     payload = plistlib.loads(s.encode('utf-8'))
     if config_root:
         payload['EnvironmentVariables']['ONEX_WORKSPACE_CONFIG_ROOT'] = str(
@@ -353,7 +350,7 @@ if config_root or state_root or preserve_backlog:
         )
     if state_root:
         payload['EnvironmentVariables']['ONEX_STATE_DIR'] = state_root
-    if preserve_backlog:
+    if os.environ.get('ONEX_HOOK_EMIT_PRESERVE_BACKLOG', '0') == '1':
         payload['ProgramArguments'].append('--preserve-backlog')
     s = plistlib.dumps(payload).decode('utf-8')
 sys.stdout.write(s)

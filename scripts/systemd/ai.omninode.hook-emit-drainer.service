@@ -34,7 +34,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-ExecStart=__PYTHON__ __OMNI_HOME__/omniclaude/plugins/onex/hooks/lib/hook_emit_drainer.py --log-level INFO
+ExecStart=__PYTHON__ __OMNI_HOME__/omniclaude/plugins/onex/hooks/lib/hook_emit_drainer.py --log-level INFO__BACKLOG_ARGS__
 Restart=always
 # Restart backoff, the plist's ThrottleInterval: an unimportable omnimarket
 # during a venv rebuild must not respawn in a tight loop.
@@ -46,7 +46,7 @@ Environment=OMNI_HOME=__OMNI_HOME__
 # `uv run onex-ledger`, and uv lives under ~/.local/bin; without it the ledger ALERT row fails
 # with "No such file or directory: 'uv'" (OMN-18603). %h is systemd's specifier for the home.
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-Environment=ONEX_STATE_DIR=__OMNI_HOME__/.onex_state
+Environment="ONEX_STATE_DIR=__STATE_DIR__"
 WorkingDirectory=__OMNI_HOME__
 StandardOutput=append:__OMNI_HOME__/.onex_state/hooks/logs/hook-emit-drainer.log
 StandardError=append:__OMNI_HOME__/.onex_state/hooks/logs/hook-emit-drainer.log
