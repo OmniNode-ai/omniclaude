@@ -587,11 +587,8 @@ def registry_roots(env: Mapping[str, str]) -> list[Path]:
     so a launchd run, whose environment carries only ``OMNI_HOME``, covers the
     same roots an interactive shell does.
     """
-    candidates: list[str] = []
     registry_home = env.get("OMNI_HOME", "")
-    if registry_home:
-        candidates.append(registry_home)
-    candidates.extend(env.get("ONEX_REGISTRY_ROOTS", "").split(":"))
+    candidates = [registry_home, *env.get("ONEX_REGISTRY_ROOTS", "").split(":")]
     if registry_home:
         roots_file = Path(registry_home) / REGISTRY_ROOTS_FILE
         with contextlib.suppress(OSError):
@@ -1886,6 +1883,10 @@ def sibling_clones(env: Mapping[str, str]) -> list[Path]:
     ``$OMNI_HOME/..`` and the absolute path in each ``*_INTERNAL_HOME`` variable.
     A linked worktree (``.git`` a file) is not one; no repository is named."""
     beside = Path(env["OMNI_HOME"]).parent if env.get("OMNI_HOME") else None
+    # A home directory is never listed (OMN-17427): that layout declares its clone
+    # through *_INTERNAL_HOME, which is data.
+    if beside and beside.resolve() == Path(env.get("HOME") or Path.home()).resolve():
+        beside = None
     found = [c for c in discover_clones([beside]) if c != beside] if beside else []
     homes = (Path(v) for k, v in sorted(env.items()) if k.endswith("_INTERNAL_HOME"))
     return found + [c for c in homes if c.is_absolute() and _is_dir(c / ".git", c)]
@@ -1894,17 +1895,14 @@ def sibling_clones(env: Mapping[str, str]) -> list[Path]:
 def _clones_for(env: Mapping[str, str], repo: str) -> list[Path]:
     """Canonical clones whose slug is ``repo``, or whose name is (``omniclaude``)."""
     wanted = repo.casefold().removesuffix(".git")
-    clones = discover_clones(registry_roots(env))
+    by_path: dict[Path, Path] = {}
+    for clone in (*discover_clones(registry_roots(env)), *sibling_clones(env)):
+        by_path.setdefault(clone.resolve(), clone)
+    clones = list(by_path.values())
     # OMN-17427: lanes on h201 and h101 got NO_CLONE for omnibase_internal on
     # 2026-10-07 because the sibling is no registry root's child; OMN-22102: the
     # same for the knowledge base clone on three lab hosts. Only the refresh
     # looks there; the sync's clone set is unchanged.
-    seen = {clone.resolve() for clone in clones}
-    for clone in sibling_clones(env):
-        resolved = clone.resolve()
-        if resolved not in seen:
-            seen.add(resolved)
-            clones.append(clone)
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         slugs = list(pool.map(clone_slug, clones))
     out: list[Path] = []

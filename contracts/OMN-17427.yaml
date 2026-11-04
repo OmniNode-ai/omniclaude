@@ -244,6 +244,11 @@ requirements:
     acceptance:
       - id: AC58
         statement: "From a copy of plugins/onex/hooks with no src above it, the capture encryption setting reads from the installed omniclaude package, the ticket gate evaluates an update and still refuses an unbound create -- falsifier: uv run pytest tests/unit/hooks/test_plugin_cache_install_omn17427.py -q --no-cov fails over the merge base, where both libs load from parents[4]/src"
+  - id: req-canonical-clone-refresh-never-lists-home
+    statement: The canonical clone refresh never lists an account home directory and skips an unreadable directory instead of aborting the discovery.
+    acceptance:
+      - id: AC17427130
+        statement: "With a mode 000 directory beside the registry root and with the registry root directly under the account home, the refresh still reaches the declared clone and no home directory is listed -- falsifier: uv run pytest plugins/onex/hooks/tests/test_canonical_clone_sync_sibling_clone.py -q --no-cov fails 4 tests over the merge base, where the stat of the locked directory's .git raises PermissionError"
   - id: req-omnimarket-pin-newest-dev-tag
     statement: The omnimarket pin names the newest dev merge tag, so the sibling-pin staleness gate passes.
     acceptance:
@@ -1202,6 +1207,15 @@ dod_evidence:
       - check_type: "test_passes"
         check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov -k test_no_count_refuses_a_create"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-canonical-clone-refresh-never-lists-home
+    description: The sibling clone tests lock a directory beside the registry root and place the root under the account home, and check the refresh reaches the declared clone; four of them fail over the merge base.
+    source: manual
+    status: verified
+    binds_ac:
+      - AC17427130
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest plugins/onex/hooks/tests/test_canonical_clone_sync_sibling_clone.py -q --no-cov"
   - id: dod-omnimarket-pin-newest-dev-tag
     description: The omnimarket pin in pyproject.toml and uv.lock is the newest dev merge tag; the grep counts two pin lines and the lock names the tag's commit.
     source: manual
