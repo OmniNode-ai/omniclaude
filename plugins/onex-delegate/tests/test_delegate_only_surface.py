@@ -23,9 +23,11 @@ keeps internal tooling out of customer installs. This test proves:
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.unit
 
@@ -38,8 +40,13 @@ DEV_MARKETPLACE = (
     PLUGINS_DIR / "onex-dev-marketplace" / ".claude-plugin" / "marketplace.json"
 )
 
+DISTRIBUTION_MANIFEST = PLUGINS_DIR / "distribution_manifest.yaml"
+
 DELEGATE_PLUGIN_DIR = PLUGINS_DIR / "onex-delegate"
 DEV_PLUGIN_DIR = PLUGINS_DIR / "onex"
+
+CONSUMER_MARKETPLACE_NAME = "omninode-tools"
+DEV_MARKETPLACE_NAME = "omninode-tools-dev"
 
 
 def _load(path: Path) -> dict:
@@ -201,3 +208,162 @@ class TestInternalDevSurfacePreserved:
         assert resolved == DEV_PLUGIN_DIR.resolve(), (
             f"onex-dev-marketplace/onex must resolve to plugins/onex, got {resolved}"
         )
+
+
+# ---------------------------------------------------------------------------
+# OMN-22272 (T1 of the plugin-surface retirement plan): the default plugin
+# surface is a tested rule. `plugins:` in distribution_manifest.yaml lists one
+# row per marketplace entry; exactly one is the default install, and the tree
+# behind it holds exactly one SKILL.md and no hooks, agents or commands.
+# ---------------------------------------------------------------------------
+
+# (marketplace file, directory its relative `source` values resolve against)
+_CONSUMER_MARKETPLACES = (
+    (ROOT_MARKETPLACE, REPO_ROOT),
+    (SCOPED_MARKETPLACE, PLUGINS_DIR),
+)
+_FORBIDDEN_COMPONENT_DIRS = ("hooks", "agents", "commands")
+
+
+def _plugin_rows() -> list[dict]:
+    manifest = yaml.safe_load(DISTRIBUTION_MANIFEST.read_text())
+    assert "plugins" in manifest, (
+        "plugins/distribution_manifest.yaml must carry a top-level `plugins:` "
+        "list, one row per marketplace entry (OMN-22272)"
+    )
+    return manifest["plugins"]
+
+
+def _default_install_rows(rows: list[dict]) -> list[dict]:
+    return [row for row in rows if row.get("default_install") is True]
+
+
+def _entry_tree_problems(tree: Path) -> list[str]:
+    """Reasons `tree` is not a delegate-alone plugin tree (empty when it is)."""
+    problems: list[str] = []
+    skill_files = sorted(
+        str(p.relative_to(tree)) for p in tree.rglob("SKILL.md") if p.is_file()
+    )
+    if len(skill_files) != 1:
+        problems.append(f"expected exactly one SKILL.md, found {skill_files}")
+    for name in _FORBIDDEN_COMPONENT_DIRS:
+        if (tree / name).exists():
+            problems.append(f"{name}/ must not exist in the default install tree")
+    return problems
+
+
+class TestDefaultPluginSurfaceLocked:
+    def test_plugins_list_exists(self) -> None:
+        rows = _plugin_rows()
+        assert rows, "plugins: list must not be empty"
+        for row in rows:
+            assert {"name", "marketplace", "source", "default_install"} <= set(row), (
+                f"plugins row missing a required key: {row}"
+            )
+            assert isinstance(row["default_install"], bool), row
+
+    def test_exactly_one_default_install_row_and_it_is_the_consumer_entry(
+        self,
+    ) -> None:
+        defaults = _default_install_rows(_plugin_rows())
+        assert len(defaults) == 1, (
+            f"exactly one plugins row may have default_install true, found {defaults}"
+        )
+        row = defaults[0]
+        assert row["name"] == "onex"
+        assert row["marketplace"] == CONSUMER_MARKETPLACE_NAME
+        assert row["source"] == "plugins/onex-delegate"
+
+    def test_dev_marketplace_onex_row_is_not_default_install(self) -> None:
+        dev_rows = [
+            row
+            for row in _plugin_rows()
+            if row["marketplace"] == DEV_MARKETPLACE_NAME and row["name"] == "onex"
+        ]
+        assert len(dev_rows) == 1, f"expected one dev onex row, found {dev_rows}"
+        assert dev_rows[0]["default_install"] is False
+
+    def test_second_default_install_row_is_detected(self) -> None:
+        """Positive control for the default_install count: a planted second
+        true row makes the one-row predicate false."""
+        rows = [dict(row) for row in _plugin_rows()]
+        for row in rows:
+            if row["marketplace"] == DEV_MARKETPLACE_NAME:
+                row["default_install"] = True
+        assert len(_default_install_rows(rows)) != 1
+
+    def test_plugins_rows_match_marketplace_entries(self) -> None:
+        """Every plugins row is a real marketplace entry and vice versa."""
+        listed = {(r["marketplace"], r["name"]) for r in _plugin_rows()}
+        actual = {
+            (m["name"], p["name"])
+            for m in (
+                _load(SCOPED_MARKETPLACE),
+                _load(DEV_MARKETPLACE),
+            )
+            for p in m["plugins"]
+        }
+        assert listed == actual
+
+    def test_consumer_marketplace_files_agree(self) -> None:
+        """The two omninode-tools marketplace files list the same plugin names,
+        with sources that resolve to the same directory."""
+        resolved: list[dict[str, Path]] = []
+        for path, base in _CONSUMER_MARKETPLACES:
+            manifest = _load(path)
+            assert manifest["name"] == CONSUMER_MARKETPLACE_NAME
+            resolved.append(
+                {p["name"]: (base / p["source"]).resolve() for p in manifest["plugins"]}
+            )
+        assert resolved[0] == resolved[1], (
+            f"consumer marketplace files disagree: {resolved[0]} vs {resolved[1]}"
+        )
+
+    def test_default_install_row_source_matches_the_marketplace_entry(self) -> None:
+        (row,) = _default_install_rows(_plugin_rows())
+        for path, base in _CONSUMER_MARKETPLACES:
+            entry = {p["name"]: p for p in _load(path)["plugins"]}[row["name"]]
+            assert (base / entry["source"]).resolve() == (
+                REPO_ROOT / row["source"]
+            ).resolve()
+
+    def test_default_install_tree_holds_exactly_one_skill_and_no_components(
+        self,
+    ) -> None:
+        (row,) = _default_install_rows(_plugin_rows())
+        assert _entry_tree_problems(REPO_ROOT / row["source"]) == []
+
+    def test_a_second_skill_in_a_copy_of_onex_delegate_is_red(
+        self, tmp_path: Path
+    ) -> None:
+        """Fixture case: copy onex-delegate, add a second SKILL.md, and the
+        one-SKILL.md assertion must refuse the copy (the clean copy passes)."""
+        copy = tmp_path / "onex-delegate"
+        shutil.copytree(
+            DELEGATE_PLUGIN_DIR, copy, ignore=shutil.ignore_patterns("tests")
+        )
+        assert _entry_tree_problems(copy) == [], "positive control: clean copy passes"
+        (copy / "skills" / "second").mkdir()
+        (copy / "skills" / "second" / "SKILL.md").write_text("---\nname: second\n---\n")
+        problems = _entry_tree_problems(copy)
+        assert any("exactly one SKILL.md" in p for p in problems), problems
+
+    @pytest.mark.parametrize("directory", _FORBIDDEN_COMPONENT_DIRS)
+    def test_a_forbidden_component_directory_in_a_copy_is_red(
+        self, tmp_path: Path, directory: str
+    ) -> None:
+        copy = tmp_path / "onex-delegate"
+        shutil.copytree(
+            DELEGATE_PLUGIN_DIR, copy, ignore=shutil.ignore_patterns("tests")
+        )
+        (copy / directory).mkdir()
+        assert any(directory in p for p in _entry_tree_problems(copy))
+
+    def test_no_omni_component_is_stable(self) -> None:
+        manifest = yaml.safe_load(DISTRIBUTION_MANIFEST.read_text())
+        offenders = [
+            c["id"]
+            for c in manifest["components"]
+            if c.get("owning_package") == "omni" and c.get("exposure") == "stable"
+        ]
+        assert offenders == [], f"owning_package omni must never be stable: {offenders}"

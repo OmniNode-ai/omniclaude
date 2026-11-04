@@ -30,6 +30,19 @@ component_counts:
   skills: 119
   hooks: 91
   agents: 53
+# One row per marketplace entry (OMN-22272, T1 of the plugin-surface retirement plan).
+# default_install marks the entry a user gets from the public marketplace with no extra step;
+# exactly one row may be true, and plugins/onex-delegate/tests/test_delegate_only_surface.py
+# refuses a second row, a second SKILL.md behind the default entry, or a hooks/agents/commands directory.
+plugins:
+- name: onex
+  marketplace: omninode-tools
+  source: plugins/onex-delegate
+  default_install: true
+- name: onex
+  marketplace: omninode-tools-dev
+  source: plugins/onex
+  default_install: false
 components:
 - id: adversarial_pipeline
   kind: skill
@@ -573,6 +586,14 @@ components:
   path: plugins/onex/skills/lean_go_and_see/SKILL.md
   backing_nodes: []
   rationale: class=pure_skill (bootstrap skill created under OMN-21461, the hand-run form of a lean practice); replaced by its node-backed skill on node_work_ledger_append_effect, task T-P4 of OMN-21433 (no child ticket yet).
+- id: lean_line_board
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/lean_line_board/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill created under OMN-22366, the hand-run form of the line board, the visual management of the lean family); replaced by its node-backed skill on node_factory_floor_effect's lines operation, OMN-22373.
 - id: lean_poka_yoke
   kind: skill
   exposure: beta

@@ -1,0 +1,60 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22366
+title: "Lean line board T1: the hand-run lean_line_board bootstrap skill in the onex plugin"
+summary: >
+  The lean line board plan (approved by the operator, RULING 2026-11-03T15:20:04Z) adds the line
+  board to the lean family as the ninth bootstrap skill: the hand-run form of a board that lists
+  every line in progress with its stage, its owner and, for each stopped line, the cause with the
+  row or check behind it. It composes the existing readers and adds none. The node-home ratchet
+  (OMN-20702) refuses a new ONEX node directory in this repository, so the skill carries no node
+  here; its replacing node (node_factory_floor_effect, lines operation) is built in omnimarket and
+  named in the skill and in the distribution manifest.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22366-skill
+    statement: The lean_line_board bootstrap skill exists in the plugin, names its replacing node, links lean_andon_stop and lean_five_whys, and the lean set is nine in the test and the manifest.
+    acceptance:
+      - id: AC1
+        statement: "AC1: plugins/onex/skills/lean_line_board/SKILL.md exists with the four required sections, bootstrap true, and names its replacing node -- falsifier: uv run pytest tests/skills/test_lean_bootstrap_skills_omn21461.py -q --no-cov"
+      - id: AC2
+        statement: "AC2: the lean set is nine in the test and in plugins/distribution_manifest.yaml -- falsifier: uv run pytest tests/skills/test_lean_bootstrap_skills_omn21461.py -q --no-cov"
+      - id: AC3
+        statement: "AC3: the skill links lean_andon_stop and lean_five_whys -- falsifier: grep -c lean_andon_stop and grep -c lean_five_whys on the SKILL.md each return at least 1"
+      - id: AC4
+        statement: "AC4: the skill names no machine path -- falsifier: a grep of the file for home-directory prefixes returns nothing, and the public hygiene gate in the repository ci.yml"
+evidence_requirements:
+  - kind: tests
+    description: "Lean bootstrap skill and skill-to-node tests pass"
+    command: "uv run pytest tests/skills/test_lean_bootstrap_skills_omn21461.py tests/unit/nodes/test_skill_node_coverage.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22366-ac1-skill
+    description: "The skill exists with the four sections, declares bootstrap: true and names its replacing node; the lean set is nine. Fails at the merge base, which has no lean_line_board directory."
+    source: manual
+    binds_ac: [AC1, AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lean_bootstrap_skills_omn21461.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22366-ac3-links
+    description: "The skill links lean_andon_stop and lean_five_whys."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: command
+        check_value: "grep -q lean_andon_stop plugins/onex/skills/lean_line_board/SKILL.md && grep -q lean_five_whys plugins/onex/skills/lean_line_board/SKILL.md"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22366-ac4-hygiene
+    description: "The skill file holds no home-directory prefix."
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: command
+        check_value: "test -f plugins/onex/skills/lean_line_board/SKILL.md && ! grep -qE '/U[s]ers/|/Vo[l]umes/' plugins/onex/skills/lean_line_board/SKILL.md"
+        cwd: "${OMNI_HOME}/omniclaude"

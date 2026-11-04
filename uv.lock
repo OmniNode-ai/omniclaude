@@ -13,7 +13,7 @@ overrides = [
     { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261102043243-124b1e99af99" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261102102425-ce12119225dc" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261104010134-0b7b2bde8a56" },
 ]
 
 [[package]]
@@ -1781,7 +1781,7 @@ wheels = [
 [[package]]
 name = "omnimarket"
 version = "0.4.321"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261102102425-ce12119225dc#ce12119225dc9ccd00c5a49f3e911c27859a87ab" }
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261104010134-0b7b2bde8a56#0b7b2bde8a56700336c57468ed183b5cb660117a" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1794,7 +1794,6 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "jsonschema" },
-    { name = "omnibase-compat" },
     { name = "omnibase-core" },
     { name = "omnibase-infra" },
     { name = "omnibase-spi" },
@@ -1911,7 +1910,7 @@ requires-dist = [
     { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261102043243-124b1e99af99" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261102102425-ce12119225dc" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261104010134-0b7b2bde8a56" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261101151826-9dca2e7608f7" },
     { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261101151826-9dca2e7608f7" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },

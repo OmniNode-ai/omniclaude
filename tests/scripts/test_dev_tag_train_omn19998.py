@@ -275,3 +275,64 @@ def test_plan_json_lists_moves(mod, tmp_path: Path) -> None:
     )
     data = json.loads(plan.to_json())
     assert data["moves"][0]["new_tag"] == "dev-20261019010000-bbbbbbbbbbbb"
+
+
+# OMN-17427: the two homes of a git-tag pin. Verbatim from omniclaude PR #3130's
+# `tests+coverage (shadow) (split 1/2)` job 126095752534 (run 41687138158):
+#   FAIL: pyproject.toml:1: [stale_pin] stale_pin: omnimarket@dev-20261102102425-ce12119225dc
+#   trails newest dev tag dev-20261103165554-199064721fcf by 106 merges and 30.5247 hours
+# omniclaude pins omnimarket in `dependencies` (a direct URL) AND in
+# `[tool.uv.sources]`. omnimarket's pin mover rewrites only the sources entry, so
+# the nightly train left the dependency home at the old tag and the first-party-ref
+# stale_pin rule kept reading it.
+_MARKET_URL = "https://github.com/OmniNode-ai/omnimarket.git"
+_STALE_TAG = "dev-20261102102425-ce12119225dc"
+_NEWER_TAG = "dev-20261103165554-199064721fcf"
+
+
+def _two_home_pyproject(path: Path) -> Path:
+    path.write_text(
+        "[project]\n"
+        'name = "consumer"\n'
+        'version = "0.0.0"\n'
+        "dependencies = [\n"
+        f'    "omnimarket @ git+{_MARKET_URL}@{_STALE_TAG}",\n'
+        "]\n"
+        f"# OMN-18639: an earlier bump named {_STALE_TAG} in prose; history stays.\n"
+        "\n"
+        "[tool.uv.sources]\n"
+        f'omnimarket = {{ git = "{_MARKET_URL}", tag = "{_STALE_TAG}" }}\n'
+    )
+    return path
+
+
+def test_node_mover_moves_the_dependency_home_with_the_source_home(
+    mod, tmp_path: Path
+) -> None:
+    pyproject = _two_home_pyproject(tmp_path / "pyproject.toml")
+    pin = mod.ModelDevTagPin(
+        distribution="omnimarket", repo="omnimarket", url=_MARKET_URL, tag=_STALE_TAG
+    )
+    mod.node_mover(pyproject, pin, _NEWER_TAG)
+    live = [
+        line
+        for line in pyproject.read_text().splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    assert not [line for line in live if _STALE_TAG in line], live
+    assert sum(_NEWER_TAG in line for line in live) == 2, live
+    assert "history stays" in pyproject.read_text()
+    assert f"named {_STALE_TAG} in prose" in pyproject.read_text()
+
+
+def test_dependency_home_is_untouched_when_the_consumer_has_none(
+    mod, tmp_path: Path
+) -> None:
+    pyproject = _pyproject(
+        tmp_path / "pyproject.toml",
+        f'omnimarket = {{ git = "{_MARKET_URL}", tag = "{_STALE_TAG}" }}\n',
+    )
+    pin = mod.ModelDevTagPin(
+        distribution="omnimarket", repo="omnimarket", url=_MARKET_URL, tag=_STALE_TAG
+    )
+    assert mod.move_dependency_home(pyproject, pin, _NEWER_TAG) == 0

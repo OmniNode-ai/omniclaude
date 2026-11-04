@@ -1,0 +1,66 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-22405
+title: "The dev runtime mutation guard judges on lab hosts instead of refusing every docker lifecycle-word command as could-not-judge"
+summary: >
+  The Bash guards entrypoint ran the dev runtime mutation node with common.sh's interpreter and discarded
+  common.sh's stderr. On a lab host no plugin venv resolves in full mode (and PLUGIN_ROOT was never set for
+  common.sh), so common.sh exited 1 and the node never ran: 79 calls were refused on 2026-11-03 with an empty
+  detail. The entrypoint now keeps that line, sets PLUGIN_ROOT, and falls back to the registry venv of the
+  module's own package. A call no interpreter judges still refuses, and the first line of the failed run rides in
+  the recorded refusal detail.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22405-judge
+    statement: The dev runtime mutation check judges a call on a lab host, and a call it cannot judge still refuses with the cause in the detail.
+    acceptance:
+      - id: AC1
+        statement: "AC1: a regression test built from a recorded refusal (the payload of a lab-host call that ended exit 1) fails on the current hook and passes after the fix -- falsifier: uv run pytest tests -q -k dev_runtime_mutation_could_not_judge"
+      - id: AC2
+        statement: "AC2: a could-not-judge refusal still refuses (fail-closed kept) and its FRICTION detail carries the first stderr line of the node run -- falsifier: uv run pytest tests -q -k dev_runtime_mutation_refusal_detail"
+      - id: AC3
+        statement: "AC3: on a lab host the hook judges `docker compose ps` and `docker compose up -d` (passes the first, judges the second) instead of exit 1, through lab-run -- falsifier: onex lab-run receipt exit=0 for uv run pytest tests -q -k dev_runtime_mutation_lab"
+evidence_requirements:
+  - kind: tests
+    description: "The interpreter tests and the existing dev runtime mutation hook tests pass"
+    command: "uv run pytest tests/hooks/test_dev_runtime_mutation_interpreter_omn22405.py tests/hooks/test_dev_runtime_mutation_guard_hook.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22405-ac1-judges
+    binds_ac: [AC1]
+    description: Under the lab-host environment the node judges the call (refusal text, or admit under a live grant), also when the resolved interpreter lacks omnimarket.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_dev_runtime_mutation_interpreter_omn22405.py -k dev_runtime_mutation_could_not_judge -q --no-cov"
+  - id: dod-omn22405-ac2-detail
+    binds_ac: [AC2]
+    description: With no interpreter that can run the node the call is still refused, and the first line of the failed run is in the refusal detail.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_dev_runtime_mutation_interpreter_omn22405.py -k dev_runtime_mutation_refusal_detail -q --no-cov"
+  - id: dod-omn22405-ac3-lab
+    binds_ac: [AC3]
+    description: A read-only compose command passes and a lifecycle one is judged, with a protected recreate still refused as the positive control; the lab-run receipt is in the PR's Lab line.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_dev_runtime_mutation_interpreter_omn22405.py -k dev_runtime_mutation_lab -q --no-cov"
+  - id: dod-omn22405-hosted-source-readback
+    description: Read the published hook at the checked-out commit and require the registry-venv fallback. A pre-fix source or missing publication fails.
+    source: manual
+    execution_scope: hosted_and_local
+    checks:
+      - check_type: command
+        check_value: >-
+          gh api "repos/OmniNode-ai/omniclaude/contents/plugins/onex/hooks/scripts/pre_tool_use_bash_guards.sh?ref=$(git rev-parse HEAD)"
+          --jq '.content | gsub("\n"; "") | @base64d | contains("/.venv/bin/python3")'
+          | grep -qx true
+        cwd: ${OMNI_HOME}/omniclaude

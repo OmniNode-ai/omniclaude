@@ -1,0 +1,84 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-22273"
+title: "Whole-file public-repo hygiene leg for the published plugin tree, and the scrub map"
+summary: >
+  Task T2 (hygiene leg) of the plugin retirement plan. The whole-file leg
+  (src/omniclaude/nodes/node_validate_skills_compute/handlers/handler_whole_file_hygiene.py) runs the hygiene gate's own
+  scanner over every file under one directory (plugins/omni by default) and fails on all
+  ten content classes, then makes a second targeted deployment-config run with a model
+  vocabulary file. Exit 0 is clean, 1 is a detection, 2 is a configuration error and is
+  never a detection. The scrub map (config/public_repo_hygiene_scrub_map.yaml) lists each
+  private value class of the plan's scrub table with the overlay key or environment
+  variable it becomes, and the leg reads it. scripts/public_repo_hygiene_gate.py gains no
+  line. Nothing reads the plugins/omni tree yet, so the leg is not wired into CI here; the
+  scaffold task that creates the tree wires it.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: "tests"
+    description: "The four ticket test groups: whole_file_leg_detects, whole_file_leg_clean, whole_file_leg_config_error, scrub_map."
+    command: |-
+      uv run pytest tests/unit/nodes/node_validate_skills_compute/test_handler_whole_file_hygiene_omn22273.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn22273-ac1-detects"
+    binds_ac: [AC1]
+    description: >
+      AC1: a fixture holding a lab address and a private repository name exits 1 under
+      the whole-file leg, also when the repository config is in report mode with the
+      added-lines scope.
+    source: "generated"
+    checks:
+      - check_type: "test_passes"
+        cwd: "."
+        check_value: |-
+          uv run pytest tests/unit/nodes/node_validate_skills_compute/test_handler_whole_file_hygiene_omn22273.py -k whole_file_leg_detects -q --no-cov
+  - id: "dod-omn22273-ac2-clean"
+    binds_ac: [AC2]
+    description: >
+      AC2: a clean fixture exits 0 under the whole-file leg, and a finding outside the
+      scope directory does not fail it.
+    source: "generated"
+    checks:
+      - check_type: "test_passes"
+        cwd: "."
+        check_value: |-
+          uv run pytest tests/unit/nodes/node_validate_skills_compute/test_handler_whole_file_hygiene_omn22273.py -k whole_file_leg_clean -q --no-cov
+  - id: "dod-omn22273-ac3-config-error"
+    binds_ac: [AC3]
+    description: >
+      AC3: a missing vocabulary, lab vocabulary, model vocabulary, scrub map or scope is
+      exit 2, reported as an error and never as a detection.
+    source: "generated"
+    checks:
+      - check_type: "test_passes"
+        cwd: "."
+        check_value: |-
+          uv run pytest tests/unit/nodes/node_validate_skills_compute/test_handler_whole_file_hygiene_omn22273.py -k whole_file_leg_config_error -q --no-cov
+  - id: "dod-omn22273-ac4-scrub-map"
+    binds_ac: [AC4]
+    description: >
+      AC4: the scrub map data file has a row for every class of the plan's scrub table
+      with its overlay key, and the leg reads it.
+    source: "generated"
+    checks:
+      - check_type: "test_passes"
+        cwd: "."
+        check_value: |-
+          uv run pytest tests/unit/nodes/node_validate_skills_compute/test_handler_whole_file_hygiene_omn22273.py -k scrub_map -q --no-cov
+  - id: "dod-omn22273-integration-proof"
+    description: >
+      The four ticket test groups run on a lab pool host at the pushed head, placed over
+      the bus with the lab-work runner, and exit 0 there.
+    source: "generated"
+    execution_scope: "local_done_gate"
+    checks:
+      - check_type: "command"
+        cwd: "."
+        check_value: |-
+          onex lab-work run --lane rm-t2-hygiene-0735b --repo OmniNode-ai/omniclaude --sha "$(git rev-parse HEAD)" --kind test -- uv run pytest tests/unit/nodes/node_validate_skills_compute/test_handler_whole_file_hygiene_omn22273.py -q --no-cov

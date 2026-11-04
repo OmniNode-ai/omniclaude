@@ -613,11 +613,11 @@ def registry_roots(env: Mapping[str, str]) -> list[Path]:
     return roots
 
 
-def _is_dir(path: Path) -> bool:
-    # An unreadable path (a root-owned 0700 directory) is not a clone; Path.is_dir
-    # re-raises PermissionError and one such child aborted the whole discovery.
-    with contextlib.suppress(OSError):
+# ``path.is_dir()``, except one the caller cannot stat is noted on stderr (OMN-22145).
+def _is_dir(path: Path, noted: Path | None = None) -> bool:
+    with contextlib.suppress(PermissionError):
         return path.is_dir()
+    sys.stderr.write(f"NOTE       skipped {noted or path}: permission denied\n")
     return False
 
 
@@ -625,23 +625,18 @@ def discover_clones(roots: Iterable[Path]) -> list[Path]:
     """Each root that is itself a clone, and each direct child that is one.
 
     A child whose ``.git`` is a FILE is a linked worktree, not a canonical
-    clone, and is skipped.
+    clone, and is skipped. So is a directory the caller cannot stat, such as a
+    root-owned mode-0700 neighbour (OMN-22145): one stderr note, no failure.
     """
-    clones: list[Path] = []
-    seen: set[Path] = set()
+    clones: dict[Path, Path] = {}
     for root in roots:
         candidates = [root]
         with contextlib.suppress(OSError):
             candidates.extend(sorted(p for p in root.iterdir() if _is_dir(p)))
         for candidate in candidates:
-            if not _is_dir(candidate / ".git"):
-                continue
-            resolved = candidate.resolve()
-            if resolved in seen:
-                continue
-            seen.add(resolved)
-            clones.append(candidate)
-    return clones
+            if _is_dir(candidate / ".git", candidate):
+                clones.setdefault(candidate.resolve(), candidate)
+    return list(clones.values())
 
 
 def clone_slug(clone: Path) -> str | None:
@@ -1894,7 +1889,7 @@ def sibling_clones(env: Mapping[str, str]) -> list[Path]:
         beside = None
     found = [c for c in discover_clones([beside]) if c != beside] if beside else []
     homes = (Path(v) for k, v in sorted(env.items()) if k.endswith("_INTERNAL_HOME"))
-    return found + [c for c in homes if c.is_absolute() and _is_dir(c / ".git")]
+    return found + [c for c in homes if c.is_absolute() and _is_dir(c / ".git", c)]
 
 
 def _clones_for(env: Mapping[str, str], repo: str) -> list[Path]:

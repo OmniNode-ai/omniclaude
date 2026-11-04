@@ -4422,11 +4422,26 @@ jobs:
           OMNI_HOME="${RUNNER_TEMP}/sibling-clones"
           echo "OMNI_HOME=${OMNI_HOME}" >> "$GITHUB_ENV"
           mkdir -p "$OMNI_HOME"
-          # omnibase_core tracks the uv.lock-pinned version tag so
-          # hook-bits-drift checks hook_bits.sh against the EnumHookBit version
-          # omniclaude actually runs.
-          core_version="$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("omnibase-core"))')"
-          git clone --quiet --depth 1 --branch "v${core_version}" https://github.com/OmniNode-ai/omnibase_core.git "$OMNI_HOME/omnibase_core"
+          # omnibase_core tracks what uv.lock pins so hook-bits-drift checks
+          # hook_bits.sh against the EnumHookBit version omniclaude actually
+          # runs. A git source (the dev merge tag the sibling-pins ruling
+          # requires, OMN-21282) is fetched at its locked sha, as omnimarket is
+          # below. Its metadata version is the version the dev tree declares,
+          # which has no v<version> release tag until the release PR merges
+          # (OMN-19612), so the release tag is the fallback for a release pin only.
+          core_src="$(awk '$0 == "name = \"omnibase-core\"" {f=1; next} f && /^source = / {print; exit}' uv.lock)"
+          [[ -n "$core_src" ]] || { echo "::error::omnibase-core source not found in uv.lock"; exit 1; }
+          core_rev="$(grep -oE 'omnibase_core\.git(\?[^#"]*)?#[0-9a-f]{40}' <<<"$core_src" | head -1 | sed 's/.*#//' || true)"
+          if [[ -n "$core_rev" ]]; then
+            git init --quiet "$OMNI_HOME/omnibase_core"
+            git -C "$OMNI_HOME/omnibase_core" fetch --quiet --depth 1 https://github.com/OmniNode-ai/omnibase_core.git "$core_rev"
+            git -C "$OMNI_HOME/omnibase_core" checkout --quiet FETCH_HEAD
+          elif [[ "$core_src" == *"git = "* ]]; then
+            echo "::error::omnibase-core is a git source in uv.lock with no locked sha: ${core_src}"; exit 1
+          else
+            core_version="$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("omnibase-core"))')"
+            git clone --quiet --depth 1 --branch "v${core_version}" https://github.com/OmniNode-ai/omnibase_core.git "$OMNI_HOME/omnibase_core"
+          fi
           # omnimarket node tree at the uv.lock pin, so the skill backing-node
           # hook resolves every backing node in this whole-tree run with no
           # allowlist entry (OMN-20560), as the Skill Backing Node workflow does.
@@ -6650,10 +6665,27 @@ jobs:
           load: true
           tags: ${{ steps.image-name.outputs.name }}:scan
 
+      - name: Install Trivy v0.70.0 from the GitHub release archive
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+        run: |
+          set -euo pipefail
+          # aquasecurity/setup-trivy installs from get.trivy.dev, which is NXDOMAIN
+          # since 2026-11-03 (aquasecurity/setup-trivy#42). Install from the GitHub
+          # release archive and pass skip-setup-trivy to trivy-action instead.
+          TRIVY_VERSION="0.70.0"
+          mkdir -p "${RUNNER_TEMP}/trivy-bin"
+          curl --fail --show-error --silent --location --retry 3 --retry-delay 5 \
+            -o "${RUNNER_TEMP}/trivy.tar.gz" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar -xzf "${RUNNER_TEMP}/trivy.tar.gz" -C "${RUNNER_TEMP}/trivy-bin" trivy
+          echo "${RUNNER_TEMP}/trivy-bin" >> "$GITHUB_PATH"
+          "${RUNNER_TEMP}/trivy-bin/trivy" --version
+
       - name: Trivy vulnerability scanner (SARIF)
         if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.34.2 (pinned 2026-03-04)
         with:
+          skip-setup-trivy: true
           image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'sarif'
           output: 'trivy-results.sarif'
@@ -6670,6 +6702,7 @@ jobs:
         if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.34.2 (pinned 2026-03-04)
         with:
+          skip-setup-trivy: true
           image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'table'
           severity: 'CRITICAL,HIGH'

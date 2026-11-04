@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""OMN-21461: the eight lean practice skills ship as bootstrap skills.
+"""OMN-21461: the lean practice skills ship as bootstrap skills (eight, and the line board of OMN-22366).
 
 Each skill is the hand-run form of a lean practice, kept so lanes can test and
 iterate on the process while the node-backed skill is built. Each one says it is
@@ -29,6 +29,7 @@ LEAN_BOOTSTRAP_SKILLS: tuple[str, ...] = (
     "lean_experiment_first",
     "lean_seam_read",
     "lean_session_recovery",
+    "lean_line_board",
 )
 
 # The one bootstrap skill whose practice has no planned node yet.
@@ -52,8 +53,8 @@ def _read(skill: str) -> tuple[dict[str, object], str]:
 
 
 @pytest.mark.unit
-def test_all_eight_lean_skills_exist_with_the_four_sections() -> None:
-    assert len(set(LEAN_BOOTSTRAP_SKILLS)) == 8
+def test_all_nine_lean_skills_exist_with_the_four_sections() -> None:
+    assert len(set(LEAN_BOOTSTRAP_SKILLS)) == 9
     problems: list[str] = []
     for skill in LEAN_BOOTSTRAP_SKILLS:
         if not (SKILLS_DIR / skill / "SKILL.md").is_file():

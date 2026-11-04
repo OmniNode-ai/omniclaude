@@ -106,12 +106,7 @@ def _git(clone: Path, *args: str) -> subprocess.CompletedProcess[str]:
 def plan_rev_advance(
     *, clone: Path, package: str, current: str, candidate: str
 ) -> ModelRevAdvance | None:
-    """Decide whether ``current`` may advance to ``candidate``.
-
-    Returns None when already at the candidate (an ordinary no-op, not an
-    error). Raises ``ErrorNotADescendant`` for every other non-advance, so a
-    refusal is loud and a caller cannot mistake it for "nothing to do".
-    """
+    """Return a strict-descendant advance, None if equal; refuse all other moves."""
     if current == candidate:
         return None
 
@@ -134,19 +129,7 @@ def plan_rev_advance(
 
 
 def rewrite_rev(*, pyproject: Path, package: str, old_rev: str, new_rev: str) -> int:
-    """Replace ``old_rev`` on every LIVE line of ``pyproject``; return the count.
-
-    Comment lines are left alone. ``pyproject.toml`` carries a running
-    commentary of every past bump and those comments name commits, so a
-    blanket replace would rewrite that history the moment a comment happened
-    to name the current rev — turning an accurate record of what was pinned
-    when into a false one. Only live values move.
-
-    Raises when the rev appears on no live line, because silently rewriting
-    nothing and reporting success is the exact failure this ticket exists to
-    remove. A rev present only in prose is that case: there is nothing to
-    advance, and saying so is more useful than a count of zero.
-    """
+    """Replace old_rev on live lines and return its count; refuse zero matches."""
     lines = pyproject.read_text(encoding="utf-8").splitlines(keepends=True)
     count = 0
     rewritten: list[str] = []
@@ -171,12 +154,7 @@ def advance_all(
     registry_root: str | None = None,
     packages: list[str] | None = None,
 ) -> list[ModelRevAdvance]:
-    """Advance every git-sourced pin in ``uv.lock`` to its canonical clone head.
-
-    Each package is resolved independently so one unresolvable clone does not
-    block the others; its refusal is raised to the caller only if that package
-    was explicitly requested.
-    """
+    """Advance clone-governed rev pins, skipping missing clones unless requested."""
     lock = repo_root / "uv.lock"
     pyproject = repo_root / "pyproject.toml"
     sources = gsp.parse_git_sources(lock)
@@ -369,10 +347,7 @@ def check_runs_verdict(runs: list[tuple[str, str]]) -> bool | None:
 
 
 def github_check_runs_green(repo: str, sha: str) -> bool | None:
-    """The workflow's oracle: every check run on the dev commit, read with gh.
-
-    Runs inside the train workflow, under its App token, never from a lane.
-    """
+    """Read dev-commit check runs with gh under the train workflow's App token."""
     result = subprocess.run(
         [
             "gh",
@@ -444,8 +419,26 @@ def mover_argv(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> list[str]:
     ]
 
 
+def move_dependency_home(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> int:
+    """Move live direct-URL dependency pins alongside uv sources; return the count."""
+    url = pin.url.removesuffix(".git")
+    home = re.compile(
+        rf"(?P<head>git\+{re.escape(url)}(?:\.git)?@){re.escape(pin.tag)}(?![0-9A-Za-z])"
+    )
+    count = 0
+    lines: list[str] = []
+    for line in pyproject.read_text(encoding="utf-8").splitlines(keepends=True):
+        if not line.lstrip().startswith("#"):
+            line, hits = home.subn(lambda m: f"{m.group('head')}{new_tag}", line)
+            count += hits
+        lines.append(line)
+    if count:
+        pyproject.write_text("".join(lines), encoding="utf-8")
+    return count
+
+
 def node_mover(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> None:
-    """Rewrite one pin through omnimarket's dev-tag pin mover node."""
+    """Move uv sources through the pin mover, then update direct-URL dependencies."""
     result = subprocess.run(
         mover_argv(pyproject, pin, new_tag),
         capture_output=True,
@@ -458,6 +451,7 @@ def node_mover(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> None:
             f"{pin.distribution}: the pin mover refused {pin.tag} -> {new_tag} "
             f"(exit {result.returncode}): {result.stdout.strip()} {result.stderr.strip()}"
         )
+    move_dependency_home(pyproject, pin, new_tag)
 
 
 def run_dev_tag_train(
@@ -510,11 +504,7 @@ def run_dev_tag_train(
 
 
 def render_pr_body(plan: ModelTrainPlan) -> str:
-    """The one PR body a night's bump opens with (OMN-21282 AC1).
-
-    One line per moved sibling naming every dev tag it rolls in, so a night is
-    one bump per consumer however many tags its siblings cut.
-    """
+    """Render one bump PR body listing every dev tag rolled into each sibling pin."""
     lines = ["## Dev-tag pin train", ""]
     if not plan.moves:
         lines.append("The train found no sibling moved: no newer green dev tag.")

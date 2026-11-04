@@ -110,8 +110,17 @@ _obg_record_refusal() {
 # fail-closed. $1 hook name, $3 the check's name for the could-not-judge text, $4
 # that refusal's class. A node refusal's class is the bypass path the node judged,
 # named by its own text.
+#
+# The interpreter (OMN-22405). common.sh's PYTHON_CMD comes first. A lab host has no
+# plugin venv, so common.sh hard-fails there (one stderr line, exit 1): 79 calls were
+# refused on 2026-11-03 with an empty detail because that line was discarded and the
+# node never ran. Its stderr is kept now, and the module's own package home
+# (`$OMNI_HOME/<top package>/.venv`, the interpreter that has the package installed)
+# is tried next, also when PYTHON_CMD resolved but lacks the package. Every attempt
+# that fails is kept; a call no attempt judges still refuses, and the first line of
+# the failure rides in the refusal's recorded detail.
 _obg_node_check() {
-    local out rc reason class why
+    local out rc reason class why first nl=$'\n'
     out="$(
         # The session mode goes to the node, which refuses nothing in lite mode (a
         # non-OmniNode install). This entrypoint itself never exits on it.
@@ -119,11 +128,19 @@ _obg_node_check() {
         # shellcheck source=/dev/null
         [[ -f "${_OBG_SCRIPTS}/../../lib/mode.sh" ]] && source "${_OBG_SCRIPTS}/../../lib/mode.sh" && _OBG_MODE="$(omniclaude_mode)"
         cd "$HOME" 2>/dev/null || cd /tmp || true
-        # shellcheck source=common.sh
-        source "${_OBG_SCRIPTS}/common.sh" >/dev/null 2>&1 || exit 1
-        unset PYTHONPATH
-        printf '%s\n' "$_OBG_INPUT" | "${PYTHON_CMD:-python3}" -m "$2" \
-            --cwd "$_OBG_CALLER_CWD" --mode "$_OBG_MODE" 2>&1
+        # common.sh exits 1 with one stderr line when no interpreter resolves, and reads
+        # PLUGIN_ROOT, which this entrypoint never set (under set -u that unset read was
+        # the lab hosts first failure). The inner sub-shell keeps that line, then PYTHON_CMD.
+        _obg_fail="$(PLUGIN_ROOT="${PLUGIN_ROOT:-${_OBG_SCRIPTS}/../..}"; source "${_OBG_SCRIPTS}/common.sh" 2>&1 >/dev/null; printf '\n%s' "${PYTHON_CMD:-}")"
+        _obg_py="${_obg_fail##*"$nl"}"; unset PYTHONPATH
+        [[ -x "$_obg_py" ]] && _obg_fail=""
+        for _obg_py in "$_obg_py" "${OMNI_HOME:-${ONEX_REGISTRY_ROOT:-/nonexistent}}/${2%%.*}/.venv/bin/python3"; do
+            [[ -x "$_obg_py" ]] || continue
+            _obg_o="$(printf '%s\n' "$_OBG_INPUT" | "$_obg_py" -m "$2" --cwd "$_OBG_CALLER_CWD" --mode "$_OBG_MODE" 2>&1)"; _obg_r=$?
+            [[ $_obg_r -eq 0 || $_obg_r -eq 2 ]] && { printf '%s' "$_obg_o"; exit "$_obg_r"; }
+            _obg_fail="${_obg_fail}${_obg_o:+$nl$_obg_o}"
+        done
+        printf '%s' "${_obg_fail#"$nl"}"; exit "${_obg_r:-1}"
     )"
     rc=$?
     [[ $rc -eq 0 ]] && return 0
@@ -140,7 +157,10 @@ _obg_node_check() {
         _obg_record_refusal "$1" "$class" "$reason"
         exit 2
     fi
-    why="BLOCKED: the $3 check could not judge this call (exit ${rc})"
+    # The node never judged: the first non-empty line of its run is the cause, and it
+    # rides in the recorded refusal detail (the recorder keeps only the first line).
+    first="${out%%$'\n'*}"
+    why="BLOCKED: the $3 check could not judge this call (exit ${rc})${first:+: ${first:0:200}}"
     _obg_record_refusal "$1" "$4" "$why"
     jq -nc --arg r "${why}. A call it cannot judge is refused, never assumed safe. Detail: ${out:0:400}" '{"decision": "block", "reason": $r}' 2>/dev/null \
         || printf '{"decision": "block", "reason": "%s."}\n' "$why"
@@ -251,12 +271,7 @@ _obg_run_guards() {
 
 # --- Pass 1: collect ---------------------------------------------------------
 _OBG_NEED=()
-_OBG_ALL=()
-_obg_i=0
-while [[ $_obg_i -lt ${#_OBG_GUARDS[@]} ]]; do
-    _OBG_ALL+=("$_obg_i")
-    _obg_i=$((_obg_i + 1))
-done
+_OBG_ALL=("${!_OBG_GUARDS[@]}")
 _obg_run_guards collect "${_OBG_ALL[@]}"
 for _obg_i in "${_OBG_ALL[@]}"; do
     _obg_rc_var="_OBG_RC_${_obg_i}"
@@ -330,8 +345,7 @@ fi
 _OBG_BLOCKS=()
 _OBG_OTHER_RC=0
 _OBG_OTHER_OUT=""
-_obg_i=0
-while [[ $_obg_i -lt ${#_OBG_GUARDS[@]} ]]; do
+for _obg_i in "${_OBG_ALL[@]}"; do
     _obg_rc_var="_OBG_FINAL_RC_${_obg_i}"
     _obg_out_var="_OBG_FINAL_OUT_${_obg_i}"
     if [[ "${!_obg_rc_var}" -eq 2 ]]; then
@@ -340,7 +354,6 @@ while [[ $_obg_i -lt ${#_OBG_GUARDS[@]} ]]; do
         _OBG_OTHER_RC="${!_obg_rc_var}"
         _OBG_OTHER_OUT="${!_obg_out_var}"
     fi
-    _obg_i=$((_obg_i + 1))
 done
 
 if [[ ${#_OBG_BLOCKS[@]} -eq 1 ]]; then

@@ -190,18 +190,20 @@ def test_a_listed_model_that_404s_on_completion_is_not_offered(tmp_path: Path) -
         out = _run(
             tmp_path,
             cat,
-            MENU + 'choose_models openai <<< "1,2"\necho "chosen=$CHOSEN_OPENAI"',
+            MENU
+            + 'choose_models openai <<< "1,2"\necho "chosen=$CHOSEN_OPENAI"\n'
+            + 'echo "unavailable=$MODEL_UNAVAILABLE"',
         )
     menu = out.split("---")[1]
     assert "rc=0" in out
     assert " 1) gpt-4.1" in menu and "gpt-4o-mini  (busy just now, HTTP 429)" in menu
     numbered = re.findall(r"^\s+\d+\) (\S+)", menu, re.M)
     assert numbered == ["gpt-4.1", "gpt-4o-mini"]
-    assert "Not offered, your key could not call these:" in menu
-    assert (
-        "✗ gpt-4.1-nano: HTTP 404: The model `gpt-4.1-nano` has been deprecated" in menu
-    )
-    assert "✗ gpt-4o-2024-05-13: HTTP 404: The model does not exist" in menu
+    # OMN-21484: the unusable models are recorded with the provider's reason, but
+    # they are no longer printed on the menu, where they could not be picked.
+    assert "Not offered" not in menu
+    assert "gpt-4.1-nano: HTTP 404: The model `gpt-4.1-nano` has been deprecated" in out
+    assert "gpt-4o-2024-05-13: HTTP 404: The model does not exist" in out
     assert set(served["auth"]) == {
         f"Bearer {KEY}"
     }  # the probe used the developer's key
