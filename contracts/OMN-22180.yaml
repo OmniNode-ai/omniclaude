@@ -20,7 +20,7 @@ requirements:
       - id: AC2
         statement: 'AC2: the onboarding guide and the script agree on who creates the marker: if the script creates it, the guide names no reconcile step; if the guide runs `onex-host-reconcile`, a test finds that command in the guide''s step list -- falsifier: the same pytest module reads the guide text and the script and asserts one of the two shapes, never neither'
       - id: AC3
-        statement: 'AC3: a regression test built from the incident''s recorded data (the refusal text above, saved as a fixture under `tests/fixtures/onboarding_walk_2026_11_02/`) fails on the broken code and passes on the fix -- falsifier: `uv run pytest tests/skills -q -k walk_2026_11_02`'
+        statement: 'AC3: a regression test built from the incident''s recorded data (the refusal text above, saved as a fixture under `tests/fixtures/onboarding_walk_2026_11_02/`) fails on the broken code and passes on the fix -- falsifier: `uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q -k walk_2026_11_02`'
 evidence_requirements:
   - kind: tests
     description: The floor marker module passes against the script and the guide.
@@ -35,8 +35,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q --no-cov -k "phase3 or stamp"
-        cwd: ${OMNI_HOME}/omniclaude
+        check_value: env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q --no-cov -k "phase3 or stamp"
     binds_ac:
       - AC1
   - id: dod-omn-22180-ac2
@@ -44,8 +43,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q --no-cov -k agree
-        cwd: ${OMNI_HOME}/omniclaude
+        check_value: env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q --no-cov -k agree
     binds_ac:
       - AC2
   - id: dod-omn-22180-ac3
@@ -53,7 +51,15 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/skills -q --no-cov -k walk_2026_11_02
-        cwd: ${OMNI_HOME}/omniclaude
+        check_value: env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q --no-cov -k walk_2026_11_02
     binds_ac:
       - AC3
+  - id: dod-omn-22180-install-pin
+    description: The installation inputs and lock agree on the omnimarket dev merge tag admitted by the sibling freshness gate.
+    source: manual
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: command
+        check_value: >-
+          python3 -c 'import tomllib; from pathlib import Path; p = tomllib.loads(Path("pyproject.toml").read_text()); tag = "dev-20261104002655-6335ba6fdcad"; sha = "6335ba6fdcadd1e7b6bcc83a355b510399cb18c0"; assert p["tool"]["uv"]["sources"]["omnimarket"]["tag"] == tag; assert any(d.endswith("@" + tag) for d in p["tool"]["uv"]["override-dependencies"]); lock = tomllib.loads(Path("uv.lock").read_text()); package = next(x for x in lock["package"] if x["name"] == "omnimarket"); assert package["source"]["git"].endswith("?tag=" + tag + "#" + sha)'
