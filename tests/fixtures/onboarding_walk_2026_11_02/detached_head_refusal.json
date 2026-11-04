@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-11-02",
+  "source": "clean macOS VM onboarding walk (Tart VM, macOS 26.6.2); omnimarket dev installed into the walk's dispatch venv; quoted as OMN-22183 records it",
+  "command": "onex delegate",
+  "detached_commit_prefix": "370f405566c1",
+  "refusal": "canonical $OMNIBASE_PATH/omnimarket clone is on a DETACHED HEAD at 370f405566c1 ... Repair with: .../converge-canonical-clone.sh omnimarket --execute",
+  "refusal_head": "canonical $OMNIBASE_PATH/omnimarket clone is on a DETACHED HEAD at",
+  "repair_tail": "converge-canonical-clone.sh omnimarket --execute",
+  "rule": "a canonical clone detached at the commit the floor marker names is accepted; detached anywhere else is refused with the repair command"
+}
