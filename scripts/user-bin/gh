@@ -1445,6 +1445,16 @@ fi
 unset _mq_a _mq_prev _mq_shape _mq_reason _mq_why _mq_rules _mq_log_dir
 
 
+# The repository tag of a cached fallback read, and of a write that can change one: the
+# repository name (case-folded) from the call, else GH_REPO, else "any" when neither names one.
+_gw_tag=""
+_gw_fb_tag() {
+  local name="${_repo:-${GH_REPO##*/}}"
+  if [ -z "$name" ]; then _gw_tag=any; return 0; fi
+  _ascii_upper_into name "$name"
+  _gw_tag="$(_sha "$name" | cut -c1-16)"
+}
+
 # --- cached read gateway (OMN-20911) ---------------------------------------------
 # The gateway shapes (_gw_shape: a failing-job log, one check run's detail, one commit object) reach GitHub
 # only through here, for every caller but the PR-state guard's allowed callers. A hit is
@@ -1514,6 +1524,12 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
     [ "$_gw_pinned" -eq 1 ] || _gw_ttl=300
   fi
   _gw_entry="$_gw_dir/$(_sha "$_gw_scope|$(printf '%s\037' "$@")")"
+  # A fallback read can be changed by a write; its name carries its repository so the write
+  # can drop it (see the pass-through below). The other shapes are immutable.
+  if [ "$_gw_kind" = "fallback" ]; then
+    _gw_fb_tag
+    _gw_entry="$_gw_dir/fb.$_gw_tag.${_gw_entry##*/}"
+  fi
   _now="$(date +%s)"
   if [ $(( $$ % 50 )) -eq 0 ]; then
     find "$_gw_dir" -type f -mmin +2880 -delete 2>/dev/null
@@ -1862,5 +1878,18 @@ fi
 _warn_gateway_read "$@"
 _run_gh "$@"
 _rc=$?
+# A write can change what a cached fallback read answered (OMN-19998: a lane set the Actions
+# permissions and its read-back was served the answer cached before the write). Drop that
+# repository's cached fallback reads, and those naming no repository, after the write runs,
+# so a read made while it ran is dropped too; a write naming no repository drops them all.
+if [ "$_method" != "LOCAL" ] && ! _lane_is_read "$@"; then
+  _gw_fb_tag
+  _gw_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omni/gh-shim/gateway"
+  if [ "$_gw_tag" = "any" ]; then
+    rm -f "$_gw_dir"/fb.* 2>/dev/null
+  else
+    rm -f "$_gw_dir/fb.$_gw_tag".* "$_gw_dir"/fb.any.* 2>/dev/null
+  fi
+fi
 _log "$_rc" none
 exit "$_rc"
