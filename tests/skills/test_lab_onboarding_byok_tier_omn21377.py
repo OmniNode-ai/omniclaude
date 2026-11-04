@@ -106,7 +106,7 @@ def test_a_registered_key_is_a_route_with_no_local_model(
     key_only_machine: tuple[Path, Path],
 ) -> None:
     """AC1: the key joins the ladder, as its own ``byok-`` route."""
-    from omnimarket.routing.local_byok_route import (
+    from omnimarket.handlers.routing.local_byok_route import (
         registered_byok_routes,
         registered_byok_tier_name,
     )
@@ -122,10 +122,10 @@ def test_the_ladder_opens_on_the_key_rather_than_a_platform_rung(
     key_only_machine: tuple[Path, Path],
 ) -> None:
     """AC2: unpinned, the first rung is the customer's key, not a house-keyed cloud rung."""
+    from omnimarket.handlers.routing.local_byok_route import registered_byok_tier_name
     from omnimarket.nodes.node_delegate_skill_orchestrator.ports import (
         port_local_delegation_dispatch as port_mod,
     )
-    from omnimarket.routing.local_byok_route import registered_byok_tier_name
 
     _, tmp_path = key_only_machine
     port = port_mod.LocalDelegationDispatchPort(

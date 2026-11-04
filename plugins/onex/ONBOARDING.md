@@ -97,7 +97,10 @@ it:
 
 So the same pinned script installs the same commits no matter how far `dev` has moved since it
 was emailed, and two people who ran it a week apart have the same code. Every clone is left at a
-detached `HEAD`, which is expected.
+detached `HEAD`. That is expected only while a clone stays detached at the commit the floor
+marker (`.onex-workspace-floor.json`) names: `onex delegate` accepts a clone detached at that
+commit and refuses a clone detached anywhere else, printing
+`converge-canonical-clone.sh <repo> --execute` as the repair.
 
 **A fix reaches you through a new email, never through `dev`.** When something you were sent is
 broken, the fix is merged, a script naming a newer anchor is published, and a new email pins that
