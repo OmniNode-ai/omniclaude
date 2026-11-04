@@ -769,9 +769,11 @@ choose_models() {
 $MODEL_LIST
 EOF
   if [ -n "$MODEL_UNAVAILABLE" ]; then
-    say ""
-    say "  Not offered, your key could not call these:"
-    while IFS= read -r m; do [ -n "$m" ] && say "    ✗ $m"; done <<ENDBAD
+    # OMN-21484: a model the key could not call is not pickable, so it is not on
+    # the menu. The ids and the provider's own reason go to the log instead, so a
+    # developer who expected a model can still find out why it is absent.
+    log "models this key could not call, not offered:"
+    while IFS= read -r m; do [ -n "$m" ] && log "  x $m"; done <<ENDBAD
 $MODEL_UNAVAILABLE
 ENDBAD
   fi
