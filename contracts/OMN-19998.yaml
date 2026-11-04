@@ -92,6 +92,11 @@ requirements:
     acceptance:
       - id: "AC15"
         statement: "AC15: recovery preview and installation render --preserve-backlog exactly once and the selected absolute state root; invalid settings leave the installed unit untouched; recorded quiet-host journal rows survive a stalled recovery cycle while ordinary overflow eviction remains active -- falsifier: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -q --no-cov with Linux recovery rendering removed"
+  - id: req-omn19998-shared-clone-refusal-no-fetch-advice
+    statement: "The shared-clone git refusal does not advise a fetch to a caller the lane git-fetch guard would refuse, and keeps its fetch advice outside a lane."
+    acceptance:
+      - id: "AC19"
+        statement: "AC19: inside a lane the shared-clone refusal text never recommends a fetch, and outside a lane it keeps the fetch advice -- falsifier: uv run pytest tests/hooks/test_git_fetch_guard.py -q --no-cov -k shared_clone_refusal fails at the merge base on the in-lane test"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -104,6 +109,14 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  - id: dod-omn19998-shared-clone-refusal-no-fetch-advice
+    description: "The in-lane refusal is checked for a fetch recommendation, with the outside-a-lane refusal as the positive control, beside the existing fetch-guard tests."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_git_fetch_guard.py -q --no-cov"
+    binds_ac:
+      - "AC19"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
