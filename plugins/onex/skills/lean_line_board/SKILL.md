@@ -117,7 +117,7 @@ one.
    | `handed-off-unmerged` | a TERMINAL `outcome=handed-off` or a STATUS `handed-off=` and no merge of the pull request it names is proven | the row and the watcher record |
    | `merged-not-running` | a task is `merged` and not `running` | the merge and the running evidence read |
    | `held-with-real-red` | a pull request held by a review gate also fails a context that is required for its repository | the context names and the required-contexts read |
-   | `release-at-old-head` | a RELEASE row's head differs from the watcher's head for that pull request | both rows |
+   | `release-at-old-head` | a RELEASE row's head differs from the watcher's head of that pull request | both rows |
    | `blocked-on-person` | a blocker sentence names a role and an ask to that role about the same ticket or pull request has no answer | the ask row |
    | `person-blocker-unverified` | the same blocker and no unanswered ask to that role about that subject exists | the row that named the role |
    | `ruled-not-started` | a RULING of 14 days names the line and no CLAIM that names the ruling's ticket or cites its id follows | the RULING row |
