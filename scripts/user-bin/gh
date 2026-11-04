@@ -1499,6 +1499,22 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
     _call_log 1 refused
     exit 1
   fi
+  # mkdir -p exits 0 on an existing directory it cannot write, so a budget directory left
+  # read-only passed the check above and every read was refused at the append below as a
+  # file fault (OMN-19998). A path this user owns gets its owner write bit back; anything
+  # else still refuses, naming the path, its mode and owner, and this uid.
+  _gw_fix_owned() {
+    [ -e "$1" ] && [ ! -w "$1" ] && [ -O "$1" ] && chmod u+rw"$2" "$1" 2>/dev/null
+    return 0
+  }
+  _gw_desc() { ls -ld "$1" 2>/dev/null | awk '{print $1" owner "$3}'; }
+  _gw_fix_owned "$_gw_dir/budget" x
+  if [ ! -w "$_gw_dir/budget" ]; then
+    printf '%s\n' \
+      "REFUSED (OMN-20911): the cached read gateway cannot write its budget directory $_gw_dir/budget ($(_gw_desc "$_gw_dir/budget"); this is uid $(id -u)), so it cannot count this read against the hourly budget; fix the directory rather than read uncounted." >&2
+    _call_log 1 refused
+    exit 1
+  fi
   _gw_scope="${GH_HOST:-github.com}|${_method:-GET}"
   if [ "$_cls" = "run view" ] || [ "$_gw_kind" = "fallback" ]; then _read_origin; fi
   [ "$_cls" = "run view" ] && _gw_scope="$_gw_scope|$_origin"
@@ -1534,9 +1550,15 @@ if [ "$_gw" -eq 1 ] && ! _prs_caller_allowed; then
   # concurrent misses can never both read a count below the budget and both proceed (no
   # check-then-act window). A refused claim stays counted, which only over-counts the hour.
   _gw_hour_file="$_gw_dir/budget/$(date -u +%Y%m%d%H)$_gw_hour_tag"
-  if ! printf '%s\n' "$$" >> "$_gw_hour_file" 2>/dev/null; then
+  _gw_fix_owned "$_gw_hour_file" ""
+  if ! { printf '%s\n' "$$" >> "$_gw_hour_file"; } 2>/dev/null; then
+    if [ -e "$_gw_hour_file" ]; then
+      _gw_why="it is $(_gw_desc "$_gw_hour_file") and this is uid $(id -u)"
+    else
+      _gw_why="it could not be created in $(_gw_desc "$_gw_dir/budget") as uid $(id -u): a full disk or a sandbox denying writes there"
+    fi
     printf '%s\n' \
-      "REFUSED (OMN-20911): the cached read gateway cannot record this read in its budget file $_gw_hour_file; fix the file rather than read uncounted." >&2
+      "REFUSED (OMN-20911): the cached read gateway cannot record this read in its budget file $_gw_hour_file ($_gw_why); fix the file rather than read uncounted." >&2
     _call_log 1 refused
     exit 1
   fi
