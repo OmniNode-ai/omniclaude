@@ -1,0 +1,53 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22177
+title: "CI reads omnibase_core at the commit uv.lock resolves, not at a tag invented from the package version"
+summary: >
+  The pinned dev tag of omnibase_core reports version 0.47.66, a version with no
+  v0.47.66 tag and none on the package index, so seven CI readers failed at
+  checkout or install. Each now takes the 40-hex commit from the uv.lock source
+  fragment of omnibase-core, refuses a lock without a Git source, and fetches
+  that exact commit. No required check, tag, release or version changed.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-pinned-core-readers
+    statement: Every CI reader of omnibase_core resolves the commit from uv.lock and fetches or installs exactly that commit.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the five checkout readers and the two index readers select the commit of the recorded 0.47.66 pin -- falsifier: tests/ci/test_pinned_core_readers.py finds a reader that names v0.47.66 or omnibase-core== for it"
+      - id: AC2
+        statement: "AC2: a lock with no Git source for omnibase-core fails before any checkout -- falsifier: a reader exits 0 on such a lock or records a Git call"
+      - id: AC3
+        statement: "AC3: the receipt-honesty workflow runs the existing core node and returns 0 for an honest receipt and 1 for a dishonest one -- falsifier: the workflow validator test returns the other exit code"
+evidence_requirements:
+  - kind: tests
+    description: "tests/ci/test_pinned_core_readers.py runs the workflow reader snippets against the recorded pin"
+    command: "uv run pytest tests/ci/test_pinned_core_readers.py -q --no-cov -p no:cacheprovider"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-ac1-readers-select-commit
+    description: "AC1: each reader selects commit 9294542b9762de81fec93bbfae2e8db94f4bbbc7 from the lock of the recorded dev pin"
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_pinned_core_readers.py -k 'dev_pin_reads or index_reader_installs' -q --no-cov -p no:cacheprovider"
+  - id: dod-ac2-no-git-pin-refused
+    description: "AC2: a lock with a registry source for omnibase-core is refused before any Git call"
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_pinned_core_readers.py -k 'missing_git_pin or no_git_pin' -q --no-cov -p no:cacheprovider"
+  - id: dod-ac3-receipt-honesty-node
+    description: "AC3: the workflow command exits 0 for an honest receipt and 1 for a dishonest one"
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_pinned_core_readers.py -k receipt_honesty_workflow -q --no-cov -p no:cacheprovider"
