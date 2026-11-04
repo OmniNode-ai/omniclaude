@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-22145
+title: "canonical_clone_sync refresh skips a sibling directory the caller cannot stat instead of raising PermissionError"
+summary: >
+  On a lab host a root-owned mode-0700 directory sits beside the registry root. The refresh walks the
+  direct children of the root's parent to find a canonical clone, and reading the .git entry of that
+  directory raised PermissionError, so no lane on that host could refresh a clone. discover_clones now
+  skips a directory the caller cannot stat and records its path; the refresh prints one note per skipped
+  path on stderr and still prints REFRESHED or UP_TO_DATE for the requested repository.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22145-skip-unstattable-sibling
+    statement: A refresh skips a sibling directory the caller cannot stat, notes the skipped path, and still refreshes the requested repository.
+    acceptance:
+      - id: AC1
+        statement: "AC1: a refresh whose registry root has a sibling directory the caller cannot stat skips that directory and still prints REFRESHED or UP_TO_DATE for the requested repository, with a one-line note naming the skipped path -- falsifier: uv run pytest plugins/onex/hooks/tests -q -k sibling_clone_permission"
+      - id: AC2
+        statement: "AC2: a regression test built from the recorded lab-host layout (a root-owned mode-0700 sibling directory, fixture path in the PR) fails on the broken code and passes on the fix -- falsifier: uv run pytest plugins/onex/hooks/tests -q -k sibling_clone_permission"
+  - id: req-omn22145-lab-host-refresh
+    statement: The refresh command exits 0 on the lab host once the fix is installed through the declared installer.
+    acceptance:
+      - id: AC3
+        statement: "AC3: on the lab host, after the fix is installed through the declared installer, `canonical_clone_sync.py refresh OmniNode-ai/<repo> --wait` exits 0 -- falsifier: onex_lab_run of that command on the lab host prints exit 0 in the receipt"
+evidence_requirements:
+  - kind: tests
+    description: "The sibling_clone tests and the existing refresh and sync tests pass"
+    command: "uv run pytest plugins/onex/hooks/tests tests/hooks/test_canonical_clone_sync_refresh.py tests/hooks/test_canonical_clone_sync.py -q --no-cov -p no:randomly"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22145-ac1-skip-unstattable
+    binds_ac: [AC1]
+    description: The sibling_clone_permission tests refresh the requested clone beside a directory the caller cannot stat and get REFRESHED or UP_TO_DATE, with one stderr note naming the skipped path.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest plugins/onex/hooks/tests -q --no-cov -k sibling_clone_permission -p no:randomly"
+  - id: dod-omn22145-ac2-regression-test
+    binds_ac: [AC2]
+    description: The recorded-layout tests exist and run green on the fix (on the old code all three raise PermissionError or reject the skipped argument).
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest plugins/onex/hooks/tests/test_canonical_clone_sync_sibling_clone.py -q --no-cov -k sibling_clone_permission -p no:randomly"
+  - id: dod-omn22145-ac3-lab-host-refresh
+    binds_ac: [AC3]
+    description: The lab-host refresh is a lab run after the declared install; this check pins that the module still carries the skip and the note the lab run depends on.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q 'permission denied' plugins/onex/hooks/lib/canonical_clone_sync.py"
