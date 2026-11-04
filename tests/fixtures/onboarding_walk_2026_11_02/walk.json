@@ -12,5 +12,18 @@
     "disk_total_gb": 41,
     "disk_free_gb": 17
   },
-  "below_minimum_disk_free_gb": 9
+  "below_minimum_disk_free_gb": 9,
+  "ticket": "OMN-22180",
+  "source": "OMN-22180 description, quoting the clean macOS VM walk",
+  "floor_marker_walk": {
+    "date": "2026-11-02",
+    "time_utc": "21:09:58Z",
+    "environment": "Tart VM, macOS 26.6.2",
+    "after_phase": 3
+  },
+  "command": "onex delegate",
+  "exit_code": 3,
+  "refusal_file": "refusal.txt",
+  "note": "The refusal text is the ticket's own quotation, including its ellipsis; the wrapper's full message was not recorded. The marker path is shown with the placeholder <workspace>.",
+  "recovered_by": "onex-host-reconcile, a step the onboarding guide never names"
 }
