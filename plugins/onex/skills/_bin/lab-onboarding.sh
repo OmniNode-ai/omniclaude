@@ -290,59 +290,46 @@ rerun_note() { # phase why
 
 last_log_lines() { tail -n 3 "$LOG" 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-300; }
 
-# retry DESC CMD... : run CMD with output to the log, up to RETRIES attempts,
-# 5-10 s apart. Returns CMD's status; on failure sets FAILED_STEP/LAST_ERR.
-retry() {
-  local desc="$1"; shift
-  local n=1 rc wait
-  while :; do
-    log "\$ $desc (attempt $n/$RETRIES)"
-    "$@" >>"$LOG" 2>&1
-    rc=$?
-    [ "$rc" -eq 0 ] && return 0
-    LAST_ERR="$(last_log_lines)"
-    if [ "$n" -ge "$RETRIES" ]; then
-      FAILED_STEP="$desc"; FAILED_ATTEMPTS=$n
-      return "$rc"
-    fi
-    wait=$(( (RANDOM % 6) + 5 ))
-    say "  … $desc failed (attempt $n/$RETRIES); retrying in ${wait}s"
-    sleep "$wait"
-    n=$((n + 1))
-  done
+# run_logged CMD... : output goes to the log; STEP_ERR is CMD's own stderr, and a
+# failure with none says so, never borrowing the log lines before it.
+# With CAPTURE set, CMD's stdout goes to CAPTURED instead and is never logged.
+STEP_ERR=""
+CAPTURED=""
+run_logged() {
+  local f rc; f="$(mktemp)"
+  if [ -n "${CAPTURE:-}" ]; then CAPTURED="$("$@" 2>"$f")"; else "$@" >>"$LOG" 2>"$f"; fi
+  rc=$?; cat "$f" >>"$LOG"
+  STEP_ERR="$(tail -n 5 "$f" | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-300)"; rm -f "$f"
+  [ "$rc" -eq 0 ] || { [ -z "${CAPTURE:-}" ] || CAPTURED=""; }
+  [ -n "$STEP_ERR" ] || STEP_ERR="exited with status $rc and wrote nothing to stderr"; return "$rc"
 }
 
-# retry_capture DESC CMD... : like retry, but CMD's stdout is returned in
-# CAPTURED and never written to the log (it may carry a credential).
-CAPTURED=""
-retry_capture() {
-  local desc="$1"; shift
+# retry DESC CMD... : run CMD with output to the log, up to RETRIES attempts,
+# 5-10 s apart. Returns CMD's status; on failure sets FAILED_STEP/LAST_ERR.
+# retry_capture DESC CMD... : the same, but CMD's stdout is returned in CAPTURED
+# and never written to the log (it may carry a credential).
+retry() {
+  local desc="$1" CAPTURE="${CAPTURE:-}"; shift
   local n=1 rc wait
-  CAPTURED=""
   while :; do
-    log "\$ $desc (attempt $n/$RETRIES; output not logged)"
-    CAPTURED="$("$@" 2>>"$LOG")"
-    rc=$?
-    [ "$rc" -eq 0 ] && return 0
-    CAPTURED=""
-    LAST_ERR="$(last_log_lines)"
-    if [ "$n" -ge "$RETRIES" ]; then
-      FAILED_STEP="$desc"; FAILED_ATTEMPTS=$n
-      return "$rc"
-    fi
+    log "\$ $desc (attempt $n/$RETRIES${CAPTURE:+; output not logged})"
+    run_logged "$@" && return 0
+    rc=$?; LAST_ERR="$STEP_ERR"
+    if [ "$n" -ge "$RETRIES" ]; then FAILED_STEP="$desc"; FAILED_ATTEMPTS=$n; return "$rc"; fi
     wait=$(( (RANDOM % 6) + 5 ))
     say "  … $desc failed (attempt $n/$RETRIES); retrying in ${wait}s"
     sleep "$wait"
     n=$((n + 1))
   done
 }
+retry_capture() { CAPTURE=1 retry "$@"; }
 
 # step DESC CMD... : a local step, run once.
 step() {
   local desc="$1"; shift
   log "\$ $desc"
-  if "$@" >>"$LOG" 2>&1; then return 0; fi
-  FAILED_STEP="$desc"; FAILED_ATTEMPTS=1; LAST_ERR="$(last_log_lines)"
+  if run_logged "$@"; then return 0; fi
+  FAILED_STEP="$desc"; FAILED_ATTEMPTS=1; LAST_ERR="$STEP_ERR"
   return 1
 }
 
@@ -1324,7 +1311,6 @@ link_onex() {
   ln -s "$wrapper" "$link"
 }
 
-key_stored() { onex_run secret list 2>/dev/null | grep -qE "^[[:space:]]+llm\.$1\.api_key[[:space:]]"; }
 
 # receipt_field JSON KEY -> the first value of KEY anywhere in the receipt JSON
 receipt_field() { printf '%s' "$1" | jq -r --arg k "$2" '[.. | objects | .[$k]? // empty] | first // empty' 2>/dev/null; }
@@ -1543,22 +1529,41 @@ docker_settings_file() {
   if [ -f "$d/settings-store.json" ]; then echo "$d/settings-store.json"; else echo "$d/settings.json"; fi
 }
 
-size_docker() { # memory MiB, cpus -> 0 changed, 1 error, 2 already enough
+# size_docker MEM_MiB CPUS -> 0 changed, 1 error, 2 already enough, 3 settings
+# unreadable, 4 not writable; stderr names the cause. macOS protects the folder: a
+# terminal without Full Disk Access gets "Operation not permitted", which must not
+# read as an absent file. Settings already enough are never rewritten.
+size_docker() {
   "$(brew_bin | sed 's#/brew$##')/python3.13" - "$(docker_settings_file)" "$1" "$2" <<'PY'
 import json, os, sys
 path, mem, cpus = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
-data = json.load(open(path)) if os.path.exists(path) else {}
+def stop(code, what, err):
+    sys.stderr.write(f"{what} ({getattr(err, "strerror", None) or err}): {path}\n"); sys.exit(code)
+data = {}
+try:
+    if os.stat(path): data = json.load(open(path))
+except FileNotFoundError: pass
+except OSError as err: stop(3, "macOS refused this terminal a read of Docker Desktop's settings", err)
+except ValueError as err: stop(1, "Docker Desktop's settings are not valid JSON", err)
 mem_key = "MemoryMiB" if "MemoryMiB" in data or path.endswith("settings-store.json") else "memoryMiB"
 cpu_key = "Cpus" if "Cpus" in data or path.endswith("settings-store.json") else "cpus"
-if int(data.get(mem_key, 0)) >= mem and int(data.get(cpu_key, 0)) >= cpus:
-    sys.exit(2)
+if int(data.get(mem_key, 0)) >= mem and int(data.get(cpu_key, 0)) >= cpus: sys.exit(2)
 data[mem_key] = max(mem, int(data.get(mem_key, 0)))
 data[cpu_key] = max(cpus, int(data.get(cpu_key, 0)))
-if os.path.exists(path):
-    os.replace(path, path + ".pre-onboarding")
-os.makedirs(os.path.dirname(path), exist_ok=True)
-json.dump(data, open(path, "w"), indent=2)
+try:
+    if os.path.exists(path): os.replace(path, path + ".pre-onboarding")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    json.dump(data, open(path, "w"), indent=2)
+except OSError as err: stop(4, "this terminal cannot write Docker Desktop's settings", err)
 PY
+}
+
+# 0 when the running engine already has MEM_MiB and CPUS: how phase 4 judges the size
+# when the settings cannot be read. The engine reports a tenth less than the setting.
+docker_has_resources() {
+  local info; info="$(docker info --format '{{.MemTotal}} {{.NCPU}}' 2>/dev/null)" || return 1
+  case "$info" in ''|*[!0-9\ ]*) return 1 ;; esac
+  [ "${info% *}" -ge $(($1 * 1024 * 1024 * 9 / 10)) ] && [ "${info#* }" -ge "$2" ]
 }
 
 docker_awaits_terms() { # Docker Desktop is showing its licence window and will not start until accepted
@@ -1702,12 +1707,16 @@ phase4() {
     say "  Docker Desktop: present"
   fi
 
-  size_docker "$mem" "$DOCKER_CPUS"
-  case $? in
+  local err rc
+  err="$(size_docker "$mem" "$DOCKER_CPUS" 2>&1)"; rc=$?
+  [ "$rc" -eq 3 ] && docker_ready && docker_has_resources "$mem" "$DOCKER_CPUS" && rc=2   # unreadable file, engine already sized
+  case $rc in
     0) say "  Docker Desktop set to ${mem_gb} GB and $DOCKER_CPUS CPUs; restarting it…"
        docker_ready && restart_docker >>"$LOG" 2>&1 ;;
     2) say "  Docker Desktop already has at least ${mem_gb} GB and $DOCKER_CPUS CPUs" ;;
-    *) FAILED_STEP="size Docker Desktop"; LAST_ERR="$(last_log_lines)"
+    3|4) FAILED_STEP="size Docker Desktop"; LAST_ERR="$err"
+       phase_fail "give your terminal Full Disk Access (System Settings > Privacy & Security > Full Disk Access, switch on Terminal, quit and reopen it), or open Docker Desktop once, set Settings > Resources to ${mem_gb} GB and $DOCKER_CPUS CPUs, leave it running; then run this again" ;;
+    *) FAILED_STEP="size Docker Desktop"; LAST_ERR="${err:-exited with status $rc and wrote nothing to stderr}"
        phase_fail "set Settings > Resources to ${mem_gb} GB and $DOCKER_CPUS CPUs by hand, then run this again" ;;
   esac
   if ! docker_ready; then

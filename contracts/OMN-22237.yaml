@@ -1,0 +1,82 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22237
+title: "Phase 4 names the cause when Docker Desktop's settings sit in a macOS-protected folder the terminal cannot read"
+summary: >
+  lab-onboarding.sh phase 4 (size_docker) told an unreadable settings folder apart from an
+  absent file nowhere, printed a Last error made of the preceding log lines, and asked for a
+  remedy that could not clear it. size_docker now exits 3 (unreadable) or 4 (not writable)
+  with a stderr line naming the folder and the OS error; phase 4 prints Full Disk Access as
+  the remedy, accepts a running engine that already has the memory and CPUs when the file
+  cannot be read, and never rewrites settings that are already enough. step and retry take
+  Last error from the step's own stderr. ONBOARDING.md states the Full Disk Access
+  requirement beside the memory and disk figures. No runtime component is deployed.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-docker-settings-tcc
+    statement: Phase 4 names an unreadable or unwritable Docker settings folder and a remedy that clears on re-run, and Last error carries the step's own stderr.
+    acceptance:
+      - id: AC1
+        statement: "AC1: an unreadable or unwritable settings path stops phase 4 with a named cause and remedy -- falsifier: uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q -k unreadable_names_cause"
+      - id: AC2
+        statement: "AC2: settings already at the floor proceed without a rewrite, and the printed remedy clears on a re-run -- falsifier: uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q -k remedy_clears_on_rerun"
+      - id: AC3
+        statement: "AC3: Last error carries the step's own stderr and never the preceding log lines -- falsifier: uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q -k last_error_is_stderr"
+      - id: AC4
+        statement: "AC4: ONBOARDING.md states the Full Disk Access requirement beside the memory and disk figures -- falsifier: git grep -n 'Full Disk Access' plugins/onex/ONBOARDING.md"
+      - id: AC5
+        statement: "AC5: a regression test built from the incident's readings fails on the old script and passes on the fix -- falsifier: uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q -k incident_fixture"
+evidence_requirements:
+  - kind: tests
+    description: "docker settings TCC regression tests pass; run against the pre-fix script, 10 of the 12 fail"
+    command: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:cacheprovider"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-ac1-unreadable-names-cause
+    description: "AC1: an unreadable settings folder stops phase 4 naming the folder, the OS error and Full Disk Access"
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:cacheprovider -k unreadable_names_cause"
+  - id: dod-ac2-remedy-clears-on-rerun
+    description: "AC2: settings at the floor need no rewrite, and a running engine at the floor clears an unreadable file"
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:cacheprovider -k remedy_clears_on_rerun"
+  - id: dod-ac3-last-error-is-stderr
+    description: "AC3: Last error is the step's own stderr for step, retry and the sizing snippet"
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:cacheprovider -k last_error_is_stderr"
+  - id: dod-ac4-onboarding-md-full-disk-access
+    description: "AC4: ONBOARDING.md names Full Disk Access beside the Before you start table"
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: command
+        check_value: "git grep -n 'Full Disk Access' plugins/onex/ONBOARDING.md"
+  - id: dod-ac5-incident-fixture
+    description: "AC5: the incident-fixture regression test passes on the fix (fails on the pre-fix script)"
+    source: manual
+    binds_ac: [AC5]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_docker_settings_tcc.py -q --no-cov -p no:cacheprovider -k incident_fixture"
+      - check_type: command
+        check_value: "test -s tests/fixtures/onboarding_docker_tcc_2026_11_03/incident.json"
+  - id: dod-no-deploy
+    description: "deploy not required: an onboarding script and its docs change; no runtime component is deployed"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "test -s plugins/onex/skills/_bin/lab-onboarding.sh && echo deploy not required onboarding script and docs only no runtime component"

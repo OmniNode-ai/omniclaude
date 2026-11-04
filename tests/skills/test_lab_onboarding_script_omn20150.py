@@ -2528,6 +2528,7 @@ def _local_url_onex(
         + _functions(
             "log",
             "last_log_lines",
+            "run_logged",
             "retry",
         )
         + "\n"

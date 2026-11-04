@@ -324,7 +324,10 @@ def test_ac4_a_resumed_run_from_a_fresh_download_runs_the_failed_phase(
     assert "Phase 1/6 PASSED: Base tools" in out and "already installed" in out
     assert "Phase 2/6 PASSED: Workspace" in out and "already in place" in out
     assert "INSTALLED" not in out
-    assert "PHASE3 checked the dispatch venv" in out
+    # The stub's marker goes to the run log; the failure's Last error is the
+    # failing step's own stderr and no longer borrows the log lines before it.
+    logs = (tmp_path / "run" / "omninode-onboarding").glob("run-*.log")
+    assert any("PHASE3 checked the dispatch venv" in f.read_text() for f in logs)
     assert "▶ Phase 3/6" in out
     assert "✘ Phase 3/6 FAILED" in out
     assert "Step:      point ~/.local/bin/onex at the workspace wrapper" in out
