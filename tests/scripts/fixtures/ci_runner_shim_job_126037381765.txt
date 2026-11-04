@@ -1,0 +1,59 @@
+﻿2026-11-03T16:05:21.1321759Z Current runner version: '2.338.2'
+2026-11-03T16:05:21.1326839Z Runner name: 'h203-light-4'
+2026-11-03T16:05:21.1327835Z Runner group name: 'omnibase-ci'
+2026-11-03T16:05:32.5295144Z ##[group]Run set -euo pipefail
+2026-11-03T16:05:32.5295435Z set -euo pipefail
+2026-11-03T16:05:32.5295628Z 
+2026-11-03T16:05:32.5295803Z if [[ -z "${PR_NUMBER}" ]]; then
+2026-11-03T16:05:32.5296177Z   echo "::error::deploy-gate: PR-METADATA READ FAILED -- no PR number could be" \
+2026-11-03T16:05:32.5296626Z        "resolved. Refusing to report a verdict on input that was never read."
+2026-11-03T16:05:32.5296943Z   exit 1
+2026-11-03T16:05:32.5297108Z fi
+2026-11-03T16:05:32.5297262Z 
+2026-11-03T16:05:32.5297545Z # The changed-file list is resolved by scripts/ci/resolve_pr_changed_files.py,
+2026-11-03T16:05:32.5297969Z # which tries `gh pr diff --name-only` first and, when GitHub refuses that
+2026-11-03T16:05:32.5298360Z # request as `PullRequest.diff too_large`, pages the names out of
+2026-11-03T16:05:32.5298773Z # repos/<repo>/pulls/<n>/files instead and checks the count against
+2026-11-03T16:05:32.5299143Z # GitHub's own `changedFiles` before trusting it (OMN-18566).
+2026-11-03T16:05:32.5299427Z #
+2026-11-03T16:05:32.5299687Z # The previous fallback here ran a local three-dot diff against the base.
+2026-11-03T16:05:32.5300100Z # actions/checkout clones at depth 1, so base and head share no history in
+2026-11-03T16:05:32.5300504Z # the local object store and git answered `fatal: origin/main...HEAD: no
+2026-11-03T16:05:32.5300906Z # merge base` -- deploy-gate is a required check on `main`, so the one
+2026-11-03T16:05:32.5301301Z # class of PR it could not read was the class that changes the most files.
+2026-11-03T16:05:32.5301693Z # Resolving from the API needs no local history, so the checkout stays
+2026-11-03T16:05:32.5302142Z # shallow. Every unreadable or truncated answer is a refusal with its own
+2026-11-03T16:05:32.5302505Z # outcome token; there is no force or skip path.
+2026-11-03T16:05:32.5302845Z uv run python scripts/ci/resolve_pr_changed_files.py \
+2026-11-03T16:05:32.5303220Z   --pr-number "${PR_NUMBER}" \
+2026-11-03T16:05:32.5303721Z   --repo "${GITHUB_REPOSITORY}" \
+2026-11-03T16:05:32.5304064Z   --output "${RUNNER_TEMP}/changed-files.txt"
+2026-11-03T16:05:32.5304339Z 
+2026-11-03T16:05:32.5304696Z if ! gh pr view "${PR_NUMBER}" --json body -q '.body' >"${RUNNER_TEMP}/pr-body.txt" 2>"${RUNNER_TEMP}/gh-body.err"; then
+2026-11-03T16:05:32.5305217Z   echo "::error::deploy-gate: PR-METADATA READ FAILED -- could not read the body" \
+2026-11-03T16:05:32.5305649Z        "of PR #${PR_NUMBER}. The gate resolves its ticket citation from the body;" \
+2026-11-03T16:05:32.5306043Z        "refusing to report a verdict on input that was never read."
+2026-11-03T16:05:32.5306376Z   cat "${RUNNER_TEMP}/gh-body.err" >&2 || true
+2026-11-03T16:05:32.5306619Z   exit 1
+2026-11-03T16:05:32.5306791Z fi
+2026-11-03T16:05:32.5306944Z 
+2026-11-03T16:05:32.5307205Z echo "deploy-gate: read $(wc -l <"${RUNNER_TEMP}/changed-files.txt") changed" \
+2026-11-03T16:05:32.5307608Z      "path(s) and $(wc -c <"${RUNNER_TEMP}/pr-body.txt") body byte(s) for" \
+2026-11-03T16:05:32.5307905Z      "PR #${PR_NUMBER}."
+2026-11-03T16:05:32.5316875Z shell: /usr/bin/bash -e {0}
+2026-11-03T16:05:32.5317081Z env:
+2026-11-03T16:05:32.5317254Z   PYTHON_VERSION: 3.12
+2026-11-03T16:05:32.5317440Z   UV_VERSION: 0.8.3
+2026-11-03T16:05:32.5317726Z   pythonLocation: /home/runner/actions-runner/_work/_tool/Python/3.12.15/x64
+2026-11-03T16:05:32.5318187Z   PKG_CONFIG_PATH: /home/runner/actions-runner/_work/_tool/Python/3.12.15/x64/lib/pkgconfig
+2026-11-03T16:05:32.5318634Z   Python_ROOT_DIR: /home/runner/actions-runner/_work/_tool/Python/3.12.15/x64
+2026-11-03T16:05:32.5319182Z   Python2_ROOT_DIR: /home/runner/actions-runner/_work/_tool/Python/3.12.15/x64
+2026-11-03T16:05:32.5319601Z   Python3_ROOT_DIR: /home/runner/actions-runner/_work/_tool/Python/3.12.15/x64
+2026-11-03T16:05:32.5320006Z   LD_LIBRARY_PATH: /home/runner/actions-runner/_work/_tool/Python/3.12.15/x64/lib
+2026-11-03T16:05:32.5320393Z   UV_PYTHON_INSTALL_DIR: /home/runner/.local/share/uv/python
+2026-11-03T16:05:32.5322930Z   GH_TOKEN: ***
+2026-11-03T16:05:32.5323116Z   PR_NUMBER: 2013
+2026-11-03T16:05:32.5323296Z ##[endgroup]
+2026-11-03T16:05:33.9560473Z resolve_pr_changed_files: 3 path(s) for PR #2013 via pr_diff
+2026-11-03T16:05:34.0358986Z ##[error]deploy-gate: PR-METADATA READ FAILED -- could not read the body of PR #2013. The gate resolves its ticket citation from the body; refusing to report a verdict on input that was never read.
+2026-11-03T16:05:34.0370298Z REFUSED (OMN-19856): gh pr view is a PR-state read; GitHub is for mutations and the declared exact-head check only (RULING 2026-09-27T18:05:21Z).
