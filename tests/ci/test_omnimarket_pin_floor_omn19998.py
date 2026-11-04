@@ -20,8 +20,8 @@ pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[2]
 GIT = "https://github.com/OmniNode-ai/omnimarket.git"
-PIN_FLOOR_TAG = "dev-20261104010134-0b7b2bde8a56"
-PIN_FLOOR_SHA = "0b7b2bde8a56700336c57468ed183b5cb660117a"
+PIN_FLOOR_TAG = "dev-20261104195025-170b049cc896"
+PIN_FLOOR_SHA = "170b049cc8967e93728b84acc9d362f39b7b618e"
 
 
 def _uv_config() -> dict[str, Any]:
