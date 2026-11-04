@@ -1155,16 +1155,41 @@ def _render_protected_push_reason(policy: Policy, git_root: Path, detail: str) -
 
 
 def _render_block_reason(
-    policy: Policy, invocation: _GitInvocation, git_root: Path, detail: str
+    policy: Policy,
+    invocation: _GitInvocation,
+    git_root: Path,
+    detail: str,
+    *,
+    lane: bool = False,
 ) -> str:
+    """The shared-clone refusal.
+
+    Its closing sentence names what is NOT gated. Said to a lane, "neither is
+    `git fetch` or `git pull --ff-only`" was false: the lane git-fetch arm
+    (OMN-20495) refuses both against GitHub, so the advice sent the lane
+    straight into a second refusal. A lane is told what that arm tells it.
+    """
+    if lane:
+        ungated = (
+            "Reads are never gated, and neither is `git merge --ff-only`. "
+            "From a lane, `git fetch` and `git pull` against GitHub are "
+            f"refused ({policy.fetch_ticket}): origin refs here are kept "
+            "current by canonical-clone-sync, so use origin/<branch> as is, "
+            f"or run `python3 {policy.clone_sync_engine} refresh "
+            "<owner>/<repo> --wait`."
+        )
+    else:
+        ungated = (
+            "Reads are never gated, and neither is "
+            "`git fetch`, `git merge --ff-only` or `git pull --ff-only`."
+        )
     return (
         f"BLOCKED: `git {invocation.subcommand}` in {git_root}, the shared "
         f"registry clone ({policy.ticket}, {policy.rule}). Many "
         "concurrent lanes work in this ONE tree, so a command that moves it "
         "takes their work with it: "
         f"{detail}. Use a sanctioned alternative instead -- "
-        f"{policy.safe_alternatives}. Reads are never gated, and neither is "
-        "`git fetch`, `git merge --ff-only` or `git pull --ff-only`. To "
+        f"{policy.safe_alternatives}. {ungated} To "
         f"disable this guard: onex hooks disable {GATE_BIT_NAME}"
     )
 
@@ -2257,6 +2282,20 @@ def _lane_name(policy: Policy, environ: Mapping[str, str]) -> str:
     return ""
 
 
+def _caller_is_lane(
+    policy: Policy,
+    payload_cwd: Path,
+    worktree_roots: tuple[Path, ...],
+    environ: Mapping[str, str],
+) -> bool:
+    """Whether the lane git-fetch arm would treat this caller as a lane."""
+    if any(environ.get(k) == v for k, v in policy.fetch_allow_env):
+        return False
+    return bool(_lane_name(policy, environ)) or _is_lane_path(
+        payload_cwd, policy, worktree_roots
+    )
+
+
 def _fetch_refusal_text(
     policy: Policy, verb: str, repo: str, detail: str, branch: str | None
 ) -> str:
@@ -2605,7 +2644,13 @@ def evaluate_bash_command(
             if detail is not None:
                 return Decision(
                     blocked=True,
-                    reason=_render_block_reason(policy, invocation, git_root, detail),
+                    reason=_render_block_reason(
+                        policy,
+                        invocation,
+                        git_root,
+                        detail,
+                        lane=_caller_is_lane(policy, cwd, worktree_roots, os.environ),
+                    ),
                 )
         elif git_root is not None:
             protected = _protected_push_detail(
