@@ -6,6 +6,7 @@
   "tests/hooks/test_agent_status_emitter.py": 0.12,
   "tests/hooks/test_all_class_capture_registration.py": 0.45,
   "tests/hooks/test_attribution_binder.py": 0.21,
+  "tests/hooks/test_auto_checkpoint_no_gh_read.py": 0.16,
   "tests/hooks/test_bash_guard.py": 1.07,
   "tests/hooks/test_bash_guard_worktree.py": 0.09,
   "tests/hooks/test_blocked_notifier.py": 0.12,
