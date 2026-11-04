@@ -131,7 +131,9 @@ are refused by the lane read guard, so visibility and the variable scopes cannot
 read live there. Set `PRRP_VARIABLES_SNAPSHOT` (or pass `--variables-snapshot`) to a
 file written by `--write-variables-snapshot` from a host whose credential CAN read
 them. The snapshot is consulted only after a live read failed, so a live answer
-always wins; one older than `--snapshot-max-age-hours` (24), dated ahead, missing,
+always wins -- except in a lane (an ONEX_LANE, agent or Codex marker), whose reads
+the gh shim refuses, so a lane with a snapshot reads it directly and makes no
+GitHub read (OMN-19998); one older than `--snapshot-max-age-hours` (24), dated ahead, missing,
 unparseable, or silent about the repository or scope asked for is a REFUSAL, exit 2,
 and every such refusal names the missing input and the sanctioned remedy (OMN-20141):
 the lab hosts' copy is published by omnimarket's `onex-prrp-snapshot-publish` (one
@@ -953,14 +955,51 @@ def published_snapshot_path() -> Path | None:
     return candidate if candidate.is_file() else None
 
 
+# The lane markers the gh shim and the lane GitHub read guard key on
+# (node_lane_github_read_guard_effect LANE_ENV_MARKERS). Spelled here because
+# this script runs as a pre-commit hook without the omniclaude package.
+LANE_ENV_MARKERS: tuple[str, ...] = (
+    "ONEX_LANE",
+    "ONEX_LANE_ID",
+    "ONEX_AGENT_NAME",
+    "CLAUDE_AGENT_NAME",
+    "CLAUDE_SUBAGENT_NAME",
+    "CODEX_THREAD_ID",
+    "CODEX_SANDBOX",
+    "CODEX_SANDBOX_NETWORK_DISABLED",
+    "CODEX_MANAGED_BY_NPM",
+)
+LANE_SKIPPED_LIVE = (
+    "live read not attempted: this is a lane, whose GitHub reads are refused"
+)
+
+
+def lane_reads_snapshot_only(snapshot: VariablesSnapshot | None) -> bool:
+    """True when a lane's commit should consume the snapshot with no live read.
+
+    A lane's GitHub reads are refused by the gh shim and the lane read guard
+    (OMN-20916), so the live read always fails there and each attempt is a
+    recorded refusal. With a snapshot supplied, a lane reads it directly; every
+    freshness and coverage refusal of VariablesSnapshot still applies. Never
+    inside Actions, which resolves live, and never without a snapshot.
+    """
+    if snapshot is None or os.environ.get("GITHUB_ACTIONS") == "true":
+        return False
+    return any(os.environ.get(name) for name in LANE_ENV_MARKERS)
+
+
 def resolve_visibility(slug: str, snapshot: VariablesSnapshot | None = None) -> str:
     """Live repository visibility. Never a list, never an inference.
 
     When the live read fails and a snapshot is supplied, the snapshot's dated
     answer is used and the run says so; a snapshot that cannot answer is the
-    same refusal as no snapshot.
+    same refusal as no snapshot. In a lane with a snapshot the live read is not
+    attempted (see lane_reads_snapshot_only).
     """
-    result = _gh(["api", f"repos/{slug}", "--jq", ".visibility"])
+    if lane_reads_snapshot_only(snapshot):
+        result = subprocess.CompletedProcess([], 1, "", LANE_SKIPPED_LIVE)
+    else:
+        result = _gh(["api", f"repos/{slug}", "--jq", ".visibility"])
     if result.returncode != 0:
         live = result.stderr.strip()[:200]
         if snapshot is None:
@@ -1053,6 +1092,9 @@ class Variables:
             flag, target = (
                 ("--repo", self._slug) if which == "repo" else ("--org", self._org_name)
             )
+            if lane_reads_snapshot_only(self._snapshot):
+                self._from_snapshot(which, LANE_SKIPPED_LIVE)
+                return self._scopes.get(which)
             try:
                 self._scopes[which] = self._read(flag, target)
             except GateError as error:
