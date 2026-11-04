@@ -117,6 +117,17 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_git_fetch_guard.py -q --no-cov"
     binds_ac:
       - "AC19"
+  - id: dod-omn19998-shared-clone-advice-source-readback
+    description: "Hosted source publication readback at the checked-out commit: the Git refusal advice handler must publish its lane-specific refresh advice. Missing or pre-fix source fails; this does not claim a running hook installation."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: >-
+          curl --fail --silent --show-error --location
+          "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_git_effect/handlers/handler_git_refusal_advice.py"
+          | python3 -c 'import sys; source = sys.stdin.read(); assert "class HandlerGitRefusalAdvice:" in source; assert "if request.lane:" in source; assert "canonical-clone-sync" in source; assert "<owner>/<repo> --wait" in source'
+    binds_ac:
+      - "AC19"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
