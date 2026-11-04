@@ -87,6 +87,11 @@ requirements:
     acceptance:
       - id: "AC14"
         statement: "AC14: the refresh CLI advances a valid clone and reports one permission diagnostic for a denied child stat, .git probe or declared sibling; sibling discovery raises an unrelated EIO -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync_refresh.py -q --no-cov -k 'recorded_hidden_sibling or does_not_hide_an_unrelated' with the permission guard removed or widened to OSError"
+  - id: "req-omn19998-gh-shim-write-drops-stale-read"
+    statement: "A lane write through the gh shim drops the cached fallback reads it can change, so a read-back after the write is not served the answer cached before it."
+    acceptance:
+      - id: "AC15"
+        statement: "AC15: after a lane write (gh api PUT on a repository path, a GraphQL mutation, gh variable set) the next identical lane read reaches GitHub and returns the new answer, while another repository's cached read and the immutable gateway shapes stay cached -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k lane_write fails over the merge base, where the read-back is served the pre-write answer"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -230,3 +235,11 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_canonical_clone_sync_refresh.py -q --no-cov -k 'recorded_hidden_sibling or does_not_hide_an_unrelated'"
     binds_ac:
       - "AC14"
+  - id: "dod-omn19998-gh-shim-write-drops-stale-read"
+    description: "Recorded friction class 694: a lane reads Actions permissions, writes them, and reads them back; the read-back reaches GitHub instead of the 300 s fallback cache."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k lane_write"
+    binds_ac:
+      - "AC15"
