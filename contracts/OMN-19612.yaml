@@ -1,0 +1,47 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-19612
+title: "The Pre-commit Suite's sibling-clone step resolves omnibase_core from uv.lock, not from a v<version> release tag"
+summary: >
+  omniclaude#3121 (omnibase-core at dev merge tag dev-20261104014415-cefaf61fea4f, metadata
+  version 0.47.66) failed the Pre-commit Suite at the step that provides the sibling clones, with
+  "fatal: Remote branch v0.47.66 not found in upstream origin": no v0.47.66 tag exists, because
+  the dev tree declares a version its release PR has not yet published. The step now fetches the
+  git source's locked sha, as it already does for omnimarket, and falls back to the v<version>
+  release tag only when uv.lock resolves omnibase-core from a release.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn19612-core-clone-from-lock"
+    statement: "The sibling-clones step clones omnibase_core at the sha uv.lock locks for a git source, at the v<version> tag for a release pin, and fails closed on a git source with no locked sha."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: with omnibase-core locked at a dev merge tag whose metadata version has no release tag, the step fetches the locked sha and runs no clone by v<version> -- falsifier: tests/ci/test_precommit_suite_job_omn19612.py::test_sibling_core_clone_follows_a_dev_tag_git_source_by_locked_sha fails over the merge base"
+      - id: "AC2"
+        statement: "AC2: with omnibase-core locked from a release, the step still clones the v<version> tag, and a git source with no locked sha fails the step without cloning -- falsifier: the two other test_sibling_core_clone tests in the same file"
+evidence_requirements:
+  - kind: tests
+    description: "The step's own shell, run against a dev-tag lock, a release lock and a shaless git lock with git stubbed"
+    command: "uv run pytest tests/ci/test_precommit_suite_job_omn19612.py -q --no-cov -p no:cacheprovider -k sibling_core_clone"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn19612-ac1-dev-tag-by-sha"
+    description: "AC1: a dev-tag omnibase-core lock is fetched at its locked sha"
+    source: "manual"
+    binds_ac: ["AC1"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_precommit_suite_job_omn19612.py -q --no-cov -p no:cacheprovider -k follows_a_dev_tag_git_source"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn19612-ac2-release-and-closed"
+    description: "AC2: a release lock keeps the v<version> clone and a shaless git source fails closed"
+    source: "manual"
+    binds_ac: ["AC2"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_precommit_suite_job_omn19612.py -q --no-cov -p no:cacheprovider -k 'keeps_the_release_tag or fails_closed'"
+        cwd: "${OMNI_HOME}/omniclaude"
