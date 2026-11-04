@@ -50,7 +50,7 @@ def _executable(path: Path, body: str) -> None:
 
 
 def _run(
-    tmp_path: Path, *, with_slack: bool, infra_ok: bool = False
+    tmp_path: Path, *, with_slack: bool, sync_body: str | None = None
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
     registry = tmp_path / "registry"
     registry.mkdir()
@@ -61,25 +61,12 @@ def _run(
         bin_dir / "curl",
         f'printf "%s\\n" "$*" >> "{curl_record}"\nprintf \'{{"ok":true}}\\n200\'\n',
     )
-    if infra_ok:
-        _executable(
-            registry / "omninode_infra" / "scripts" / "archive_claude_sessions.sh",
-            "exit 0\n",
-        )
-        _executable(
-            bin_dir / "aws",
-            'case "$1 $2" in\n'
-            '  "s3api list-buckets") echo omninode-claude-session-archive-test ;;\n'
-            '  "kms describe-key") echo arn:aws:kms:us-east-1:0:key/test ;;\n'
-            "  *) echo listed ;;\n"
-            "esac\n",
-        )
     failure_log = tmp_path / "alert_delivery_failures.log"
     stderr_log = tmp_path / "stderr.log"
     env = {
         k: v
         for k, v in os.environ.items()
-        if k not in {"SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID", "OMNINODE_INFRA_PATH"}
+        if k not in {"SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID"}
     }
     env.update(
         {
@@ -96,6 +83,13 @@ def _run(
         env["SLACK_BOT_TOKEN"] = "xoxb-test-not-a-real-token"
         env["SLACK_CHANNEL_ID"] = "C0TEST"
     args = _program_arguments(registry, stderr_log)
+    if sync_body is not None:
+        # Stand in for the sync script (argument 1 of the wrapper) to drive the
+        # wrapper with a chosen exit code.
+        stub = tmp_path / "sync-stub.sh"
+        _executable(stub, sync_body)
+        assert args[-3].endswith("transcript-s3-archive-sync.sh")
+        args[-3] = str(stub)
     # launchd sends the job's stderr to StandardErrorPath; do the same here.
     with stderr_log.open("w") as err:
         result = subprocess.run(
@@ -131,10 +125,21 @@ def test_an_undeliverable_alarm_is_recorded_not_dropped(tmp_path: Path) -> None:
     assert "ALARM NOT DELIVERED" in failure_log.read_text()
 
 
+def test_the_sync_exit_code_passes_through_unchanged(tmp_path: Path) -> None:
+    """A wrapper that always exited 1 on failure would pass the refused-run case."""
+    result, _, curl_record, stderr_log = _run(
+        tmp_path, with_slack=True, sync_body='echo "stub failed" >&2\nexit 3\n'
+    )
+    assert result.returncode == 3, stderr_log.read_text()
+    call = curl_record.read_text()
+    assert "exit=3" in call
+    assert "last=stub failed" in call
+
+
 def test_a_successful_run_sends_no_alarm(tmp_path: Path) -> None:
     """Positive control: exit 0 is silent, so the alarm means a failure."""
     result, failure_log, curl_record, stderr_log = _run(
-        tmp_path, with_slack=True, infra_ok=True
+        tmp_path, with_slack=True, sync_body="echo done\nexit 0\n"
     )
     assert result.returncode == 0, stderr_log.read_text()
     assert "done" in result.stdout
