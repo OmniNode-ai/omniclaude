@@ -15,6 +15,9 @@ repository, so the layout is what the tests record, not the name.
 
 from __future__ import annotations
 
+import os
+import stat
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -113,3 +116,86 @@ def test_sibling_clone_sync_does_not_pick_up_a_clone_beside_the_root(
     results = ccs.run_sync(reg.env(), None, "manual", None)
     assert all(Path(r.clone) != beside for r in results)
     assert {Path(r.clone) for r in results} == {clone}
+
+
+# OMN-22145: on a lab host a root-owned mode-0700 directory sits beside the
+# registry root. A caller that is not root cannot stat anything inside it, and
+# the refresh used to die with PermissionError instead of refreshing.
+_LOCKED = "locked_neighbour"
+
+
+def _locked_neighbour(reg: Registry, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A sibling directory whose contents the caller cannot stat.
+
+    Mode 0 on a real directory stands in for the root-owned 0700 one. The
+    patched ``is_dir`` raises the same error for it, so the layout also holds
+    when the suite itself runs as root (root ignores directory modes).
+    """
+    locked = reg.home.parent / _LOCKED
+    locked.mkdir()
+    locked.chmod(0)
+    real_is_dir = Path.is_dir
+
+    def is_dir(self: Path) -> bool:
+        if _LOCKED in self.parts and self != locked:
+            raise PermissionError(13, os.strerror(13), str(self))
+        return real_is_dir(self)
+
+    monkeypatch.setattr(Path, "is_dir", is_dir)
+    return locked
+
+
+@pytest.fixture
+def _restore_modes(reg: Registry) -> Iterator[None]:
+    yield
+    for child in reg.home.parent.iterdir():
+        if child.name == _LOCKED:
+            child.chmod(stat.S_IRWXU)
+
+
+def test_sibling_clone_permission_unstattable_directory_is_skipped(
+    reg: Registry,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    _restore_modes: None,
+) -> None:
+    clone = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
+    target = reg.advance(_BESIDE, owner="OmniNode-ai", branch="main")
+    locked = _locked_neighbour(reg, monkeypatch)
+
+    results = ccs.run_refresh(reg.env(), _BESIDE_SLUG, None, cwd=reg.tmp)
+
+    assert [(Path(r.clone), r.result) for r in results] == [(clone, ccs.REFRESHED)]
+    assert _origin(clone, "main") == target
+    notes = [ln for ln in capsys.readouterr().err.splitlines() if str(locked) in ln]
+    assert notes == [f"NOTE       skipped {locked}: permission denied"]
+
+
+def test_sibling_clone_permission_up_to_date_with_unstattable_directory(
+    reg: Registry, monkeypatch: pytest.MonkeyPatch, _restore_modes: None
+) -> None:
+    clone = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
+    _locked_neighbour(reg, monkeypatch)
+    results = ccs.run_refresh(reg.env(), _BESIDE_SLUG, None, cwd=reg.tmp)
+    assert [(Path(r.clone), r.result) for r in results] == [(clone, ccs.UP_TO_DATE)]
+
+
+def test_sibling_clone_permission_cli_prints_one_note_and_exits_zero(
+    reg: Registry,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    _restore_modes: None,
+) -> None:
+    reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
+    locked = _locked_neighbour(reg, monkeypatch)
+    for key, value in reg.env().items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.chdir(reg.tmp)
+
+    code = ccs.main(["refresh", _BESIDE_SLUG, "--wait"])
+
+    out = capsys.readouterr()
+    assert code == 0
+    assert ccs.UP_TO_DATE in out.out
+    notes = [line for line in out.err.splitlines() if str(locked) in line]
+    assert len(notes) == 1, out.err
