@@ -253,7 +253,7 @@ requirements:
     statement: The omnimarket pin names the newest dev merge tag, so the sibling-pin staleness gate passes.
     acceptance:
       - id: AC59
-        statement: "pyproject.toml names omnimarket at dev-20261102235857-65611aac6f14 in both dependencies and [tool.uv.sources] -- falsifier: rg -c 'dev-20261102235857-65611aac6f14' pyproject.toml prints 2 and fails over the merge base, which pins dev-20261102102425-ce12119225dc"
+        statement: "pyproject.toml names omnimarket at dev-20261104195025-170b049cc896 in both dependencies and [tool.uv.sources] -- falsifier: rg -c 'dev-20261104195025-170b049cc896' pyproject.toml prints 2 and fails over the merge base, which pins dev-20261104060946-f745fee0e016"
   - id: req-trivy-installs-without-setup-trivy
     statement: No workflow installs Trivy through aquasecurity/setup-trivy, whose get.trivy.dev host is NXDOMAIN, so the image scan runs a binary the job itself fetched.
     acceptance:
@@ -1224,7 +1224,7 @@ dod_evidence:
       - AC59
     checks:
       - check_type: command
-        check_value: "test \"$(grep -c 'dev-20261102235857-65611aac6f14' pyproject.toml)\" = 2 && grep -q '65611aac6f14' uv.lock"
+        check_value: "test \"$(grep -c 'dev-20261104195025-170b049cc896' pyproject.toml)\" = 2 && grep -q '170b049cc896' uv.lock"
   - id: dod-trivy-installs-without-setup-trivy
     description: "Every trivy-action step skips setup-trivy, each scanning job fetches Trivy from the GitHub release archive, and no executable workflow line reaches get.trivy.dev. Two of the three assertions fail at the merge base."
     source: manual
