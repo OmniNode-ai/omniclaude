@@ -21,6 +21,13 @@ points no model at a lab server.
 The run checks all of this before it changes anything. Below the minimum it stops and
 installs nothing.
 
+If you will run the Docker stack, your terminal also needs **Full Disk Access**. macOS keeps
+Docker Desktop's settings in a protected folder (`~/Library/Group Containers/group.com.docker`),
+and the run reads them to size Docker's memory and CPUs. Without the access, phase 4 stops and
+names the folder. Grant it in System Settings > Privacy & Security > Full Disk Access (switch on
+Terminal, then quit and reopen it), or open Docker Desktop once, set Settings > Resources to the
+figures the run printed, leave it running, and run the same command again.
+
 You also need **a model key of your own**, unless you pick Ollama or a local model server.
 One of:
 

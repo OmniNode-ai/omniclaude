@@ -1,0 +1,15 @@
+{
+  "source": "OMN-22237 description. The recorded run log (run-20261102-190022.log) stayed on the operator's Mac under /Users/Shared/jess-logs; this lane could not read it, so this file holds only the readings the ticket states, scrubbed of account names.",
+  "measured_at": "2026-11-03T01:01:33Z",
+  "macos": "27.0.1",
+  "arch": "arm64",
+  "docker_desktop": "29.1.2",
+  "script_commit": "ee8797af",
+  "settings_dir": "Library/Group Containers/group.com.docker",
+  "os_error": "Operation not permitted",
+  "phase_results": {"0": "PASS", "1": "PASS", "2": "PASS", "3": "PASS", "4": "FAIL"},
+  "failed_step": "size Docker Desktop",
+  "failed_after": "0s",
+  "last_error_as_recorded": "",
+  "next_as_recorded": "set Settings > Resources to 10 GB and 4 CPUs by hand, then run this again"
+}
