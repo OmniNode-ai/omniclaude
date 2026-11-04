@@ -35,10 +35,8 @@ import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import pytest
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "private_repo_runner_placement_gate.py"
@@ -130,7 +128,12 @@ LANE_MARKERS = (
 
 
 def _run_hook(
-    tmp_path: Path, tree: Path, snapshot: Path | None, *, lane: str | None = None
+    tmp_path: Path,
+    tree: Path,
+    snapshot: Path | None,
+    *,
+    lane: str | None = None,
+    marker: str = "ONEX_LANE",
 ) -> subprocess.CompletedProcess[str]:
     """The hook as pre-commit runs it, with a stub gh on PATH.
 
@@ -149,7 +152,7 @@ def _run_hook(
         and key not in LANE_MARKERS
     }
     if lane is not None:
-        env["ONEX_LANE"] = lane
+        env[marker] = lane
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
     # The host's own published snapshot (~/.omninode/prrp/) is read when no
     # path is set (OMN-20074), so HOME is the test's directory, which holds none.
@@ -398,3 +401,73 @@ def test_lane_commit_without_snapshot_still_tries_live(tmp_path: Path) -> None:
     result = _run_hook(tmp_path, _tree(tmp_path, SEAM_JOB), None, lane="cloud-pfix-174")
     assert result.returncode == 2, result.stdout
     assert f"api repos/{SLUG}" in _gh_calls(tmp_path)
+
+
+@pytest.mark.parametrize("marker", LANE_MARKERS)
+def test_every_lane_marker_reads_snapshot_without_gh(
+    tmp_path: Path, marker: str
+) -> None:
+    result = _run_hook(
+        tmp_path,
+        _tree(tmp_path, SEAM_JOB),
+        _snapshot(tmp_path, org={"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET}),
+        lane="snapshot-fixture",
+        marker=marker,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK: every job in" in result.stdout
+    assert _gh_calls(tmp_path) == ""
+
+
+def test_snapshot_source_policy_keeps_actions_live(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _module()
+    monkeypatch.setenv("ONEX_LANE", "snapshot-fixture")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    calls = []
+
+    def live(args, env_name="GH_TOKEN"):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "private\n", "")
+
+    monkeypatch.setattr(module, "_gh", live)
+    assert module.resolve_visibility(SLUG, object()) == "private"
+    assert calls == [["api", f"repos/{SLUG}", "--jq", ".visibility"]]
+
+
+def test_snapshot_source_policy_is_wired_to_existing_node() -> None:
+    import yaml
+
+    from omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_lane_github_read_guard import (
+        LANE_ENV_MARKERS as GUARD_MARKERS,
+    )
+    from omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_runner_placement_snapshot_policy import (
+        handle,
+    )
+
+    module = _module()
+    assert GUARD_MARKERS == module.LANE_ENV_MARKERS
+    contract = yaml.safe_load(
+        (
+            REPO_ROOT
+            / "src/omniclaude/nodes/node_lane_github_read_guard_effect/contract.yaml"
+        ).read_text()
+    )
+    route = next(
+        entry
+        for entry in contract["handler_routing"]["handlers"]
+        if entry["handler"]["name"] == handle.__name__
+    )
+    assert route["event_model"] == {
+        "name": "ModelRunnerPlacementSnapshotRequest",
+        "module": "omniclaude.models.model_runner_placement_snapshot_request",
+    }
+    assert (
+        "onex.cmd.omniclaude.runner-placement-snapshot-check.v1"
+        in contract["event_bus"]["subscribe_topics"]
+    )
+    assert (
+        "onex.evt.omniclaude.runner-placement-snapshot-checked.v1"
+        in contract["event_bus"]["publish_topics"]
+    )
