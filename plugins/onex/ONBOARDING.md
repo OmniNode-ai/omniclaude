@@ -50,9 +50,9 @@ Fetch the script, check it is the one this page was written against, then run it
 
 ```bash
 curl -fsSL -o lab-onboarding.sh \
-  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/ee8797affce6400db65eeb24561f825688b6c554/plugins/onex/skills/_bin/lab-onboarding.sh
-echo "8515001ffb68328b153bafbac37c953b4bc1979513458eec5bfa1c9f75c89893  lab-onboarding.sh" | shasum -a 256 -c -
-bash lab-onboarding.sh
+  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/11a255e325785d76ed7dda65c8f9bef2bc06bdc1/plugins/onex/skills/_bin/lab-onboarding.sh
+echo "ea5312e7d7e4068accf9a8e9d9e59ece6d111db7f4d46d6a1ed0590854dbcc06  lab-onboarding.sh" | shasum -a 256 -c -
+bash lab-onboarding.sh --no-containers
 ```
 
 Three lines rather than one, for two reasons. The URL names a **commit**, not a branch, so the
@@ -133,8 +133,9 @@ Every question comes before anything is installed:
    take the recommended order, so you never need to know or type a model id. Each chosen model
    is tested in phase 3. Change them later with `onex models add-model`, `onex models reorder`
    and `onex models remove`.
-3. **Whether to run the local stack in Docker.** "Not now" is a complete setup — you can
-   add it later. In a macOS VM the question is skipped, because Docker cannot run there.
+The command above passes `--no-containers`, so the run does not ask about the local Docker
+stack and phase 4 is skipped. That is a complete setup: onex runs your delegations natively on
+this Mac. Drop the flag to be asked, or pass `--containers` to answer it yes in advance.
 
 Before the model questions, the run prints what every model failing costs you:
 
