@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine != 's390x'",
@@ -10,7 +10,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261102043243-124b1e99af99" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261104102410-b002ec3ceab1" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261104010134-0b7b2bde8a56" },
@@ -1682,8 +1682,8 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.47.62"
-source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261102043243-124b1e99af99#124b1e99af9941b74d03be6d0672d31be83a36fa" }
+version = "0.47.66"
+source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261104102410-b002ec3ceab1#b002ec3ceab1d0968f6adaabac5d47e63656aefb" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -1907,7 +1907,7 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261102043243-124b1e99af99" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261104102410-b002ec3ceab1" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261104010134-0b7b2bde8a56" },
