@@ -1,0 +1,51 @@
+schema_version: "1.0.0"
+ticket_id: OMN-22404
+title: "The nightly sibling-pin train moves one of a pin's two homes, so a bumped omnimarket pin still reads stale"
+summary: "relock_git_sources.node_mover moves the tool.uv.sources tag through omnimarket's pin mover and now also moves the dependencies direct-URL home, so a train bump leaves no stale_pin finding behind."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn22404-both-homes"
+    statement: "A train bump moves every live home of a git-tag pin and leaves comment lines as written."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: a regression test built from the recorded pyproject shape and the verbatim stale tag fails on the broken train mover and passes once node_mover also moves the dependencies home"
+      - id: "AC2"
+        statement: "AC2: only live lines move, comment lines naming the old tag are untouched, and a consumer with no dependencies home is unchanged"
+      - id: "AC3"
+        statement: "AC3: both homes of the omnimarket pin on this branch name the newest omnimarket dev merge tag, so first-party-ref passes on the branch the train fix lands from"
+evidence_requirements:
+  - kind: tests
+    description: "The two-home pin move is tested through the real omnimarket pin mover node"
+    command: "uv run pytest tests/scripts/test_dev_tag_train_omn19998.py -q --no-cov -k 'node_mover or dependency_home'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn22404-ac1-both-homes"
+    description: "AC1: node_mover moves the dependencies home with the sources home, from the verbatim stale tag shape"
+    source: "manual"
+    binds_ac: ["AC1"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_dev_tag_train_omn19998.py -q --no-cov -k 'node_mover_moves'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn22404-ac2-live-lines"
+    description: "AC2: comment lines stay as written and a consumer with no dependencies home is untouched"
+    source: "manual"
+    binds_ac: ["AC2"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/scripts/test_dev_tag_train_omn19998.py -q --no-cov -k 'node_mover_moves or consumer_has_none'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn22404-ac3-pin-at-newest-dev-tag"
+    description: "AC3: the two live pin homes and the lock all name dev-20261103235646-df5f6b54bb13"
+    source: "manual"
+    status: "verified"
+    binds_ac: ["AC3"]
+    checks:
+      - check_type: "command"
+        check_value: "test \"$(grep -c 'dev-20261103235646-df5f6b54bb13' pyproject.toml)\" = 2 && grep -q 'df5f6b54bb13' uv.lock"
+        cwd: "${OMNI_HOME}/omniclaude"
