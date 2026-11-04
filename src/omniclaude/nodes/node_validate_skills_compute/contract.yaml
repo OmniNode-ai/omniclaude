@@ -20,7 +20,9 @@ node_type: COMPUTE_GENERIC
 
 description: >
   Canonical skill hygiene and contract validation for CI and pre-commit.
-  Invoked through the CLI with source-compatible checks and output.
+  Invoked through the CLI with source-compatible checks and output. Also the
+  whole-file public-repo hygiene leg and scrub map for a published plugin tree
+  (OMN-22273), which uses its own request and result models.
 
 runtime_profiles: [main]
 
@@ -43,6 +45,12 @@ handler_routing:
       handler:
         name: HandlerSkillContracts
         module: omniclaude.nodes.node_validate_skills_compute.handlers.handler_skill_contracts
+    # OMN-22273: takes ModelWholeFileHygieneRequest and returns
+    # ModelWholeFileHygieneResult, not the skill-tree request and report above.
+    - operation: whole_file_hygiene_check
+      handler:
+        name: HandlerWholeFileHygiene
+        module: omniclaude.nodes.node_validate_skills_compute.handlers.handler_whole_file_hygiene
 
 error_handling:
   retry_policy:
