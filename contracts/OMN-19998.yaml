@@ -82,6 +82,11 @@ requirements:
     acceptance:
       - id: "AC13"
         statement: "AC13: pyproject.toml pins omnimarket at dev-20261104010134-0b7b2bde8a56 or a later dev merge tag in override-dependencies and [tool.uv.sources], and uv.lock resolves that tag to its commit with matching override and requirement metadata -- falsifier: uv run pytest tests/ci/test_omnimarket_pin_floor_omn19998.py -q --no-cov fails over the merge base, which pins dev-20261102235857-65611aac6f14"
+  - id: "req-omn19998-recorded-sibling-permission"
+    statement: "Canonical clone refresh keeps processing a valid clone when a hidden sibling cannot be inspected, while unrelated storage errors remain visible."
+    acceptance:
+      - id: "AC14"
+        statement: "AC14: the refresh CLI advances a valid clone and reports one permission diagnostic for a denied child stat, .git probe or declared sibling; sibling discovery raises an unrelated EIO -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync_refresh.py -q --no-cov -k 'recorded_hidden_sibling or does_not_hide_an_unrelated' with the permission guard removed or widened to OSError"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -217,3 +222,11 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_omnimarket_pin_floor_omn19998.py -q --no-cov"
     binds_ac:
       - "AC13"
+  - id: "dod-omn19998-recorded-sibling-permission"
+    description: "Recorded hidden-directory failures are exercised through the refresh CLI with a valid clone as the positive control; EIO still raises."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_canonical_clone_sync_refresh.py -q --no-cov -k 'recorded_hidden_sibling or does_not_hide_an_unrelated'"
+    binds_ac:
+      - "AC14"
