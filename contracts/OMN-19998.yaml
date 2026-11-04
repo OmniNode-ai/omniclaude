@@ -81,7 +81,7 @@ requirements:
     statement: "The omnimarket pin names the newest dev merge tag at the time of the change, so the first-party-ref and Pre-commit Suite sibling-pin staleness check passes on dev again."
     acceptance:
       - id: "AC13"
-        statement: "AC13: pyproject.toml names omnimarket at dev-20261104010134-0b7b2bde8a56 in both dependencies and [tool.uv.sources], and uv.lock resolves it to 0b7b2bde8a56 -- falsifier: test \"$(grep -c 'dev-20261104010134' pyproject.toml)\" = 2 fails over the merge base, which pins dev-20261102235857-65611aac6f14"
+        statement: "AC13: pyproject.toml pins omnimarket at dev-20261104010134-0b7b2bde8a56 or a later dev merge tag in override-dependencies and [tool.uv.sources], and uv.lock resolves that tag to its commit with matching override and requirement metadata -- falsifier: uv run pytest tests/ci/test_omnimarket_pin_floor_omn19998.py -q --no-cov fails over the merge base, which pins dev-20261102235857-65611aac6f14"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -210,10 +210,10 @@ dod_evidence:
     binds_ac:
       - "AC12"
   - id: "dod-omn19998-omnimarket-pin-newest-dev-tag"
-    description: "pyproject.toml names the newest omnimarket dev merge tag in both pin homes and uv.lock resolves it; at the merge base the grep counts zero."
+    description: "TOML regression tests require the repaired omnimarket dev tag floor and matching source, override, lock commit and lock metadata; the stale merge-base pin fails the floor."
     source: manual
     checks:
-      - check_type: command
-        check_value: "test \"$(grep -c 'dev-20261104010134' pyproject.toml)\" = 2 && grep -q 'tag=dev-20261104010134' uv.lock"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_omnimarket_pin_floor_omn19998.py -q --no-cov"
     binds_ac:
       - "AC13"
