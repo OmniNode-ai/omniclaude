@@ -1224,7 +1224,7 @@ dod_evidence:
       - AC59
     checks:
       - check_type: command
-        check_value: "test \"$(grep -c 'dev-20261104195025-170b049cc896' pyproject.toml)\" = 2 && grep -q '170b049cc896' uv.lock"
+        check_value: "test \"$(grep -c 'dev-20261104195025-170b049cc896' pyproject.toml)\" = 2 && grep -q 170b049cc896 uv.lock"
   - id: dod-trivy-installs-without-setup-trivy
     description: "Every trivy-action step skips setup-trivy, each scanning job fetches Trivy from the GitHub release archive, and no executable workflow line reaches get.trivy.dev. Two of the three assertions fail at the merge base."
     source: manual
