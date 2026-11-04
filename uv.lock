@@ -13,7 +13,7 @@ overrides = [
     { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261102043243-124b1e99af99" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261102235857-65611aac6f14" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261103235646-df5f6b54bb13" },
 ]
 
 [[package]]
@@ -1781,7 +1781,7 @@ wheels = [
 [[package]]
 name = "omnimarket"
 version = "0.4.321"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261102235857-65611aac6f14#65611aac6f14716c53ef4c818fdd6fbeb21cfaba" }
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261103235646-df5f6b54bb13#df5f6b54bb13321915411f3c7660b1ed1b85a084" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1911,7 +1911,7 @@ requires-dist = [
     { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261102043243-124b1e99af99" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261102235857-65611aac6f14" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261103235646-df5f6b54bb13" },
     { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261101151826-9dca2e7608f7" },
     { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261101151826-9dca2e7608f7" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
