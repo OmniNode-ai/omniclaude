@@ -518,3 +518,64 @@ def test_run_sync_does_not_pick_up_the_sibling(reg: Registry) -> None:
     results = ccs.run_sync(reg.env(), None, "manual", None)
     assert all(Path(r.clone) != sibling for r in results)
     assert {Path(r.clone) for r in results} == {clone}
+
+
+@pytest.mark.parametrize("probe", ["child", "git", "declared"])
+def test_recorded_hidden_sibling_permission_error_keeps_cli_refreshing(
+    reg: Registry,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    probe: str,
+) -> None:
+    """Recorded rows: discovery must survive a hidden sibling's denied stat."""
+    clone = reg.make(
+        "beside_clone", branch="main", owner="OmniNode-ai", root=reg.home.parent
+    )
+    target = reg.advance("beside_clone", owner="OmniNode-ai", branch="main")
+    locked = reg.home.parent / ".installbuilder"
+    locked.mkdir()
+    denied = locked if probe == "child" else locked / ".git"
+    real_is_dir = Path.is_dir
+
+    def is_dir(self: Path) -> bool:
+        if self == denied:
+            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(self))
+        return real_is_dir(self)
+
+    monkeypatch.setattr(Path, "is_dir", is_dir)
+    env = reg.env()
+    if probe == "declared":
+        env.update(HOME=str(reg.home.parent), BESIDE_INTERNAL_HOME=str(clone))
+        env["LOCKED_INTERNAL_HOME"] = str(locked)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.chdir(reg.tmp)
+
+    assert (
+        ccs.main(["refresh", "OmniNode-ai/beside_clone", "--branch", "main", "--wait"])
+        == 0
+    )
+
+    out = capsys.readouterr()
+    assert ccs.REFRESHED in out.out
+    assert _origin(clone, "main") == target
+    assert out.err.splitlines() == [f"NOTE       skipped {locked}: permission denied"]
+
+
+def test_sibling_discovery_does_not_hide_an_unrelated_io_error(
+    reg: Registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The permission guard must not turn a storage error into missing clones."""
+    broken = reg.home.parent / ".installbuilder"
+    broken.mkdir()
+    real_is_dir = Path.is_dir
+
+    def is_dir(self: Path) -> bool:
+        if self == broken / ".git":
+            raise OSError(errno.EIO, os.strerror(errno.EIO), str(self))
+        return real_is_dir(self)
+
+    monkeypatch.setattr(Path, "is_dir", is_dir)
+    with pytest.raises(OSError) as error:
+        ccs.sibling_clones(reg.env())
+    assert error.value.errno == errno.EIO
