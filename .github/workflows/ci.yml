@@ -600,13 +600,13 @@ jobs:
           # OMN-22177: use the resolved Git pin, including for unreleased dev versions.
           core_ref="$(python3 -c 'import tomllib; p = next(p for p in tomllib.load(open("uv.lock", "rb"))["package"] if p["name"] == "omnibase-core"); print(p["source"]["git"].rsplit("#", 1)[-1])')"
           [[ "$core_ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::omnibase-core Git commit not found in uv.lock"; exit 1; }
-          echo "ref=${core_ref}" >> "$GITHUB_OUTPUT"
+          echo "rev=${core_ref}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout omnibase_core
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
-          ref: ${{ steps.core_pin.outputs.ref }}
+          ref: ${{ steps.core_pin.outputs.rev }}
           path: omnibase_core
 
       - name: Verify handshake is current
@@ -4423,12 +4423,20 @@ jobs:
           OMNI_HOME="${RUNNER_TEMP}/sibling-clones"
           echo "OMNI_HOME=${OMNI_HOME}" >> "$GITHUB_ENV"
           mkdir -p "$OMNI_HOME"
-          # OMN-22177: use the resolved Git pin, including for unreleased dev versions.
-          core_ref="$(python3 -c 'import tomllib; p = next(p for p in tomllib.load(open("uv.lock", "rb"))["package"] if p["name"] == "omnibase-core"); print(p["source"]["git"].rsplit("#", 1)[-1])')"
-          [[ "$core_ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::omnibase-core Git commit not found in uv.lock"; exit 1; }
-          git init --quiet "$OMNI_HOME/omnibase_core"
-          git -C "$OMNI_HOME/omnibase_core" fetch --quiet --depth 1 https://github.com/OmniNode-ai/omnibase_core.git "$core_ref"
-          git -C "$OMNI_HOME/omnibase_core" checkout --quiet FETCH_HEAD
+          # OMN-22177: Git sources use their locked SHA; registry pins keep their release tag.
+          core_src="$(awk '$0 == "name = \"omnibase-core\"" {f=1; next} f && /^source = / {print; exit}' uv.lock)"
+          [[ -n "$core_src" ]] || { echo "::error::omnibase-core source not found in uv.lock"; exit 1; }
+          core_rev="$(grep -oE 'omnibase_core\.git(\?[^#"]*)?#[0-9a-f]{40}' <<<"$core_src" | head -1 | sed 's/.*#//' || true)"
+          if [[ -n "$core_rev" ]]; then
+            git init --quiet "$OMNI_HOME/omnibase_core"
+            git -C "$OMNI_HOME/omnibase_core" fetch --quiet --depth 1 https://github.com/OmniNode-ai/omnibase_core.git "$core_rev"
+            git -C "$OMNI_HOME/omnibase_core" checkout --quiet FETCH_HEAD
+          elif [[ "$core_src" == *"git = "* ]]; then
+            echo "::error::omnibase-core is a git source in uv.lock with no locked sha: ${core_src}"; exit 1
+          else
+            core_version="$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("omnibase-core"))')"
+            git clone --quiet --depth 1 --branch "v${core_version}" https://github.com/OmniNode-ai/omnibase_core.git "$OMNI_HOME/omnibase_core"
+          fi
           # omnimarket node tree at the uv.lock pin, so the skill backing-node
           # hook resolves every backing node in this whole-tree run with no
           # allowlist entry (OMN-20560), as the Skill Backing Node workflow does.
@@ -6096,14 +6104,14 @@ jobs:
           # OMN-22177: use the resolved Git pin, including for unreleased dev versions.
           core_ref="$(python3 -c 'import tomllib; p = next(p for p in tomllib.load(open("uv.lock", "rb"))["package"] if p["name"] == "omnibase-core"); print(p["source"]["git"].rsplit("#", 1)[-1])')"
           [[ "$core_ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::omnibase-core Git commit not found in uv.lock"; exit 1; }
-          echo "ref=${core_ref}" >> "$GITHUB_OUTPUT"
+          echo "rev=${core_ref}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout omnibase_core (provides the skill receipt-mode validator)
         uses: actions/checkout@v7
         with:
           repository: OmniNode-ai/omnibase_core
           # Read the exact core commit resolved in uv.lock.
-          ref: ${{ steps.core_pin.outputs.ref }}
+          ref: ${{ steps.core_pin.outputs.rev }}
           path: _omnibase_core
           token: ${{ github.token }}
       - name: Install uv

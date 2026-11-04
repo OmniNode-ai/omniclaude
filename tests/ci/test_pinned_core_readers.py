@@ -87,19 +87,19 @@ def test_dev_pin_reads_its_resolved_commit(
     result = _run(tmp_path, script)
     assert result.returncode == 0, (workflow, result.stdout, result.stderr)
     if step.get("id") == "core_pin":
-        assert (tmp_path / "output").read_text().strip() == f"ref={SHA}"
+        assert (tmp_path / "output").read_text().strip() == f"rev={SHA}"
         checkouts = [
             s
             for s in _steps(workflow)
             if s.get("with", {}).get("ref")
             in (
-                "${{ steps.core_pin.outputs.ref }}",
+                "${{ steps.core_pin.outputs.rev }}",
                 "${{ steps.core_pin.outputs.tag }}",
             )
         ]
         assert checkouts
         assert all(
-            s["with"]["ref"] == "${{ steps.core_pin.outputs.ref }}" for s in checkouts
+            s["with"]["ref"] == "${{ steps.core_pin.outputs.rev }}" for s in checkouts
         )
     else:
         calls = [
@@ -120,7 +120,7 @@ def _index_readers() -> list[tuple[str, dict]]:
         (workflow, step)
         for workflow in ("ci.yml", "contract-validation.yml")
         for step in _steps(workflow)
-        if "core_src=" in step.get("run", "")
+        if '--with "$core_src"' in step.get("run", "")
     ]
 
 
@@ -178,8 +178,13 @@ def test_missing_git_pin_refuses_before_checkout(
         script,
         '[[package]]\nname = "omnibase-core"\nversion = "0.47.66"\nsource = { registry = "https://pypi.org/simple" }\n',
     )
-    assert result.returncode != 0, (workflow, result.stdout, result.stderr)
-    assert not (tmp_path / "git-calls").exists()
+    if step["name"].startswith("Provide the sibling clones"):
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        calls = (tmp_path / "git-calls").read_text()
+        assert '"v0.47.66"' in calls
+    else:
+        assert result.returncode != 0, (workflow, result.stdout, result.stderr)
+        assert not (tmp_path / "git-calls").exists()
 
 
 @pytest.mark.parametrize("honest", [True, False])
