@@ -92,6 +92,11 @@ requirements:
     acceptance:
       - id: "AC15"
         statement: "AC15: recovery preview and installation render --preserve-backlog exactly once and the selected absolute state root; invalid settings leave the installed unit untouched; recorded quiet-host journal rows survive a stalled recovery cycle while ordinary overflow eviction remains active -- falsifier: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -q --no-cov with Linux recovery rendering removed"
+  - id: req-omn19998-transcript-archive-alarm
+    statement: "A failed run of the launchd transcript archive job raises an alarm through the shared alarm sender instead of exiting into an unread stderr log."
+    acceptance:
+      - id: "AC16"
+        statement: "AC16: the rendered transcript-s3-archive plist sends a non-zero sync exit to hook_canary_notify.sh with the exit code and last stderr line, records an undeliverable alarm, keeps the job's exit code, and sends nothing on success -- falsifier: uv run pytest tests/scripts/test_transcript_s3_archive_failure_alarm_omn19998.py -q --no-cov against the plist with the wrapper removed"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -104,6 +109,14 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
+  - id: dod-omn19998-transcript-archive-alarm
+    description: "The rendered plist's own ProgramArguments are run against a refused sync, an undeliverable alarm and a successful sync with a fake aws and curl. The next scheduled 04:30 run on the operator host has not been observed."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_transcript_s3_archive_failure_alarm_omn19998.py -q --no-cov"
+    binds_ac:
+      - "AC16"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
