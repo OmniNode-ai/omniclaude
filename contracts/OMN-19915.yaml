@@ -1,0 +1,36 @@
+schema_version: 1.0.0
+ticket_id: OMN-19915
+title: A downloaded onboarding script fetches a handler that defines the functions the script calls
+summary: >-
+  Scoped remediation found by the clean-machine retake: the script's downloaded
+  handler pin named an older dev commit, so phase 3 failed with place_local_url_on_ladder
+  and retire_lab_model_overrides not found. This implementation criterion covers the
+  handler pin only. The epic's participant recording, child evidence audit and scheduled
+  producer successes remain unproven; this contract does not claim them.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: handler-pin
+  statement: The handler a downloaded onboarding script sources defines every function the script calls and matches its pinned digest.
+  acceptance:
+  - id: DoD1
+    statement: The pinned download commit serves a handler whose sha256 equals download_digest and which defines the two functions the walk could not find.
+evidence_requirements:
+- kind: tests
+  description: Recorded phase 3 failure replayed against the pinned download commit.
+  command: uv run pytest tests/skills/test_onboarding_handler_pin_omn19915.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn19915-handler-pin
+  description: The test fails at the merge base, where the pinned handler lacks both functions, and passes with the repinned commit.
+  source: manual
+  binds_ac:
+  - DoD1
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/skills/test_onboarding_handler_pin_omn19915.py -q --no-cov
+    cwd: .
