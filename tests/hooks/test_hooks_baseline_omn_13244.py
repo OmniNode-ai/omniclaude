@@ -98,8 +98,8 @@ the ``printf '%s' "$TOOL_INFO"`` passthrough echo is removed from every branch
 (it re-emitted the raw ``tool_response`` that the OMN-16277 guard masks on this
 same Bash matcher); changeset-guard's advisory ``additionalContext`` injection is
 NOT revived, only its JSONL side-write (per-turn injection is the token cost
-OMN-13244 removed); and auto-checkpoint's ``gh pr view`` is bounded by
-``timeout 5`` with its retention cap raised from 5 to 200 (the 5-file cap is why
+OMN-13244 removed); and auto-checkpoint makes no ``gh`` call (OMN-19998; it
+was a bounded ``gh pr view``) with its retention cap raised from 5 to 200 (the 5-file cap is why
 only one 8-hour window of checkpoints survived to be examined). Neither hook
 publishes to the bus -- that half stays gated behind OMN-17209 -- so this is not
 an OMN-16162-class transport re-enable.
@@ -140,6 +140,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -1100,14 +1101,16 @@ def test_revived_capture_hook_does_not_publish_to_the_bus(script_name: str) -> N
 
 
 def test_auto_checkpoint_bounds_its_network_call(tmp_path: Path) -> None:
-    """``gh pr view`` must be bounded by an explicit timeout.
+    """The hook makes no GitHub network call at all (OMN-19998).
 
-    This is the one unbounded-latency call in either revived hook, and it sits
-    on the PostToolUse path. OMN-17224 (the fast-append + singleton-drainer
-    split) is NOT merged yet, so nothing upstream amortises a slow hook: on
-    2026-08-30 the measured emitter load already reached 598 events / 10 s with
-    895 windows at or above the 14-concurrent stacking threshold. An unbounded
-    network call re-creates that failure mode one commit at a time.
+    This was the one unbounded-latency call in either revived hook, and it sits
+    on the PostToolUse path; on 2026-08-30 the measured emitter load already
+    reached 598 events / 10 s, so an unbounded call there re-creates the
+    stacking failure one commit at a time. It was first bounded with
+    ``timeout``; it is now removed, because the gh shim counts a call from
+    under a Claude or Codex process as a lane read (OMN-20911) and lanes do
+    not read GitHub. The PR-state field of the OMN-17207 set stays, naming
+    the local reader.
     """
     script = (
         _REPO_ROOT
@@ -1122,14 +1125,15 @@ def test_auto_checkpoint_bounds_its_network_call(tmp_path: Path) -> None:
         for line in script.read_text().splitlines()
         if not line.lstrip().startswith("#")
     ]
-    assert any("gh pr view" in line for line in code_lines), (
-        "the PR-state capture is part of the OMN-17207 field set"
+    assert any("PR_STATUS=" in line for line in code_lines), (
+        "the PR-state field is part of the OMN-17207 field set"
     )
-    gh_line = next(line for line in code_lines if "gh pr view" in line)
-    assert "timeout" in gh_line, (
-        "the `gh pr view` call must be wrapped in `timeout` so a hung network call "
-        f"cannot stall the PostToolUse path. Found: {gh_line!r}"
-    )
+    gh_calls = [
+        line
+        for line in code_lines
+        if re.search(r"(^|[\s$(|;&`])gh\s", line) or "curl" in line
+    ]
+    assert not gh_calls, f"the hook must not read GitHub: {gh_calls!r}"
 
 
 def test_auto_checkpoint_writes_a_checkpoint_on_git_commit(tmp_path: Path) -> None:
