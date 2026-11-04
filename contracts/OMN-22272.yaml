@@ -1,0 +1,65 @@
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-22272"
+title: "Lock the default plugin surface to delegate alone, with a plugins list in the distribution manifest and a test that refuses a second skill in the default install"
+summary: >-
+  T1 of the internal plugin retirement plan. Adds a top-level plugins: list to
+  plugins/distribution_manifest.yaml (one row per marketplace entry; exactly one row,
+  onex in omninode-tools with source plugins/onex-delegate, has default_install true; the
+  omninode-tools-dev onex row has default_install false) and extends
+  plugins/onex-delegate/tests/test_delegate_only_surface.py so a second SKILL.md, a hooks,
+  agents or commands directory, a second default_install row, or a stable omni-owned
+  component turns the test red. Neither omninode-tools marketplace file changes. The
+  clean-profile reading for AC3 is recorded in the PR body from a lab run.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn22272-default-surface-locked"
+    statement: "The default install is locked to the delegate skill alone and the lock is a tested rule."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the extended test passes on dev with the plugins list present, and its fixture case (a second skill added to a copy of onex-delegate) is red as intended -- falsifier: uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py -q exits nonzero on a head that adds a second SKILL.md under plugins/onex-delegate"
+      - id: "AC2"
+        statement: "AC2: the plugins list exists with exactly one default_install true row, onex in omninode-tools with source plugins/onex-delegate, and the omninode-tools-dev onex row has default_install false -- falsifier: uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py -k default_install -q is red when a second row is default_install true"
+      - id: "AC3"
+        statement: "AC3: on a clean profile the default install lists delegate as its only skill and one enabled plugin -- falsifier: claude plugin details onex@omninode-tools on a new empty CLAUDE_CONFIG_DIR lists any skill other than delegate, or claude plugin list lists a second enabled plugin"
+evidence_requirements:
+  - kind: "tests"
+    description: "The delegate-only surface tests pass"
+    command: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn22272-ac1-extended-test"
+    description: >-
+      AC1: the extended surface test passes on this head, which carries the plugins list and exactly one
+      SKILL.md under plugins/onex-delegate; its fixture cases plant a second skill and a hooks directory
+      in a copy and assert the check is red.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py -q --no-cov"
+    binds_ac: ["AC1"]
+  - id: "dod-omn22272-ac2-default-install-rows"
+    description: >-
+      AC2: the default_install tests pass, and a fixture row set with a second default_install true row
+      or none is refused.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py -k default_install -q --no-cov"
+    binds_ac: ["AC2"]
+  - id: "dod-omn22272-ac3-clean-profile"
+    description: >-
+      AC3: the static half, run on the hosted runner, is the tree test that the directory behind the
+      omninode-tools onex entry holds one SKILL.md and no hooks, agents or commands directory. The
+      claude plugin details and claude plugin list readings on a new empty CLAUDE_CONFIG_DIR were taken
+      on a lab host and are recorded in the PR body.
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py -k tree_behind_consumer_entry -q --no-cov"
+    binds_ac: ["AC3"]

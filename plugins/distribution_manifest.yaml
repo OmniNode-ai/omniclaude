@@ -30,6 +30,15 @@ component_counts:
   skills: 119
   hooks: 91
   agents: 53
+plugins:
+- name: onex
+  marketplace: omninode-tools
+  source: plugins/onex-delegate
+  default_install: true
+- name: onex
+  marketplace: omninode-tools-dev
+  source: plugins/onex
+  default_install: false
 components:
 - id: adversarial_pipeline
   kind: skill
