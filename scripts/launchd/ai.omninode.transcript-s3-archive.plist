@@ -31,9 +31,22 @@
   <key>Label</key>
   <string>ai.omninode.transcript-s3-archive</string>
 
+  <!--
+    A failed run raises an alarm (OMN-19998). The job exited 1 on every run for
+    38 days while launchctl showed it loaded, and the only record was the stderr
+    log nothing read. Any non-zero exit now goes through hook_canary_notify.sh,
+    the shared alarm sender (OMN-20109), and the job keeps its own exit code.
+    Arguments: 1 the sync script, 2 the notifier, 3 the stderr log.
+  -->
   <key>ProgramArguments</key>
   <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>"$1" || { rc=$?; "$2" "transcript-s3-archive FAILED" "exit=${rc} host=$(hostname -s) last=$(tail -n 1 "$3" 2&gt;/dev/null) log=$3"; exit "${rc}"; }</string>
+    <string>transcript-s3-archive</string>
     <string>__OMNI_HOME__/omniclaude/scripts/transcript-s3-archive-sync.sh</string>
+    <string>__OMNI_HOME__/omniclaude/scripts/hook_canary_notify.sh</string>
+    <string>/tmp/transcript-s3-archive-stderr.log</string>
   </array>
 
   <key>StartCalendarInterval</key>

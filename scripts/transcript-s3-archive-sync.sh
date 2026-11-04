@@ -21,32 +21,6 @@
 # changes the bucket policy, never deletes a local transcript. This script
 # only ever syncs TO the one archive bucket declared by OMN-18189.
 
-# Every non-zero exit raises an alarm (OMN-19998). This job exited 1 on every
-# run for 38 days while launchd showed it loaded, and the only record was the
-# stderr log nobody read. The alarm goes through alert_channel_alarm, the shared
-# sender (OMN-20109): it resolves the Slack credential itself, and one it cannot
-# deliver is recorded in the alert failure log with a local notification. The
-# script's own exit code is kept.
-_ARCHIVE_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_ARCHIVE_STDERR_LOG="${TRANSCRIPT_ARCHIVE_STDERR_LOG:-/tmp/transcript-s3-archive-stderr.log}"
-_archive_alarm_on_failure() {
-  local rc=$?
-  [[ "${rc}" -eq 0 ]] && return 0
-  local host last=""
-  host="${HOSTNAME:-$(hostname -s 2>/dev/null || echo unknown)}"
-  [[ -f "${_ARCHIVE_STDERR_LOG}" ]] && last="$(tail -n 1 "${_ARCHIVE_STDERR_LOG}" 2>/dev/null || true)"
-  # shellcheck disable=SC1091
-  if source "${_ARCHIVE_HERE}/../plugins/onex/hooks/scripts/alert-channel.sh"; then
-    alert_channel_alarm "transcript_s3_archive" \
-      "transcript-s3-archive FAILED exit=${rc} host=${host}${last:+ last=${last:0:200}} log=${_ARCHIVE_STDERR_LOG}" ||
-      echo "transcript-s3-archive: alarm not delivered (see the alert failure log)" >&2
-  else
-    echo "transcript-s3-archive: alert-channel.sh unavailable; failure not alarmed" >&2
-  fi
-  exit "${rc}"
-}
-trap _archive_alarm_on_failure EXIT
-
 set -euo pipefail
 
 OMNI_HOME="${OMNI_HOME:?OMNI_HOME must be set to the registry root}"
