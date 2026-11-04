@@ -31,13 +31,11 @@ emergency_bypass:
   follow_up_ticket_id: ''
 dod_evidence:
   - id: dod-omn-22180-ac1
-    description: Phase 3 of the script, run against a simulated fresh workspace, leaves the floor marker naming the installed omnimarket commit.
+    description: Phase 3 of the script, run against a simulated fresh workspace, leaves the floor marker naming the installed omnimarket commit (the script already did so at the merge base, so this item is coverage, not a bound regression control; AC1 is bound by the install-pin check).
     source: manual
     checks:
       - check_type: test_passes
         check_value: env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/skills/test_lab_onboarding_script_floor_marker.py -q --no-cov -k "phase3 or stamp"
-    binds_ac:
-      - AC1
   - id: dod-omn-22180-ac2
     description: The guide names phase 3 as the writer of the marker and no reconcile step; the script stamps it once.
     source: manual

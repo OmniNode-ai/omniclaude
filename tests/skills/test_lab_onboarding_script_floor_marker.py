@@ -239,6 +239,14 @@ def test_walk_2026_11_02_refusal_is_reproduced_by_a_script_that_never_stamps(
     fixed_ws = FreshWorkspace(tmp_path / "fixed", SCRIPT.read_text())
     assert fixed_ws.run_phase3().returncode == 0
     assert _refusal(fixed_ws.workspace, _refusal_template()) == ""
+    # The walk recovered by a step the guide never named; the guide now says
+    # phase 3 writes the marker and names no recovery step.
+    guide = GUIDE.read_text()
+    recovery = walk["recovered_by"].split(",")[0]
+    assert recovery not in guide, "the guide names the step the walk needed"
+    assert re.search(r"phase 3[^\n]*" + re.escape(FLOOR_NAME), guide, re.I), (
+        "the guide does not say phase 3 writes the floor marker"
+    )
 
 
 def test_guide_and_script_agree_on_who_creates_the_marker() -> None:
