@@ -1,0 +1,47 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-22272"
+title: "The default plugin surface is locked to delegate alone, with a plugins list in the distribution manifest and a test that refuses a second skill in the default install"
+summary: "Adds a top-level plugins list to plugins/distribution_manifest.yaml (one default_install true row: onex in omninode-tools, source plugins/onex-delegate; the omninode-tools-dev onex row is false) and extends plugins/onex-delegate/tests/test_delegate_only_surface.py so a second default_install row, a second SKILL.md, or a hooks, agents or commands directory behind the default entry is refused. Neither marketplace file changes and nothing moves; no host or install reads the new block."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-default-surface-locked"
+    statement: "The default install is one plugin holding one skill, and a test refuses a second."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the extended test passes on dev with the plugins list present, and its fixture case (a second skill added to a copy of onex-delegate) is red as intended -- falsifier: the delegate-only surface test file exits nonzero on a head that adds a second SKILL.md under plugins/onex-delegate"
+      - id: "AC2"
+        statement: "AC2: the plugins list exists with exactly one default_install true row, onex in omninode-tools with source plugins/onex-delegate, and the omninode-tools-dev onex row has default_install false -- falsifier: the default_install tests in the delegate-only surface test file are red when a second row is default_install true"
+      - id: "AC3"
+        statement: "AC3: on a clean profile the default install lists delegate as its only skill and one enabled plugin -- falsifier: claude plugin details onex@omninode-tools on a new empty CLAUDE_CONFIG_DIR lists any skill other than delegate, or claude plugin list lists a second enabled plugin"
+evidence_requirements:
+  - kind: "tests"
+    description: "The delegate-only surface tests."
+    command: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn22272-surface-tests"
+    description: "AC1: the extended surface tests pass, fixture cases included."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py -q --no-cov"
+    binds_ac: ["AC1"]
+  - id: "dod-omn22272-default-install-rows"
+    description: "AC2: the default_install rows are exactly one true, on the consumer entry."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py -k default_install -q --no-cov"
+    binds_ac: ["AC2"]
+  - id: "dod-omn22272-clean-profile"
+    description: "AC3: on a new empty CLAUDE_CONFIG_DIR the default install shows one skill, delegate (read on the lab, recorded in the PR body)."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_only_surface.py -k one_skill -q --no-cov"
+    binds_ac: ["AC3"]

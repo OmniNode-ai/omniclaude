@@ -30,6 +30,19 @@ component_counts:
   skills: 119
   hooks: 91
   agents: 53
+# One row per marketplace entry (OMN-22272, T1 of the plugin-surface retirement plan).
+# default_install marks the entry a user gets from the public marketplace with no extra step;
+# exactly one row may be true, and plugins/onex-delegate/tests/test_delegate_only_surface.py
+# refuses a second row, a second SKILL.md behind the default entry, or a hooks/agents/commands directory.
+plugins:
+- name: onex
+  marketplace: omninode-tools
+  source: plugins/onex-delegate
+  default_install: true
+- name: onex
+  marketplace: omninode-tools-dev
+  source: plugins/onex
+  default_install: false
 components:
 - id: adversarial_pipeline
   kind: skill
