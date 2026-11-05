@@ -28,8 +28,8 @@ requirements:
         statement: "AC6: the documented run command passes --no-containers and explains that phase 4 is skipped -- falsifier: remove --no-containers from the run command."
 evidence_requirements:
   - kind: tests
-    description: "The anchor shape test and the anchor health-fix floor test pass"
-    command: "uv run pytest tests/skills/test_lab_onboarding_anchor_omn21255.py tests/skills/test_lab_onboarding_anchor_health_fix_omn21261.py -q --no-cov"
+    description: "The anchor shape test, the anchor health-fix floor test and the guide pin test pass"
+    command: "uv run pytest tests/skills/test_lab_onboarding_anchor_omn21255.py tests/skills/test_lab_onboarding_anchor_health_fix_omn21261.py tests/skills/test_onboarding_guide_pin_omn21261.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -45,40 +45,18 @@ dod_evidence:
         check_value: "uv run pytest tests/skills/test_lab_onboarding_anchor_health_fix_omn21261.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn21261-document-tested-pin
-    description: "The participant download names the corrected script and its checksum. The merge-base guide pins the earlier script, so this check fails there."
+    description: "The participant download names the corrected script and its checksum. The merge-base guide pins the earlier script, so this test fails there."
     source: manual
     binds_ac: ["AC5"]
     checks:
-      - check_type: command
-        cwd: "."
-        check_value: |-
-          python3 - <<'PYCODE'
-          from pathlib import Path
-          guide = Path("plugins/onex/ONBOARDING.md").read_text()
-          assert "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/11a255e325785d76ed7dda65c8f9bef2bc06bdc1/plugins/onex/skills/_bin/lab-onboarding.sh" in guide
-          assert 'echo "ea5312e7d7e4068accf9a8e9d9e59ece6d111db7f4d46d6a1ed0590854dbcc06  lab-onboarding.sh" | shasum -a 256 -c -' in guide
-          PYCODE
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_guide_pin_omn21261.py -q --no-cov -k ac5"
+        cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn21261-document-native-default
-    description: "The participant command passes --no-containers and explains the skipped stack phase. The merge-base command omits the flag. This does not attest to the clean-machine end-to-end walk."
+    description: "The participant command passes --no-containers and explains the skipped stack phase. The merge-base command omits the flag, so this test fails there. This does not attest to the clean-machine end-to-end walk."
     source: manual
     binds_ac: ["AC6"]
     checks:
-      - check_type: command
-        cwd: "."
-        check_value: |-
-          python3 - <<'PYCODE'
-          from pathlib import Path
-          guide = Path("plugins/onex/ONBOARDING.md").read_text()
-          assert "\nbash lab-onboarding.sh --no-containers\n" in guide
-          assert "phase 4 is skipped" in guide
-          assert "Drop the flag to be asked" in guide
-          PYCODE
-  - id: dod-omn21261-deploy-download-checksum
-    description: "Hosted-runner deploy artifact readback: download the public immutable script URL given to participants and verify its SHA256. No runtime deploy or clean-machine walk is claimed. A missing or different served script fails the check."
-    source: manual
-    binds_ac: ["AC5"]
-    checks:
-      - check_type: command
-        cwd: "."
-        check_value: |-
-          bash -o pipefail -ec 'deploy_sha=$(curl -fsSL --max-time 60 https://raw.githubusercontent.com/OmniNode-ai/omniclaude/11a255e325785d76ed7dda65c8f9bef2bc06bdc1/plugins/onex/skills/_bin/lab-onboarding.sh | sha256sum); test "$deploy_sha" = "ea5312e7d7e4068accf9a8e9d9e59ece6d111db7f4d46d6a1ed0590854dbcc06  -"'
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_guide_pin_omn21261.py -q --no-cov -k ac6"
+        cwd: "${OMNI_HOME}/omniclaude"
