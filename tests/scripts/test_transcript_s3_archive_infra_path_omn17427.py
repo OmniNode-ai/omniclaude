@@ -51,6 +51,7 @@ def _run(env_overrides: dict[str, str]) -> subprocess.CompletedProcess[str]:
         text=True,
         env=env,
         timeout=60,
+        check=False,
     )
 
 
@@ -78,7 +79,9 @@ def test_resolves_the_repos_root_beside_the_config_tree(tmp_path: Path) -> None:
     home = tmp_path / "home"
     _make_clone(home / "OmniNode" / "repos" / "omninode_infra")
     result = _run({"OMNI_HOME": str(omni_home), "HOME": str(home)})
-    assert str(home / "OmniNode" / "repos" / "omninode_infra" / SYNC_REL) in result.stdout
+    assert (
+        str(home / "OmniNode" / "repos" / "omninode_infra" / SYNC_REL) in result.stdout
+    )
 
 
 def test_an_explicit_override_wins_over_every_discovered_path(tmp_path: Path) -> None:
@@ -125,7 +128,9 @@ def test_refusal_names_every_candidate_it_tried(tmp_path: Path) -> None:
     assert "REFUSED" in result.stderr
     assert "OMNINODE_INFRA_PATH" in result.stderr
     assert str(omni_home / "omninode_infra" / SYNC_REL) in result.stderr
-    assert str(home / "OmniNode" / "repos" / "omninode_infra" / SYNC_REL) in result.stderr
+    assert (
+        str(home / "OmniNode" / "repos" / "omninode_infra" / SYNC_REL) in result.stderr
+    )
     assert str(omni_home.parent / "omninode_infra" / SYNC_REL) in result.stderr
 
 
@@ -140,6 +145,6 @@ def test_resolution_happens_before_any_aws_call(marker: str) -> None:
     """Guard the ordering the tests above rely on: the clone is resolved first, so
     a refusal cannot be mistaken for an AWS or credential failure."""
     body = SCRIPT.read_text()
-    resolve_at = body.index("INFRA_SYNC_CANDIDATES=()")
+    resolve_at = body.index("INFRA_SYNC_CANDIDATES=")
     assert marker in body
     assert resolve_at < body.index(marker)

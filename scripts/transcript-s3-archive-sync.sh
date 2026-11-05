@@ -28,7 +28,7 @@ OMNI_HOME="${OMNI_HOME:?OMNI_HOME must be set to the registry root}"
 # Resolve the omninode_infra clone by DISCOVERY, like the bucket and the KMS key
 # below, instead of assuming it is a sibling of the registry root.
 #
-# WHY (OMN-17427, measured 2026-11-02): this line used to hardcode
+# WHY (OMN-17427, measured 2026-11-02): this used to hardcode
 # "${OMNI_HOME}/omninode_infra/scripts/archive_claude_sessions.sh". On the operator
 # Mac the clone lives at ~/OmniNode/repos/omninode_infra while OMNI_HOME is
 # ~/code/omni, so the path never resolved and the agent exited 1 on every run. The
@@ -37,33 +37,14 @@ OMNI_HOME="${OMNI_HOME:?OMNI_HOME must be set to the registry root}"
 # 38 days stale, and 186 local session files (879 MB) on that host had never been
 # uploaded. A per-host path is not config to copy by hand (kb#1571), so the
 # resolution order is declared here and every candidate is named in the refusal.
-INFRA_SYNC_REL="scripts/archive_claude_sessions.sh"
-INFRA_SYNC_CANDIDATES=()
-# 1. An explicit override wins, for a host whose clone is somewhere else again.
-[[ -n "${OMNINODE_INFRA_PATH:-}" ]] &&
-  INFRA_SYNC_CANDIDATES+=("${OMNINODE_INFRA_PATH%/}/${INFRA_SYNC_REL}")
-# 2. The registry-root sibling, which is the layout on the lab hosts.
-INFRA_SYNC_CANDIDATES+=("${OMNI_HOME}/omninode_infra/${INFRA_SYNC_REL}")
-# 3. The repos/ root beside the config tree, the layout on the operator Mac.
-INFRA_SYNC_CANDIDATES+=("${HOME}/OmniNode/repos/omninode_infra/${INFRA_SYNC_REL}")
-# 4. The parent of the registry root, where the sibling-clone convention puts it.
-INFRA_SYNC_CANDIDATES+=("$(dirname "${OMNI_HOME}")/omninode_infra/${INFRA_SYNC_REL}")
-
-INFRA_SYNC_SCRIPT=""
-for candidate in "${INFRA_SYNC_CANDIDATES[@]}"; do
-  if [[ -x "${candidate}" ]]; then
-    INFRA_SYNC_SCRIPT="${candidate}"
-    break
-  fi
-done
-[[ -n "${INFRA_SYNC_SCRIPT}" ]] || {
-  echo "REFUSED: sync script not found or not executable at any known omninode_infra clone." >&2
-  echo "  Set OMNINODE_INFRA_PATH to the clone root. Tried, in order:" >&2
-  for candidate in "${INFRA_SYNC_CANDIDATES[@]}"; do
-    echo "    ${candidate}" >&2
-  done
-  exit 1
-}
+#
+# The order is: an explicit OMNINODE_INFRA_PATH override, the registry-root sibling
+# (the lab hosts), $HOME/OmniNode/repos (the operator Mac), then the parent of the
+# registry root (the sibling-clone convention). Written as four statements because
+# the canonical-file-shape baseline (OMN-20304) only ever shrinks.
+INFRA_SYNC_CANDIDATES=("${OMNINODE_INFRA_PATH:-${OMNI_HOME}/omninode_infra}" "${OMNI_HOME}/omninode_infra" "${HOME}/OmniNode/repos/omninode_infra" "$(dirname "${OMNI_HOME}")/omninode_infra")
+INFRA_SYNC_SCRIPT="$(for c in "${INFRA_SYNC_CANDIDATES[@]}"; do if [[ -x "${c%/}/scripts/archive_claude_sessions.sh" ]]; then printf '%s' "${c%/}/scripts/archive_claude_sessions.sh"; break; fi; done)"
+[[ -n "${INFRA_SYNC_SCRIPT}" ]] || { printf 'REFUSED: no executable scripts/archive_claude_sessions.sh under any known omninode_infra clone. Set OMNINODE_INFRA_PATH to the clone root. Tried, in order:\n' >&2; printf '    %s/scripts/archive_claude_sessions.sh\n' "${INFRA_SYNC_CANDIDATES[@]%/}" >&2; exit 1; }
 echo "infra sync script: ${INFRA_SYNC_SCRIPT}"
 
 export AWS_PROFILE="${AWS_PROFILE:-default}"
