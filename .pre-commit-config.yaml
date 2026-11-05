@@ -50,6 +50,14 @@ repos:
 
   - repo: local
     hooks:
+      - id: internal-sibling-pins-handler
+        name: Internal sibling pins accept a published PyPI release (OMN-19998)
+        entry: bash scripts/uv-run-worktree-safe.sh python -m omniclaude.handlers.handler_internal_sibling_pins --head-lock uv.lock
+        language: system
+        pass_filenames: false
+        files: '^(uv\.lock|src/omniclaude/handlers/handler_internal_sibling_pins\.py|src/omniclaude/models/model_internal_sibling_pins\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
+
       - id: linear-lane-repo-evidence
         name: Linear lane repository evidence readers (OMN-17427)
         entry: bash scripts/uv-run-worktree-safe.sh pytest tests/unit/nodes/node_linear_effect/test_handler_linear_api.py -q --no-cov
