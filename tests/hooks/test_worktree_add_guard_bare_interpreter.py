@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """The worktree guard's decision core imports on a bare interpreter (OMN-19998).
 
@@ -101,14 +101,14 @@ def test_hook_on_bare_interpreter_allows_sanctioned_and_refuses_stray(
     bare.chmod(0o755)
     home = tmp_path / "home"
     (home / ".onex_state").mkdir(parents=True)
-    omni_home = tmp_path / "oh"
-    (omni_home / "omni_worktrees").mkdir(parents=True)
+    registry_root = tmp_path / "oh"
+    (registry_root / "omni_worktrees").mkdir(parents=True)
     env = _bare_env()
     env.update(
         {
             "HOME": str(home),
             "ONEX_STATE_DIR": str(home / ".onex_state"),
-            "OMNI_HOME": str(omni_home),
+            "OMNI_HOME": str(registry_root),
             "PLUGIN_PYTHON_BIN": str(bare),
             "CLAUDE_PLUGIN_ROOT": str(REPO_ROOT / "plugins" / "onex"),
         }
@@ -128,7 +128,7 @@ def test_hook_on_bare_interpreter_allows_sanctioned_and_refuses_stray(
         )
 
     sanctioned = run(
-        f"git worktree add {omni_home}/omni_worktrees/OMN-1/omniclaude -b b"
+        f"git worktree add {registry_root}/omni_worktrees/OMN-1/omniclaude -b b"
     )
     assert EXIT_1_REFUSAL not in sanctioned.stdout, sanctioned.stdout
     assert sanctioned.returncode == 0, sanctioned.stdout + sanctioned.stderr
