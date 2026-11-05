@@ -34,7 +34,6 @@ Exports Validation
 F5.1 No compact cmd topic
 Hook Edge Lane Gate
 Hook Inventory Gate
-Hostile Review Gate
 Kafka Import Guard
 kb-doc-gate / kb-doc-gate
 Lane Identity Gate

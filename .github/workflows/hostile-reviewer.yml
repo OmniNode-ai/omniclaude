@@ -86,9 +86,13 @@
 name: Hostile Reviewer
 
 on:
-  pull_request:
-    branches: [main, dev]
-    types: [opened, synchronize, reopened]
+  # OMN-22478, operator RULING 2026-11-05T20:27:56Z: the automated review holds no
+  # merge and runs on no pull request until the review route is fixed. To restore,
+  # replace this trigger with:
+  #   pull_request:
+  #     branches: [main, dev]
+  #     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   pull-requests: write
