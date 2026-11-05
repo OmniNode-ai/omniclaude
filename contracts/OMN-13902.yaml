@@ -134,3 +134,11 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv run pytest tests/hooks/test_generate_event_registry.py -q --no-cov -k delegation_run_step_is_daemon_internal
+  - id: dod-omniclaude-sibling-pins-core-hook-alignment-pr3169
+    source: manual
+    binds_ac:
+      - AC2
+    description: The core hook pins in pyproject.toml, .pre-commit-config.yaml and uv.lock agree at the refreshed dev tag, and uv.lock resolves without rewriting. The pin alignment test fails when the three files disagree.
+    checks:
+      - check_type: test_passes
+        check_value: uv lock --check && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
