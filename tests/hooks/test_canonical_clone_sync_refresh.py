@@ -512,12 +512,11 @@ def test_a_sibling_worktree_is_not_a_canonical_clone(reg: Registry) -> None:
     assert [r.result for r in results] == [ccs.NO_CLONE]
 
 
-def test_run_sync_does_not_pick_up_the_sibling(reg: Registry) -> None:
+def test_run_sync_picks_up_the_sibling(reg: Registry) -> None:
     sibling = reg.make("omnibase_internal", root=reg.home.parent)
     clone = reg.make("svc")
     results = ccs.run_sync(reg.env(), None, "manual", None)
-    assert all(Path(r.clone) != sibling for r in results)
-    assert {Path(r.clone) for r in results} == {clone}
+    assert {Path(r.clone) for r in results} == {sibling, clone}
 
 
 @pytest.mark.parametrize("probe", ["child", "git", "declared"])
