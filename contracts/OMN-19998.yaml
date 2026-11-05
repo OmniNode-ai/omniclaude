@@ -102,6 +102,16 @@ requirements:
     acceptance:
       - id: "AC19"
         statement: "AC19: inside a lane the shared-clone refusal text never recommends a fetch, and outside a lane it keeps the fetch advice -- falsifier: uv run pytest tests/hooks/test_git_fetch_guard.py -q --no-cov -k shared_clone_refusal fails at the merge base on the in-lane test"
+  - id: req-omn19998-gh-shim-readonly-budget
+    statement: "The gh shim repairs a lane read budget directory or hour file that the lane itself owns and that is read-only, keeps the hour's count, and still refuses with its cause when the file cannot be written."
+    acceptance:
+      - id: "AC18"
+        statement: "AC18: an owned read-only budget directory and an owned read-only hour file are repaired and the read is counted, and an unwritable hour file still refuses and names the cause -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k 'owned_read_only or unwritable_hour_file' fails 3 of 3 at the merge base"
+  - id: req-omn19998-sibling-pins-precommit-hook
+    statement: "The internal-sibling-pins handler runs as a local pre-commit hook on the lockfile as well as in the CI job, so a refused sibling pin stops at commit time."
+    acceptance:
+      - id: "AC20"
+        statement: "AC20: a local pre-commit hook runs omniclaude.handlers.handler_internal_sibling_pins with --head-lock uv.lock at the pre-commit stage, passes on the checked-in lock, and the handler refuses a release pin that is not a published PyPI release -- falsifier: uv run pytest tests/ci/test_internal_sibling_pins_precommit_omn19998.py -q --no-cov fails at the merge base, where no pre-commit hook runs the handler"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -141,6 +151,14 @@ dod_evidence:
           | python3 -c 'import sys; source = sys.stdin.read(); assert "class HandlerGitRefusalAdvice:" in source; assert "if request.lane:" in source; assert "canonical-clone-sync" in source; assert "<owner>/<repo> --wait" in source'
     binds_ac:
       - "AC19"
+  - id: dod-omn19998-gh-shim-readonly-budget
+    description: "The shim is exercised against an owned read-only budget directory, an owned read-only hour file and an unwritable hour file, beside the existing lane-read fallback tests."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov"
+    binds_ac:
+      - "AC18"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
@@ -280,3 +298,11 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_canonical_clone_sync_refresh.py -q --no-cov -k 'recorded_hidden_sibling or does_not_hide_an_unrelated'"
     binds_ac:
       - "AC14"
+  - id: dod-omn19998-sibling-pins-precommit-hook
+    description: "The hook's entry, stage and file trigger are read from .pre-commit-config.yaml, the entry is run against the checked-in lock, and a git release pin is refused. At the merge base no hook runs the handler, so the hook tests fail."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_internal_sibling_pins_precommit_omn19998.py -q --no-cov"
+    binds_ac:
+      - "AC20"
