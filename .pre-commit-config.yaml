@@ -277,6 +277,15 @@ repos:
         args: [--allowlist, .onex_ratchets/noncanonical_class_allowlist.yaml, src/omniclaude]
         files: ^src/omniclaude/.*\.py$
 
+  # OMN-19998: a public workflow selects no lab runner. No baseline: a job still on the
+  # lab has a typed route packaged with this core, and the routes only shrink. CI twin:
+  # the last steps of job public-runner-placement in .github/workflows/ci.yml read this rev.
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: dev-20261105190003-87a6f5ddcbcc
+    hooks:
+      - id: check-public-lab-selection
+        args: [--repo, omniclaude, --visibility, public]
+        require_serial: true
   # OMN-19998: public-repository runner placement (RULING 2026-10-16T07:07:09Z,
   # "Ci runners should be for private repos only"). CI twin job
   # public-runner-placement in .github/workflows/ci.yml; keep this rev equal to

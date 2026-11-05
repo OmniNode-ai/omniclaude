@@ -196,3 +196,16 @@ def test_reusable_lab_route_the_runner_label_gate_is_hosted() -> None:
     jobs = _load(WORKFLOWS / "runner-label-exists-reusable.yml")["jobs"]
     assert isinstance(jobs, dict)
     assert jobs["runner-label-exists"]["runs-on"] == "ubuntu-latest"
+
+
+def test_the_lab_selection_refusal_is_in_the_required_job() -> None:
+    """The refusal runs in the job CI Summary sweeps, with its failing control first."""
+    steps = _load(CI_WORKFLOW)["jobs"]["public-runner-placement"]["steps"]
+    runs = [str(step.get("run", "")) for step in steps]
+    control = next(i for i, run in enumerate(runs) if "FAILING CONTROL FAILED" in run)
+    refusal = next(
+        i
+        for i, run in enumerate(runs)
+        if "validator_public_lab_selection" in run and "--variables-json" in run
+    )
+    assert control < refusal
