@@ -8,15 +8,21 @@ tests read the three places a tag lives -- the dependency line, the
 ``[tool.uv.sources]`` entry and ``uv.lock`` -- and refuse a refresh that moved
 one and left another behind.
 
-The check is a function of file text, so each test that reads the repo's own
-files is paired with a planted-skew case that proves the same check refuses a
-skewed copy. A check that has only ever seen the aligned tree has not shown it
-can fail.
+The alignment check is a function of file text, so each test that reads the
+repo's own files is paired with a planted-skew case that proves the same check
+refuses a skewed copy. A check that has only ever seen the aligned tree has not
+shown it can fail.
+
+The installed sibling also preserves complete Git output for plan parsing while
+keeping human-facing command reports truncated. That regression fails with the
+pre-refresh dependency even when its pins agree with one another.
 """
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -72,7 +78,9 @@ def _repo_texts() -> tuple[str, str]:
 
 
 def _source_rev(pyproject_text: str) -> str:
-    return _SOURCE_PIN.findall(pyproject_text)[0]
+    match = _SOURCE_PIN.search(pyproject_text)
+    assert match is not None
+    return match.group(1)
 
 
 def test_omnimarket_tag_is_one_dev_merge_tag_on_every_surface() -> None:
@@ -112,3 +120,47 @@ def test_planted_truncated_tag_is_refused() -> None:
     assert skewed != pyproject_text
     problems = skew_problems(skewed, lock_text)
     assert any("exactly one git dependency" in p for p in problems), problems
+
+
+def test_refreshed_git_parser_retains_older_plan_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The installed sibling must retain records beyond its report tail limit."""
+    from omnimarket.nodes.node_morning_ground_state_orchestrator.tools.base import (
+        _git,
+        _git_out,
+    )
+
+    # Hooks export Git locations that otherwise override this isolated index.
+    env = os.environ.copy()
+    for name in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CEILING_DIRECTORIES",
+        "GIT_NAMESPACE",
+    ):
+        env.pop(name, None)
+        monkeypatch.delenv(name, raising=False)
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, env=env)
+    plans = tmp_path / "plans"
+    plans.mkdir()
+    expected = [
+        f"plans/2026-01-01-{index:04d}-older-plan-with-a-long-title.md"
+        for index in range(160)
+    ]
+    for path in expected:
+        (tmp_path / path).write_text("plan\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "plans"], check=True, env=env)
+
+    parsed = _git_out(tmp_path, "ls-files", "--", "plans")
+    report = _git(tmp_path, "ls-files", "--", "plans")
+
+    assert parsed is not None
+    assert len(parsed) > 4000
+    assert parsed.splitlines() == expected
+    assert expected[0] not in str(report["stdout"])
+    assert str(report["stdout"]).endswith(expected[-1] + "\n")
