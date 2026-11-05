@@ -1330,10 +1330,7 @@ anchored_commit() { # repo
   # the model-config handler phase 3 imports does not exist yet, so Ollama and the
   # local model server could not be set up on any machine. omniclaude therefore
   # takes origin/dev at the anchor's time, like any repo with no pin.
-  if [ "$1" != omniclaude ]; then
-    pin="$(proven_pin "$1")" || return 1
-    [ -n "$pin" ] && { printf '%s\n' "$pin"; return 0; }
-  fi
+  if [ "$1" != omniclaude ]; then pin="$(proven_pin "$1")" || return 1; [ -n "$pin" ] && { printf '%s\n' "$pin"; return 0; }; fi
   def="$(clone_default_branch "$1")"
   when="$(anchor_time)"
   [ -n "$def" ] && [ -n "$when" ] || return 1
