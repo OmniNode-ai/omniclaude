@@ -34,3 +34,13 @@ dod_evidence:
         check_value: uv run pytest tests/ci/test_inherited_container_checks_omn20413.py -q --no-cov
     binds_ac:
       - AC1
+  - id: dod-omn20413-core-hook-rev-floor
+    description: The core hook rev test compares against the fixed PIN_FLOOR_TAG, not the moving pyproject pin, so a nightly core bump no longer fails it.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py -q --no-cov
+      - check_type: command
+        check_value: test "$(grep -c 'dev_merge_tag_stamp(PIN_FLOOR_TAG)' tests/ci/test_core_dev_tag_pin_omn18595.py)" = 2
+    binds_ac:
+      - AC1

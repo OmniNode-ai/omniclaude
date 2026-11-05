@@ -97,10 +97,12 @@ def test_core_check_local_paths_hook_pins_at_least_the_floor() -> None:
     if rev.startswith("v"):
         assert Version(rev[1:]) >= FLOOR, rev
     else:
-        # A dev merge tag at or after the one pyproject reads carries the release.
+        # A dev merge tag at or after PIN_FLOOR_TAG carries the release. The floor is
+        # fixed: comparing against the moving pyproject pin made every nightly core
+        # bump red, since the train moves pyproject and not this hook rev.
         stamp, floor_stamp = (
             dev_merge_tag_stamp(rev),
-            dev_merge_tag_stamp(_source_tag()),
+            dev_merge_tag_stamp(PIN_FLOOR_TAG),
         )
         assert stamp is not None and floor_stamp is not None, rev
         assert stamp >= floor_stamp, rev
