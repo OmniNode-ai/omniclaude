@@ -556,20 +556,26 @@ class TopicBase(StrEnum):
     # node_pr_ownership_guard_effect command and terminal event.
     # ==========================================================================
     PR_OWNERSHIP_CHECK = "onex.cmd.omniclaude.pr-ownership-check.v1"
-    """Command: judge a Bash command's guarded GitHub mutations by lane ownership."""
+    # Command: judge a Bash command's guarded GitHub mutations by lane ownership.
 
     PR_OWNERSHIP_CHECKED = "onex.evt.omniclaude.pr-ownership-checked.v1"
-    """Terminal event: the ownership verdict for the command."""
+    # Terminal event: the ownership verdict for the command.
 
     # ==========================================================================
     # Lane GitHub read guard (OMN-20916)
     # node_lane_github_read_guard_effect command and terminal event.
     # ==========================================================================
     LANE_GITHUB_READ_CHECK = "onex.cmd.omniclaude.lane-github-read-check.v1"
-    """Command: judge one PreToolUse call against the GitHub read paths around the gh shim."""
+    # Command: judge one PreToolUse call against the GitHub read paths around the gh shim.
 
     LANE_GITHUB_READ_CHECKED = "onex.evt.omniclaude.lane-github-read-checked.v1"
-    """Terminal event: the allow or refuse verdict for the call."""
+    # Terminal event: the allow or refuse verdict for the call.
+
+    RUNNER_SNAPSHOT_CHECK = "onex.cmd.omniclaude.runner-placement-snapshot-check.v1"
+    # Command: select the placement gate's snapshot read policy.
+
+    RUNNER_SNAPSHOT_CHECKED = "onex.evt.omniclaude.runner-placement-snapshot-checked.v1"
+    # Terminal event: the snapshot source selection.
 
     # ==========================================================================
     # Delegation pipeline topics (OMN-7103)
