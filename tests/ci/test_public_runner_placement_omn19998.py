@@ -155,3 +155,44 @@ def test_precommit_hook_names_this_public_repository() -> None:
     hooks = _hooks()
     assert hooks
     assert hooks[0][1]["args"] == ["--repo", "omniclaude", "--visibility", "public"]
+
+
+GUARDED_REUSABLES = (
+    "anti-growth-baseline-reusable.yml",
+    "branch-claim-check-reusable.yml",
+    "deploy-gate-reusable.yml",
+    "doctrine-claim-gate-reusable.yml",
+    "private-repo-runner-placement-reusable.yml",
+    "public-repo-hygiene-reusable.yml",
+    "route-runner-reusable.yml",
+    "secrets-baseline-wiring-reusable.yml",
+)
+
+
+@pytest.mark.parametrize("name", GUARDED_REUSABLES)
+def test_reusable_lab_route_is_taken_by_a_private_caller_only(name: str) -> None:
+    jobs = _load(WORKFLOWS / name)["jobs"]
+    assert isinstance(jobs, dict)
+    for job in jobs.values():
+        runs_on = " ".join(str(job["runs-on"]).split())
+        if "self-hosted" not in runs_on:
+            continue
+        body = runs_on.removeprefix("${{").removesuffix("}}").strip()
+        assert body.startswith(f"{PRIVATE_CALLER} ("), name
+        assert body.endswith(") || 'ubuntu-latest'"), name
+
+
+def test_reusable_lab_route_control_an_unguarded_fleet_route_is_seen() -> None:
+    """The failing control: the test above reads the shape it would refuse."""
+    unguarded = (
+        """${{ fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted"]') }}"""
+    )
+    body = unguarded.removeprefix("${{").removesuffix("}}").strip()
+    assert "self-hosted" in body
+    assert not body.startswith(f"{PRIVATE_CALLER} (")
+
+
+def test_reusable_lab_route_the_runner_label_gate_is_hosted() -> None:
+    jobs = _load(WORKFLOWS / "runner-label-exists-reusable.yml")["jobs"]
+    assert isinstance(jobs, dict)
+    assert jobs["runner-label-exists"]["runs-on"] == "ubuntu-latest"
