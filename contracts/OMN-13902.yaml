@@ -14,12 +14,12 @@ requirements:
     statement: A strict descendant is accepted, a non-descendant is refused without writing, both dependency and source rev occurrences are rewritten together, and only omnimarket is declared clone-governed.
     acceptance:
       - id: AC1
-        statement: 'AC1: A strict descendant is accepted, a non-descendant is refused without writing, both dependency and source rev occurrences are rewritten together, and only omnimarket is declared clone-governed. -- falsifier: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov'
+        statement: 'AC1: A strict descendant is accepted, a non-descendant is refused without writing, both dependency and source rev occurrences are rewritten together, and only omnimarket is declared clone-governed. -- falsifier: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@dev-[0-9]{14}-[0-9a-f]{12}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov'
   - id: req-sibling-lock-resolution
     statement: uv.lock resolves the declared dependencies and git source revs without rewriting.
     acceptance:
       - id: AC2
-        statement: 'AC2: uv.lock resolves the declared dependencies and git source revs without rewriting. -- falsifier: grep -Eq "omnimarket[.]git[?]rev=[0-9a-f]{40}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov'
+        statement: 'AC2: uv.lock resolves the declared dependencies and git source revs without rewriting. -- falsifier: grep -Eq "omnimarket[.]git[?]tag=dev-[0-9]{14}-[0-9a-f]{12}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov'
   - id: req-lane-write-guard-tracks-refreshed-write-config
     statement: The lane write guard honours a github_mode_by_owner row of the write_config contract that the sibling-refreshed omnimarket carries, and a github_mode_by_repository row wins over its owner row.
     acceptance:
@@ -50,12 +50,17 @@ requirements:
     acceptance:
       - id: AC8
         statement: 'AC8: delegation.run_step is in DAEMON_INTERNAL_EVENT_TYPES and is excluded from the projected client registry. -- falsifier: uv run pytest tests/hooks/test_generate_event_registry.py -q --no-cov -k delegation_run_step_is_daemon_internal'
+  - id: req-refreshed-bootstrap-deploy
+    statement: The onboarding entrypoint selects the published preflight handler by its content digest.
+    acceptance:
+      - id: AC9
+        statement: 'AC9: The entrypoint digest matches the updated handler served at this commit, and differs from the pre-refresh handler. -- falsifier: run dod-omniclaude-deploy-bootstrap on a hosted runner with HTTPS, git and sha256sum.'
 evidence_requirements:
   - kind: tests
-    command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+    command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@dev-[0-9]{14}-[0-9a-f]{12}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
     description: Validates forward-only git refresh behavior including descendant acceptance, non-descendant refusal, and rev rewriting.
   - kind: ci
-    command: grep -Eq "omnimarket[.]git[?]rev=[0-9a-f]{40}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+    command: grep -Eq "omnimarket[.]git[?]tag=dev-[0-9]{14}-[0-9a-f]{12}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
     description: Verifies that uv.lock resolves the declared dependencies and git source revs without rewriting.
   - kind: tests
     command: uv lock --check && uv run pytest tests/scripts/test_gh_lane_write_guard.py -q --no-cov
@@ -77,7 +82,7 @@ dod_evidence:
     description: Validates forward-only git refresh behavior including descendant acceptance, non-descendant refusal, and rev rewriting.
     checks:
       - check_type: command
-        check_value: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@[0-9a-f]{40}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+        check_value: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@dev-[0-9]{14}-[0-9a-f]{12}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
   - id: dod-omniclaude-sibling-lock-resolution
     source: manual
     binds_ac:
@@ -85,7 +90,7 @@ dod_evidence:
     description: Verifies that uv.lock resolves the declared dependencies and git source revs without rewriting.
     checks:
       - check_type: command
-        check_value: grep -Eq "omnimarket[.]git[?]rev=[0-9a-f]{40}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+        check_value: grep -Eq "omnimarket[.]git[?]tag=dev-[0-9]{14}-[0-9a-f]{12}#[0-9a-f]{40}" uv.lock && uv lock --check && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
   - id: dod-omniclaude-lane-write-guard-owner-rows
     source: manual
     binds_ac:
@@ -134,7 +139,7 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv run pytest tests/hooks/test_generate_event_registry.py -q --no-cov -k delegation_run_step_is_daemon_internal
-  - id: dod-omniclaude-sibling-pins-core-hook-alignment-pr3169
+  - id: dod-omniclaude-core-hook-alignment-pr3169
     source: manual
     binds_ac:
       - AC2
@@ -142,3 +147,16 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: uv lock --check && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+  - id: dod-omniclaude-deploy-bootstrap
+    description: "The published handler at the checked-out commit matches the entrypoint's checkout digest, and that digest is this change's handler and not the one it replaces. At the merge base the entrypoint still names the old handler, so the digest comparison fails there. The hosted runner needs HTTPS, git and sha256sum."
+    source: manual
+    binds_ac: [AC9]
+    checks:
+      - check_type: command
+        check_value: >-
+          e=9a659f5d367bd6c677277460fdaefba1e762b94ccad1b7d707de8454198f0c2b
+          && d=$(grep '^  local digest=' plugins/onex/skills/_bin/lab-onboarding.sh | cut -d '"' -f2 | tr -d :)
+          && [ "$d" = "$e" ]
+          && curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
+          | sha256sum | grep -q "^$d  -$"
+        cwd: "${OMNI_HOME}/omniclaude"
