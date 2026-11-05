@@ -37,3 +37,23 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_omniclaude_unpinned_omn22477.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22477-bootstrap-integrity
+    description: "The checkout entrypoint and node contract declare the changed handler's checksum; the separate download pin remains verifiable."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_bootstrap_handler_omn21087.py tests/skills/test_onboarding_deploy_probe_omn21087.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22477-deploy-bootstrap
+    description: "The published handler at the checked-out commit matches the entrypoint's checkout digest. The hosted runner needs HTTPS, git and sha256sum."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: command
+        check_value: >-
+          d=$(grep '^  local digest=' plugins/onex/skills/_bin/lab-onboarding.sh | cut -d '"' -f2 | tr -d :)
+          && [ "${#d}" -eq 64 ]
+          && curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
+          | sha256sum | grep -q "^$d  -$"
+        cwd: "${OMNI_HOME}/omniclaude"
