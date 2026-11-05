@@ -259,6 +259,13 @@ requirements:
     acceptance:
       - id: AC60
         statement: "every aquasecurity/trivy-action step in ci.yml and security-scan.yml carries skip-setup-trivy: true, each scanning job installs Trivy from github.com/aquasecurity/trivy/releases/download/, and no executable workflow line names aquasecurity/setup-trivy or get.trivy.dev -- falsifier: uv run pytest tests/ci/test_trivy_install_skips_setup_trivy_omn17427.py -q --no-cov fails over the merge base, whose four trivy-action steps carry no skip-setup-trivy and whose jobs install nothing"
+  - id: req-canonical-clone-sync-visits-siblings
+    statement: Canonical clone sync visits registry and sibling clones through the same discovery set as refresh.
+    acceptance:
+      - id: AC61
+        statement: run_sync visits both a registry clone and a canonical clone beside the registry root; the sibling sync regression fails when run_sync discovers only registry-root clones.
+      - id: AC62
+        statement: A canonical clone reachable through both registry discovery and a declared sibling home is visited exactly once by resolved path.
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1234,3 +1241,50 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/ci/test_trivy_install_skips_setup_trivy_omn17427.py -q --no-cov"
+  - id: dod-canonical-clone-sync-visits-siblings
+    description: The sibling sync regression runs the sync engine against temporary local Git clones and asserts that it visits the registry clone and the sibling.
+    source: manual
+    status: verified
+    binds_ac:
+      - AC61
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest plugins/onex/hooks/tests/test_canonical_clone_sync_sibling_clone.py::test_sibling_clone_sync_visits_a_clone_beside_the_root -q --no-cov"
+  - id: dod-canonical-clone-sync-deduplicates-paths
+    description: The same local clone is reachable through a registry root and a sibling home; run_sync must return exactly one result for its resolved path.
+    source: manual
+    status: verified
+    binds_ac:
+      - AC62
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest plugins/onex/hooks/tests/test_canonical_clone_sync_sibling_clone.py::test_sync_visits_a_clone_reachable_both_ways_once -q --no-cov"
+  - id: dod-deploy-canonical-clone-sync-discovery
+    description: A hosted Docker runner mounts this checkout read-only and executes its clone discovery against temporary registry and sibling layouts, including duplicate paths; it needs no credentials or network inside the container.
+    source: manual
+    status: verified
+    binds_ac:
+      - AC61
+      - AC62
+    checks:
+      - check_type: command
+        check_value: |
+          env docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --env PYTHONDONTWRITEBYTECODE=1 --mount "type=bind,src=$(pwd),dst=/workspace,readonly" --workdir /workspace python:3.12-bookworm@sha256:a5bab0ff300f91231c2e68bf73a8a8d60762ac39ce1c50eaf6803e4c38a9062b python -c '
+          import runpy, tempfile
+          from pathlib import Path
+          engine = runpy.run_path("plugins/onex/hooks/lib/canonical_clone_sync.py", run_name="discovery_probe")
+          with tempfile.TemporaryDirectory() as directory:
+              root = Path(directory)
+              registry = root / "registry"
+              service = registry / "service"
+              sibling = root / "beside_clone"
+              for clone in (service, sibling):
+                  (clone / ".git").mkdir(parents=True)
+              environment = {"OMNI_HOME": str(registry), "HOME": str(root / "account")}
+              clones = engine["all_clones"](environment)
+              assert {clone.resolve() for clone in clones} == {service, sibling}, clones
+              environment.update(ONEX_REGISTRY_ROOTS=str(root), BESIDE_INTERNAL_HOME=str(sibling))
+              clones = engine["all_clones"](environment)
+              assert len(clones) == 2 and {clone.resolve() for clone in clones} == {service, sibling}, clones
+          print("PASS: registry and sibling discovery deduplicates resolved paths")
+          '
