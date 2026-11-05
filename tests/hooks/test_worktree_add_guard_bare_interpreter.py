@@ -48,7 +48,7 @@ def _payload(command: str) -> str:
 def _run_core(
     guard: Path, root: Path, command: str, env: dict[str, str]
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         [sys.executable, "-S", str(guard), "--root", str(root), "--cwd", "/tmp"],
         input=_payload(command),
         capture_output=True,
@@ -117,7 +117,7 @@ def test_hook_on_bare_interpreter_allows_sanctioned_and_refuses_stray(
         env.pop(key, None)
 
     def run(command: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(  # noqa: S603
+        return subprocess.run(
             ["bash", str(HOOK)],
             input=_payload(command),
             capture_output=True,

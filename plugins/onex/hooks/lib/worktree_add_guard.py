@@ -60,26 +60,11 @@ from pathlib import Path
 # stdlib-only: use this checkout's source, or the registry clone for an
 # installed plugin -- the same resolution as pr_body_stamp_guard.py (OMN-20266).
 _HOOKS_LIB = Path(__file__).resolve().parent
-if str(_HOOKS_LIB) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_LIB))
-_SOURCE_ROOTS = [_HOOKS_LIB.parents[3] / "src"]
-if os.environ.get("OMNI_HOME"):
-    _SOURCE_ROOTS.append(Path(os.environ["OMNI_HOME"]) / "omniclaude" / "src")
-for _src in _SOURCE_ROOTS:
-    if (
-        _src / "omniclaude/nodes/node_git_effect/handlers/handler_shell_words.py"
-    ).is_file():
-        if str(_src) not in sys.path:
-            sys.path.append(str(_src))
-        break
+_ROOTS = (_HOOKS_LIB.parents[3], Path(os.environ.get("OMNI_HOME", "/")) / "omniclaude")
+sys.path += [str(r / "src") for r in _ROOTS if (r / "src/omniclaude").is_dir()][:1]
 
-from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import (  # noqa: E402
-    EnumQuoteKind,
-)
-from omniclaude.nodes.node_git_effect.handlers.handler_shell_scope import (  # noqa: E402
-    Scope,
-)
 from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # noqa: E402
+    EnumQuoteKind,
     HereDoc,
     ShellSyntaxError,
     UnresolvableWord,
@@ -94,7 +79,9 @@ from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # n
     tokenize,
 )
 
-_Scope = Scope
+_Scope = __import__(
+    "omniclaude.nodes.node_git_effect.handlers.handler_shell_scope", fromlist=["Scope"]
+).Scope
 
 DISABLE_HINT = "To disable this guard: onex hooks disable WORKTREE_GUARD"
 
@@ -985,8 +972,7 @@ def main(argv: list[str] | None = None) -> int:
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if not isinstance(command, str) or not command:
         return 0
-    cwd_raw = payload.get("cwd") or args.cwd
-    cwd = Path(cwd_raw) if cwd_raw else None
+    cwd = Path(raw) if (raw := payload.get("cwd") or args.cwd) else None
 
     try:
         root = Path(args.root) if args.root else None
