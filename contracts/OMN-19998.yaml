@@ -107,6 +107,11 @@ requirements:
     acceptance:
       - id: "AC20"
         statement: "AC20: a local pre-commit hook runs omniclaude.handlers.handler_internal_sibling_pins with --head-lock uv.lock at the pre-commit stage, passes on the checked-in lock, and the handler refuses a release pin that is not a published PyPI release -- falsifier: uv run pytest tests/ci/test_internal_sibling_pins_precommit_omn19998.py -q --no-cov fails at the merge base, where no pre-commit hook runs the handler"
+  - id: req-omn19998-lane-commit-snapshot-only
+    statement: "A lane commit runs the private-repo runner-placement hook from the checked-in snapshot with no GitHub read, since the gh shim and the lane read guard refuse every such read from a lane."
+    acceptance:
+      - id: "AC17"
+        statement: "AC17: with a lane marker set, outside GitHub Actions and with a snapshot supplied, the runner-placement gate resolves repository visibility and both variable scopes from the snapshot with no gh call, and still refuses a hosted value, a stale snapshot and a snapshot missing a scope; a lane with no snapshot still tries the live read -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k lane_commit fails 4 of 5 at the merge base"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -146,6 +151,14 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov"
     binds_ac:
       - "AC18"
+  - id: dod-omn19998-lane-commit-snapshot-only
+    description: "The lane-commit regressions run the hook as pre-commit does, with a stub gh that records any call, a hosted value, a stale snapshot, a snapshot missing a scope and a lane with no snapshot as controls."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k lane_commit"
+    binds_ac:
+      - "AC17"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
