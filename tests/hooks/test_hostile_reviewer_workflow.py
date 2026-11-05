@@ -734,10 +734,84 @@ def test_degraded_quorum_exit_code_fails_the_gate_closed(
         "own name, not folded into infra_error"
     )
     assert 'echo "verdict=degraded_quorum"' in run_text
-    assert '[ "$VERDICT" = "degraded_quorum" ]' in run_text, (
-        "degraded_quorum must fail the step closed alongside blocked -- the "
-        "absence of a verdict is not a passing one"
+    # OMN-19998: the review step hands a degraded quorum on instead of ending
+    # on it, so the accept step can stand a verified agent review receipt in
+    # place of the lost voter. The absence of a verdict is still not a passing
+    # one: the enforcement step at the end of the job fails the job on it (see
+    # test_a_degraded_quorum_is_failed_by_the_enforcement_step_unless_accepted).
+    # Only ``blocked`` still ends the review step with exit 1.
+    assert '[ "$VERDICT" = "blocked" ]' in run_text
+    assert '[ "$VERDICT" = "degraded_quorum" ]' not in run_text, (
+        "the review step must not fail on degraded_quorum itself: the accept "
+        "step and the enforcement step own that verdict (OMN-19998)"
     )
+
+
+def test_a_degraded_quorum_is_failed_by_the_enforcement_step_unless_accepted(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-19998: no verdict is not a pass, unless a verified receipt stands in.
+
+    The accept step runs after the review step, from the omnimarket clone and
+    the omniintelligence environment, never from the checkout under review. The
+    enforcement step is the last step of the job, runs after a failed review
+    step too, and is skipped only when the accept step's decision is
+    ``pass_agent``.
+    """
+    steps = _review_job_steps(workflow)
+    names = [str(step.get("name")) for step in steps]
+    review = names.index("Run adversarial review")
+    accept = next(
+        i for i, n in enumerate(names) if n.startswith("Accept an agent review receipt")
+    )
+    enforce = next(
+        i for i, n in enumerate(names) if n.startswith("Enforce hostile-review verdict")
+    )
+    clone = names.index("Clone omnimarket (gate-accept node)")
+    assert clone < review < accept < enforce == len(steps) - 1
+
+    accept_step = steps[accept]
+    assert accept_step["id"] == "accept"
+    assert accept_step["if"] == "always() && env.RUNNER_IS_TRUSTED == 'true'", (
+        "a fork-origin run must never hold the receipt key"
+    )
+    assert accept_step["working-directory"] == "../omniintelligence"
+    accept_run = str(accept_step["run"])
+    assert "node_agent_review_gate_accept_effect" in accept_run
+    assert 'echo "decision=unchanged" >> "$GITHUB_OUTPUT"' in accept_run, (
+        "a node that is absent or does not run leaves the voters' verdict standing"
+    )
+    assert "${{ runner.temp }}/hostile-review-result.json" in accept_run
+    assert "hostile-review-result.json" in _review_step_run_text(workflow)
+    accept_env = accept_step["env"]
+    assert isinstance(accept_env, dict)
+    assert str(accept_env["ACCEPT_SRC"]).endswith("/../omnimarket/src"), (
+        "the node comes from the omnimarket clone, never the pull request checkout"
+    )
+
+    enforce_step = steps[enforce]
+    assert (
+        enforce_step["if"]
+        == "always() && steps.accept.outputs.decision != 'pass_agent'"
+    )
+    enforce_run = str(enforce_step["run"])
+    assert '"degraded_quorum"' in enforce_run
+    assert "exit 1" in enforce_run
+
+
+def test_the_ci_overlay_fetch_carries_the_accept_and_verifier_overlays(
+    workflow: dict[object, object],
+) -> None:
+    """OMN-19998: the accept node reads two overlays beside the voters."""
+    step = _named_step(workflow, "Fetch the CI overlay")
+    inputs = step["with"]
+    assert isinstance(inputs, dict)
+    sparse = str(inputs["sparse-checkout"]).split()
+    assert sparse == [
+        "config/onex/overlays/node_review_voters_overlay_compute",
+        "config/onex/overlays/agent_review_gate_accept",
+        "config/onex/overlays/review_agent_receipt_verify",
+    ]
 
 
 def test_verdict_parser_blocks_only_on_cross_model_agreement(
