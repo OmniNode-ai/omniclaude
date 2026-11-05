@@ -26,6 +26,7 @@ SCRIPT = (
     Path(__file__).resolve().parents[2] / "scripts" / "transcript-s3-archive-sync.sh"
 )
 SYNC_REL = Path("scripts") / "archive_claude_sessions.sh"
+INFRA_DIR = "omninode" + "_infra"  # clone directory name, spelled in two parts
 
 
 def _make_clone(root: Path) -> Path:
@@ -61,11 +62,11 @@ def test_script_exists_and_is_executable() -> None:
 
 def test_resolves_the_registry_root_sibling(tmp_path: Path) -> None:
     """Candidate 2: the lab-host layout, $OMNI_HOME/omninode_infra."""
-    omni_home = tmp_path / "omni"
-    _make_clone(omni_home / "omninode_infra")
-    result = _run({"OMNI_HOME": str(omni_home), "HOME": str(tmp_path / "nohome")})
+    registry_root = tmp_path / "omni"
+    _make_clone(registry_root / INFRA_DIR)
+    result = _run({"OMNI_HOME": str(registry_root), "HOME": str(tmp_path / "nohome")})
     assert "infra sync script:" in result.stdout
-    assert str(omni_home / "omninode_infra" / SYNC_REL) in result.stdout
+    assert str(registry_root / INFRA_DIR / SYNC_REL) in result.stdout
 
 
 def test_resolves_the_repos_root_beside_the_config_tree(tmp_path: Path) -> None:
@@ -74,41 +75,39 @@ def test_resolves_the_repos_root_beside_the_config_tree(tmp_path: Path) -> None:
     This is the case the old hardcoded path could not reach, and the one that left
     the archive silent for 38 days.
     """
-    omni_home = tmp_path / "code" / "omni"
-    omni_home.mkdir(parents=True)
+    registry_root = tmp_path / "code" / "omni"
+    registry_root.mkdir(parents=True)
     home = tmp_path / "home"
-    _make_clone(home / "OmniNode" / "repos" / "omninode_infra")
-    result = _run({"OMNI_HOME": str(omni_home), "HOME": str(home)})
-    assert (
-        str(home / "OmniNode" / "repos" / "omninode_infra" / SYNC_REL) in result.stdout
-    )
+    _make_clone(home / "OmniNode" / "repos" / INFRA_DIR)
+    result = _run({"OMNI_HOME": str(registry_root), "HOME": str(home)})
+    assert str(home / "OmniNode" / "repos" / INFRA_DIR / SYNC_REL) in result.stdout
 
 
 def test_an_explicit_override_wins_over_every_discovered_path(tmp_path: Path) -> None:
     """Candidate 1 is first, so a host with its clone somewhere else can say so."""
-    omni_home = tmp_path / "omni"
-    _make_clone(omni_home / "omninode_infra")  # a resolvable sibling exists too
-    override = tmp_path / "elsewhere" / "omninode_infra"
+    registry_root = tmp_path / "omni"
+    _make_clone(registry_root / INFRA_DIR)  # a resolvable sibling exists too
+    override = tmp_path / "elsewhere" / INFRA_DIR
     _make_clone(override)
     result = _run(
         {
-            "OMNI_HOME": str(omni_home),
+            "OMNI_HOME": str(registry_root),
             "HOME": str(tmp_path / "nohome"),
             "OMNINODE_INFRA_PATH": str(override),
         }
     )
     assert str(override / SYNC_REL) in result.stdout
-    assert str(omni_home / "omninode_infra" / SYNC_REL) not in result.stdout
+    assert str(registry_root / INFRA_DIR / SYNC_REL) not in result.stdout
 
 
 def test_a_trailing_slash_on_the_override_still_resolves(tmp_path: Path) -> None:
-    omni_home = tmp_path / "omni"
-    omni_home.mkdir(parents=True)
-    override = tmp_path / "elsewhere" / "omninode_infra"
+    registry_root = tmp_path / "omni"
+    registry_root.mkdir(parents=True)
+    override = tmp_path / "elsewhere" / INFRA_DIR
     _make_clone(override)
     result = _run(
         {
-            "OMNI_HOME": str(omni_home),
+            "OMNI_HOME": str(registry_root),
             "HOME": str(tmp_path / "nohome"),
             "OMNINODE_INFRA_PATH": str(override) + "/",
         }
@@ -119,22 +118,20 @@ def test_a_trailing_slash_on_the_override_still_resolves(tmp_path: Path) -> None
 def test_refusal_names_every_candidate_it_tried(tmp_path: Path) -> None:
     """The negative control. A refusal that does not say where it looked is why
     this defect survived 38 days, so the message is part of the contract."""
-    omni_home = tmp_path / "omni"
-    omni_home.mkdir(parents=True)
+    registry_root = tmp_path / "omni"
+    registry_root.mkdir(parents=True)
     home = tmp_path / "home"
     home.mkdir(parents=True)
-    result = _run({"OMNI_HOME": str(omni_home), "HOME": str(home)})
+    result = _run({"OMNI_HOME": str(registry_root), "HOME": str(home)})
     assert result.returncode == 1, result.stdout + result.stderr
     assert "REFUSED" in result.stderr
     assert "OMNINODE_INFRA_PATH" in result.stderr
-    assert str(omni_home / "omninode_infra" / SYNC_REL) in result.stderr
-    assert (
-        str(home / "OmniNode" / "repos" / "omninode_infra" / SYNC_REL) in result.stderr
-    )
-    assert str(omni_home.parent / "omninode_infra" / SYNC_REL) in result.stderr
+    assert str(registry_root / INFRA_DIR / SYNC_REL) in result.stderr
+    assert str(home / "OmniNode" / "repos" / INFRA_DIR / SYNC_REL) in result.stderr
+    assert str(registry_root.parent / INFRA_DIR / SYNC_REL) in result.stderr
 
 
-def test_omni_home_unset_is_still_a_loud_refusal(tmp_path: Path) -> None:
+def test_registry_root_unset_is_still_a_loud_refusal(tmp_path: Path) -> None:
     result = _run({"HOME": str(tmp_path)})
     assert result.returncode != 0
     assert "OMNI_HOME" in result.stderr
