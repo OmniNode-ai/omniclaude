@@ -686,7 +686,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="51b1:567c:2d97:88d4:3374:7e69:312f:7a24:608a:0e65:cf42:cba5:59df:31df:3c4e:eff7" root candidate \
+  local digest="9a65:9f5d:367b:d6c6:7727:7460:fdae:fba1:e762:b94c:cad1:b7d7:07de:8454:198f:0c2b" root candidate \
     download_digest="51b1:567c:2d97:88d4:3374:7e69:312f:7a24:608a:0e65:cf42:cba5:59df:31df:3c4e:eff7"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"

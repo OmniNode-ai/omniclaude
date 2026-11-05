@@ -1322,8 +1322,15 @@ anchor_time() { # -> the anchor's committer date, ISO 8601
 anchored_commit() { # repo
   local pin def when
   [ "$1" = omnibase_infra ] && { printf '%s\n' "$INFRA_ANCHOR"; return 0; }
-  pin="$(proven_pin "$1")" || return 1
-  [ -n "$pin" ] && { printf '%s\n' "$pin"; return 0; }
+  # OMN-22477: omniclaude is deliberately excluded from the proven set. Its entry
+  # in omnibase_infra's sibling-pins.yaml is a CI pin, held back on purpose so a
+  # gating omnibase_infra workflow does not turn red every time omniclaude merges
+  # (the OMN-20331 rationale in that file's own header). Onboarding needs the
+  # omniclaude that carries this script's own handlers: at the pin of 2026-10-06
+  # the model-config handler phase 3 imports does not exist yet, so Ollama and the
+  # local model server could not be set up on any machine. omniclaude therefore
+  # takes origin/dev at the anchor's time, like any repo with no pin.
+  if [ "$1" != omniclaude ]; then pin="$(proven_pin "$1")" || return 1; [ -n "$pin" ] && { printf '%s\n' "$pin"; return 0; }; fi
   def="$(clone_default_branch "$1")"
   when="$(anchor_time)"
   [ -n "$def" ] && [ -n "$when" ] || return 1
