@@ -111,18 +111,23 @@ def test_sibling_clone_worktree_is_not_a_canonical_clone(reg: Registry) -> None:
 def test_sibling_clone_sync_visits_a_clone_beside_the_root(reg: Registry) -> None:
     beside = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
     clone = reg.make("svc")
-    results = ccs.run_sync(reg.env(), None, "manual", None)
+    results = ccs.run_sync(reg.env(HOME=str(reg.tmp / "account")), None, "manual", None)
     assert {Path(r.clone) for r in results} == {beside, clone}
 
 
 def test_sync_visits_a_clone_reachable_both_ways_once(reg: Registry) -> None:
     clone = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
+    declared_only = reg.make("declared_only", root=reg.tmp / "elsewhere")
     env = reg.env(
-        BESIDE_INTERNAL_HOME=str(clone), ONEX_REGISTRY_ROOTS=str(reg.home.parent)
+        HOME=str(reg.tmp / "account"),
+        BESIDE_INTERNAL_HOME=str(clone),
+        OTHER_INTERNAL_HOME=str(declared_only),
+        ONEX_REGISTRY_ROOTS=str(reg.home.parent),
     )
     assert ccs.sibling_clones(env) and ccs.discover_clones(ccs.registry_roots(env))
     results = ccs.run_sync(env, None, "manual", None)
-    assert [Path(r.clone).resolve() for r in results] == [clone.resolve()]
+    visited = sorted(Path(r.clone).resolve() for r in results)
+    assert visited == sorted([clone.resolve(), declared_only.resolve()])
 
 
 @pytest.fixture

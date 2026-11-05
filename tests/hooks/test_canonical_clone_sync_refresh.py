@@ -515,7 +515,7 @@ def test_a_sibling_worktree_is_not_a_canonical_clone(reg: Registry) -> None:
 def test_run_sync_picks_up_the_sibling(reg: Registry) -> None:
     sibling = reg.make("omnibase_internal", root=reg.home.parent)
     clone = reg.make("svc")
-    results = ccs.run_sync(reg.env(), None, "manual", None)
+    results = ccs.run_sync(reg.env(HOME=str(reg.tmp / "account")), None, "manual", None)
     assert {Path(r.clone) for r in results} == {sibling, clone}
 
 
