@@ -83,7 +83,7 @@ _Scope = __import__(
     "omniclaude.nodes.node_git_effect.handlers.handler_shell_scope", fromlist=["Scope"]
 ).Scope
 
-DISABLE_HINT = "To disable this guard: onex hooks disable WORKTREE_GUARD"
+DISABLE_HINT = "A form that passes is one literal command per repo with an absolute destination: git -C $OMNI_HOME/<repo> worktree add $OMNI_HOME/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
 
 # git's global options that take a separate value (`git --help`).
 _GIT_VALUE_OPTIONS = frozenset(

@@ -254,6 +254,34 @@ class TestControls:
         assert str(outside.resolve()) in reason
         assert "onex hooks disable WORKTREE_GUARD" in reason
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # 8 of the 16 refusals replayed from two days of lane transcripts (OMN-22564): git resolves it inside the -C clone.
+            "git -C {clone} worktree add omni_worktrees/OMN-1/repo -b feat/x origin/dev",
+            # a loop variable, which the guard never runs
+            "for r in omnibase_infra; do git -C {clone} worktree add {root}/OMN-1/$r -b feat/x origin/dev; done",
+            "git worktree add $PWD/w -b feat/x",
+        ],
+    )
+    def test_every_refusal_ends_with_the_absolute_path_form_absolute_form(
+        self, command: str, workspace: Path, sandbox_home: Path
+    ) -> None:
+        """OMN-22564: a refused lane reads the one form that passes, then the disable hint, in the same message."""
+        result = _run_hook(
+            command.format(
+                clone=workspace / "omnibase_infra", root=workspace / "omni_worktrees"
+            ),
+            workspace=workspace,
+            sandbox_home=sandbox_home,
+            cwd=workspace,
+        )
+        reason = _assert_refused(result)
+        form = "git -C $OMNI_HOME/<repo> worktree add $OMNI_HOME/omni_worktrees/<ticket>/<repo> -b <branch> <base>"
+        assert form in reason
+        assert reason.rstrip().endswith("onex hooks disable WORKTREE_GUARD")
+        assert reason.index(form) < reason.index("onex hooks disable WORKTREE_GUARD")
+
     def test_segment_match_alone_no_longer_admits(
         self, workspace: Path, sandbox_home: Path
     ) -> None:
