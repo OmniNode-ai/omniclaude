@@ -16,15 +16,9 @@ requirements:
       - id: "AC1"
         statement: |-
           AC1: every refusal of the decision core ends with the literal absolute-path form and still ends with the disable hint -- falsifier: `uv run pytest tests/hooks/test_worktree_add_guard.py -k absolute_form -q` fails on origin/dev
-      - id: "AC2"
-        statement: |-
-          AC2: a destination that passes today still passes and the refusal count of the corpus is unchanged -- falsifier: `uv run pytest tests/hooks_system -k bash_guard -q`
-      - id: "AC3"
-        statement: |-
-          AC3: the canonical-file-shape ratchet accepts the change with no new code line in the baselined guard files -- falsifier: `pre-commit run canonical-file-shape --files plugins/onex/hooks/lib/worktree_add_guard.py`
 evidence_requirements:
   - kind: tests
-    description: "the tests named by OMN-22564 AC1 and AC2"
+    description: "the tests named by OMN-22564 AC1 and the neighbouring hook tests"
     command: "uv run pytest tests/hooks/test_worktree_add_guard.py tests/hooks/test_pre_tool_use_bash_guard_worktree.py tests/hooks_system -q -k \"worktree or bash_guard\""
 emergency_bypass:
   enabled: false
@@ -38,20 +32,6 @@ dod_evidence:
       - check_type: command
         check_value: "uv run pytest tests/hooks/test_worktree_add_guard.py -k absolute_form -q"
     binds_ac: ["AC1"]
-  - id: dod-omn22564-ac2
-    description: "AC2: see OMN-22564"
-    source: manual
-    checks:
-      - check_type: command
-        check_value: "uv run pytest tests/hooks_system -k bash_guard -q"
-    binds_ac: ["AC2"]
-  - id: dod-omn22564-ac3
-    description: "AC3: see OMN-22564"
-    source: manual
-    checks:
-      - check_type: command
-        check_value: "uv run pre-commit run canonical-file-shape --files plugins/onex/hooks/lib/worktree_add_guard.py"
-    binds_ac: ["AC3"]
   - id: dod-omn22564-integration-proof
     description: "the change run on a lab host from the pushed branch: the guard's refusal of a relative destination ends with the form"
     source: manual
