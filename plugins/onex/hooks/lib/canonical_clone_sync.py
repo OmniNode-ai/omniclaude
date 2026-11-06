@@ -652,6 +652,27 @@ def clone_slug(clone: Path) -> str | None:
     return repo_slug_of_url(url) if url else None
 
 
+def repo_key(name: str) -> str:
+    """A repository name as one comparable key: ``_`` and ``-`` agree (OMN-22478)."""
+    # A clone's `onex.repo` may spell with `_` where its remote, and the name a
+    # lane's refusal quotes, spells with `-` (OMN-22478).
+    return name.strip().casefold().removesuffix(".git").replace("_", "-")
+
+
+def clones_named(clones: Sequence[Path], wanted: set[str]) -> list[Path]:
+    """The clones whose ``onex.repo`` or origin URL has a ``wanted`` key (owner/name or name)."""
+
+    def keys(clone: Path) -> set[str]:
+        url = run_git(clone, "remote", "get-url", "origin").out
+        slugs = (clone_slug(clone), repo_slug_of_url(url) if url else None)
+        full = {repo_key(slug) for slug in slugs if slug}
+        return full | {k.split("/")[-1] for k in full}
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        found = pool.map(keys, clones)
+    return [c for c, k in zip(clones, found, strict=True) if k & wanted]
+
+
 # --------------------------------------------------------------------------- #
 # Locks
 # --------------------------------------------------------------------------- #
@@ -1609,15 +1630,10 @@ def run_sync(
     """Sync every canonical clone of ``repos`` (all clones when None)."""
     started = time.monotonic()
     clones = all_clones(env)
-    wanted = {r.casefold() for r in repos} if repos else None
+    wanted = {repo_key(r) for r in repos} if repos else None
+    if wanted is not None:
+        clones = clones_named(clones, wanted)
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        if wanted is not None:
-            slugs = list(pool.map(clone_slug, clones))
-            clones = [
-                c
-                for c, slug in zip(clones, slugs, strict=True)
-                if (slug or "").casefold() in wanted
-            ]
         results = list(pool.map(sync_clone, clones))
         list(pool.map(lambda r: track_refusal(env, r), results))
 
@@ -1649,7 +1665,7 @@ def run_sync(
                 },
             )
     if wanted is not None:
-        found = {(r.repo or "").casefold() for r in results}
+        found = {repo_key(r.repo or "") for r in results}
         for repo in sorted(wanted - found):
             append_log(
                 path,
@@ -1900,20 +1916,11 @@ def all_clones(env: Mapping[str, str]) -> list[Path]:
 
 def _clones_for(env: Mapping[str, str], repo: str) -> list[Path]:
     """Canonical clones whose slug is ``repo``, or whose name is (``omniclaude``)."""
-    wanted = repo.casefold().removesuffix(".git")
-    clones = all_clones(env)
     # OMN-17427: lanes on h201 and h101 got NO_CLONE for omnibase_internal on
     # 2026-10-07 because the sibling is no registry root's child; OMN-22102: the
     # same for the knowledge base clone on three lab hosts. Only the refresh
     # looks there; run_sync visits the same set (OMN-17427).
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        slugs = list(pool.map(clone_slug, clones))
-    out: list[Path] = []
-    for clone, slug in zip(clones, slugs, strict=True):
-        slug_cf = (slug or "").casefold()
-        if slug_cf and (slug_cf == wanted or slug_cf.split("/", 1)[-1] == wanted):
-            out.append(clone)
-    return out
+    return clones_named(all_clones(env), {repo_key(repo)})
 
 
 def run_refresh(
