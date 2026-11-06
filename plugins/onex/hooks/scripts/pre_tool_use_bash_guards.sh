@@ -91,9 +91,9 @@ while [[ "$_OBG_INPUT" == *$'\n' ]]; do _OBG_INPUT="${_OBG_INPUT%$'\n'}"; done
 # Fail-closed: a call that trips the pre-filter and cannot be judged (no
 # interpreter, the node not importable, an unreadable payload) is refused, as every
 # guard here refuses a call it cannot evaluate. A Bash command naming none of
-# api.github.com, a /gh path or a bare gh verb starts no interpreter. A bare gh reaches
-# the node so it can refuse one the real binary would run on the operator's login, where
-# no shim is first on PATH (OMN-22539).
+# api.github.com or a /gh path starts no interpreter. A bare gh reaches the node only
+# from a lane with no shim first on PATH, the case where the real binary would run on the
+# operator's login (OMN-22539); that test forks head, not an interpreter.
 #
 # Every refusal here writes one class=refusal row through the refusal recorder
 # (OMN-21020). The node checks run ahead of the seven guards, so none of their
@@ -174,9 +174,9 @@ _OBG_TOOL=""
 _obg_lane_read=0
 if [[ "$_OBG_TOOL" == mcp__* ]]; then
     _obg_lane_read=1
-elif [[ "$_OBG_INPUT" =~ [Aa][Pp][Ii]\.[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm] \
-        || "$_OBG_INPUT" =~ [Uu][Pp][Ll][Oo][Aa][Dd][Ss]\.[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm] \
-        || "$_OBG_INPUT" =~ (\\n|[^A-Za-z0-9_.-])gh([^A-Za-z0-9_.-]|$) ]]; then
+elif [[ "$_OBG_INPUT" =~ ([Aa][Pp][Ii]|[Uu][Pp][Ll][Oo][Aa][Dd][Ss])\.[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm] \
+        || "$_OBG_INPUT" =~ /gh([^A-Za-z0-9_.-]|$) \
+        || ( "$_OBG_INPUT" =~ (\\n|[^A-Za-z0-9_./-])gh[[:space:]]+[a-z] && ( "$_OBG_INPUT" == *'"agent_id"'* || -n "${ONEX_LANE:-}" || "${CLAUDE_CODE_ENTRYPOINT:-}" == sdk-* ) && "$(head -c 512 "$(type -P gh)" 2>/dev/null)" != *ONEX_GH_USER_SHIM* ) ]]; then
     _obg_lane_read=1
 fi
 _OBG_CALLER_CWD="$PWD"
