@@ -50,7 +50,7 @@ dod_evidence:
     source: manual
     checks:
       - check_type: command
-        check_value: "pre-commit run canonical-file-shape --files plugins/onex/hooks/lib/worktree_add_guard.py"
+        check_value: "uv run pre-commit run canonical-file-shape --files plugins/onex/hooks/lib/worktree_add_guard.py"
     binds_ac: ["AC3"]
   - id: dod-omn22564-integration-proof
     description: "the change run on a lab host from the pushed branch: the guard's refusal of a relative destination ends with the form"
