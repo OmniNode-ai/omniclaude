@@ -64,7 +64,7 @@ if [ "$HAS_JQ" -eq 1 ]; then
     GIT_BRANCH=$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null)
     [ -z "$GIT_BRANCH" ] && GIT_BRANCH=$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null)
 
-    if [ -n "$(git -C "$PROJECT_DIR" status --porcelain 2>/dev/null)" ]; then
+    if [ -n "$(git --no-optional-locks -C "$PROJECT_DIR" status --porcelain 2>/dev/null)" ]; then
       DIRTY=" ${YELLOW}●${RESET}"
     fi
 

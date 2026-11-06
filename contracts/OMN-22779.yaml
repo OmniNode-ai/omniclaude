@@ -1,0 +1,35 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22779
+title: "The plugin's read-only git status calls pass --no-optional-locks, so a status read never takes a clone's index lock"
+summary: >
+  Plain `git status` holds `.git/index.lock` for its whole index refresh, and a git killed inside that window strands a zero-byte lock that blocks the canonical-clone sync. The sync engine's dirty-tree read, the statusline's dirty read and the deploy readback's dirty read now run git with `--no-optional-locks`, so none of them takes the lock.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22779-fix
+    statement: A read-only git status in the plugin takes no index lock.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the sync engine's dirty-tree read, the statusline's dirty read and the deploy readback's dirty read each run git with --no-optional-locks -- falsifier: uv run pytest tests/hooks/test_status_no_optional_locks.py -q --no-cov"
+      - id: "AC2"
+        statement: "AC2: the same test run at origin/dev without the change fails on each of the three call sites -- falsifier: uv run pytest tests/hooks/test_status_no_optional_locks.py -q --no-cov run in a worktree at origin/dev with only the test file added"
+evidence_requirements:
+  - kind: tests
+    description: "The focused test passes on the lab from the branch and fails on the lab at origin/dev with only the test file added"
+    command: "uv run pytest tests/hooks/test_status_no_optional_locks.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22779-ac1
+    description: "the sync engine's dirty-tree read, the statusline's dirty read and the deploy readback's dirty read each run git with --no-optional-locks"
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_status_no_optional_locks.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
