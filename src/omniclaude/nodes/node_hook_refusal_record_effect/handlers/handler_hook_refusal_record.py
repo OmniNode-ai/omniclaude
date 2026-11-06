@@ -145,8 +145,7 @@ def state_dir() -> Path:
     override = os.environ.get("ONEX_HOOK_REFUSAL_STATE_DIR")
     if override:
         return Path(override)
-    base = os.environ.get("ONEX_STATE_DIR")
-    if base:
+    if base := os.environ.get("ONEX_STATE_DIR"):
         return Path(base) / "hook_refusals"
     registry_root = _resolve_registry_root()
     if registry_root is None:
@@ -264,6 +263,7 @@ def decide_row(
     """
     return container_hook.build_row_compute().handle(
         ModelHookRefusalRowRequest(
+            normalizer_facts=container_hook.build_normalizer_facts(),
             guard=guard,
             reason=reason,
             detail=detail,
