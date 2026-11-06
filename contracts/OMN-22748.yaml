@@ -1,0 +1,59 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22748
+title: "The sibling-pin train calls omnimarket's hook revs node, so its core pin is held below the core hook floor and its bump PR is not red on arrival"
+summary: >
+  The nightly sibling-pin train moved the omnibase-core pin to core's newest green dev merge tag and left the core hooks
+  of .pre-commit-config.yaml behind it. The core hook floor needs every core hook rev at or past the locked core tag,
+  and first_party_ref_two_homes forbids one tag literal in both files, so the hooks must be strictly newer than the pin.
+  The train PR at head f1d12f52d failed Tests splits 1/5 and 4/5, the shadow tests split 2/2, Tests Gate, CI Summary and
+  reason-graph. The train now reads each pin's newer dev tags with their dev CI verdicts, asks omnimarket's
+  node_sibling_pin_hook_revs_compute for the plan, moves the pin to the plan's pin tag and the planned hook blocks to
+  its hook tag, and the sibling-lock-refresh workflow commits the config with the pin. The script does not grow.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22748-train-calls-hook-revs-node
+    statement: "The train never moves a pin to the newest green tag by itself: the pin takes the tag the node plans and the floor-bound hook blocks move with it."
+    acceptance:
+      - id: "AC5"
+        statement: "AC5: the train asks the node for each pin's plan and moves the pin to the plan's pin tag, never to the newest green tag, and records the plan's hook tag -- falsifier: uv run pytest tests/scripts/test_dev_tag_train_omn19998.py -q --no-cov"
+      - id: "AC6"
+        statement: "AC6: a test fails on the unfixed train, which moves core to the newest green tag, and passes with the call site -- falsifier: uv run pytest tests/scripts/test_dev_tag_train_omn19998.py -k plan_names -q --no-cov on origin/dev (red) and on the branch (green)"
+      - id: "AC7"
+        statement: "AC7: scripts/relock_git_sources.py holds at or under its baselined code-line count -- falsifier: the canonical-file-shape check on the branch against origin/dev passes"
+evidence_requirements:
+  - kind: tests
+    description: "The focused tests pass on the lab from the branch"
+    command: "uv run pytest tests/scripts/test_dev_tag_train_omn19998.py tests/workflows tests/scripts/validator_parity_omn20566 tests/ci/test_core_dev_tag_pin_omn18595.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22748-call-site
+    description: "The train hands the node the tags it read and writes the plan it gets back; the control that moves the pin to the newest tag is red."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_dev_tag_train_omn19998.py -q --no-cov"
+    binds_ac:
+      - "AC5"
+      - "AC6"
+  - id: dod-omn22748-script-holds-its-size
+    description: "scripts/relock_git_sources.py holds at or under its baselined code-line count and carries the node call site; at the merge base the control fails because the call site is absent."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_dev_tag_train_omn19998.py -k code_line_count -q --no-cov"
+    binds_ac:
+      - "AC7"
+  - id: dod-omn22748-floor-tests-after-the-train
+    description: "Run on a lab host at the pushed head: the two core hook floor tests pass on the tree (AC8). The train run against real core tags that produced this tree is in the pull request body; hosted CI cannot reach the lab, so AC8 is not bound here and only the local Done gate runs this unbound check."
+    source: manual
+    execution_scope: local_done_gate
+    checks:
+      - check_type: command
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 onex lab-work run --repo OmniNode-ai/omniclaude --sha \"$(git rev-parse HEAD)\" --lane dod-integration-proof-22748 --kind test -- env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/scripts/validator_parity_omn20566/test_node_parity.py tests/ci/test_core_dev_tag_pin_omn18595.py -q --no-cov"
+        cwd: .

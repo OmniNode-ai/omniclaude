@@ -3,50 +3,20 @@
 # SPDX-License-Identifier: MIT
 """Advance this repo's immutable git-rev sibling pins to the clone head (OMN-18752).
 
-## The gap this closes
+``uv lock --upgrade-package`` cannot move a pinned rev, because the rev is input, not
+output. This module moves the input first, in ``pyproject.toml``, and ``uv lock`` then
+re-resolves against it (``.github/workflows/sibling-lock-refresh.yml``, OMN-13902).
+omnimarket publishes release-on-merge, so its pin went stale on almost every PR.
 
-``.github/workflows/sibling-lock-refresh.yml`` (OMN-13902) is the surface that
-already owns "make the lock follow its upstream". Its own header records why it
-could not do so for one class of pin:
+The advance is forward only and refused rather than clamped. The canonical clone is the
+authority (``git_source_pins``); a candidate that is not a strict descendant of the
+current rev raises ``ErrorNotADescendant`` with the file byte-identical afterwards, since
+a clamp would keep a stale pin while reporting success (OMN-18663). Ancestry is resolved
+against a real clone, a parameter so the tests point at a fixture.
 
-    Repos whose siblings are pinned to an immutable git rev/tag in
-    ``[tool.uv.sources]`` ... are left untouched — ``uv lock
-    --upgrade-package`` cannot move a pinned rev
-
-``pyproject.toml`` repeats the same sentence. That is mechanically true and it
-is why advancing ``omnimarket`` has been a hand-filed ticket every time
-(OMN-18622, OMN-18639, and a third the same week). omnimarket publishes
-release-on-merge, so the pin goes stale on essentially every omnimarket PR, and
-each staleness window is one in which the plugin CLI venv and the lock disagree
-about which commit is correct.
-
-``uv lock --upgrade-package`` cannot move the rev because the rev is **input**,
-not output. So this module moves the input first: it rewrites the rev in
-``pyproject.toml``, and ``uv lock`` then re-resolves against it. That is the
-whole trick, and it is why this lives beside the workflow rather than inside
-uv.
-
-## Forward only, and refused rather than clamped
-
-The canonical clone is the authority (see ``git_source_pins``), but "follow the
-clone" must never mean "follow the clone backwards". A candidate that is not a
-**strict descendant** of the current rev raises ``ErrorNotADescendant`` and
-nothing is written — the file is byte-identical afterwards. A clamp would be
-worse than a refusal here: it would silently keep a stale pin while reporting
-success, which is the failure shape OMN-18663 already had to close once.
-
-Ancestry is resolved against a real clone, never against version strings. The
-clone is a parameter so the workflow can point at its own checkout and the
-tests can point at a fixture, with no network in either case.
-
-## Why both occurrences move together
-
-In ``omniclaude/pyproject.toml`` the sha appears twice — once in the
-``dependencies`` entry (``omnimarket @ git+...@<sha>``) and once in
-``[tool.uv.sources]`` (``rev = "<sha>"``). uv will not resolve a tree where
-those disagree, so a rewrite that moved one and not the other would produce a
-lock failure rather than a stale pin. ``rewrite_rev`` returns the occurrence
-count and the caller asserts it.
+The sha appears twice in ``pyproject.toml``, in ``dependencies`` and in
+``[tool.uv.sources]``, and uv will not resolve a tree where they disagree, so both move
+together and ``rewrite_rev`` returns the count for the caller to assert.
 """
 
 from __future__ import annotations
@@ -60,6 +30,7 @@ import tomllib
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 from omniclaude.handlers.handler_dev_merge_tag import dev_merge_tag_stamp
 
@@ -252,13 +223,6 @@ class ModelDevTagPin:
 
 
 @dataclass(frozen=True)
-class ModelTagChoice:
-    new_tag: str | None
-    examined: list[str] = field(default_factory=list)
-    skipped: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
 class ModelTrainMove:
     distribution: str
     repo: str
@@ -274,6 +238,8 @@ class ModelTrainPlan:
     moves: list[ModelTrainMove]
     unchanged: list[str]
     skipped: dict[str, dict[str, str]]
+    # OMN-22748: distribution -> the dev tag its floor-bound hook blocks moved to.
+    hooks: dict[str, str] = field(default_factory=dict)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, sort_keys=True)
@@ -376,29 +342,46 @@ def github_check_runs_green(repo: str, sha: str) -> bool | None:
     return check_runs_verdict(runs)
 
 
-def pick_train_tag(
+def read_candidates(
     *,
     pin: ModelDevTagPin,
     clone: Path,
     is_green: GreenOracle,
     max_candidates: int = _MAX_CANDIDATES,
-) -> ModelTagChoice:
-    """The newest dev tag newer than the pin whose dev CI is green, or None."""
+) -> list[tuple[str, bool | None]]:
+    """Dev tags newer than the pin, newest first, with their dev CI verdicts, read to the second green."""
     current = dev_merge_tag_stamp(pin.tag) or ""
-    examined: list[str] = []
-    skipped: dict[str, str] = {}
+    read: list[tuple[str, bool | None]] = []
     for tag, sha in dev_tags_newest_first(clone):
-        if (dev_merge_tag_stamp(tag) or "") <= current:
+        stop = (dev_merge_tag_stamp(tag) or "") <= current or len(
+            read
+        ) >= max_candidates
+        if stop or sum(verdict is True for _, verdict in read) == 2:
             break
-        if len(examined) >= max_candidates:
-            skipped[tag] = "beyond-candidate-cap"
-            break
-        examined.append(tag)
-        verdict = is_green(pin.repo, sha)
-        if verdict is True:
-            return ModelTagChoice(new_tag=tag, examined=examined, skipped=skipped)
-        skipped[tag] = "red" if verdict is False else "unread"
-    return ModelTagChoice(new_tag=None, examined=examined, skipped=skipped)
+        read.append((tag, is_green(pin.repo, sha)))
+    return read
+
+
+def node_planner(
+    pyproject: Path,
+    pin: ModelDevTagPin,
+    read: list[tuple[str, bool | None]],
+    apply: bool,
+) -> dict[str, Any]:
+    """The plan of omnimarket's sibling-pin hook revs node; with ``apply`` it moves the hook blocks."""
+    node = "omnimarket.nodes.node_sibling_pin_hook_revs_compute.runtime_sibling_pin_hook_revs"
+    argv = [sys.executable, "-m", node, "--pyproject", str(pyproject)]
+    argv += ["--distribution", pin.distribution, "--candidates", json.dumps(read)]
+    result = subprocess.run(
+        [*argv, *(["--apply"] if apply else [])],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    if result.returncode:
+        raise ErrorRelock(f"{pin.distribution}: {result.stderr.strip()}")
+    return dict(json.loads(result.stdout)["plan"])
 
 
 def mover_argv(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> list[str]:
@@ -460,12 +443,14 @@ def run_dev_tag_train(
     registry_root: str | None,
     is_green: GreenOracle,
     mover: Mover = node_mover,
+    planner: Callable[..., dict[str, Any]] = node_planner,
     apply: bool,
 ) -> ModelTrainPlan:
     """One plan moving every dev-tag pin of ``pyproject`` to its newest green tag."""
     moves: list[ModelTrainMove] = []
     unchanged: list[str] = []
     skipped: dict[str, dict[str, str]] = {}
+    hooks: dict[str, str] = {}
     for pin in parse_dev_tag_pins(pyproject.read_text(encoding="utf-8")):
         clone = gsp.canonical_clone(pin.repo, registry_root)
         if clone is None:
@@ -475,24 +460,27 @@ def run_dev_tag_train(
                 f"{pin.distribution}: no canonical clone for {pin.repo!r} under "
                 f"{registry_root or '$OMNI_HOME'}"
             )
-        choice = pick_train_tag(pin=pin, clone=clone, is_green=is_green)
-        if choice.skipped:
-            skipped[pin.distribution] = choice.skipped
-        if choice.new_tag is None:
+        read = read_candidates(pin=pin, clone=clone, is_green=is_green)
+        plan = planner(pyproject, pin, read, apply)
+        if passed := {t: "red" if g is False else "unread" for t, g in read if not g}:
+            skipped[pin.distribution] = passed
+        if plan["hook_tag"]:
+            hooks[pin.distribution] = plan["hook_tag"]
+        if plan["pin_tag"] is None:
             unchanged.append(pin.distribution)
             continue
         if apply:
-            mover(pyproject, pin, choice.new_tag)
+            mover(pyproject, pin, plan["pin_tag"])
         old, new = (
             dev_merge_tag_stamp(pin.tag) or "",
-            dev_merge_tag_stamp(choice.new_tag) or "",
+            dev_merge_tag_stamp(plan["pin_tag"]) or "",
         )
         moves.append(
             ModelTrainMove(
                 distribution=pin.distribution,
                 repo=pin.repo,
                 old_tag=pin.tag,
-                new_tag=choice.new_tag,
+                new_tag=plan["pin_tag"],
                 rolled=[
                     tag
                     for tag, _ in dev_tags_newest_first(clone)
@@ -500,7 +488,7 @@ def run_dev_tag_train(
                 ],
             )
         )
-    return ModelTrainPlan(moves=moves, unchanged=unchanged, skipped=skipped)
+    return ModelTrainPlan(moves, unchanged, skipped, hooks)
 
 
 def render_pr_body(plan: ModelTrainPlan) -> str:
@@ -514,6 +502,8 @@ def render_pr_body(plan: ModelTrainPlan) -> str:
             f"`{move.new_tag}`, rolling {len(move.rolled)} dev tag(s): "
             + ", ".join(f"`{tag}`" for tag in move.rolled)
         )
+    for distribution, tag in plan.hooks.items():
+        lines.append(f"- `{distribution}` hook blocks: `{tag}`")
     if plan.unchanged or plan.skipped:
         lines += ["", "### Left where they were", ""]
     for distribution in plan.unchanged:
