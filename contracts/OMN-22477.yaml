@@ -22,31 +22,18 @@ requirements:
 evidence_requirements:
   - kind: tests
     description: "The anchor handler tests and the omniclaude unpinned test pass"
-    command: "uv run pytest tests/skills/test_onboarding_anchor_handler_omn21255.py tests/skills/test_onboarding_omniclaude_unpinned_omn22477.py -q --no-cov"
+    command: "uv run pytest tests/skills/test_onboarding_anchor_handler_omn21255.py tests/skills/test_onboarding_omniclaude_unpinned_omn22477.py tests/skills/test_onboarding_omniclaude_unpinned_download_omn22477.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
   follow_up_ticket_id: ""
 dod_evidence:
-  - id: dod-omn22477-omniclaude-off-proven-set
-    description: "anchored_commit omniclaude returns origin/dev at the anchor's time even when the sibling-pins file holds a pin for it, while a pinned repo keeps its pin. Fails at the merge base, which returns the pin. The import falsifier against a real phase 2 clone is separate evidence."
+  - id: dod-omn22477-download-pin-to-the-merged-handler
+    description: "A downloaded run gets the handler that takes omniclaude off the proven set: the entrypoint's raw URL names the commit the fix merged as, download_digest matches the bytes served there, and the two digests agree again. Fails at the merge base, where the URL still names 884c501d, whose handler keeps the pin. The checkout-side evidence of the same criterion landed with pull request 3164."
     source: manual
     binds_ac:
       - "AC2"
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/skills/test_onboarding_omniclaude_unpinned_omn22477.py -q --no-cov"
-        cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-omn22477-deploy-bootstrap
-    description: "The published handler at the checked-out commit matches the entrypoint's checkout digest, and that digest is this change's handler and not the one it replaces. At the merge base the entrypoint still names the old handler, so the digest comparison fails there. The hosted runner needs HTTPS, git and sha256sum."
-    source: manual
-    binds_ac: [AC2]
-    checks:
-      - check_type: command
-        check_value: >-
-          e=9a659f5d367bd6c677277460fdaefba1e762b94ccad1b7d707de8454198f0c2b
-          && d=$(grep '^  local digest=' plugins/onex/skills/_bin/lab-onboarding.sh | cut -d '"' -f2 | tr -d :)
-          && [ "$d" = "$e" ]
-          && curl --fail --silent --show-error "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-          | sha256sum | grep -q "^$d  -$"
+        check_value: "uv run pytest tests/skills/test_onboarding_omniclaude_unpinned_download_omn22477.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
