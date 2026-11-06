@@ -595,13 +595,17 @@ OLLAMA_MARK="# Written by omninode-dev-setup: Ollama on this Mac."
 OLLAMA_PORT=""; OLLAMA_CHAT_PATH=""; OLLAMA_DOWNLOAD_GB=""; OLLAMA_URL=""
 
 
+# OLLAMA_CONFIG_ERR says which of the two faults this hit: the model-config call
+# itself failing is not the config declaring no block this Mac fits, and naming
+# the second for the first sends the reader to a file that needs no change. It is
+# set before every return, so the caller always has the one that applies.
 load_ollama_config() { # -> OLLAMA_PORT OLLAMA_CHAT_PATH OLLAMA_MODEL OLLAMA_DOWNLOAD_GB OLLAMA_URL
   local out
+  OLLAMA_CONFIG_ERR="the model-config call failed; its error is at the end of $LOG"
   out="$(ollama_config "$(ram_gb)" "$OLLAMA_MODEL" 2>>"$LOG")" || return 1
-  set -- $out
-  [ $# -eq 4 ] || return 1
-  OLLAMA_PORT="$1"; OLLAMA_CHAT_PATH="$2"; OLLAMA_MODEL="$3"; OLLAMA_DOWNLOAD_GB="$4"
-  OLLAMA_URL="http://127.0.0.1:$OLLAMA_PORT"
+  OLLAMA_CONFIG_ERR="the omnimarket clone's model config declares no ollama block this Mac fits; update it"
+  set -- $out; [ $# -eq 4 ] || return 1
+  OLLAMA_CONFIG_ERR=""; OLLAMA_PORT="$1"; OLLAMA_CHAT_PATH="$2"; OLLAMA_MODEL="$3"; OLLAMA_DOWNLOAD_GB="$4"; OLLAMA_URL="http://127.0.0.1:$1"
 }
 
 ollama_bin() {
@@ -686,7 +690,7 @@ YAML
 # the merge commit and sets download_digest back to digest.
 load_onboarding_preflight() {
   local rel="src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/handler_onboarding_preflight.sh"
-  local digest="9a65:9f5d:367b:d6c6:7727:7460:fdae:fba1:e762:b94c:cad1:b7d7:07de:8454:198f:0c2b" root candidate \
+  local digest="24ca:661a:7af4:2089:d761:289c:8830:0853:ad47:2b62:0501:3ce5:48bb:d755:20ba:71b2" root candidate \
     download_digest="9a65:9f5d:367b:d6c6:7727:7460:fdae:fba1:e762:b94c:cad1:b7d7:07de:8454:198f:0c2b"
   digest="${digest//:/}"; download_digest="${download_digest//:/}"
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." 2>/dev/null && pwd)"
@@ -1462,7 +1466,7 @@ phase3() {
 # failure here costs Ollama alone and the run goes on with the other models.
 setup_ollama() {
   step "read the Ollama settings from the workspace's model config" load_ollama_config || {
-    LAST_ERR="the omnimarket clone's model config declares no ollama block; update it"; return 1; }
+    LAST_ERR="$OLLAMA_CONFIG_ERR"; return 1; }
   local need=$((M1_DISK_GB + OLLAMA_DOWNLOAD_GB))
   if ! ollama_has_model "$OLLAMA_MODEL" 2>/dev/null && [ "$(disk_free_gb)" -lt "$need" ]; then
     FAILED_STEP="free disk for $OLLAMA_MODEL"

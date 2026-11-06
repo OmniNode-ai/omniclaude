@@ -57,17 +57,40 @@ def test_downloaded_handler_takes_omniclaude_off_the_proven_set() -> None:
     assert b'if [ "$1" != omniclaude ]; then' in served.stdout
 
 
-def test_the_two_digests_agree_once_the_handler_is_on_dev() -> None:
-    """The divergence is allowed for exactly one pull request.
+def test_each_digest_matches_the_handler_it_checks() -> None:
+    """Both digests are the bytes they check, and a divergence is a real one.
 
     `digest` is the handler beside the entrypoint; `download_digest` is the
     handler at the commit the raw URL names. A pull request that changes the
-    handler cannot name a dev commit holding its new bytes, so the two differ
-    for that one change. This pull request names the merge commit, so they
-    agree again, and a downloaded run gets the same handler as a checkout.
+    handler cannot name a dev commit holding its new bytes (the merge queue
+    squashes, so no branch commit reaches dev), so the two differ for that one
+    change and the next pull request moves the URL to the merge commit. The
+    invariant that holds on every commit is this one: each digest is the
+    sha256 of the handler it checks, so they agree exactly when the handler
+    beside the entrypoint and the handler dev serves are the same bytes. An
+    asserted equality instead refused the mid-flight state the entrypoint's
+    own comment requires (OMN-22477).
     """
     text = SCRIPT.read_text()
     local = re.search(r'\bdigest="([0-9a-f:]{79})"', text)
     download = re.search(r'download_digest="([0-9a-f:]{79})"', text)
     assert local and download
-    assert local.group(1) == download.group(1)
+    here = hashlib.sha256((REPO / HANDLER_REL).read_bytes()).hexdigest()
+    assert local.group(1).replace(":", "") == here, (
+        "digest is not the handler beside the entrypoint"
+    )
+    commit = re.search(
+        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
+        text,
+    )
+    assert commit
+    if _git("cat-file", "-e", f"{commit.group(1)}^{{commit}}").returncode != 0:
+        _git("fetch", "--no-tags", "--depth=1", "origin", commit.group(1))
+    served = _git("show", f"{commit.group(1)}:{HANDLER_REL}")
+    assert served.returncode == 0, served.stderr.decode(errors="replace")
+    there = hashlib.sha256(served.stdout).hexdigest()
+    assert download.group(1).replace(":", "") == there, (
+        "download_digest is not the handler the raw URL serves"
+    )
+    # A divergence is only ever the handler genuinely moving ahead of dev.
+    assert (local.group(1) == download.group(1)) == (here == there)
