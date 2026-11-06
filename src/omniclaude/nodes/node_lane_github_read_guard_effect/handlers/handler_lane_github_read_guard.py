@@ -27,6 +27,14 @@ this handler refuses each one from a lane:
     (the ``ONEX_GH_USER_SHIM`` marker in its first 512 bytes, the same test the shim
     uses to skip its own copies) is the shim, and the shim judges it.
 
+``BARE_GH`` (OMN-22539)
+    A bare ``gh`` when the first ``gh`` on the caller's PATH is the real binary, so no
+    shim will judge it: the operator's Mac, whose shim moved to a lanes-only directory
+    on 2026-10-25. A shape ``bare_gh_routes.yaml`` maps to an ``onex scm`` verb
+    is refused naming that verb, a write included, because the node serves it. A shape
+    with no route has no node path yet and passes. Where the shim is first on PATH, as
+    on a lab lane, this shape never fires: the shim judges.
+
 Who is a lane. A PreToolUse hook always runs inside Claude Code, so the half of the
 shim's predicate that says "a Claude Code ancestor, or CLAUDECODE /
 CLAUDE_CODE_SESSION_ID / CLAUDE_CODE_ENTRYPOINT set" is true of the operator's own
@@ -427,6 +435,70 @@ def _real_gh_read(
     return None
 
 
+# --- OMN-22539: a bare gh with the real binary first on PATH -----------------------
+
+#: Shell words that start a compound command's body and run the next word as a command.
+_COMPOUND_WORDS = frozenset({"do", "then", "else", "elif", "if", "while", "until", "!"})
+_HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1.*?^\s*\2\s*$", re.DOTALL | re.MULTILINE)
+
+
+def _top_level_segments(command: str) -> list[str]:
+    """The simple commands of ``command``, split outside quotes and heredocs only.
+
+    A pull request body that names gh, in a heredoc or a quoted string, is not a call.
+    """
+    text = _HEREDOC.sub(" ", command)
+    segments: list[str] = []
+    current: list[str] = []
+    quote = ""
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if char == "\\" and quote != "'" and i + 1 < len(text):
+            current.append(text[i : i + 2])
+            i += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = ""
+            current.append(char)
+        elif char in "'\"":
+            quote = char
+            current.append(char)
+        elif char in ";|&()\n`":
+            segments.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+        i += 1
+    segments.append("".join(current))
+    return segments
+
+
+def _bare_gh_route(request: ModelLaneGithubReadRequest) -> tuple[str, str] | None:
+    """(gh shape, onex scm verb) of the first routed bare gh, else None."""
+    for segment in _top_level_segments(request.command):
+        words = _strip_prefixes(_words(segment.strip()))
+        while words and words[0] in _COMPOUND_WORDS:
+            words = _strip_prefixes(words[1:])
+        if not words or words[0] != "gh":
+            continue
+        args = words[1:]
+        is_read, label = _gh_args_are_read(args)
+        if label.startswith("api "):
+            method, _, endpoint = label[len("api ") :].partition(" ")
+            if not is_read or method not in {"GET", "HEAD"}:
+                continue
+            for pattern, verb in request.api_routes:
+                if re.match(pattern, endpoint.split("?", 1)[0]):
+                    return f"gh {label}", verb
+            continue
+        for shape, verb in request.gh_routes:
+            if shape == label:
+                return f"gh {label}", verb
+    return None
+
+
 def _raw_api_read(request: ModelLaneGithubReadRequest) -> str | None:
     """The HTTP client of a read that reaches the API directly, else None."""
     command = request.command
@@ -503,8 +575,18 @@ def _refusal(
     )
 
 
+def _bare_gh_refusal(shape: str, scm: str, lane: str, gh_path: str) -> str:
+    return (
+        f"REFUSED (OMN-22539): {shape} from a lane ({lane}) would run {gh_path}, the real gh on "
+        "the operator's login, with no shim in front of it. Lanes do GitHub work through the "
+        "source-control node (RULING 2026-10-10T18:32:46Z).\n"
+        f"Use instead: onex scm {scm}   (onex scm {scm} --help for its options, onex scm verbs "
+        "for the whole table; PR and CI reads are answered from the PR watcher's state first)"
+    )
+
+
 class HandlerLaneGithubReadGuard:
-    """Judges one PreToolUse call against the three read paths around the gh shim."""
+    """Judges one PreToolUse call against the read paths around the gh shim."""
 
     def __init__(self, shim_probe: ProtocolGhShimProbe | None = None) -> None:
         self._probe: ProtocolGhShimProbe = shim_probe or FileGhShimProbe()
@@ -522,6 +604,24 @@ class HandlerLaneGithubReadGuard:
             target = request.tool_name
             is_read = not _mcp_tool_is_write(mcp_tool)
         elif request.tool_name == "Bash" and request.command:
+            lane_now = _lane_reason(request)
+            if (
+                lane_now
+                and request.gh_on_path
+                and not self._probe.is_gh_shim(request.gh_on_path)
+            ):
+                route = _bare_gh_route(request)
+                if route is not None:
+                    return ModelLaneGithubReadDecision(
+                        verdict=EnumLaneGithubReadVerdict.REFUSE,
+                        shape=EnumLaneGithubReadShape.BARE_GH,
+                        is_read=False,
+                        lane_reason=lane_now,
+                        target=route[0],
+                        reason=_bare_gh_refusal(
+                            route[0], route[1], lane_now, request.gh_on_path
+                        ),
+                    )
             real_gh = _real_gh_read(request, self._probe)
             raw = _raw_api_read(request)
             if real_gh is not None:

@@ -1,0 +1,35 @@
+schema_version: "1.0.0"
+ticket_id: OMN-22553
+title: "A headless lab worker loads a settings file that registers only the capture hook, derived from hooks.json"
+summary: >-
+  A landing worker on a lab host runs claude -p with the omni plugin and none of the onex plugin's hooks, so its tool
+  calls never reached the hook-event table. plugins/onex/hooks/capture_only_settings.json registers only the capture
+  hook, on the events and matchers hooks.json gives it, and a test rebuilds the file from hooks.json and compares, so a
+  capture event added to the plugin without the file is a red test.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22553-capture-only-settings
+    statement: "A headless lab worker can load a settings file that registers only the capture hook, derived from hooks.json so it cannot drift."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: plugins/onex/hooks/capture_only_settings.json registers only the capture hook on exactly the events and matchers hooks.json gives it, and a capture event added to hooks.json without the file turns the test red -- falsifier: uv run pytest tests/unit/hooks/test_capture_only_settings.py -q --no-cov with the settings file absent
+evidence_requirements:
+  - kind: tests
+    description: "The capture-only settings file matches the capture registration rebuilt from hooks.json; at the merge base the file does not exist, so the tests fail."
+    command: uv run pytest tests/unit/hooks/test_capture_only_settings.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22553-capture-only-settings
+    description: "The capture-only settings file equals the capture registration rebuilt from hooks.json."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_capture_only_settings.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude

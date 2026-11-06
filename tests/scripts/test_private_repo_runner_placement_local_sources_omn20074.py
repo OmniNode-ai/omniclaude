@@ -183,6 +183,9 @@ def _run_hook(
             "GITHUB_REPOSITORY",
             "OMNI_HOME",
         }
+        # These cases model a host that tries the live read first; a declared
+        # lane reads the snapshot directly (OMN-19998, lane_omn20141 tests).
+        and key not in _module().LANE_ENV_MARKERS
     }
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
     env["HOME"] = str(tmp_path / "home")

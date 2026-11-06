@@ -130,8 +130,9 @@ lane cannot read Actions variables (HTTP 403 at both scopes) and its GitHub read
 are refused by the lane read guard, so visibility and the variable scopes cannot be
 read live there. Set `PRRP_VARIABLES_SNAPSHOT` (or pass `--variables-snapshot`) to a
 file written by `--write-variables-snapshot` from a host whose credential CAN read
-them. The snapshot is consulted only after a live read failed, so a live answer
-always wins; one older than `--snapshot-max-age-hours` (24), dated ahead, missing,
+them. A lane outside Actions reads a supplied snapshot without GitHub (OMN-19998);
+other callers consult it after a failed live read. A snapshot older than
+`--snapshot-max-age-hours` (24), dated ahead, missing,
 unparseable, or silent about the repository or scope asked for is a REFUSAL, exit 2,
 and every such refusal names the missing input and the sanctioned remedy (OMN-20141):
 the lab hosts' copy is published by omnimarket's `onex-prrp-snapshot-publish` (one
@@ -151,10 +152,9 @@ that repository and one of its origin branches holds the resolved commit: a sha
 names one tree, so the bytes are the ones the contents API serves. A branch pin,
 an absent tag, a commit nobody pushed and a clone of another repository answer
 nothing, and the refusal says so.
-A hosted value inside a fresh snapshot is judged exactly like a live one. Inside
-GitHub Actions the flag and the variable are refused: hosted CI is the enforced
-merge gate and resolves live. Use the environment variable, not hook `args`, so the
-same hook entry runs unchanged in a pre-commit step inside Actions.
+A hosted snapshot value is judged like a live value. Inside Actions snapshot
+inputs are refused and the gate resolves live. Set the environment variable, not
+hook `args`, so the same hook runs unchanged inside Actions.
 """
 
 from __future__ import annotations
@@ -177,6 +177,16 @@ from typing import Any
 from urllib.parse import quote
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_runner_placement_snapshot_policy import (
+    LANE_ENV_MARKERS,
+    LANE_SKIPPED_LIVE,
+    lane_reads_snapshot_only,
+    published_snapshot_path,
+)
+
+__all__ = ["LANE_ENV_MARKERS"]
 
 # A label naming a GitHub-hosted image. Deliberately prefix-matched rather than
 # enumerated: `ubuntu-latest`, `ubuntu-24.04`, `macos-15`, `windows-2025` and
@@ -790,12 +800,6 @@ def _gh(
 
 
 SNAPSHOT_SCHEMA = 1
-# Where omnimarket's onex-prrp-snapshot-publish puts the snapshot on every host
-# it serves, relative to that host's home (its `--destination`, OMN-19998). A
-# run outside GitHub Actions with no --variables-snapshot and no
-# PRRP_VARIABLES_SNAPSHOT reads this file when it exists, so a lane's commit
-# needs no environment the lane runner may not have exported (OMN-20074).
-PUBLISHED_SNAPSHOT_RELPATH = Path(".omninode") / "prrp" / "variables-snapshot.json"
 SNAPSHOT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 DEFAULT_SNAPSHOT_MAX_AGE_HOURS = 24.0
 # A snapshot dated slightly ahead of this host's clock is skew, not forgery.
@@ -940,27 +944,12 @@ def snapshot_remedy(slug: str, path: str = "<file>") -> str:
     )
 
 
-def published_snapshot_path() -> Path | None:
-    """The publisher's copy on this host, or None (always None inside Actions).
-
-    Only WHERE the snapshot is found changes: it is still read only after a
-    live read failed, and every age and coverage refusal of VariablesSnapshot
-    applies to it unchanged.
-    """
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        return None
-    candidate = Path.home() / PUBLISHED_SNAPSHOT_RELPATH
-    return candidate if candidate.is_file() else None
-
-
 def resolve_visibility(slug: str, snapshot: VariablesSnapshot | None = None) -> str:
-    """Live repository visibility. Never a list, never an inference.
-
-    When the live read fails and a snapshot is supplied, the snapshot's dated
-    answer is used and the run says so; a snapshot that cannot answer is the
-    same refusal as no snapshot.
-    """
-    result = _gh(["api", f"repos/{slug}", "--jq", ".visibility"])
+    """Read visibility live, or from a validated lane snapshot."""
+    if lane_reads_snapshot_only(snapshot):
+        result = subprocess.CompletedProcess([], 1, "", LANE_SKIPPED_LIVE)
+    else:
+        result = _gh(["api", f"repos/{slug}", "--jq", ".visibility"])
     if result.returncode != 0:
         live = result.stderr.strip()[:200]
         if snapshot is None:
@@ -1053,6 +1042,9 @@ class Variables:
             flag, target = (
                 ("--repo", self._slug) if which == "repo" else ("--org", self._org_name)
             )
+            if lane_reads_snapshot_only(self._snapshot):
+                self._from_snapshot(which, LANE_SKIPPED_LIVE)
+                return self._scopes.get(which)
             try:
                 self._scopes[which] = self._read(flag, target)
             except GateError as error:

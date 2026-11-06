@@ -68,8 +68,10 @@ FINDING_KEYS = (
 # line numbers of the dead-handler rows it touched; no finding was added or dropped.
 # OMN-21769 read slice topics from manifests, so one dead-module hardcoded_topic row left,
 # and one handler_history_postgres direct_db row moved one line; no finding was added.
+# OMN-19998 declared two runner-placement snapshot topics on node_lane_github_read_guard_effect,
+# so the existing dead handler_gh_shim_probe row lists them in declared_topics; no finding was added.
 RECORDED_OCC_FINDING_DIGEST = (
-    "c9da24e207510c2da4afc45ccdeee01d549a0c22efb2bba7a8ac25e1062874d0"
+    "97408cf69ee029664f3d7a47b7474643544021d60f081a799464a9d20cdb6c90"
 )
 
 

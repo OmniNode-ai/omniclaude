@@ -291,7 +291,28 @@ def test_ac3_lane_shim_by_its_path_is_left_to_the_shim(tmp_path: Path) -> None:
 def test_lane_local_reads_and_shim_calls_are_allowed(
     tmp_path: Path, command: str
 ) -> None:
-    _assert_allowed(_run(_bash(command), _env(tmp_path, lane=True)))
+    env = _env(tmp_path, lane=True)
+    shim = tmp_path / "lane-bin"
+    shim.mkdir()
+    (shim / "gh").write_text("#!/bin/bash\n# ONEX_GH_USER_SHIM\n")
+    (shim / "gh").chmod(0o755)
+    env["PATH"] = f"{shim}{os.pathsep}{env['PATH']}"
+    _assert_allowed(_run(_bash(command), env))
+
+
+def test_a_bare_gh_with_the_real_binary_first_is_refused_naming_the_verb(
+    tmp_path: Path,
+) -> None:
+    # OMN-22539: the same call as above, with no shim first on PATH to judge it.
+    env = _env(tmp_path, lane=True)
+    real = tmp_path / "homebrew"
+    real.mkdir()
+    (real / "gh").write_text("#!/bin/bash\n# not the shim\n")
+    (real / "gh").chmod(0o755)
+    env["PATH"] = f"{real}{os.pathsep}{env['PATH']}"
+    result = _run(_bash("gh pr view 2661 --repo OmniNode-ai/omniclaude"), env)
+    assert result.returncode == 2
+    assert "onex scm pr-view" in result.stdout
 
 
 def test_lite_mode_install_has_no_lanes(tmp_path: Path) -> None:
