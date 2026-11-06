@@ -1,0 +1,43 @@
+schema_version: "1.0.0"
+ticket_id: OMN-22539
+title: "A Mac lane's bare gh runs the real binary on the operator's login, and no guard refuses it"
+summary: >-
+  The lane read guard left a bare gh to the shim on the premise that the shim is first on PATH. On the operator's Mac it
+  has not been since the shim moved to a lanes-only directory on 2026-10-25. The guard now judges a bare gh when the
+  first gh on PATH is not the shim, refusing a routed shape and naming the onex scm verb.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: A routed bare gh is refused naming the verb; the shim, the operator's session, an unrouted shape and prose are not.
+    command: uv run --frozen pytest tests/unit/nodes/node_lane_github_read_guard_effect/test_bare_gh_route.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22539-routed-bare-gh-refused
+    description: A lane's bare gh with a route, read or write, is refused naming the onex scm verb when the real gh is first on PATH.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: uv run --frozen pytest tests/unit/nodes/node_lane_github_read_guard_effect/test_bare_gh_route.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn22539-unrouted-and-operator-pass
+    description: The shim first on PATH, the operator's own session, a gh shape with no route and prose naming gh are not refused.
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: uv run --frozen pytest tests/unit/nodes/node_lane_github_read_guard_effect/test_bare_gh_route.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-deploy-omn22539-routes-on-github
+    description: The route table is on GitHub at this commit, in the repository the plugin is installed from, and names the verb the guard refuses in favour of.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_lane_github_read_guard_effect/bare_gh_routes.yaml?ref=$(git rev-parse HEAD)" --jq .content | base64 -d | grep -q 'pr-view'
+        cwd: ${OMNI_HOME}/omniclaude
