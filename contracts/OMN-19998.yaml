@@ -124,6 +124,8 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k lane_commit"
+    binds_ac:
+      - "AC3"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
