@@ -60,6 +60,8 @@ requirements:
     statement: "The internal-sibling-pins handler runs as a local pre-commit hook on the lockfile as well as in the CI job, so a refused sibling pin stops at commit time."
   - id: req-omn19998-public-reusables-leave-lab
     statement: "A public repository's job never reaches a lab runner through a reusable workflow of omniclaude: the fleet route is taken only by a private caller, and the runner label gate runs GitHub-hosted."
+  - id: req-omn19998-worktree-guard-bare-interpreter
+    statement: "The worktree guard decision core resolves the omniclaude source root itself, so a hook interpreter with no omniclaude install still judges a destination instead of refusing every sanctioned worktree add."
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -99,6 +101,25 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov"
     binds_ac:
       - "AC18"
+  - id: dod-omn19998-worktree-guard-bare-interpreter
+    description: "The core and the registered hook are exercised under a bare interpreter, with the installed interpreter as the positive control and a stray destination still refused."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_worktree_add_guard_bare_interpreter.py -q --no-cov"
+    binds_ac:
+      - "AC16"
+  - id: dod-omn19998-worktree-guard-source-readback
+    description: "Hosted source publication readback at the checked-out commit: the worktree guard must publish both source-root candidates before its shared tokenizer import. Missing or pre-fix source fails; this does not claim a running hook installation."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: >-
+          curl --fail --silent --show-error --location
+          "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/plugins/onex/hooks/lib/worktree_add_guard.py"
+          | python3 -c 'import sys; source = sys.stdin.read(); assert "_ROOTS = (_HOOKS_LIB.parents[3]" in source; assert "Path(os.environ.get(" in source; assert "OMNI_HOME" in source; assert source.index("sys.path += [str(r /") < source.index("from omniclaude.nodes.node_git_effect")'
+    binds_ac:
+      - "AC16"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
