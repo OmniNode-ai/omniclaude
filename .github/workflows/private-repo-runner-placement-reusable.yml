@@ -81,7 +81,10 @@ permissions:
 jobs:
   private-repo-runner-placement:
     name: private-repo-runner-placement
-    runs-on: [self-hosted, omnibase-ci]
+    # OMN-19998: only a private caller takes the fleet route. A public repository
+    # never reaches a lab runner through this workflow.
+    runs-on: >-
+      ${{ github.event.repository.private && (fromJSON('["self-hosted","omnibase-ci"]')) || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - name: Checkout the caller repository

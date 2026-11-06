@@ -35,10 +35,8 @@ import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import pytest
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "private_repo_runner_placement_gate.py"
@@ -116,10 +114,32 @@ def _snapshot(
     return path
 
 
+LANE_MARKERS = (
+    "ONEX_LANE",
+    "ONEX_LANE_ID",
+    "ONEX_AGENT_NAME",
+    "CLAUDE_AGENT_NAME",
+    "CLAUDE_SUBAGENT_NAME",
+    "CODEX_THREAD_ID",
+    "CODEX_SANDBOX",
+    "CODEX_SANDBOX_NETWORK_DISABLED",
+    "CODEX_MANAGED_BY_NPM",
+)
+
+
 def _run_hook(
-    tmp_path: Path, tree: Path, snapshot: Path | None
+    tmp_path: Path,
+    tree: Path,
+    snapshot: Path | None,
+    *,
+    lane: str | None = None,
+    marker: str = "ONEX_LANE",
 ) -> subprocess.CompletedProcess[str]:
-    """The hook as pre-commit runs it, inside a lane, with a stub gh on PATH."""
+    """The hook as pre-commit runs it, with a stub gh on PATH.
+
+    ``lane`` sets ``ONEX_LANE``; without it every lane marker is stripped, so
+    the run models a host whose gh refuses but which is not a declared lane.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     gh = bin_dir / "gh"
@@ -129,7 +149,10 @@ def _run_hook(
         key: value
         for key, value in os.environ.items()
         if key not in {"GITHUB_ACTIONS", "PRRP_VARIABLES_SNAPSHOT", "GITHUB_REPOSITORY"}
+        and key not in LANE_MARKERS
     }
+    if lane is not None:
+        env[marker] = lane
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
     # The host's own published snapshot (~/.omninode/prrp/) is read when no
     # path is set (OMN-20074), so HOME is the test's directory, which holds none.
@@ -310,3 +333,141 @@ def test_the_ci_step_and_the_paired_hook_collect_this_file() -> None:
     )
     assert name in step
     assert name in entry
+
+
+# --- OMN-19998: a lane's commit consumes the snapshot with no live read ------
+# Recorded case (friction class 174): the pre-commit hook read visibility and
+# Actions variables from GitHub at commit time inside a lane, and the lane
+# GitHub read guard refused each read. With a snapshot supplied, a lane now
+# makes no gh call; freshness, coverage and placement refusals are unchanged.
+
+
+def test_lane_commit_reads_snapshot_with_no_gh_call(tmp_path: Path) -> None:
+    result = _run_hook(
+        tmp_path,
+        _tree(tmp_path, SEAM_JOB),
+        _snapshot(tmp_path, org={"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET}),
+        lane="cloud-pfix-174",
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK: every job in" in result.stdout
+    assert f"visibility of {SLUG} is private, read from snapshot" in result.stderr
+    assert "org:OmniNode-ai variables read from snapshot" in result.stderr
+    assert _gh_calls(tmp_path) == "", "a lane must not attempt a GitHub read"
+
+
+def test_lane_commit_hosted_value_in_snapshot_still_refused(tmp_path: Path) -> None:
+    result = _run_hook(
+        tmp_path,
+        _tree(tmp_path, SEAM_JOB),
+        _snapshot(tmp_path, org={"OMNI_TRUSTED_CI_RUNS_ON_JSON": HOSTED}),
+        lane="cloud-pfix-174",
+    )
+    assert result.returncode == 1, result.stderr
+    assert "ubuntu-latest" in result.stdout + result.stderr
+    assert _gh_calls(tmp_path) == ""
+
+
+def test_lane_commit_stale_snapshot_still_refused(tmp_path: Path) -> None:
+    result = _run_hook(
+        tmp_path,
+        _tree(tmp_path, SEAM_JOB),
+        _snapshot(
+            tmp_path,
+            read_at=datetime.now(UTC) - timedelta(hours=30),
+            org={"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET},
+        ),
+        lane="cloud-pfix-174",
+    )
+    assert result.returncode == 2, result.stdout
+    assert "is stale" in result.stderr
+    assert "THE GATE DID NOT RUN" in result.stderr
+    assert _gh_calls(tmp_path) == ""
+
+
+def test_lane_commit_snapshot_missing_scope_still_refused(tmp_path: Path) -> None:
+    result = _run_hook(
+        tmp_path,
+        _tree(tmp_path, SEAM_JOB),
+        _snapshot(tmp_path, org=None),
+        lane="cloud-pfix-174",
+    )
+    assert result.returncode == 2, result.stdout
+    assert "does not record scope org:OmniNode-ai" in result.stderr
+    assert _gh_calls(tmp_path) == ""
+
+
+def test_lane_commit_without_snapshot_still_tries_live(tmp_path: Path) -> None:
+    result = _run_hook(tmp_path, _tree(tmp_path, SEAM_JOB), None, lane="cloud-pfix-174")
+    assert result.returncode == 2, result.stdout
+    assert f"api repos/{SLUG}" in _gh_calls(tmp_path)
+
+
+@pytest.mark.parametrize("marker", LANE_MARKERS)
+def test_every_lane_marker_reads_snapshot_without_gh(
+    tmp_path: Path, marker: str
+) -> None:
+    result = _run_hook(
+        tmp_path,
+        _tree(tmp_path, SEAM_JOB),
+        _snapshot(tmp_path, org={"OMNI_TRUSTED_CI_RUNS_ON_JSON": FLEET}),
+        lane="snapshot-fixture",
+        marker=marker,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK: every job in" in result.stdout
+    assert _gh_calls(tmp_path) == ""
+
+
+def test_snapshot_source_policy_keeps_actions_live(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _module()
+    monkeypatch.setenv("ONEX_LANE", "snapshot-fixture")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    calls = []
+
+    def live(args, env_name="GH_TOKEN"):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "private\n", "")
+
+    monkeypatch.setattr(module, "_gh", live)
+    assert module.resolve_visibility(SLUG, object()) == "private"
+    assert calls == [["api", f"repos/{SLUG}", "--jq", ".visibility"]]
+
+
+def test_snapshot_source_policy_is_wired_to_existing_node() -> None:
+    import yaml
+
+    from omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_lane_github_read_guard import (
+        LANE_ENV_MARKERS as GUARD_MARKERS,
+    )
+    from omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_runner_placement_snapshot_policy import (
+        handle,
+    )
+
+    module = _module()
+    assert GUARD_MARKERS == module.LANE_ENV_MARKERS
+    contract = yaml.safe_load(
+        (
+            REPO_ROOT
+            / "src/omniclaude/nodes/node_lane_github_read_guard_effect/contract.yaml"
+        ).read_text()
+    )
+    route = next(
+        entry
+        for entry in contract["handler_routing"]["handlers"]
+        if entry["handler"]["name"] == handle.__name__
+    )
+    assert route["event_model"] == {
+        "name": "ModelRunnerPlacementSnapshotRequest",
+        "module": "omniclaude.models.model_runner_placement_snapshot_request",
+    }
+    assert (
+        "onex.cmd.omniclaude.runner-placement-snapshot-check.v1"
+        in contract["event_bus"]["subscribe_topics"]
+    )
+    assert (
+        "onex.evt.omniclaude.runner-placement-snapshot-checked.v1"
+        in contract["event_bus"]["publish_topics"]
+    )

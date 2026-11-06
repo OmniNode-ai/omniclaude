@@ -17,8 +17,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
+
+import yaml
 
 from omniclaude.nodes.node_lane_github_read_guard_effect.enums import (
     EnumLaneGithubReadVerdict,
@@ -31,6 +34,8 @@ from omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_lane_g
 from omniclaude.nodes.node_lane_github_read_guard_effect.models import (
     ModelLaneGithubReadRequest,
 )
+
+_BARE_GH_ROUTES = Path(__file__).resolve().parent / "bare_gh_routes.yaml"
 
 EXIT_ALLOW = 0
 EXIT_ERROR = 1
@@ -53,11 +58,15 @@ def build_request(
     if isinstance(tool_input, dict):
         command = _string(tool_input.get("command"))
     home = environ.get("HOME", "")
+    routes = yaml.safe_load(_BARE_GH_ROUTES.read_text())
     return ModelLaneGithubReadRequest(
         tool_name=_string(payload.get("tool_name")),
         command=command,
         cwd=_string(payload.get("cwd")) or fallback_cwd,
         home=home if home and Path(home).is_absolute() else "",
+        gh_on_path=shutil.which("gh", path=environ.get("PATH", "")) or "",
+        gh_routes=tuple((shape, verb) for shape, verb in routes["gh"].items()),
+        api_routes=tuple((row["endpoint"], row["scm"]) for row in routes["api"]),
         agent_id=_string(payload.get("agent_id")),
         entrypoint=environ.get("CLAUDE_CODE_ENTRYPOINT", ""),
         mode=mode,

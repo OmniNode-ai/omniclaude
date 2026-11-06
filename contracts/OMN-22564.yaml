@@ -1,0 +1,41 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22564
+title: "The worktree guard's refusal ends with the one literal absolute-path form that passes, so a lane that was refused does not find it by trial"
+summary: >
+  The worktree-add guard's shared hint now carries the one form that passes (one literal git -C command per repo, with an
+  absolute destination under the worktrees root, no relative path, loop variable, PWD or command substitution), so every
+  refusal of the decision core ends with it and then with the disable hint. No code line is added to a baselined file.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn22564-refusal-names-the-passing-form"
+    statement: "Every refusal of the worktree add decision core ends with the absolute-path form that passes."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: every refusal of the decision core ends with the literal absolute-path form and still ends with the disable hint -- falsifier: `uv run pytest tests/hooks/test_worktree_add_guard.py -k absolute_form -q` fails on origin/dev
+evidence_requirements:
+  - kind: tests
+    description: "the tests named by OMN-22564 AC1 and the neighbouring hook tests"
+    command: "uv run pytest tests/hooks/test_worktree_add_guard.py tests/hooks/test_pre_tool_use_bash_guard_worktree.py tests/hooks_system -q -k \"worktree or bash_guard\""
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22564-ac1
+    description: "AC1: see OMN-22564"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_worktree_add_guard.py -k absolute_form -q"
+    binds_ac: ["AC1"]
+  - id: dod-omn22564-integration-proof
+    description: "the change run on a lab host from the pushed branch: the guard's refusal of a relative destination ends with the form"
+    source: manual
+    execution_scope: local_done_gate
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_worktree_add_guard.py -k absolute_form -q"
