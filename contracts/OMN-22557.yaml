@@ -1,0 +1,44 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22557
+title: "The shared-tree git guard refuses merge, rebase and checkout in a worktree the same command creates"
+summary: >
+  A worktree made by a `git worktree add` earlier in the same command is not on disk when the hook runs, so the walk up from its path ended at the registry clone above omni_worktrees and the merge was refused. The guard now reads the created path from the add, and admits a git call reached by `git -C <path>` or by a `cd <path>` along an unbroken `&&` chain. A `;` after the cd, a path no add makes, and a cd to the registry stay refused.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22557-fix
+    statement: The shared-tree git guard refuses merge, rebase and checkout in a worktree the same command creates.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: a merge, rebase or checkout in a worktree made earlier in the same command is admitted when reached by git -C or by a cd along an unbroken && chain -- falsifier: uv run pytest tests/hooks/test_shared_tree_git_guard.py -k a_worktree_made_by_the_same_command -q --no-cov"
+      - id: "AC2"
+        statement: "AC2: the same shapes without a matching worktree add, with a ; after the cd, or leaving for the registry are still refused -- falsifier: uv run pytest tests/hooks/test_shared_tree_git_guard.py -k new_worktree_exemption_does_not_open_the_registry -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "The focused tests pass on the lab from the branch"
+    command: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22557-ac1
+    description: "a merge, rebase or checkout in a worktree made earlier in the same command is admitted when reached by git -C or by a cd along an unbroken && chain"
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -k a_worktree_made_by_the_same_command -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22557-ac2
+    description: "the same shapes without a matching worktree add, with a ; after the cd, or leaving for the registry are still refused"
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -k new_worktree_exemption_does_not_open_the_registry -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"

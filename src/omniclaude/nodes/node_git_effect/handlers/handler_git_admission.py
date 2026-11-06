@@ -5,97 +5,74 @@ r"""Fail-closed shared-tree git admission gate for the shared registry clone (OM
 
 Why this exists
 ---------------
-The repository registry clone at ``$OMNI_HOME`` is the ONE repository in
-the fleet where many concurrent agent
-lanes commit into the SAME working tree -- ``docs/tracking/``,
-``docs/workflows/``, ``.claude/workflows/``, ``scripts/``. Code repos use
-per-ticket worktrees and do not have this problem. Two failure classes were
-measured in the shared clone and neither had a mechanical defence:
+The registry clone at ``$OMNI_HOME`` is the ONE repository where many
+concurrent lanes commit into the SAME working tree; code repos use per-ticket
+worktrees. Two failure classes were measured there, with no mechanical defence:
 
-1. **Destruction.** ``git reflog`` recorded 20 ``reset: moving to
-   origin/main`` entries in that clone on 2026-09-18 alone. Those resets
-   twice re-orphaned a staged 1.9 MB ledger-roll archive holding 1,258
-   append-only coordination rows -- leaving them untracked on one disk, with
-   no copy in any commit, on any branch, on any remote, for 2h22m, where a
-   ``git clean -fd`` would have destroyed them and left ``origin/main``
-   showing a ledger that had never lost them. The same verbs twice dropped a
-   peer lane's unpushed commit from local ``main`` and twice reverted a peer
-   lane's uncommitted edit.
+1. **Destruction.** 20 ``reset: moving to origin/main`` reflog entries on
+   2026-09-18 alone twice re-orphaned a staged ledger-roll archive of 1,258
+   append-only rows (in no commit, branch or remote for 2h22m) and twice
+   dropped a peer lane's unpushed commit from local ``main``.
+2. **Stranding**, quieter: a feature branch checked out in the shared clone
+   makes ``onex-commit-lock`` refuse EVERY other lane's ledger commit
+   (exit 78, ``STRANDED CLONE``) for as long as it stays, which is why
+   ``git checkout -b`` and ``git switch`` are refused too.
 
-2. **Stranding**, which destroys nothing and is quieter. A feature branch
-   checked out in the shared clone makes ``onex-commit-lock`` refuse EVERY
-   other lane's ledger commit -- exit 78, ``STRANDED CLONE`` -- for as long
-   as it stays checked out. Three rows appended at 01:24Z reached a
-   committed copy only at 11:17Z; the refusals at 02:37Z named the branch.
-   The only signal is an exit code on somebody else's terminal, so a guard
-   that refused only the destructive verbs would not have caught it. This is
-   why ``git checkout -b`` and ``git switch`` are refused here too.
-
-Operating Rule 19 of the workspace ``CLAUDE.md`` states the prohibition.
-Until this module it was doctrine only -- it held exactly as long as each
-lane remembered it, which the reflog shows was not long.
+Operating Rule 19 states the prohibition; until this module it held exactly
+as long as each lane remembered it.
 
 What this refuses, and what it deliberately does not
 ------------------------------------------------------
-A shell segment whose program is ``git`` is refused when its effective git
-root -- ``git rev-parse --show-toplevel`` semantics applied to the ``-C
-<path>`` argument, or to the command's own ``cwd`` when no ``-C`` is given
--- IS the registry clone at ``$OMNI_HOME`` itself, AND its subcommand
-matches a
-refused shape declared in ``git_admission_policy.json``:
+A ``git`` segment is refused when its effective git root (``-C <path>``, else
+the command's own ``cwd``) IS the registry clone at ``$OMNI_HOME`` itself AND
+its subcommand matches a refused shape declared in ``git_admission_policy.json``:
 
 * ``reset``, ``switch``, ``clean``, ``rebase`` -- in every form;
 * ``checkout`` -- except the Operating Rule 17 path-scoped restore recipe
-  (``git checkout -- <path>``, ``git checkout <ref> -- <path>``), and except
-  nothing else: a ``-b``/``-B`` creation is refused even with a ``--``, a
-  whole-tree path operand is refused because it is a blanket checkout in
-  path-scoped clothing, and operands with no ``--`` separator are refused
-  because git itself cannot tell a ref from a path there;
-* ``merge`` -- unless it carries ``--ff-only`` (the sanctioned sync verb,
-  which advances a pointer or refuses and never runs a content merge) or one
-  of the in-progress management flags ``--abort``/``--quit``/``--continue``;
+  (``git checkout -- <path>``, ``git checkout <ref> -- <path>``): a
+  ``-b``/``-B`` creation is refused even with a ``--``, a whole-tree path
+  operand is a blanket checkout in path-scoped clothing, and operands with no
+  ``--`` are refused because git cannot tell a ref from a path there;
+* ``merge`` -- unless it carries ``--ff-only`` (the sanctioned sync verb) or
+  one of the in-progress flags ``--abort``/``--quit``/``--continue``;
 * ``branch`` -- only a delete or rename whose target IS the checked-out
   branch, read from ``.git/HEAD`` rather than by running git.
 
-Everything else passes untouched, because it never matches the vocabulary in
-the first place: ``git merge --ff-only``, ``git fetch``, ``git pull
---ff-only``, and every read (``status``, ``log``, ``diff``, ``show``,
-``rev-parse``, ``reflog``, ``worktree list``). There is no allowlist to fall
-out of date and no escape entry -- no consent citation, no exempt marker --
-because each refused verb has a sanctioned alternative reaching the same
-outcome without touching state a peer lane owns.
+Everything else passes untouched, because it never matches the vocabulary:
+``git merge --ff-only``, ``git fetch``, ``git pull --ff-only`` and every read
+(``status``, ``log``, ``diff``, ``show``, ``rev-parse``, ``reflog``, ``worktree
+list``). There is no allowlist and no escape entry (no consent citation, no
+exempt marker): each refused verb has a sanctioned alternative that reaches the
+same outcome without touching state a peer lane owns.
 
 Scope, stated so it is not over-read
 --------------------------------------
 This fires ONLY when the effective git root is the registry clone itself. A
-worktree under ``omni_worktrees/`` has its own ``.git`` file and so its own
-root; a code-repo canonical clone under ``$OMNI_HOME`` has root
-``$OMNI_HOME/<repo>``, not ``$OMNI_HOME``. Neither is ever matched, and both
-already have the OMN-7018/OMN-14330 worktree guard.
+worktree under ``omni_worktrees/`` has its own ``.git`` file and root, and a
+code-repo clone under ``$OMNI_HOME`` has root ``$OMNI_HOME/<repo>``; neither is
+matched, and both have the OMN-7018/OMN-14330 worktree guard. A worktree the
+SAME command creates with ``git worktree add`` is not on disk yet, so the walk
+up from its path would end at the registry clone; it is read as the worktree
+it will be (OMN-22478) when reached by ``git -C <path>`` or by a ``cd`` along
+an unbroken ``&&`` chain, because under ``;`` a failed add would leave the
+shell where it was.
 
 Token matching, not substring matching
 ---------------------------------------
-Each shell segment is tokenised with the shared shell tokenizer and matched by program plus
-tokens, never by raw text -- the same reason the OMN-17334 git-stash guard
-this module is patterned on does it that way: a comment or a grep that
-merely *mentions* ``git reset`` is not a reset, and a raw-substring rule
-would refuse both (workspace CLAUDE.md rule 15, the OCC#7213 shape).
+Each shell segment is tokenised with the shared tokenizer and matched by
+program plus tokens, never by raw text (as the OMN-17334 git-stash guard does):
+a comment or a grep that merely *mentions* ``git reset`` is not a reset.
 
 Fail-closed boundary, stated deliberately
 -------------------------------------------
 * A command carrying neither a ``git`` token nor any refused verb never
-  reaches this module -- the shell wrapper's pre-filter drops it. A bug here
-  can never brick unrelated Bash traffic.
-* A command that DOES carry the vocabulary and cannot then be resolved -- an
+  reaches this module, so a bug here cannot brick unrelated Bash traffic.
+* A command that DOES carry the vocabulary and cannot then be resolved (an
   unreadable policy, a target directory that cannot be stat'd, an unreadable
-  ``HEAD`` behind a branch delete -- is REFUSED.
-* An UNTOKENISABLE command is refused only when its raw text plainly names
-  ``git`` and one of the refused verbs as whole words. An unbalanced quote
-  in a command that has nothing to do with git is not this guard's business,
-  and refusing it would be a bug wearing a fail-closed costume. Untokenisable
-  means what the shell means (OMN-17427): an unterminated quote or
-  substitution. An apostrophe in a here-document body or a comment is text,
-  and a newline ends a command.
+  ``HEAD`` behind a branch delete) is REFUSED.
+* An UNTOKENISABLE command (an unterminated quote or substitution, OMN-17427)
+  is refused only when its raw text plainly names ``git`` and a refused verb
+  as whole words; an apostrophe in a here-document body or a comment is text.
 
 The lane git-fetch arm (OMN-20495)
 -----------------------------------
@@ -103,67 +80,51 @@ A third arm, scoped to lanes rather than to a tree: ``git fetch``, ``git
 pull``, ``git ls-remote`` and ``git remote update`` reading a GitHub remote are
 refused in a lane context, because a worktree shares its canonical clone's
 refs and the canonical-clone sync keeps them current. The refusal names
-``canonical_clone_sync.py refresh``. The full contract is at
-``_lane_fetch_refusal``.
+``canonical_clone_sync.py refresh`` (contract at ``_lane_fetch_refusal``).
 
 The dirty-path restore arm (OMN-18874), and why its scope is wider
 --------------------------------------------------------------------
 Everything above is about the ONE tree many lanes share. This arm is about a
-hazard every lane has in its OWN tree: a path-scoped restore --
-``git checkout [<ref>] -- <path>``, ``git checkout <ref> <path>``,
-``git restore [--source=<ref>] <path>`` -- returns the file to the
-REFERENCE, not to what is in the working tree. Over a path carrying
-uncommitted work it discards that work silently: exit 0, no output, and no
-reflog, because a working tree that was never committed has none. Operating
-Rule 17 names the trap and prescribes the RED-proof sequence that springs
-it whenever HEAD is still the base. Four lanes lost work that way, each
-after reading the rule: OMN-18566, the OMN-18863 lane, OMN-18992 and
-OMN-19237.
+hazard every lane has in its OWN tree: a path-scoped restore (``git checkout
+[<ref>] -- <path>``, ``git checkout <ref> <path>``, ``git restore
+[--source=<ref>] <path>``) returns the file to the REFERENCE, not to what is in
+the working tree. Over a path carrying uncommitted work it discards that work
+silently: exit 0, no output, no reflog. Operating Rule 17 names the trap; four
+lanes lost work that way after reading it (OMN-18566, OMN-18863, OMN-18992,
+OMN-19237).
 
-So the arm refuses a path restore when any content it would overwrite -- the
-working-tree file, and the index entry when the restore writes the index --
-exists nowhere else: not in the restore's own source, and not in any ref
-declared in ``restore_reachable_refs`` (HEAD, the upstream, ``origin/dev``,
-``origin/main``). That comparison, rather than a bare "is it dirty", is what
-lets the committed-first Rule 17 sequence through: its closing
-``git checkout HEAD -- <path>`` runs over a path that differs from HEAD, but
-holds ``origin/dev``'s content, so restoring it loses nothing. Staged
-changes count as uncommitted -- a staged blob is reachable from no ref. A
-clean path, a path that does not exist yet, a deleted file brought back, and
-an untracked file the source does not name are never refused, and neither is
-the read the refusal prescribes, ``git show <rev>:<path> > <scratch file>``,
-which never writes the tree.
+So the arm refuses a path restore when any content it would overwrite (the
+working-tree file, and the index entry when the restore writes the index)
+exists nowhere else: not in the restore's own source, and not in any ref in
+``restore_reachable_refs`` (HEAD, the upstream, ``origin/dev``,
+``origin/main``). That comparison, rather than a bare "is it dirty", lets the
+committed-first Rule 17 sequence through: its closing ``git checkout HEAD --
+<path>`` holds ``origin/dev``'s content, so it loses nothing. Staged changes
+count as uncommitted. A clean path, a path that does not exist yet, a deleted
+file brought back, an untracked file the source does not name, and the read
+the refusal prescribes (``git show <rev>:<path> > <scratch file>``) are never
+refused.
 
 Scope is every git root the guard can place under the fleet: the registry
-clone, any canonical clone or worktree beneath ``$OMNI_HOME``, anything under
-a declared worktrees root (``worktree_root_envs``), and any git WORKTREE at
-all (a ``.git`` file), matching the OMN-17334 stash guard so a thin hook
-environment cannot switch it off where lanes work. A plain clone elsewhere
-on the disk is left alone.
+clone, any clone or worktree beneath ``$OMNI_HOME``, anything under a declared
+worktrees root, and any git WORKTREE (a ``.git`` file), matching the OMN-17334
+stash guard so a thin hook environment cannot switch it off where lanes work.
 
-Unlike the rest of this module, this arm has to run git: dirtiness lives in
-the index and the object store. Every probe runs with the location variables
-scrubbed, optional locks off, and a declared timeout, and it fails CLOSED --
-a probe that errors or times out, an unresolvable ``cd`` ahead of the
-restore, ``--pathspec-from-file``, and a ``--git-dir``/``--work-tree``
-override -- flag or ``GIT_DIR``/``GIT_WORK_TREE`` assignment -- are all
-refused, because in each case whether the command destroys work cannot be
-determined.
+Unlike the rest of this module, this arm runs git: dirtiness lives in the
+index and the object store. Every probe scrubs the location variables, turns
+optional locks off, has a declared timeout, and fails CLOSED: a probe that
+errors or times out, an unresolvable ``cd`` ahead of the restore,
+``--pathspec-from-file`` and a ``--git-dir``/``--work-tree`` override are all
+refused, because whether the command destroys work cannot then be known.
 
 An operand the shell computes (a variable, ``~``, a substitution, brace
-expansion) is not refused for being computed (OMN-17427). A variable the
-environment or an earlier assignment in the command resolves is read. A path
-operand that cannot be resolved is refused as indeterminate (OMN-19380),
-even over a clean tree: pass literal paths, or commit first and restore by
-path per Operating Rule 17. An unresolved source operand credits nothing as
-already saved; the declared reachable refs still determine whether its
-literal paths hold uncommitted work. A bare ``git checkout <name>`` after an unresolvable ``cd`` is
-refused on the same ground, since it may be a branch switch or a path
-restore; the refusal names ``git switch`` as the unambiguous verb. A
-conflicted path is judged too: ``--ours``/``--theirs``/``-m`` rewrite its
-working-tree file from the index stages. Probes run
-only for a restore shape in scope, so ordinary Bash traffic never pays for
-them.
+expansion) is not refused for being computed (OMN-17427): a variable the
+environment or an earlier assignment resolves is read. A path operand that
+cannot be resolved is refused as indeterminate (OMN-19380), even over a clean
+tree: pass literal paths, or commit first. A bare ``git checkout <name>``
+after an unresolvable ``cd`` is refused the same way, and the refusal names
+``git switch``. A conflicted path is judged too: ``--ours``/``--theirs``/``-m``
+rewrite its working-tree file. Probes run only for a restore shape in scope.
 
 What this cannot do, stated rather than implied
 -------------------------------------------------
@@ -173,15 +134,15 @@ lane considers it, and the refusal points at the scratch-copy read that
 never needs a restore. A ``git show <rev>:<path> > <path>`` redirected over
 the dirty file itself is the same loss by other means and is not seen.
 
-It sees a command only at the Claude Code tool seam. A ``git reset`` typed
-directly at a terminal, or run by a script this guard never sees, reaches
-the shared tree unchallenged. And the hook loads at session start, so
-sessions already open when it lands are not covered until they restart.
+It sees a command only at the Claude Code tool seam: a ``git reset`` typed at
+a terminal, or run by a script this guard never sees, is not challenged, and
+sessions already open when the hook lands are not covered until they restart.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fcntl
 import hashlib
 import json
@@ -476,39 +437,37 @@ def _str_pairs(raw: Mapping[str, object], key: str) -> tuple[tuple[str, str], ..
     return tuple(sorted(value.items()))
 
 
-def _segments(command: str) -> list[list[str]]:
-    """The simple commands of ``command``, each as its dequoted words.
+def _joined_segments(command: str) -> list[tuple[list[str], str]]:
+    """The simple commands of ``command`` (dequoted words), each with its joiner.
 
-    OMN-17427. This read the command with ``shlex``, which is not a shell
-    reader. An apostrophe in a here-document body made the whole command
-    "untokenisable", and the raw-text fallback then refused any command whose
-    prose said ``git`` next to ``merge``, ``push`` or ``branch``. A newline
-    was plain whitespace, so the second line of ``cd x`` then
-    ``git -C <registry clone> reset --hard`` joined the first line's segment
-    and was never read as a git command at all. The shared tokenizer the
-    worktree and PR-body guards already use ends a command at a newline, keeps
-    a here-document body and a comment out of the command list, and fails
-    only on a genuine syntax error (an unterminated quote or substitution).
-    A subshell parenthesis stays a word of its own, which ``_peel_grouping``
-    reads.
+    The joiner is ``&&`` when only ``&&`` stands between a command and the one
+    before it, so it runs only if that one succeeded; anything else is ``""``.
+    The shared tokenizer (OMN-17427) ends a command at a newline and keeps a
+    here-document body and a comment out of the list; it fails only on a
+    genuine syntax error. A subshell parenthesis stays a word, which
+    ``_peel_grouping`` reads.
     """
-    tokens = tokenize(command)
-    segments: list[list[str]] = []
+    joined: list[tuple[list[str], str]] = []
     current: list[str] = []
-    for tok in tokens:
-        if isinstance(tok, Operator):
-            if tok.text in _SEPARATORS:
-                if current:
-                    segments.append(current)
-                current = []
-            else:
-                current.append(tok.text)
+    before: list[str] = []
+    for tok in tokenize(command):
+        if isinstance(tok, Operator) and tok.text in _SEPARATORS:
+            if current:
+                joined.append((current, "&&" if set(before) == {"&&"} else ""))
+                current, before = [], []
+            before.append(tok.text)
+        elif isinstance(tok, Operator):
+            current.append(tok.text)
         elif isinstance(tok, Word):
             current.append(_ShellWord(tok))
-        # A HereDoc is data handed to a program, never a command line.
     if current:
-        segments.append(current)
-    return segments
+        joined.append((current, "&&" if set(before) == {"&&"} else ""))
+    return joined
+
+
+def _segments(command: str) -> list[list[str]]:
+    """The simple commands of ``command``, each as its dequoted words."""
+    return [segment for segment, _ in _joined_segments(command)]
 
 
 def _strip_wrappers(tokens: list[str]) -> list[str]:
@@ -2388,6 +2347,37 @@ def _log_fetch_refusal(
         pass
 
 
+def _created_worktree(
+    invocation: _GitInvocation, base: Path, scope: Scope
+) -> Path | None:
+    """The directory a ``git worktree add`` creates (OMN-22478), or None."""
+    args = list(invocation.args)
+    if invocation.subcommand != "worktree" or args[:1] != ["add"]:
+        return None
+    operands: list[str] = []
+    skip = False
+    for arg in args[1:]:
+        if skip:
+            skip = False
+        elif arg in ("-b", "-B", "--reason"):
+            skip = True
+        elif not arg.startswith("-"):
+            operands.append(arg)
+    path = _expand_path(operands[0], scope) if operands else None
+    return Path(os.path.normpath(base / path)).resolve() if path else None
+
+
+def _inside(target: Path, created: list[Path]) -> Path | None:
+    """The worktree made earlier in this command that the absent ``target`` is in.
+
+    Before it exists, the first parent with a ``.git`` is the registry clone.
+    """
+    if target.exists():
+        return None
+    resolved = target.resolve()
+    return next((c for c in created if c == resolved or c in resolved.parents), None)
+
+
 def evaluate_bash_command(
     command: str,
     policy: Policy,
@@ -2397,7 +2387,7 @@ def evaluate_bash_command(
 ) -> Decision:
     notes: list[str] = []
     try:
-        segments = _segments(command)
+        segments = _joined_segments(command)
     except ShellSyntaxError as exc:
         if _plainly_names_refused_verb(command, policy):
             prefix = command[: exc.segment_start or 0]
@@ -2435,7 +2425,7 @@ def evaluate_bash_command(
             ),
         )
 
-    scope = shadow(os.environ, shadowed_names(segments))
+    scope = shadow(os.environ, shadowed_names([words for words, _ in segments]))
     effective_cwd = cwd
     # Whether effective_cwd is really where the shell will be. An
     # unresolvable `cd` leaves effective_cwd where it was, which keeps every
@@ -2449,7 +2439,13 @@ def evaluate_bash_command(
     # subshell cannot leak out of its `)`.
     subshell_stack: list[tuple[Path, bool]] = []
     pending_close = 0
-    for raw_segment in segments:
+    # Worktrees this command creates, and the one a `cd` entered with `&&` joining
+    # every command since: under `;` a failed add would leave the shell where it was.
+    created: list[Path] = []
+    entered: Path | None = None
+    for raw_segment, joiner in segments:
+        if joiner != "&&":
+            entered = None
         # A `)` takes effect after the segment that carries it.
         for _ in range(pending_close):
             if subshell_stack:
@@ -2474,8 +2470,14 @@ def evaluate_bash_command(
             else:
                 cwd_known = cwd_known or _cd_operand_is_absolute(segment, policy, scope)
                 effective_cwd = moved_to
+                entered = _inside(moved_to, created)
             continue
         invocation = _parse_git(segment)
+        if invocation is not None and invocation.subcommand == "worktree":
+            with contextlib.suppress(OSError):
+                base = _resolve_target_dir(invocation, effective_cwd, scope)
+                made = _created_worktree(invocation, base, scope)
+                created.extend([made] if made else [])
         fetch_call = invocation or _parse_git(_drop_timeout(segment))
         if fetch_call is not None and fetch_call.subcommand in policy.fetch_subcommands:
             fetched = _lane_fetch_refusal(
@@ -2561,6 +2563,9 @@ def evaluate_bash_command(
         in_registry = git_root is not None and _is_registry_root(
             git_root, registry_root, policy
         )
+        new = _inside(target_dir, created)
+        if new is not None and (invocation.target_arg is not None or entered == new):
+            git_root, in_registry = new, False
         if git_root is not None and in_registry:
             detail = _refusal_detail(
                 invocation,
