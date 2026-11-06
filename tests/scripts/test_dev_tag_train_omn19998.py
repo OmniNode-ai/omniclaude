@@ -445,7 +445,7 @@ def test_the_planner_is_handed_the_tags_read_newest_first_and_the_apply_flag(
 
 def test_red_and_unread_tags_are_named_in_the_plan(mod, tmp_path: Path) -> None:
     clones, pyproject, names = _train_tree(tmp_path)
-    shas = {v: k for k, v in _tags_of(clones).items()}
+    shas = _tags_of(clones)
     verdict = {shas[names[2]]: False, shas[names[1]]: None}
     plan = mod.run_dev_tag_train(
         pyproject=pyproject,
