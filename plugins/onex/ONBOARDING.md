@@ -50,8 +50,8 @@ Fetch the script, check it is the one this page was written against, then run it
 
 ```bash
 curl -fsSL -o lab-onboarding.sh \
-  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/11a255e325785d76ed7dda65c8f9bef2bc06bdc1/plugins/onex/skills/_bin/lab-onboarding.sh
-echo "ea5312e7d7e4068accf9a8e9d9e59ece6d111db7f4d46d6a1ed0590854dbcc06  lab-onboarding.sh" | shasum -a 256 -c -
+  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/ad5d6ef877b3b792f5facccf807d466986eba9b5/plugins/onex/skills/_bin/lab-onboarding.sh
+echo "947ddfc430da2eead1184c255c10dec95aa642eb7bf40e83e66df36f3dd401df  lab-onboarding.sh" | shasum -a 256 -c -
 bash lab-onboarding.sh --no-containers
 ```
 
