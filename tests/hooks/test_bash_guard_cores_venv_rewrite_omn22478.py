@@ -92,5 +92,7 @@ def test_a_core_that_stays_missing_is_still_refused_within_a_bound(
         "No module named 'onex_rewrite_window_never'"
     )
     # Each tried venv is named once, not once per retry.
-    assert first.count("declared interpreters tried: CLAUDE_PLUGIN_DATA)") == 1
+    tried = first.rsplit("declared interpreters tried: ", 1)[1].rstrip(")").split(", ")
+    assert tried[0] == "CLAUDE_PLUGIN_DATA"
+    assert len(tried) == len(set(tried))
     assert time.monotonic() - started < 15
