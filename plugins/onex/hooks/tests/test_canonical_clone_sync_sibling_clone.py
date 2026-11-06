@@ -6,7 +6,7 @@ The recorded layout (three lab hosts): the registry root holds the service
 clones, and one more canonical clone, whose remote is under the OmniNode-ai
 owner, sits one level up, beside the root. Before the fix the refresh answered
 NO_CLONE for it unless it was the one clone the code named, and its
-``origin/main`` stayed stale. The sync's own clone set must stay unchanged.
+``origin/main`` stayed stale. The sync visits the same set (OMN-17427).
 
 The beside-root repository is a neutral name here: the public-repo hygiene gate
 refuses a private repository's name on an added line, and the lookup names no
@@ -108,14 +108,26 @@ def test_sibling_clone_worktree_is_not_a_canonical_clone(reg: Registry) -> None:
     assert [r.result for r in results] == [ccs.NO_CLONE]
 
 
-def test_sibling_clone_sync_does_not_pick_up_a_clone_beside_the_root(
-    reg: Registry,
-) -> None:
+def test_sibling_clone_sync_visits_a_clone_beside_the_root(reg: Registry) -> None:
     beside = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
     clone = reg.make("svc")
-    results = ccs.run_sync(reg.env(), None, "manual", None)
-    assert all(Path(r.clone) != beside for r in results)
-    assert {Path(r.clone) for r in results} == {clone}
+    results = ccs.run_sync(reg.env(HOME=str(reg.tmp / "account")), None, "manual", None)
+    assert {Path(r.clone) for r in results} == {beside, clone}
+
+
+def test_sync_visits_a_clone_reachable_both_ways_once(reg: Registry) -> None:
+    clone = reg.make(_BESIDE, branch="main", owner="OmniNode-ai", root=reg.home.parent)
+    declared_only = reg.make("declared_only", root=reg.tmp / "elsewhere")
+    env = reg.env(
+        HOME=str(reg.tmp / "account"),
+        BESIDE_INTERNAL_HOME=str(clone),
+        OTHER_INTERNAL_HOME=str(declared_only),
+        ONEX_REGISTRY_ROOTS=str(reg.home.parent),
+    )
+    assert ccs.sibling_clones(env) and ccs.discover_clones(ccs.registry_roots(env))
+    results = ccs.run_sync(env, None, "manual", None)
+    visited = sorted(Path(r.clone).resolve() for r in results)
+    assert visited == sorted([clone.resolve(), declared_only.resolve()])
 
 
 @pytest.fixture
