@@ -52,17 +52,6 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py tests/scripts/validator_parity_omn20566/test_node_parity.py -q --no-cov -k 'local_paths and not real_tree or pin_the_locked_core_version or hook_pins_at_least_the_floor'"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC3"]
-  - id: "dod-omn18595-core-dev-20261102043243-pin"
-    description: "AC1: this bump reads omnibase-core from dev merge tag dev-20261102043243-124b1e99af99 in pyproject.toml and uv.lock alike, and the pin tests pass"
-    source: "manual"
-    checks:
-      - check_type: "command"
-        check_value: "grep -c 'dev-20261102043243-124b1e99af99' pyproject.toml uv.lock"
-        cwd: "${OMNI_HOME}/omniclaude"
-      - check_type: "test_passes"
-        check_value: "uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py -q --no-cov -k bumped_dev_merge_tag"
-        cwd: "${OMNI_HOME}/omniclaude"
-    binds_ac: ["AC1"]
   - id: "dod-omn18595-core-dev-20261105194015-pin"
     description: "AC1: this bump reads omnibase-core from dev merge tag dev-20261105194015-1adbf46062bd in pyproject.toml and uv.lock alike, and the pin tests pass"
     source: "manual"
