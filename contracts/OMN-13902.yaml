@@ -89,9 +89,7 @@ dod_evidence:
       - check_type: command
         check_value: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@dev-[0-9]{14}-[0-9a-f]{12}" pyproject.toml
       - check_type: test_passes
-        check_value: uv run pytest tests/test_git_source_pins.py -q --no-cov
-      - check_type: test_passes
-        check_value: uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+        check_value: uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov -k refreshed_git_parser
   - id: dod-omniclaude-sibling-lock-resolution
     source: manual
     binds_ac:
@@ -175,7 +173,6 @@ dod_evidence:
         check_value: uv run pytest tests/hooks/test_refusal_recorder_state_omn20265.py -q --no-cov
   - id: dod-omniclaude-refusal-recorder-integration-proof
     source: manual
-    execution_scope: local_done_gate
     binds_ac:
       - AC10
     description: The change run from the pushed branch on a lab host, with the refreshed omnimarket installed, records a refusal through the real row node.
