@@ -774,3 +774,148 @@ def test_only_the_first_dispatch_line_counts() -> None:
 )
 def test_text_that_names_no_lane_names_none(text: str) -> None:
     assert _named(text) == ("", "")
+
+
+# OMN-22478: the orchestrator's briefs now open "Lane <lane>, parent <parent>,
+# ticket <T>." In one day (2026-11-05T22:00Z to 2026-11-06T22:00Z) the gate
+# refused 82 lane creates as issue-create-not-bound-to-a-commitment and about
+# 110 lanes wrote an alias CLAIM under the harness label, because that sentence
+# named no lane here. The form is read only with its parent, and the CLAIM must
+# still be of that lane and that parent.
+
+
+def _lane_form_dispatch(lane: str = _LANE, parent: str = _ORCHESTRATOR) -> str:
+    return (
+        _FRAME
+        + "  ROUTE: band=B4 score=12 dest=claude model=opus effort=high\n"
+        + f"  Lane {lane}, parent {parent}, ticket OMN-22478. CLAIM first, TERMINAL last.\n"
+    )
+
+
+def test_a_lane_form_dispatch_with_an_open_claim_mints(tmp_path: Path) -> None:
+    rows = (_claim(_LANE, parent=_ORCHESTRATOR),)
+    _admitted(
+        _prompted_lane(
+            tmp_path, label="process-issues", rows=rows, prompt=_lane_form_dispatch()
+        )
+    )
+
+
+def test_a_lane_form_dispatch_under_another_parent_is_refused(tmp_path: Path) -> None:
+    rows = (_claim(_LANE, parent="orchestrator-other"),)
+    result = _prompted_lane(
+        tmp_path, label="process-issues", rows=rows, prompt=_lane_form_dispatch()
+    )
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_a_lane_form_dispatch_with_no_claim_is_refused(tmp_path: Path) -> None:
+    result = _prompted_lane(
+        tmp_path, label="process-issues", rows=(), prompt=_lane_form_dispatch()
+    )
+    assert result.returncode == 3
+    assert f"no open CLAIM for lane '{_LANE}'" in _reason(result)
+
+
+def test_a_framed_lane_form_names_its_lane_and_parent() -> None:
+    text = (
+        _PROMPT_TEST_FRAME
+        + "  ROUTE: band=B4\n  Lane fix-x-2205, parent orch-1, ticket OMN-1. Go.\n"
+    )
+    assert _named(text) == ("fix-x-2205", "orch-1")
+
+
+def test_a_lane_form_ending_its_sentence_at_the_parent_names_it() -> None:
+    assert _named("  Lane fix-x-2205, parent orch-1.\n") == ("fix-x-2205", "orch-1")
+
+
+def test_a_column_zero_lane_form_under_the_frame_is_forged() -> None:
+    assert _named(_PROMPT_TEST_FRAME + "Lane lane-a, parent p, x\n") == ("", "")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Lane lane-a is slow today.",
+        "Lane lane-a, ticket OMN-1.",
+        "  Lane ../x, parent p, x",
+        "  The Lane lane-a, parent p, x",
+    ],
+)
+def test_a_lane_form_without_its_parent_names_nothing(text: str) -> None:
+    assert _named(text) == ("", "")
+
+
+def test_the_first_dispatch_sentence_of_either_form_counts() -> None:
+    text = (
+        _PROMPT_TEST_FRAME
+        + "  Lane lane-a, parent p, x\n  You are lane lane-b (parent p, x)\n"
+    )
+    assert _named(text) == ("lane-a", "p")
+
+
+#: How the harness opens a relayed user request it sends ahead of the computed
+#: task, as the real transcript of the OMN-22478 lane process-issues-2205 shows.
+_RELAY = (
+    "[Workflow harness — user request] The harness relays, verbatim and "
+    "indented below, the user request that triggered this workflow run.\n"
+    "  Fix the process.\n"
+)
+
+
+def _relayed_lane(
+    tmp_path: Path, *, rows: tuple[str, ...], relay: str = _RELAY
+) -> subprocess.CompletedProcess[str]:
+    env, extra = _workflow_subagent(
+        tmp_path,
+        sidecar_lane="x",
+        sidecar_description="process-issues",
+        prompt="",
+        ledger_rows=rows,
+    )
+    transcript = (
+        tmp_path
+        / "projects"
+        / "-proj"
+        / _SESSION
+        / "subagents"
+        / "workflows"
+        / "wf_0001"
+        / f"agent-{_AGENT}.jsonl"
+    )
+    entries = [
+        {"type": "user", "message": {"role": "user", "content": relay}},
+        {"type": "user", "message": {"role": "user", "content": _lane_form_dispatch()}},
+    ]
+    transcript.write_text(
+        "".join(json.dumps(e) + "\n" for e in entries), encoding="utf-8"
+    )
+    ok = _create(description=_stamped(_LANE), labels=[_LABEL])
+    return _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
+
+
+def test_a_dispatch_after_a_relayed_user_request_names_the_lane(
+    tmp_path: Path,
+) -> None:
+    """The relay is the user's text; the computed task after it is the dispatch."""
+    _admitted(_relayed_lane(tmp_path, rows=(_claim(_LANE, parent=_ORCHESTRATOR),)))
+
+
+def test_a_dispatch_after_a_relay_still_needs_its_claim(tmp_path: Path) -> None:
+    result = _relayed_lane(tmp_path, rows=())
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_a_first_message_that_is_no_relay_is_still_the_only_one_read(
+    tmp_path: Path,
+) -> None:
+    """Only the harness relay frame is passed over, never an ordinary message."""
+    result = _relayed_lane(
+        tmp_path,
+        rows=(_claim(_LANE, parent=_ORCHESTRATOR),),
+        relay="Summarise the repo.",
+    )
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
