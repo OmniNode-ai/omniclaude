@@ -152,6 +152,14 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -q -k \"job_ceiling or share_of_the_ceiling\""
     binds_ac:
       - AC2
+  - id: dod-omn19998-hostile-reviewer-accept-agent-receipt
+    description: "The accept step, its trusted-run guard, its source (the omnimarket clone, never the checkout under review) and the enforcement step that fails a degraded quorum are held by structural tests; a degraded quorum fails the job unless the accept decision is pass_agent."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k \"enforcement_step or accept_and_verifier or degraded_quorum\""
+    binds_ac:
+      - AC1
   - id: dod-omn19998-hosted-eligible-listed
     description: "A listed hosted job passes the placement gate and its unlisted twin fails."
     source: manual
