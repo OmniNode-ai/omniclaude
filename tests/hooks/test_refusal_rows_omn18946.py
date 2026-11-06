@@ -130,6 +130,14 @@ class TestTheNodeDecidesTheSameRowTheRecorderDid:
     (OMN-20685). The golden file holds what this recorder produced, for the
     inputs it was given, at commit ad0aa0ddc, the last revision that computed
     rows itself. A repoint that changed one byte of any row fails here.
+
+    OMN-13902: omnimarket owns the row layout now, and that node's contract
+    declares two further cells, ``class_key`` and ``key_version``, written
+    between ``dedupe`` and ``refusal_count``. The golden carries them from
+    omnimarket ``dev-20261106062827-a4798bc9d618``. Every other cell of every
+    case, and every ``key``, is still the ad0aa0ddc value byte for byte, which
+    is what made the two cells safe to add; a pin that moves any other cell
+    still fails here, which is the whole point of the file.
     """
 
     def test_every_recorded_refusal_yields_the_recorded_row(self) -> None:
