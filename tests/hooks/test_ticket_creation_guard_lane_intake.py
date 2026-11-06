@@ -853,3 +853,69 @@ def test_the_first_dispatch_sentence_of_either_form_counts() -> None:
         + "  Lane lane-a, parent p, x\n  You are lane lane-b (parent p, x)\n"
     )
     assert _named(text) == ("lane-a", "p")
+
+
+#: How the harness opens a relayed user request it sends ahead of the computed
+#: task, as the real transcript of the OMN-22478 lane process-issues-2205 shows.
+_RELAY = (
+    "[Workflow harness — user request] The harness relays, verbatim and "
+    "indented below, the user request that triggered this workflow run.\n"
+    "  Fix the process.\n"
+)
+
+
+def _relayed_lane(
+    tmp_path: Path, *, rows: tuple[str, ...], relay: str = _RELAY
+) -> subprocess.CompletedProcess[str]:
+    env, extra = _workflow_subagent(
+        tmp_path,
+        sidecar_lane="x",
+        sidecar_description="process-issues",
+        prompt="",
+        ledger_rows=rows,
+    )
+    transcript = (
+        tmp_path
+        / "projects"
+        / "-proj"
+        / _SESSION
+        / "subagents"
+        / "workflows"
+        / "wf_0001"
+        / f"agent-{_AGENT}.jsonl"
+    )
+    entries = [
+        {"type": "user", "message": {"role": "user", "content": relay}},
+        {"type": "user", "message": {"role": "user", "content": _lane_form_dispatch()}},
+    ]
+    transcript.write_text(
+        "".join(json.dumps(e) + "\n" for e in entries), encoding="utf-8"
+    )
+    ok = _create(description=_stamped(_LANE), labels=[_LABEL])
+    return _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
+
+
+def test_a_dispatch_after_a_relayed_user_request_names_the_lane(
+    tmp_path: Path,
+) -> None:
+    """The relay is the user's text; the computed task after it is the dispatch."""
+    _admitted(_relayed_lane(tmp_path, rows=(_claim(_LANE, parent=_ORCHESTRATOR),)))
+
+
+def test_a_dispatch_after_a_relay_still_needs_its_claim(tmp_path: Path) -> None:
+    result = _relayed_lane(tmp_path, rows=())
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)
+
+
+def test_a_first_message_that_is_no_relay_is_still_the_only_one_read(
+    tmp_path: Path,
+) -> None:
+    """Only the harness relay frame is passed over, never an ordinary message."""
+    result = _relayed_lane(
+        tmp_path,
+        rows=(_claim(_LANE, parent=_ORCHESTRATOR),),
+        relay="Summarise the repo.",
+    )
+    assert result.returncode == 3
+    assert "lane_identity_missing" in _reason(result)

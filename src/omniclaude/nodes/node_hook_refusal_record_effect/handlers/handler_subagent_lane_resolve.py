@@ -63,6 +63,10 @@ _REFUSAL_LANE_PY = (
 #: How the harness opens a workflow script's computed task. It indents every
 #: line of that task, so under this frame a column-zero line is forged text.
 _WORKFLOW_FRAME = "[Workflow harness"
+#: How the harness opens a relayed user request when it sends one ahead of the
+#: computed task (OMN-22776). The relay is the user's text, never the dispatch,
+#: so the dispatch sentence is read from the message after it.
+_WORKFLOW_RELAY_FRAME = "[Workflow harness \u2014 user request]"
 #: ``You are lane <lane> (parent <parent>, ...)`` or ``Lane <lane>, parent
 #: <parent>, ...`` -- the two dispatch sentences the orchestrator's briefs open
 #: with (OMN-22478: the second form named no lane here, so 82 creates in a day
@@ -154,13 +158,63 @@ def _prompt_named(
     """``(lane, parent)`` the agent's own first message names, or ``("", "")``."""
     own = payload.get("agent_transcript_path")
     transcript = payload.get("transcript_path")
-    first = attribution.read_agent_first_message(
-        transcript if isinstance(transcript, str) and transcript.strip() else None,
-        session_id or None,
-        agent_id,
-        agent_transcript_path=own if isinstance(own, str) and own.strip() else None,
+    transcript_arg = (
+        transcript if isinstance(transcript, str) and transcript.strip() else None
     )
+    own_arg = own if isinstance(own, str) and own.strip() else None
+    first = attribution.read_agent_first_message(
+        transcript_arg, session_id or None, agent_id, agent_transcript_path=own_arg
+    )
+    if first.lstrip().startswith(_WORKFLOW_RELAY_FRAME):
+        first = _message_after_relay(
+            attribution, transcript_arg, session_id, agent_id, own_arg
+        )
     return prompt_lane(first, reader)
+
+
+def _message_after_relay(
+    attribution: ModuleType,
+    transcript: str | None,
+    session_id: str,
+    agent_id: str,
+    own: str | None,
+) -> str:
+    """The user message after the harness's relayed user request, or ``""``.
+
+    Found in the agent's own transcript by the candidates the first-message
+    reader uses, within its scan bound. Never raises: an unreadable transcript
+    names nothing, which refuses.
+    """
+    candidates = [Path(own)] if own else []
+    try:
+        candidates += [
+            sidecar.with_name(sidecar.name.removesuffix(".meta.json") + ".jsonl")
+            for sidecar in attribution._sidecar_candidates(
+                transcript, session_id or None, agent_id, include_workflows=True
+            )
+        ]
+    except (AttributeError, OSError, TypeError, ValueError):
+        return ""
+    for candidate in candidates:
+        try:
+            with candidate.open(encoding="utf-8") as stream:
+                texts = []
+                for _ in range(attribution._AGENT_SCAN_LINES):
+                    line = stream.readline(attribution._AGENT_FIRST_LINE_CHARS)
+                    if not line:
+                        break
+                    text = attribution._first_user_text(json.loads(line))
+                    if text is not None:
+                        texts.append(text)
+                    if len(texts) == 2:
+                        return (
+                            texts[1]
+                            if texts[0].lstrip().startswith(_WORKFLOW_RELAY_FRAME)
+                            else ""
+                        )
+        except (OSError, ValueError, AttributeError):
+            continue
+    return ""
 
 
 def _claim_matches(claim: Mapping[str, str], lane: str, parent: str) -> bool:

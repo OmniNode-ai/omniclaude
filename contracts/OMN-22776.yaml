@@ -21,6 +21,8 @@ requirements:
         statement: "AC2: the same sentence with no CLAIM, a CLAIM under another parent, no parent, or at column zero under the frame names no lane and is refused -- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -k \"lane_form and (refused or forged or without)\""
       - id: "AC3"
         statement: "AC3: the \"You are lane\" form is unchanged -- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py"
+      - id: "AC4"
+        statement: "AC4: when the harness relays the user request as the agent's first message, the dispatch sentence is read from the computed task after it, and an ordinary first message is still the only one read -- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -k relay"
 evidence_requirements:
   - kind: tests
     description: "The lane intake tests pass, the new lane-form cases among them"
@@ -45,6 +47,7 @@ dod_evidence:
     binds_ac:
       - "AC2"
       - "AC3"
+      - "AC4"
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov"
