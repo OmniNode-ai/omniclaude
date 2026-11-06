@@ -11,6 +11,13 @@ lines, rate-limit state files, extracted details and resolved lanes.
 
 Timestamps and the temporary directory are normalised out of every recorded
 value; nothing else is.
+
+OMN-13902: the row layout is omnimarket's, and that node's contract declares
+two further cells, ``class_key`` and ``key_version``, written between
+``dedupe`` and ``refusal_count``. The golden's ledger rows carry them from
+omnimarket ``dev-20261106062827-a4798bc9d618``. Strip those two cells from the
+replay and it is still the 8d694c72e capture value for value, which is what
+made them safe to add; anything else the node changes still fails here.
 """
 
 from __future__ import annotations

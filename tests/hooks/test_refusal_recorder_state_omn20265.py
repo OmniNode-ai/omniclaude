@@ -241,3 +241,26 @@ def test_recorder_cli_failed_append_is_loud_and_retryable(tmp_path: Path) -> Non
     assert log.read_text().count("refusal_count=1 |") == 2
     assert ledger.read_text() == "fixture\n"
     assert not (tmp_path / "home/.onex_state").exists()
+
+
+def test_decide_row_supplies_normalizer_facts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The row request carries the facts built by the container (OMN-13902)."""
+    from omniclaude.nodes.node_hook_refusal_record_effect.container import (
+        container_hook,
+    )
+
+    facts = container_hook.build_normalizer_facts()
+    assert facts.configuration is not None
+    row = recorder.decide_row(
+        guard="test-guard",
+        reason="test-refusal",
+        lane="lane",
+        lane_source="env",
+        detail="",
+        session="",
+        suppressed=0,
+        timestamp="2026-10-09T06:00:00Z",
+    )
+    assert row.key

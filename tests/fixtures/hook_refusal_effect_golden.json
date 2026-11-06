@@ -51,7 +51,7 @@
   "custom_window": [
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=w | lane_source=env | dedupe=bfa1b0b51f5b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=w | lane_source=env | dedupe=bfa1b0b51f5b | class_key=hook.g%2e;sh.template.50e721e49c | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 1,
     "rc": 0,
@@ -77,7 +77,7 @@
    },
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=w | lane_source=env | dedupe=bfa1b0b51f5b | refusal_count=1 | suppressed_since_last_row=1 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=w | lane_source=env | dedupe=bfa1b0b51f5b | class_key=hook.g%2e;sh.template.50e721e49c | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=1 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 3,
     "rc": 0,
@@ -93,7 +93,7 @@
   "different_keys_do_not_share_a_window": [
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=a.sh | reason=one | lane_source=env | dedupe=ce2d5b80d27f | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=a.sh | reason=one | lane_source=env | dedupe=ce2d5b80d27f | class_key=hook.a%2e;sh.template.7692c3ad35 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 1,
     "rc": 0,
@@ -107,7 +107,7 @@
    },
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=b.sh | reason=one | lane_source=env | dedupe=cd05babe10db | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=b.sh | reason=one | lane_source=env | dedupe=cd05babe10db | class_key=hook.b%2e;sh.template.7692c3ad35 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 2,
     "rc": 0,
@@ -126,7 +126,7 @@
    },
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=a.sh | reason=two | lane_source=env | dedupe=8b1a6ec3ac48 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=a.sh | reason=two | lane_source=env | dedupe=8b1a6ec3ac48 | class_key=hook.a%2e;sh.template.daa7c83bb7 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 3,
     "rc": 0,
@@ -188,7 +188,7 @@
   "redaction_and_field_breakers": [
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=redacted-forged | lane_source=env | dedupe=234637e39ccb | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted]   cell next row\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=redacted-forged | lane_source=env | dedupe=234637e39ccb | class_key=hook.g%2e;sh.template.0fb1901911 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted]   cell next row\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 1,
     "rc": 0,
@@ -204,7 +204,7 @@
   "secret_guard_sessions_are_separate": [
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.5f537b80f1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 1,
     "rc": 0,
@@ -218,7 +218,7 @@
    },
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=1abd95f1821d | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=1abd95f1821d | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.5f537b80f1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 2,
     "rc": 0,
@@ -256,7 +256,7 @@
   "secret_guard_surfaces_the_fourth": [
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.5f537b80f1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 1,
     "rc": 0,
@@ -294,7 +294,7 @@
    },
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | refusal_count=1 | suppressed_since_last_row=2 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.5f537b80f1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=2 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 4,
     "rc": 0,
@@ -308,7 +308,7 @@
    },
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.5f537b80f1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 5,
     "rc": 0,
@@ -322,7 +322,7 @@
    },
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=leak | lane_source=env | dedupe=42c80749499b | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.5f537b80f1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"rule=r1 line=3\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 6,
     "rc": 0,
@@ -338,7 +338,7 @@
   "window_then_new_row": [
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=same-class | lane_source=env | dedupe=81b14f4657c6 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"d1\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=same-class | lane_source=env | dedupe=81b14f4657c6 | class_key=hook.g%2e;sh.template.33fa9f87d0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"d1\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 1,
     "rc": 0,
@@ -376,7 +376,7 @@
    },
    {
     "appended": [
-     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=same-class | lane_source=env | dedupe=81b14f4657c6 | refusal_count=1 | suppressed_since_last_row=2 | detail=\"d4\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+     "<ts> | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=g.sh | reason=same-class | lane_source=env | dedupe=81b14f4657c6 | class_key=hook.g%2e;sh.template.33fa9f87d0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=2 | detail=\"d4\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
     ],
     "log_lines": 4,
     "rc": 0,

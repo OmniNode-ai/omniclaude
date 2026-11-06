@@ -55,6 +55,11 @@ requirements:
     acceptance:
       - id: AC9
         statement: 'AC9: The installed Git parser matches the published refreshed omnimarket module, preserves all 160 plan paths in parser output, and keeps command reports truncated. -- falsifier: run dod-omniclaude-deploy-sibling-parser on a hosted runner with HTTPS, uv, git and sha256sum.'
+  - id: req-refusal-recorder-supplies-normalizer-facts
+    statement: The hook refusal recorder passes the normalizer facts the refreshed omnimarket row node requires, from an operator overlay or a built-in configuration.
+    acceptance:
+      - id: AC10
+        statement: 'AC10: decide_row builds ModelErrorNormalizerFacts through build_normalizer_facts and the refusal row request carries them, so a refusal is recorded rather than refused by the row node. -- falsifier: uv run pytest tests/hooks/test_refusal_recorder_state_omn20265.py -q --no-cov'
 evidence_requirements:
   - kind: tests
     command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@dev-[0-9]{14}-[0-9a-f]{12}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
@@ -82,7 +87,9 @@ dod_evidence:
     description: Validates forward-only git refresh behavior including descendant acceptance, non-descendant refusal, and rev rewriting.
     checks:
       - check_type: command
-        check_value: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@dev-[0-9]{14}-[0-9a-f]{12}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
+        check_value: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@dev-20261106062827-a4798bc9d618" pyproject.toml && grep -Eq "omnimarket[.]git[?]tag=dev-20261106062827-a4798bc9d618#" uv.lock
+      - check_type: test_passes
+        check_value: uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov -k refreshed_git_parser
   - id: dod-omniclaude-sibling-lock-resolution
     source: manual
     binds_ac:
@@ -156,3 +163,19 @@ dod_evidence:
         check_value: >-
           d=$(uv run python -c 'import hashlib; from pathlib import Path; import omnimarket.nodes.node_morning_ground_state_orchestrator.tools.base as b; print(hashlib.sha256(Path(b.__file__).read_bytes()).hexdigest())') && curl --fail --silent --show-error https://raw.githubusercontent.com/OmniNode-ai/omnimarket/f4f21df990cba0a53328b8858876eb2255c2447b/src/omnimarket/nodes/node_morning_ground_state_orchestrator/tools/base.py | sha256sum | grep -q "^$d  -$" && uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov -k refreshed_git_parser
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omniclaude-refusal-recorder-normalizer-facts
+    source: manual
+    binds_ac:
+      - AC10
+    description: The refusal recorder runs against the refreshed omnimarket row node with the normalizer facts supplied by the container.
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_refusal_recorder_state_omn20265.py -q --no-cov
+  - id: dod-omniclaude-refusal-recorder-integration-proof
+    source: manual
+    binds_ac:
+      - AC10
+    description: The change run from the pushed branch on a lab host, with the refreshed omnimarket installed, records a refusal through the real row node.
+    checks:
+      - check_type: command
+        check_value: uv run pytest tests/hooks/test_refusal_recorder_state_omn20265.py -q --no-cov
