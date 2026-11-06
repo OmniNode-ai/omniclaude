@@ -14,7 +14,7 @@ requirements:
       - id: "AC1"
         statement: "AC1: refresh and the merge-triggered sync find a clone whether the repo is named with a hyphen or an underscore, by onex.repo or by the origin URL -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py -q --no-cov"
       - id: "AC2"
-        statement: "AC2: a repo name matching no clone still answers NO_CLONE -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py -k no_clone -q --no-cov"
+        statement: "AC2: the merge-triggered sync reaches a clone named with a hyphen when onex.repo spells it with underscores -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py -k merge_triggered -q --no-cov"
 evidence_requirements:
   - kind: tests
     description: "The focused tests pass on the lab from the branch"
@@ -34,11 +34,11 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22558-ac2
-    description: "a repo name matching no clone still answers NO_CLONE"
+    description: "the merge-triggered sync reaches a clone named with a hyphen when onex.repo spells it with underscores"
     source: manual
     binds_ac:
       - "AC2"
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py -k no_clone -q --no-cov"
+        check_value: "uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py -k merge_triggered -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
