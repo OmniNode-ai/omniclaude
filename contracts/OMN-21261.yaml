@@ -23,7 +23,7 @@ requirements:
     statement: The participant guide downloads the corrected script with its checksum and defaults to native delegation.
     acceptance:
       - id: "AC5"
-        statement: "AC5: ONBOARDING.md pins 11a255e325785d76ed7dda65c8f9bef2bc06bdc1 and its SHA256 ea5312e7d7e4068accf9a8e9d9e59ece6d111db7f4d46d6a1ed0590854dbcc06 -- falsifier: restore the old ee8797af URL or checksum in the download command."
+        statement: "AC5: ONBOARDING.md pins ad5d6ef877b3b792f5facccf807d466986eba9b5 and its SHA256 947ddfc430da2eead1184c255c10dec95aa642eb7bf40e83e66df36f3dd401df -- falsifier: restore the old 11a255e3 URL or its ea5312e7 checksum in the download command."
       - id: "AC6"
         statement: "AC6: the documented run command passes --no-containers and explains that phase 4 is skipped -- falsifier: remove --no-containers from the run command."
 evidence_requirements:
@@ -59,4 +59,12 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_guide_pin_omn21261.py -q --no-cov -k ac6"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21261-download-repin-to-merged-script
+    description: "The participant download names ad5d6ef8, the commit pull request 3167 merged as, with the checksum of the bytes served there. The merge-base guide still names 11a255e3 and its checksum, so the pin test fails there."
+    source: manual
+    binds_ac: ["AC5"]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_guide_pin_omn21261.py -q --no-cov -k ac5"
         cwd: "${OMNI_HOME}/omniclaude"
