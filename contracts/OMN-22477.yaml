@@ -65,3 +65,12 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_ollama_config_fault_omn22477.py -q --no-cov"
         cwd: "."
+  - id: dod-deploy-omn22477-fingerprint-on-github
+    description: "The node contract on GitHub, at the commit this is probed from, carries the re-pinned bootstrap fingerprint of the fixed handler. That file is the runtime path this change touches, and the fingerprint is what a participant run checks the downloaded handler against, so the probe reads the deployed surface rather than anything this pull request authors locally. Falsifiable: at the merge base, and at any commit whose handler still derives PYTHONPATH from ${BASH_SOURCE[0]}, the file carries the old fingerprint and the grep exits nonzero."
+    source: manual
+    binds_ac:
+      - "AC5"
+    checks:
+      - check_type: command
+        check_value: gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/contract.yaml?ref=$(git rev-parse HEAD)" --jq .content | base64 -d | grep -q '24ca:661a:7af4:2089:d761:289c:8830:0853:ad47:2b62:0501:3ce5:48bb:d755:20ba:71b2'
+        cwd: "${OMNI_HOME}/omniclaude"
