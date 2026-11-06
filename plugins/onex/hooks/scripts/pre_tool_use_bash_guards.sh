@@ -176,7 +176,7 @@ if [[ "$_OBG_TOOL" == mcp__* ]]; then
     _obg_lane_read=1
 elif [[ "$_OBG_INPUT" =~ ([Aa][Pp][Ii]|[Uu][Pp][Ll][Oo][Aa][Dd][Ss])\.[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm] \
         || "$_OBG_INPUT" =~ /gh([^A-Za-z0-9_.-]|$) \
-        || ( "$_OBG_INPUT" =~ (\\n|[^A-Za-z0-9_./-])gh[[:space:]]+[a-z] && ( "$_OBG_INPUT" == *'"agent_id"'* || -n "${ONEX_LANE:-}" || "${CLAUDE_CODE_ENTRYPOINT:-}" == sdk-* ) && "$(head -c 512 "$(type -P gh)" 2>/dev/null)" != *ONEX_GH_USER_SHIM* ) ]]; then
+        || ( "$_OBG_INPUT" =~ (\\n|[^A-Za-z0-9_./-])gh[[:space:]]+[a-z] && ( "$_OBG_INPUT" == *'"agent_id"'* || -n "${ONEX_LANE:-}" ) && "$(head -c 512 "$(type -P gh)" 2>/dev/null)" != *ONEX_GH_USER_SHIM* ) ]]; then
     _obg_lane_read=1
 fi
 _OBG_CALLER_CWD="$PWD"
