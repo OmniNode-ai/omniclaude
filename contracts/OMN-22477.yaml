@@ -19,10 +19,20 @@ requirements:
     acceptance:
       - id: "AC2"
         statement: "AC2: the module the model-config call imports is present in the workspace that phase 2 leaves behind -- falsifier: python -c 'import omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_model_config' run with the workspace dispatch venv against the phase 2 clone"
+  - id: req-omn22477-model-config-import-path-from-the-workspace
+    statement: model_config takes its PYTHONPATH from the workspace clone, not from the handler's own location, so a downloaded run can import omniclaude; and a failed model-config call is reported as that call failing.
+    acceptance:
+      - id: "AC4"
+        statement: "AC4: a failure inside the model-config call reports the call that failed and not a guess about the omnimarket config -- falsifier: pytest over the onboarding script tests asserting the Ollama failure text does not claim a missing ollama block when the import is what failed"
+      - id: "AC5"
+        statement: "AC5: a regression test built from this run's recorded traceback fails on the current script and passes on the fix -- falsifier: the new test in omniclaude's onboarding script test suite, run with uv run pytest"
 evidence_requirements:
   - kind: tests
     description: "The anchor handler tests and the omniclaude unpinned test pass"
     command: "uv run pytest tests/skills/test_onboarding_anchor_handler_omn21255.py tests/skills/test_onboarding_omniclaude_unpinned_omn22477.py tests/skills/test_onboarding_omniclaude_unpinned_download_omn22477.py -q --no-cov"
+  - kind: tests
+    description: "The model-config import path and the Ollama fault-reporting tests pass, with the handler digest re-pinned"
+    command: "uv run pytest tests/skills/test_onboarding_model_config_outside_clone_omn22477.py tests/skills/test_onboarding_ollama_config_fault_omn22477.py tests/skills/test_onboarding_bootstrap_handler_omn21087.py -q --no-cov"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -36,4 +46,31 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_omniclaude_unpinned_download_omn22477.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22477-model-config-path-from-workspace
+    description: "model_config reads omniclaude from $WORKSPACE/omniclaude/src, so the handler imports when it is read from outside the clone, which is where a downloaded run writes it. Fails at the merge base, where the path is derived from ${BASH_SOURCE[0]} and the call dies with ModuleNotFoundError: No module named 'omniclaude'. The handler bytes changed, so the entrypoint's local digest and the node contract's bootstrap fingerprint are re-pinned; download_digest stays at the commit dev still serves, which the next pull request moves to the merge commit."
+    source: manual
+    binds_ac:
+      - "AC5"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_model_config_outside_clone_omn22477.py tests/skills/test_onboarding_bootstrap_handler_omn21087.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn22477-ollama-fault-is-not-a-config-guess
+    description: "load_ollama_config sets OLLAMA_CONFIG_ERR to which of its two faults it hit, and setup_ollama reports that instead of the fixed sentence, so a failed model-config call is no longer named as the omnimarket config declaring no ollama block. Fails at the merge base, where three of the four cases fail because the variable does not exist and the collapsed sentence is still in the entrypoint."
+    source: manual
+    binds_ac:
+      - "AC4"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_ollama_config_fault_omn22477.py -q --no-cov"
+        cwd: "."
+  - id: dod-deploy-omn22477-fingerprint-on-github
+    description: "The node contract on GitHub, at the commit this is probed from, carries the re-pinned bootstrap fingerprint of the fixed handler. That file is the runtime path this change touches, and the fingerprint is what a participant run checks the downloaded handler against, so the probe reads the deployed surface rather than anything this pull request authors locally. Falsifiable: at the merge base, and at any commit whose handler still derives PYTHONPATH from ${BASH_SOURCE[0]}, the file carries the old fingerprint and the grep exits nonzero."
+    source: manual
+    binds_ac:
+      - "AC5"
+    checks:
+      - check_type: command
+        check_value: gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/contract.yaml?ref=$(git rev-parse HEAD)" --jq .content | base64 -d | grep -q '24ca:661a:7af4:2089:d761:289c:8830:0853:ad47:2b62:0501:3ce5:48bb:d755:20ba:71b2'
         cwd: "${OMNI_HOME}/omniclaude"

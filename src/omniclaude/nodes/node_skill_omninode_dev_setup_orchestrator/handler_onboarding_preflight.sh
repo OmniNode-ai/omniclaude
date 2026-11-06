@@ -705,7 +705,7 @@ ollama_config() {
 # model_config operation field=value... -> the output of node
 # HandlerOnboardingModelConfig for that request, run in the dispatch venv.
 model_config() {
-  PYTHONPATH="${BASH_SOURCE[0]%/*}/../../..${PYTHONPATH:+:$PYTHONPATH}" "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$@" <<'PYMC'
+  PYTHONPATH="$WORKSPACE/omniclaude/src" "$WORKSPACE/.onex-dispatch-venv/bin/python" - "$@" <<'PYMC'
 from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_model_config import HandlerOnboardingModelConfig
 from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_onboarding_model_config_request import ModelOnboardingModelConfigRequest
 import sys
