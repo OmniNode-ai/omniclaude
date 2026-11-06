@@ -216,8 +216,8 @@ EXIT_PENDING = 2
 # (`gh api repos/OmniNode-ai/omniclaude/branches/dev/protection/required_status_checks`,
 # verified 2026-08-13 against the then-58-context set). Repo evidence is
 # required by the repository ruleset after S6; the other S6 additions are
-# enforced through CI Summary. "Hostile Review Gate" remains
-# intentionally absent for the reason below.
+# enforced through CI Summary. "Hostile Review Gate" is absent for the reason
+# below.
 EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     # OMN-20923: presence and success are required by the existing CI Summary.
     # A missing or skipped whole-tree deployment ratchet cannot read green.
@@ -327,13 +327,9 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     # watcher state of 2026-10-10T10:16:53Z (#2566..#2652), red on none.
     "pypi-pin-resolvability",  # pin-resolvability-gate.yml
 )
-# NOTE: "Hostile Review Gate" (hostile-reviewer.yml) is intentionally absent
-# from EXPECTED_EXTERNAL_CONTEXTS. It is already directly required by branch
-# protection and is fixed at the source (hostile-reviewer.yml, 2026-08-13:
-# removed the continue-on-error + manufactured degraded/exit-0 verdict on
-# install failure or CLI crash -- both now fail the job, and the job's own
-# `if: always()` default-deny gate already reads that closed). Duplicating it
-# here would add nothing; the fix lives where the false-green was produced.
+# NOTE: "Hostile Review Gate" (hostile-reviewer.yml) is absent from
+# EXPECTED_EXTERNAL_CONTEXTS: OMN-22478, operator RULING 2026-11-05T20:27:56Z,
+# took the automated review out of what holds a merge.
 
 EXTERNAL_GOOD_CONCLUSIONS: frozenset[str] = frozenset({"success"})
 

@@ -4,7 +4,7 @@
 
 Asserts that ``.github/workflows/hostile-reviewer.yml`` is wired correctly:
 
-- Triggers on the expected ``pull_request`` event types.
+- Starts no run on a pull request (OMN-22478).
 - Runs on the ``omnibase-ci`` self-hosted runner that reaches the voters'
   private network.
 - Invokes ``omniintelligence.review_pairing.cli_review`` with the review
@@ -63,7 +63,7 @@ def test_workflow_is_valid_yaml(workflow: dict[object, object]) -> None:
 
 
 def test_workflow_triggers_on_pull_request(workflow: dict[object, object]) -> None:
-    """Workflow must run on PR open / synchronize / reopen against main.
+    """The workflow starts no run on a pull request (OMN-22478).
 
     PyYAML maps the bare ``on:`` key to Python boolean ``True`` because YAML
     1.1 treats ``on`` as a truthy literal — accept either spelling.
@@ -71,16 +71,9 @@ def test_workflow_triggers_on_pull_request(workflow: dict[object, object]) -> No
     triggers = workflow.get("on") or workflow.get(True)
     assert isinstance(triggers, dict), "workflow must declare a triggers mapping"
 
-    pr_block = triggers.get("pull_request")
-    assert isinstance(pr_block, dict), "pull_request trigger must be a mapping"
-
-    types = pr_block.get("types") or []
-    assert "opened" in types, "must trigger on PR opened"
-    assert "synchronize" in types, "must trigger on PR synchronize"
-    assert "reopened" in types, "must trigger on PR reopened"
-
-    branches = pr_block.get("branches") or []
-    assert "main" in branches, "must gate PRs targeting main"
+    # OMN-22478, operator RULING 2026-11-05T20:27:56Z: the automated review starts
+    # no run on a pull request until the review route is fixed.
+    assert set(triggers) == {"workflow_dispatch"}
 
 
 def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -> None:
