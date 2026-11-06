@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""The transcript archiver must find the omninode_infra clone wherever it lives.
+"""The transcript archiver must find the infrastructure clone wherever it lives.
 
 OMN-17427. ``transcript-s3-archive-sync.sh`` used to hardcode the sync script at
-``$OMNI_HOME/omninode_infra/scripts/archive_claude_sessions.sh``. On a host whose
+``$OMNI_HOME/infrastructure/scripts/archive_claude_sessions.sh``. On a host whose
 clone is not a sibling of the registry root, that path never resolved and the agent
 exited 1 on every run while launchd reported the job as loaded and healthy. The
 archive took nothing for 38 days and nobody read the exit code.
@@ -26,11 +26,11 @@ SCRIPT = (
     Path(__file__).resolve().parents[2] / "scripts" / "transcript-s3-archive-sync.sh"
 )
 SYNC_REL = Path("scripts") / "archive_claude_sessions.sh"
-INFRA_DIR = "omninode" + "_infra"  # clone directory name, spelled in two parts
+INFRA_DIR = "infra_clone"  # the archiver finds the clone by its script, not its name
 
 
 def _make_clone(root: Path) -> Path:
-    """Create a fake omninode_infra clone whose sync script is executable."""
+    """Create a fake infrastructure clone whose sync script is executable."""
     script = root / SYNC_REL
     script.parent.mkdir(parents=True, exist_ok=True)
     # Echo the marker and exit non-zero, so the archiver stops here instead of
@@ -61,7 +61,7 @@ def test_script_exists_and_is_executable() -> None:
 
 
 def test_resolves_the_registry_root_sibling(tmp_path: Path) -> None:
-    """Candidate 2: the lab-host layout, $OMNI_HOME/omninode_infra."""
+    """The lab-host layout: a clone directly under $OMNI_HOME."""
     registry_root = tmp_path / "omni"
     _make_clone(registry_root / INFRA_DIR)
     result = _run({"OMNI_HOME": str(registry_root), "HOME": str(tmp_path / "nohome")})
@@ -70,7 +70,7 @@ def test_resolves_the_registry_root_sibling(tmp_path: Path) -> None:
 
 
 def test_resolves_the_repos_root_beside_the_config_tree(tmp_path: Path) -> None:
-    """Candidate 3: the operator-Mac layout, $HOME/OmniNode/repos/omninode_infra.
+    """Candidate 3: the operator-Mac layout, $HOME/OmniNode/repos/infrastructure.
 
     This is the case the old hardcoded path could not reach, and the one that left
     the archive silent for 38 days.
@@ -126,9 +126,9 @@ def test_refusal_names_every_candidate_it_tried(tmp_path: Path) -> None:
     assert result.returncode == 1, result.stdout + result.stderr
     assert "REFUSED" in result.stderr
     assert "OMNINODE_INFRA_PATH" in result.stderr
-    assert str(registry_root / INFRA_DIR / SYNC_REL) in result.stderr
-    assert str(home / "OmniNode" / "repos" / INFRA_DIR / SYNC_REL) in result.stderr
-    assert str(registry_root.parent / INFRA_DIR / SYNC_REL) in result.stderr
+    assert f"{registry_root}/*/{SYNC_REL}" in result.stderr
+    assert f"{home}/OmniNode/repos/*/{SYNC_REL}" in result.stderr
+    assert f"{registry_root.parent}/*/{SYNC_REL}" in result.stderr
 
 
 def test_registry_root_unset_is_still_a_loud_refusal(tmp_path: Path) -> None:
@@ -142,6 +142,6 @@ def test_resolution_happens_before_any_aws_call(marker: str) -> None:
     """Guard the ordering the tests above rely on: the clone is resolved first, so
     a refusal cannot be mistaken for an AWS or credential failure."""
     body = SCRIPT.read_text()
-    resolve_at = body.index("INFRA_SYNC_CANDIDATES=")
+    resolve_at = body.index("INFRA_SYNC_ROOTS=")
     assert marker in body
     assert resolve_at < body.index(marker)
