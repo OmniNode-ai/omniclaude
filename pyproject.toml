@@ -297,7 +297,7 @@ override-dependencies = [
 # nightly sibling-pin train moves it from here. The version range in [project]
 # stays for external installs. OMN-13873's PyPI rule still holds for every
 # other form: check_dep_provenance.py accepts only this tag-only dev-tag shape.
-omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "dev-20261106133647-64d60448c3e3" }
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "dev-20261105194015-1adbf46062bd" }
 # OMN-20910: pin the Claude API voter merge; it retains the lab roster reader,
 # the larger retry budget and the torch-free default install.
 # OMN-21900: a first-party source names a dev-merge tag, never a sha (first_party_ref validator).
