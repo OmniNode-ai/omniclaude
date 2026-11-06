@@ -58,6 +58,8 @@ requirements:
     statement: "The gh shim repairs a lane read budget directory or hour file that the lane itself owns and that is read-only, keeps the hour's count, and still refuses with its cause when the file cannot be written."
   - id: req-omn19998-sibling-pins-precommit-hook
     statement: "The internal-sibling-pins handler runs as a local pre-commit hook on the lockfile as well as in the CI job, so a refused sibling pin stops at commit time."
+  - id: req-omn19998-capture-only-settings
+    statement: "A headless lab worker can load a settings file that registers only the capture hook, derived from hooks.json so it cannot drift."
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -406,3 +408,9 @@ dod_evidence:
     - AC1
     - AC2
     - AC3
+  - id: dod-omn19998-capture-only-settings
+    description: "The capture-only settings file matches the capture registration rebuilt from hooks.json; at the merge base the file does not exist so the tests fail. This item binds no criterion: the live ticket carries AC1 to AC3 only."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_capture_only_settings.py -q --no-cov"
