@@ -91,7 +91,9 @@ while [[ "$_OBG_INPUT" == *$'\n' ]]; do _OBG_INPUT="${_OBG_INPUT%$'\n'}"; done
 # Fail-closed: a call that trips the pre-filter and cannot be judged (no
 # interpreter, the node not importable, an unreadable payload) is refused, as every
 # guard here refuses a call it cannot evaluate. A Bash command naming none of
-# api.github.com or a /gh path starts no interpreter.
+# api.github.com, a /gh path or a bare gh verb starts no interpreter. A bare gh reaches
+# the node so it can refuse one the real binary would run on the operator's login, where
+# no shim is first on PATH (OMN-22539).
 #
 # Every refusal here writes one class=refusal row through the refusal recorder
 # (OMN-21020). The node checks run ahead of the seven guards, so none of their
@@ -174,7 +176,7 @@ if [[ "$_OBG_TOOL" == mcp__* ]]; then
     _obg_lane_read=1
 elif [[ "$_OBG_INPUT" =~ [Aa][Pp][Ii]\.[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm] \
         || "$_OBG_INPUT" =~ [Uu][Pp][Ll][Oo][Aa][Dd][Ss]\.[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm] \
-        || "$_OBG_INPUT" =~ /gh([^A-Za-z0-9_.-]|$) ]]; then
+        || "$_OBG_INPUT" =~ (\\n|[^A-Za-z0-9_.-])gh([^A-Za-z0-9_.-]|$) ]]; then
     _obg_lane_read=1
 fi
 _OBG_CALLER_CWD="$PWD"
